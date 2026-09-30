@@ -77,7 +77,8 @@ public sealed class ShiftHandoverService
 
         var dto = new PortalHandoverDto(
             latest.CompletionId, text, latest.NothingToHandOver, latest.SubmittedByUserId, NameOf(latest.SubmittedByUserId),
-            latest.ServiceDate, latest.SubmittedAt, RequiresAcknowledgement: text != null, IsRead: ack.HasValue, ReadAt: ack);
+            latest.ServiceDate, ProviderLocalTime.AsUtc(latest.SubmittedAt), RequiresAcknowledgement: text != null,
+            IsRead: ack.HasValue, ReadAt: ProviderLocalTime.AsUtc(ack));
         return new HandoverView(dto, trail);
     }
 

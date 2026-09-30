@@ -475,6 +475,39 @@ public class PortalShiftPackageTests
         Assert.Equal("Australia/Sydney", Get(Create(ShiftStatus.Published)).TimeZoneId);
     }
 
+    // ══════════════ Timestamps on the wire ══════════════
+
+    [Fact]
+    public void Instants_AlwaysCarryAZone_WhileProviderLocalWallClockTimesNeverDo()
+    {
+        // Values read back from Postgres have Kind Unspecified (the legacy timestamp behaviour persists Kind verbatim), which
+        // would serialise with NO zone suffix - indistinguishable from a provider-local wall-clock time. The package DTOs mark
+        // every instant as UTC; the wall-clock fields (dose scheduledAt) stay suffix-free.
+        static DateTime Unspecified(DateTime utc) => DateTime.SpecifyKind(utc, DateTimeKind.Unspecified);
+        var f = Create();
+        var med = AddMed(f, "Levetiracetam", "09:00");
+        f.Db.MedicationAdministrations.Add(new MedicationAdministration
+        {
+            Id = Guid.NewGuid(), TenantId = med.TenantId, ParticipantMedicationId = med.Id, ParticipantId = med.ParticipantId,
+            ScheduledAt = new DateTime(2026, 7, 14, 9, 0, 0), Status = MedicationAdministrationStatus.Administered, RecordedByName = "Ben",
+            AdministeredAt = Unspecified(new DateTime(2026, 7, 13, 23, 10, 0, DateTimeKind.Utc)), CreatedAt = Unspecified(new DateTime(2026, 7, 13, 23, 11, 0, DateTimeKind.Utc)),
+        });
+        f.Db.ShiftBreaks.Add(new ShiftBreak
+        {
+            Id = Guid.NewGuid(), TenantId = med.TenantId, ShiftCompletionId = f.Completion!.Id, CreatedByUserId = f.Worker.Id,
+            StartedAt = Unspecified(new DateTime(2026, 7, 14, 0, 0, 0, DateTimeKind.Utc)), EndedAt = Unspecified(new DateTime(2026, 7, 14, 0, 20, 0, DateTimeKind.Utc)),
+        });
+        f.Db.SaveChanges();
+
+        var json = JsonSerializer.Serialize(Get(f), Json);
+
+        Assert.Matches("\"startedAt\":\"2026-07-14T00:00:00Z\"", json);
+        Assert.Matches("\"endedAt\":\"2026-07-14T00:20:00Z\"", json);
+        Assert.Matches("\"administeredAt\":\"2026-07-13T23:10:00Z\"", json);
+        Assert.Matches("\"recordedAt\":\"2026-07-13T23:11:00Z\"", json);
+        Assert.Matches("\"scheduledAt\":\"2026-07-14T09:00:00\"", json);   // wall clock: no suffix
+    }
+
     // ══════════════ Routines ══════════════
 
     [Fact]

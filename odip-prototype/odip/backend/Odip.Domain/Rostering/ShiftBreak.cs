@@ -76,12 +76,7 @@ public static class ShiftBreakRules
 
     /// <summary>Normalises a client-supplied instant to UTC: an unsuffixed value is treated as UTC (the codebase's F4
     /// rule - Npgsql persists Kind verbatim), a Local value is converted.</summary>
-    public static DateTime ToUtc(DateTime value) => value.Kind switch
-    {
-        DateTimeKind.Local => value.ToUniversalTime(),
-        DateTimeKind.Unspecified => DateTime.SpecifyKind(value, DateTimeKind.Utc),
-        _ => value,
-    };
+    public static DateTime ToUtc(DateTime value) => ProviderLocalTime.AsUtc(value);
 
     /// <summary>Whole minutes of a span, rounded half away from zero.</summary>
     public static int WholeMinutes(TimeSpan span) => (int)Math.Round(span.TotalMinutes, MidpointRounding.AwayFromZero);

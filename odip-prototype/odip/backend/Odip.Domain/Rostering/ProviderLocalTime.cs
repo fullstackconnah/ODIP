@@ -48,6 +48,22 @@ public static class ProviderLocalTime
         return DateTime.SpecifyKind(TimeZoneInfo.ConvertTimeToUtc(unspecified, zone), DateTimeKind.Utc);
     }
 
+    /// <summary>
+    /// Marks a UTC instant as UTC so it serialises with a trailing "Z". Instants read back from Postgres come out with
+    /// Kind Unspecified (the legacy timestamp behaviour persists Kind verbatim) and would otherwise serialise with NO zone
+    /// suffix, indistinguishable from a provider-local wall-clock value on the wire. The shift-package DTOs use this for
+    /// every instant they return (breaks, handover, dose outcomes, PRN); provider-local wall-clock fields (dose scheduledAt,
+    /// routine occursAt) are deliberately left Unspecified.
+    /// </summary>
+    public static DateTime AsUtc(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+    };
+
+    public static DateTime? AsUtc(DateTime? value) => value.HasValue ? AsUtc(value.Value) : null;
+
     /// <summary>The provider-local wall-clock value (Kind Unspecified, like every stored local time) of a UTC instant.</summary>
     public static DateTime UtcToLocal(DateTime utc, TimeZoneInfo zone) =>
         DateTime.SpecifyKind(

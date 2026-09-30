@@ -104,12 +104,14 @@ public sealed class ShiftPackageService
             m.Id, m.Name, Clean(m.Strength), m.DoseDescription, m.Form, m.Route, Clean(m.Directions), m.SupportLevel, m.IsHighRisk,
             slot.ScheduledAt, slot.TimeOfDay.ToString(@"hh\:mm", CultureInfo.InvariantCulture), state, state == PortalDoseState.Overdue,
             a is null ? null : ToOutcomeDto(a),
-            new PortalDoseWitnessDto(m.IsHighRisk, a?.WitnessStatus, a?.WitnessName, a?.WitnessRequestedAt, a?.WitnessRespondedAt));
+            new PortalDoseWitnessDto(
+                m.IsHighRisk, a?.WitnessStatus, a?.WitnessName, ProviderLocalTime.AsUtc(a?.WitnessRequestedAt),
+                ProviderLocalTime.AsUtc(a?.WitnessRespondedAt)));
     }
 
     public static PortalDoseOutcomeDto ToOutcomeDto(MedicationAdministration a) => new(
-        a.Id, a.Status, a.RecordedByName, a.AdministeredAt, a.AdministeredAtTimeZone, a.CreatedAt,
-        Clean(a.Reason), Clean(a.DoseGiven), Clean(a.Notes));
+        a.Id, a.Status, a.RecordedByName, ProviderLocalTime.AsUtc(a.AdministeredAt), a.AdministeredAtTimeZone,
+        ProviderLocalTime.AsUtc(a.CreatedAt), Clean(a.Reason), Clean(a.DoseGiven), Clean(a.Notes));
 
     private static PortalPrnDto ToPrnDto(PrnMedicationStatus p, DateTime nowUtc)
     {
@@ -122,9 +124,9 @@ public sealed class ShiftPackageService
         }
         return new PortalPrnDto(
             m.Id, m.Name, Clean(m.Strength), m.DoseDescription, m.Form, m.Route, Clean(m.Directions), m.SupportLevel, m.IsHighRisk,
-            Clean(m.PrnIndication), m.PrnMaxDosesPer24h, m.PrnMinIntervalMinutes, p.DosesInLast24h, p.LastDoseAt,
+            Clean(m.PrnIndication), m.PrnMaxDosesPer24h, m.PrnMinIntervalMinutes, p.DosesInLast24h, ProviderLocalTime.AsUtc(p.LastDoseAt),
             MaxDosesReached: m.PrnMaxDosesPer24h is { } max && p.DosesInLast24h >= max,
-            nextAvailable, p.OutcomePendingAdministration?.Id);
+            ProviderLocalTime.AsUtc(nextAvailable), p.OutcomePendingAdministration?.Id);
     }
 
     // ═════════════════════════ Routines ═════════════════════════
