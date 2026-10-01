@@ -434,6 +434,19 @@ a.sign--mini:hover { transform: translateY(-2px); }
   .screen:not(.screen--phone) .screen__hint { display: inline; }
 }
 
+/* ---------- Very narrow phones (360 and below): keep the header on one row ---------- */
+@media (max-width: 374.98px) {
+  .site-nav { gap: 6px; }
+  .sign--chip { padding: 0 10px; gap: 6px; font-size: 0.875rem; }
+  .brand { gap: 8px; }
+  .brand__tile { width: 32px; height: 32px; font-size: 1.125rem; }
+  .brand__name { font-size: 1.25rem; }
+  .fold { scroll-margin-top: calc(var(--header-h) + 12px); }
+}
+@media (max-width: 1023.98px) {
+  .fold { scroll-margin-top: calc(var(--header-h) + 12px); }
+}
+
 /* ---------- Reduced motion: every fold open and static; the route fully drawn ---------- */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
