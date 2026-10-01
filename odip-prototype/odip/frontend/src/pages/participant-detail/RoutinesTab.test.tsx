@@ -228,6 +228,39 @@ describe('RoutinesTab', () => {
     expect(screen.queryByRole('button', { name: /new routine/i })).not.toBeInTheDocument()
   })
 
+  it('offers a support worker Edit and New routine but not Delete, which the API refuses for that role', () => {
+    setUserRole('SupportWorker')
+    mockUseParticipantRoutines.mockReturnValue({ data: [makeRoutine()], isLoading: false })
+
+    render(<RoutinesTab participantId="participant-1" />)
+
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /new routine/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+
+  it.each(['SuperAdmin', 'Admin', 'Coordinator'])('offers %s Delete as well as Edit', (role) => {
+    setUserRole(role)
+    mockUseParticipantRoutines.mockReturnValue({ data: [makeRoutine()], isLoading: false })
+
+    render(<RoutinesTab participantId="participant-1" />)
+
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+  })
+
+  it('says a deleted routine moves to Inactive routines instead of being removed for good', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantRoutines.mockReturnValue({ data: [makeRoutine()], isLoading: false })
+    render(<RoutinesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    const dialog = screen.getByRole('alertdialog')
+    expect(within(dialog).getByText(/moved to Inactive routines/)).toBeInTheDocument()
+    expect(within(dialog).queryByText(/permanently/i)).not.toBeInTheDocument()
+  })
+
   it('creates a new routine with the entered title, description and critical flag', async () => {
     const user = userEvent.setup()
     render(<RoutinesTab participantId="participant-1" />)

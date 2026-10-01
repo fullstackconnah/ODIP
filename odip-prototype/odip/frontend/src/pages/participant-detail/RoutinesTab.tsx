@@ -115,9 +115,10 @@ function RoutineSkeleton() {
   )
 }
 
-function RoutineCard({ routine, canWrite, onEdit, onDelete }: {
+function RoutineCard({ routine, canWrite, canDelete, onEdit, onDelete }: {
   routine: ParticipantRoutineDto
   canWrite: boolean
+  canDelete: boolean
   onEdit: () => void
   onDelete: () => void
 }) {
@@ -153,13 +154,15 @@ function RoutineCard({ routine, canWrite, onEdit, onDelete }: {
             >
               Edit
             </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              className="text-xs font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)] px-2 py-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
-              Delete
-            </button>
+            {canDelete && (
+              <button
+                type="button"
+                onClick={onDelete}
+                className="text-xs font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)] px-2 py-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
+              >
+                Delete
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -180,7 +183,7 @@ function RoutineCard({ routine, canWrite, onEdit, onDelete }: {
 }
 
 export default function RoutinesTab({ participantId }: { participantId: string | undefined }) {
-  const { canWriteRoutines } = usePermissions()
+  const { canWriteRoutines, canDeleteRoutines } = usePermissions()
   // includeInactive=true: the edit form lets staff flip a routine to inactive (see the "Active"
   // field below), so the list has to fetch inactive ones too and surface them in their own
   // disclosure — otherwise toggling a routine off would make it vanish with no way back,
@@ -328,7 +331,7 @@ export default function RoutinesTab({ participantId }: { participantId: string |
               </h3>
               <div className="space-y-3">
                 {group.items.map(r => (
-                  <RoutineCard key={r.id} routine={r} canWrite={canWriteRoutines} onEdit={() => openEdit(r)} onDelete={() => setDeletingRoutine(r)} />
+                  <RoutineCard key={r.id} routine={r} canWrite={canWriteRoutines} canDelete={canDeleteRoutines} onEdit={() => openEdit(r)} onDelete={() => setDeletingRoutine(r)} />
                 ))}
               </div>
             </div>
@@ -355,7 +358,7 @@ export default function RoutinesTab({ participantId }: { participantId: string |
           {showInactive && (
             <div className="space-y-3 mt-3">
               {inactiveRoutines.map(r => (
-                <RoutineCard key={r.id} routine={r} canWrite={canWriteRoutines} onEdit={() => openEdit(r)} onDelete={() => setDeletingRoutine(r)} />
+                <RoutineCard key={r.id} routine={r} canWrite={canWriteRoutines} canDelete={canDeleteRoutines} onEdit={() => openEdit(r)} onDelete={() => setDeletingRoutine(r)} />
               ))}
             </div>
           )}
@@ -489,7 +492,7 @@ export default function RoutinesTab({ participantId }: { participantId: string |
         onCancel={() => setDeletingRoutine(null)}
         onConfirm={confirmDelete}
         title={`Delete "${deletingRoutine?.title ?? ''}"?`}
-        message="This permanently removes the routine. This can't be undone."
+        message="The routine is taken out of the participant's shifts and moved to Inactive routines. Shifts already worked keep what was ticked."
         confirmLabel="Delete"
         variant="danger"
         loading={deleteRoutine.isPending}
