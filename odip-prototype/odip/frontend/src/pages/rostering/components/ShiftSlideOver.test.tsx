@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ShiftSlideOver } from './ShiftSlideOver'
 import { makeShift, makeFinding } from '../test-fixtures'
@@ -20,7 +20,7 @@ const {
   mockUseShiftNotes: vi.fn(() => ({ data: [] as ShiftNoteDto[] })),
 }))
 
-// Only the API layer is mocked — every other collaborator (FindingsList, useSlideOverA11y,
+// Only the API layer is mocked — every other collaborator (FindingsList, SlideOver,
 // Dropdown, FormField) is the real component, so this exercises the actual override gate wiring.
 vi.mock('@/api/hooks', () => ({
   useCheckShift: () => ({ mutate: mockCheckMutate, isPending: false }),
@@ -1280,5 +1280,105 @@ describe('ShiftSlideOver — the live dry-run\'s refusal', () => {
     await user.click(screen.getByRole('option', { name: 'Noah Reid' }))
 
     expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
+  })
+})
+
+describe('ShiftSlideOver as a dialog', () => {
+  const props = { canWrite: true, participantOptions, staffOptions }
+
+  it('is a modal dialog named "Shift details" when editing and "New shift" when creating', () => {
+    const { rerender } = render(<ShiftSlideOver {...props} target={{ mode: 'edit', shift: makeShift() }} onClose={noop} />)
+    expect(screen.getByRole('dialog', { name: 'Shift details' })).toHaveAttribute('aria-modal', 'true')
+    rerender(<ShiftSlideOver {...props} target={{ mode: 'create' }} onClose={noop} />)
+    expect(screen.getByRole('dialog', { name: 'New shift' })).toBeInTheDocument()
+  })
+
+  it('renders nothing while there is no target', () => {
+    render(<ShiftSlideOver {...props} target={null} onClose={noop} />)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('Escape closes an untouched panel without asking', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<ShiftSlideOver {...props} target={{ mode: 'edit', shift: makeShift() }} onClose={onClose} />)
+    await user.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('Escape after an edit asks "Discard changes?": Keep editing leaves the panel and the edit as they were, Discard closes', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<ShiftSlideOver {...props} target={{ mode: 'edit', shift: makeShift() }} onClose={onClose} />)
+    await user.type(screen.getByLabelText('Notes'), 'Bring the hoist sling')
+
+    await user.keyboard('{Escape}')
+    const prompt = screen.getByRole('alertdialog', { name: 'Discard changes?' })
+    expect(onClose).not.toHaveBeenCalled()
+
+    await user.click(within(prompt).getByRole('button', { name: 'Keep editing' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Shift details' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Notes')).toHaveValue('Bring the hoist sling')
+    expect(onClose).not.toHaveBeenCalled()
+
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('an edit that is typed and then undone is not an unsaved change', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<ShiftSlideOver {...props} target={{ mode: 'edit', shift: makeShift() }} onClose={onClose} />)
+    await user.type(screen.getByLabelText('Notes'), 'x')
+    await user.clear(screen.getByLabelText('Notes'))
+    await user.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('Cancel is an explicit discard: it closes at once even after an edit', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<ShiftSlideOver {...props} target={{ mode: 'edit', shift: makeShift() }} onClose={onClose} />)
+    await user.type(screen.getByLabelText('Notes'), 'x')
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('a read-only panel has nothing to discard', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<ShiftSlideOver {...props} canWrite={false} target={{ mode: 'edit', shift: makeShift() }} onClose={onClose} />)
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('Delete opens a confirm dialog; Escape closes only that dialog, the panel stays open and Delete has focus again', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<ShiftSlideOver {...props} target={{ mode: 'edit', shift: makeShift() }} onClose={onClose} />)
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(screen.getByRole('alertdialog', { name: 'Delete shift' })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Shift details' })).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveFocus()
+  })
+
+  it('focus starts on the close button, or on the field named by focusField when the board prefilled the others', () => {
+    const { unmount } = render(<ShiftSlideOver {...props} target={{ mode: 'create' }} onClose={noop} />)
+    expect(screen.getByRole('button', { name: 'Close panel' })).toHaveFocus()
+    unmount()
+    render(
+      <ShiftSlideOver {...props} target={{ mode: 'create', participantId: 'participant-1', serviceDate: '2026-08-17', focusField: 'staff' }} onClose={noop} />,
+    )
+    expect(screen.getByRole('combobox', { name: 'Staff' })).toHaveFocus()
   })
 })

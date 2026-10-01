@@ -140,6 +140,11 @@
         "name": "header-hairline",
         "value": "0 24px 32px -12px rgba(27,28,26,0.04)",
         "purpose": "Sticky 48px header ambient lift."
+      },
+      {
+        "name": "side-panel",
+        "value": "shadow-xl (0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1))",
+        "purpose": "The SlideOver panel docked to the right edge over its scrim."
       }
     ],
     "motion": [
@@ -147,6 +152,11 @@
         "name": "state-transition",
         "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)",
         "purpose": "Colour/opacity change on hover and focus."
+      },
+      {
+        "name": "panel-slide-in",
+        "value": "200ms ease-out; translateX(100%) to 0, scrim opacity 0 to 1; none under prefers-reduced-motion",
+        "purpose": "A SlideOver panel entering from its edge (src/index.css, .slide-over-panel and .slide-over-scrim)."
       }
     ],
     "breakpoints": [
@@ -714,6 +724,54 @@
         "guards": [
           "src/hooks/useTabParam.test.tsx: read, fallback, write, default drops the param, other params survive, replace, unknown key ignored"
         ]
+      },
+      {
+        "name": "Dialog layers",
+        "status": "shared; every modal layer runs on src/hooks/useDialogBehavior.ts",
+        "shipsOn": [
+          "Modal",
+          "ConfirmDialog",
+          "SlideOver (nine panels)",
+          "EditTripModal",
+          "the unsaved-changes dialog"
+        ],
+        "api": [
+          {
+            "component": "useDialogBehavior({ open, onClose, containerRef, closeOnEscape, lockScroll, initialFocusRef, returnFocus })",
+            "prop": "returns nothing; the caller marks up the dialog",
+            "effect": "Escape and the Tab trap act on the topmost open layer only (a module-level stack in the order layers opened); focus moves in on open and back to the opener on close; page scroll is locked once and released with the last layer; an Escape already preventDefault-ed (an open Dropdown list) is ignored"
+          }
+        ],
+        "guards": [
+          "src/hooks/useDialogBehavior.test.tsx: stack order, Escape topmost only, closeOnEscape swallowing, defaultPrevented, Tab trap and wrap (userEvent.tab), focus return, scroll lock count",
+          "src/test/slideOver.test.ts: no hand-written Escape handler outside the ratchet list, one place that locks scroll, aria-modal only on hook-driven dialogs"
+        ]
+      },
+      {
+        "name": "Side panel",
+        "status": "shared; the right-hand panel for creating or editing a record (src/components/SlideOver.tsx)",
+        "shipsOn": [
+          "Event templates",
+          "Billable events",
+          "Funding sources",
+          "Service bookings",
+          "Roster exceptions",
+          "Shift patterns",
+          "Roster shifts",
+          "Tenants",
+          "Users"
+        ],
+        "api": [
+          {
+            "component": "SlideOver",
+            "prop": "open, onClose, title, description?, footer?, size md|lg, side right, dirty?, beforeClose?, initialFocusRef?, bodyClassName?, footerClassName?",
+            "effect": "z-40 scrim and z-50 panel (fixed right-0 top-0, max-w-md or max-w-lg, shadow-xl); role=dialog aria-modal labelled by the title; header with a 44px-hit-area close button; scrolling body; sticky footer; Escape, scrim and close button go through beforeClose then dirty (\"Discard changes?\"); stops above the bottom nav below lg"
+          }
+        ],
+        "guards": [
+          "src/components/SlideOver.test.tsx: semantics, geometry, close button, focus, beforeClose, dirty, dialog over the panel, reduced motion",
+          "src/test/slideOver.test.ts: the nine panels render SlideOver and draw no fixed panel or scrim of their own"
+        ]
       }
     ]
   },
@@ -909,7 +967,8 @@
       "**Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed (\"Couldn't load\"), and never an \"All clear\" without data",
       "**Do** use `Button` for every action; it owns height, radius and focus",
       "**Do** keep compliance state, alerts and countdowns visually equal to ordinary data",
-      "**Do** express depth with warm tonal surfaces; reserve shadow for the primary button, floating panels and the header hairline"
+      "**Do** express depth with warm tonal surfaces; reserve shadow for the primary button, floating panels, the side panel and the header hairline",
+      "**Do** open a record from a list in a SlideOver, and run any dialog on useDialogBehavior so Escape, the Tab trap, focus return and the scroll lock come with it"
     ],
     "donts": [
       "**Don't** hardcode hex, `rgb()` or any literal colour in feature code; use `var(--color-*)` or a `Button` variant",

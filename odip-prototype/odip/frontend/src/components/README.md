@@ -24,6 +24,8 @@ copying it.
 - [EmptyState](#emptystate)
 - [PageState](#pagestate) (loading, error and not found, in place of a page or a tab)
 - [Modal](#modal) / [ConfirmDialog](#confirmdialog)
+- [useDialogBehavior](#usedialogbehavior) (`hooks/useDialogBehavior.ts`: the Escape, Tab trap, scroll lock and focus return behind every dialog, and the stack that lets one open over another)
+- [SlideOver](#slideover) (the right-hand panel for creating or editing a record)
 - [SearchInput](#searchinput)
 - [StatusBadge](#statusbadge)
 - [Tone system](#tone-system) (`lib/tone.ts`: `TONE`, `STATUS_TONE`, how a status gets its colour)
@@ -473,8 +475,11 @@ and shows skeletons for a region (the dashboard, the portal shift), a list with 
 
 `Modal.tsx` is the base dialog shell: focus trap, Escape-to-close, background scroll
 lock, focus returns to the trigger on close, `role="dialog"` + `aria-modal` +
-`aria-labelledby`. Props: `open`, `onClose`, `title`, `size` (`sm`/`md`/`lg`/`xl`),
-`footer`, `children`, `className`.
+`aria-labelledby`. The behaviour is [`useDialogBehavior`](#usedialogbehavior), so a Modal
+opened over another layer (a ConfirmDialog over a [SlideOver](#slideover)) answers Escape
+alone. Props: `open`, `onClose`, `title`, `size` (`sm`/`md`/`lg`/`xl`), `footer`,
+`children`, `className`. The close button is named "Close dialog" and has the `TAP_AREA`
+44px hit area on touch (its box stays 28px).
 
 `ConfirmDialog.tsx` is `Modal` pre-wired for the confirm/cancel shape: `title`, `message`,
 `confirmLabel`, `variant` (`'default' | 'danger'`), `loading` (button reads
@@ -498,6 +503,135 @@ confirm footer.
   loading={deleteShift.isPending}
 />
 ```
+
+---
+
+## useDialogBehavior
+
+`hooks/useDialogBehavior.ts` is the behaviour every modal layer owes its user, in one hook: **Escape** closes it, **Tab**
+stays inside it (and wraps both ways), focus **moves in** on open and **returns** to whatever had it when the layer
+opened, and the **page behind does not scroll**. `Modal`, `SlideOver`, `EditTripModal` and the unsaved-changes dialog
+(`useUnsavedChangesWarning`) all run on it. It renders nothing and sets no ARIA: the caller marks up the dialog.
+
+```tsx
+const ref = useRef<HTMLDivElement>(null)
+useDialogBehavior({ open, onClose, containerRef: ref })
+return open ? <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>…</div> : null
+```
+
+| Option | Default | |
+|---|---|---|
+| `open` | | The layer is on screen. Everything below starts on `open` and is undone when it goes false (or the component unmounts). |
+| `onClose` | | What Escape does. The caller closes the layer; the hook never does. |
+| `containerRef` | | The dialog element: the Tab trap's boundary and where focus goes. Give it `tabIndex={-1}`. |
+| `closeOnEscape` | `true` | `false` makes the layer ignore Escape and still keep Escape from reaching the layer under it. |
+| `lockScroll` | `true` | Counted: the page stays locked until the last layer that asked for it closes. |
+| `initialFocusRef` | first focusable | An element in the container. Read when focus moves in, so a ref set in a layout effect works. |
+| `returnFocus` | `true` | Give focus back to the opener on close. |
+
+**The stack.** Every open layer registers in a small module-level list in the order it opened, and ONE `keydown`
+listener serves all of them. Escape and the Tab trap act on the TOPMOST layer only, so a ConfirmDialog opened from a panel
+closes by itself and the panel keeps its place and focus (a dialog hands focus back to the control that opened it, the
+Delete button, which is inside the panel). Before the stack each layer listened on `document` on its own and one Escape
+closed both. Order is order of opening, not order in the tree.
+
+**Escape that something else used.** An open `Dropdown` or `SearchableSelect` list closes on Escape and calls
+`preventDefault()`; the hook ignores an Escape that is already `defaultPrevented`, so the first Escape closes the list
+and the second closes the dialog.
+
+**Rules.** Do not use `autoFocus` inside a layer: React focuses that element before the hook runs, so the hook would take it
+for the opener and never return focus to the real one; pass `initialFocusRef`. Focus that has strayed outside the layer (a
+click on a scrim that does not dismiss) is pulled back in on the next Tab. Hidden inputs and anything in a disabled
+`<fieldset>` are skipped when finding the first and last stop.
+
+**Not done: an inert background.** `aria-modal` tells assistive technology to ignore the page behind, and the trap keeps
+keyboard focus in, but the background is not `inert`: a layer rendered inline cannot make its own ancestors inert, so it
+needs a portal first.
+
+### The nav drawer should adopt it (not done here)
+
+`AppLayout`'s mobile drawer still has its own Escape effect and `menuButtonRef.focus()`; it is out of scope for the SlideOver
+change and belongs to the nav regroup. How it should move over:
+
+1. Below `lg` the `<aside>` IS a drawer; from `lg` it is the permanent sidebar. Open the layer only when it is a drawer:
+   `useDialogBehavior({ open: sidebarOpen && isBelowLg, onClose: () => setSidebarOpen(false), containerRef: drawerRef })`,
+   with `isBelowLg` from a `matchMedia('(max-width: 1023px)')` hook. Otherwise a stale `sidebarOpen` after a resize would lock
+   scroll and trap Tab on desktop.
+2. Give the aside `role="dialog" aria-modal="true" aria-label="Main menu" tabIndex={-1}` ONLY while it is a drawer, not
+   permanently (at `lg` it is a landmark).
+3. Delete the Escape `useEffect` and the manual `menuButtonRef.current?.focus()`: Escape and focus return come from the hook
+   (the opener is the menu button). Closing by a link click navigates, so give the links `returnFocus` care: pass
+   `returnFocus={false}` and let the route change move focus to `#main`, or the hook will pull focus back to the menu button.
+4. The scrim (`z-[55]`) and drawer (`z-[60]`) stay as they are; the hook does not touch z-index. Add tests: Escape closes the
+   drawer and focus is on the menu button; Tab does not leave the drawer; at `lg` none of it applies.
+
+---
+
+## SlideOver
+
+`components/SlideOver.tsx` is the panel docked to the right edge, for creating or editing a record without leaving the list.
+It replaced nine hand-rolled copies (`TemplateFormPanel`, `BillableEventFormPanel`, `FundingSourceFormPanel`,
+`ServiceBookingFormPanel`, `ExceptionsDrawer`, `PatternSlideOver`, `ShiftSlideOver`, `TenantFormPanel`, `UserFormPanel`), six
+of which had no Escape, no focus handling and no dialog role.
+
+```tsx
+<SlideOver
+  open
+  onClose={onClose}
+  title={isEdit ? 'Edit pattern' : 'New pattern'}
+  dirty={isDirty}
+  bodyClassName="flex flex-col gap-[var(--field-gap-y)]"
+  footerClassName="flex items-center justify-between gap-3"
+  footer={<>…Delete… <div className="flex gap-3">…Cancel, Save…</div></>}
+>
+  …fields…
+</SlideOver>
+```
+
+| Prop | |
+|---|---|
+| `open`, `onClose`, `title` | `title` is the h2 and the dialog's accessible name. |
+| `description` | One muted line under the title; the dialog's accessible description. None of the nine uses it yet. |
+| `footer` | The sticky strip under the body: the actions. Omit it for a read-only panel (the rostering panels do when `canWrite` is false). |
+| `size` | `md` = `max-w-md` (28rem, the default), `lg` = `max-w-lg` (32rem). Full width below that. Keep a panel's width when migrating. |
+| `side` | `'right'` is the only edge; `left` arrives with the nav drawer. |
+| `dirty` | The form has unsaved edits: Escape, the scrim and the close button then ask "Discard changes?" (**Keep editing** / **Discard**) instead of closing. |
+| `beforeClose` | `() => boolean \| Promise<boolean>`; `false` vetoes Escape, the scrim and the close button. Runs before `dirty`. |
+| `initialFocusRef` | Where focus lands. Default: the first focusable element, which is the close button. |
+| `bodyClassName`, `footerClassName` | Layout classes merged over the defaults (`cn`), e.g. the field gap on the body, or a justify rule on the footer. |
+
+**Markup.** A `z-40` scrim (`bg-black/40`) and a `z-50` panel: `fixed right-0 top-0 w-full max-w-md|lg flex-col overflow-hidden
+border-l bg-card shadow-xl`, `role="dialog"` `aria-modal="true"` `aria-labelledby` the title. Header: a `font-display` 16px
+title and a `Button variant="ghost" iconOnly` close ("Close panel", 44px hit area on touch). Body: `flex-1 overflow-y-auto`
+with `--card-pad` padding, so **the panel scrolls, not your form**: put the `<form>` inside it with no `overflow` of its own, and
+submit it from the footer with `type="submit" form="the-form-id"`. Footer: `shrink-0 border-t`, `--card-pad` padding.
+
+**Closing.** A panel closes by the caller setting `open` false, or by one of the three ways the panel closes itself (Escape,
+scrim, close button), which go through `beforeClose` and then `dirty`. A successful save calls `onClose` directly and
+a footer Cancel is an explicit discard that calls `onClose` directly: neither asks. To make a footer Cancel ask too, it has to
+call the panel's own request, which is not exposed; keep Cancel as the explicit way out.
+
+**Dirty.** The panels compute `dirty` from what they already have: react-hook-form's `formState.isDirty` (Template, Billable
+event, Funding source, Service booking), or the current values against the values the panel opened with (Shift and Pattern
+compare to their first render, because their page keys them on the target; Tenant and User compare to what the open effect
+set). A panel that shows a success notice before it auto-closes (Template, Tenant) is not dirty once it has saved. A read-only
+panel (`canWrite` false, a claimed billable event) cannot be dirty.
+
+**A dialog over the panel** (the Delete flow) is a `ConfirmDialog` rendered after the `SlideOver`: it is the topmost layer, so
+Escape closes only it, focus returns to the Delete button, and the page stays scroll-locked until the panel closes too. See
+[useDialogBehavior](#usedialogbehavior).
+
+**Layers and touch.** Scrim z-40, panel z-50: a Modal opened over it is also z-50 and later in the DOM, so it paints above. Below
+`lg` the fixed bottom nav (`AppLayout`, z-50, `--mobile-nav-h` tall) is also z-50 and later in the DOM than the page, so a full-height
+panel had its footer (Cancel, Save, Delete) underneath it and unreachable; the panel stops above the nav there
+(`h-[calc(100%-var(--mobile-nav-h))]`, full height from `lg`), as the wizard footer does. At `lg` and up the desktop sidebar is z-50 under a
+z-40 scrim, so it is neither dimmed nor blocked; that is unchanged.
+
+**Motion.** The panel slides in from the right and the scrim fades in over 200ms, only under
+`@media (prefers-reduced-motion: no-preference)` (`index.css`); with the preference set both just appear. There is no exit animation.
+
+**When to use it.** Create or edit one record from a list, where the list should stay in view behind. A short confirm or a
+small form is a `Modal`; anything with its own URL or several steps is a page.
 
 ---
 

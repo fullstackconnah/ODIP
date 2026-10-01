@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PatternSlideOver } from './PatternSlideOver'
 import type { ShiftPatternDto } from '@/api/types'
@@ -316,5 +316,51 @@ describe('PatternSlideOver — the server\'s refusal reaches the user', () => {
 
     expect(await screen.findByText(GENERIC_PATTERN_ERROR)).toBeInTheDocument()
     expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
+  })
+})
+
+describe('PatternSlideOver as a dialog', () => {
+  const props = { canWrite: true, participantOptions, staffOptions }
+
+  it('is a modal dialog named "New pattern" or "Edit pattern"', () => {
+    const { unmount } = render(<PatternSlideOver {...props} target={{ mode: 'create' }} onClose={noop} />)
+    expect(screen.getByRole('dialog', { name: 'New pattern' })).toHaveAttribute('aria-modal', 'true')
+    unmount()
+    render(<PatternSlideOver {...props} target={{ mode: 'edit', pattern: makePattern() }} onClose={noop} />)
+    expect(screen.getByRole('dialog', { name: 'Edit pattern' })).toBeInTheDocument()
+  })
+
+  it('Escape closes an untouched panel straight away', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<PatternSlideOver {...props} target={{ mode: 'edit', pattern: makePattern() }} onClose={onClose} />)
+    await user.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('Escape after an edit asks before closing; Keep editing keeps the edit', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<PatternSlideOver {...props} target={{ mode: 'edit', pattern: makePattern() }} onClose={onClose} />)
+    await user.type(screen.getByLabelText('Notes'), 'Fortnightly')
+    await user.keyboard('{Escape}')
+    const prompt = screen.getByRole('alertdialog', { name: 'Discard changes?' })
+    expect(onClose).not.toHaveBeenCalled()
+    await user.click(within(prompt).getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByRole('dialog', { name: 'Edit pattern' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Notes')).toHaveValue('Fortnightly')
+  })
+
+  it('Delete opens a confirm dialog; Escape closes only that dialog and leaves the panel open', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(<PatternSlideOver {...props} target={{ mode: 'edit', pattern: makePattern() }} onClose={onClose} />)
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(screen.getByRole('alertdialog', { name: 'Delete pattern' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Edit pattern' })).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveFocus()
   })
 })

@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { X, ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import {
   useCreateEventTemplate,
   useUpdateEventTemplate,
@@ -12,6 +12,7 @@ import {
 } from '@/api/hooks'
 import type { EventTemplateDto, TripListDto } from '@/api/types'
 import { SearchableSelect } from '@/components/SearchableSelect'
+import { SlideOver } from '@/components/SlideOver'
 
 // ---------------------------------------------------------------------------
 // Schema & types
@@ -89,7 +90,7 @@ export default function TemplateFormPanel({
     handleSubmit,
     reset,
     getValues,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
   // Populate form when panel opens
@@ -187,215 +188,22 @@ export default function TemplateFormPanel({
   const isBusy =
     isSubmitting || createMutation.isPending || updateMutation.isPending || deactivateMutation.isPending
 
+  // Unsaved edits. Choosing a trip in "Fill from trip" re-seeds the form with reset(), which would otherwise read as clean, so
+  // a changed selection counts too. Once the save has gone through (the "Template created" notice, up to the auto-close) there is
+  // nothing left to lose.
+  const dirty = (isDirty || selectedTripId !== (initialTrip?.id ?? '')) && !successMessage
+
   if (!isOpen) return null
 
   return (
-    <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
-
-      {/* Panel */}
-      <div className="fixed right-0 top-0 h-full w-full max-w-md bg-[var(--color-card)] border-l border-[var(--color-border)] z-50 flex flex-col shadow-xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)] shrink-0">
-          <h2 className="font-semibold text-[var(--color-foreground)]">
-            {isEdit ? 'Edit Template' : 'New Template'}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 rounded-[var(--radius-md)] hover:bg-[var(--color-accent)] transition-colors"
-          >
-            <X className="w-5 h-5 text-[var(--color-muted-foreground)]" />
-          </button>
-        </div>
-
-        {/* Scrollable form body */}
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          className={`flex-1 overflow-y-auto px-[var(--card-pad)] py-[var(--card-pad)] content-start ${modalGrid}`}
-        >
-          {/* Fill from trip — create mode only */}
-          {!isEdit && (
-            <div>
-              <label id="fillFromTripLabel" className={labelClass}>Fill from trip</label>
-              <SearchableSelect
-                id="fillFromTrip"
-                aria-labelledby="fillFromTripLabel"
-                value={selectedTripId}
-                onChange={handleTripSelect}
-                placeholder="— select a trip —"
-                items={trips.map(t => ({ value: t.id, label: t.tripName }))}
-              />
-              <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
-                Fills name, code, destination, region, and duration from the selected trip.
-              </p>
-            </div>
-          )}
-
-          {/* Event Name */}
-          <div className={modalSpan.full}>
-            <label htmlFor="eventName" className={labelClass}>Event Name *</label>
-            <input
-              id="eventName"
-              {...register('eventName')}
-              className={inputClass}
-              placeholder="e.g. Gold Coast Beach Break"
-            />
-            {errors.eventName && (
-              <p className="text-xs text-[var(--color-destructive)] mt-1">{errors.eventName.message}</p>
-            )}
-          </div>
-
-          {/* Event Code */}
-          <div className={modalSpan.half}>
-            <label htmlFor="eventCode" className={labelClass}>Event Code *</label>
-            <input
-              id="eventCode"
-              {...register('eventCode')}
-              className={`${inputClass} font-mono uppercase`}
-              placeholder="e.g. GOLD-01"
-            />
-            {errors.eventCode && (
-              <p className="text-xs text-[var(--color-destructive)] mt-1">{errors.eventCode.message}</p>
-            )}
-          </div>
-
-          {/* Destination + Region */}
-          <div className="contents">
-            <div>
-              <label htmlFor="defaultDestination" className={labelClass}>Default Destination</label>
-              <input
-                id="defaultDestination"
-                {...register('defaultDestination')}
-                className={inputClass}
-                placeholder="e.g. Gold Coast"
-              />
-            </div>
-            <div>
-              <label htmlFor="defaultRegion" className={labelClass}>Default Region</label>
-              <input
-                id="defaultRegion"
-                {...register('defaultRegion')}
-                className={inputClass}
-                placeholder="e.g. QLD"
-              />
-            </div>
-          </div>
-
-          {/* Duration + Preferred Time */}
-          <div className="contents">
-            <div>
-              <label htmlFor="standardDurationDays" className={labelClass}>Duration (days)</label>
-              <input
-                id="standardDurationDays"
-                {...register('standardDurationDays')}
-                type="number"
-                min={1}
-                className={inputClass}
-                placeholder="e.g. 7"
-              />
-            </div>
-            <div>
-              <label htmlFor="preferredTimeOfYear" className={labelClass}>Preferred Time of Year</label>
-              <input
-                id="preferredTimeOfYear"
-                {...register('preferredTimeOfYear')}
-                className={inputClass}
-                placeholder="e.g. Winter"
-              />
-            </div>
-          </div>
-
-          {/* Typical Activities */}
-          <div className={modalSpan.full}>
-            <label htmlFor="typicalActivities" className={labelClass}>Typical Activities</label>
-            <textarea
-              id="typicalActivities"
-              {...register('typicalActivities')}
-              rows={3}
-              className={inputClass}
-              placeholder="Describe typical activities…"
-            />
-          </div>
-
-          {/* Accessibility Notes */}
-          <div className={modalSpan.full}>
-            <label htmlFor="accessibilityNotes" className={labelClass}>Accessibility Notes</label>
-            <textarea
-              id="accessibilityNotes"
-              {...register('accessibilityNotes')}
-              rows={3}
-              className={inputClass}
-              placeholder="General accessibility notes…"
-            />
-          </div>
-
-          {/* Collapsible accommodation notes */}
-          <div className={modalSpan.full}>
-            <button
-              type="button"
-              onClick={() => setAccessibilityExpanded(p => !p)}
-              className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
-            >
-              {accessibilityExpanded ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
-              )}
-              Accommodation Notes
-            </button>
-
-            {accessibilityExpanded && (
-              <div className="mt-3 flex flex-col gap-[var(--field-gap-y)] pl-5 border-l border-[var(--color-border)]">
-                <div>
-                  <label htmlFor="fullyModifiedAccommodationNotes" className={labelClass}>Fully Modified Accommodation</label>
-                  <textarea
-                    id="fullyModifiedAccommodationNotes"
-                    {...register('fullyModifiedAccommodationNotes')}
-                    rows={3}
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="semiModifiedAccommodationNotes" className={labelClass}>Semi Modified Accommodation</label>
-                  <textarea
-                    id="semiModifiedAccommodationNotes"
-                    {...register('semiModifiedAccommodationNotes')}
-                    rows={3}
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="wheelchairAccessNotes" className={labelClass}>Wheelchair Access Notes</label>
-                  <textarea
-                    id="wheelchairAccessNotes"
-                    {...register('wheelchairAccessNotes')}
-                    rows={3}
-                    className={inputClass}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Success message */}
-          {successMessage && (
-            <div className="sm:col-span-2 bg-[var(--color-primary-fixed)] border border-[var(--color-primary-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-primary-fixed)] font-medium">
-              {successMessage}
-            </div>
-          )}
-
-          {/* Error message */}
-          {error && (
-            <div className="sm:col-span-2 bg-[var(--color-error-container)] border border-[var(--color-error-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)]">
-              {error}
-            </div>
-          )}
-        </form>
-
-        {/* Footer — sticky at bottom, outside scroll area */}
-        <div className="px-[var(--card-pad)] py-3 border-t border-[var(--color-border)] space-y-3 shrink-0">
+    <SlideOver
+      open
+      onClose={onClose}
+      title={isEdit ? 'Edit Template' : 'New Template'}
+      dirty={dirty}
+      footerClassName="py-3 space-y-3"
+      footer={
+        <>
           {/* Deactivate (edit mode only) */}
           {isEdit && (
             <div>
@@ -450,8 +258,188 @@ export default function TemplateFormPanel({
               {isBusy ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Template'}
             </button>
           </div>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit(onSubmit)} className={modalGrid}>
+        {/* Fill from trip — create mode only */}
+        {!isEdit && (
+          <div>
+            <label id="fillFromTripLabel" className={labelClass}>Fill from trip</label>
+            <SearchableSelect
+              id="fillFromTrip"
+              aria-labelledby="fillFromTripLabel"
+              value={selectedTripId}
+              onChange={handleTripSelect}
+              placeholder="— select a trip —"
+              items={trips.map(t => ({ value: t.id, label: t.tripName }))}
+            />
+            <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
+              Fills name, code, destination, region, and duration from the selected trip.
+            </p>
+          </div>
+        )}
+
+        {/* Event Name */}
+        <div className={modalSpan.full}>
+          <label htmlFor="eventName" className={labelClass}>Event Name *</label>
+          <input
+            id="eventName"
+            {...register('eventName')}
+            className={inputClass}
+            placeholder="e.g. Gold Coast Beach Break"
+          />
+          {errors.eventName && (
+            <p className="text-xs text-[var(--color-destructive)] mt-1">{errors.eventName.message}</p>
+          )}
         </div>
-      </div>
-    </>
+
+        {/* Event Code */}
+        <div className={modalSpan.half}>
+          <label htmlFor="eventCode" className={labelClass}>Event Code *</label>
+          <input
+            id="eventCode"
+            {...register('eventCode')}
+            className={`${inputClass} font-mono uppercase`}
+            placeholder="e.g. GOLD-01"
+          />
+          {errors.eventCode && (
+            <p className="text-xs text-[var(--color-destructive)] mt-1">{errors.eventCode.message}</p>
+          )}
+        </div>
+
+        {/* Destination + Region */}
+        <div className="contents">
+          <div>
+            <label htmlFor="defaultDestination" className={labelClass}>Default Destination</label>
+            <input
+              id="defaultDestination"
+              {...register('defaultDestination')}
+              className={inputClass}
+              placeholder="e.g. Gold Coast"
+            />
+          </div>
+          <div>
+            <label htmlFor="defaultRegion" className={labelClass}>Default Region</label>
+            <input
+              id="defaultRegion"
+              {...register('defaultRegion')}
+              className={inputClass}
+              placeholder="e.g. QLD"
+            />
+          </div>
+        </div>
+
+        {/* Duration + Preferred Time */}
+        <div className="contents">
+          <div>
+            <label htmlFor="standardDurationDays" className={labelClass}>Duration (days)</label>
+            <input
+              id="standardDurationDays"
+              {...register('standardDurationDays')}
+              type="number"
+              min={1}
+              className={inputClass}
+              placeholder="e.g. 7"
+            />
+          </div>
+          <div>
+            <label htmlFor="preferredTimeOfYear" className={labelClass}>Preferred Time of Year</label>
+            <input
+              id="preferredTimeOfYear"
+              {...register('preferredTimeOfYear')}
+              className={inputClass}
+              placeholder="e.g. Winter"
+            />
+          </div>
+        </div>
+
+        {/* Typical Activities */}
+        <div className={modalSpan.full}>
+          <label htmlFor="typicalActivities" className={labelClass}>Typical Activities</label>
+          <textarea
+            id="typicalActivities"
+            {...register('typicalActivities')}
+            rows={3}
+            className={inputClass}
+            placeholder="Describe typical activities…"
+          />
+        </div>
+
+        {/* Accessibility Notes */}
+        <div className={modalSpan.full}>
+          <label htmlFor="accessibilityNotes" className={labelClass}>Accessibility Notes</label>
+          <textarea
+            id="accessibilityNotes"
+            {...register('accessibilityNotes')}
+            rows={3}
+            className={inputClass}
+            placeholder="General accessibility notes…"
+          />
+        </div>
+
+        {/* Collapsible accommodation notes */}
+        <div className={modalSpan.full}>
+          <button
+            type="button"
+            onClick={() => setAccessibilityExpanded(p => !p)}
+            className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
+          >
+            {accessibilityExpanded ? (
+              <ChevronDown className="w-4 h-4" />
+            ) : (
+              <ChevronRight className="w-4 h-4" />
+            )}
+            Accommodation Notes
+          </button>
+
+          {accessibilityExpanded && (
+            <div className="mt-3 flex flex-col gap-[var(--field-gap-y)] pl-5 border-l border-[var(--color-border)]">
+              <div>
+                <label htmlFor="fullyModifiedAccommodationNotes" className={labelClass}>Fully Modified Accommodation</label>
+                <textarea
+                  id="fullyModifiedAccommodationNotes"
+                  {...register('fullyModifiedAccommodationNotes')}
+                  rows={3}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="semiModifiedAccommodationNotes" className={labelClass}>Semi Modified Accommodation</label>
+                <textarea
+                  id="semiModifiedAccommodationNotes"
+                  {...register('semiModifiedAccommodationNotes')}
+                  rows={3}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="wheelchairAccessNotes" className={labelClass}>Wheelchair Access Notes</label>
+                <textarea
+                  id="wheelchairAccessNotes"
+                  {...register('wheelchairAccessNotes')}
+                  rows={3}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Success message */}
+        {successMessage && (
+          <div className="sm:col-span-2 bg-[var(--color-primary-fixed)] border border-[var(--color-primary-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-primary-fixed)] font-medium">
+            {successMessage}
+          </div>
+        )}
+
+        {/* Error message */}
+        {error && (
+          <div className="sm:col-span-2 bg-[var(--color-error-container)] border border-[var(--color-error-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)]">
+            {error}
+          </div>
+        )}
+      </form>
+    </SlideOver>
   )
 }

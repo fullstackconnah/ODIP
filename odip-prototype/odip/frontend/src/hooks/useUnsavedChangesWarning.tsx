@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useBlocker, type BlockerFunction } from 'react-router-dom'
+import { useDialogBehavior } from './useDialogBehavior'
 
 type UnsavedChangesWarningReturn = {
   dialog: ReactNode
@@ -66,14 +67,11 @@ export function useUnsavedChangesWarning(when: boolean): UnsavedChangesWarningRe
 
   const isOpen = blocker.state === 'blocked'
 
-  useEffect(() => {
-    if (!isOpen) return
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') handleCancel()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, handleCancel])
+  // Escape (= keep editing), the Tab trap, scroll lock and focus in / back, shared with Modal and SlideOver. Focus starts on
+  // "Keep editing" (the safe answer); `autoFocus` is out because the hook must see the real opener to give focus back to it.
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const keepEditingRef = useRef<HTMLButtonElement>(null)
+  useDialogBehavior({ open: isOpen, onClose: handleCancel, containerRef: dialogRef, initialFocusRef: keepEditingRef })
 
   const dialog: ReactNode = isOpen ? (
     <div
@@ -82,11 +80,13 @@ export function useUnsavedChangesWarning(when: boolean): UnsavedChangesWarningRe
       onClick={handleCancel}
     >
       <div
+        ref={dialogRef}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="unsaved-changes-title"
         aria-describedby="unsaved-changes-message"
-        className="w-full max-w-sm rounded-lg bg-[var(--color-card)] p-6 shadow-xl"
+        tabIndex={-1}
+        className="w-full max-w-sm rounded-lg bg-[var(--color-card)] p-6 shadow-xl focus:outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="unsaved-changes-title" className="text-base font-semibold text-[var(--color-foreground)]">
@@ -97,8 +97,8 @@ export function useUnsavedChangesWarning(when: boolean): UnsavedChangesWarningRe
         </p>
         <div className="mt-6 flex justify-end gap-3">
           <button
+            ref={keepEditingRef}
             type="button"
-            autoFocus
             onClick={handleCancel}
             className="rounded-lg border border-[var(--color-foreground)]/20 px-4 py-2 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--color-foreground)]/5"
           >

@@ -255,6 +255,24 @@
 .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 
 /*
+ * SlideOver: the panel slides in from its edge over a fading scrim. Only for users who have not asked for reduced motion
+ * (the block below also zeroes animation durations product-wide, so this is belt and braces): with the preference set the
+ * panel and scrim simply appear, as they always did. No exit animation: the panel unmounts when it closes.
+ */
+@keyframes slideOverIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes scrimIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .slide-over-panel { animation: slideOverIn 0.2s ease-out; }
+  .slide-over-scrim { animation: scrimIn 0.2s ease-out; }
+}
+
+/*
  * Reduced motion — applied product-wide rather than per-component. Neutralises animation and
  * transition *duration/delay* so state changes (colour, opacity, width, transform) still happen
  * and are still perceivable, they just resolve instantly instead of animating. This deliberately
