@@ -196,6 +196,7 @@ a.sign--mini:hover { transform: translateY(-2px); }
 
 /* ---------- The tour: a concertina-folded road strip map ---------- */
 .tour { padding: clamp(48px, 7vw, 88px) 0 clamp(64px, 9vw, 112px); background: linear-gradient(180deg, var(--grass) 0, var(--ground) 160px, var(--ground) 100%); }
+.tour__country { display: none; }
 .tour__head { margin-bottom: 32px; }
 .tour__head h2 { max-width: 20ch; }
 
@@ -388,6 +389,12 @@ a.sign--mini:hover { transform: translateY(-2px); }
 @media (min-width: 640px) {
   .plates { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .site-footer__inner { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 56px; }
+}
+
+/* ---------- Wide desktop: the country shows through beside the strip ---------- */
+@media (min-width: 1280px) {
+  .tour { position: relative; isolation: isolate; background: linear-gradient(180deg, var(--grass) 0, #c6dbf9 240px, var(--sky) 100%); }
+  .tour__country { display: block; position: sticky; top: var(--header-h); z-index: -1; height: calc(100vh - var(--header-h)); margin-bottom: calc(var(--header-h) - 100vh); overflow: hidden; pointer-events: none; }
 }
 
 /* ---------- Desktop: folding volume, sticky stops, side-by-side ---------- */

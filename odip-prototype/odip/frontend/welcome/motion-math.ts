@@ -35,3 +35,8 @@ export function kmAt(progress: number, total = 60): number {
 export function currentFold(rects: Array<{ top: number; bottom: number }>, readingLine: number): number {
   return rects.findIndex((r) => r.top <= readingLine && r.bottom > readingLine)
 }
+
+/** How far through the tour section the viewport has travelled, 0 as it enters to 1 as it leaves. Drives the landscape drift. */
+export function sectionProgress(top: number, height: number, viewportHeight: number): number {
+  return clamp01((viewportHeight - top) / (height + viewportHeight))
+}

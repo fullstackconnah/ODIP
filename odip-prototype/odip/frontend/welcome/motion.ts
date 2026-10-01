@@ -3,13 +3,15 @@
 // and the distance marker counts down to "Early access 0 km".
 // Everything is visible and static by default: no listeners at all when the visitor prefers reduced motion.
 
-import { clamp01, currentFold, kmAt, routeFill, unfoldAmount } from './motion-math'
+import { clamp01, currentFold, kmAt, routeFill, sectionProgress, unfoldAmount } from './motion-math'
 
 export function initMotion(doc: Document = document, win: Window = window): { destroy(): void } {
   const reduce = win.matchMedia('(prefers-reduced-motion: reduce)')
   const wide = win.matchMedia('(min-width: 1024px)')
   const hero = doc.querySelector<HTMLElement>('.hero')
   const strip = doc.querySelector<HTMLElement>('.strip')
+  const tour = doc.querySelector<HTMLElement>('.tour')
+  const country = doc.querySelector<HTMLElement>('.tour__country')
   const folds = Array.from(doc.querySelectorAll<HTMLElement>('[data-fold]'))
   const links = Array.from(doc.querySelectorAll<HTMLAnchorElement>('[data-stop]'))
   const odo = doc.querySelector<HTMLElement>('[data-odo]')
@@ -23,6 +25,7 @@ export function initMotion(doc: Document = document, win: Window = window): { de
 
   function clear() {
     hero?.style.removeProperty('--drift')
+    country?.style.removeProperty('--drift')
     for (const fold of folds) {
       fold.style.removeProperty('--fill')
       fold.style.removeProperty('--unfold')
@@ -37,6 +40,10 @@ export function initMotion(doc: Document = document, win: Window = window): { de
     if (reduce.matches) return
     const vh = win.innerHeight
     if (hero) hero.style.setProperty('--drift', clamp01(win.scrollY / Math.max(1, hero.offsetHeight)).toFixed(3))
+    if (country && tour) {
+      const t = tour.getBoundingClientRect()
+      country.style.setProperty('--drift', sectionProgress(t.top, t.height, vh).toFixed(3))
+    }
     if (!strip || folds.length === 0) return
 
     const readingLine = vh * 0.6

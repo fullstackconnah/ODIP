@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clamp01, currentFold, kmAt, routeFill, smoothstep, unfoldAmount } from './motion-math'
+import { clamp01, currentFold, kmAt, routeFill, sectionProgress, smoothstep, unfoldAmount } from './motion-math'
 
 const PEAK = 58 // degrees, as in welcome.css
 const angle = (topFraction: number, vh = 900) => (1 - unfoldAmount(vh * topFraction, vh)) * PEAK
@@ -63,5 +63,12 @@ describe('motion maths', () => {
     expect(currentFold(rects, 600)).toBe(2)
     expect(currentFold(rects, 1200)).toBe(-1)
     expect(currentFold(rects, -500)).toBe(-1)
+  })
+
+  it('measures how far the viewport has travelled through the tour, for the landscape drift', () => {
+    expect(sectionProgress(900, 4000, 900)).toBe(0)
+    expect(sectionProgress(-4000, 4000, 900)).toBe(1)
+    expect(sectionProgress(-1550, 4000, 900)).toBeCloseTo(0.5, 2)
+    expect(sectionProgress(5000, 4000, 900)).toBe(0)
   })
 })

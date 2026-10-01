@@ -200,4 +200,10 @@ describe('finish-review corrections', () => {
     expect(cta.getAttribute('aria-label')).toBe('Request early access')
     expect(cta.querySelector('.cta-short')!.hasAttribute('aria-hidden')).toBe(false)
   })
+
+  it('has a quiet landscape behind the tour, hidden from assistive tech', () => {
+    const country = doc.querySelector('.tour__country')!
+    expect(country.getAttribute('aria-hidden')).toBe('true')
+    expect(country.querySelectorAll('use').length).toBeGreaterThanOrEqual(5)
+  })
 })
