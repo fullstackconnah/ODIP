@@ -1,6 +1,8 @@
 using System.Reflection;
+using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -10,6 +12,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
+using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Xunit;
 
@@ -153,6 +156,132 @@ public class ProviderSettingsControllerTests
         var settings = await ReadAsync(controller);
         Assert.Equal("Renamed Org", settings.OrganisationName);
         Assert.Equal(MedicationCompetencyMode.Enforce, settings.MedicationCompetencyMode);
+    }
+
+    // ── who changed the medication safety control: one audit row per real change (review 3 finding M1) ──
+
+    private static readonly Guid AdminId = Guid.NewGuid();
+
+    private static ProviderSettingsController ControllerAs(OdipDbContext db, Guid? actorId = null, string actorName = "Dana Admin") =>
+        new(db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                        [new Claim(ClaimTypes.NameIdentifier, (actorId ?? AdminId).ToString()), new Claim("fullName", actorName)], "Test")),
+                },
+            },
+        };
+
+    private static async Task<List<Odip.Domain.Entities.AuditLog>> AuditRowsAsync(OdipDbContext db) => await db.AuditLogs.ToListAsync();
+
+    [Fact]
+    public async Task CompetencyMode_AChange_WritesExactlyOneAuditRow_WithTheOldTheNewAndWho()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = ControllerAs(db);
+        await controller.Upsert(MinimalUpsertDto(), CancellationToken.None);   // Warn, the default: no change yet
+
+        await controller.Upsert(MinimalUpsertDto() with { MedicationCompetencyMode = MedicationCompetencyMode.Enforce }, CancellationToken.None);
+
+        var row = Assert.Single(await AuditRowsAsync(db));
+        Assert.Equal("ProviderSettings", row.EntityType);
+        Assert.Equal((await db.ProviderSettings.SingleAsync()).Id, row.EntityId);
+        Assert.Equal(AuditAction.Updated, row.Action);
+        Assert.Equal(AdminId, row.ChangedById);
+        Assert.Equal("Dana Admin", row.ChangedByName);
+        var change = Assert.Single(JsonSerializer.Deserialize<JsonElement>(row.Changes).EnumerateArray().ToList());
+        Assert.Equal("MedicationCompetencyMode", change.GetProperty("Field").GetString());
+        Assert.Equal("Warn", change.GetProperty("Old").GetString());
+        Assert.Equal("Enforce", change.GetProperty("New").GetString());
+
+        // and back again: a second row, the other way round
+        await controller.Upsert(MinimalUpsertDto() with { MedicationCompetencyMode = MedicationCompetencyMode.Warn }, CancellationToken.None);
+        var rows = await AuditRowsAsync(db);
+        Assert.Equal(2, rows.Count);
+        var back = JsonSerializer.Deserialize<JsonElement>(rows.OrderBy(r => r.ChangedAt).Last().Changes).EnumerateArray().Single();
+        Assert.Equal("Enforce", back.GetProperty("Old").GetString());
+        Assert.Equal("Warn", back.GetProperty("New").GetString());
+    }
+
+    [Fact]
+    public async Task CompetencyMode_NoChange_WritesNoAuditRow()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = ControllerAs(db);
+        await controller.Upsert(MinimalUpsertDto() with { MedicationCompetencyMode = MedicationCompetencyMode.Enforce }, CancellationToken.None);
+        var afterTheChange = (await AuditRowsAsync(db)).Count;   // the one row for Warn -> Enforce on the first save
+
+        await controller.Upsert(MinimalUpsertDto() with { MedicationCompetencyMode = MedicationCompetencyMode.Enforce }, CancellationToken.None);             // the same value
+        await controller.Upsert(MinimalUpsertDto() with { OrganisationName = "Renamed Org", MedicationCompetencyMode = null }, CancellationToken.None);       // not sent
+        await controller.Upsert(MinimalUpsertDto() with { ManagerPhone = "0412345007" }, CancellationToken.None);                                             // other fields only
+
+        Assert.Equal(1, afterTheChange);
+        Assert.Equal(1, await db.AuditLogs.CountAsync());
+        Assert.Equal(MedicationCompetencyMode.Enforce, (await db.ProviderSettings.SingleAsync()).MedicationCompetencyMode);
+    }
+
+    [Theory]
+    [InlineData(null, 0)]
+    [InlineData(MedicationCompetencyMode.Warn, 0)]
+    [InlineData(MedicationCompetencyMode.Enforce, 1)]
+    public async Task CompetencyMode_TheFirstSave_AuditsOnlyAChangeFromTheDefault(MedicationCompetencyMode? sent, int expectedRows)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+
+        await ControllerAs(db).Upsert(MinimalUpsertDto() with { MedicationCompetencyMode = sent }, CancellationToken.None);
+
+        Assert.Equal(expectedRows, await db.AuditLogs.CountAsync());
+    }
+
+    [Fact]
+    public async Task CompetencyMode_TheAuditRowNeverCarriesTheBankDetails_ProviderSettingsIsNotAnAuditedEntity()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = ControllerAs(db);
+
+        await controller.Upsert(MinimalUpsertDto() with
+        {
+            BankAccountName = "Test Org Operating", BSB = "062-000", AccountNumber = "12345678", MedicationCompetencyMode = MedicationCompetencyMode.Enforce,
+        }, CancellationToken.None);
+
+        var row = Assert.Single(await AuditRowsAsync(db));
+        Assert.DoesNotContain("12345678", row.Changes);
+        Assert.DoesNotContain("062-000", row.Changes);
+        Assert.DoesNotContain("Operating", row.Changes);
+        Assert.DoesNotContain(typeof(Odip.Domain.Entities.ProviderSettings), AuditedEntities.Types);   // it holds bank details: never audit the whole entity
+    }
+
+    [Fact]
+    public async Task CompetencyMode_WithNoSignedInUser_StillWorks_AndTheRowHasNoActor()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+
+        await new ProviderSettingsController(db).Upsert(MinimalUpsertDto() with { MedicationCompetencyMode = MedicationCompetencyMode.Enforce }, CancellationToken.None);
+
+        var row = Assert.Single(await AuditRowsAsync(db));
+        Assert.Null(row.ChangedById);
+        Assert.Null(row.ChangedByName);
+    }
+
+    [Theory]
+    [InlineData(7)]
+    [InlineData(-1)]
+    public async Task CompetencyMode_AnUndefinedValue_Is400_AndNothingChanges(int value)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = ControllerAs(db);
+        await controller.Upsert(MinimalUpsertDto() with { MedicationCompetencyMode = MedicationCompetencyMode.Enforce }, CancellationToken.None);
+
+        var result = await controller.Upsert(MinimalUpsertDto() with { OrganisationName = "Changed", MedicationCompetencyMode = (MedicationCompetencyMode)value }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        var stored = await db.ProviderSettings.SingleAsync();
+        Assert.Equal(MedicationCompetencyMode.Enforce, stored.MedicationCompetencyMode);
+        Assert.Equal("Test Org", stored.OrganisationName);   // nothing else was saved either
+        Assert.Equal(1, await db.AuditLogs.CountAsync());   // only the earlier real change
     }
 
     [Fact]
