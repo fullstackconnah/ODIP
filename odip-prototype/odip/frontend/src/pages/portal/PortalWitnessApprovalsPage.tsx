@@ -11,9 +11,16 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import type { PortalWitnessRequestDto } from '@/api/types'
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS } from '@/api/types/enums'
 import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
+import { formatWallClock } from '@/lib/wallClock'
 
+/** An INSTANT (a dose given), in the zone it was recorded in. */
 function formatDateTime(value: string | null, timeZone: string | null) {
   return formatWithTimeZone(value, timeZone, { dateStyle: 'medium', timeStyle: 'short' }, undefined)
+}
+
+/** The incident time the reporter typed: a provider-local wall-clock value, shown as written (never converted). */
+function formatIncidentTime(value: string | null) {
+  return formatWallClock(value, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 /** Matches the card shape/spacing of the real rows below, so the loading state doesn't jump. */
@@ -182,7 +189,7 @@ export default function PortalWitnessApprovalsPage() {
                         {request.incidentSeverity ? ` · ${INCIDENT_SEVERITY_LABELS[request.incidentSeverity] ?? request.incidentSeverity} severity` : ''}
                       </p>
                       <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
-                        Reported by {request.recordedByName} · {formatDateTime(request.incidentDateTime, null)}
+                        Reported by {request.recordedByName} · {formatIncidentTime(request.incidentDateTime)}
                       </p>
                     </>
                   ) : (

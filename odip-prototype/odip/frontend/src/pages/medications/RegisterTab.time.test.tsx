@@ -23,7 +23,7 @@ function medication(nextReviewDue: string): MedicationListDto {
     daysOfWeek: [], intervalDays: null, anchorDate: null, status: 'Active', isHighRisk: false, isPsychotropic: false,
     isChemicalRestraint: false, drugSchedule: 'None', supportLevel: 'FullSupport', packaging: 'OriginalPackaging',
     startDate: '2026-01-01T00:00:00', endDate: null, nextReviewDue, complianceFlags: [],
-  } as MedicationListDto
+  } as unknown as MedicationListDto
 }
 
 // L4-04, on the register: the red "Next review" date is for a review that is overdue, which starts the day AFTER the due date.

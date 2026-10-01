@@ -5,6 +5,7 @@
 import { ADMIN_STATUS_LABELS, INCIDENT_TRIGGER_OUTCOMES } from '@/api/types/medications'
 import type { MedicationAdministrationStatus } from '@/api/types/enums'
 import { parseApiDate, formatWithTimeZone, formatDateAu } from '@/lib/utils'
+import { datetimeInputNow, formatWallClock, toDatetimeInputValue } from '@/lib/wallClock'
 import type { RestrictivePracticeDto } from '@/api/types/restrictive-practices'
 import { formatFlaggedCategoryList, incidentTypeForFlaggedCategories, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { formatShiftRange, formatDayAccessibleName } from '@/pages/rostering/lib/roster'
@@ -112,7 +113,8 @@ export function buildIncidentDescriptionSkeleton(p: MarIncidentPrefillState): st
   const when = p.administeredAt
     ? formatWithTimeZone(p.administeredAt, p.administeredAtTimeZone, { dateStyle: 'medium', timeStyle: 'short' })
     : p.scheduledAt
-      ? `scheduled for ${formatWithTimeZone(p.scheduledAt, p.administeredAtTimeZone, { dateStyle: 'medium', timeStyle: 'short' })}`
+      // The slot is a provider-local wall-clock value ("8 pm" on the MAR), shown as written, not an instant to convert.
+      ? `scheduled for ${formatWallClock(p.scheduledAt, { dateStyle: 'medium', timeStyle: 'short' })}`
       : null
 
   const lines = [
@@ -135,12 +137,13 @@ export function buildIncidentTitleSkeleton(p: MarIncidentPrefillState): string {
   return `${ADMIN_STATUS_LABELS[p.outcome]} — ${p.medicationName} (${p.participantName})`
 }
 
-/** Best-effort incidentDateTime for the datetime-local field — prefers the actual administered
- * instant (rendered in the zone it was captured in), falling back to the scheduled time, then now. */
+/** Best-effort incidentDateTime for the datetime-local field. The field holds provider-local wall-clock digits (stored verbatim), so: the actual
+ * administered INSTANT rendered in the zone it was captured in; else the scheduled SLOT, which is already wall-clock digits and is copied as
+ * written (it used to be read as an instant and shifted by the UTC offset); else the viewer's local clock now (not the UTC clock). */
 export function buildIncidentDateTime(p: MarIncidentPrefillState): string {
-  const iso = p.administeredAt ?? p.scheduledAt
-  if (!iso) return new Date().toISOString().slice(0, 16)
-  return toDatetimeLocalValue(iso, p.administeredAtTimeZone)
+  if (p.administeredAt) return toDatetimeLocalValue(p.administeredAt, p.administeredAtTimeZone)
+  if (p.scheduledAt) return toDatetimeInputValue(p.scheduledAt)
+  return datetimeInputNow()
 }
 
 /** MED-03/INC-03 default severity heuristic — a wrong medication is treated as more serious than

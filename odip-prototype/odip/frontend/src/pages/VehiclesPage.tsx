@@ -1,6 +1,7 @@
 import { useVehicles, useDeleteVehicle, useUpdateVehicle } from '@/api/hooks'
 import type { VehicleListDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
+import { deadlineState } from '@/lib/deadline'
 import { Plus, Pencil, Trash2, ArchiveRestore, Car, Bus, Truck, Users, Wrench, Calendar, Accessibility } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
@@ -25,14 +26,14 @@ const vehicleTypeConfig: Record<VehicleTypeKey, { icon: React.ElementType; iconB
   Other: { icon: Truck, iconBg: 'bg-[var(--color-surface-container-high)]', iconColor: 'text-[var(--color-muted-foreground)]' },
 }
 
+// The service and registration dates are DateOnly: overdue from the day AFTER, warning today and for the next 30 days (the same rule as the
+// Qualifications page, lib/deadline). It read the date as UTC midnight, which is 10:00 in Sydney, and went red mid-morning on the due day.
 function getDateStatus(dateStr: string | null | undefined): 'overdue' | 'warning' | 'ok' | null {
   if (!dateStr) return null
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffDays = (date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-  if (diffDays < 0) return 'overdue'
-  if (diffDays < 30) return 'warning'
-  return 'ok'
+  const { status } = deadlineState(dateStr, { warnDays: 30 })
+  if (status === 'overdue') return 'overdue'
+  if (status === 'today' || status === 'soon') return 'warning'
+  return status === 'ok' ? 'ok' : null
 }
 
 function StatCell({ icon: Icon, label, value, status }: {

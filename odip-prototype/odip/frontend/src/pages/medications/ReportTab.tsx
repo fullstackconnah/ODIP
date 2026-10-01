@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { WITNESS_STATUS_LABELS } from '@/api/types/medications'
 import type { AdministrationDto } from '@/api/types/medications'
 import { formatWithTimeZone } from '@/lib/utils'
+import { formatWallClock } from '@/lib/wallClock'
 import type { Tone } from '@/lib/tone'
 import { plural } from '@/lib/format'
 
@@ -71,7 +72,12 @@ export default function ReportTab() {
       key: 'administeredAt',
       header: 'When Given',
       sortable: true,
-      render: a => formatWithTimeZone(a.administeredAt ?? a.scheduledAt, a.administeredAtTimeZone, { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }),
+      // A dose that was given is an INSTANT, shown in the zone it was recorded in; one that never was falls back to its SLOT, which is a
+      // provider-local wall-clock value shown as written (read as an instant it moved by the UTC offset).
+      render: a => {
+        const fmt: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }
+        return a.administeredAt ? formatWithTimeZone(a.administeredAt, a.administeredAtTimeZone, fmt) : formatWallClock(a.scheduledAt, fmt)
+      },
     },
     { key: 'recordedByName', header: 'Staff', render: a => a.recordedByName || '—' },
     {

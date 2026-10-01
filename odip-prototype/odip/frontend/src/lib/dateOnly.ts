@@ -39,6 +39,35 @@ export function dayNumberOf(when: Date): number | null {
   return Number.isNaN(when.getTime()) ? null : dayNumber(when.getFullYear(), when.getMonth() + 1, when.getDate())
 }
 
+/** "YYYY-MM-DD" for a day number (the inverse of parseDateOnly). Exact in every zone: it never goes through a local midnight. */
+export function formatDayNumber(day: number): string {
+  return new Date(day * MS_PER_DAY).toISOString().slice(0, 10)
+}
+
+/**
+ * The viewer's local calendar date as "YYYY-MM-DD": what their wall calendar shows right now. This is the date to SAVE for "today" (a task's
+ * completed date). `new Date().toISOString().split('T')[0]` is the UTC date, which is still yesterday before 10:00 (11:00 in daylight time)
+ * in Sydney. '' for an invalid Date.
+ */
+export function localIsoDate(when: Date = new Date()): string {
+  const day = dayNumberOf(when)
+  return day === null ? '' : formatDayNumber(day)
+}
+
+/**
+ * Every day from `from` up to but NOT including `to`, as "YYYY-MM-DD" (the nights of a stay that checks in on `from` and out on `to`).
+ * Whole-day maths on day numbers, so it is the same in every zone and across a clock change. Empty for an empty or backwards range or an
+ * unusable date; a time part after the date is ignored.
+ */
+export function eachDay(from: string | null | undefined, to: string | null | undefined): string[] {
+  const start = parseDateOnly(from)
+  const end = parseDateOnly(to)
+  if (start === null || end === null || end <= start) return []
+  const days: string[] = []
+  for (let d = start; d < end; d++) days.push(formatDayNumber(d))
+  return days
+}
+
 /**
  * Whole calendar days from `today` to `target`: positive in the future, 0 today, negative once it has passed. null when either side is
  * not a usable date. `today` defaults to the viewer's current local day.

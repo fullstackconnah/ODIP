@@ -26,7 +26,8 @@ import type {
   CreateLeaveRequestDto, CreateRecurringUnavailabilityDto, CreateStaffAvailabilityDto, OverlapShiftDto,
 } from '@/api/types'
 import { formatEffectiveRange, formatShiftTimeRange } from './lib/roster'
-import { extractErrorMessage, formatDateAu } from '@/lib/utils'
+import { extractErrorMessage, formatDateAu, parseApiDate } from '@/lib/utils'
+import { localIsoDate } from '@/lib/dateOnly'
 import type { Tone } from '@/lib/tone'
 import { plural } from '@/lib/format'
 
@@ -464,7 +465,8 @@ export default function LeaveApprovalsPage() {
     if (row.rowKind === 'legacy') return '—'
     const { requestedByUserId, userId, requestedAt } = row.data
     const who = requestedByUserId === userId ? 'Self' : (staffNameById.get(requestedByUserId) ?? 'Coordinator')
-    return `${who} · ${requestedAt.slice(0, 10)}`
+    // requestedAt is an INSTANT: the day it was requested is the viewer's local date, not the first ten characters (the UTC date).
+    return `${who} · ${localIsoDate(parseApiDate(requestedAt))}`
   }
 
   // Column budget (density §4): the Edit / Decline / Approve buttons take ~260px, so with uncapped text columns this table needed ~1170px

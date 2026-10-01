@@ -11,6 +11,7 @@ import { Button } from '@/components/Button'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
+import { isPastDue } from '@/lib/deadline'
 import { ComplianceFlagChips } from './MedicationBadges'
 import { DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_TYPE_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
 import type { MedicationListDto } from '@/api/types/medications'
@@ -64,7 +65,8 @@ export default function RegisterTab() {
     setPage(1)
   }
 
-  const isReviewOverdue = (dateStr: string | null) => !!dateStr && new Date(dateStr).getTime() < Date.now()
+  // NextReviewDue is a date held in a DateTime ("2026-10-03T00:00:00"): overdue from the day AFTER, not from local midnight on the due day.
+  const isReviewOverdue = (dateStr: string | null) => isPastDue(dateStr)
 
   // Column budget (density §4): nine columns with an uncapped medication and dose need ~1300px against a ~1006px box at 1280, which
   // pushed Status off-screen. The three text columns are capped (ellipsis, full text in the tooltip); Type and Support level give way

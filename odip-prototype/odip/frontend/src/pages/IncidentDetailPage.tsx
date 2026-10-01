@@ -10,6 +10,7 @@ import { isNotFoundError } from '@/lib/httpStatus'
 import { FactList } from '@/components/FactList'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
+import { formatWallClock } from '@/lib/wallClock'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { SHIFT_NOTE_FLAG_LABELS, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, QSC_REPORTING_STATUS_LABELS } from '@/api/types/enums'
@@ -70,7 +71,7 @@ export default function IncidentDetailPage() {
       <Card>
         <FactList
           items={[
-            { label: 'Date & time', value: <span className="tabular-nums">{formatWithTimeZone(incident.incidentDateTime, null, { dateStyle: 'medium', timeStyle: 'short' })}</span> },
+            { label: 'Date & time', value: <span className="tabular-nums">{formatWallClock(incident.incidentDateTime, { dateStyle: 'medium', timeStyle: 'short' })}</span> },
             { label: 'Location', value: incident.location || '—' },
             { label: 'Reported by', value: incident.reportedByName || '—' },
             { label: 'QSC reporting status', value: QSC_REPORTING_STATUS_LABELS[incident.qscReportingStatus] ?? incident.qscReportingStatus },

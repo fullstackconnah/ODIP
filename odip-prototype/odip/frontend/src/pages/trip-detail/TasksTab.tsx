@@ -7,6 +7,7 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
 import { StatusBadge } from '@/components/StatusBadge'
 import { getStatusColor } from '@/lib/utils'
+import { localIsoDate } from '@/lib/dateOnly'
 
 const TASK_STATUS_ITEMS = [
   { value: 'NotStarted', label: 'Not Started' },
@@ -36,7 +37,7 @@ function toUpdateTaskPayload(task: TaskDto, status: TaskItemStatus, tripId: stri
     notes: task.notes ?? undefined,
     status,
     completedDate: status === 'Completed'
-      ? new Date().toISOString().split('T')[0]
+      ? localIsoDate()
       : (task.completedDate ?? undefined),
   }
 }

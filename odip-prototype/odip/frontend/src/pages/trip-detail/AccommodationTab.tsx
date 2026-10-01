@@ -11,6 +11,7 @@ import {
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { TONE } from '@/lib/tone'
 import { formatRatio, plural } from '@/lib/format'
+import { eachDay, formatDayNumber, parseDateOnly } from '@/lib/dateOnly'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { DataTable, type Column } from '@/components/DataTable'
@@ -22,6 +23,10 @@ import { RESERVATION_STATUSES } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { ReservationDto } from '@/api/types/reservations'
 import type { AccommodationListDto } from '@/api/types/accommodation'
+
+/** "Sat, 3 Oct": the weekday and date of a calendar day ("2026-10-03"), the same in every viewer zone (it is never a local midnight). */
+const dayLabel = (isoDate: string) =>
+  new Date(`${isoDate}T00:00:00Z`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
 
 const RESERVATION_STATUS_ITEMS: DropdownItem[] = RESERVATION_STATUSES.map(s => ({ value: s, label: s }))
 
@@ -177,12 +182,12 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
     }
   }
 
-  // Accommodation coverage check
+  // Accommodation coverage check. Trip and stay dates are DateOnly ("2026-10-01"), so this is whole-calendar-day maths (lib/dateOnly): a night is
+  // the day a guest checks in, up to but not including the day they check out. It stepped with setDate (local) and keyed with toISOString (the
+  // UTC date), which put every night after Sydney's clock change (Sun 4 Oct 2026) one day early: the trip's last night was never tested.
   const accommodationCoverage = useMemo(() => {
-    if (!trip?.startDate || !trip?.endDate) return null
-    const start = new Date(trip.startDate)
-    const end = new Date(trip.endDate)
-    const totalNights = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+    const tripNights = eachDay(trip?.startDate, trip?.endDate)
+    const totalNights = tripNights.length
     if (totalNights <= 0) return null
 
     const activeReservations = accommodation.filter((r: ReservationDto) =>
@@ -192,31 +197,21 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
     // Track which nights are covered (night = day you check in)
     const coveredNights = new Set<string>()
     for (const r of activeReservations) {
-      const ci = new Date(r.checkInDate)
-      const co = new Date(r.checkOutDate)
-      const d = new Date(ci)
-      while (d < co) {
-        coveredNights.add(d.toISOString().split('T')[0])
-        d.setDate(d.getDate() + 1)
-      }
+      for (const night of eachDay(r.checkInDate, r.checkOutDate)) coveredNights.add(night)
     }
 
     // Check each night of the trip (not including last day — that's checkout)
-    const uncoveredNights: string[] = []
-    const d = new Date(start)
-    for (let i = 0; i < totalNights; i++) {
-      const key = d.toISOString().split('T')[0]
-      if (!coveredNights.has(key)) uncoveredNights.push(key)
-      d.setDate(d.getDate() + 1)
-    }
+    const uncoveredNights = tripNights.filter(night => !coveredNights.has(night))
 
     return { totalNights, coveredNights: totalNights - uncoveredNights.length, uncoveredNights, allCovered: uncoveredNights.length === 0 }
   }, [accommodation, trip?.startDate, trip?.endDate])
 
   const property = (r: ReservationDto) => allAccommodation.find((a: AccommodationListDto) => a.id === r.accommodationPropertyId)
-  const nightsOf = (r: ReservationDto) => r.checkInDate && r.checkOutDate
-    ? Math.round((new Date(r.checkOutDate).getTime() - new Date(r.checkInDate).getTime()) / (1000 * 60 * 60 * 24))
-    : null
+  const nightsOf = (r: ReservationDto) => {
+    const checkIn = parseDateOnly(r.checkInDate)
+    const checkOut = parseDateOnly(r.checkOutDate)
+    return checkIn !== null && checkOut !== null ? checkOut - checkIn : null
+  }
 
   // Column budget (density §4): the Property cell (name, address, badges, comments) is the one column that holds free text of any
   // length, and unwrapped it made the table 1275px wide with a one-line address and ~2000px with a two-sentence comment, pushing Ref and
@@ -311,20 +306,18 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
       {/* Stay Timeline */}
       {trip?.startDate && trip?.endDate && (() => {
-        const tripStart = new Date(trip.startDate)
-        const tripEnd = new Date(trip.endDate)
-        const totalDays = Math.max(1, Math.round((tripEnd.getTime() - tripStart.getTime()) / (1000 * 60 * 60 * 24)))
+        const tripStartDay = parseDateOnly(trip.startDate)
+        const tripEndDay = parseDateOnly(trip.endDate)
+        if (tripStartDay === null || tripEndDay === null) return null
+        const totalDays = Math.max(1, tripEndDay - tripStartDay)
         const coverage = accommodationCoverage
         const activeRes = accommodation.filter((r: ReservationDto) => !['Cancelled', 'Unavailable'].includes(r.reservationStatus))
 
-        // Build day labels
-        const days: { date: Date; label: string; covered: boolean }[] = []
+        // Build day labels: each is a calendar day, labelled with its own weekday whatever zone the viewer is in.
+        const days: { key: string; label: string }[] = []
         for (let i = 0; i <= totalDays; i++) {
-          const d = new Date(tripStart)
-          d.setDate(d.getDate() + i)
-          const key = d.toISOString().split('T')[0]
-          const isCovered = i < totalDays ? !coverage?.uncoveredNights.includes(key) : true // last day is checkout
-          days.push({ date: d, label: d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }), covered: isCovered })
+          const key = formatDayNumber(tripStartDay + i)
+          days.push({ key, label: dayLabel(key) })
         }
 
         return (
@@ -350,8 +343,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
             {/* Night cells row */}
             <div className="flex gap-0.5 mt-1 mb-2">
               {days.slice(0, -1).map((day, i) => {
-                const key = day.date.toISOString().split('T')[0]
-                const isMissing = coverage?.uncoveredNights.includes(key)
+                const isMissing = coverage?.uncoveredNights.includes(day.key)
                 return (
                   <div key={i} className={`flex-1 h-2 rounded-sm ${isMissing ? 'bg-[var(--color-error-container)]/70' : 'bg-[var(--color-primary-fixed)]/50'}`}
                     title={`${day.label}: ${isMissing ? 'No accommodation' : 'Covered'}`} />
@@ -361,10 +353,11 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
             {/* Reservation bars */}
             {activeRes.map((r: ReservationDto) => {
-              const ci = new Date(r.checkInDate)
-              const co = new Date(r.checkOutDate)
-              const startOffset = Math.max(0, (ci.getTime() - tripStart.getTime()) / (1000 * 60 * 60 * 24))
-              const endOffset = Math.min(totalDays, (co.getTime() - tripStart.getTime()) / (1000 * 60 * 60 * 24))
+              const checkIn = parseDateOnly(r.checkInDate)
+              const checkOut = parseDateOnly(r.checkOutDate)
+              if (checkIn === null || checkOut === null) return null
+              const startOffset = Math.max(0, checkIn - tripStartDay)
+              const endOffset = Math.min(totalDays, checkOut - tripStartDay)
               const leftPct = (startOffset / totalDays) * 100
               const widthPct = ((endOffset - startOffset) / totalDays) * 100
               if (widthPct <= 0) return null
@@ -383,10 +376,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
               <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-[rgba(195,201,181,0.15)]">
                 <AlertTriangle className="w-3.5 h-3.5 text-[var(--color-destructive)] shrink-0" />
                 <p className="text-xs text-[var(--color-destructive)]">
-                  Missing: {coverage.uncoveredNights.map((d: string) => {
-                    const dt = new Date(d)
-                    return dt.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
-                  }).join(', ')}
+                  Missing: {coverage.uncoveredNights.map(dayLabel).join(', ')}
                 </p>
               </div>
             )}

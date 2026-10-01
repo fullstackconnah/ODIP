@@ -200,6 +200,8 @@ export default function QualificationsPage() {
               change in Settings
             </Link>
             {' '}· showing active staff only
+            {/* The Dashboard's "Qualification Issues" figure counts issues; the tabs below count staff. Both are said here, so 12 reads against 4. */}
+            {' '}· {plural(groups.reduce((sum, g) => sum + g.issueCount, 0), 'issue')} across {plural(groups.length, 'staff member')}
           </>
         )}
       />

@@ -61,6 +61,16 @@ export function deadlineLabel(state: DeadlineState, style: DeadlineLabelStyle = 
   }
 }
 
+/**
+ * True once a due DAY has passed: the day AFTER it, never on it. This is the "overdue" every screen means (the Qualifications page says
+ * "Expires today" on the day itself). A date-time ("2026-10-03T00:00:00", a DateTime? that holds a date) counts by its date part. The four
+ * screens that rolled their own `new Date(x).getTime() < Date.now()` went red mid-morning on the due day (a DateOnly is UTC midnight, which
+ * is 10:00 in Sydney) or from 00:00 (a zone-less date-time is local midnight).
+ */
+export function isPastDue(isoDate: string | null | undefined, today: Date | string = new Date()): boolean {
+  return deadlineState(isoDate, { warnDays: 0, today }).status === 'overdue'
+}
+
 /** True for every state that needs someone to act: no date, past, today or soon. Only `ok` is fine. */
 export function isDeadlineIssue(state: DeadlineState): boolean {
   return state.status !== 'ok'

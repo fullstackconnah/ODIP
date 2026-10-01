@@ -29,7 +29,7 @@ function medication(nextReviewDue: string): MedicationListDto {
     daysOfWeek: [], intervalDays: null, anchorDate: null, status: 'Active', isHighRisk: false, isPsychotropic: false,
     isChemicalRestraint: false, drugSchedule: 'None', supportLevel: 'FullSupport', packaging: 'OriginalPackaging',
     startDate: '2026-01-01T00:00:00', endDate: null, nextReviewDue, complianceFlags: [],
-  } as MedicationListDto
+  } as unknown as MedicationListDto
 }
 
 function renderTab() {

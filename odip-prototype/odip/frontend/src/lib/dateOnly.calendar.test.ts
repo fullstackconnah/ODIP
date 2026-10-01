@@ -7,16 +7,17 @@ import { restoreZone, setZone } from '@/test/timeZone'
 afterEach(restoreZone)
 
 describe('localIsoDate', () => {
+  // Components, not Dates: a Date built here would be created in the zone the process started in, before setZone runs.
   it.each([
-    ['Australia/Sydney', new Date(2026, 9, 3, 8, 0), '2026-10-03'],  // 22:00Z on the 2nd
-    ['Australia/Sydney', new Date(2026, 9, 5, 8, 0), '2026-10-05'],  // 21:00Z on the 4th (daylight time)
-    ['Australia/Sydney', new Date(2026, 9, 3, 0, 5), '2026-10-03'],
-    ['Australia/Sydney', new Date(2026, 9, 3, 23, 55), '2026-10-03'],
-    ['UTC', new Date(2026, 9, 3, 8, 0), '2026-10-03'],
-    ['America/New_York', new Date(2026, 9, 3, 22, 0), '2026-10-03'], // 02:00Z on the 4th
-  ] as const)('%s %s is %s', (zone, when, expected) => {
+    ['Australia/Sydney', [2026, 9, 3, 8, 0], '2026-10-03'],  // 22:00Z on the 2nd
+    ['Australia/Sydney', [2026, 9, 5, 8, 0], '2026-10-05'],  // 21:00Z on the 4th (daylight time)
+    ['Australia/Sydney', [2026, 9, 3, 0, 5], '2026-10-03'],
+    ['Australia/Sydney', [2026, 9, 3, 23, 55], '2026-10-03'],
+    ['UTC', [2026, 9, 3, 8, 0], '2026-10-03'],
+    ['America/New_York', [2026, 9, 3, 22, 0], '2026-10-03'], // 02:00Z on the 4th
+  ] as const)('%s %j is %s', (zone, [y, m, d, h, min], expected) => {
     if (!setZone(zone)) return
-    expect(localIsoDate(when)).toBe(expected)
+    expect(localIsoDate(new Date(y, m, d, h, min))).toBe(expected)
   })
 })
 
