@@ -317,6 +317,9 @@ export const SHIFT_PACKAGE_ERROR_CODES = {
    * Administered or WrongMedication, supersedes Refused, Withheld or Missed records; an Administered or WrongMedication record is never
    * superseded); `data` is the newest active record (an AdministrationDto). */
   administrationAlreadyRecorded: 'ADMINISTRATION_ALREADY_RECORDED',
+  /** 409 on recording a dose — another request held this dose's slot lock for more than a few seconds (a stuck request, not a normal double tap,
+   * which just waits a moment and then gets the first record). Nothing was written and `data` is null: look at the dose, then try again. */
+  administrationSlotBusy: 'ADMINISTRATION_SLOT_BUSY',
   /** 400 — the idempotency key was used for a different medication. */
   idempotencyKeyReused: 'ADMINISTRATION_IDEMPOTENCY_KEY_REUSED',
   /** 404 on ticking or unticking a routine that is not one of the routines matched to the shift's window (`shiftRoutines`). */

@@ -201,7 +201,9 @@ export interface FinishShiftDto {
   longitude?: number | null
   geolocationDeclined: boolean
   actualStart?: string | null
-  /** The handover note for the next worker (max 2000 chars). Blank is allowed — it is prompted but optional. */
+  /** The handover note for the next worker (max 2000 chars). Blank is allowed — it is prompted but optional. The Finish form should set
+   * `maxLength={2000}` on its textarea: a longer note is rejected by the framework before the action runs, as a ValidationProblemDetails 400
+   * (no `code`; `errors` keyed by field), which `apiErrorMessages` in lib/shiftPackageErrors reads. */
   handoverText?: string | null
   /** "Nothing to hand over", confirmed explicitly. Mutually exclusive with a non-blank `handoverText` (400 SHIFT_HANDOVER_CONFLICT). */
   nothingToHandOver?: boolean

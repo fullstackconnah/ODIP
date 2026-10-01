@@ -8,11 +8,16 @@ import { SHIFT_PACKAGE_ERROR_CODES } from '@/api/types'
  *  - `errors` — plain-language messages, safe to show;
  *  - `data`   — sometimes a payload worth using: the refreshed shift detail on 422 SHIFT_FINISH_BLOCKED and 409
  *               SHIFT_HANDOVER_CHANGED, the EXISTING record on 409 ADMINISTRATION_ALREADY_RECORDED.
+ *
+ * One failure does NOT use the envelope: a request the framework rejects before the action runs (a handover note over its 2000-character limit,
+ * say) is an ASP.NET `ValidationProblemDetails` 400 with no `success` and no `code`, where `errors` is an OBJECT keyed by field name
+ * (`{ HandoverText: ['The field HandoverText must be ...'] }`), not a list. `apiErrorMessages` reads both shapes.
  */
 interface ApiErrorBody<T = unknown> {
   success?: boolean
   code?: string | null
-  errors?: string[] | null
+  /** The envelope's list of messages, or the framework's object of messages keyed by field name. */
+  errors?: string[] | Record<string, string[] | string> | null
   message?: string | null
   data?: T | null
 }
@@ -32,10 +37,21 @@ export function apiErrorCode(error: unknown): string | undefined {
   return bodyOf(error)?.code ?? undefined
 }
 
-/** Every plain-language message the server returned (empty when there is none). */
+/**
+ * Every plain-language message the server returned (empty when there is none). Reads the envelope's `errors` list, the framework's
+ * ValidationProblemDetails `errors` object (every field's messages, in the order the server sent them), and falls back to the top-level `message`.
+ */
 export function apiErrorMessages(error: unknown): string[] {
   const body = bodyOf(error)
-  if (body?.errors?.length) return body.errors
+  const errors = body?.errors
+  if (Array.isArray(errors)) {
+    if (errors.length) return errors
+  } else if (errors && typeof errors === 'object') {
+    const messages = Object.values(errors)
+      .flatMap((value) => (Array.isArray(value) ? value : [value]))
+      .filter((message): message is string => typeof message === 'string' && message.length > 0)
+    if (messages.length) return messages
+  }
   return body?.message ? [body.message] : []
 }
 

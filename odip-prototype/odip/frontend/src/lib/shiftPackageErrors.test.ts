@@ -36,6 +36,38 @@ describe('shiftPackageErrors', () => {
     expect(apiErrorCode(undefined)).toBeUndefined()
   })
 
+  it('reads the framework ValidationProblemDetails too: errors is an OBJECT keyed by field, and there is no success or code', () => {
+    // A handover note over 2000 characters is rejected by the framework before the action runs (what the real server sends, minus the traceId).
+    const tooLong = axiosError(400, {
+      type: 'https://tools.ietf.org/html/rfc9110#section-15.5.1', title: 'One or more validation errors occurred.', status: 400,
+      errors: { HandoverText: ['The field HandoverText must be a string with a maximum length of 2000.'] },
+      traceId: '00-4f2c9d0b7a1e-8c3b2a1d-00',
+    })
+
+    expect(apiErrorMessages(tooLong)).toEqual(['The field HandoverText must be a string with a maximum length of 2000.'])
+    expect(apiErrorStatus(tooLong)).toBe(400)
+    expect(apiErrorCode(tooLong)).toBeUndefined()
+  })
+
+  it('flattens every field of a ValidationProblemDetails, keeps the order, and ignores empty or non-text entries', () => {
+    const body = {
+      errors: {
+        HandoverText: ['too long', 'also wrong'],
+        'request.Note': 'a lone string rather than a list',
+        Empty: [],
+        Odd: [42, '', null, 'kept'],
+      },
+    }
+
+    expect(apiErrorMessages(axiosError(400, body))).toEqual(['too long', 'also wrong', 'a lone string rather than a list', 'kept'])
+  })
+
+  it('falls back to the message when the errors object has nothing to show, and still prefers the envelope list', () => {
+    expect(apiErrorMessages(axiosError(400, { errors: {}, message: 'Nope' }))).toEqual(['Nope'])
+    expect(apiErrorMessages(axiosError(400, { errors: { Field: [] } }))).toEqual([])
+    expect(apiErrorMessages(axiosError(409, { success: false, errors: ['one', 'two'], message: 'ignored' }))).toEqual(['one', 'two'])
+  })
+
   it('pulls the Finish checklist out of a 422 SHIFT_FINISH_BLOCKED, and only out of that', () => {
     const detail = { finishBlockers: [blocker] } as unknown as PortalShiftDetailDto
     const blocked = axiosError(422, { success: false, code: 'SHIFT_FINISH_BLOCKED', errors: [blocker.message], data: detail })
@@ -86,5 +118,14 @@ describe('isDoseTimeError', () => {
   it('exposes both codes in the shared constants', () => {
     expect(SHIFT_PACKAGE_ERROR_CODES.administrationTooEarly).toBe('ADMINISTRATION_TOO_EARLY')
     expect(SHIFT_PACKAGE_ERROR_CODES.administrationTimeOutOfRange).toBe('ADMINISTRATION_TIME_OUT_OF_RANGE')
+  })
+
+  it('knows the slot-busy 409 by its code, with no record to show', () => {
+    const busy = axiosError(409, { success: false, code: 'ADMINISTRATION_SLOT_BUSY', errors: ['Another request is recording this dose right now. Check the dose, then try again.'], data: null })
+
+    expect(SHIFT_PACKAGE_ERROR_CODES.administrationSlotBusy).toBe('ADMINISTRATION_SLOT_BUSY')
+    expect(hasApiErrorCode(busy, SHIFT_PACKAGE_ERROR_CODES.administrationSlotBusy)).toBe(true)
+    expect(existingAdministrationFromError(busy)).toBeUndefined()   // unlike ADMINISTRATION_ALREADY_RECORDED, nothing was recorded
+    expect(apiErrorMessages(busy)).toEqual(['Another request is recording this dose right now. Check the dose, then try again.'])
   })
 })

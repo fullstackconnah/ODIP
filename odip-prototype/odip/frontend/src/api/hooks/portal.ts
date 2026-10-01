@@ -134,7 +134,8 @@ export function useAcknowledgeHandover() {
  * one exception to "a slot takes one record": a later `Administered` (or `WrongMedication`) supersedes an active `Refused`, `Withheld` or
  * `Missed` record (the participant refused then took it; a Missed record was wrong because the dose was given) - the earlier record is kept as
  * history and the slot then reads the new one. Nothing else is superseded: an `Administered` or `WrongMedication` record is final (409, `data` is
- * that record) and a not-given outcome never replaces another record. 422 ADMINISTRATION_TOO_EARLY: an Administered dose cannot be charted more than 60 minutes before its slot (the message says
+ * that record) and a not-given outcome never replaces another record. 409 ADMINISTRATION_SLOT_BUSY: another request held the slot's lock too
+ * long (nothing written, no `data`): look at the dose, then try again. 422 ADMINISTRATION_TOO_EARLY: an Administered dose cannot be charted more than 60 minutes before its slot (the message says
  * from when); 422 ADMINISTRATION_TIME_OUT_OF_RANGE: `administeredAt` must lie between the shift's actual start and now + 5 minutes.
  * Refreshes the shift detail and the medication caches.
  * Every instant in the returned record (`administeredAt`, `createdAt`, ...) is UTC with a Z - on a replay and on the 409 body too;
