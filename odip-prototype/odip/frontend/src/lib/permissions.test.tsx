@@ -1,7 +1,8 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { Suspense } from 'react'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { PrivateRoute } from '../App'
+import { HomeRoute, PrivateRoute } from '../App'
 import { usePermissions, type PageKey, type UserRole } from './permissions'
 
 /** usePermissions reads localStorage synchronously and calls no React hooks itself, but it's
@@ -35,6 +36,9 @@ function CapabilityProbe() {
 function setUserRole(role: UserRole) {
   localStorage.setItem('odip_user', JSON.stringify({ role }))
 }
+
+// HomeRoute renders the Dashboard (lazy-loaded by App.tsx) for everyone but a SupportWorker: a stub keeps this suite off its queries.
+vi.mock('../pages/DashboardPage', () => ({ default: () => <div>Dashboard page</div> }))
 
 describe('usePermissions.canAccessPage', () => {
   afterEach(() => {
@@ -246,5 +250,132 @@ describe('PrivateRoute participant lifecycle admission', () => {
       unmount()
       localStorage.clear()
     }
+  })
+})
+
+
+describe('usePermissions.canAccessPage — ReadOnly', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  // Each of these sits behind a controller that admits only SuperAdmin, Admin and Coordinator, reads included: see READ_ONLY_REFUSED_PAGES.
+  const REFUSED: PageKey[] = ['rostering', 'leave-approvals', 'billing', 'claims', 'settings', 'caregiver-submissions']
+  const ALLOWED: PageKey[] = [
+    'dashboard', 'portal', 'portal-leave', 'trips', 'schedule', 'participants', 'accommodation', 'vehicles', 'staff', 'tasks', 'incidents', 'bookings',
+    'qualifications', 'medications',
+  ]
+
+  it('refuses ReadOnly the pages its API refuses (rostering, leave, billing, claims, caregiver forms, settings)', () => {
+    setUserRole('ReadOnly')
+    render(<PermissionsProbe pages={REFUSED} />)
+    for (const page of REFUSED) expect(screen.getByTestId(`page-${page}`), page).toHaveTextContent('false')
+  })
+
+  it('still lets ReadOnly read everything else the app shows it', () => {
+    setUserRole('ReadOnly')
+    render(<PermissionsProbe pages={ALLOWED} />)
+    for (const page of ALLOWED) expect(screen.getByTestId(`page-${page}`), page).toHaveTextContent('true')
+  })
+
+  it('leaves the management roles, and no user at all, with every page including the ones ReadOnly loses', () => {
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator'] as UserRole[]) {
+      setUserRole(role)
+      const { unmount } = render(<PermissionsProbe pages={[...REFUSED, ...ALLOWED]} />)
+      for (const page of [...REFUSED, ...ALLOWED]) expect(screen.getByTestId(`page-${page}`), `${role} ${page}`).toHaveTextContent('true')
+      unmount()
+    }
+    localStorage.clear()
+    render(<PermissionsProbe pages={REFUSED} />)
+    for (const page of REFUSED) expect(screen.getByTestId(`page-${page}`), `no user ${page}`).toHaveTextContent('true')
+  })
+
+  it("keeps Caregiver forms off a SupportWorker's pages too, as it was (their allow-list does not name it)", () => {
+    setUserRole('SupportWorker')
+    render(<PermissionsProbe pages={['caregiver-submissions', 'participants']} />)
+    expect(screen.getByTestId('page-caregiver-submissions')).toHaveTextContent('false')
+    expect(screen.getByTestId('page-participants')).toHaveTextContent('true')
+  })
+})
+
+function renderGuarded(role: UserRole, path: string, route: { page: PageKey; requiresWrite?: boolean }) {
+  localStorage.setItem('odip_user', JSON.stringify({ role }))
+  localStorage.setItem('odip_token', 'test-token')
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/" element={<div>Redirected</div>} />
+        <Route path={path} element={<PrivateRoute page={route.page} requiresWrite={route.requiresWrite}><div>The page</div></PrivateRoute>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+describe('PrivateRoute — pages ReadOnly is refused', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it.each<[string, PageKey, boolean]>([
+    ['/rostering', 'rostering', false],
+    ['/rostering/leave', 'leave-approvals', false],
+    ['/billing', 'billing', false],
+    ['/claims/c-1', 'claims', false],
+    ['/settings', 'settings', false],
+    ['/caregiver-submissions', 'caregiver-submissions', true],
+  ])('sends ReadOnly away from %s, and still admits a Coordinator', (path, page, requiresWrite) => {
+    const { unmount } = renderGuarded('ReadOnly', path, { page, requiresWrite })
+    expect(screen.getByText('Redirected')).toBeInTheDocument()
+    unmount()
+    renderGuarded('Coordinator', path, { page, requiresWrite })
+    expect(screen.getByText('The page')).toBeInTheDocument()
+  })
+})
+
+describe('HomeRoute', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  function renderHome() {
+    localStorage.setItem('odip_token', 'test-token')
+    return render(
+      <MemoryRouter initialEntries={['/']}>
+        <Suspense fallback={<div>Loading</div>}>
+          <Routes>
+            <Route path="/" element={<HomeRoute />} />
+            <Route path="/portal" element={<div>My Shifts page</div>} />
+          </Routes>
+        </Suspense>
+      </MemoryRouter>,
+    )
+  }
+
+  it('sends a SupportWorker from / to My Shifts, replacing the entry so Back does not bounce them again', () => {
+    setUserRole('SupportWorker')
+    renderHome()
+    expect(screen.getByText('My Shifts page')).toBeInTheDocument()
+    expect(screen.queryByText('Dashboard page')).not.toBeInTheDocument()
+  })
+
+  it.each(['SuperAdmin', 'Admin', 'Coordinator', 'ReadOnly'] as UserRole[])("keeps the Dashboard as %s's home", async role => {
+    setUserRole(role)
+    renderHome()
+    expect(await screen.findByText('Dashboard page')).toBeInTheDocument()
+    expect(screen.queryByText('My Shifts page')).not.toBeInTheDocument()
+  })
+
+  it('still sends someone with no token to the login route (the shell guard is the first hop; PrivateRoute is the second)', () => {
+    setUserRole('Coordinator')
+    localStorage.removeItem('odip_token')
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<HomeRoute />} />
+          <Route path="/login" element={<div>Login page</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Login page')).toBeInTheDocument()
   })
 })

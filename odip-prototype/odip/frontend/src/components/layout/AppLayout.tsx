@@ -1,129 +1,190 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { usePreviousAppPathTracker } from '@/hooks/useBackNavigation'
-import {
-  LayoutDashboard, Map, CalendarRange, Users, Building2, Truck, UserCog,
-  ListChecks, Settings, LogOut, Menu, X, ClipboardList, AlertTriangle, ChevronDown, Receipt,
-  CalendarClock, Pill, CalendarCheck2, ClipboardCheck, CalendarOff, FileCheck
-} from 'lucide-react'
-import { useState, useEffect, useRef } from 'react'
+import { useDialogBehavior } from '@/hooks/useDialogBehavior'
+import { useIsBelowLg } from '@/hooks/useIsBelowLg'
+import { LogOut, Menu, X, ChevronDown } from 'lucide-react'
+import { Suspense, useState, useRef } from 'react'
+import ErrorBoundary from '@/components/ErrorBoundary'
 import { TAP_AREA } from '@/components/tapArea'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
-import { usePermissions, type PageKey } from '@/lib/permissions'
+import {
+  barEntries, groupCount, isGroup, isGroupActive, isLeafActive, leafCount, navItems, resolveNav, toBarItem,
+  type BarAudience, type BarItem, type NavCounts, type NavGroup, type NavLeaf,
+} from '@/components/layout/navConfig'
+import { readStoredOpenGroups, storeGroupOpen } from '@/components/layout/navOpenGroups'
+import { usePermissions } from '@/lib/permissions'
 import { usePendingWitnessRequests, usePendingLeaveCount, usePendingCompletionCount } from '@/api/hooks'
 
-type NavLeaf = { to: string; icon: React.ElementType; label: string; msIcon: string; page: PageKey; requiresParticipantLifecycleMutation?: boolean }
 /**
- * Optional alternative active-match predicate for a leaf. When present, it OVERRIDES the
- * default NavLink `isActive` (which would otherwise be exact/prefix matching). The Participants
- * hub at /participants needs to highlight when the user is also on /inquiries or /onboarding,
- * so the standalone routes for those lifecycle stages feel "owned" by the hub entry.
- */
-type NavLeafMatch = (pathname: string) => boolean
-type NavLeafWithMatch = NavLeaf & { matchActive?: NavLeafMatch }
-type NavParent = { label: string; icon: React.ElementType; msIcon: string; children: NavLeafWithMatch[] }
-type NavEntry = NavLeaf | NavParent
-
-const navItems: NavEntry[] = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard', msIcon: 'dashboard', page: 'dashboard' },
-  { to: '/portal', icon: CalendarCheck2, label: 'My Shifts', msIcon: 'calendar_today', page: 'portal' },
-  {
-    label: 'Trips',
-    icon: Map,
-    msIcon: 'map',
-    children: [
-      { to: '/trips', icon: Map, label: 'All Trips', msIcon: 'map', page: 'trips' },
-      { to: '/schedule', icon: CalendarRange, label: 'Schedule', msIcon: 'calendar_month', page: 'schedule' },
-      { to: '/bookings', icon: ClipboardList, label: 'Bookings', msIcon: 'description', page: 'bookings' },
-      { to: '/accommodation', icon: Building2, label: 'Accommodation', msIcon: 'home_work', page: 'accommodation' },
-      { to: '/vehicles', icon: Truck, label: 'Vehicles', msIcon: 'directions_car', page: 'vehicles' },
-    ],
-  },
-  {
-    label: 'Rostering',
-    icon: CalendarClock,
-    msIcon: 'calendar_view_week',
-    children: [
-      { to: '/rostering', icon: CalendarClock, label: 'Board', msIcon: 'calendar_view_week', page: 'rostering' },
-      { to: '/rostering/patterns', icon: CalendarClock, label: 'Patterns', msIcon: 'event_repeat', page: 'rostering' },
-      { to: '/rostering/compatibility', icon: CalendarClock, label: 'Compatibility', msIcon: 'join_inner', page: 'rostering' },
-      { to: '/rostering/leave', icon: CalendarOff, label: 'Leave', msIcon: 'event_busy', page: 'leave-approvals' },
-      // Same 'rostering' PageKey as Board/Patterns/Compatibility (unlike Leave's own
-      // 'leave-approvals' key) — this is ordinary coordinator-only rostering work, so
-      // SupportWorker is already excluded via canAccessPage('rostering') with no new key needed.
-      { to: '/rostering/completions', icon: FileCheck, label: 'Completions', msIcon: 'fact_check', page: 'rostering' },
-    ],
-  },
-  { to: '/billing', icon: Receipt, label: 'Billing', msIcon: 'receipt_long', page: 'billing' },
-  {
-    label: 'Participants',
-    icon: Users,
-    msIcon: 'group',
-    children: [
-      // The Participants hub at /participants owns the Enquiries, Onboarding and Active stages
-      // behind a single tab strip, so the sidebar surfaces one Participants entry. Anything
-      // nested under /participants/ (detail, intake, profile, agreement-draft, edit, etc.) and
-      // the standalone /onboarding/:id checklist still light up this nav item.
-      {
-        to: '/participants',
-        icon: Users,
-        label: 'Participants',
-        msIcon: 'group',
-        page: 'participants',
-        matchActive: (pathname) =>
-          pathname === '/participants'
-          || pathname.startsWith('/participants/')
-          || pathname.startsWith('/onboarding/'),
-      },
-      { to: '/medications', icon: Pill, label: 'Medications', msIcon: 'pill', page: 'medications' },
-      // cg04 — gated identically to "All Participants": same PageKey, so canAccessPage('participants')
-      // decides visibility for both (the route itself further requires write access — see App.tsx).
-      { to: '/caregiver-submissions', icon: ClipboardCheck, label: 'Caregiver forms', msIcon: 'checklist_rtl', page: 'participants' },
-    ],
-  },
-  { to: '/staff', icon: UserCog, label: 'Staff', msIcon: 'manage_accounts', page: 'staff' },
-  { to: '/tasks', icon: ListChecks, label: 'Tasks', msIcon: 'checklist', page: 'tasks' },
-  { to: '/incidents', icon: AlertTriangle, label: 'Incidents', msIcon: 'emergency', page: 'incidents' },
-  { to: '/qualifications', icon: Settings, label: 'Qualifications', msIcon: 'health_and_safety', page: 'qualifications' },
-  { to: '/settings', icon: Settings, label: 'Settings', msIcon: 'settings', page: 'settings' },
-]
-
-/** Mirrors NavLink's default (non-`end`) active matching: exact path or a path segment prefix. */
-function isRouteActive(to: string, pathname: string): boolean {
-  return to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`)
-}
-
-const allNavLeaves: NavLeaf[] = navItems.flatMap(item => ('children' in item ? item.children : [item]))
-
-/**
- * Mobile bottom-nav link: icon over label, 42px tall. The links share the row in equal-width cells (`flex-1`), so
- * however many the role is allowed to see (Dashboard, Trips, People, Settings; three for a SupportWorker) they stay
- * evenly spaced whatever their label widths ("Trips" is 28px, "Dashboard" 61px), and every cell is wider than 44px (78px
- * at 360px wide with four links). Touch needs 44px each way, so the box also gets a `--tap-min` floor (0px on a mouse,
- * 44px under `pointer: coarse`) and centres its content.
+ * Mobile bottom-nav cell: icon over label, 42px tall. The cells share the row in equal widths (`flex-1`), so however many pages the
+ * role's bar holds (four and "More", whatever the role) they stay evenly spaced whatever their label widths ("Trips" is 28px,
+ * "Participants" 68px), and every cell is wider than 44px (68px at 360px wide with five cells). Touch needs 44px each way, so the box
+ * also gets a `--tap-min` floor (0px on a mouse, 44px under `pointer: coarse`) and centres its content.
  * A floor, not TAP_AREA's pad: the cells tile the row edge to edge, so a pad reaching past a cell would overlap the next
  * link, and a floor cannot. Nothing changes on a mouse.
  */
 const MOBILE_NAV_LINK = 'flex flex-1 min-h-[var(--tap-min)] min-w-[var(--tap-min)] flex-col items-center justify-center gap-1'
 
+/** The lit item of the sidebar, the drawer and the bar's links: Pale Sprout with near-black bold text. */
+const NAV_ACTIVE = 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
+const NAV_IDLE = 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'
+
 /**
- * Whether a leaf's NavLink should require an exact path match (React Router's `end`) rather
- * than the default prefix match. A leaf needs `end` only when another nav entry's path is
- * nested more specifically under it (e.g. /rostering has sibling entries /rostering/patterns
- * and /rostering/compatibility) — otherwise it would stay "active" on every child route
- * alongside that more specific entry's own leaf. A leaf with no such nested sibling (e.g.
- * /trips, whose detail route /trips/:id isn't itself a nav entry) keeps the normal prefix
- * match so it stays active on its own detail/child routes.
+ * The groups to show open: the ones already open, plus any group that holds the current page. The page you are on is never hidden
+ * inside a closed group on arrival; a group you close while on it stays closed until you navigate (see U3 in SidebarGroup).
  */
-function isExactMatchOnly(to: string): boolean {
-  return to === '/' || allNavLeaves.some(leaf => leaf.to !== to && leaf.to.startsWith(`${to}/`))
+function withActiveGroups(open: ReadonlySet<string>, pathname: string): Set<string> {
+  const next = new Set(open)
+  for (const entry of navItems) {
+    if (isGroup(entry) && entry.children.some(child => isLeafActive(child, pathname))) next.add(entry.id)
+  }
+  return next
+}
+
+/** The announcement of a leaf that carries a pending count: "3 leave requests pending, Leave"; none when nothing is pending. */
+function leafBadgeLabel(leaf: NavLeaf, counts: NavCounts): string | undefined {
+  return leaf.badge ? navBadgeLabel(leafCount(leaf, counts), leaf.badge.noun, leaf.label) : undefined
+}
+
+type SidebarContext = { pathname: string; counts: NavCounts; onNavigate: () => void }
+
+/** One page in the sidebar or drawer: a top-level row, or (`nested`) a 28px row inside a group. */
+function SidebarLink({ leaf, nested = false, tabbable = true, pathname, counts, onNavigate }: SidebarContext & {
+  leaf: NavLeaf
+  nested?: boolean
+  /** False for a row inside a closed group: out of the Tab order along with the panel (which is `aria-hidden`). */
+  tabbable?: boolean
+}) {
+  const active = isLeafActive(leaf, pathname)
+  return (
+    <Link
+      to={leaf.to}
+      tabIndex={tabbable ? undefined : -1}
+      aria-current={active ? 'page' : undefined}
+      aria-label={leafBadgeLabel(leaf, counts)}
+      onClick={onNavigate}
+      className={`flex items-center gap-3 ${nested ? 'pl-7 pr-3 h-7' : 'px-3 py-1.5'} min-h-[var(--tap-min)] rounded-md text-sm transition-all duration-150 ${active ? NAV_ACTIVE : NAV_IDLE}`}
+    >
+      <span className="material-symbols-outlined shrink-0" aria-hidden="true" style={{ fontSize: '18px' }}>{leaf.msIcon}</span>
+      <span className="flex-1 truncate">{leaf.label}</span>
+      <NavCountBadge count={leafCount(leaf, counts)} />
+    </Link>
+  )
+}
+
+/**
+ * A collapsible group: a native <button aria-expanded aria-controls> above a grid panel that animates `grid-template-rows` 0fr to 1fr.
+ * The panel is `aria-hidden` and its links leave the Tab order while it is closed. Two things keep a closed group honest:
+ * it shows the sum of its children's pending counts (U2, so approvals do not vanish behind a closed header), and when it holds the
+ * current page it takes the lit fill and `aria-current` (U3, so the page you are on is never marked by nothing).
+ */
+function SidebarGroup({ group, leaves, open, onToggle, pathname, counts, onNavigate }: SidebarContext & {
+  group: NavGroup
+  leaves: NavLeaf[]
+  open: boolean
+  onToggle: (id: string) => void
+}) {
+  const active = isGroupActive(leaves, pathname)
+  const filled = active && !open
+  const count = groupCount(leaves, counts)
+  const panelId = `nav-group-${group.id}`
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-current={filled ? 'true' : undefined}
+        aria-label={open ? undefined : navBadgeLabel(count, group.badgeNoun ?? 'item', group.label)}
+        onClick={() => onToggle(group.id)}
+        className={`flex items-center w-full gap-3 px-3 py-1.5 min-h-[var(--tap-min)] rounded-md text-sm transition-all duration-150 ${
+          filled
+            ? NAV_ACTIVE
+            : active
+              ? 'text-[var(--color-on-primary-fixed)] font-bold hover:bg-[var(--color-surface-container-high)]'
+              : NAV_IDLE
+        }`}
+      >
+        <span className="material-symbols-outlined shrink-0" aria-hidden="true" style={{ fontSize: '18px' }}>{group.msIcon}</span>
+        <span className="flex-1 text-left truncate">{group.label}</span>
+        {!open && <NavCountBadge count={count} />}
+        <ChevronDown
+          aria-hidden="true"
+          className={`w-4 h-4 shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      <div
+        id={panelId}
+        aria-hidden={!open}
+        className={`grid overflow-hidden transition-[grid-template-rows] duration-200 ease-in-out motion-reduce:transition-none motion-reduce:duration-0 ${
+          open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+      >
+        <div className="min-h-0 space-y-0.5">
+          {leaves.map(leaf => (
+            <SidebarLink key={leaf.to} leaf={leaf} nested tabbable={open} pathname={pathname} counts={counts} onNavigate={onNavigate} />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The mobile bottom bar, generated from the same config as the sidebar: the role's first pages in bar order, then "More", which
+ * opens the drawer. "More" is lit on any page the bar does not list, so the bar always says where you are (it used to light nothing on
+ * 24 of 33 routes). Gated exactly as the sidebar, so a restricted role never sees a link it cannot open.
+ */
+function BottomBar({ items, moreActive, menuOpen, onOpenMenu }: {
+  items: BarItem[]
+  moreActive: boolean
+  menuOpen: boolean
+  onOpenMenu: () => void
+}) {
+  const colour = (active: boolean) => (active ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]')
+  return (
+    <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 h-[var(--mobile-nav-h)] bg-[var(--color-background)]/90 backdrop-blur-xl shadow-[0_-8px_24px_-4px_rgba(27,28,26,0.04)] px-2 flex items-center z-50">
+      {items.map(item => (
+        <Link
+          key={item.key}
+          to={item.to}
+          aria-current={item.current}
+          aria-label={item.count > 0 ? navBadgeLabel(item.count, item.noun, item.label) : undefined}
+          className={`${MOBILE_NAV_LINK} ${colour(item.active)}`}
+        >
+          <span className="relative inline-flex">
+            <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: '22px' }}>{item.msIcon}</span>
+            {item.count > 0 && (
+              <span className="absolute -top-2 left-full -ml-2">
+                <NavCountBadge count={item.count} />
+              </span>
+            )}
+          </span>
+          <span className="text-xs font-medium">{item.label}</span>
+        </Link>
+      ))}
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={menuOpen}
+        aria-controls="app-menu"
+        aria-current={moreActive ? 'true' : undefined}
+        onClick={onOpenMenu}
+        className={`${MOBILE_NAV_LINK} ${colour(moreActive)}`}
+      >
+        <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: '22px' }}>menu</span>
+        <span className="text-xs font-medium">More</span>
+      </button>
+    </nav>
+  )
 }
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const menuButtonRef = useRef<HTMLButtonElement>(null)
+  const drawerRef = useRef<HTMLElement>(null)
   const location = useLocation()
   const permissions = usePermissions()
   // Only relevant to staff who can see the portal at all — fetching it unconditionally is fine
@@ -137,50 +198,43 @@ export default function AppLayout() {
   // RosteringController's completion endpoints are Admin/Coordinator/SuperAdmin only
   // server-side — same poll-gating rationale as pendingLeaveCount above.
   const pendingCompletionCount = usePendingCompletionCount(permissions.canReviewCompletions)
-  const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
-    const initial = new Set<string>()
-    navItems.forEach(item => {
-      if ('children' in item && item.children.some(child => isLeafActive(child, location.pathname))) {
-        initial.add(item.label)
-      }
-    })
-    return initial
-  })
+  const counts: NavCounts = { pendingLeave: pendingLeaveCount, pendingCompletions: pendingCompletionCount, pendingWitness: pendingWitnessCount }
 
-  useEffect(() => {
-    if (!sidebarOpen) return
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setSidebarOpen(false)
-        menuButtonRef.current?.focus()
-      }
-    }
-    document.addEventListener('keydown', closeOnEscape)
-    return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [sidebarOpen])
+  // Below lg the <aside> IS a drawer: a dialog while open (Escape closes it, Tab stays inside it, the page behind does not scroll,
+  // focus goes back to whatever opened it). From lg up it is the permanent sidebar and none of that applies.
+  const isBelowLg = useIsBelowLg()
+  const drawerOpen = sidebarOpen && isBelowLg
+  useDialogBehavior({ open: drawerOpen, onClose: () => setSidebarOpen(false), containerRef: drawerRef })
+  // A drawer left open while the window grew past lg would open again on the way back down: forget it.
+  if (!isBelowLg && sidebarOpen) setSidebarOpen(false)
+  // Closed below lg the drawer is off screen: `inert` takes its links out of the Tab order and the accessibility tree.
+  const drawerInert = isBelowLg && !drawerOpen
 
-  useEffect(() => {
-    navItems.forEach(item => {
-      if ('children' in item && item.children.some(child => isLeafActive(child, location.pathname))) {
-        setOpenGroups(prev => (prev.has(item.label) ? prev : new Set(prev).add(item.label)))
-      }
-    })
-  }, [location.pathname])
+  // Which groups are open: what the user chose to keep open last time, plus the group that holds the current page.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => withActiveGroups(readStoredOpenGroups(), location.pathname))
+  // Navigating (a link, a Dashboard tile, the browser's Back) opens the group that now holds the page, and closes the drawer.
+  const [seenPathname, setSeenPathname] = useState(location.pathname)
+  if (seenPathname !== location.pathname) {
+    setSeenPathname(location.pathname)
+    setOpenGroups(open => withActiveGroups(open, location.pathname))
+    setSidebarOpen(false)
+  }
 
-/** Active-state resolver for nav leaves — matchActive takes precedence over default prefix matching. */
-function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
-  if (leaf.matchActive) return leaf.matchActive(pathname)
-  return isRouteActive(leaf.to, pathname)
-}
-
-  const toggleGroup = (label: string) => {
-    setOpenGroups(prev => {
-      const next = new Set(prev)
-      if (next.has(label)) next.delete(label)
-      else next.add(label)
+  const toggleGroup = (id: string) => {
+    const willOpen = !openGroups.has(id)
+    setOpenGroups(open => {
+      const next = new Set(open)
+      if (willOpen) next.add(id)
+      else next.delete(id)
       return next
     })
+    storeGroupOpen(id, willOpen)
   }
+
+  const resolvedNav = resolveNav(navItems, permissions)
+  const barAudience: BarAudience = permissions.isSupportWorker ? 'field' : 'office'
+  const barItems = barEntries(resolvedNav, barAudience).map(entry => toBarItem(entry, location.pathname, counts))
+  const closeDrawer = () => setSidebarOpen(false)
 
   const user = JSON.parse(localStorage.getItem('odip_user') || '{}')
   const isSuperAdmin = permissions.isSuperAdmin || !!localStorage.getItem('odip_superadmin_user')
@@ -213,16 +267,33 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
         "Sign Out" (which could not be tapped) and stayed live above the scrim. From lg up the sidebar is permanent,
         there is no bottom nav, and it keeps z-50 (`lg:z-50`) so a Modal (z-50, later in the DOM) still covers it.
       */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 bg-black/40 z-[55] lg:hidden" onClick={() => setSidebarOpen(false)} />
+      {drawerOpen && (
+        <div aria-hidden="true" className="fixed inset-0 bg-black/40 z-[55] lg:hidden" onClick={closeDrawer} />
       )}
 
-      {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-[60] lg:z-50 w-[232px] flex flex-col bg-[var(--color-sidebar)] pt-3 pb-3 px-3 transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      {/*
+        Sidebar / drawer. While the drawer is open it is a modal dialog ("Main menu"); closed below lg it is `inert`, which takes its links
+        out of the Tab order and the accessibility tree (they used to be 13 off-screen tab stops before the page). Not `visibility:
+        hidden`: that is inherited, every nav item has `transition-all`, and a visibility transition starts hidden, so the first
+        frame after opening would still have every link hidden and the focus the dialog moves in would be refused. At lg and up it is a
+        plain landmark, always on screen.
+      */}
+      <aside
+        ref={drawerRef}
+        id="app-menu"
+        role={drawerOpen ? 'dialog' : undefined}
+        aria-modal={drawerOpen ? true : undefined}
+        aria-label={drawerOpen ? 'Main menu' : undefined}
+        tabIndex={drawerOpen ? -1 : undefined}
+        inert={drawerInert}
+        className={`fixed inset-y-0 left-0 z-[60] lg:z-50 w-[232px] flex flex-col bg-[var(--color-sidebar)] pt-3 pb-3 px-3 transition-transform duration-200 lg:translate-x-0 ${
+          drawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
+      >
         {/* Brand — ~48px tall total */}
         <div className="flex items-center gap-2.5 h-12 px-2 shrink-0">
           <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-container)] flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-[var(--color-primary-fixed)]" style={{ fontSize: '16px' }}>travel_explore</span>
+            <span className="material-symbols-outlined text-[var(--color-primary-fixed)]" aria-hidden="true" style={{ fontSize: '16px' }}>travel_explore</span>
           </div>
           <div className="min-w-0">
             <span className="font-extrabold text-[var(--color-primary)] tracking-tight text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Odip</span>
@@ -235,103 +306,22 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
             this is the touch drawer (and the permanent sidebar of a touch tablet). The list scrolls inside the
             drawer when 44px items no longer fit its height. */}
         <nav aria-label="Main" className="flex-1 space-y-0.5 overflow-y-auto pt-1">
-          {navItems.map(item => {
-            if ('children' in item) {
-              const visibleChildren = item.children.filter(child =>
-                permissions.canAccessPage(child.page)
-                && (!child.requiresParticipantLifecycleMutation || permissions.canManageParticipantLifecycle),
-              )
-              if (visibleChildren.length === 0) return null
-
-              const isOpen = openGroups.has(item.label)
-              const isGroupActive = visibleChildren.some(child => isLeafActive(child, location.pathname))
-              const groupId = `nav-group-${item.label.toLowerCase().replace(/\s+/g, '-')}`
-
-              return (
-                <div key={item.label}>
-                  <button
-                    type="button"
-                    aria-expanded={isOpen}
-                    aria-controls={groupId}
-                    onClick={() => toggleGroup(item.label)}
-                    className={`flex items-center w-full gap-3 px-3 py-1.5 min-h-[var(--tap-min)] rounded-md text-sm transition-all duration-150 ${
-                      isGroupActive
-                        ? 'text-[var(--color-on-primary-fixed)] font-bold hover:bg-[var(--color-surface-container-high)]'
-                        : 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined shrink-0" style={{ fontSize: '18px' }}>{item.msIcon}</span>
-                    <span className="flex-1 text-left truncate">{item.label}</span>
-                    <ChevronDown
-                      aria-hidden="true"
-                      className={`w-4 h-4 shrink-0 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
-                    />
-                  </button>
-                  <div
-                    id={groupId}
-                    aria-hidden={!isOpen}
-                    className={`grid overflow-hidden transition-[grid-template-rows] duration-200 ease-in-out motion-reduce:transition-none motion-reduce:duration-0 ${
-                      isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-                    }`}
-                  >
-                    <div className="min-h-0 space-y-0.5">
-                      {visibleChildren.map(({ to, label, msIcon, matchActive }) => {
-                        const showLeaveBadge = to === '/rostering/leave' && pendingLeaveCount > 0
-                        const showCompletionBadge = to === '/rostering/completions' && pendingCompletionCount > 0
-                        const badgeCount = showLeaveBadge ? pendingLeaveCount : showCompletionBadge ? pendingCompletionCount : 0
-                        const badgeNoun = showLeaveBadge ? 'leave request' : 'shift completion'
-                        // matchActive overrides NavLink's default active matcher when supplied
-                        // (see NavLeafMatch). Falls back to the standard exact/prefix logic.
-                        const computeActive = (navLinkActive: boolean) => matchActive
-                          ? matchActive(location.pathname)
-                          : navLinkActive
-                        return (
-                          <NavLink key={to} to={to} end={isExactMatchOnly(to)}
-                            tabIndex={isOpen ? undefined : -1}
-                            aria-label={badgeCount > 0 ? navBadgeLabel(badgeCount, badgeNoun, label) : undefined}
-                            className={({ isActive }) =>
-                              `flex items-center gap-3 pl-7 pr-3 h-7 min-h-[var(--tap-min)] rounded-md text-sm transition-all duration-150 ${
-                                computeActive(isActive)
-                                  ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
-                                  : 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'
-                              }`
-                            }
-                            onClick={() => setSidebarOpen(false)}
-                          >
-                            <span className="material-symbols-outlined shrink-0" style={{ fontSize: '18px' }}>{msIcon}</span>
-                            <span className="flex-1 truncate">{label}</span>
-                            {badgeCount > 0 && <NavCountBadge count={badgeCount} />}
-                          </NavLink>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )
-            }
-
-            if (!permissions.canAccessPage(item.page)) return null
-            const { to, label, msIcon } = item
-
-            const showWitnessBadge = to === '/portal' && pendingWitnessCount > 0
-            return (
-              <NavLink key={to} to={to} end={isExactMatchOnly(to)}
-                aria-label={showWitnessBadge ? navBadgeLabel(pendingWitnessCount, 'witness approval', label) : undefined}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-1.5 min-h-[var(--tap-min)] rounded-md text-sm transition-all duration-150 ${
-                    isActive
-                      ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
-                      : 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'
-                  }`
-                }
-                onClick={() => setSidebarOpen(false)}
-              >
-                <span className="material-symbols-outlined shrink-0" style={{ fontSize: '18px' }}>{msIcon}</span>
-                <span className="flex-1 truncate">{label}</span>
-                {showWitnessBadge && <NavCountBadge count={pendingWitnessCount} />}
-              </NavLink>
-            )
-          })}
+          {resolvedNav.map(entry =>
+            entry.kind === 'group' ? (
+              <SidebarGroup
+                key={entry.group.id}
+                group={entry.group}
+                leaves={entry.children}
+                open={openGroups.has(entry.group.id)}
+                onToggle={toggleGroup}
+                pathname={location.pathname}
+                counts={counts}
+                onNavigate={closeDrawer}
+              />
+            ) : (
+              <SidebarLink key={entry.leaf.to} leaf={entry.leaf} pathname={location.pathname} counts={counts} onNavigate={closeDrawer} />
+            ),
+          )}
         </nav>
 
         {/* Bottom */}
@@ -351,12 +341,12 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
           <div className="flex items-center justify-between h-full px-[var(--gutter,20px)]">
             <div className="flex items-center gap-4">
               <button
-                ref={menuButtonRef}
                 className={`${TAP_AREA} lg:hidden p-2 rounded-md hover:bg-[var(--color-accent)] transition-colors`}
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 title={sidebarOpen ? 'Close menu' : 'Open menu'}
                 aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
                 aria-expanded={sidebarOpen}
+                aria-controls="app-menu"
               >
                 {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
@@ -388,7 +378,7 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
                 aria-label="Notifications"
                 disabled
               >
-                <span className="material-symbols-outlined text-[var(--color-primary)]" style={{ fontSize: '20px' }}>notifications</span>
+                <span className="material-symbols-outlined text-[var(--color-primary)]" aria-hidden="true" style={{ fontSize: '20px' }}>notifications</span>
               </button>
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center text-white font-bold text-sm shadow-md">
                 {initial}
@@ -438,54 +428,32 @@ function isLeafActive(leaf: NavLeafWithMatch, pathname: string): boolean {
               page-header back control (e.g. the intake/profile wizards) can navigate to
               where the user actually came from instead of a hardcoded fallback. */}
           <BackPathTracker />
-          <Outlet />
+          {/* A page that throws takes the page area down, not the shell: the nav stays on screen so the user can leave the broken
+              page. The error clears when the pathname changes (App.tsx keeps its own boundary around the shell for a crash in the shell).
+              The same goes for a page that is still loading: its lazy chunk suspends HERE, not at the app's root boundary, which would
+              replace the whole shell with "Loading..." for a frame and drop the focus (the drawer's link, the bar's More) with it. */}
+          <ErrorBoundary inline resetKey={location.pathname}>
+            <Suspense fallback={<div role="status" className="flex items-center justify-center py-16 text-sm text-[var(--color-muted-foreground)]">Loading...</div>}>
+              <Outlet />
+            </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
 
-      {/* Mobile bottom nav — items are gated the same as the sidebar (same canAccessPage
-          helper), so a restricted role never sees a link it doesn't have access to. There is no
-          create shortcut here (or in the sidebar): creating a trip is the "New Trip" button in
-          the Trips page header. The links share the row in equal-width cells (MOBILE_NAV_LINK),
-          so the row needs no spacer or justify rule whatever number of them a role sees.
+      {/* Mobile bottom nav. Generated from the same config as the sidebar (see BottomBar), so it can never offer a link the role
+          may not open or disagree with the sidebar about which page is lit. There is no create shortcut here (or in the sidebar):
+          creating a trip is the "New Trip" button in the Trips page header. The cells share the row in equal widths
+          (MOBILE_NAV_LINK), so the row needs no spacer or justify rule whatever pages a role's bar holds.
           The nav is exactly --mobile-nav-h tall (index.css: 66px on a mouse, 68px under `pointer:
           coarse`, where the links reach the 44px tap floor): a fixed height rather than whatever
           the content adds up to, so the sticky wizard footer (WizardNavFooter) can sit precisely
           above it by offsetting with the same var. */}
-      <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 h-[var(--mobile-nav-h)] bg-[var(--color-background)]/90 backdrop-blur-xl shadow-[0_-8px_24px_-4px_rgba(27,28,26,0.04)] px-6 flex items-center z-50">
-        {permissions.canAccessPage('dashboard') && (
-          <NavLink to="/" end className={({ isActive }) => `${MOBILE_NAV_LINK} ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
-            <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>dashboard</span>
-            <span className="text-xs font-medium">Dashboard</span>
-          </NavLink>
-        )}
-        {permissions.canAccessPage('trips') && (
-          <NavLink to="/trips" className={({ isActive }) => `${MOBILE_NAV_LINK} ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
-            <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>map</span>
-            <span className="text-xs font-medium">Trips</span>
-          </NavLink>
-        )}
-        {permissions.canAccessPage('participants') && (
-          // Match the desktop Participants entry's matchActive predicate: anything under
-          // /participants/* plus the standalone /onboarding/:id checklist still light up the
-          // mobile nav item, since the hub owns all three lifecycle stages.
-          <NavLink to="/participants" end className={({ isActive }) => `${MOBILE_NAV_LINK} ${
-            isActive
-            || location.pathname.startsWith('/participants/')
-            || location.pathname.startsWith('/onboarding/')
-              ? 'text-[var(--color-primary)]'
-              : 'text-[var(--color-secondary)]'
-          }`}>
-            <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>group</span>
-            <span className="text-xs font-medium">People</span>
-          </NavLink>
-        )}
-        {permissions.canAccessPage('settings') && (
-          <NavLink to="/settings" className={({ isActive }) => `${MOBILE_NAV_LINK} ${isActive ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]'}`}>
-            <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>settings</span>
-            <span className="text-xs font-medium">Settings</span>
-          </NavLink>
-        )}
-      </nav>
+      <BottomBar
+        items={barItems}
+        moreActive={!barItems.some(item => item.active)}
+        menuOpen={drawerOpen}
+        onOpenMenu={() => setSidebarOpen(true)}
+      />
     </div>
   )
 }

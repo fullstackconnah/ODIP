@@ -517,17 +517,32 @@ describe('DashboardPage — needs-attention band: order and role gating', () => 
     for (const item of bandItems()) expect(within(item).getByText('0')).toBeInTheDocument()
   })
 
-  it('leaves out the alerts item and Pending Leave for a role without canViewAlerts / canApproveLeave, even with leave waiting', () => {
+  it('leaves out the alerts item, Pending Leave and Qualification Issues for a role without canViewAlerts / canApproveLeave / the Qualifications page, even with leave waiting', () => {
     asRole('SupportWorker')
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     mockUsePendingLeaveCount.mockReturnValue(3)
     renderPage()
 
     expect(bandLabels()).toEqual(
-      FULL_ORDER.filter((label) => label !== 'Critical Participant Alerts' && label !== 'Pending Leave'),
+      FULL_ORDER.filter((label) => !['Critical Participant Alerts', 'Pending Leave', 'Qualification Issues'].includes(label)),
     )
     expect(screen.queryByText('Critical Participant Alerts')).not.toBeInTheDocument()
     expect(screen.queryByText('Pending Leave')).not.toBeInTheDocument()
+  })
+
+  it('shows Qualification Issues, linked to the Qualifications page, to every role that can open that page, and to none that cannot', () => {
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator', 'ReadOnly']) {
+      asRole(role)
+      const { unmount } = renderPage()
+      expect(itemFor('Qualification Issues'), role).toHaveAttribute('href', '/qualifications')
+      unmount()
+      localStorage.clear()
+    }
+    // The tile used to link a SupportWorker to a page that bounced them back to the Dashboard.
+    asRole('SupportWorker')
+    renderPage()
+    expect(screen.queryByText('Qualification Issues')).not.toBeInTheDocument()
+    expect(band().querySelector('a[href="/qualifications"]')).toBeNull()
   })
 
   it('spells the accommodation item out (the KPI row abbreviated it to fit a 136px tile)', () => {
@@ -772,7 +787,8 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
   })
 
   it('still fails honestly for a role without alerts: the staff item is the only placeholder', () => {
-    asRole('SupportWorker')
+    // ReadOnly: no alerts and no leave, but it can open the Qualifications page, so it keeps the tile (a SupportWorker no longer gets one).
+    asRole('ReadOnly')
     mockUseStaff.mockReturnValue(failed)
     renderPage()
 
@@ -826,7 +842,7 @@ describe('DashboardPage — needs-attention band: links and accessible names', (
   })
 
   it('links only Qualification Issues and Overdue for a role without alerts or leave', () => {
-    asRole('SupportWorker')
+    asRole('ReadOnly')
     renderPage()
 
     expect(within(band()).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/qualifications', '/tasks?status=Overdue'])
@@ -879,7 +895,7 @@ describe('DashboardPage — needs-attention band: responsive shape', () => {
   })
 
   it('shapes 7 items (no alerts, no leave) as 4 + 3 and one row from 1259px, the odd last item taking the spare slot', () => {
-    asRole('SupportWorker')
+    asRole('ReadOnly')
     renderPage()
 
     expect(bandItems()).toHaveLength(7)

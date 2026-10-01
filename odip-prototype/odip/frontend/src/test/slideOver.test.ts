@@ -61,8 +61,8 @@ describe('useDialogBehavior', () => {
     expect(offendersOf(text => /const FOCUSABLE_SELECTOR\s*=/.test(text), ['hooks/useDialogBehavior.ts'])).toEqual([])
   })
 
-  it('is what Modal, SlideOver, EditTripModal and the unsaved-changes dialog run on', () => {
-    for (const path of ['components/Modal.tsx', 'components/SlideOver.tsx', 'pages/trip-detail/EditTripModal.tsx', 'hooks/useUnsavedChangesWarning.tsx']) {
+  it('is what Modal, SlideOver, EditTripModal, the unsaved-changes dialog and the nav drawer run on', () => {
+    for (const path of ['components/Modal.tsx', 'components/SlideOver.tsx', 'pages/trip-detail/EditTripModal.tsx', 'hooks/useUnsavedChangesWarning.tsx', 'components/layout/AppLayout.tsx']) {
       expect(textOf(path), `${path} should call useDialogBehavior`).toMatch(/useDialogBehavior\(/)
     }
   })
@@ -72,12 +72,11 @@ describe('useDialogBehavior', () => {
    * and why each may stay: the list is a ratchet: no new one may appear, and a file that moved onto the hook leaves it.
    *   Dropdown, SearchableSelect: an open list closing itself (they call preventDefault, which the hook respects).
    *   TenantSwitcher, UserSwitcher: header popovers, not dialogs.
-   *   AppLayout: the nav drawer, which adopts the hook in the nav regroup (components/README.md, "useDialogBehavior").
+   * (AppLayout, the nav drawer, left this list when the nav regroup moved it onto the hook.)
    */
   const KNOWN_ESCAPE_HANDLERS: Record<string, number> = {
     'components/Dropdown.tsx': 2,
     'components/SearchableSelect.tsx': 1,
-    'components/layout/AppLayout.tsx': 1,
     'components/layout/TenantSwitcher.tsx': 1,
     'components/layout/UserSwitcher.tsx': 1,
     'hooks/useDialogBehavior.ts': 1,
@@ -101,7 +100,7 @@ describe('useDialogBehavior', () => {
   })
 
   it('aria-modal appears only on dialogs that run on the hook', () => {
-    const allowed = ['components/Modal.tsx', 'components/SlideOver.tsx', 'hooks/useUnsavedChangesWarning.tsx', 'pages/trip-detail/EditTripModal.tsx']
+    const allowed = ['components/Modal.tsx', 'components/SlideOver.tsx', 'components/layout/AppLayout.tsx', 'hooks/useUnsavedChangesWarning.tsx', 'pages/trip-detail/EditTripModal.tsx']
     expect(offendersOf(text => /aria-modal=/.test(text), allowed)).toEqual([])
     for (const path of allowed) expect(textOf(path), `${path} marks itself modal, so it must run on the hook`).toMatch(/useDialogBehavior\(/)
   })

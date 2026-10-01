@@ -79,6 +79,16 @@ function ParticipantEditRedirect() {
   return <Navigate to={`/participants/${id}/profile`} replace />
 }
 
+/**
+ * The home route. A SupportWorker works from My Shifts, not the Management Dashboard (KPIs they cannot act on), so `/` sends them to
+ * /portal. 'dashboard' stays on their allow-list, so a link to `/` still resolves (to My Shifts) instead of bouncing in a loop.
+ */
+export function HomeRoute() {
+  const { isSupportWorker } = usePermissions()
+  if (isSupportWorker) return <Navigate to="/portal" replace />
+  return <PrivateRoute page="dashboard"><DashboardPage /></PrivateRoute>
+}
+
 export function PrivateRoute({ children, page, requiresWrite, requiresParticipantLifecycleMutation }: {
   children: React.ReactNode
   page?: PageKey
@@ -107,7 +117,7 @@ const router = createBrowserRouter(
           authenticated shell: no PrivateRoute, no AppLayout, no UiPreferencesProvider. */}
       <Route path="/caregiver/:token" element={<CaregiverWizardPage />} />
       <Route element={<UiPreferencesProvider><ErrorBoundary><PrivateRoute><AppLayout /></PrivateRoute></ErrorBoundary></UiPreferencesProvider>}>
-        <Route path="/" element={<PrivateRoute page="dashboard"><DashboardPage /></PrivateRoute>} />
+        <Route path="/" element={<HomeRoute />} />
         <Route path="/trips" element={<PrivateRoute page="trips"><TripsPage /></PrivateRoute>} />
         <Route path="/trips/new" element={<PrivateRoute page="trips" requiresWrite><TripCreatePage /></PrivateRoute>} />
         <Route path="/trips/:id" element={<PrivateRoute page="trips"><TripDetailPage /></PrivateRoute>} />
@@ -123,10 +133,10 @@ const router = createBrowserRouter(
         <Route path="/participants/:id/intake" element={<PrivateRoute page="participants" requiresParticipantLifecycleMutation><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/profile" element={<PrivateRoute page="participants" requiresWrite><ProfileWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/edit" element={<PrivateRoute page="participants" requiresWrite><ParticipantEditRedirect /></PrivateRoute>} />
-        {/* cg04 (design §5) — admin review surfaces for caregiver-submitted forms, gated the
-            same as the rest of the Participants area. */}
-        <Route path="/caregiver-submissions" element={<PrivateRoute page="participants" requiresWrite><CaregiverSubmissionsPage /></PrivateRoute>} />
-        <Route path="/caregiver-submissions/:id" element={<PrivateRoute page="participants" requiresWrite><CaregiverSubmissionReviewPage /></PrivateRoute>} />
+        {/* cg04 (design §5) — admin review surfaces for caregiver-submitted forms: write access and the
+            management roles only (the page key mirrors CaregiverSubmissionsController's role gate). */}
+        <Route path="/caregiver-submissions" element={<PrivateRoute page="caregiver-submissions" requiresWrite><CaregiverSubmissionsPage /></PrivateRoute>} />
+        <Route path="/caregiver-submissions/:id" element={<PrivateRoute page="caregiver-submissions" requiresWrite><CaregiverSubmissionReviewPage /></PrivateRoute>} />
         <Route path="/accommodation" element={<PrivateRoute page="accommodation"><AccommodationPage /></PrivateRoute>} />
         <Route path="/accommodation/new" element={<PrivateRoute page="accommodation" requiresWrite><AccommodationCreatePage /></PrivateRoute>} />
         <Route path="/accommodation/:id" element={<PrivateRoute page="accommodation"><AccommodationDetailPage /></PrivateRoute>} />

@@ -3,6 +3,13 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 interface Props {
   children: ReactNode
   fallback?: ReactNode
+  /**
+   * A caught error is cleared when this value changes. A boundary inside the app shell passes the pathname, so the user who
+   * navigates away from a broken page (the shell's nav stays usable for exactly that) lands on a working one instead of the same error.
+   */
+  resetKey?: string
+  /** Fill the area the boundary sits in instead of the whole viewport: for a boundary inside the shell, whose nav must stay on screen. */
+  inline?: boolean
 }
 
 interface State {
@@ -44,6 +51,10 @@ export default class ErrorBoundary extends Component<Props, State> {
     )
   }
 
+  componentDidUpdate(prevProps: Props) {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) this.handleReset()
+  }
+
   handleReset = () => {
     this.setState({ hasError: false, error: null })
   }
@@ -53,7 +64,7 @@ export default class ErrorBoundary extends Component<Props, State> {
       if (this.props.fallback) return this.props.fallback
 
       return (
-        <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <div className={`flex items-center justify-center ${this.props.inline ? 'py-16' : 'min-h-screen bg-gray-50'}`}>
           <div className="max-w-md rounded-lg bg-white p-8 text-center shadow-md">
             <h2 className="mb-2 text-xl font-semibold text-[var(--color-muted-foreground)]">
               Something went wrong

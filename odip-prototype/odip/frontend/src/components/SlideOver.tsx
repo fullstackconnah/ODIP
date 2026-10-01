@@ -14,7 +14,7 @@ export type SlideOverProps = {
   description?: ReactNode
   /** Actions for the sticky strip under the scrolling body (Cancel, Save, a destructive action). Omit it for a read-only panel. */
   footer?: ReactNode
-  /** The edge the panel is attached to. Only the right edge exists today; the nav drawer will add `left`. */
+  /** The edge the panel is attached to. Only the right edge exists. (The nav drawer, the one left-hand layer, runs on useDialogBehavior itself: its element is also the permanent sidebar.) */
   side?: 'right'
   /** `md` = max-w-md (28rem), `lg` = max-w-lg (32rem). Full width below that. */
   size?: 'md' | 'lg'

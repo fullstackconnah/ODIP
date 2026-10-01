@@ -36,7 +36,7 @@ const BAND_SHAPE: Record<number, { grid: string; last: string }> = {
 const BAND_SHAPE_FALLBACK = { grid: 'md:grid-cols-4', last: '' }
 
 export default function DashboardPage() {
-  const { canViewAlerts, canApproveLeave } = usePermissions()
+  const { canViewAlerts, canApproveLeave, canAccessPage } = usePermissions()
   const { data, isLoading, isError } = useDashboard()
   const { data: settings } = useSettings()
   const { data: allStaff = [], isLoading: staffLoading, isError: staffError } = useStaff({ isActive: 'true' })
@@ -105,16 +105,21 @@ export default function DashboardPage() {
   // staff qualification or participant needs urgent attention. Qualification Issues counts the staff list; Critical
   // Participant Alerts counts the participant-alerts aggregate.
   const attentionItems: StatCardProps[] = [
-    {
-      label: 'Qualification Issues',
-      value: qualIssueCount,
-      to: '/qualifications',
-      tone: tinted(qualIssueCount, 'danger'),
-      loading: staffLoading,
-      error: staffError,
-      // The tile counts credential issues; the Qualifications page's tabs count staff ("All Issues (4)"). Say both, so 12 reads against 4.
-      caption: staffLoading || staffError ? undefined : qualIssueCount === 0 ? 'All clear' : plural(qualIssueStaffCount, 'staff member'),
-    },
+    // The tile links to the Qualifications page, so a role that cannot open it (a SupportWorker) gets no tile rather than one that bounces.
+    ...(canAccessPage('qualifications')
+      ? [
+          {
+            label: 'Qualification Issues',
+            value: qualIssueCount,
+            to: '/qualifications',
+            tone: tinted(qualIssueCount, 'danger'),
+            loading: staffLoading,
+            error: staffError,
+            // The tile counts credential issues; the Qualifications page's tabs count staff ("All Issues (4)"). Say both, so 12 reads against 4.
+            caption: staffLoading || staffError ? undefined : qualIssueCount === 0 ? 'All clear' : plural(qualIssueStaffCount, 'staff member'),
+          },
+        ]
+      : []),
     ...(canViewAlerts
       ? [
           {
