@@ -482,7 +482,8 @@ export default function ProfileWizardPage() {
         }
       >
         <form
-          onSubmit={handleSubmit(onComplete, wizard.handleInvalidSubmit)}
+          // Built when the form submits, not while rendering: onComplete reads the saved-step snapshots (refs).
+          onSubmit={(event) => handleSubmit(onComplete, wizard.handleInvalidSubmit)(event)}
           noValidate
           // The form now fills the full content-column width (no max-w cap) so the rail's
           // sidebar and the form's step panel share the row; the step's heading + body sit
