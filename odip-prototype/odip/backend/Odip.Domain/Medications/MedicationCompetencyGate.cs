@@ -51,9 +51,12 @@ public sealed record MedicationCompetencyCheck(MedicationCompetencyStatus Status
 }
 
 /// <summary>
-/// The Medication Competency gate (D3): recording ANY medication administration requires the recording
-/// user to hold a current, unexpired Medication Competency credential. The credential lives on the staff
-/// <see cref="User"/> (<see cref="User.IsMedicationCompetent"/> + <see cref="User.MedicationCompetencyExpiryDate"/>,
+/// The Medication Competency check (D3): does the user recording a medication administration hold a current, unexpired
+/// Medication Competency credential? This class answers only THAT question, the same way in every provider. What happens to a
+/// recording by a user who does not is the provider's <see cref="Odip.Domain.Enums.MedicationCompetencyMode"/>, applied by the recorder
+/// (<c>MedicationAdministrationRecorder.DescribeAccess</c>): in ENFORCE the recording is refused (403 MEDICATION_COMPETENCY_*); in
+/// WARN, the default, it is accepted and FLAGGED (<c>RecordedWithoutCompetency</c>, with a warning shown to the worker). The credential lives
+/// on the staff <see cref="User"/> (<see cref="User.IsMedicationCompetent"/> + <see cref="User.MedicationCompetencyExpiryDate"/>,
 /// edited on the staff qualification forms) — the same two fields the roster's CREDENTIAL_EXPIRED warning and
 /// <see cref="User.HasExpiredQualifications"/> read, so all three agree on what "expired" means.
 ///
