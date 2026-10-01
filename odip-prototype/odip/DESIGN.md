@@ -503,7 +503,7 @@ their own facts to tones. It stops at the header: the tab strip and every panel 
   with the state chip beside it and the icon and a 13px label beneath (source order is label then value, so a screen reader hears "Outstanding
   Tasks, 2, Action Needed"). Two columns (2×2) below 768px, one row from there; a chip that does not fit wraps under its figure instead
   of overflowing. Figures are counts, ratios or short amounts: anything longer belongs in a `FactList`. A ratio is always spelled
-  "x / y", a space each side of the slash, through the one `glanceRatio` formatter, so no two figures drift ("12 / 10" beside "12/14").
+  "x / y", a space each side of the slash, through the one `formatRatio` formatter (`glanceRatio` is its earlier name), so no two figures drift ("12 / 10" beside "12/14").
 
 **The Attention Tint Rule.** A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family:
 `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Everything in
@@ -580,6 +580,24 @@ on-container text), a soft wash (a tile or a row, paired with the ink) and an in
 - **Contrast.** Every pair above is held to WCAG AA (4.5:1) by `src/test/toneContrast.test.ts`, which reads the palette from `src/index.css`; the closest is the info
   solid at 5.0:1. `--color-warning` (amber) is for fills, borders and rings, never text or an icon (2.15:1 on the card): warning text is `TONE.warning.ink`.
 
+**Deadline wording** (`deadlineState`, `deadlineLabel` and `DEADLINE_TONE` in `src/lib/deadline.ts`). A dated deadline (a credential's expiry, a review
+due date) has one state and one set of words, never a string of its own. The date is a calendar day, so the count cannot shift with the time zone or a
+daylight-saving change (`src/lib/dateOnly.ts`). The badge is `<StatusBadge tone={DEADLINE_TONE[state.status]} label={deadlineLabel(state)} />`.
+
+| State | Long (a badge on its own) | Compact (no room for the lead-in) | Tone |
+|---|---|---|---|
+| Overdue (the day has passed) | Expired | Expired | `danger` |
+| Today | Expires today | Expires today | `warning` |
+| Soon (within the warning window) | Expires in 12 days | 12 days | `warning` |
+| Fine | Current | Current | `success` |
+| No date | No date set | No date set | `neutral` |
+
+Capitalised like a sentence ("Expired", never "EXPIRED"). Use the long form unless the cell has no room for "Expires in": a staff member's Credentials tab is long, the
+Qualifications table (each row a wrapping card on a phone) is compact. Which credentials count is
+`src/lib/credentials.ts`: a flagged credential applies with or without a date, and worker screening (no flag) applies only once it has an expiry date. The
+Qualifications list, a staff member's Credentials tab and the Dashboard's Qualification Issues figure all read it, so the figure is the sum of the list's
+issue counts.
+
 ### Modals
 
 `--radius-lg`, 16px padding, 90vh max height with internal scroll.
@@ -599,6 +617,7 @@ on-container text), a soft wash (a tile or a row, paired with the ink) and an in
 - **Do** give a record's own page the detail header pattern by opting in (`variant="detail"`, `variant="glance"`), never by restyling the default header or bar
 - **Do** derive a glance segment's chip and tint from one tone with `glanceState`
 - **Do** colour a status by its tone: add the word to `STATUS_TONE` (or pass a `colorMap` of tones for a domain whose word means something else), never a class string of its own
+- **Do** make nouns agree with counts through `plural()`, spell ratios through `formatRatio()` ("x / y") and relative times through `formatRelative()` (`src/lib/format.ts`), and state a dated deadline through `deadlineState()` and `deadlineLabel()` (`src/lib/deadline.ts`), never by hand
 - **Do** put what needs action in the attention band and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on
 - **Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed ("Couldn't load"), and never an "All clear" without data
 - **Do** use `Button` for every action; it owns height, radius and focus
