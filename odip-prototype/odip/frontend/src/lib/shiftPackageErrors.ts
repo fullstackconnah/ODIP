@@ -63,6 +63,17 @@ export function existingAdministrationFromError(error: unknown): AdministrationD
   return bodyOf<AdministrationDto>(error)?.data ?? undefined
 }
 
+/**
+ * A dose time the server refused (422): charted more than 60 minutes before its slot (ADMINISTRATION_TOO_EARLY), or an `administeredAt`
+ * outside [shift start, now + 5 min] (ADMINISTRATION_TIME_OUT_OF_RANGE). The message says what to change; the dose can be sent again once the
+ * time is fixed (or, for too early, once the slot is within the hour).
+ */
+export function isDoseTimeError(error: unknown): boolean {
+  const code = apiErrorCode(error)
+  return apiErrorStatus(error) === 422
+    && (code === SHIFT_PACKAGE_ERROR_CODES.administrationTooEarly || code === SHIFT_PACKAGE_ERROR_CODES.administrationTimeOutOfRange)
+}
+
 /** The worker has no current Medication Competency (403 MEDICATION_COMPETENCY_*): a permission problem, not a retryable one. */
 export function isCompetencyError(error: unknown): boolean {
   const code = apiErrorCode(error)

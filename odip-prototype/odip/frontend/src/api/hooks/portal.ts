@@ -114,7 +114,9 @@ export function useAcknowledgeHandover() {
  * dose is recorded and flagged `recordedWithoutCompetency`); 409 ADMINISTRATION_ALREADY_RECORDED carries the existing record as `data`. The
  * one exception to "a slot takes one record": a later `Administered` supersedes an active `Refused` or `Missed` record (the participant took
  * it after all; a cover worker takes over) - the earlier record is kept as history and the slot then reads the new one. Nothing else is
- * superseded. Refreshes the shift detail and the medication caches.
+ * superseded. 422 ADMINISTRATION_TOO_EARLY: an Administered dose cannot be charted more than 60 minutes before its slot (the message says
+ * from when); 422 ADMINISTRATION_TIME_OUT_OF_RANGE: `administeredAt` must lie between the shift's actual start and now + 5 minutes.
+ * Refreshes the shift detail and the medication caches.
  * Every instant in the returned record (`administeredAt`, `createdAt`, ...) is UTC with a Z - on a replay and on the 409 body too;
  * `scheduledAt` stays the slot's provider-local wall-clock value. The same `idempotencyKey` may only be reused for the SAME dose
  * (medication, slot and outcome): reusing it for a different one is 400 ADMINISTRATION_IDEMPOTENCY_KEY_REUSED, never a silent replay.

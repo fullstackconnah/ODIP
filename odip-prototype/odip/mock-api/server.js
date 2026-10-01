@@ -719,7 +719,8 @@ function portalParticipantSummary(participantId) {
 // cannot record a dose is never asked to clear one). Default worker: current.
 //
 // The Finish checklist follows the real server: a running break blocks; a dose blocks only once its
-// time has ARRIVED (a slot flagged `upcoming` in the fixtures does not - it is handed over) and only
+// time has ARRIVED (a slot flagged `upcoming` in the fixtures does not - it is handed over, and it also stands for "more than an hour
+// away": an Administered dose cannot be charted for it yet, 422 ADMINISTRATION_TOO_EARLY) and only
 // for a worker who can record doses. A slot takes one record; an idempotencyKey may only be reused for
 // the SAME dose (medication, slot, outcome) - anything else is 400 ADMINISTRATION_IDEMPOTENCY_KEY_REUSED.
 // The one exception to a slot taking one record: an Administered record supersedes an active Refused or Missed one (the earlier record is
@@ -1160,6 +1161,22 @@ const packageRoutesPost = [
 
     if (body?.status !== 'Administered' && !String(body?.reason || '').trim()) {
       return respond(400, failEnvelope(null, ['A reason is required when a dose is refused, withheld, missed or the wrong medication was given.'], null))
+    }
+
+    // Temporal rules (422), after validation like the server. An `upcoming` fixture slot stands for "more than an hour away": an Administered
+    // dose for it cannot be charted yet (a not-given outcome can). administeredAt must lie in [the shift actual start, now + 5 minutes].
+    if (slotDef && body?.status === 'Administered' && slotDef.upcoming) {
+      return respond(422, failEnvelope(null, [`This dose is not due until ${slotDef.at.slice(11, 16)}. It can be recorded from an hour before.`], 'ADMINISTRATION_TOO_EARLY'))
+    }
+    if (body?.administeredAt) {
+      const given = Date.parse(/[zZ]|[+-]\d\d:\d\d$/.test(String(body.administeredAt)) ? body.administeredAt : `${body.administeredAt}Z`)   // no zone = UTC
+      const shiftStart = st.completion ? Date.parse(st.completion.actualStart) : null
+      if (given > Date.now() + SKEW_MS) {
+        return respond(422, failEnvelope(null, ["The time this dose was given can't be in the future. Check the time and try again."], 'ADMINISTRATION_TIME_OUT_OF_RANGE'))
+      }
+      if (shiftStart != null && given < shiftStart) {
+        return respond(422, failEnvelope(null, ["The time this dose was given can't be earlier than when the shift started. Check the time and try again."], 'ADMINISTRATION_TIME_OUT_OF_RANGE'))
+      }
     }
     if (prnDef) {
       if (body.status === 'Administered' && !String(body.prnReason || '').trim()) {

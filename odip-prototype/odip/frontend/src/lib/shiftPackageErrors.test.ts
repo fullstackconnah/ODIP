@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   apiErrorStatus, apiErrorCode, apiErrorMessages, hasApiErrorCode, finishBlockersFromError, shiftDetailFromError,
-  existingAdministrationFromError, isCompetencyError,
+  existingAdministrationFromError, isCompetencyError, isDoseTimeError,
 } from './shiftPackageErrors'
 import { SHIFT_PACKAGE_ERROR_CODES } from '@/api/types'
 import type { AdministrationDto, PortalFinishBlockerDto, PortalShiftDetailDto } from '@/api/types'
@@ -69,5 +69,22 @@ describe('shiftPackageErrors', () => {
   it('does not treat other 403s or other codes as competency problems', () => {
     expect(isCompetencyError(axiosError(403, { success: false }))).toBe(false)
     expect(isCompetencyError(axiosError(409, { success: false, code: 'MEDICATION_COMPETENCY_MISSING' }))).toBe(false)
+  })
+})
+
+describe('isDoseTimeError', () => {
+  it.each(['ADMINISTRATION_TOO_EARLY', 'ADMINISTRATION_TIME_OUT_OF_RANGE'])('recognises a 422 %s', (code) => {
+    expect(isDoseTimeError(axiosError(422, { success: false, code, errors: ['This dose is not due until 12:30.'] }))).toBe(true)
+  })
+
+  it('is false for another 422 (a slot that is not due), for a 400 with the same code, and for no response', () => {
+    expect(isDoseTimeError(axiosError(422, { success: false, code: 'DOSE_SLOT_NOT_DUE' }))).toBe(false)
+    expect(isDoseTimeError(axiosError(400, { success: false, code: 'ADMINISTRATION_TOO_EARLY' }))).toBe(false)
+    expect(isDoseTimeError(new Error('Network Error'))).toBe(false)
+  })
+
+  it('exposes both codes in the shared constants', () => {
+    expect(SHIFT_PACKAGE_ERROR_CODES.administrationTooEarly).toBe('ADMINISTRATION_TOO_EARLY')
+    expect(SHIFT_PACKAGE_ERROR_CODES.administrationTimeOutOfRange).toBe('ADMINISTRATION_TIME_OUT_OF_RANGE')
   })
 })

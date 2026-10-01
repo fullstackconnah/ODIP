@@ -307,6 +307,10 @@ export const SHIFT_PACKAGE_ERROR_CODES = {
   idempotencyKeyReused: 'ADMINISTRATION_IDEMPOTENCY_KEY_REUSED',
   /** 422 — `scheduledAt` is not one of the dose slots due in the shift window. */
   doseSlotNotDue: 'DOSE_SLOT_NOT_DUE',
+  /** 422 — an Administered dose was charted more than 60 minutes before its slot (provider-local time). The message says when it can be recorded from. */
+  administrationTooEarly: 'ADMINISTRATION_TOO_EARLY',
+  /** 422 — `administeredAt` is more than 5 minutes in the future, or before the shift started (MAR path: before the start of the slot day). */
+  administrationTimeOutOfRange: 'ADMINISTRATION_TIME_OUT_OF_RANGE',
   /** 409 — the medication is not Active. */
   medicationNotActive: 'MEDICATION_NOT_ACTIVE',
 } as const
