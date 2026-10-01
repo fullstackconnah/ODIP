@@ -105,7 +105,7 @@ export interface PortalAtAGlanceDto {
   communication: PortalCommunicationDto
   behaviour: PortalBehaviourDto
   hidpa: PortalHidpaDto
-  /** The participant's address; `null` when the shift's status withholds sensitive information (`PortalShiftDetailDto.sensitiveInfoWithheldReason`). */
+  /** The participant's address; `null` when the shift withholds sensitive information (its status, or a Published shift more than 48 hours out: `PortalShiftDetailDto.sensitiveInfoWithheldReason`). */
   address: PortalAddressDto | null
 }
 

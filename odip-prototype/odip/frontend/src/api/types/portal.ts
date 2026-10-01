@@ -154,8 +154,8 @@ export interface PortalShiftDetailDto {
   timeZoneId: string
   /** The critical care facts in fixed groups, with explicit nulls for anything not recorded. */
   atAGlance: PortalAtAGlanceDto
-  /** Active emergency contacts, first call first. `null` (not an empty list) when the shift's status withholds sensitive information - see
-   * `sensitiveInfoWithheldReason`; an empty list means the participant simply has none. */
+  /** Active emergency contacts, first call first. `null` (not an empty list) when the shift withholds sensitive information (its status, or a Published
+   * shift more than 48 hours before its rostered start) - see `sensitiveInfoWithheldReason`; an empty list means the participant simply has none. */
   emergencyContacts: PortalEmergencyContactDto[] | null
   /** Scheduled doses due in the shift's rostered window, time order, with state (Due / Overdue / Recorded), outcome and witness
    * status. Overdue is judged in the provider's local time. */
@@ -176,10 +176,12 @@ export interface PortalShiftDetailDto {
   /** MEDICATION_COMPETENCY_MISSING | MEDICATION_COMPETENCY_EXPIRED | MEDICATION_COMPETENCY_UNVERIFIABLE whenever the credential is not current (in both modes); null with a current one. */
   canRecordDosesReasonCode: string | null
   /**
-   * NEED-TO-KNOW BY SHIFT STATUS. The participant's handover, emergency contacts and address are returned ONLY for a shift that is Published or
-   * InProgress. For any other status (PendingReview, Completed, Cancelled, Draft) `handover`, `emergencyContacts` and `atAGlance.address` are
-   * `null` (and `handoverTrail` is empty) and this is a plain-language reason to show instead; `null` when nothing is withheld. The other
-   * at-a-glance care facts are unaffected. After Finish the returned shift (PendingReview) no longer carries them.
+   * NEED-TO-KNOW BY SHIFT STATUS AND TIME. The participant's handover, emergency contacts and address are returned ONLY for a shift the worker is doing
+   * (InProgress) or is about to do: a Published shift shows them from 48 hours before its rostered start (so a shift rostered for next month does not).
+   * For any other status (PendingReview, Completed, Cancelled, Draft), and for a Published shift further out than that, `handover`, `emergencyContacts`
+   * and `atAGlance.address` are `null` (and `handoverTrail` is empty) and this is a plain-language reason to show instead - for a Published shift, from
+   * when they will show (provider-local); `null` when nothing is withheld. The other at-a-glance care facts are unaffected. After Finish the returned
+   * shift (PendingReview) no longer carries them. Acknowledging a handover that is not shown is 404 SHIFT_HANDOVER_NOT_FOUND.
    */
   sensitiveInfoWithheldReason: string | null
 }

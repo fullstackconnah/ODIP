@@ -119,7 +119,9 @@ export function useUncheckRoutine() {
 
 /**
  * POST portal/shifts/{id}/handover/ack — the next worker marks the latest handover read (who and when are recorded). Pass the
- * `completionId` of the handover on screen so a newer one arriving meanwhile is 409 SHIFT_HANDOVER_CHANGED, not a silent ack.
+ * `completionId` of the handover on screen so a newer one arriving meanwhile is 409 SHIFT_HANDOVER_CHANGED, not a silent ack. 404 SHIFT_HANDOVER_NOT_FOUND
+ * when there is nothing to read, which includes a Published shift more than 48 hours before its rostered start (its handover is not shown yet: the
+ * message says from when).
  */
 export function useAcknowledgeHandover() {
   return useShiftDetailWrite(({ id, data }: { id: string; data?: AcknowledgeHandoverDto }) =>

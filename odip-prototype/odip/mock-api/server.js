@@ -678,6 +678,13 @@ const portalShiftBase = {
     endsNextDay: shiftSchedule['shift-0003'].endsNextDay, durationHours: 6, ratio: 'OneToOne', nightType: 'None',
     notes: null, status: 'Published',
   },
+  // Published and rostered five days from the moment the mock starts: further out than the 48-hour need-to-know lead time, so its handover, emergency
+  // contacts and address are withheld with a reason that says when they will show (the state an upcoming-shift screen has to explain).
+  'shift-0004': {
+    id: 'shift-0004', participantId: shiftParticipant['shift-0003'].id, serviceDate: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
+    startTime: '09:00:00', endTime: '15:00:00', endsNextDay: false, durationHours: 6, ratio: 'OneToOne', nightType: 'None',
+    notes: null, status: 'Published',
+  },
 }
 
 /** Maps a `participants` fixture row (+ its participantDetailExtras) onto the narrower
@@ -734,9 +741,10 @@ function portalParticipantSummary(participantId) {
 // routine's time afterwards neither hides the tick nor lets it be ticked twice. A tick whose routine was LATER edited out of the window, retired or
 // deleted still shows on the coordinator's review, listed from the title and time recorded when it was ticked (`fromTickSnapshot: true`; shift-0002
 // has one, `packageOrphanTicks`); the worker's shiftRoutines list never carries those.
-// NEED-TO-KNOW BY SHIFT STATUS: handover, emergency contacts and address only for a Published or InProgress shift. Any other status (the
-// Completed and PendingReview fixtures, and shift-0003 once finished) gets explicit nulls for them (and an empty handoverTrail) plus
-// `sensitiveInfoWithheldReason`.
+// NEED-TO-KNOW BY SHIFT STATUS AND TIME: handover, emergency contacts and address only for an InProgress shift or a Published one within 48 hours of its
+// rostered start. Any other status (the Completed and PendingReview fixtures, and shift-0003 once finished), and a Published shift further out
+// (shift-0004, rostered five days away), gets explicit nulls for them (and an empty handoverTrail) plus `sensitiveInfoWithheldReason`; acknowledging a
+// handover that is not shown is 404 SHIFT_HANDOVER_NOT_FOUND.
 // Null members are written as explicit nulls (the real API marks every nullable shift-package member
 // [JsonIgnore(Never)]); an error envelope omits the members it does not use, like the real ApiResponse.
 //
@@ -1078,8 +1086,22 @@ function finishBlockersFor(shiftId) {
   return blockers
 }
 
-/** Why the handover, emergency contacts and address are not shown for this status (the server's wording). */
-function withheldReason(status) {
+// NEED-TO-KNOW WINDOW: a Published shift shows the handover, emergency contacts and address only from 48 hours before its rostered start (boundary
+// inclusive); an InProgress shift always does. The fixtures' wall-clock times are treated as UTC, like the rest of the mock's rostered times.
+const SENSITIVE_LEAD_MS = 48 * 60 * 60 * 1000
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+/** Why the handover, emergency contacts and address are not shown for this shift right now (the server's wording), or null when they are. */
+function sensitiveWithheld(status, base) {
+  if (status === 'InProgress') return null
+  if (status === 'Published') {
+    const opens = Date.parse(`${base.serviceDate}T${base.startTime}Z`) - SENSITIVE_LEAD_MS
+    if (Date.now() >= opens) return null
+    const d = new Date(opens)
+    const hhmm = `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
+    return `The participant's emergency contacts, address and handover are shown from 48 hours before the shift starts, from ${hhmm} on ${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}.`
+  }
   const state = { PendingReview: 'waiting for review', Completed: 'completed', Cancelled: 'cancelled' }[status] || 'not published'
   return `The participant's emergency contacts, address and handover are only shown for a shift that is published or in progress. This shift is ${state}.`
 }
@@ -1095,8 +1117,10 @@ function routineWithCheck(shiftId, r) {
 function packageFor(shiftId, participantId, status) {
   const pp = packageParticipants[participantId] || packageParticipants['p-0001']
   const st = pkgState(shiftId)
-  // NEED-TO-KNOW BY SHIFT STATUS: only a Published or InProgress shift shows the handover, emergency contacts and address.
-  const showSensitive = status === 'Published' || status === 'InProgress'
+  // NEED-TO-KNOW BY SHIFT STATUS AND TIME: an InProgress shift, or a Published one within 48 hours of its rostered start, shows the handover, emergency
+  // contacts and address.
+  const withheld = sensitiveWithheld(status, portalShiftBase[shiftId] || portalShiftBase['shift-0003'])
+  const showSensitive = withheld === null
   const doses = packageDoses[shiftId] || { slots: [], prn: [] }
   const handover = pp.handover ? {
     completionId: pp.handover.completionId, text: pp.handover.text, nothingToHandOver: pp.handover.nothingToHandOver,
@@ -1109,7 +1133,7 @@ function packageFor(shiftId, participantId, status) {
     handover: showSensitive ? handover : null, handoverTrail: showSensitive ? pp.handoverTrail : [], finishBlockers: finishBlockersFor(shiftId),
     timeZoneId: PACKAGE_TZ, atAGlance: showSensitive ? pp.atAGlance : { ...pp.atAGlance, address: null },
     emergencyContacts: showSensitive ? pp.emergencyContacts : null,
-    sensitiveInfoWithheldReason: showSensitive ? null : withheldReason(status),
+    sensitiveInfoWithheldReason: withheld,
     medicationsDue: doses.slots.map((def) => doseSlotDto(shiftId, def)), prn: doses.prn.map((def) => prnDto(shiftId, def)),
     shiftRoutines: (packageRoutines[shiftId] || []).map((r) => routineWithCheck(shiftId, r)), ...competencyView(),
   }
@@ -1201,6 +1225,9 @@ const packageRoutesPost = [
       const [message, code] = NOT_IN_PROGRESS[status] || NOT_IN_PROGRESS.Draft
       return respond(409, failEnvelope(null, [message], code))
     }
+    // A Published shift outside its need-to-know window does not show the handover, so there is nothing seen to mark as read.
+    const withheld = sensitiveWithheld(status, base)
+    if (withheld) return respond(404, failEnvelope(null, [withheld], 'SHIFT_HANDOVER_NOT_FOUND'))
     const h = (packageParticipants[base.participantId] || {}).handover
     if (!h) return respond(404, failEnvelope(null, ["There's no handover to mark as read."], 'SHIFT_HANDOVER_NOT_FOUND'))
     if (body?.completionId && body.completionId !== h.completionId) {
@@ -1978,7 +2005,7 @@ function retriedNotification(id) {
 // shifts, derived from shiftCompletions.submittedByUserId where a completion exists (shift-0001/
 // 0002) and from the shift-0003 note's authorUserId otherwise (shift-0003 has no completion yet —
 // see shiftNotesByShiftId's note-0004, authored by Tom Beattie).
-const PORTAL_SHIFT_STAFF_ID = { 'shift-0001': 's-0003', 'shift-0002': 's-0004', 'shift-0003': 's-0005' }
+const PORTAL_SHIFT_STAFF_ID = { 'shift-0001': 's-0003', 'shift-0002': 's-0004', 'shift-0003': 's-0005', 'shift-0004': 's-0005' }
 
 /** Connection map item 12 — one combined list of every fixture shift (rosterBoard's
  * participant-grouped shifts plus the three portalShiftBase shifts), each carrying its own
