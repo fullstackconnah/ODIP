@@ -965,7 +965,7 @@ describe('DashboardPage — trip status and task priority chips use the shared t
     ['OpenForBookings', 'success'],
     ['WaitlistOnly', 'warning'],
     ['Confirmed', 'success'],
-    ['InProgress', 'accessible'],
+    ['InProgress', 'info'], // owner decision: in progress is information (blue)
     ['Completed', 'success'],
     ['Cancelled', 'danger'],
     ['Archived', 'neutral'],

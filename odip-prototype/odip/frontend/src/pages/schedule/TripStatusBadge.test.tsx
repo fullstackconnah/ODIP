@@ -13,7 +13,7 @@ describe('TripStatusBadge (schedule)', () => {
     ['OpenForBookings', 'success'],
     ['WaitlistOnly', 'warning'],
     ['Confirmed', 'success'],
-    ['InProgress', 'accessible'],
+    ['InProgress', 'info'], // owner decision: in progress is information (blue), not the accessibility pink
     ['Completed', 'success'],
     ['Cancelled', 'danger'],
     ['Archived', 'neutral'],

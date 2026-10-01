@@ -356,7 +356,7 @@ describe('TripsPage — trip status pills use the shared tones', () => {
     ['Planning', 'info'],
     ['OpenForBookings', 'success'],
     ['Confirmed', 'success'],
-    ['InProgress', 'accessible'],
+    ['InProgress', 'info'], // owner decision: in progress is information (blue)
   ] as const)('colours a %s trip with the %s tone in the table and in the cards', (status, tone) => {
     mockUseTrips.mockReturnValue({ data: [trip({ status })], isLoading: false })
     const label = status.replace(/([A-Z])/g, ' $1').trim()

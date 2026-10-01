@@ -44,10 +44,10 @@ describe('StatusBadge — size', () => {
 })
 
 // The trip detail header renders `<StatusBadge status={trip.status} size="md" />`, and StatusBadge had no entries for four of the nine trip
-// statuses (Planning, OpenForBookings, WaitlistOnly, InProgress): they fell to the amber warning fallback (the wrong signal, per DESIGN.md's
-// Semantic Colour Rule) and showed the raw enum text ("OpenForBookings").
+// statuses (Planning, OpenForBookings, WaitlistOnly, InProgress): they fell to the fallback pair (the wrong signal, per DESIGN.md's
+// Semantic Colour Rule) and showed the raw enum text ("OpenForBookings"). The fallback is NEUTRAL now: an unknown status never claims attention.
 describe('StatusBadge — every trip status', () => {
-  const FALLBACK = 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
+  const FALLBACK = 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]'
   const toneOf = (badge: HTMLElement) => badge.className.replace(/\s+/g, ' ').replace(/^text-xs px-2 py-0.5 rounded-full /, '').trim()
 
   it('has a colour for every value in TRIP_STATUSES: none is left to the fallback by omission', () => {
@@ -60,8 +60,8 @@ describe('StatusBadge — every trip status', () => {
     for (const status of TRIP_STATUSES) {
       const { unmount } = render(<StatusBadge status={status} />)
       const tone = toneOf(screen.getByText(status))
-      // WaitlistOnly is amber on the dashboard and the schedule too, so its explicit entry equals the fallback pair by design.
-      if (status !== 'WaitlistOnly') expect(tone, status).not.toBe(FALLBACK)
+      // Draft and Archived are deliberately neutral, so their explicit entries equal the fallback pair by design.
+      if (status !== 'Draft' && status !== 'Archived') expect(tone, status).not.toBe(FALLBACK)
       unmount()
     }
     // ...and every one of the four that had no entry is now an explicit one.
@@ -73,7 +73,8 @@ describe('StatusBadge — every trip status', () => {
       Planning: 'bg-[var(--color-secondary-container)] text-[var(--color-info)]',
       OpenForBookings: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
       WaitlistOnly: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
-      InProgress: 'bg-[var(--color-accessible-container)] text-[var(--color-on-accessible-container)]',
+      // Owner decision: In progress is information (blue), not the accessibility pink.
+      InProgress: 'bg-[var(--color-secondary-container)] text-[var(--color-info)]',
     }
     for (const [status, expected] of Object.entries(tones)) {
       const { unmount } = render(<StatusBadge status={status} />)
@@ -140,9 +141,9 @@ describe('StatusBadge — tones', () => {
     expect(pair(screen.getByText('Pending'))).toBe(TONE.warning.solid)
   })
 
-  it('falls back to the warning tone for a status no map knows', () => {
+  it('falls back to the NEUTRAL tone for a status no map knows (never the amber "attention" pair)', () => {
     render(<StatusBadge status="Totally New Thing" />)
-    expect(pair(screen.getByText('Totally New Thing'))).toBe(TONE.warning.solid)
+    expect(pair(screen.getByText('Totally New Thing'))).toBe(TONE.neutral.solid)
   })
 
   it('keeps "new" on the lighter neutral surface, a step below draft (the one quiet pill)', () => {
@@ -158,6 +159,6 @@ describe('StatusBadge — tones', () => {
 
   it('does not trip over a status that is an Object.prototype name', () => {
     render(<StatusBadge status="constructor" />)
-    expect(pair(screen.getByText('constructor'))).toBe(TONE.warning.solid)
+    expect(pair(screen.getByText('constructor'))).toBe(TONE.neutral.solid)
   })
 })

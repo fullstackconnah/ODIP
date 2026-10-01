@@ -91,11 +91,11 @@ describe('STATUS_TONE', () => {
     expect(Object.keys(TRIP_STATUS_LABELS).sort()).toEqual([...TRIP_STATUSES].sort())
   })
 
-  it('statusClass is the tone\'s solid pair, warning for an unknown status, and the quiet pair for a QUIET_STATUS', () => {
+  it('statusClass is the tone\'s solid pair, NEUTRAL for an unknown status (never the amber "attention" pair), and the quiet pair for a QUIET_STATUS', () => {
     expect(statusClass('Confirmed')).toBe(TONE.success.solid)
     expect(statusClass('Cancelled')).toBe(TONE.danger.solid)
-    expect(statusClass('No Such Status')).toBe(TONE.warning.solid)
-    expect(statusClass('No Such Status', 'neutral')).toBe(TONE.neutral.solid)
+    expect(statusClass('No Such Status')).toBe(TONE.neutral.solid)
+    expect(statusClass('No Such Status', 'warning')).toBe(TONE.warning.solid)
     expect([...QUIET_STATUS]).toEqual(['new'])
     expect(statusClass('New')).toBe(`${TONE.neutral.soft} ${TONE.neutral.ink}`)
     expect(bgClass(statusClass('New'))).toBe('bg-[var(--color-surface-container)]')
