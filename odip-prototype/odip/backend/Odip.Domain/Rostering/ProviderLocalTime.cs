@@ -22,15 +22,18 @@ public static class ProviderLocalTime
     /// Resolves an IANA zone id to a <see cref="TimeZoneInfo"/>. An unresolvable/corrupt id must never
     /// 500 a request (the shift-completion F5 rule) — it falls back to <see cref="FallbackZoneId"/>.
     /// </summary>
-    public static TimeZoneInfo ResolveZone(string? timeZoneId)
+    public static TimeZoneInfo ResolveZone(string? timeZoneId) => ResolveZone(timeZoneId, TimeZoneInfo.FindSystemTimeZoneById);
+
+    /// <summary>The same, over an explicit lookup, so a runtime with no tz database can be tested.</summary>
+    public static TimeZoneInfo ResolveZone(string? timeZoneId, Func<string, TimeZoneInfo> lookup)
     {
         try
         {
-            return TimeZoneInfo.FindSystemTimeZoneById(string.IsNullOrWhiteSpace(timeZoneId) ? FallbackZoneId : timeZoneId);
+            return lookup(string.IsNullOrWhiteSpace(timeZoneId) ? FallbackZoneId : timeZoneId);
         }
         catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
         {
-            return TimeZoneInfo.FindSystemTimeZoneById(FallbackZoneId);
+            return lookup(FallbackZoneId);
         }
     }
 
