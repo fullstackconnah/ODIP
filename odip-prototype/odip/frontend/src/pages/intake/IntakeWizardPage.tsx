@@ -49,6 +49,7 @@ import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
+import { queryPhase } from '@/lib/queryPhase'
 import {
   type ParticipantFormData, intakeParticipantResolver, INTAKE_STEP_SCHEMAS_BY_KEY,
   STEP_PARTICIPANT_DETAILS_FIELDS, STEP_NDIS_FUNDING_FIELDS, STEP_CONTACTS_FIELDS,
@@ -409,9 +410,11 @@ export default function IntakeWizardPage() {
 
   // Three different facts, three different states: still loading, the load failed, and there is no such participant. A failed or
   // missing record used to leave this page on "Loading..." for ever (L2-06 = L5-02), with no message, no retry and no way back.
+  // A paused request (the browser is offline and the load has not run) is loading, not "not found" (review F-1).
   if (isEditMode && !participant) {
-    if (participantLoading) return <PageState kind="loading" noun="participant" />
-    return participantFailed && !isNotFoundError(participantError)
+    const phase = queryPhase({ data: participant, isLoading: participantLoading, isError: participantFailed })
+    if (phase === 'loading') return <PageState kind="loading" noun="participant" />
+    return phase === 'error' && !isNotFoundError(participantError)
       ? <PageState kind="error" noun="participant" onRetry={() => refetchParticipant()} />
       : <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
   }

@@ -20,6 +20,7 @@ import { Plus, Users, ChevronRight, Pill } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { plural } from '@/lib/format'
+import { queryPhase } from '@/lib/queryPhase'
 
 const ACTIVE_STATUS_COLORS: Record<string, string> = {
   Active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
@@ -126,9 +127,14 @@ function useParticipantsScreen() {
     setStatusNotice(null)
   }
 
-  const { data: participants = [], isLoading, isError, refetch } = useParticipants(listParams(view, search.trim()))
-  // A failed load is not an empty register. Data already on screen wins over a refetch that failed behind it.
-  const loadFailed = !!isError && participants.length === 0
+  const participantsQuery = useParticipants(listParams(view, search.trim()))
+  const { data: participants = [], refetch } = participantsQuery
+  // Three different facts: loading, failed, and loaded. A failed load is not an empty register, and neither is a request that has not run
+  // (TanStack Query pauses it while the browser reports offline: isLoading false, isError false, data undefined), so "No participants yet"
+  // follows only a request that succeeded. Data already on screen wins over a refetch that failed behind it.
+  const phase = queryPhase(participantsQuery)
+  const isLoading = phase === 'loading'
+  const loadFailed = phase === 'error'
 
   // The status pill on each row is read-only; status changes go through an explicit
   // confirmation flow so a coordinator can never flip a participant's active flag

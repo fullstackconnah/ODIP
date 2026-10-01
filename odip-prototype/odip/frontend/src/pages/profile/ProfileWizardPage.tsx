@@ -65,6 +65,7 @@ import { CommunityAccessStep } from './steps/CommunityAccessStep'
 import { Card } from '@/components/Card'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
+import { queryPhase } from '@/lib/queryPhase'
 
 const CA_SECTION = PROFILE_CONDITIONAL_SECTIONS.find((s) => s.key === 'communityAccess')!
 const STA_SECTION = PROFILE_CONDITIONAL_SECTIONS.find((s) => s.key === 'holidaySta')!
@@ -424,9 +425,11 @@ export default function ProfileWizardPage() {
 
   // Three different facts, three different states: still loading, the load failed, and there is no such participant. A failed or
   // missing record used to leave this page on "Loading..." for ever (L2-06 = L5-02).
+  // A paused request (the browser is offline and the load has not run) is loading, not "not found" (review F-1).
   if (!participant) {
-    if (isLoading) return <PageState kind="loading" noun="participant" />
-    return isError && !isNotFoundError(error)
+    const phase = queryPhase({ data: participant, isLoading, isError })
+    if (phase === 'loading') return <PageState kind="loading" noun="participant" />
+    return phase === 'error' && !isNotFoundError(error)
       ? <PageState kind="error" noun="participant" onRetry={() => refetch()} />
       : <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
   }

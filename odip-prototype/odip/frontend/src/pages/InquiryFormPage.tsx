@@ -13,6 +13,7 @@ import { useCreateParticipantInquiry, useParticipantInquiries, useUpdateParticip
 import type { CreateParticipantInquiryDto, InquirySource, ParticipantInquiryDto } from '@/api/types/inquiries'
 import { formGrid, span } from '@/lib/formGrid'
 import { extractErrorMessage } from '@/lib/utils'
+import { queryPhase } from '@/lib/queryPhase'
 
 /** The form's own state: every field is text while it is being typed. */
 type FormState = { firstName: string; lastName: string; phone: string; email: string; source: InquirySource; provenance: string }
@@ -48,8 +49,11 @@ export default function InquiryFormPage() {
   const [searchParams] = useSearchParams()
   const editId = searchParams.get('id')
   const navigate = useNavigate()
-  const { data: inquiries = [], isLoading, isError, refetch } = useParticipantInquiries()
+  const inquiriesQuery = useParticipantInquiries()
+  const inquiries = inquiriesQuery.data ?? []
   const existing = editId ? inquiries.find(row => row.id === editId) : undefined
+  // A paused request (the browser is offline and the load has not run) is loading, not "not found" (review F-1).
+  const phase = queryPhase(inquiriesQuery)
 
   const header = (
     <div className="flex items-start gap-4">
@@ -66,10 +70,10 @@ export default function InquiryFormPage() {
   let content
   if (editId && !existing) {
     // Three different facts: still loading, the load failed, and there is no such enquiry.
-    content = isLoading
+    content = phase === 'loading'
       ? <PageState kind="loading" noun="enquiry" />
-      : isError
-        ? <PageState kind="error" noun="enquiry" onRetry={() => refetch()} />
+      : phase === 'error'
+        ? <PageState kind="error" noun="enquiry" onRetry={() => inquiriesQuery.refetch()} />
         : <PageState kind="not-found" noun="enquiry" backTo="/participants?tab=enquiries" backLabel="enquiries" />
   } else {
     content = (
