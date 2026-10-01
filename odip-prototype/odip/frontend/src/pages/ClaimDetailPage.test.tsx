@@ -198,3 +198,35 @@ describe('ClaimDetailPage — Kind === Shift claim', () => {
     expect(screen.getByRole('link', { name: 'Priya Nair' })).toHaveAttribute('href', '/participants/p-9')
   })
 })
+
+describe('ClaimDetailPage — failed request vs. missing record (PageState)', () => {
+  it('names a failed request as a failure, with a retry, and does not call it "Claim not found"', () => {
+    mockUseClaim.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this claim")
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.queryByText('Claim not found')).not.toBeInTheDocument()
+  })
+
+  it('shows "Claim not found" for a 404, with nothing to retry', () => {
+    mockUseClaim.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByText('Claim not found')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to billing' })).toHaveAttribute('href', '/billing')
+  })
+
+  it('shows "Claim not found" for an answer with no record, and says "Loading claim…" while it loads', () => {
+    mockUseClaim.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
+    const { unmount } = renderPage()
+    expect(screen.getByText('Claim not found')).toBeInTheDocument()
+    unmount()
+
+    mockUseClaim.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
+    renderPage()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading claim…')
+  })
+})

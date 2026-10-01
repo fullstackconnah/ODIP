@@ -178,7 +178,7 @@ describe('OnboardingDetailPage — hook ordering across the loading transition',
     // First render: the query is still in flight, so the page takes its early return.
     mockUseQuery.mockReturnValue({ data: undefined, isLoading: true })
     const { rerender } = renderDetail()
-    expect(screen.getByText('Loading onboarding\u2026')).toBeInTheDocument()
+    expect(screen.getByText('Loading onboarding record\u2026')).toBeInTheDocument()
 
     // Then the real transition: the query resolves and the full page renders.
     mockUseQuery.mockReturnValue({ data: incomplete, isLoading: false })
@@ -191,11 +191,37 @@ describe('OnboardingDetailPage — hook ordering across the loading transition',
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1, name: 'Jamie Rivers' })).toBeInTheDocument()
     })
-    expect(screen.queryByText('Loading onboarding\u2026')).not.toBeInTheDocument()
+    expect(screen.queryByText('Loading onboarding record\u2026')).not.toBeInTheDocument()
     expect(screen.getByText('Participant Profile')).toBeInTheDocument()
     expect(orderWarning()).toBe(false)
     } finally {
       consoleError.mockRestore()
     }
+  })
+})
+
+describe('OnboardingDetailPage — failed request vs. missing record (PageState)', () => {
+  beforeEach(() => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseMutation.mockReturnValue({ mutate: vi.fn(), error: null, isPending: false })
+    mockUseParticipant.mockReturnValue({ data: { firstName: 'Jamie', lastName: 'Rivers', preferredName: null }, isLoading: false })
+  })
+
+  it('names a failed request as a failure, with a retry, not "Onboarding record not found"', () => {
+    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
+    renderDetail()
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this onboarding record")
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.queryByText('Onboarding record not found')).not.toBeInTheDocument()
+  })
+
+  it('shows "Onboarding record not found" with a Back link to the hub for a 404', () => {
+    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch: vi.fn() })
+    renderDetail()
+
+    expect(screen.getByText('Onboarding record not found')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to onboarding' })).toHaveAttribute('href', '/participants?tab=onboarding')
   })
 })

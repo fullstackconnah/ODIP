@@ -13,6 +13,8 @@ import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, FileText, CalendarRange } from 'lucide-react'
 import { useState, useSyncExternalStore } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
@@ -82,7 +84,7 @@ export default function ParticipantDetailPage() {
   // Connection map item 12 — the Rostering tab, same canAccessPage gate RosterBoardPage itself
   // uses (see lib/permissions.ts's SUPPORT_WORKER_PAGES — SupportWorker is excluded).
   const canAccessRostering = canAccessPage('rostering')
-  const { data: p, isLoading } = useParticipant(id)
+  const { data: p, isLoading, isError, error, refetch } = useParticipant(id)
   const { data: bookings = [] } = useParticipantBookings(id)
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
   // DOC-01 — Documents header buttons. Hooks called unconditionally, ahead of the isLoading/!p
@@ -95,8 +97,12 @@ export default function ParticipantDetailPage() {
   // header. See this branch's report for the reversible product call.
   const downloadClientOverview = useDownloadClientOverviewPdf()
 
-  if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
-  if (!p) return <div className="text-center py-12">Participant not found</div>
+  if (isLoading) return <PageState kind="loading" noun="participant" />
+  if (!p) {
+    return isError && !isNotFoundError(error)
+      ? <PageState kind="error" noun="participant" onRetry={() => refetch()} />
+      : <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
+  }
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">

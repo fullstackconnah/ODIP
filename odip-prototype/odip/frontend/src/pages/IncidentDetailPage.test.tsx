@@ -53,7 +53,7 @@ describe('IncidentDetailPage — Context panel', () => {
   it('shows a loading state before the incident resolves', () => {
     mockUseIncident.mockReturnValue({ data: undefined, isLoading: true })
     renderPage()
-    expect(screen.getByText('Loading...')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading incident…')
   })
 
   it('shows a not-found state when the incident fails to resolve', () => {
@@ -158,5 +158,37 @@ describe('IncidentDetailPage — Back', () => {
     const back = screen.getByRole('link', { name: 'Back to incidents' })
     expect(back).toHaveAttribute('href', '/incidents')
     expect(back).toHaveTextContent(/^Back$/)
+  })
+})
+
+describe('IncidentDetailPage — failed request vs. missing record (PageState)', () => {
+  it('names a failed request as a failure, with a retry, and does not call it "Incident not found"', () => {
+    mockUseIncident.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this incident")
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.queryByText('Incident not found')).not.toBeInTheDocument()
+  })
+
+  it('shows "Incident not found" for a 404, with nothing to retry', () => {
+    mockUseIncident.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByText('Incident not found')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to incidents' })).toHaveAttribute('href', '/incidents')
+  })
+
+  it('shows "Incident not found" for an answer with no record, and says "Loading incident…" while it loads', () => {
+    mockUseIncident.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
+    const { unmount } = renderPage()
+    expect(screen.getByText('Incident not found')).toBeInTheDocument()
+    unmount()
+
+    mockUseIncident.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
+    renderPage()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading incident…')
   })
 })

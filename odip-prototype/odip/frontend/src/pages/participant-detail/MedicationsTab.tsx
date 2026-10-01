@@ -4,6 +4,7 @@ import { ChevronDown, Plus, Info, Pill } from 'lucide-react'
 import { useParticipantMedications, useParticipantAdministrations } from '@/api/hooks'
 import { Card } from '@/components/Card'
 import { EmptyState } from '@/components/EmptyState'
+import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
@@ -62,6 +63,8 @@ function IncidentLinkOrAction({ administration, canFile }: { administration: Adm
   )
 }
 
+const NO_MEDICATIONS: MedicationListDto[] = []
+
 function MedicationCard({ medication }: { medication: MedicationListDto }) {
   return (
     <Link
@@ -97,7 +100,8 @@ function MedicationCard({ medication }: { medication: MedicationListDto }) {
 export default function MedicationsTab({ participantId }: { participantId: string | undefined }) {
   const { canManageMedications, canCreateIncidents } = usePermissions()
   const [showInactive, setShowInactive] = useState(false)
-  const { data: medications = [], isLoading } = useParticipantMedications(participantId, true)
+  const { data: medicationsData, isLoading, isError, refetch } = useParticipantMedications(participantId, true)
+  const medications = medicationsData ?? NO_MEDICATIONS
   const { data: administrations = [] } = useParticipantAdministrations(participantId, isoDaysAgo(14), isoDaysAgo(0))
 
   const activeMeds = useMemo(() => medications.filter(m => m.status !== 'Ceased'), [medications])
@@ -110,7 +114,9 @@ export default function MedicationsTab({ participantId }: { participantId: strin
   const activeCount = useMemo(() => medications.filter(m => m.status === 'Active').length, [medications])
   const showPolypharmacyNotice = activeCount >= 5 || activePsychotropicCount >= 2
 
-  if (isLoading) return <div className="flex items-center justify-center h-40 text-[var(--color-muted-foreground)]">Loading...</div>
+  if (isLoading) return <PageState kind="loading" noun="medication list" />
+  // A failed request is not an empty list: without data, say so instead of showing "no medications".
+  if (isError && !medicationsData) return <PageState kind="error" noun="medication list" onRetry={() => refetch()} />
 
   return (
     <div className="space-y-6">

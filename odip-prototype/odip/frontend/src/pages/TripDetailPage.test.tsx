@@ -13,6 +13,8 @@ const baseTrip: TripDetailDto = {
 // call time, so a test only has to assign before it renders.
 let trip: TripDetailDto | undefined = baseTrip
 let tripLoading = false
+let tripFailure: { error?: unknown } | null = null
+const tripRefetch = vi.fn()
 let canWrite = true
 
 const { mockUseTripSchedule, mockUseTripClaims, mockUseTripIncidents } = vi.hoisted(() => ({
@@ -26,7 +28,7 @@ vi.mock('@/lib/permissions', () => ({
 }))
 
 vi.mock('@/api/hooks', () => ({
-  useTrip: () => ({ data: trip, isLoading: tripLoading }),
+  useTrip: () => ({ data: trip, isLoading: tripLoading, isError: tripFailure !== null, error: tripFailure?.error, refetch: tripRefetch }),
   useTripBookings: () => ({ data: [] }),
   useTripAccommodation: () => ({ data: [] }),
   useTripVehicles: () => ({ data: [] }),
@@ -62,6 +64,8 @@ function renderPage(initialEntry = '/trips/trip-1') {
 beforeEach(() => {
   trip = baseTrip
   tripLoading = false
+  tripFailure = null
+  tripRefetch.mockClear()
   canWrite = true
   localStorage.clear()
   mockUseTripSchedule.mockClear()
@@ -359,7 +363,7 @@ describe('TripDetailPage — loading and not-found states', () => {
     trip = undefined
     renderPage()
 
-    expect(screen.getByText('Loading trip...')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading trip…')
     expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
     expect(screen.queryByText('Participants / Staff')).toBeNull()
   })
@@ -371,6 +375,42 @@ describe('TripDetailPage — loading and not-found states', () => {
     expect(screen.getByText('Trip not found')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
     expect(screen.queryByRole('tablist')).toBeNull()
+  })
+
+  it('offers a way out of "Trip not found": a Back link to the trip list', () => {
+    trip = undefined
+    renderPage()
+
+    expect(screen.getByRole('link', { name: 'Back to trips' })).toHaveAttribute('href', '/trips')
+  })
+
+  it('shows a retryable error, not "Trip not found", when the request failed', async () => {
+    const user = userEvent.setup()
+    trip = undefined
+    tripFailure = { error: { response: { status: 500 } } }
+    renderPage()
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this trip")
+    expect(screen.queryByText('Trip not found')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(tripRefetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats a 404 as "no such trip", not as a failure to retry', () => {
+    trip = undefined
+    tripFailure = { error: { response: { status: 404 } } }
+    renderPage()
+
+    expect(screen.getByText('Trip not found')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+  })
+
+  it('keeps the page when a background refetch fails over a trip that is already on screen', () => {
+    tripFailure = { error: { response: { status: 500 } } }
+    renderPage()
+
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
+    expect(screen.queryByText(/couldn't load this trip/i)).toBeNull()
   })
 })
 

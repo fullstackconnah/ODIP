@@ -8,6 +8,8 @@ import { Modal } from '@/components/Modal'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { formatDateAu } from '@/lib/utils'
 
 /**
@@ -24,7 +26,7 @@ export default function CaregiverSubmissionReviewPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { canWriteParticipantDetails } = usePermissions()
-  const { data: s, isLoading } = useCaregiverSubmission(id)
+  const { data: s, isLoading, isError, error, refetch } = useCaregiverSubmission(id)
   const accept = useAcceptCaregiverSubmission()
   const reject = useRejectCaregiverSubmission()
   const [confirmAccept, setConfirmAccept] = useState(false)
@@ -37,8 +39,12 @@ export default function CaregiverSubmissionReviewPage() {
     [rows],
   )
 
-  if (isLoading) return <p>Loading…</p>
-  if (!s) return <p>Submission not found.</p>
+  if (isLoading) return <PageState kind="loading" noun="submission" />
+  if (!s) {
+    return isError && !isNotFoundError(error)
+      ? <PageState kind="error" noun="submission" onRetry={() => refetch()} />
+      : <PageState kind="not-found" noun="submission" backTo="/caregiver-submissions" backLabel="caregiver submissions" />
+  }
   const canAct = canWriteParticipantDetails && s.status === 'Submitted'
 
   return (

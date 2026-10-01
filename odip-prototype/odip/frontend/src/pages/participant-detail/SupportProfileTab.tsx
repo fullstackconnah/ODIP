@@ -6,6 +6,8 @@ import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { FormField, labelClass } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { FactList } from '@/components/FactList'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { TAP_AREA } from '@/components/tapArea'
 import { SectionEditPanel } from './SectionEditPanel'
@@ -712,10 +714,14 @@ function SupportProfileSection({ participantId, canEdit, onViewRestrictivePracti
  */
 export default function SupportProfileTab({ participantId, onNavigateToTab }: { participantId: string | undefined; onNavigateToTab?: (tab: string) => void }) {
   const { canWriteParticipantDetails, canWriteSupportProfile } = usePermissions()
-  const { data: p, isLoading } = useParticipant(participantId)
+  const { data: p, isLoading, isError, error, refetch } = useParticipant(participantId)
 
-  if (isLoading) return <div className="text-[var(--color-muted-foreground)]">Loading...</div>
-  if (!p || !participantId) return <div className="text-[var(--color-muted-foreground)]">Participant not found</div>
+  if (isLoading) return <PageState kind="loading" noun="support profile" />
+  if (!p || !participantId) {
+    return isError && !isNotFoundError(error)
+      ? <PageState kind="error" noun="support profile" onRetry={() => refetch()} />
+      : <PageState kind="not-found" noun="participant" />
+  }
 
   function viewRestrictivePractices() {
     onNavigateToTab?.('restrictive-practices')

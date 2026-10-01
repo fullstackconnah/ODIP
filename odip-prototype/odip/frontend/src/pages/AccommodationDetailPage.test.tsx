@@ -33,7 +33,7 @@ describe('AccommodationDetailPage — fetch failure vs. not-found (PP-66)', () =
     renderPage()
 
     expect(screen.queryByText(/property not found/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent(/failed to load this property/i)
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't load this property/i)
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
   })
 
@@ -106,5 +106,23 @@ describe('AccommodationDetailPage — Back', () => {
     const back = screen.getByRole('link', { name: 'Back to accommodation' })
     expect(back).toHaveAttribute('href', '/accommodation')
     expect(back).toHaveTextContent(/^Back$/)
+  })
+})
+
+describe('AccommodationDetailPage — a 404 is not a failure (PageState)', () => {
+  it('shows "Property not found" with a Back link, and nothing to retry, when the API answers 404', () => {
+    mockUseAccommodationDetail.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByText('Property not found')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /try again/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to accommodation' })).toHaveAttribute('href', '/accommodation')
+  })
+
+  it('says "Loading property…" while it loads', () => {
+    mockUseAccommodationDetail.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading property…')
   })
 })

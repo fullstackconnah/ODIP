@@ -9,6 +9,8 @@ import { Tabs, type TabItem } from '@/components/Tabs'
 import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TRIP_STATUS_LABELS } from '@/lib/tone'
 import { FactBar, type FactBarSegment } from '@/components/FactBar'
@@ -42,7 +44,7 @@ export default function TripDetailPage() {
   }
   const [showEditTrip, setShowEditTrip] = useState(false)
 
-  const { data: trip, isLoading } = useTrip(id)
+  const { data: trip, isLoading, isError, error, refetch } = useTrip(id)
   const { data: bookings = [] } = useTripBookings(id)
   const { data: accommodation = [] } = useTripAccommodation(id)
   const { data: vehicles = [] } = useTripVehicles(id)
@@ -65,8 +67,12 @@ export default function TripDetailPage() {
   const isReadOnly = trip?.status === 'Cancelled' || trip?.status === 'Archived'
 
   if (!id) return null
-  if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading trip...</div>
-  if (!trip) return <div className="text-center py-12">Trip not found</div>
+  if (isLoading) return <PageState kind="loading" noun="trip" />
+  if (!trip) {
+    return isError && !isNotFoundError(error)
+      ? <PageState kind="error" noun="trip" onRetry={() => refetch()} />
+      : <PageState kind="not-found" noun="trip" backTo="/trips" backLabel="trips" />
+  }
 
   const tabs: TabItem[] = [
     { id: 'overview', label: 'Overview', icon: ClipboardList },

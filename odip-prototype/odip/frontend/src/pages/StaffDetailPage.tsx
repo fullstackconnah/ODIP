@@ -6,6 +6,8 @@ import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { DataTable } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
@@ -47,7 +49,7 @@ export default function StaffDetailPage() {
     initialTab && (TAB_KEYS as string[]).includes(initialTab) ? (initialTab as Tab) : 'availability'
   )
 
-  const { data: overview, isLoading } = useStaffOverview(id)
+  const { data: overview, isLoading, isError, error, refetch } = useStaffOverview(id)
   const { data: settings } = useSettings()
   const warningDays = settings?.qualificationWarningDays ?? 30
 
@@ -56,8 +58,12 @@ export default function StaffDetailPage() {
     [overview, warningDays]
   )
 
-  if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
-  if (!overview) return <div className="text-center py-12">Staff member not found</div>
+  if (isLoading) return <PageState kind="loading" noun="staff member" />
+  if (!overview) {
+    return isError && !isNotFoundError(error)
+      ? <PageState kind="error" noun="staff member" onRetry={() => refetch()} />
+      : <PageState kind="not-found" noun="staff member" backTo="/staff" backLabel="staff" />
+  }
 
   const { staff } = overview
   // Join only the parts that exist: an empty position used to leave the row starting with a

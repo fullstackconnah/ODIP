@@ -1020,3 +1020,35 @@ describe('ParticipantDetailPage — coarse-pointer targets and empty tables', ()
     }
   })
 })
+
+describe('ParticipantDetailPage — failed request vs. missing record (PageState)', () => {
+  it('names a failed request as a failure, with a retry, and does not call it "Participant not found"', () => {
+    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
+    renderAt('p-1')
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this participant")
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.queryByText('Participant not found')).not.toBeInTheDocument()
+  })
+
+  it('shows "Participant not found" for a 404, with nothing to retry', () => {
+    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch: vi.fn() })
+    renderAt('p-1')
+
+    expect(screen.getByText('Participant not found')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to participants' })).toHaveAttribute('href', '/participants')
+  })
+
+  it('shows "Participant not found" for an answer with no record, and says "Loading participant…" while it loads', () => {
+    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
+    const { unmount } = renderAt('p-1')
+    expect(screen.getByText('Participant not found')).toBeInTheDocument()
+    unmount()
+
+    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
+    renderAt('p-1')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading participant…')
+  })
+})

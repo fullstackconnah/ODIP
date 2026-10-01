@@ -5,6 +5,8 @@ import { apiGet, apiPost } from '@/api/client'
 import { useParticipant } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
@@ -45,8 +47,12 @@ export default function OnboardingDetailPage() {
   const services = useMutation({ mutationFn: () => apiPost<Detail>(`/inquiries/${id}/onboarding/service-needs-confirmation`, {}), onSuccess: () => qc.invalidateQueries({ queryKey: ['onboarding', id] }) })
   const d = detail.data
 
-  if (detail.isLoading) return <div>Loading onboarding…</div>
-  if (!d) return <Callout tone="error">Onboarding record was not found.</Callout>
+  if (detail.isLoading) return <PageState kind="loading" noun="onboarding record" />
+  if (!d) {
+    return detail.isError && !isNotFoundError(detail.error)
+      ? <PageState kind="error" noun="onboarding record" onRetry={() => detail.refetch()} />
+      : <PageState kind="not-found" noun="onboarding record" backTo="/participants?tab=onboarding" backLabel="onboarding" />
+  }
 
   const participantName = participant
     ? `${participant.preferredName?.trim() || participant.firstName} ${participant.lastName}`.trim()

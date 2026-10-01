@@ -30,3 +30,39 @@ describe('BackButton', () => {
     expect(offendersOf(text => /import\s*\{[^}]*\bArrowLeft\b[^}]*\}\s*from\s*'lucide-react'/.test(text), ['components/BackButton.tsx'])).toEqual([])
   })
 })
+
+// Every record page and tab the scaffolding work touched: its early returns go through PageState, so a loading, failed or missing record
+// reads the same on all of them (and a failure is never reported as "not found").
+const PAGE_STATE_SITES = [
+  'pages/TripDetailPage.tsx',
+  'pages/StaffDetailPage.tsx',
+  'pages/AccommodationDetailPage.tsx',
+  'pages/IncidentDetailPage.tsx',
+  'pages/ParticipantDetailPage.tsx',
+  'pages/ClaimDetailPage.tsx',
+  'pages/OnboardingDetailPage.tsx',
+  'pages/caregiver-admin/CaregiverSubmissionReviewPage.tsx',
+  'pages/participant-detail/MedicationsTab.tsx',
+  'pages/participant-detail/SupportProfileTab.tsx',
+  'components/ItineraryTab.tsx',
+]
+
+describe('PageState', () => {
+  it.each(PAGE_STATE_SITES)('%s early-returns through PageState, with no hand-rolled "Loading..." or "not found" placeholder', (path) => {
+    const file = FILES.find(f => f.path === path)
+    expect(file, `${path} should exist`).toBeDefined()
+    expect(file!.text).toMatch(/from '[^']*PageState'/)
+    expect(file!.text).not.toMatch(/>\s*Loading[^<]*(\.\.\.|…)\s*</)
+    expect(file!.text).not.toMatch(/>[^<>{}]*\bnot found\.?\s*</i)
+  })
+
+  it('a page that reports a failure separately from a missing record also routes a 404 to "not found"', () => {
+    // The detail endpoints answer 404 for an unknown id, and react-query reports that as an error, so every page that renders
+    // kind="error" for a record must ask isNotFoundError first. (The tabs below it have no "no such record" of their own.)
+    const pages = PAGE_STATE_SITES.filter(path => path.startsWith('pages/') && !path.includes('MedicationsTab'))
+    for (const path of pages) {
+      const text = FILES.find(f => f.path === path)!.text
+      expect(text, `${path} should import isNotFoundError`).toContain('isNotFoundError')
+    }
+  })
+})

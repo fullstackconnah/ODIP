@@ -95,7 +95,7 @@ describe('StaffDetailPage — loading/empty states', () => {
     mockUseStaffOverview.mockReturnValue({ data: undefined, isLoading: true })
     renderAt('staff-1')
 
-    expect(screen.getByText('Loading...')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading staff member…')
   })
 
   it('shows a not-found state when the overview is missing', () => {
@@ -402,5 +402,37 @@ describe('StaffDetailPage — mobile header and tap targets', () => {
     cleanup()
     renderAtTab('staff-1', 'incidents')
     expect(screen.getByRole('link', { name: 'Minor graze' })).toHaveClass('min-h-[var(--tap-min)]')
+  })
+})
+
+describe('StaffDetailPage — failed request vs. missing record (PageState)', () => {
+  it('names a failed request as a failure, with a retry, and does not call it "Staff member not found"', () => {
+    mockUseStaffOverview.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
+    renderAt('staff-1')
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this staff member")
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.queryByText('Staff member not found')).not.toBeInTheDocument()
+  })
+
+  it('shows "Staff member not found" for a 404, with nothing to retry', () => {
+    mockUseStaffOverview.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch: vi.fn() })
+    renderAt('staff-1')
+
+    expect(screen.getByText('Staff member not found')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to staff' })).toHaveAttribute('href', '/staff')
+  })
+
+  it('shows "Staff member not found" for an answer with no record, and says "Loading staff member…" while it loads', () => {
+    mockUseStaffOverview.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
+    const { unmount } = renderAt('staff-1')
+    expect(screen.getByText('Staff member not found')).toBeInTheDocument()
+    unmount()
+
+    mockUseStaffOverview.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
+    renderAt('staff-1')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading staff member…')
   })
 })

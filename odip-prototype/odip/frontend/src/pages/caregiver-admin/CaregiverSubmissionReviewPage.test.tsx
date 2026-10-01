@@ -144,3 +144,35 @@ describe('CaregiverSubmissionReviewPage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/caregiver-submissions')
   })
 })
+
+describe('CaregiverSubmissionReviewPage — failed request vs. missing record (PageState)', () => {
+  it('names a failed request as a failure, with a retry, and does not call it "Submission not found"', () => {
+    mockUseCaregiverSubmission.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this submission")
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.queryByText('Submission not found')).not.toBeInTheDocument()
+  })
+
+  it('shows "Submission not found" for a 404, with nothing to retry', () => {
+    mockUseCaregiverSubmission.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByText('Submission not found')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to caregiver submissions' })).toHaveAttribute('href', '/caregiver-submissions')
+  })
+
+  it('shows "Submission not found" for an answer with no record, and says "Loading submission…" while it loads', () => {
+    mockUseCaregiverSubmission.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
+    const { unmount } = renderPage()
+    expect(screen.getByText('Submission not found')).toBeInTheDocument()
+    unmount()
+
+    mockUseCaregiverSubmission.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
+    renderPage()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading submission…')
+  })
+})

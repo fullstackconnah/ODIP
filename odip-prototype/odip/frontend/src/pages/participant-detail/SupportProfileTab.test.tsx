@@ -330,3 +330,29 @@ describe('SupportProfileTab — 44px coarse-pointer hit area', () => {
     expect(onNavigateToTab).toHaveBeenCalledWith('restrictive-practices')
   })
 })
+
+describe('SupportProfileTab — loading, failure and a missing participant (PageState)', () => {
+  it('says "Loading support profile…" while it loads', () => {
+    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
+    render(<SupportProfileTab participantId="participant-1" />)
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading support profile…')
+  })
+
+  it('names a failed request as a failure, with a retry, not "Participant not found"', () => {
+    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
+    render(<SupportProfileTab participantId="participant-1" />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this support profile")
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.queryByText('Participant not found')).not.toBeInTheDocument()
+  })
+
+  it('shows "Participant not found" for a 404, with no Back (the participant page around the tab is still on screen)', () => {
+    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch: vi.fn() })
+    render(<SupportProfileTab participantId="participant-1" />)
+
+    expect(screen.getByText('Participant not found')).toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+})
