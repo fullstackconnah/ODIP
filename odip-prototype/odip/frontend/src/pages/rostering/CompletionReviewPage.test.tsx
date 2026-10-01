@@ -49,6 +49,8 @@ function makeQueueItem(overrides: Partial<CompletionQueueItemDto> = {}): Complet
     isOutlierVariance: false,
     varianceReviewMinutes: 15,
     returnCount: 0,
+    dosesWithoutOutcome: 0,
+    breakMinutes: 0,
     ...overrides,
   }
 }

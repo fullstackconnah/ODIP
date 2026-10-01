@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using Odip.Api.Controllers;
+using Odip.Api.Rostering;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -1233,5 +1234,148 @@ public class RosteringCompletionReviewTests
         // tenant filter hides tenant B's completions entirely, so this is indistinguishable from
         // "no completions for this shift" rather than a distinct "forbidden" response.
         Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    // ── review queue: doses without an outcome and break minutes ──────────
+
+    private static ParticipantMedication SeedMedication(OdipDbContext db, Guid participantId, string times, MedicationType type = MedicationType.Regular, Guid? tenantId = null) =>
+        Seed(db, new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId ?? Guid.Empty, ParticipantId = participantId, Name = "Levetiracetam", DoseDescription = "1 tablet", Type = type,
+            TimesOfDay = type == MedicationType.Regular ? times : null, StartDate = new DateTime(2026, 1, 1), Status = MedicationStatus.Active,
+        });
+
+    private static MedicationAdministration Outcome(
+        ParticipantMedication med, int hour, int minute, MedicationAdministrationStatus status, Guid? supersededBy = null) => new()
+    {
+        Id = Guid.NewGuid(), TenantId = med.TenantId, ParticipantMedicationId = med.Id, ParticipantId = med.ParticipantId,
+        ScheduledAt = new DateTime(2026, 9, 8, hour, minute, 0, DateTimeKind.Unspecified), Status = status, RecordedByName = "Ben Turner",
+        Reason = status == MedicationAdministrationStatus.Administered ? null : "Not given", SupersededByAdministrationId = supersededBy,
+    };
+
+    private static async Task<List<CompletionQueueItemDto>> QueueAsync(OdipDbContext db)
+    {
+        var result = await MakeController(db).GetCompletions(null, null, null, 1, 50, CancellationToken.None);
+        return Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Items;
+    }
+
+    [Fact]
+    public async Task TheQueueRow_CountsScheduledDosesWithoutAnOutcome_AndTheBreakMinutes()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);   // 09:00-17:00 on 8 Sep 2026
+        var completion = SeedCompletion(db, shift.Id, staff.Id);
+        var med = SeedMedication(db, participant.Id, "09:00,12:30,15:00,16:30");
+        db.MedicationAdministrations.AddRange(
+            Outcome(med, 9, 0, MedicationAdministrationStatus.Administered),
+            Outcome(med, 12, 30, MedicationAdministrationStatus.Missed));   // 15:00 and 16:30 have nothing
+        db.ShiftBreaks.AddRange(
+            new ShiftBreak { Id = Guid.NewGuid(), ShiftCompletionId = completion.Id, StartedAt = completion.ActualStart.AddHours(2), EndedAt = completion.ActualStart.AddHours(2).AddMinutes(20), CreatedByUserId = staff.Id },
+            new ShiftBreak { Id = Guid.NewGuid(), ShiftCompletionId = completion.Id, StartedAt = completion.ActualStart.AddHours(5), EndedAt = completion.ActualStart.AddHours(5).AddMinutes(10), CreatedByUserId = staff.Id });
+        db.SaveChanges();
+
+        var item = Assert.Single(await QueueAsync(db));
+
+        Assert.Equal(2, item.DosesWithoutOutcome);   // any outcome counts - a Missed record is an outcome, an empty slot is not
+        Assert.Equal(30, item.BreakMinutes);
+    }
+
+    [Fact]
+    public async Task NoMedicationsAndNoBreaks_AreZero_NotMissing()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        SeedCompletion(db, SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview).Id, staff.Id);
+
+        var item = Assert.Single(await QueueAsync(db));
+
+        Assert.Equal(0, item.DosesWithoutOutcome);
+        Assert.Equal(0, item.BreakMinutes);
+    }
+
+    [Fact]
+    public async Task TheCount_UsesTheRosteredWindow_TheActiveRecord_AndSkipsPrnAndOtherDays()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        SeedCompletion(db, SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview).Id, staff.Id);
+        var med = SeedMedication(db, participant.Id, "08:59,09:00,10:00,17:00");   // 08:59 is before the window and 17:00 is the next shift's (half-open)
+        SeedMedication(db, participant.Id, string.Empty, MedicationType.Prn);          // as-needed: no slots
+        var administered = Outcome(med, 10, 0, MedicationAdministrationStatus.Administered);
+        // 09:00 was Missed and then superseded by an Administered record: the slot has an outcome (the active one).
+        var supersedingAdmin = Outcome(med, 9, 0, MedicationAdministrationStatus.Administered);
+        db.MedicationAdministrations.AddRange(administered, supersedingAdmin, Outcome(med, 9, 0, MedicationAdministrationStatus.Missed, supersededBy: supersedingAdmin.Id));
+        db.SaveChanges();
+
+        var item = Assert.Single(await QueueAsync(db));
+
+        Assert.Equal(0, item.DosesWithoutOutcome);
+    }
+
+    [Fact]
+    public async Task EachRowOfAPage_GetsItsOwnFigures()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var amy = SeedParticipant(db);
+        var mia = Seed(db, new Participant { Id = Guid.NewGuid(), FirstName = "Mia", LastName = "Chen", IsActive = true });
+        SeedCompletion(db, SeedShift(db, amy.Id, staff.Id, ShiftStatus.PendingReview).Id, staff.Id);
+        SeedCompletion(db, SeedShift(db, mia.Id, staff.Id, ShiftStatus.PendingReview).Id, staff.Id);
+        SeedMedication(db, amy.Id, "09:00,10:00,11:00");   // Amy: three doses, nothing recorded
+        SeedMedication(db, mia.Id, "09:00");                // Mia: one dose, nothing recorded
+
+        var items = await QueueAsync(db);
+
+        Assert.Equal(2, items.Count);
+        Assert.Equal(3, items.Single(i => i.ParticipantName.StartsWith("Amy")).DosesWithoutOutcome);
+        Assert.Equal(1, items.Single(i => i.ParticipantName.StartsWith("Mia")).DosesWithoutOutcome);
+    }
+
+    [Fact]
+    public async Task TheStaffOverviewsRecentCompletions_CarryTheSameFigures()
+    {
+        // ShiftCompletionMapper.BuildQueueItemsAsync is the other producer of CompletionQueueItemDto (the staff overview).
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var completion = SeedCompletion(db, shift.Id, staff.Id);
+        SeedMedication(db, participant.Id, "09:00,12:00");
+        db.ShiftBreaks.Add(new ShiftBreak { Id = Guid.NewGuid(), ShiftCompletionId = completion.Id, StartedAt = completion.ActualStart.AddHours(2), EndedAt = completion.ActualStart.AddHours(2).AddMinutes(45), CreatedByUserId = staff.Id });
+        db.SaveChanges();
+
+        var item = Assert.Single(await ShiftCompletionMapper.BuildQueueItemsAsync(db, db.Shifts.Where(s => s.Id == shift.Id), 15, CancellationToken.None));
+
+        Assert.Equal(2, item.DosesWithoutOutcome);
+        Assert.Equal(45, item.BreakMinutes);
+    }
+
+    [Fact]
+    public async Task AnotherTenantsMedicationForTheSameParticipant_IsNeverCounted_ToANonSuperAdminReviewer()
+    {
+        // Seam test: the dose slots come through tenant-filtered queries, so a medication row owned by another tenant (here pointing at the same
+        // participant id) must not inflate the queue's count.
+        var (tenantA, tenantB) = (Guid.NewGuid(), Guid.NewGuid());
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        Mock<ICurrentTenant> TenantOf(Guid? id) { var t = new Mock<ICurrentTenant>(); t.Setup(x => x.TenantId).Returns(id); t.Setup(x => x.IsSuperAdmin).Returns(id is null); return t; }
+        using (var seed = new OdipDbContext(options, TenantOf(null).Object))
+        {
+            var staff = SeedStaff(seed); staff.TenantId = tenantA;
+            var participant = SeedParticipant(seed); participant.TenantId = tenantA;
+            var shift = SeedShift(seed, participant.Id, staff.Id, ShiftStatus.PendingReview); shift.TenantId = tenantA;
+            var completion = SeedCompletion(seed, shift.Id, staff.Id); completion.TenantId = tenantA;
+            SeedMedication(seed, participant.Id, "09:00", tenantId: tenantA);
+            SeedMedication(seed, participant.Id, "10:00,11:00,12:00", tenantId: tenantB);   // not tenant A's
+            seed.SaveChanges();
+        }
+
+        using var db = new OdipDbContext(options, TenantOf(tenantA).Object);
+        var item = Assert.Single(await QueueAsync(db));
+
+        Assert.Equal(1, item.DosesWithoutOutcome);
     }
 }

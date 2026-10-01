@@ -888,5 +888,12 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         var medications = new MedicationsController(db, tenant.Object);
         var mar = Assert.IsType<ApiResponse<MarDayDto>>(Assert.IsType<OkObjectResult>((await medications.GetMar(new DateOnly(2026, 7, 14), participantId, default)).Result).Value).Data!;
         Assert.Equal(2, mar.Entries.Count);
+
+        // The review queue row (doses without an outcome, break minutes) runs on Npgsql too: both doses have an outcome, the break was 30 minutes.
+        var queue = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(
+            Assert.IsType<OkObjectResult>((await rostering.GetCompletions(null, null, null, 1, 50, default)).Result).Value).Data!.Items;
+        var row = queue.Single(r => r.ShiftId == shiftId);   // (the previous worker's PendingReview shift is in the queue too)
+        Assert.Equal(0, row.DosesWithoutOutcome);
+        Assert.Equal(30, row.BreakMinutes);
     }
 }

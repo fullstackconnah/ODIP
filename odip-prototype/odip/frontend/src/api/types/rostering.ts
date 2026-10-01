@@ -202,6 +202,11 @@ export interface CompletionQueueItemDto {
   isOutlierVariance: boolean
   varianceReviewMinutes: number
   returnCount: number
+  /** Scheduled doses in the shift's ROSTERED window with no outcome recorded (any outcome counts; a superseded record is history). The review
+   * (`GET rostering/shifts/{id}/completion/review`) lists them. */
+  dosesWithoutOutcome: number
+  /** Total minutes of breaks on the completion (same figure as `ShiftCompletionDto.breakMinutes`). */
+  breakMinutes: number
 }
 
 /** POST rostering/shifts/{id}/completion/return body — reason is required server-side (400

@@ -327,7 +327,7 @@ describe('StaffDetailPage — Completions tab', () => {
             serviceDate: '2026-09-08', rosteredStart: '2026-09-08T08:00:00Z', rosteredEnd: '2026-09-08T16:00:00Z',
             actualStart: '2026-09-08T08:02:00Z', actualEnd: '2026-09-08T16:05:00Z',
             varianceMinutesStart: 2, varianceMinutesEnd: 5, status: 'Completed', timeZoneId: 'Australia/Brisbane',
-            isOutlierVariance: false, varianceReviewMinutes: 15, returnCount: 0,
+            isOutlierVariance: false, varianceReviewMinutes: 15, returnCount: 0, dosesWithoutOutcome: 0, breakMinutes: 0,
           },
         ],
       }),

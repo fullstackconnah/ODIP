@@ -803,13 +803,20 @@ public class RosteringController : ControllerBase
             .Take(pageSize)
             .Select(x => new
             {
-                x.Shift.Id, x.Shift.ServiceDate, x.Shift.StartTime, x.Shift.EndTime, x.Shift.EndsNextDay, x.Shift.Status, x.Shift.ReturnCount,
+                x.Shift.Id, x.Shift.ServiceDate, x.Shift.StartTime, x.Shift.EndTime, x.Shift.EndsNextDay, x.Shift.Status, x.Shift.ReturnCount, x.Shift.ParticipantId,
                 ParticipantName = x.Shift.Participant != null ? x.Shift.Participant.FullName : string.Empty,
                 StaffName = x.Shift.User != null ? x.Shift.User.FullName : string.Empty,
                 CompletionId = x.Completion.Id, x.Completion.TimeZoneId, x.Completion.ActualStart, x.Completion.ActualEnd,
                 x.Completion.VarianceMinutesStart, x.Completion.VarianceMinutesEnd,
             })
             .ToListAsync(ct);
+
+        // Doses without an outcome and break minutes for the page's rows (bounded by the page size).
+        var extras = await ShiftCompletionMapper.QueueExtrasAsync(
+            _db,
+            pageRows.Select(r => new ShiftCompletionMapper.QueueExtrasInput(
+                r.CompletionId, r.ParticipantId, r.ServiceDate, r.StartTime, r.EndTime, r.EndsNextDay, r.ActualStart, r.ActualEnd)).ToList(),
+            ct);
 
         var items = pageRows.Select(row =>
         {
@@ -823,7 +830,8 @@ public class RosteringController : ControllerBase
                 row.Id, row.CompletionId, row.ParticipantName, row.StaffName,
                 row.ServiceDate, rosteredStartUtc, rosteredEndUtc, row.ActualStart, row.ActualEnd,
                 row.VarianceMinutesStart, row.VarianceMinutesEnd, row.Status,
-                row.TimeZoneId, isOutlier, thresholdMinutes, row.ReturnCount);
+                row.TimeZoneId, isOutlier, thresholdMinutes, row.ReturnCount,
+                extras[row.CompletionId].DosesWithoutOutcome, extras[row.CompletionId].BreakMinutes);
         }).ToList();
 
         return Ok(ApiResponse<PagedResult<CompletionQueueItemDto>>.Ok(

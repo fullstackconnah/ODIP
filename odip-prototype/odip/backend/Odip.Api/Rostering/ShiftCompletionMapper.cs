@@ -3,6 +3,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Rostering;
 
@@ -38,6 +39,49 @@ public static class ShiftCompletionMapper
     public static bool IsOutlierVariance(int varianceMinutesStart, int varianceMinutesEnd, int thresholdMinutes) =>
         Math.Abs(varianceMinutesStart) > thresholdMinutes || Math.Abs(varianceMinutesEnd) > thresholdMinutes;
 
+    /// <summary>The inputs <see cref="QueueExtrasAsync"/> needs for one queue row.</summary>
+    public sealed record QueueExtrasInput(
+        Guid CompletionId, Guid ParticipantId, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay,
+        DateTime ActualStart, DateTime? ActualEnd);
+
+    /// <summary>The per-completion figures the review queue adds to each row.</summary>
+    public sealed record QueueExtras(int DosesWithoutOutcome, int BreakMinutes);
+
+    /// <summary>
+    /// For each queue row: how many scheduled doses in the ROSTERED window have no outcome (the same slots, dedupe and active-record rule the
+    /// shift package and the completion review use), and the completion's break minutes. Breaks are one query for the whole page; the dose slots are
+    /// computed per shift through <see cref="MedicationSlotService"/> (two small queries each), so the cost is bounded by the page size.
+    /// </summary>
+    public static async Task<Dictionary<Guid, QueueExtras>> QueueExtrasAsync(
+        OdipDbContext db, IReadOnlyCollection<QueueExtrasInput> rows, CancellationToken ct)
+    {
+        var result = new Dictionary<Guid, QueueExtras>();
+        if (rows.Count == 0) return result;
+
+        var completionIds = rows.Select(r => r.CompletionId).ToList();
+        var breaksByCompletion = (await db.ShiftBreaks.Where(b => completionIds.Contains(b.ShiftCompletionId)).ToListAsync(ct))
+            .GroupBy(b => b.ShiftCompletionId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(db, ct);
+        var slots = new MedicationSlotService(db);
+        var nowUtc = DateTime.UtcNow;
+
+        foreach (var row in rows)
+        {
+            var breaks = breaksByCompletion.GetValueOrDefault(row.CompletionId) ?? new List<ShiftBreak>();
+            var (_, breakMinutes, _) = ShiftBreakRules.NetWorked(row.ActualStart, row.ActualEnd, nowUtc, breaks);
+
+            var window = ProviderLocalTime.RosteredWindowLocal(new Shift
+            {
+                ServiceDate = row.ServiceDate, StartTime = row.StartTime, EndTime = row.EndTime, EndsNextDay = row.EndsNextDay,
+            });
+            var due = await slots.GetWindowAsync(window.Item1, window.Item2, row.ParticipantId, provider.Zone, includePrn: false, ct);
+            var withoutOutcome = due.Slots.DistinctBy(s => (s.Medication.Id, s.ScheduledAt)).Count(s => s.Administration is null);
+            result[row.CompletionId] = new QueueExtras(withoutOutcome, breakMinutes);
+        }
+        return result;
+    }
+
     /// <summary>
     /// The CompletionQueueItemDto projection shared by StaffController's staff-overview endpoint
     /// (item 12 — RecentCompletions, filtered by staff and unbounded on status). NOTE:
@@ -53,7 +97,7 @@ public static class ShiftCompletionMapper
         var shiftRows = await shiftQuery
             .Select(s => new
             {
-                s.Id, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.ReturnCount,
+                s.Id, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.ReturnCount, s.ParticipantId,
                 ParticipantName = s.Participant != null ? s.Participant.FullName : string.Empty,
                 StaffName = s.User != null ? s.User.FullName : string.Empty,
             })
@@ -63,6 +107,14 @@ public static class ShiftCompletionMapper
         var completionsByShiftId = await db.ShiftCompletions
             .Where(c => shiftIds.Contains(c.ShiftId) && c.IsActive)
             .ToDictionaryAsync(c => c.ShiftId, ct);
+        var extras = await QueueExtrasAsync(
+            db,
+            shiftRows.Where(r => completionsByShiftId.ContainsKey(r.Id))
+                .Select(r => new QueueExtrasInput(
+                    completionsByShiftId[r.Id].Id, r.ParticipantId, r.ServiceDate, r.StartTime, r.EndTime, r.EndsNextDay,
+                    completionsByShiftId[r.Id].ActualStart, completionsByShiftId[r.Id].ActualEnd))
+                .ToList(),
+            ct);
 
         var items = new List<CompletionQueueItemDto>();
         foreach (var row in shiftRows)
@@ -78,7 +130,8 @@ public static class ShiftCompletionMapper
                 row.Id, completion.Id, row.ParticipantName, row.StaffName,
                 row.ServiceDate, rosteredStartUtc, rosteredEndUtc, completion.ActualStart, completion.ActualEnd,
                 completion.VarianceMinutesStart, completion.VarianceMinutesEnd, row.Status,
-                completion.TimeZoneId, isOutlier, varianceReviewMinutes, row.ReturnCount));
+                completion.TimeZoneId, isOutlier, varianceReviewMinutes, row.ReturnCount,
+                extras[completion.Id].DosesWithoutOutcome, extras[completion.Id].BreakMinutes));
         }
         return items;
     }

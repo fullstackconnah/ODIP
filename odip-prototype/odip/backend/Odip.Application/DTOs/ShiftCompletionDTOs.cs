@@ -161,7 +161,13 @@ public record CompletionQueueItemDto(
     string TimeZoneId,
     bool IsOutlierVariance,
     int VarianceReviewMinutes,
-    int ReturnCount);
+    int ReturnCount,
+    /// <summary>How many scheduled doses in the shift's ROSTERED window have no outcome recorded (Administered, Refused, Withheld, Missed and
+    /// WrongMedication all count as an outcome; a superseded record is history). Lets the review queue flag "doses without outcome" without
+    /// opening each shift; the review (<c>GET rostering/shifts/{id}/completion/review</c>) lists them.</summary>
+    int DosesWithoutOutcome,
+    /// <summary>Total minutes of breaks on the completion (the same figure as <c>ShiftCompletionDto.breakMinutes</c>).</summary>
+    int BreakMinutes);
 
 public record ReturnCompletionDto
 {

@@ -874,7 +874,9 @@ const packageDoses = {
       { ...DOSE_COMMON, medicationId: 'med-0202', name: 'Melatonin', strength: '3mg', dose: '1 tablet', at: '2026-09-10T22:00:00',
         recorded: { status: 'Refused', recordedByName: 'Mei Zhang', reason: 'Declined - said she was not tired yet.' } },
       { ...DOSE_COMMON, medicationId: 'med-0203', name: 'Clonidine', strength: '25mcg', dose: '1 tablet', at: '2026-09-11T02:00:00',
-        recorded: { status: 'Missed', recordedByName: 'Mei Zhang', reason: 'Asleep - not given this shift; left for the morning worker.' } },
+        recorded: { status: 'Missed', recordedByName: 'Mei Zhang', reason: 'Asleep, not woken for it.' } },
+      // Nothing was recorded for this one: the review shows outcome null and the queue counts it in dosesWithoutOutcome.
+      { ...DOSE_COMMON, medicationId: 'med-0204', name: 'Vitamin D', strength: '1000IU', dose: '1 capsule', at: '2026-09-11T06:00:00' },
     ],
     prn: [],
   },
@@ -1388,6 +1390,9 @@ const completionQueueItems = Object.values(portalShiftBase)
       status: base.status, timeZoneId: completion.timeZoneId,
       isOutlierVariance: completion.isOutlierVariance, varianceReviewMinutes: completion.varianceReviewMinutes,
       returnCount: completion.shiftReturnCount,
+      // The same figures the server computes: scheduled doses in the window with no outcome, and the completion's break minutes.
+      dosesWithoutOutcome: (packageDoses[base.id]?.slots || []).filter((slot) => !slot.recorded).length,
+      breakMinutes: (packageHistoryBreaks[base.id] || []).reduce((sum, b) => sum + Math.round((Date.parse(b.endedAt) - Date.parse(b.startedAt)) / 60000), 0),
     }
   })
   .filter(Boolean)
