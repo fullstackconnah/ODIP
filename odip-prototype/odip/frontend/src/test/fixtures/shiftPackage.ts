@@ -26,6 +26,7 @@ type PackageFields = Pick<
   PortalShiftDetailDto,
   | 'breaks' | 'handover' | 'handoverTrail' | 'finishBlockers' | 'timeZoneId' | 'atAGlance' | 'emergencyContacts'
   | 'medicationsDue' | 'prn' | 'shiftRoutines' | 'canRecordDoses' | 'canRecordDosesReason' | 'canRecordDosesReasonCode'
+  | 'sensitiveInfoWithheldReason'
 >
 
 /** The shift-package fields of a shift detail, all empty: no breaks, no handover, no doses, nothing recorded, a competent worker. */
@@ -44,6 +45,7 @@ export function emptyShiftPackage(overrides: Partial<PackageFields> = {}): Packa
     canRecordDoses: true,
     canRecordDosesReason: null,
     canRecordDosesReasonCode: null,
+    sensitiveInfoWithheldReason: null,
     ...overrides,
   }
 }

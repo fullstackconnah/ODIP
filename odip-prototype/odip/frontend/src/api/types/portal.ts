@@ -140,9 +140,9 @@ export interface PortalShiftDetailDto {
   // ── Shift package (PR 1) ──
   /** Breaks in the shift's active completion, oldest first (empty before Start). Also on `completion.breaks`. */
   breaks: ShiftBreakDto[]
-  /** The latest handover for this participant from a PREVIOUS shift, or null if there has never been one. */
+  /** The latest handover for this participant from a PREVIOUS shift, or null if there has never been one - or when `sensitiveInfoWithheldReason` is set. */
   handover: PortalHandoverDto | null
-  /** The last 3 holders (most recent first, including the handover's author): name and shift date only. */
+  /** The last 3 holders (most recent first, including the handover's author): name and shift date only. Empty when the handover is withheld. */
   handoverTrail: PortalHandoverTrailEntryDto[]
   /**
    * What still blocks Finish right now (only while InProgress; empty otherwise): a running break, and the doses that have COME DUE with no
@@ -154,8 +154,9 @@ export interface PortalShiftDetailDto {
   timeZoneId: string
   /** The critical care facts in fixed groups, with explicit nulls for anything not recorded. */
   atAGlance: PortalAtAGlanceDto
-  /** Active emergency contacts, first call first. */
-  emergencyContacts: PortalEmergencyContactDto[]
+  /** Active emergency contacts, first call first. `null` (not an empty list) when the shift's status withholds sensitive information - see
+   * `sensitiveInfoWithheldReason`; an empty list means the participant simply has none. */
+  emergencyContacts: PortalEmergencyContactDto[] | null
   /** Scheduled doses due in the shift's rostered window, time order, with state (Due / Overdue / Recorded), outcome and witness
    * status. Overdue is judged in the provider's local time. */
   medicationsDue: PortalDoseSlotDto[]
@@ -174,6 +175,13 @@ export interface PortalShiftDetailDto {
   canRecordDosesReason: string | null
   /** MEDICATION_COMPETENCY_MISSING | MEDICATION_COMPETENCY_EXPIRED | MEDICATION_COMPETENCY_UNVERIFIABLE whenever the credential is not current (in both modes); null with a current one. */
   canRecordDosesReasonCode: string | null
+  /**
+   * NEED-TO-KNOW BY SHIFT STATUS. The participant's handover, emergency contacts and address are returned ONLY for a shift that is Published or
+   * InProgress. For any other status (PendingReview, Completed, Cancelled, Draft) `handover`, `emergencyContacts` and `atAGlance.address` are
+   * `null` (and `handoverTrail` is empty) and this is a plain-language reason to show instead; `null` when nothing is withheld. The other
+   * at-a-glance care facts are unaffected. After Finish the returned shift (PendingReview) no longer carries them.
+   */
+  sensitiveInfoWithheldReason: string | null
 }
 
 // ── Shift completion write bodies (design spec §2) ───────

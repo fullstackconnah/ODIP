@@ -105,7 +105,8 @@ export interface PortalAtAGlanceDto {
   communication: PortalCommunicationDto
   behaviour: PortalBehaviourDto
   hidpa: PortalHidpaDto
-  address: PortalAddressDto
+  /** The participant's address; `null` when the shift's status withholds sensitive information (`PortalShiftDetailDto.sensitiveInfoWithheldReason`). */
+  address: PortalAddressDto | null
 }
 
 /** One emergency contact, first call first. `mobile`/`phone` are nullable independently. */

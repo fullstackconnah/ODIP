@@ -725,6 +725,9 @@ function portalParticipantSummary(participantId) {
 // the SAME dose (medication, slot, outcome) - anything else is 400 ADMINISTRATION_IDEMPOTENCY_KEY_REUSED.
 // The one exception to a slot taking one record: an Administered record supersedes an active Refused or Missed one (the earlier record is
 // kept as history in `superseded`, the slot reads the new one).
+// NEED-TO-KNOW BY SHIFT STATUS: handover, emergency contacts and address only for a Published or InProgress shift. Any other status (the
+// Completed and PendingReview fixtures, and shift-0003 once finished) gets explicit nulls for them (and an empty handoverTrail) plus
+// `sensitiveInfoWithheldReason`.
 // Null members are written as explicit nulls (the real API marks every nullable shift-package member
 // [JsonIgnore(Never)]); an error envelope omits the members it does not use, like the real ApiResponse.
 //
@@ -1024,9 +1027,17 @@ function finishBlockersFor(shiftId) {
   return blockers
 }
 
-function packageFor(shiftId, participantId) {
+/** Why the handover, emergency contacts and address are not shown for this status (the server's wording). */
+function withheldReason(status) {
+  const state = { PendingReview: 'waiting for review', Completed: 'completed', Cancelled: 'cancelled' }[status] || 'not published'
+  return `The participant's emergency contacts, address and handover are only shown for a shift that is published or in progress. This shift is ${state}.`
+}
+
+function packageFor(shiftId, participantId, status) {
   const pp = packageParticipants[participantId] || packageParticipants['p-0001']
   const st = pkgState(shiftId)
+  // NEED-TO-KNOW BY SHIFT STATUS: only a Published or InProgress shift shows the handover, emergency contacts and address.
+  const showSensitive = status === 'Published' || status === 'InProgress'
   const doses = packageDoses[shiftId] || { slots: [], prn: [] }
   const handover = pp.handover ? {
     completionId: pp.handover.completionId, text: pp.handover.text, nothingToHandOver: pp.handover.nothingToHandOver,
@@ -1036,8 +1047,10 @@ function packageFor(shiftId, participantId) {
   } : null
   return {
     breaks: breaksFor(shiftId).sort((a, b) => a.startedAt.localeCompare(b.startedAt)).map((b) => breakDto(b, Date.now())),
-    handover, handoverTrail: pp.handoverTrail, finishBlockers: finishBlockersFor(shiftId),
-    timeZoneId: PACKAGE_TZ, atAGlance: pp.atAGlance, emergencyContacts: pp.emergencyContacts,
+    handover: showSensitive ? handover : null, handoverTrail: showSensitive ? pp.handoverTrail : [], finishBlockers: finishBlockersFor(shiftId),
+    timeZoneId: PACKAGE_TZ, atAGlance: showSensitive ? pp.atAGlance : { ...pp.atAGlance, address: null },
+    emergencyContacts: showSensitive ? pp.emergencyContacts : null,
+    sensitiveInfoWithheldReason: showSensitive ? null : withheldReason(status),
     medicationsDue: doses.slots.map((def) => doseSlotDto(shiftId, def)), prn: doses.prn.map((def) => prnDto(shiftId, def)),
     shiftRoutines: packageRoutines[shiftId] || [], ...competencyView(),
   }
@@ -1273,7 +1286,7 @@ function buildPortalShiftDetail(shiftId, overrides = {}) {
     ? overrides.completion
     : st.completion || shiftCompletions.find((c) => c.shiftId === base.id) || null
   const completion = rawCompletion ? withPackageFields(base.id, rawCompletion) : null
-  const pkg = packageFor(base.id, base.participantId)
+  const pkg = packageFor(base.id, base.participantId, status)
   const doses = packageDoses[base.id] || { slots: [], prn: [] }
   // Every active routine (the unfiltered list the original page still filters client-side) and the medication summary,
   // both derived from the package fixtures so they can't drift from shiftRoutines / medicationsDue.
