@@ -561,27 +561,20 @@ describe('ParticipantsPage — narrow-desktop columns', () => {
     return screen.getByRole('columnheader', { name }) as HTMLElement
   }
 
-  it('drops Region below 1280, Support Ratio and Repeat below 2xl and Plan Type below 1792px, on the header and every row', () => {
+  // L3-04: Region (below 1280), Support Ratio and Repeat (below 2xl) and Plan Type (below 1792px) used to be deleted by breakpoint; the table
+  // now scrolls in its box with the name and the row actions pinned (DataTable's column rule), so every column is on the page at every width.
+  it('keeps every column at every width, on the header and every row', () => {
     mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
     renderPage()
 
     const row = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
     const cells = within(row).getAllByRole('cell')
     const headers = screen.getAllByRole('columnheader')
-    const dropped = (label: string, cls: string) => {
-      expect(headerCell(label)).toHaveClass(cls)
-      // The body cell in the same column position carries the same class (a header/cell mismatch
-      // would shear the table).
+    for (const label of ['Name', 'NDIS Number', 'Streams', 'Status', 'High', 'Plan Type', 'Region', 'Support Ratio', 'Repeat']) {
       const index = headers.findIndex(h => h.textContent?.includes(label))
-      expect(cells[index]).toHaveClass(cls)
-    }
-    dropped('Support Ratio', 'md:max-2xl:hidden')
-    dropped('Repeat', 'md:max-2xl:hidden')
-    dropped('Plan Type', 'md:max-[1792px]:hidden')
-    dropped('Region', 'md:max-xl:hidden')
-    // Everything else stays: name, NDIS number, streams, status, alerts, the flags.
-    for (const label of ['Name', 'NDIS Number', 'Streams', 'Status', 'High']) {
-      expect(headerCell(label).className).not.toMatch(/max-(xl|2xl)/)
+      expect(index, label).toBeGreaterThanOrEqual(0)
+      expect(headers[index].className, label).not.toMatch(/hidden/)
+      expect(cells[index].className, label).not.toMatch(/hidden/)
     }
   })
 

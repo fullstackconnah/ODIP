@@ -132,13 +132,12 @@ describe('TasksPage — obligation-engine tasks (item 9)', () => {
 // table needed 1436px against a ~1006px box at 1280 and pushed Status and the row actions off-screen. jsdom does no layout (the Playwright
 // overflow audit measures it), so this pins the budget itself: what gives way and when, what is capped, and what is reserved.
 describe('TasksPage — column budget', () => {
-  it('drops the two least useful columns as the screen narrows (Trip below 1536px, Type below 1792px) and keeps the rest', () => {
+  // L3-04: Trip (below 1536px) and Type (below 1792px) used to be deleted, so a coordinator could not see which trip a task belonged to.
+  it('keeps every column at every width, Trip and Type included (the table scrolls in its box: the DataTable column rule)', () => {
     renderPage()
-    expect(screen.getByRole('columnheader', { name: 'Trip' })).toHaveClass('md:max-2xl:hidden')
-    expect(screen.getByRole('columnheader', { name: 'Type' })).toHaveClass('md:max-[1792px]:hidden')
-    for (const name of ['Task', 'Owner', 'Due', 'Priority', 'Status']) {
+    for (const name of ['Task', 'Trip', 'Type', 'Owner', 'Due', 'Priority', 'Status']) {
       const header = screen.getByRole('columnheader', { name })
-      expect(header.className, name).not.toMatch(/max-(xl|2xl)|max-\[1792px\]/)
+      expect(header.className, name).not.toMatch(/hidden/)
     }
   })
 
