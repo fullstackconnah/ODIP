@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
@@ -56,50 +55,18 @@ public sealed class ShiftBreakService
     /// <summary>
     /// Starts a break now. The caller resolved the shift as InProgress a moment ago, but a Finish on another device can commit in between, and a
     /// running break on a PendingReview completion is one nobody can end (every break endpoint needs InProgress) - so the write re-checks. On
-    /// PostgreSQL the check and the insert run in one transaction that holds the shift row (<c>SELECT ... FOR UPDATE</c>): a Finish that has
-    /// already flipped the shift but not yet committed makes this wait, and the re-check then sees the new state; a Finish that commits later
-    /// cannot slip in between the check and the insert. With the in-memory test provider only the re-check remains. If the context is already
-    /// inside a transaction the lock joins it and the owner commits. Returns <see cref="ShiftBreakOutcome.ShiftNotInProgress"/>, having written
-    /// nothing, when the shift or its completion is no longer open.
+    /// PostgreSQL the check and the insert run in one transaction that holds the shift row (<see cref="ShiftRowLock"/>, <c>SELECT ... FOR UPDATE</c>),
+    /// and Finish takes the same lock before it reads its blockers: a Finish that has already flipped the shift but not yet committed makes this wait,
+    /// and the re-check then sees the new state; a Finish that arrives while this holds the row waits, and then sees the running break and refuses.
+    /// With the in-memory test provider only the re-check remains. If the context is already inside a transaction the lock joins it and the owner
+    /// commits. Returns <see cref="ShiftBreakOutcome.ShiftNotInProgress"/>, having written nothing, when the shift or its completion is no longer open.
     /// </summary>
     public async Task<ShiftBreakResult> StartAsync(ShiftCompletion completion, Guid userId, CancellationToken ct)
     {
-        var ownedTransaction = await LockShiftRowAsync(completion.ShiftId, ct);
-        try
-        {
-            var result = await StartCoreAsync(completion, userId, ct);
-            if (result.Outcome == ShiftBreakOutcome.Ok && ownedTransaction is not null) await ownedTransaction.CommitAsync(ct);
-            return result;
-        }
-        finally
-        {
-            if (ownedTransaction is not null) await ownedTransaction.DisposeAsync();   // rolls back anything not committed
-        }
-    }
-
-    /// <summary>
-    /// PostgreSQL only: begins a transaction (unless the context is already in one) and locks the shift row until it ends. Returns the transaction
-    /// this call began, or null when there is nothing to commit (another provider, or a transaction the caller owns). If the lock statement fails
-    /// the transaction is rolled back before the exception leaves, so the context is never left inside an aborted transaction.
-    /// </summary>
-    private async Task<IDbContextTransaction?> LockShiftRowAsync(Guid shiftId, CancellationToken ct)
-    {
-        if (!_db.Database.IsNpgsql()) return null;
-
-        var owned = _db.Database.CurrentTransaction is null ? await _db.Database.BeginTransactionAsync(ct) : null;
-        try
-        {
-            await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT \"Id\" FROM \"Shifts\" WHERE \"Id\" = {shiftId} FOR UPDATE", ct);
-            return owned;
-        }
-        catch
-        {
-            if (owned is not null)
-            {
-                try { await owned.DisposeAsync(); } catch { /* the failure being reported is the one that matters */ }
-            }
-            throw;
-        }
+        await using var rowLock = await ShiftRowLock.AcquireAsync(_db, completion.ShiftId, ct);
+        var result = await StartCoreAsync(completion, userId, ct);
+        if (result.Outcome == ShiftBreakOutcome.Ok) await rowLock.CommitAsync(ct);
+        return result;   // disposing the lock rolls back anything not committed
     }
 
     /// <summary>Whether the shift is still InProgress and the completion is still the active, unsubmitted one - read fresh from the database.</summary>

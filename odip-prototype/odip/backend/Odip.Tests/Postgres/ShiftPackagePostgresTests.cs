@@ -925,6 +925,113 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         Assert.True(Assert.Single(await verify.ShiftBreaks.Where(b => b.ShiftCompletionId == completionId).ToListAsync()).IsRunning);
     }
 
+    /// <summary>The worker's portal controller over a request-scoped Postgres context, at a fixed instant.</summary>
+    private PortalController PortalFor(OdipDbContext request, Guid tenantId, Guid userId, DateTime nowUtc)
+    {
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())], "Test");
+        return new PortalController(request, TenantMock(tenantId).Object, clock: FakeClock.AtUtc(nowUtc.Year, nowUtc.Month, nowUtc.Day, nowUtc.Hour, nowUtc.Minute))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } },
+        };
+    }
+
+    [SkippableFact]
+    public async Task AFinishBlockedBehindAStartBreakInFlight_SeesTheRunningBreak_AndIsRefused_OnRealPostgres()
+    {
+        // The other side of the Start Break race (review 3 finding m6). A Start Break holds the shift row and has inserted its break, not yet committed, when a
+        // Finish arrives that has ALREADY resolved the shift as InProgress. Finish used to read its blockers first (no running break was visible yet) and then
+        // flip the shift the moment the row freed, committing a PendingReview completion with a running break that nobody can end. Now Finish waits for the row
+        // before it reads anything, so it sees the committed break and refuses with FINISH_BLOCKED, and the shift stays open.
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var (_, userId, shiftId, completionId) = await SeedCompletionAsync(db);
+
+        await using var breakRequest = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        await using var breakTransaction = await breakRequest.Database.BeginTransactionAsync();   // the lock joins this transaction; committing it is the test's job
+        var completion = await breakRequest.ShiftCompletions.SingleAsync(c => c.Id == completionId);
+        var started = await new ShiftBreakService(breakRequest, FakeClock.AtUtc(2026, 7, 14, 7, 0)).StartAsync(completion, userId, default);
+        Assert.Equal(ShiftBreakOutcome.Ok, started.Outcome);   // the shift row is held FOR UPDATE and the running break inserted, uncommitted
+
+        await using var request = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var portal = PortalFor(request, tenantId, userId, new DateTime(2026, 7, 14, 7, 30, 0, DateTimeKind.Utc));
+        var finish = portal.FinishShift(shiftId, new FinishShiftDto { NothingToNote = true, NothingToHandOver = true }, default);
+        await Task.Delay(700);
+        Assert.False(finish.IsCompleted, "Finish must wait for the Start Break that holds the shift row");
+        await breakTransaction.CommitAsync();
+        var result = await finish;
+
+        var refused = Assert.IsType<UnprocessableEntityObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(refused.Value);
+        Assert.Equal(ShiftErrorCodes.ShiftFinishBlocked, body.Code);
+        Assert.Contains(body.Data!.FinishBlockers, b => b.Code == ShiftFinishBlockerCodes.BreakRunning);
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.Equal(ShiftStatus.InProgress, (await verify.Shifts.SingleAsync(x => x.Id == shiftId)).Status);   // nothing was flipped
+        Assert.Null((await verify.ShiftCompletions.SingleAsync(c => c.Id == completionId)).SubmittedAt);
+        Assert.True(Assert.Single(await verify.ShiftBreaks.Where(b => b.ShiftCompletionId == completionId).ToListAsync()).IsRunning);   // the break is there to be ended
+        Assert.Null(request.Database.CurrentTransaction);
+    }
+
+    [SkippableFact]
+    public async Task ALateFinishBehindAFinishInFlight_IsTheIdempotentReplay_AndDoesNotRewriteTheCompletion_OnRealPostgres()
+    {
+        // The worker taps Finish on two devices. The first has flipped the shift and submitted the completion with its handover (not yet committed) when the second
+        // arrives having resolved the shift as InProgress. The second waits for the row, re-reads the shift, sees PendingReview and answers as the replay it is: it
+        // must not write its own handover over the first one.
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var (_, userId, shiftId, completionId) = await SeedCompletionAsync(db);
+
+        await using var firstFinish = new NpgsqlConnection(_pg.ConnectionString);
+        await firstFinish.OpenAsync();
+        await using var flip = await firstFinish.BeginTransactionAsync();
+        await using (var update = new NpgsqlCommand(
+            "UPDATE \"Shifts\" SET \"Status\" = @status WHERE \"Id\" = @shift; " +
+            "UPDATE \"ShiftCompletions\" SET \"SubmittedAt\" = now(), \"ActualEnd\" = now(), \"HandoverText\" = 'FIRST' WHERE \"Id\" = @completion", firstFinish, flip))
+        {
+            update.Parameters.AddWithValue("status", (int)ShiftStatus.PendingReview);
+            update.Parameters.AddWithValue("shift", shiftId);
+            update.Parameters.AddWithValue("completion", completionId);
+            await update.ExecuteNonQueryAsync();
+        }
+
+        await using var request = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var portal = PortalFor(request, tenantId, userId, new DateTime(2026, 7, 14, 7, 30, 0, DateTimeKind.Utc));
+        var late = portal.FinishShift(shiftId, new FinishShiftDto { NothingToNote = true, HandoverText = "SECOND" }, default);
+        await Task.Delay(700);
+        Assert.False(late.IsCompleted, "the second Finish must wait for the first");
+        await flip.CommitAsync();
+        var result = await late;
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(ShiftStatus.PendingReview, Assert.IsType<ApiResponse<PortalShiftDetailDto>>(ok.Value).Data!.Status);
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.Equal("FIRST", (await verify.ShiftCompletions.SingleAsync(c => c.Id == completionId)).HandoverText);   // the replay wrote nothing
+        Assert.Null(request.Database.CurrentTransaction);
+    }
+
+    [SkippableFact]
+    public async Task AFinishOnAnOpenShift_OnRealPostgres_CommitsTheFlip_AndLeavesNoTransactionOpen()
+    {
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var (_, userId, shiftId, completionId) = await SeedCompletionAsync(db);
+        await using var request = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var portal = PortalFor(request, tenantId, userId, new DateTime(2026, 7, 14, 7, 30, 0, DateTimeKind.Utc));
+
+        var result = await portal.FinishShift(shiftId, new FinishShiftDto { NothingToNote = true, HandoverText = "All settled." }, default);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Null(request.Database.CurrentTransaction);   // the transaction that held the row was committed, not left open
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);   // a fresh connection sees only what was committed
+        Assert.Equal(ShiftStatus.PendingReview, (await verify.Shifts.SingleAsync(x => x.Id == shiftId)).Status);
+        var stored = await verify.ShiftCompletions.SingleAsync(c => c.Id == completionId);
+        Assert.Equal(new DateTime(2026, 7, 14, 7, 30, 0), stored.SubmittedAt);
+        Assert.Equal("All settled.", stored.HandoverText);
+    }
+
     [SkippableFact]
     public async Task DifferentSlotsOfOneMedication_AreNotSerialisedIntoConflicts_EachGetsItsOwnRecord()
     {

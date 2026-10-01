@@ -378,7 +378,8 @@ public class PortalController : ControllerBase
     /// <summary>
     /// Worker taps Finish. 409 SHIFT_NOTE_REQUIRED if zero ShiftNote rows exist on the shift,
     /// checked first so the worker gets one clear reason. Supports the manual-start path
-    /// (dto.ActualStart supplied while Shift.Status is still Published) per spec §3.
+    /// (dto.ActualStart supplied while Shift.Status is still Published) per spec §3. On PostgreSQL the whole decision (the blocker check and the
+    /// write) runs holding the shift row, the same lock Start Break takes, so the two cannot interleave (see <see cref="ShiftRowLock"/>).
     /// </summary>
     [HttpPost("shifts/{id:guid}/finish")]
     public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> FinishShift(
@@ -386,6 +387,19 @@ public class PortalController : ControllerBase
     {
         var (shift, error) = await ResolveOwnedShiftAsync(id, ct);
         if (error is not null) return error;
+
+        // Hold the shift row from here to the commit (PostgreSQL). Start Break takes the same lock, so a break cannot be started in the gap between the
+        // blocker check below and the flip to PendingReview - that left a running break on a submitted completion that nobody can end - and two Finish
+        // taps from two devices cannot both write. Whatever committed while this waited is visible: the shift is re-read, and every check below judges
+        // that state (a Finish that lost the race is then the idempotent replay, a Start Break that won is a "break still running" blocker).
+        await using var rowLock = await ShiftRowLock.AcquireAsync(_db, shift!.Id, ct);
+        if (rowLock.Held)
+        {
+            var ownerBeforeWaiting = shift.UserId;
+            await _db.Entry(shift).ReloadAsync(ct);
+            if (_db.Entry(shift).State == EntityState.Detached || shift.UserId != ownerBeforeWaiting)
+                return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));   // deleted or reassigned while this waited
+        }
 
         // Idempotent replay / already-elsewhere guards, checked before the note-required gate — none
         // of these states can be fixed by adding a note, so the note gate would be a misleading error.
@@ -539,6 +553,7 @@ public class PortalController : ControllerBase
         }
 
         await _db.SaveChangesAsync(ct);
+        await rowLock.CommitAsync(ct);
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
     }
 
