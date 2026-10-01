@@ -301,6 +301,115 @@ public class ParticipantIntakeControllerTests
         Assert.Single(await db.People.ToListAsync());
     }
 
+    // ── Review F-2: "already recorded" means an ACTIVE match. A match against an inactive row must not drop what was typed. ──
+
+    [Fact]
+    public async Task SaveIntake_AContactThatMatchesAnExpiredRole_IsCreated_NotSilentlyDropped()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, controller) = Create(tenantId);
+        using var _ = db;
+        var participant = DraftWithProfileData(tenantId);
+        var pat = new Person { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Pat", LastName = "Parent" };
+        db.AddRange(participant, pat, new ParticipantContactRole
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, PersonId = pat.Id,
+            RoleType = ContactRoleType.NextOfKin, Status = ContactRoleStatus.Expired,
+        });
+        await db.SaveChangesAsync();
+        // The coordinator adds Pat Parent again, as a CURRENT next of kin: the old, expired row says nothing about that.
+        var body = WizardBody("""
+            , "contactRoles": [ { "newPersonFirstName": "Pat", "newPersonLastName": "Parent", "roleType": "NextOfKin", "isPrimary": false, "status": "Active" } ]
+            """);
+
+        Ok(await controller.SaveIntake(participant.Id, body, CancellationToken.None));
+
+        var roles = await db.ParticipantContactRoles.OrderBy(r => r.Status).ToListAsync();
+        Assert.Equal([ContactRoleStatus.Active, ContactRoleStatus.Expired], roles.Select(r => r.Status).ToList());
+    }
+
+    [Fact]
+    public async Task SaveIntake_AContactGivenByPersonId_IsCreated_WhenTheExistingRoleForThatPersonIsSuperseded()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, controller) = Create(tenantId);
+        using var _ = db;
+        var participant = DraftWithProfileData(tenantId);
+        var pat = new Person { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Pat", LastName = "Parent" };
+        db.AddRange(participant, pat, new ParticipantContactRole
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, PersonId = pat.Id,
+            RoleType = ContactRoleType.Guardian, Status = ContactRoleStatus.Superseded,
+        });
+        await db.SaveChangesAsync();
+        var body = WizardBody($$"""
+            , "contactRoles": [ { "personId": "{{pat.Id}}", "roleType": "Guardian", "isPrimary": false, "status": "Active" } ]
+            """);
+
+        Ok(await controller.SaveIntake(participant.Id, body, CancellationToken.None));
+
+        Assert.Equal(2, await db.ParticipantContactRoles.CountAsync());
+        Assert.Single(await db.ParticipantContactRoles.Where(r => r.Status == ContactRoleStatus.Active).ToListAsync());
+    }
+
+    [Fact]
+    public async Task SaveIntake_ARiskThatMatchesAnInactiveRisk_IsCreated_NotSilentlyDropped()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, controller) = Create(tenantId);
+        using var _ = db;
+        var participant = DraftWithProfileData(tenantId);
+        db.AddRange(participant, new ParticipantRiskEntry
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, AtRiskParty = AtRiskParty.Participant,
+            Description = "Wanders at night", IsActive = false,
+        });
+        await db.SaveChangesAsync();
+        var body = WizardBody("""
+            , "riskEntries": [ { "atRiskParty": "Participant", "description": "wanders at night", "isActive": true } ]
+            """);
+
+        Ok(await controller.SaveIntake(participant.Id, body, CancellationToken.None));
+
+        var risks = await db.ParticipantRiskEntries.OrderBy(r => r.IsActive).ToListAsync();
+        Assert.Equal([false, true], risks.Select(r => r.IsActive).ToList());
+    }
+
+    // ── Review F-3: the auto safety notes this endpoint creates belong to the PARTICIPANT's tenant. ──
+
+    [Fact]
+    public async Task SaveIntake_CreatesTheAutoSafetyNotesInTheParticipantsTenant_EvenWhenASuperAdminWithAnotherHomeTenantSavesIt()
+    {
+        var participantTenant = Guid.NewGuid();
+        var adminHomeTenant = Guid.NewGuid();
+        // A SuperAdmin sees every tenant (the query filter is open for them) but SaveChanges stamps a default TenantId with THEIR home tenant.
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(x => x.TenantId).Returns(adminHomeTenant);
+        tenant.Setup(x => x.IsSuperAdmin).Returns(true);
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
+        var http = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "super-1")], "Test")) };
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db))
+        {
+            ControllerContext = new ControllerContext { HttpContext = http },
+        };
+        var participant = DraftWithProfileData(participantTenant);
+        db.Participants.Add(participant);
+        await db.SaveChangesAsync();
+        // The wizard body carries behavioursOfConcernCurrent and a risks summary, so both safety notes are created by the save.
+        var body = WizardBody("""
+            , "riskEntries": [ { "atRiskParty": "Participant", "description": "Wanders at night", "isActive": true } ]
+            """);
+
+        Ok(await controller.SaveIntake(participant.Id, body, CancellationToken.None));
+
+        var notes = await db.ParticipantNotes.ToListAsync();
+        Assert.Contains(notes, n => n.SourceKey == "safety:behavioursOfConcern");
+        Assert.Contains(notes, n => n.SourceKey == "safety:risksHazards");
+        Assert.All(notes, n => Assert.Equal(participantTenant, n.TenantId));
+        // And everything else the save created is in the same tenant (the stamping the contacts and risks already had).
+        Assert.All(await db.ParticipantRiskEntries.ToListAsync(), r => Assert.Equal(participantTenant, r.TenantId));
+    }
+
     [Fact]
     public async Task SaveIntake_ARejectedContact_SavesNothingAtAll()
     {
