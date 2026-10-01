@@ -27,8 +27,10 @@ public class ParticipantsController : ControllerBase
     private readonly ParticipantDocumentService _documentService;
     private readonly SafetyNoteSyncService _safetyNoteSync;
     private readonly ParticipantIntakeSnapshotService _intakeSnapshots;
-    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService, SafetyNoteSyncService safetyNoteSync, ParticipantIntakeSnapshotService? intakeSnapshots = null)
+    private readonly TimeProvider _clock;
+    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService, SafetyNoteSyncService safetyNoteSync, ParticipantIntakeSnapshotService? intakeSnapshots = null, TimeProvider? clock = null)
     {
+        _clock = clock ?? TimeProvider.System;
         _db = db;
         _compatLink = compatLink;
         _documentService = documentService;

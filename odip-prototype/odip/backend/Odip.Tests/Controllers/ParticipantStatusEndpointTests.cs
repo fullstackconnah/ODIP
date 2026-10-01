@@ -40,7 +40,7 @@ public class ParticipantStatusEndpointTests
     }
 
     /// <summary>One request's worth of plumbing: the audit interceptor sees the same HttpContext the controller does, as in the app.</summary>
-    private static Fixture Create(Guid? tenantId = null, string databaseName = "")
+    private static Fixture Create(Guid? tenantId = null, string databaseName = "", TimeProvider? clock = null)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(tenantId ?? TenantId);
@@ -58,7 +58,7 @@ public class ParticipantStatusEndpointTests
             .AddInterceptors(new AuditInterceptor(accessor.Object))
             .Options;
         var db = new OdipDbContext(options, tenant.Object);
-        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db))
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db), clock: clock)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
         };
@@ -283,6 +283,28 @@ public class ParticipantStatusEndpointTests
         Assert.Equal(5, await fx.Db.Shifts.CountAsync());
         Assert.Equal(2, await fx.Db.ShiftPatterns.CountAsync());
         Assert.Equal(1, await fx.Db.ParticipantBookings.CountAsync(b => b.BookingStatus == BookingStatus.Confirmed));
+    }
+
+    /// <summary>
+    /// "Upcoming" is counted from the PROVIDER's today (DESIGN.md "Time on the wire": never DateTime.UtcNow, which is still yesterday until
+    /// 10:00 or 11:00 in Sydney). At 20:00 UTC on 1 October it is 06:00 on 2 October in Sydney (UTC+10 until the 4th): the shift on the 1st is
+    /// behind the provider, and a pattern that ended on the 1st has ended.
+    /// </summary>
+    [Fact]
+    public async Task ChangeStatus_Deactivate_CountsUpcomingFromTheProvidersToday_NotTheUtcDate()
+    {
+        using var fx = Create(clock: Odip.Tests.Medications.FakeClock.AtUtc(2026, 10, 1, 20, 0));
+        var participant = RichParticipant();
+        fx.Db.Participants.Add(participant);
+        foreach (var day in new[] { 1, 2, 3 })
+            fx.Db.Shifts.Add(new Shift { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = participant.Id, ServiceDate = new DateOnly(2026, 10, day), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(15, 0), Status = ShiftStatus.Published });
+        fx.Db.ShiftPatterns.Add(new ShiftPattern { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = participant.Id, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(15, 0), EffectiveFrom = new DateOnly(2026, 9, 1), EffectiveTo = new DateOnly(2026, 10, 1), IsActive = true });
+        await fx.Db.SaveChangesAsync();
+
+        var result = Ok(await fx.Controller.ChangeStatus(participant.Id, new ChangeParticipantStatusDto { IsActive = false }, CancellationToken.None));
+
+        Assert.Contains("2 upcoming shifts still reference this participant. They were not cancelled.", result.Warnings);
+        Assert.DoesNotContain(result.Warnings, w => w.Contains("recurring shift pattern", StringComparison.Ordinal));
     }
 
     [Fact]
