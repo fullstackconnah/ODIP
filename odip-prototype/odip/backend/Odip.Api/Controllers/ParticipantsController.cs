@@ -1032,9 +1032,9 @@ public class ParticipantsController : ControllerBase
     /// </summary>
     private async Task<List<string>> DeactivationWarningsAsync(Guid participantId, CancellationToken ct)
     {
-        // A date, not a moment: shifts are rostered by calendar day. The UTC date can lag the provider's local date by up to a
-        // day, which at worst counts yesterday's shifts for a few morning hours: a warning, so over-counting is the safe side.
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        // A date, not a moment: shifts are rostered by calendar day, and "today" is the PROVIDER's date (DESIGN.md "Time on the wire"),
+        // never the UTC date, which is still yesterday until 10:00 or 11:00 in Sydney.
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var shifts = await ParticipantQueries.UpcomingShifts(_db, participantId, today).CountAsync(ct);
         var patterns = await ParticipantQueries.LivePatterns(_db, participantId, today).CountAsync(ct);
         var bookings = await ParticipantQueries.UpcomingBookings(_db, participantId, today).CountAsync(ct);
