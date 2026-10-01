@@ -735,3 +735,7 @@ not. Never hand-roll a `fixed right-0` panel: use `SlideOver`.
 - **Don't** tint a glance segment its own badge calls fine, or fill one with anything but the warning-container or error-container
 - **Don't** tint an attention tile at zero, or claim "All clear" without data (while its request is in flight, or after it failed)
 - **Don't** restyle a single module more heavily than any other; design effort is uniform by commitment
+
+## Marketing surface (/welcome/)
+
+A separate visual world ("Tourist Drive"), documented in `frontend/welcome/DESIGN.md`. Never import its tokens into the app, or the app's tokens into it.
