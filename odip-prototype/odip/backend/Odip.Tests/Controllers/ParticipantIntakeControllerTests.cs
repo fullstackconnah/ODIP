@@ -180,9 +180,9 @@ public class ParticipantIntakeControllerTests
 
     private static Dictionary<string, string?> Scalars(Participant p) =>
         typeof(Participant).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(pi => pi.CanRead && pi.GetIndexParameters().Length == 0)
+            .Where(pi => pi.CanRead && pi.CanWrite && pi.GetIndexParameters().Length == 0)
             .Where(pi => { var t = Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType; return t.IsPrimitive || t.IsEnum || t == typeof(string) || t == typeof(decimal) || t == typeof(DateTime) || t == typeof(DateOnly) || t == typeof(Guid) || t == typeof(List<string>); })
-            .ToDictionary(pi => pi.Name, pi => pi.GetValue(p) switch { null => null, List<string> l => string.Join("|", l), var v => v.ToString() });
+            .ToDictionary(pi => pi.Name, pi => pi.GetValue(p) switch { null => null, List<string> l => string.Join("|", l), DateTime d => d.ToString("O"), var v => v.ToString() });
 
     /// <summary>
     /// The drift guard. Every CreateParticipantDto field that is also a participant column is sent with a value that differs from
@@ -196,7 +196,7 @@ public class ParticipantIntakeControllerTests
         var (db, controller) = Create(tenantId);
         using var _ = db;
         var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Base", LastName = "Person", IsDraft = true };
-        var dto = new CreateParticipantDto { FirstName = "Dto", LastName = "Person", IsDraft = true, PlanType = PlanType.AgencyManaged };
+        var dto = new CreateParticipantDto { FirstName = "Dto", LastName = "DtoLast", IsDraft = true, PlanType = PlanType.AgencyManaged };
         foreach (var dtoProp in typeof(CreateParticipantDto).GetProperties())
         {
             var entityProp = typeof(Participant).GetProperty(dtoProp.Name);
@@ -545,7 +545,7 @@ public class ParticipantIntakeControllerTests
         var replayData = Assert.IsType<ApiResponse<ParticipantDetailDto>>(replay.Value).Data!;
 
         Assert.Equal(firstId, replayData.Id);
-        Assert.Equal("Jamie Rivers", replayData.FullName);
+        Assert.Equal("Jay Rivers", replayData.FullName);
         Assert.NotNull(replayData.IntakeCompletedAt);
         Assert.Single(await db.Participants.ToListAsync());
         Assert.Single(await db.ParticipantIntakeSnapshots.ToListAsync());

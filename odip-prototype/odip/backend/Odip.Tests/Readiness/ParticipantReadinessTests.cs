@@ -641,6 +641,8 @@ public class ParticipantReadinessTests
 
         var data = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
         Assert.False(data.IsActive);
-        Assert.True(data.IsDraft);
+        // Not demoted to a draft either (L1-03): this record was finalised before intake completion was recorded, and an edit must not
+        // pull it out of the register and every picker. What it must not do is activate without a completed intake.
+        Assert.False(data.IsDraft);
     }
 }

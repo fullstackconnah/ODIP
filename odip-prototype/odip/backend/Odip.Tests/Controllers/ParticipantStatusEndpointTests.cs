@@ -82,7 +82,7 @@ public class ParticipantStatusEndpointTests
     /// <summary>Every simple (scalar) property of the participant as text, so a test can prove which ones a call did and did not touch.</summary>
     private static Dictionary<string, string?> Scalars(Participant p) =>
         typeof(Participant).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(pi => pi.CanRead && pi.GetIndexParameters().Length == 0 && IsScalar(pi.PropertyType))
+            .Where(pi => pi.CanRead && pi.CanWrite && pi.GetIndexParameters().Length == 0 && IsScalar(pi.PropertyType))
             .ToDictionary(pi => pi.Name, pi => Render(pi.GetValue(p)));
 
     private static bool IsScalar(Type type)
@@ -96,6 +96,7 @@ public class ParticipantStatusEndpointTests
     {
         null => null,
         List<string> list => string.Join("|", list),
+        DateTime moment => moment.ToString("O"),   // a change inside the same second must still show
         _ => value.ToString(),
     };
 

@@ -38,7 +38,7 @@ public record CreateParticipantInquiryDto
     [Required, StringLength(100)] public string FirstName { get; init; } = string.Empty;
     [Required, StringLength(100)] public string LastName { get; init; } = string.Empty;
     [StringLength(50)] public string? Phone { get; init; }
-    [EmailAddress, StringLength(200)] public string? Email { get; init; }
+    [OptionalEmailAddress, StringLength(200)] public string? Email { get; init; }
     [Required, RegularExpression("^(Web|Email|Phone)$")] public string Source { get; init; } = string.Empty;
     [StringLength(2000)] public string? Provenance { get; init; }
 }
