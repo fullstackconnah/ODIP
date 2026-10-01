@@ -499,7 +499,7 @@ const incidentDetailExtras = {
     reviewedAt: '2026-07-14T09:00:00Z', reviewNotes: 'No further action. Footwear check added to pre-walk checklist.',
     correctiveActions: 'Added wet-weather route alternative to itinerary template.',
     resolvedAt: '2026-07-14T09:00:00Z',
-    familyNotified: true, familyNotifiedAt: '2026-07-11T12:00:00Z',
+    familyNotified: true, familyNotifiedAt: '2026-07-11T12:00:00.0000000',
     supportCoordinatorNotified: false, supportCoordinatorNotifiedAt: null,
     updatedAt: '2026-07-14T09:00:00Z',
     medicationContext: null, shiftContext: null, shiftNoteContext: null,
@@ -511,11 +511,11 @@ const incidentDetailExtras = {
     immediateActionsTaken: 'BGL checked, on-call nurse consulted, dose given per protocol.',
     wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
     witnessNames: null, witnessStatements: null,
-    qscReportedAt: '2026-07-12T09:10:00Z', qscReferenceNumber: 'QSC-2026-48213',
+    qscReportedAt: '2026-07-12T09:10:00.0000000', qscReferenceNumber: 'QSC-2026-48213',
     reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null,
     correctiveActions: null, resolvedAt: null,
-    familyNotified: true, familyNotifiedAt: '2026-07-12T08:30:00Z',
-    supportCoordinatorNotified: true, supportCoordinatorNotifiedAt: '2026-07-12T08:45:00Z',
+    familyNotified: true, familyNotifiedAt: '2026-07-12T08:30:00.0000000',
+    supportCoordinatorNotified: true, supportCoordinatorNotifiedAt: '2026-07-12T08:45:00.0000000',
     updatedAt: '2026-07-25T10:00:00Z',
     // Connection map: the one incident fixture that carries a real medication context, matching
     // medicationAdministrationId above and admin-0001's own record.
@@ -535,8 +535,8 @@ const incidentDetailExtras = {
     qscReportedAt: null, qscReferenceNumber: null,
     reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null,
     correctiveActions: null, resolvedAt: null,
-    familyNotified: true, familyNotifiedAt: '2026-07-29T17:00:00Z',
-    supportCoordinatorNotified: true, supportCoordinatorNotifiedAt: '2026-07-29T17:15:00Z',
+    familyNotified: true, familyNotifiedAt: '2026-07-29T17:00:00.0000000',
+    supportCoordinatorNotified: true, supportCoordinatorNotifiedAt: '2026-07-29T17:15:00.0000000',
     updatedAt: '2026-07-30T08:00:00Z',
     medicationContext: null, shiftContext: null, shiftNoteContext: null,
   },
@@ -1609,7 +1609,7 @@ const scheduleOverview = {
       s.id === 's-0005'
         ? [{
             id: 'av-0001', staffId: 's-0005',
-            startDateTime: '2026-08-10T00:00:00Z', endDateTime: '2026-08-21T23:59:00Z',
+            startDateTime: '2026-08-10T00:00:00.0000000', endDateTime: '2026-08-21T23:59:00.0000000',
             availabilityType: 'Leave', isRecurring: false, recurrenceNotes: null,
             notes: 'Annual leave — overseas.',
           }]
@@ -2176,7 +2176,7 @@ const routes = [
     id === 's-0005'
       ? [{
           id: 'av-0001', staffId: 's-0005',
-          startDateTime: '2026-08-10T00:00:00Z', endDateTime: '2026-08-21T23:59:00Z',
+          startDateTime: '2026-08-10T00:00:00.0000000', endDateTime: '2026-08-21T23:59:00.0000000',
           availabilityType: 'Leave', isRecurring: false, recurrenceNotes: null,
           notes: 'Annual leave — overseas.',
         }]
