@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   DndContext, PointerSensor, KeyboardSensor, useSensor, useSensors, closestCenter,
   type DragEndEvent,
@@ -18,7 +18,7 @@ import {
   WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer,
   type ShiftSlideOverTarget,
 } from './components'
-import { weekStartOf, shiftWeek, daysOfWeek } from './lib/roster'
+import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek } from './lib/roster'
 import { useBoardViewMode } from './lib/useBoardViewMode'
 
 type PendingAssign = { shift: ShiftDto; staffId: string | null; findings: RosterFindingDto[] }
@@ -36,7 +36,9 @@ function allBoardShifts(board: RosterBoardDto | undefined): ShiftDto[] {
 
 export default function RosterBoardPage() {
   const { canWrite } = usePermissions()
-  const [weekStart, setWeekStart] = useState(() => weekStartOf(new Date()))
+  // `?date=` (the server's "Re-cover shift" task link) opens the week that contains it; read once, then the toolbar owns the week.
+  const [searchParams] = useSearchParams()
+  const [weekStart, setWeekStart] = useState(() => weekStartFromDateParam(searchParams.get('date')))
   const [groupBy, setGroupBy] = useBoardViewMode()
   const [participantFilter, setParticipantFilter] = useState('')
   const [regionFilter, setRegionFilter] = useState('')

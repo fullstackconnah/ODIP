@@ -12,7 +12,7 @@ const steps = [
 describe('WizardStepRail', () => {
   it('marks the current step with aria-current="step"', () => {
     render(<WizardStepRail steps={steps} visitedSteps={new Set(['a'])} currentKey="a" onSelect={vi.fn()} />)
-    const nav = screen.getByRole('navigation', { name: /intake wizard steps/i })
+    const nav = screen.getByRole('navigation', { name: 'Wizard steps' })
     expect(within(nav).getByRole('button', { name: /alpha/i, current: 'step' })).toBeInTheDocument()
   })
 
@@ -32,7 +32,7 @@ describe('WizardStepRail', () => {
   it('keeps the rail inside its container while preserving an independently scrollable touch target', () => {
     render(<WizardStepRail steps={steps} visitedSteps={new Set(['a', 'b'])} currentKey="a" onSelect={vi.fn()} />)
 
-    const nav = screen.getByRole('navigation', { name: /intake wizard steps/i })
+    const nav = screen.getByRole('navigation', { name: 'Wizard steps' })
     expect(nav).toHaveClass('relative', 'w-full', 'min-w-0', 'max-w-full', '[contain:inline-size]', 'overflow-x-auto', 'touch-pan-x')
     expect(within(nav).getByRole('list')).toHaveClass('w-max', 'min-w-full')
   })
@@ -115,12 +115,12 @@ describe('WizardStepRail', () => {
     const { rerender } = render(
       <WizardStepRail steps={steps} visitedSteps={new Set(['a', 'b'])} currentKey="a" onSelect={vi.fn()} orientation="horizontal" />,
     )
-    expect(screen.getAllByRole('navigation', { name: /intake wizard steps/i })).toHaveLength(1)
+    expect(screen.getAllByRole('navigation', { name: 'Wizard steps' })).toHaveLength(1)
     expect(screen.getAllByRole('button', { name: /alpha/i })).toHaveLength(1)
     rerender(
       <WizardStepRail steps={steps} visitedSteps={new Set(['a', 'b'])} currentKey="a" onSelect={vi.fn()} orientation="vertical" />,
     )
-    expect(screen.getAllByRole('navigation', { name: /intake wizard steps/i })).toHaveLength(1)
+    expect(screen.getAllByRole('navigation', { name: 'Wizard steps' })).toHaveLength(1)
     expect(screen.getAllByRole('button', { name: /alpha/i })).toHaveLength(1)
   })
 })

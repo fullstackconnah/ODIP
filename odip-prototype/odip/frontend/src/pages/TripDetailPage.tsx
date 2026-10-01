@@ -3,7 +3,7 @@ import { usePermissions } from '@/lib/permissions'
 import { useTrip, useTripBookings, useTripAccommodation, useTripVehicles, useTripStaff, useTripTasks, useTripSchedule, useTripClaims, useTripIncidents, useParticipants } from '@/api/hooks'
 import { formatDateRange } from '@/lib/dateRange'
 import { Users, Building2, Truck, UserCog, ListChecks, Calendar, Pencil, ClipboardList, ClockIcon, FileText, ShieldAlert } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { Tabs, type TabItem } from '@/components/Tabs'
 import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
@@ -32,8 +32,14 @@ export default function TripDetailPage() {
   const { id } = useParams()
   const currentUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
   const isAdmin = currentUser.role === 'Admin'
-  // PP-60: URL-synced so a shared/reloaded link lands on the same tab.
-  const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'overview')
+  const canAccessIncidents = canAccessPage('incidents')
+  // PP-60: URL-synced so a shared/reloaded link lands on the same tab. Only the tabs this role can see are valid keys (L5-05): a ?tab= for
+  // a tab it cannot see (incidents, history) reads as Overview, instead of selecting nothing over an empty body.
+  const tabKeys = useMemo(
+    () => TAB_KEYS.filter(key => (key === 'incidents' ? canAccessIncidents : key === 'history' ? isAdmin : true)),
+    [canAccessIncidents, isAdmin],
+  )
+  const [activeTab, setActiveTab] = useTabParam(tabKeys, 'overview')
   const [showEditTrip, setShowEditTrip] = useState(false)
 
   const { data: trip, isLoading, isError, error, refetch } = useTrip(id)
@@ -55,7 +61,6 @@ export default function TripDetailPage() {
   // INTAKE-08: the trip/booking picker (BookingsTab) excludes drafts.
   const { data: participants = [] } = useParticipants({ isDraft: 'false' })
 
-  const canAccessIncidents = canAccessPage('incidents')
   const isReadOnly = trip?.status === 'Cancelled' || trip?.status === 'Archived'
 
   if (!id) return null
@@ -150,6 +155,7 @@ export default function TripDetailPage() {
           active={activeTab}
           onChange={setActiveTab}
           ariaLabel="Trip detail sections"
+          idPrefix="trip"
         />
       </div>
 

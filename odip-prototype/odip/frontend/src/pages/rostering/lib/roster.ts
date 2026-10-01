@@ -1,4 +1,4 @@
-import { addDays, addWeeks, format, parseISO, startOfWeek } from 'date-fns'
+import { addDays, addWeeks, format, isValid, parseISO, startOfWeek } from 'date-fns'
 import { formatShiftTime, parseApiDate } from '@/lib/utils'
 import { formatRatio } from '@/lib/format'
 
@@ -36,6 +36,18 @@ export function rosterDayColumnsTemplate(dayCount: number): string {
 /** Monday-start ISO week key, e.g. "2026-08-17". */
 export function weekStartOf(date: Date): string {
   return format(startOfWeek(date, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+}
+
+/**
+ * The Monday-start week a `?date=YYYY-MM-DD` opens (L5-08: the server's "Re-cover shift" task links to `/rostering?date=<the shift's day>`), or
+ * the week of `fallback` (now) when the value is missing, malformed or not a real day ("2026-02-30"). A date mid-week opens its own week.
+ */
+export function weekStartFromDateParam(value: string | null, fallback: Date = new Date()): string {
+  if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const parsed = parseISO(value)
+    if (isValid(parsed)) return weekStartOf(parsed)
+  }
+  return weekStartOf(fallback)
 }
 
 export function shiftWeek(weekStart: string, deltaWeeks: number): string {

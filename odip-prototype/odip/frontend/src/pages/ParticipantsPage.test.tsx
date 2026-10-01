@@ -555,12 +555,8 @@ describe('ParticipantsPage — density row actions', () => {
 })
 
 // Density verdict, narrow desktops: the table keeps exactly --row-h rows from 1280 up because a cell
-// never wraps and the columns that don't fit are dropped, not squeezed.
+// never wraps; a table wider than its box scrolls inside it (no column is dropped).
 describe('ParticipantsPage — narrow-desktop columns', () => {
-  function headerCell(name: string): HTMLElement {
-    return screen.getByRole('columnheader', { name }) as HTMLElement
-  }
-
   // L3-04: Region (below 1280), Support Ratio and Repeat (below 2xl) and Plan Type (below 1792px) used to be deleted by breakpoint; the table
   // now scrolls in its box with the name and the row actions pinned (DataTable's column rule), so every column is on the page at every width.
   it('keeps every column at every width, on the header and every row', () => {
