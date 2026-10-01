@@ -181,6 +181,10 @@ components:
 > colour was compared before and after); the deliberate changes are the ones where one intent was coloured two ways (trip status, task priority,
 > plan types, a few status maps), listed in Status Badges & Alerts. No new colour was added.
 
+> Added 2026-10-02 from the wrong-or-hidden-information fixes (code review round 2): **every real status has a deliberate tone and an unknown one is neutral**,
+> **In progress is info blue** (owner decision), and **The Column Rule** (Tables): no column is removed at any width, the box scrolls, the first column and the
+> actions stay pinned. The status table and the rule are written under Status Badges & Alerts and Tables.
+
 ## Overview
 
 **Creative North Star: "The Operational Ledger"**
@@ -332,13 +336,21 @@ row). Modal bodies use the narrower `modalGrid` (two columns from `sm`, `half` /
 
 ### Tables
 Body rows are `--row-h` and the header `--table-head-h`; cells take `--cell-px` horizontally. Plain-string
-cells are capped at 24rem with an ellipsis and a `title` carrying the full text. Columns carry a priority
-(`high`, `medium`, `low`, `lowest`) and drop out below xl / 2xl / 1792px rather than squeezing the rest.
+cells are capped at 24rem with an ellipsis and a `title` carrying the full text.
 Below 768px a table becomes a stack of cards, one per row, each cell labelled by `data-label` in a 12px caption. Under a coarse pointer the cells of a card sit 12px apart
 (8px otherwise), so two neighbouring 44px hit areas never overlap.
 
+**The Column Rule.** A column is never removed at md and up. The #161 overflow fix hid columns by breakpoint (`priority`: below xl, 2xl and 1792px), so at 1280 a
+task's Trip and Type, a staff member's Manual and Overnight flags, a reservation's Ref and Nights, a billable event's Stream and Day Type were not on the page at all:
+the data was deleted to fix the layout. Now every column stays, text is capped with an ellipsis (`maxWidth`, `CellText`), and a table wider than its box scrolls
+sideways inside its own box (the page never does). Two columns stay put while it does, so a row is never anonymous and its actions are never out of reach: the first
+labelled column (the one that says who the row is; an unlabelled tick or avatar column and the select-all checkbox column scroll away) pins to the start edge, and
+the column keyed `actions` pins to the end edge (`pin: 'start' | 'end' | false` picks or opts out). A pinned cell is filled opaque, with a hairline, only while
+content is scrolled under it, so a tinted row keeps its tint at rest, and the fill follows the row's hover tint. `priority` is retired and ignored;
+`src/test/dataTableColumnRule.test.ts` stops a page asking for it. Derivable secondary text inside a cell (a trip's "(4d)") may still give way by breakpoint; a column may not.
+
 **The Density Rule.** Row height comes from `--row-h`, never from added padding. If a table is too tall,
-the answer is fewer columns, not more air.
+the answer is a tighter cell (a cap, an ellipsis), not more air, and never a deleted column.
 
 **The Row Action Reveal Rule.** Row actions are `Button size="sm"` / `iconOnly` (24px) and are revealed by
 opacity alone (row hover, row focus-within, or control focus), so they stay in the tab order and the
@@ -611,20 +623,36 @@ on-container text), a soft wash (a tile or a row, paired with the ink) and an in
 
 | Tone | Solid (fill / text) | Soft wash | Ink | Reads as | Used by (examples) |
 |---|---|---|---|---|---|
-| `neutral` | Field Grey `input` / `muted-foreground` | `surface-container` | `muted-foreground` | no state | Draft, None, Archived, Not required, Self managed |
-| `info` | `secondary-container` / `info` | `secondary-container` at 60% | `info` | information, a category | Low, Submitted, Planning, NDIA / Agency managed |
-| `success` | Pale Sprout `primary-fixed` / `on-primary-fixed` | `primary-fixed` at 40% | `primary` | go, confirmed, paid, all clear | Confirmed, Open for bookings, Completed, Paid, Active |
-| `warning` | `warning-container` / `on-warning-container` | `warning-container` | `on-warning-container` | pending or time-bound | Pending, Waitlist only, Medium, Partially paid |
-| `danger` | `error-container` / `on-error-container` | `error-container` at 30% | `destructive` | action needed, failed, over | Cancelled, Overdue, High, Urgent, Rejected, Expired |
-| `accessible` | `accessible-container` / `on-accessible-container` | `accessible-container` at 60% | `on-accessible-container` | accessibility, and the categories that already use its pink | Plan managed, In progress (a trip), Shift claim |
+| `neutral` | Field Grey `input` / `muted-foreground` | `surface-container` | `muted-foreground` | no state yet, or no longer | Draft, None, Archived, Not started, Closed, Researching, Planned, Not required, Self managed, anything unlisted |
+| `info` | `secondary-container` / `info` | `secondary-container` at 60% | `info` | in the pipeline, nothing wrong; a category | Low, Submitted, Ready, Planning, **In progress**, Published, Validated, NDIA / Agency managed |
+| `success` | Pale Sprout `primary-fixed` / `on-primary-fixed` | `primary-fixed` at 40% | `primary` | go, confirmed, paid, all clear | Confirmed, Open for bookings, Completed, Paid, Active, Approved, Resolved, Claimed, Administered |
+| `warning` | `warning-container` / `on-warning-container` | `warning-container` | `on-warning-container` | awaiting somebody: a decision, a reply, a confirmation, a hold running out | Pending, Enquiry, Held, Waitlist, Requested, Booked, Under review, Pending review, Withheld, Medium, Partially paid |
+| `danger` | `error-container` / `on-error-container` | `error-container` at 30% | `destructive` | action needed, failed, refused, over | Cancelled, Overdue, High, Urgent, Rejected, Expired, Escalated, Declined, Refused, Missed, Wrong medication |
+| `accessible` | `accessible-container` / `on-accessible-container` | `accessible-container` at 60% | `on-accessible-container` | accessibility, and the categories that already use its pink; never a state | Plan managed, Shift claim |
 
 - **One mapping per intent.** A trip status is coloured the same in the trip header, the dashboard, the schedule and the trips list (Planning info, Open for
-  bookings and Confirmed and Completed success, Waitlist only warning, In progress accessible, Cancelled danger, Draft and Archived neutral). A task priority is
+  bookings and Confirmed and Completed success, Waitlist only warning, In progress info, Cancelled danger, Draft and Archived neutral). A task priority is
   coloured the same on the Tasks page, the trip Tasks tab and the dashboard (Low info, Medium warning, High and Urgent danger). The three plan types stay
   apart as categories: NDIA / Agency managed info, Plan managed accessible, Self managed neutral.
+- **In progress is information (owner decision, 2026-10-02).** Blue for a trip, a task and a shift alike: it is in the pipeline and nothing is wrong. The
+  accessibility pink is for accessibility and for categories (Plan managed, Shift claim), never for a state.
+- **Every status the API sends has a row, and a status nobody listed is neutral.** `STATUS_TONE` carries every value of every status enum, and the fallback
+  (`StatusBadge`, `statusClass`, `getStatusColor`) is the quiet neutral pair, never the amber "awaiting a decision" one: an unknown word must not claim
+  attention (it used to, and the register showed a Closed incident, an Approved claim and a wrong-medication dose in amber). `src/lib/statusToneCoverage.test.ts`
+  walks the frontend's `as const` status arrays and, where the backend source sits next to the frontend, the C# enums: a new value, or a new `*Status` enum,
+  fails it until somebody has given it a tone. How to read a tone for a new status: neutral is no state yet or no longer, info is in the pipeline with
+  nothing wrong, success is done or good, warning is awaiting somebody, danger is a failure, a refusal or something that needs action. A domain whose word
+  means something else still passes a `colorMap` (a cancelled leave request is over, not a failure).
 - **API.** `StatusBadge` takes a `status` word (looked up in `STATUS_TONE`), or a `tone` and a `label` (`<StatusBadge tone="danger" label="Refused" />`). Its
   `colorMap` overrides the map for one domain, and its values are tones. The older tone words still work: Callout `error` is `danger`, FactChip `positive` is
   `success` and `negative` is `danger`.
+- **The status words, by domain** (every real value; `STATUS_TONE` is the source). Incidents: Draft neutral, Submitted info, Under review warning, Escalated danger,
+  Resolved success, Closed neutral. Claims and billable events: Draft neutral, Ready, Submitted, Validated, Routed info, Approved, Claimed, Invoiced, Paid success,
+  Partially paid warning, Rejected and Cancelled danger. Bookings, reservations, vehicle requests and activities: Enquiry, Held, Waitlist, Requested, Booked warning
+  (not yet on the trip, or not yet confirmed), Researching and Planned neutral, Confirmed and Completed success, Cancelled and Unavailable danger. Shifts and tasks:
+  Draft and Not started neutral, Published and In progress info, Pending review warning, Completed success, Overdue and Cancelled danger. Payments: Not invoiced neutral,
+  Invoice sent info, Partial warning, Paid success, Overdue danger. Medication: Administered success, Withheld and On hold warning, Refused, Missed, Wrong medication
+  and Ceased danger. Notifications and submissions: Sent and Accepted success, Skipped neutral, Failed, Revoked and Rejected danger.
 - **Contrast.** Every pair above is held to WCAG AA (4.5:1) by `src/test/toneContrast.test.ts`, which reads the palette from `src/index.css`; the closest is the info
   solid at 5.0:1. `--color-warning` (amber) is for fills, borders and rings, never text or an icon (2.15:1 on the card): warning text is `TONE.warning.ink`.
 - **Readiness note.** A participant who is not fully ready shows a quiet, never-blocking warning-tone note (`ReadinessNote`): a chip in a row or beside a
