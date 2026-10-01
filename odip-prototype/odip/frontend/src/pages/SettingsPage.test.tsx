@@ -295,7 +295,8 @@ describe('SettingsPage — Provider Settings: medication competency check', () =
   })
 
   it('reads as Warn only when the server does not send the setting, and then does not send one back', async () => {
-    const { medicationCompetencyMode: _omitted, ...older } = saved
+    const older: Record<string, unknown> = { ...saved }
+    delete older.medicationCompetencyMode
     providerSettings.current = older
     const user = await openProviderSettings()
 
