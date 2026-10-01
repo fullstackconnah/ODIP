@@ -32,6 +32,9 @@ public enum RecordAdministrationOutcome
 
     /// <summary>The scheduled dose slot already has a record (409); <see cref="RecordAdministrationResult.Administration"/> is that record.</summary>
     AlreadyRecorded,
+
+    /// <summary>The dose is charted too early, or the time it was given is outside the allowed range (422); see the result <c>Code</c>.</summary>
+    TimeRejected,
 }
 
 /// <summary>
@@ -53,9 +56,12 @@ public sealed record RecordAdministrationResult(
 /// <param name="AdministeringUserId">The caller's resolved staff user id (ViewAsUserId first, then the JWT subject), or null.</param>
 /// <param name="FallbackRecordedByName">The JWT display name, used only when no user row can be resolved.</param>
 /// <param name="RequiredParticipantId">When set (the portal package), the medication must belong to this participant.</param>
+/// <param name="AdministeredAtLowerBoundUtc">The earliest instant the dose can have been given, when the caller knows one: the portal passes the
+/// shift's actual start. When null, a scheduled dose is bounded below by the start of the slot's provider-local day (the MAR path) and a PRN
+/// dose has no lower bound.</param>
 public sealed record RecordAdministrationRequest(
     Guid MedicationId, CreateAdministrationDto Dto, Guid? AdministeringUserId, string FallbackRecordedByName,
-    Guid? RequiredParticipantId = null);
+    Guid? RequiredParticipantId = null, DateTime? AdministeredAtLowerBoundUtc = null);
 
 /// <summary>
 /// The one implementation of "record a medication administration", shared by the general
@@ -72,7 +78,11 @@ public sealed record RecordAdministrationRequest(
 ///    used for the SAME request (medication, slot and outcome) returns the earlier record (a double tap is safe); the same
 ///    key on a different request is refused, never silently dropped. The unique filtered index on the key backs this up
 ///    against a true race.
-/// 3. <b>One ACTIVE record per scheduled dose slot.</b> For a scheduled dose (ScheduledAt set), an active record that already
+/// 3. <b>Temporal validation (422).</b> An Administered dose is refused when the slot is more than <see cref="EarlyAdministrationMinutes"/>
+///    minutes away (ADMINISTRATION_TOO_EARLY), and a supplied <c>administeredAt</c> must lie between the earliest the dose could have been given
+///    (the shift's actual start on the portal path, the start of the slot's provider-local day on the MAR path) and now plus
+///    <see cref="ClockSkewMinutes"/> (ADMINISTRATION_TIME_OUT_OF_RANGE). All comparisons are on UTC instants; times in messages are provider-local.
+/// 4. <b>One ACTIVE record per scheduled dose slot.</b> For a scheduled dose (ScheduledAt set), an active record that already
 ///    exists for (medication, ScheduledAt) blocks a second one: <see cref="RecordAdministrationOutcome.AlreadyRecorded"/>
 ///    with the existing record. The one exception: a later ADMINISTERED record SUPERSEDES an active Refused or Missed one (the
 ///    participant refused then took it; a cover worker takes over) - the earlier record is kept as history, linked through
@@ -86,6 +96,12 @@ public sealed record RecordAdministrationRequest(
 /// </summary>
 public sealed class MedicationAdministrationRecorder
 {
+    /// <summary>An ADMINISTERED dose cannot be charted more than this many minutes before the slot's time (422 ADMINISTRATION_TOO_EARLY).</summary>
+    public const int EarlyAdministrationMinutes = 60;
+
+    /// <summary>How far past "now" the time a dose was given may be (device clock skew) before it is refused (422 ADMINISTRATION_TIME_OUT_OF_RANGE).</summary>
+    public const int ClockSkewMinutes = 5;
+
     private readonly OdipDbContext _db;
     private readonly INotificationRaiser _notificationRaiser;
     private readonly IObligationTaskService _obligationTasks;
@@ -199,7 +215,11 @@ public sealed class MedicationAdministrationRecorder
         if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.PrnReason))
             return Fail(RecordAdministrationOutcome.Invalid, "A PRN reason is required when recording an administered PRN dose.");
 
-        // ── 3. One ACTIVE record per scheduled dose slot (under the slot lock taken above) ──
+        // ── 3. Temporal validation (422) ──
+        var timeRejection = ValidateTimes(dto, request.AdministeredAtLowerBoundUtc, nowUtc, provider.Zone);
+        if (timeRejection is not null) return timeRejection;
+
+        // ── 4. One ACTIVE record per scheduled dose slot (under the slot lock taken above) ──
         var toSupersede = new List<MedicationAdministration>();
         if (dto.ScheduledAt is { } scheduledAt)
         {
@@ -392,4 +412,63 @@ public sealed class MedicationAdministrationRecorder
 
     private static RecordAdministrationResult Fail(RecordAdministrationOutcome outcome, string message, string? code = null) =>
         new(outcome, null, message, code);
+
+    /// <summary>
+    /// The temporal rules. (1) An Administered scheduled dose is refused when its slot is more than <see cref="EarlyAdministrationMinutes"/> minutes
+    /// ahead of now (exactly 60 is allowed). (2) A supplied <c>administeredAt</c> (any status) must be no later than now + <see cref="ClockSkewMinutes"/>
+    /// and no earlier than the lower bound: the caller's (the shift's actual start), else the start of the slot's provider-local day, else none (PRN on
+    /// the MAR path has no slot to anchor to). Slots are provider-local wall clock and compared as UTC instants; messages show provider-local time.
+    /// </summary>
+    private static RecordAdministrationResult? ValidateTimes(
+        CreateAdministrationDto dto, DateTime? callerLowerBoundUtc, DateTime nowUtc, TimeZoneInfo zone)
+    {
+        var nowLocal = ProviderLocalTime.UtcToLocal(nowUtc, zone);
+
+        if (dto.Status == MedicationAdministrationStatus.Administered && dto.ScheduledAt is { } slot
+            && ProviderLocalTime.LocalToUtc(slot, zone) > nowUtc.AddMinutes(EarlyAdministrationMinutes))
+        {
+            return Fail(RecordAdministrationOutcome.TimeRejected,
+                $"This dose is not due until {FormatLocal(slot, nowLocal)}. It can be recorded from {FormatLocal(slot.AddMinutes(-EarlyAdministrationMinutes), nowLocal)}.",
+                MedicationErrorCodes.AdministrationTooEarly);
+        }
+
+        if (dto.AdministeredAt is { } given)
+        {
+            var givenUtc = ProviderLocalTime.AsUtc(given);
+            if (givenUtc > nowUtc.AddMinutes(ClockSkewMinutes))
+            {
+                return Fail(RecordAdministrationOutcome.TimeRejected,
+                    "The time this dose was given can't be in the future. Check the time and try again.",
+                    MedicationErrorCodes.AdministrationTimeOutOfRange);
+            }
+
+            // The caller's bound is the shift's actual start (the portal); otherwise the start of the slot's provider-local day (the MAR).
+            DateTime? lowerUtc = null;
+            var lowerWhat = string.Empty;
+            if (callerLowerBoundUtc is { } caller)
+            {
+                lowerUtc = ProviderLocalTime.AsUtc(caller);
+                lowerWhat = $"when the shift started ({FormatLocal(ProviderLocalTime.UtcToLocal(lowerUtc.Value, zone), nowLocal)})";
+            }
+            else if (dto.ScheduledAt is { } scheduled)
+            {
+                lowerUtc = ProviderLocalTime.LocalToUtc(scheduled.Date, zone);
+                lowerWhat = $"the start of {scheduled.Date.ToString("d MMM", System.Globalization.CultureInfo.InvariantCulture)}, the day this dose was scheduled for";
+            }
+            if (lowerUtc is { } lower && givenUtc < lower)
+            {
+                return Fail(RecordAdministrationOutcome.TimeRejected,
+                    $"The time this dose was given can't be earlier than {lowerWhat}. Check the time and try again.",
+                    MedicationErrorCodes.AdministrationTimeOutOfRange);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>A provider-local wall-clock time for a message: "14:00" on the same local day as now, "15 Jul 14:00" otherwise (invariant culture).</summary>
+    private static string FormatLocal(DateTime local, DateTime nowLocal) =>
+        local.Date == nowLocal.Date
+            ? local.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)
+            : local.ToString("d MMM HH:mm", System.Globalization.CultureInfo.InvariantCulture);
 }

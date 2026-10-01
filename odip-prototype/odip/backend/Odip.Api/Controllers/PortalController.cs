@@ -586,8 +586,14 @@ public class PortalController : ControllerBase
             TripInstanceId = null,
         };
 
+        // The time a dose was given cannot be before the worker started the shift (the active completion's actual start).
+        var actualStart = await _db.ShiftCompletions
+            .Where(c => c.ShiftId == shift.Id && c.IsActive)
+            .Select(c => (DateTime?)c.ActualStart)
+            .FirstOrDefaultAsync(ct);
         var result = await _recorder.RecordAsync(
-            new RecordAdministrationRequest(medicationId, dto, staffId, GetCallerName(), RequiredParticipantId: shift.ParticipantId), ct);
+            new RecordAdministrationRequest(
+                medicationId, dto, staffId, GetCallerName(), RequiredParticipantId: shift.ParticipantId, AdministeredAtLowerBoundUtc: actualStart), ct);
 
         // Every instant this endpoint returns is UTC with a Z. The record a request just created carries Kind=Utc, but the one a replay
         // or a 409 hands back is read from PostgreSQL as Kind=Unspecified and would otherwise serialise without the Z - so the same field

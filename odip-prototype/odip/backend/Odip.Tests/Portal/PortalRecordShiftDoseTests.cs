@@ -287,7 +287,8 @@ public class PortalRecordShiftDoseTests
     {
         // A 22:00 -> 06:00 shift starting 14 Jul touches two dates. A course that ends on the 14th has no dose on the 15th, and one that
         // starts on the 15th has none on the 14th: the window-level query keeps both medications, so the per-date test is what refuses them.
-        var f = Create(endsNextDay: true, start: new TimeOnly(22, 0), end: new TimeOnly(6, 0));
+        // 03:30 local on the 15th (17:30Z on the 14th): every slot of the window has come due, so the dose-too-early rule is not in play.
+        var f = Create(endsNextDay: true, start: new TimeOnly(22, 0), end: new TimeOnly(6, 0), now: new DateTimeOffset(2026, 7, 14, 17, 30, 0, TimeSpan.Zero));
         var ended = AddMed(f, "Antibiotic", "02:00,22:00");
         ended.EndDate = new DateTime(2026, 7, 14);
         var starting = AddMed(f, "NewMedication", "23:00,02:00");
