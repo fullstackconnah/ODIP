@@ -17,8 +17,8 @@ namespace Odip.Tests.Medications;
 /// <summary>
 /// Temporal validation of a recorded dose (422): an ADMINISTERED dose cannot be charted more than 60 minutes before its slot, and a supplied
 /// <c>administeredAt</c> must lie between the earliest the dose could have been given (the shift's actual start on the portal; the start of the
-/// slot's provider-local day on the MAR) and now + 5 minutes. Fixture clock: 11:00 on Tue 14 July 2026 in Sydney (01:00Z, AEST = UTC+10); the
-/// shift started 09:05 local (13 Jul 23:05Z).
+/// slot's provider-local day on the MAR) and now + 15 minutes; a time in the future but within that tolerance is a device clock running fast and is
+/// stored as the server's now. Fixture clock: 11:00 on Tue 14 July 2026 in Sydney (01:00Z, AEST = UTC+10); the shift started 09:05 local (13 Jul 23:05Z).
 /// </summary>
 public class MedicationTemporalValidationTests
 {
@@ -149,20 +149,61 @@ public class MedicationTemporalValidationTests
     // ── administeredAt: not in the future, not before the earliest it could have been given ──
 
     [Fact]
-    public async Task AdministeredAt_InTheFuture_Is422OutOfRange_ButWithinFiveMinutesOfSkewIsAllowed()
+    public async Task AdministeredAt_MoreThanFifteenMinutesInTheFuture_Is422OutOfRange_AndNothingIsRecorded()
     {
         var f = Create();
         var med = AddMed(f);
-        var now = NowUtc(f);
 
-        var skewed = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(9, 0), administeredAt: now.AddMinutes(4)), default);
-        var future = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(12, 0), administeredAt: now.AddMinutes(10)), default);
+        var future = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(12, 0), administeredAt: NowUtc(f).AddMinutes(16)), default);
 
-        Assert.Equal(200, Status(skewed));
         Assert.Equal(422, Status(future));
         Assert.Equal(MedicationErrorCodes.AdministrationTimeOutOfRange, Body(future).Code);
         Assert.Contains("future", Assert.Single(Body(future).Errors!));
-        Assert.Single(await f.Db.MedicationAdministrations.ToListAsync());
+        Assert.Empty(await f.Db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(6)]    // the old 5-minute tolerance refused this one: a tablet or PC whose clock is 6 minutes fast could not chart any dose on the MAR
+    [InlineData(10)]
+    [InlineData(15)]   // exactly on the line
+    public async Task AdministeredAt_AFewMinutesAheadOfTheServer_IsADeviceClockRunningFast_SoTheServersNowIsStored(int minutesAhead)
+    {
+        var f = Create();
+        var med = AddMed(f);
+
+        var result = await Mar(f).RecordAdministration(med.Id, Dose(Local(9, 0), administeredAt: NowUtc(f).AddMinutes(minutesAhead)), default);
+
+        Assert.Equal(200, Status(result));
+        Assert.Equal(NowUtc(f), Body(result).Data!.AdministeredAt);   // never a time in the future
+        Assert.Equal(NowUtc(f), (await f.Db.MedicationAdministrations.SingleAsync()).AdministeredAt);
+    }
+
+    [Fact]
+    public async Task TheClampAppliesOnThePortalAndToEveryOutcomeThatSuppliesATime()
+    {
+        var f = Create();
+        var med = AddMed(f);
+
+        var given = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(9, 0), administeredAt: NowUtc(f).AddMinutes(12)), default);
+        var refused = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(12, 0), MedicationAdministrationStatus.Refused, administeredAt: NowUtc(f).AddMinutes(12)), default);
+
+        Assert.Equal(200, Status(given));
+        Assert.Equal(200, Status(refused));
+        Assert.All(await f.Db.MedicationAdministrations.ToListAsync(), a => Assert.Equal(NowUtc(f), a.AdministeredAt));
+    }
+
+    [Fact]
+    public async Task ATimeThatIsNotInTheFuture_IsStoredAsSupplied_TheClampOnlyTouchesTheFuture()
+    {
+        var f = Create();
+        var med = AddMed(f);
+        var earlier = NowUtc(f).AddMinutes(-20);
+
+        var result = await Mar(f).RecordAdministration(med.Id, Dose(Local(9, 0), administeredAt: earlier), default);
+
+        Assert.Equal(200, Status(result));
+        Assert.Equal(earlier, Body(result).Data!.AdministeredAt);
     }
 
     [Fact]
@@ -198,11 +239,11 @@ public class MedicationTemporalValidationTests
     {
         var f = Create();
         var med = AddMed(f);
-        // Ten minutes ahead of the clock, written WITHOUT a zone: read as UTC (like every other unsuffixed instant in the package), so it is
-        // beyond the 5-minute skew. Read as provider-local it would be hours in the past and slip through.
-        var tenAhead = DateTime.SpecifyKind(NowUtc(f).AddMinutes(10), DateTimeKind.Unspecified);
+        // Twenty minutes ahead of the clock, written WITHOUT a zone: read as UTC (like every other unsuffixed instant in the package), so it is
+        // beyond the 15-minute tolerance. Read as provider-local it would be hours in the past and slip through.
+        var twentyAhead = DateTime.SpecifyKind(NowUtc(f).AddMinutes(20), DateTimeKind.Unspecified);
 
-        var result = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(9, 0), administeredAt: tenAhead), default);
+        var result = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(9, 0), administeredAt: twentyAhead), default);
 
         Assert.Equal(422, Status(result));
     }
@@ -307,7 +348,7 @@ public class MedicationTemporalValidationTests
         var prn = AddMed(f, type: MedicationType.Prn);
 
         var threeDaysAgo = await Mar(f).RecordAdministration(prn.Id, Dose(null, administeredAt: NowUtc(f).AddDays(-3)), default);
-        var future = await Mar(f).RecordAdministration(prn.Id, Dose(null, administeredAt: NowUtc(f).AddMinutes(10)), default);
+        var future = await Mar(f).RecordAdministration(prn.Id, Dose(null, administeredAt: NowUtc(f).AddMinutes(20)), default);
 
         Assert.Equal(200, Status(threeDaysAgo));
         Assert.Equal(422, Status(future));

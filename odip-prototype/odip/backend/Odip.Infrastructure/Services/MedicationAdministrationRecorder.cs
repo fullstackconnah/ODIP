@@ -87,7 +87,9 @@ public sealed record RecordAdministrationRequest(
 ///    minutes away (ADMINISTRATION_TOO_EARLY), and a supplied <c>administeredAt</c> must lie between the earliest the dose could have been given
 ///    (the shift's actual start on the portal path; on the MAR path the start of the slot's provider-local day, or an hour before the slot when that
 ///    is earlier, so a slot just after midnight can be charted in the hour before it) and now plus
-///    <see cref="ClockSkewMinutes"/> (ADMINISTRATION_TIME_OUT_OF_RANGE). All comparisons are on UTC instants; times in messages are provider-local.
+///    <see cref="ClockSkewMinutes"/> (ADMINISTRATION_TIME_OUT_OF_RANGE). A time that is in the future but within that tolerance is a device clock
+///    running fast, not an error: the record is stored with the SERVER's now instead. All comparisons are on UTC instants; times in messages are
+///    provider-local.
 /// 4. <b>One ACTIVE record per scheduled dose slot.</b> For a scheduled dose (ScheduledAt set), an active record that already
 ///    exists for (medication, ScheduledAt) blocks a second one: <see cref="RecordAdministrationOutcome.AlreadyRecorded"/>
 ///    with the newest active record. The one exception: a record saying the dose WAS given (Administered, or WrongMedication) SUPERSEDES
@@ -112,8 +114,12 @@ public sealed class MedicationAdministrationRecorder
     /// <summary>An ADMINISTERED dose cannot be charted more than this many minutes before the slot's time (422 ADMINISTRATION_TOO_EARLY).</summary>
     public const int EarlyAdministrationMinutes = 60;
 
-    /// <summary>How far past "now" the time a dose was given may be (device clock skew) before it is refused (422 ADMINISTRATION_TIME_OUT_OF_RANGE).</summary>
-    public const int ClockSkewMinutes = 5;
+    /// <summary>
+    /// How far past "now" the time a dose was given may be before it is refused (422 ADMINISTRATION_TIME_OUT_OF_RANGE). Inside it the time is a device
+    /// clock running fast (the live MAR modal always sends the device clock, which cannot be edited there), so the record is accepted and stored with
+    /// the server's now rather than the worker being told to fix their clock.
+    /// </summary>
+    public const int ClockSkewMinutes = 15;
 
     /// <summary>How far apart the <c>administeredAt</c> of a retried PRN request and the stored record may be and still read as the same dose.</summary>
     public const int PrnReplayToleranceMinutes = 1;
@@ -331,6 +337,10 @@ public sealed class MedicationAdministrationRecorder
 
         var administeredAt = dto.AdministeredAt;
         if (dto.Status == MedicationAdministrationStatus.Administered && administeredAt == null)
+            administeredAt = nowUtc;
+        // A supplied time a few minutes AHEAD of the server (within ClockSkewMinutes, which validation let through) is a device clock running fast:
+        // store the server's now, never a time in the future.
+        else if (administeredAt is { } supplied && ProviderLocalTime.AsUtc(supplied) > nowUtc)
             administeredAt = nowUtc;
 
         var admin = new MedicationAdministration
