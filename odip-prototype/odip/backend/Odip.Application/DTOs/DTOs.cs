@@ -617,41 +617,6 @@ public record UpdateParticipantDto : CreateParticipantDto
     public bool IsActive { get; init; } = true;
 }
 
-/// <summary>
-/// The deliberately small write contract used by the intake flow.  It is not an alias for the
-/// profile DTO: operational state, funding/plan administration, staff assignment and every other
-/// profile-only field are intentionally absent, so an intake save cannot erase them.
-/// </summary>
-public record SaveParticipantIntakeDto
-{
-    [Required, StringLength(100)] public string FirstName { get; init; } = string.Empty;
-    [Required, StringLength(100)] public string LastName { get; init; } = string.Empty;
-    [StringLength(100)] public string? PreferredName { get; init; }
-    public DateOnly? DateOfBirth { get; init; }
-    private Gender? _gender;
-    // Presence matters: omission preserves existing canonical values; explicit JSON null clears.
-    public Gender? Gender { get => _gender; init { _gender = value; GenderSpecified = true; } }
-    [System.Text.Json.Serialization.JsonIgnore] public bool GenderSpecified { get; private set; }
-    private string? _ndisNumber;
-    [StringLength(50)] public string? NdisNumber { get => _ndisNumber; init { _ndisNumber = value; NdisNumberSpecified = true; } }
-    [System.Text.Json.Serialization.JsonIgnore] public bool NdisNumberSpecified { get; private set; }
-    [StringLength(50)] public string? Phone { get; init; }
-    [EmailAddress, StringLength(200)] public string? Email { get; init; }
-    [StringLength(500)] public string? AddressStreet { get; init; }
-    [StringLength(100)] public string? AddressSuburb { get; init; }
-    [StringLength(10)] public string? AddressState { get; init; }
-    [StringLength(10)] public string? AddressPostcode { get; init; }
-    [StringLength(200)] public string? PrimaryDiagnosis { get; init; }
-    [StringLength(2000)] public string? MedicalSummary { get; init; }
-    [StringLength(2000)] public string? MobilityNotes { get; init; }
-    [StringLength(2000)] public string? BehaviourRiskSummary { get; init; }
-    [StringLength(2000)] public string? Notes { get; init; }
-    /// <summary>Must identify an inquiry already linked to this tenant's participant.</summary>
-    public Guid? InquiryId { get; init; }
-    [StringLength(50)] public string? InquirySource { get; init; }
-    [StringLength(2000)] public string? InquiryProvenance { get; init; }
-}
-
 /// <summary>Immutable intake-completion evidence available to the participant's tenant.</summary>
 public record ParticipantIntakeSnapshotDto
 {

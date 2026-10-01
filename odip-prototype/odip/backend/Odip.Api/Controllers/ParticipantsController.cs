@@ -742,66 +742,26 @@ public class ParticipantsController : ControllerBase
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, IntakeCompletedAt = p.IntakeCompletedAt, UpdatedAt = p.UpdatedAt, PlanTypeComplianceWarning = updatePlanTypeComplianceWarning }));
     }
 
-    /// <summary>
-    /// Saves the participant-owned intake subset. This endpoint is intentionally separate from
-    /// full profile PUT: it never accepts or changes activation, draft state, plan/funding or
-    /// staff fields. An incomplete save therefore cannot activate a draft participant or make it
-    /// available to booking surfaces (which already exclude <c>IsDraft</c> participants).
-    /// </summary>
+    // TDD stubs (red commit): replaced by the real implementations in the next commit.
     [HttpPut("{id:guid}/intake")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
-    public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> SaveIntake(Guid id, [FromBody] SaveParticipantIntakeDto dto, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(dto.FirstName) || string.IsNullOrWhiteSpace(dto.LastName))
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("First name and last name are required."));
+    public Task<ActionResult<ApiResponse<ParticipantDetailDto>>> SaveIntake(Guid id, [FromBody] CreateParticipantDto dto, CancellationToken ct) =>
+        Task.FromResult<ActionResult<ApiResponse<ParticipantDetailDto>>>(StatusCode(501, ApiResponse<ParticipantDetailDto>.Fail("not implemented")));
 
-        // Query filters enforce the authenticated tenant boundary; foreign IDs are indistinguishable
-        // from missing IDs, including when the API is called by ordinary tenant users.
-        var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
+    [HttpPost("{id:guid}/status")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public Task<ActionResult<ApiResponse<ParticipantStatusResultDto>>> ChangeStatus(Guid id, [FromBody] ChangeParticipantStatusDto dto, CancellationToken ct) =>
+        Task.FromResult<ActionResult<ApiResponse<ParticipantStatusResultDto>>>(StatusCode(501, ApiResponse<ParticipantStatusResultDto>.Fail("not implemented")));
 
-        ParticipantInquiry? linkedInquiry = null;
-        if (dto.InquiryId is Guid inquiryId)
-        {
-            linkedInquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == inquiryId && x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
-            if (linkedInquiry == null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Inquiry is not linked to this participant."));
-            if (string.IsNullOrWhiteSpace(dto.InquirySource) || !new[] { "Web", "Email", "Phone" }.Contains(dto.InquirySource, StringComparer.Ordinal))
-                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Inquiry source must be Web, Email, or Phone."));
-        }
+    [HttpPost("{id:guid}/restore")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public Task<ActionResult<ApiResponse<ParticipantStatusResultDto>>> Restore(Guid id, CancellationToken ct) =>
+        Task.FromResult<ActionResult<ApiResponse<ParticipantStatusResultDto>>>(StatusCode(501, ApiResponse<ParticipantStatusResultDto>.Fail("not implemented")));
 
-        var identityChanged = p.FirstName != dto.FirstName.Trim() || p.LastName != dto.LastName.Trim()
-            || p.DateOfBirth != dto.DateOfBirth
-            || (dto.GenderSpecified && p.Gender != dto.Gender)
-            || (dto.NdisNumberSpecified && p.NdisNumber != dto.NdisNumber?.Trim());
-        p.FirstName = dto.FirstName.Trim(); p.LastName = dto.LastName.Trim(); p.PreferredName = dto.PreferredName;
-        p.DateOfBirth = dto.DateOfBirth;
-        if (dto.GenderSpecified) p.Gender = dto.Gender;
-        if (dto.NdisNumberSpecified) p.NdisNumber = dto.NdisNumber?.Trim();
-        p.Phone = dto.Phone; p.Email = dto.Email;
-        p.AddressStreet = dto.AddressStreet; p.AddressSuburb = dto.AddressSuburb;
-        p.AddressState = dto.AddressState; p.AddressPostcode = dto.AddressPostcode;
-        p.PrimaryDiagnosis = dto.PrimaryDiagnosis?.Trim(); p.MedicalSummary = dto.MedicalSummary;
-        p.MobilityNotes = dto.MobilityNotes; p.BehaviourRiskSummary = dto.BehaviourRiskSummary; p.Notes = dto.Notes;
-        if (linkedInquiry != null)
-        {
-            // Keep the inquiry's identity/contact projection coherent with the canonical intake.
-            linkedInquiry.FirstName = p.FirstName; linkedInquiry.LastName = p.LastName; linkedInquiry.Phone = p.Phone; linkedInquiry.Email = p.Email;
-            linkedInquiry.Source = dto.InquirySource!; linkedInquiry.Provenance = dto.InquiryProvenance?.Trim(); linkedInquiry.UpdatedAt = DateTime.UtcNow;
-        }
-        p.UpdatedAt = DateTime.UtcNow;
-        if (identityChanged)
-        {
-            var onboarding = await _db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
-            onboarding?.InvalidateProfileValidation(p.UpdatedAt);
-        }
-        await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto
-        {
-            Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName,
-            IsActive = p.IsActive, IsDraft = p.IsDraft, IntakeCompletedAt = p.IntakeCompletedAt,
-            UpdatedAt = p.UpdatedAt
-        }));
-    }
+    [HttpPost("{id:guid}/complete-profile")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public Task<ActionResult<ApiResponse<ParticipantDetailDto>>> CompleteProfile(Guid id, CancellationToken ct) =>
+        Task.FromResult<ActionResult<ApiResponse<ParticipantDetailDto>>>(StatusCode(501, ApiResponse<ParticipantDetailDto>.Fail("not implemented")));
 
     /// <summary>
     /// CORE-02: partial save. Patches only the semantic field groups present in <paramref name="dto"/>

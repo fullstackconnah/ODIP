@@ -13,6 +13,24 @@ public record ParticipantInquiryDto
     public string Source { get; init; } = string.Empty;
     public string? Provenance { get; init; }
     public DateTime CreatedAt { get; init; }
+    // The linked participant's lifecycle state, so the Enquiries tab can say where a converted enquiry
+    // has got to ("Draft intake", "Intake complete", ...) instead of offering "Resume intake" forever.
+    // All three are null while the enquiry has no participant.
+    public bool? ParticipantIsDraft { get; init; }
+    public bool? ParticipantIsActive { get; init; }
+    public DateTime? ParticipantIntakeCompletedAt { get; init; }
+}
+
+/// <summary>
+/// An email address that may be left blank. [EmailAddress] alone rejects the empty string (it has no '@'), so a form that
+/// posts <c>""</c> for "no email" was answered 400 and a prospect without an email address could not be captured. Null,
+/// empty and whitespace pass; anything else must be a valid address.
+/// </summary>
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field | AttributeTargets.Parameter)]
+public sealed class OptionalEmailAddressAttribute : ValidationAttribute
+{
+    private static readonly EmailAddressAttribute Inner = new();
+    public override bool IsValid(object? value) => value is not string text || string.IsNullOrWhiteSpace(text) || Inner.IsValid(text.Trim());
 }
 
 public record CreateParticipantInquiryDto
@@ -54,4 +72,29 @@ public record ParticipantOnboardingWorklistDto
     public int CompletedSteps { get; init; }
     public int TotalSteps { get; init; } = 5;
     public List<string> Reasons { get; init; } = [];
+}
+
+/// <summary>
+/// POST /participants/{id}/status: the one way a screen changes whether a participant is active. It carries the flag and a
+/// reason and nothing else, so no screen can wipe a field by sending a partial participant (PUT /participants/{id} is a
+/// full replace).
+/// </summary>
+public record ChangeParticipantStatusDto
+{
+    /// <summary>Required. Nullable so an omitted flag is a 400 and never a silent "archive".</summary>
+    public bool? IsActive { get; init; }
+    /// <summary>Why, for the audit trail. Optional; blank is stored as nothing.</summary>
+    [StringLength(500)] public string? Reason { get; init; }
+}
+
+/// <summary>What the status and restore endpoints answer.</summary>
+public record ParticipantStatusResultDto
+{
+    public Guid Id { get; init; }
+    public bool IsActive { get; init; }
+    public bool IsDraft { get; init; }
+    /// <summary>False when the participant was already in the requested state: nothing was written.</summary>
+    public bool Changed { get; init; }
+    /// <summary>Non-blocking consequences the screen should show after a success (upcoming shifts that still reference an archived participant, readiness gaps on activation).</summary>
+    public List<string> Warnings { get; init; } = [];
 }
