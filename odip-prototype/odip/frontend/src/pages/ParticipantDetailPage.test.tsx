@@ -1167,3 +1167,54 @@ describe('ParticipantDetailPage — readiness chip in the header', () => {
     expect(screen.getByText('Active')).toBeInTheDocument()
   })
 })
+
+// L5-05: the tab keys were a static whitelist while the strip and the panels are role-gated, so ?tab=history (or claims, rostering) for a role
+// without that tab matched a key but showed no tab: nothing selected, an empty body. A key the role cannot see reads as the default tab.
+describe('ParticipantDetailPage — a role-gated tab key in the URL', () => {
+  const selectedTab = () => screen.getAllByRole('tab').filter(tab => tab.getAttribute('aria-selected') === 'true')
+
+  it.each(['claims', 'rostering', 'history'])('reads ?tab=%s as Details for a SupportWorker, who has no such tab', (tab) => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAtTab('participant-1', tab)
+
+    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Details/)])
+  })
+
+  it('reads ?tab=history as Details for a Coordinator (History is Admin only), and still opens a tab the Coordinator has', () => {
+    setUserRole('Coordinator')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    const { unmount } = renderAtTab('participant-1', 'history')
+
+    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Details/)])
+    unmount()
+
+    renderAtTab('participant-1', 'claims')
+    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Claims/)])
+  })
+})
+
+// L5-07: "Copy" on the caregiver link called navigator.clipboard.writeText straight away. navigator.clipboard is undefined on a non-secure origin
+// (the plain-http LAN address this app is served from), so the click threw an uncaught TypeError and copied nothing.
+describe('ParticipantDetailPage — copying the caregiver link on a page that is not a secure context', () => {
+  it('falls back to a selection copy instead of throwing when navigator.clipboard is undefined', async () => {
+    const user = userEvent.setup()
+    setUserRole('Coordinator')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    const generate = vi.fn().mockResolvedValue({ data: { token: 'tok-1', expiresAt: '2026-10-09T00:00:00Z' } })
+    mockUseGenerateCaregiverLink.mockReturnValue({ mutateAsync: generate, isPending: false, isError: false })
+    const original = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    const execCommand = vi.fn(() => true)
+    document.execCommand = execCommand
+    try {
+      renderAt('participant-1')
+      await user.click(screen.getByRole('button', { name: /Generate/ }))
+      await user.click(await screen.findByRole('button', { name: 'Copy' }))
+
+      expect(execCommand).toHaveBeenCalledWith('copy')
+    } finally {
+      if (original) Object.defineProperty(navigator, 'clipboard', original)
+      else delete (navigator as unknown as Record<string, unknown>).clipboard
+    }
+  })
+})

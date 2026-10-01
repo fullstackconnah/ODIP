@@ -62,7 +62,9 @@ describe('WizardStepRail', () => {
     expect(screen.getByRole('button', { name: /gamma/i })).toBeDisabled()
   })
 
-  it('still exposes nav aria-label "Intake wizard steps" with orientation="vertical"', () => {
+  // L5-10: the label was hard-coded "Intake wizard steps", so the Profile wizard, the incident wizard and the caregiver form announced themselves
+  // as the intake. Generic by default; a wizard names itself with `ariaLabel`.
+  it('names the nav "Wizard steps" by default, with orientation="vertical" too (it is not the intake)', () => {
     render(
       <WizardStepRail
         steps={steps}
@@ -72,8 +74,14 @@ describe('WizardStepRail', () => {
         orientation="vertical"
       />,
     )
-    const nav = screen.getByRole('navigation', { name: /intake wizard steps/i })
-    expect(nav).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Wizard steps' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: /intake/i })).not.toBeInTheDocument()
+  })
+
+  it('takes the wizard’s own name through ariaLabel', () => {
+    render(<WizardStepRail steps={steps} visitedSteps={new Set(['a'])} currentKey="a" onSelect={vi.fn()} ariaLabel="Profile wizard steps" />)
+
+    expect(screen.getByRole('navigation', { name: 'Profile wizard steps' })).toBeInTheDocument()
   })
 
   it('with orientation="vertical" the <ol> carries the vertical layout classes and the buttons keep their step-label accessible name', () => {

@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import RosterBoardPage from './RosterBoardPage'
 import { makeParticipantBoard, makeParticipantRow, makeShift } from './test-fixtures'
 import type { RosterBoardDto } from '@/api/types'
+import { weekStartOf } from './lib/roster'
 
 const { mockUseRosterBoard, mockUseParticipants, mockAssignMutateAsync, mockDeleteMutateAsync } = vi.hoisted(() => ({
   mockUseRosterBoard: vi.fn(),
@@ -31,11 +32,11 @@ vi.mock('@/api/hooks', async () => {
   }
 })
 
-function renderPage() {
+function renderPage(entry = '/rostering') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[entry]}>
         <RosterBoardPage />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -384,5 +385,38 @@ describe('RosterBoardPage — readiness warnings (never in the way)', () => {
 
     const panel = await screen.findByRole('dialog', { name: 'Shift details' })
     expect(within(panel).getByText('Not ready: Intake not complete')).toBeInTheDocument()
+  })
+})
+
+// L5-08: the "Re-cover shift" task the server raises for a shift left uncovered by approved leave links to /rostering?date=YYYY-MM-DD, and the
+// board ignored it: it always opened on the current week, so the coordinator landed on a week with nothing about that shift.
+describe('RosterBoardPage — ?date= opens the week that contains it', () => {
+  beforeEach(() => {
+    mockUseRosterBoard.mockReset()
+    mockUseRosterBoard.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
+    mockUseParticipants.mockReturnValue({ data: [] })
+  })
+
+  it('asks the server for the Monday-start week of a mid-week ?date=', () => {
+    renderPage('/rostering?date=2026-12-16')   // a Wednesday: its week starts Mon 14 Dec
+
+    expect(mockUseRosterBoard).toHaveBeenCalled()
+    for (const call of mockUseRosterBoard.mock.calls) expect(call[0]).toBe('2026-12-14')
+  })
+
+  it('keeps a ?date= that is already a Monday', () => {
+    renderPage('/rostering?date=2026-12-14')
+
+    for (const call of mockUseRosterBoard.mock.calls) expect(call[0]).toBe('2026-12-14')
+  })
+
+  it('opens the current week when ?date= is missing, malformed or not a real day', () => {
+    const current = weekStartOf(new Date())
+    for (const entry of ['/rostering', '/rostering?date=', '/rostering?date=soon', '/rostering?date=2026-02-30', '/rostering?date=2026-13-01']) {
+      mockUseRosterBoard.mockClear()
+      const { unmount } = renderPage(entry)
+      for (const call of mockUseRosterBoard.mock.calls) expect(call[0], entry).toBe(current)
+      unmount()
+    }
   })
 })

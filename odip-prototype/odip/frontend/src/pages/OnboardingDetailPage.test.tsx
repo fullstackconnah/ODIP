@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, Route, Routes, RouterProvider } from 'react-router-dom'
 import OnboardingDetailPage from './OnboardingDetailPage'
+import { __testHooks } from '@/hooks/useBackNavigation'
 
 const { mockUseQuery, mockUseMutation, mockInvalidate, mockUseParticipant } = vi.hoisted(() => ({
   mockUseQuery: vi.fn(), mockUseMutation: vi.fn(), mockInvalidate: vi.fn(), mockUseParticipant: vi.fn(),
@@ -26,6 +27,9 @@ const readyForSchedule = {
   serviceTypeConfirmed: true, serviceAgreementSigned: true, isReady: false,
   reasons: [],
 }
+
+// The previous-path tracker is module state: no test may leave its path behind for the next one.
+afterEach(() => __testHooks.reset())
 
 function renderDetail() {
   return render(<MemoryRouter initialEntries={['/onboarding/p-1']}><Routes><Route path="/onboarding/:id" element={<OnboardingDetailPage />} /></Routes></MemoryRouter>)
@@ -151,6 +155,30 @@ describe('OnboardingDetailPage', () => {
     await userEvent.setup().click(back)
     expect(router.state.location.pathname).toBe('/participants')
     expect(router.state.location.search).toBe('?tab=onboarding')
+  })
+
+  // L5-01: history-aware Back keeps ONE previous path, not a stack. Hub > Onboarding > Open > "Complete intake" > wizard Back lands here with the
+  // wizard as the previous path, so Back on THIS page went back into the wizard, whose Back came back here, forever: the Onboarding table
+  // was unreachable with Back. This page is a hub child like every other detail page: its Back is always the hub tab.
+  it('always goes to the hub Onboarding tab, never back into the wizard the user has just left', async () => {
+    __testHooks.reset()
+    __testHooks.recordCurrentPath('/participants/p-1/intake')
+    __testHooks.recordCurrentPath('/onboarding/p-1')
+    const router = createMemoryRouter(
+      [
+        { path: '/participants', element: <div>Hub placeholder</div> },
+        { path: '/onboarding/:id', element: <OnboardingDetailPage /> },
+      ],
+      { initialEntries: ['/onboarding/p-1'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    const back = screen.getByRole('link', { name: /Back to|Go back/i })
+    expect(back).toHaveAttribute('href', '/participants?tab=onboarding')
+    expect(back).toHaveAccessibleName('Back to onboarding')
+
+    await userEvent.setup().click(back)
+    expect(router.state.location.pathname).toBe('/participants')
   })
 })
 
