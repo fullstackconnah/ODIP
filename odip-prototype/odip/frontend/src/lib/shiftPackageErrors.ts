@@ -81,7 +81,7 @@ export function existingAdministrationFromError(error: unknown): AdministrationD
 
 /**
  * A dose time the server refused (422): charted more than 60 minutes before its slot (ADMINISTRATION_TOO_EARLY), or an `administeredAt`
- * outside [shift start, now + 5 min] (ADMINISTRATION_TIME_OUT_OF_RANGE). The message says what to change; the dose can be sent again once the
+ * outside [the earliest the shift allows, now + 15 min] (ADMINISTRATION_TIME_OUT_OF_RANGE). The message says what to change; the dose can be sent again once the
  * time is fixed (or, for too early, once the slot is within the hour).
  */
 export function isDoseTimeError(error: unknown): boolean {

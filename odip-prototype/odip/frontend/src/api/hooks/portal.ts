@@ -135,8 +135,14 @@ export function useAcknowledgeHandover() {
  * `Missed` record (the participant refused then took it; a Missed record was wrong because the dose was given) - the earlier record is kept as
  * history and the slot then reads the new one. Nothing else is superseded: an `Administered` or `WrongMedication` record is final (409, `data` is
  * that record) and a not-given outcome never replaces another record. 409 ADMINISTRATION_SLOT_BUSY: another request held the slot's lock too
- * long (nothing written, no `data`): look at the dose, then try again. 422 ADMINISTRATION_TOO_EARLY: an Administered dose cannot be charted more than 60 minutes before its slot (the message says
- * from when); 422 ADMINISTRATION_TIME_OUT_OF_RANGE: `administeredAt` must lie between the shift's actual start and now + 5 minutes.
+ * long (nothing written, no `data`): look at the dose, then try again. 422 ADMINISTRATION_TOO_EARLY: an Administered dose cannot be charted more than
+ * 60 minutes before its slot (the message says from when); 422 ADMINISTRATION_TIME_OUT_OF_RANGE: `administeredAt` must lie between the earliest the
+ * shift allows (the earlier of the start of any of its completions, including one archived by a coordinator Return, and an hour before the rostered
+ * start) and now. A time up to 15 minutes AHEAD of the server is a device clock running fast: the dose is recorded with the server's now (the response
+ * says what was stored); beyond 15 minutes it is the 422. A PRN dose's limits (maximum per 24 hours, minimum interval) are judged at `administeredAt`,
+ * against the doses recorded on both sides of that time, so a 400 for a limit can name a dose recorded AFTER it (acknowledge with `acknowledgeLimitBreach`).
+ * A retry of a dose must resend the SAME `administeredAt` (and dose and reasons) with the same `idempotencyKey`: for a PRN dose, which has no slot to
+ * identify it, the key is honoured only when those match (10 minutes before the stored time or 15 after), else 400 ADMINISTRATION_IDEMPOTENCY_KEY_REUSED.
  * Refreshes the shift detail and the medication caches.
  * Every instant in the returned record (`administeredAt`, `createdAt`, ...) is UTC with a Z - on a replay and on the 409 body too;
  * `scheduledAt` stays the slot's provider-local wall-clock value. The same `idempotencyKey` may only be reused for the SAME dose

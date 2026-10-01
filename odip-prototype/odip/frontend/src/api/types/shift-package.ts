@@ -328,7 +328,9 @@ export const SHIFT_PACKAGE_ERROR_CODES = {
   doseSlotNotDue: 'DOSE_SLOT_NOT_DUE',
   /** 422 — an Administered dose was charted more than 60 minutes before its slot (provider-local time). The message says when it can be recorded from. */
   administrationTooEarly: 'ADMINISTRATION_TOO_EARLY',
-  /** 422 — `administeredAt` is more than 5 minutes in the future, or before the shift started (MAR path: before the start of the slot day). */
+  /** 422 — `administeredAt` is more than 15 minutes in the future (up to 15 minutes ahead is stored as the server's now), or before the earliest the shift
+   * allows: the earlier of the start of any of its completions and an hour before the rostered start (MAR path: before the start of the slot day, or an
+   * hour before the slot when that is earlier). */
   administrationTimeOutOfRange: 'ADMINISTRATION_TIME_OUT_OF_RANGE',
   /** 409 — the medication is not Active. */
   medicationNotActive: 'MEDICATION_NOT_ACTIVE',

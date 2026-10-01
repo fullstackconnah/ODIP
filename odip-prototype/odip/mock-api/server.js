@@ -913,7 +913,9 @@ const packageHistoryBreaks = {
   ],
 }
 
-const SKEW_MS = 5 * 60 * 1000
+const SKEW_MS = 5 * 60 * 1000   // breaks: a break cannot be more than 5 minutes in the future
+// Doses: a supplied administeredAt up to 15 minutes ahead is a device clock running fast - the server stores ITS now instead of refusing.
+const DOSE_SKEW_MS = 15 * 60 * 1000
 const wholeMinutes = (ms) => Math.round(ms / 60000)
 
 /** Per-shift sticky package state (status/completion overrides, breaks, dose records, ack). */
@@ -1017,6 +1019,33 @@ function prnDto(shiftId, def) {
     nextAvailableAt: nextMs && nextMs > Date.now() ? new Date(nextMs).toISOString() : null,
     outcomePendingAdministrationId: given.length ? given[given.length - 1].id : def.pendingOutcomeId ?? null,
   }
+}
+
+/**
+ * The PRN limits, judged at the time the dose was GIVEN (administeredAt, or now) against the Administered records on both sides, like the server: no
+ * 24-hour window containing the dose may hold more than the maximum with this dose in it, and the minimum interval holds from the nearest record before
+ * AND to the nearest record after. The fixture's earlier doses (baseDoses, all at baseLastDoseAt) count too. Null when there is no breach.
+ */
+function prnLimitBreach(shiftId, def, doseMs) {
+  const DAY = 24 * 60 * 60000
+  const recorded = pkgState(shiftId).prnGiven.filter((g) => g.participantMedicationId === def.medicationId).map((g) => Date.parse(g.administeredAt))
+  const earlier = def.baseLastDoseAt ? Array(def.baseDoses || 0).fill(Date.parse(def.baseLastDoseAt)) : []
+  const times = [...earlier, ...recorded].sort((a, b) => a - b)
+  if (def.maxDosesPer24h != null) {
+    const starts = [...times.filter((t) => t >= doseMs - DAY && t <= doseMs), doseMs]
+    if (starts.some((start) => times.filter((t) => t >= start && t <= start + DAY).length >= def.maxDosesPer24h)) {
+      return `Maximum ${def.maxDosesPer24h} doses in 24 hours reached`
+    }
+  }
+  if (def.minIntervalMinutes) {
+    const before = times.filter((t) => t <= doseMs).pop()
+    const after = times.find((t) => t > doseMs)
+    if (before != null && (doseMs - before) / 60000 < def.minIntervalMinutes) return `Minimum interval of ${def.minIntervalMinutes} minutes not yet elapsed`
+    if (after != null && (after - doseMs) / 60000 < def.minIntervalMinutes) {
+      return `This dose is less than ${def.minIntervalMinutes} minutes before the dose recorded at ${new Date(after).toISOString().slice(11, 16)}`
+    }
+  }
+  return null
 }
 
 function finishBlockersFor(shiftId) {
@@ -1204,27 +1233,36 @@ const packageRoutesPost = [
     }
 
     // Temporal rules (422), after validation like the server. An `upcoming` fixture slot stands for "more than an hour away": an Administered
-    // dose for it cannot be charted yet (a not-given outcome can). administeredAt must lie in [the shift actual start, now + 5 minutes].
+    // dose for it cannot be charted yet (a not-given outcome can). administeredAt must lie in [the earliest the shift allows, now + 15 minutes]: the
+    // earlier of the shift's completion start and an hour before the rostered start (so a late Start tap or a Return and restart cannot make the true
+    // time of a dose unchartable); a time ahead of the server but within 15 minutes is stored as the server's now.
     if (slotDef && body?.status === 'Administered' && slotDef.upcoming) {
       return respond(422, failEnvelope(null, [`This dose is not due until ${slotDef.at.slice(11, 16)}. It can be recorded from an hour before.`], 'ADMINISTRATION_TOO_EARLY'))
     }
+    let givenMs = null
     if (body?.administeredAt) {
-      const given = Date.parse(/[zZ]|[+-]\d\d:\d\d$/.test(String(body.administeredAt)) ? body.administeredAt : `${body.administeredAt}Z`)   // no zone = UTC
-      const shiftStart = st.completion ? Date.parse(st.completion.actualStart) : null
-      if (given > Date.now() + SKEW_MS) {
+      givenMs = Date.parse(/[zZ]|[+-]\d\d:\d\d$/.test(String(body.administeredAt)) ? body.administeredAt : `${body.administeredAt}Z`)   // no zone = UTC
+      const shiftBase = portalShiftBase[shiftId]
+      const rosteredLimit = Date.parse(`${shiftBase.serviceDate}T${shiftBase.startTime}Z`) - 60 * 60000
+      const earliest = Math.min(rosteredLimit, st.completion ? Date.parse(st.completion.actualStart) : Infinity)
+      if (givenMs > Date.now() + DOSE_SKEW_MS) {
         return respond(422, failEnvelope(null, ["The time this dose was given can't be in the future. Check the time and try again."], 'ADMINISTRATION_TIME_OUT_OF_RANGE'))
       }
-      if (shiftStart != null && given < shiftStart) {
-        return respond(422, failEnvelope(null, ["The time this dose was given can't be earlier than when the shift started. Check the time and try again."], 'ADMINISTRATION_TIME_OUT_OF_RANGE'))
+      if (givenMs < earliest) {
+        return respond(422, failEnvelope(null, [`The time this dose was given can't be earlier than ${new Date(earliest).toISOString().slice(11, 16)}, the earliest this shift allows. Check the time and try again.`], 'ADMINISTRATION_TIME_OUT_OF_RANGE'))
+      }
+      if (givenMs > Date.now()) {   // a device clock running fast: store the server's now
+        givenMs = Date.now()
+        body = { ...body, administeredAt: new Date(givenMs).toISOString() }
       }
     }
     if (prnDef) {
       if (body.status === 'Administered' && !String(body.prnReason || '').trim()) {
         return respond(400, failEnvelope(null, ['A PRN reason is required when recording an administered PRN dose.'], null))
       }
-      const prn = prnDto(shiftId, prnDef)
-      if (body.status === 'Administered' && (prn.maxDosesReached || prn.nextAvailableAt) && !body.acknowledgeLimitBreach) {
-        return respond(400, failEnvelope(null, [prn.maxDosesReached ? `Maximum ${prnDef.maxDosesPer24h} doses in 24 hours reached` : `Minimum interval of ${prnDef.minIntervalMinutes} minutes not yet elapsed`], null))
+      const breach = body.status === 'Administered' ? prnLimitBreach(shiftId, prnDef, givenMs ?? Date.now()) : null
+      if (breach && !body.acknowledgeLimitBreach) {
+        return respond(400, failEnvelope(null, [breach], null))
       }
       const record = administrationFromBody(shiftId, prnDef, body, null)
       if (record.status === 'Administered') st.prnGiven.push(record)
