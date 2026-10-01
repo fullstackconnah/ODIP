@@ -13,6 +13,7 @@ import { useConvertParticipantInquiry, useParticipantInquiries } from '@/api/hoo
 import type { ParticipantInquiryDto } from '@/api/types/inquiries'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
+import { queryPhase } from '@/lib/queryPhase'
 
 /**
  * Where an enquiry has got to. `new`: no participant yet. `draftintake`: a draft participant whose intake is still open. `intakecomplete`:
@@ -74,7 +75,11 @@ export function InquiriesTable() {
 function useInquiriesScreen() {
   const navigate = useNavigate()
   const { canManageParticipantLifecycle } = usePermissions()
-  const { data: inquiries = [], isLoading, isError, refetch } = useParticipantInquiries()
+  const inquiriesQuery = useParticipantInquiries()
+  const { data: inquiries = [], isError, refetch } = inquiriesQuery
+  // A request that has not run (paused while the browser reports offline: isLoading false, isError false, data undefined) is loading, not an
+  // empty list: "No enquiries captured yet" follows only a request that succeeded.
+  const isLoading = queryPhase(inquiriesQuery) === 'loading'
   const convert = useConvertParticipantInquiry()
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')

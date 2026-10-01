@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
+import { queryPhase } from '@/lib/queryPhase'
 import { readIntakeCompleteNotice } from './intake/intakeComplete'
 import { plural } from '@/lib/format'
 
@@ -85,6 +86,8 @@ function useOnboardingScreen() {
   const { canManageParticipantLifecycle, canAccessPage } = usePermissions()
   // The API scopes this query to the current tenant; this page does not add a client-side tenant filter.
   const worklist = useQuery({ queryKey: ['participant-onboarding-worklist'], queryFn: () => apiGet<WorklistRow[]>('/inquiries/onboarding-worklist') })
+  // A request that has not run (paused while the browser reports offline) is loading, not an empty worklist.
+  const worklistLoading = queryPhase(worklist) === 'loading'
   const [search, setSearch] = useState('')
   const allRows = useMemo(() => worklist.data ?? [], [worklist.data])
   // The onboarding worklist endpoint takes no query parameters, so search is client-side.
@@ -174,7 +177,7 @@ function useOnboardingScreen() {
           {extractErrorMessage(worklist.error, 'Could not load the onboarding worklist. Please try again.')}
         </Callout>
       )}
-      {!worklist.isError && (!worklist.isLoading && rows.length === 0 ? (
+      {!worklist.isError && (!worklistLoading && rows.length === 0 ? (
         <EmptyState
           icon={ClipboardCheck}
           title="No participants in onboarding"
@@ -182,7 +185,7 @@ function useOnboardingScreen() {
           action={canAccessPage('participants') ? { label: 'View enquiries', to: '/participants?tab=enquiries' } : undefined}
         />
       ) : (
-        <DataTable data={rows} columns={columns} keyField="participantId" loading={worklist.isLoading} sortable emptyMessage="No incomplete onboarding work." rowClassName={row => (completed && row.participantId === completed.participantId ? 'bg-[var(--color-primary)]/10 outline outline-2 -outline-offset-2 outline-[var(--color-primary)]/40' : '')} />
+        <DataTable data={rows} columns={columns} keyField="participantId" loading={worklistLoading} sortable emptyMessage="No incomplete onboarding work." rowClassName={row => (completed && row.participantId === completed.participantId ? 'bg-[var(--color-primary)]/10 outline outline-2 -outline-offset-2 outline-[var(--color-primary)]/40' : '')} />
       ))}
     </>
   )
