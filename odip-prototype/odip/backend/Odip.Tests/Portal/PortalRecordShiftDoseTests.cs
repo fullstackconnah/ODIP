@@ -399,7 +399,7 @@ public class PortalRecordShiftDoseTests
         {
             "dose" => PrnDose("k1", dose: "1000mg"),
             "reason" => PrnDose("k1", reason: "toothache"),
-            _ => PrnDose("k1", at: PrnGivenAt.AddMinutes(10)),
+            _ => PrnDose("k1", at: PrnGivenAt.AddMinutes(20)),
         };
         var second = await f.Controller.RecordShiftDose(f.Shift.Id, prn.Id, changed, default);
 
@@ -424,6 +424,51 @@ public class PortalRecordShiftDoseTests
             Assert.Equal(200, Status(retry));
             Assert.Equal(first.Id, Body(retry).Data!.Id);
         }
+        Assert.Single(await f.Db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(-10, true)]    // a retry that re-stamps a little EARLIER than the stored time: tolerated up to 10 minutes
+    [InlineData(-11, false)]
+    [InlineData(15, true)]     // a retry that supplies a LATER time than was stored: the first attempt's time was ahead of the server and was stored as the server's now
+    [InlineData(16, false)]
+    public async Task APrnRetrysTime_MayDifferFromTheStoredOne_ByTenMinutesBeforeOrFifteenAfter(int minutesFromStored, bool replays)
+    {
+        var f = Create();
+        var prn = AddMed(f, "Paracetamol", type: MedicationType.Prn);
+        var first = Body(await f.Controller.RecordShiftDose(f.Shift.Id, prn.Id, PrnDose("k1"), default)).Data!;
+
+        var retry = await f.Controller.RecordShiftDose(f.Shift.Id, prn.Id, PrnDose("k1", at: PrnGivenAt.AddMinutes(minutesFromStored)), default);
+
+        if (replays)
+        {
+            Assert.Equal(200, Status(retry));
+            Assert.Equal(first.Id, Body(retry).Data!.Id);
+        }
+        else
+        {
+            Assert.Equal(400, Status(retry));
+            Assert.Equal(MedicationErrorCodes.AdministrationIdempotencyKeyReused, Body(retry).Code);
+        }
+        Assert.Single(await f.Db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
+    public async Task APrnDoseStampedWithAFastDeviceClock_IsReplayedByTheSameRetry_WhereTheServerStoredItsOwnNow()
+    {
+        // The device clock is 12 minutes fast: the first attempt supplies a time ahead of the server, which stores its own now. The retry (after a
+        // dropped response) supplies the SAME time again; it must replay, not be refused as a different dose.
+        var f = Create();
+        var prn = AddMed(f, "Paracetamol", type: MedicationType.Prn);
+        var aheadOfTheServer = DefaultNow.UtcDateTime.AddMinutes(12);
+        var first = Body(await f.Controller.RecordShiftDose(f.Shift.Id, prn.Id, PrnDose("k1", at: aheadOfTheServer), default)).Data!;
+        Assert.Equal(DefaultNow.UtcDateTime, first.AdministeredAt);   // stored as the server's now
+        f.Advance(TimeSpan.FromMinutes(1));
+
+        var retry = await f.Controller.RecordShiftDose(f.Shift.Id, prn.Id, PrnDose("k1", at: aheadOfTheServer), default);
+
+        Assert.Equal(200, Status(retry));
+        Assert.Equal(first.Id, Body(retry).Data!.Id);
         Assert.Single(await f.Db.MedicationAdministrations.ToListAsync());
     }
 

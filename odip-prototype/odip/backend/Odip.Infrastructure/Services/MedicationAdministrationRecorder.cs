@@ -105,9 +105,13 @@ public sealed record RecordAdministrationRequest(
 ///    devices, two workers, a double tap with no key) cannot both pass the check: the loser waits, then gets the winner's record
 ///    as a replay when its key matches and as a 409 when it does not. The wait is bounded (<see cref="DefaultSlotLockWait"/>): a stuck
 ///    holder gets the waiter <see cref="RecordAdministrationOutcome.SlotBusy"/> (409 ADMINISTRATION_SLOT_BUSY), not a pinned connection.
+/// 5. <b>The PRN limits</b> (a maximum per 24 hours and a minimum interval) are judged at the time the dose was GIVEN (<c>administeredAt</c>, or now),
+///    not the time it is recorded, against the Administered records on both sides of that time (see <c>FindPrnLimitBreachAsync</c>), so a
+///    back-dated dose cannot slip past them. An Administered PRN dose has no slot to serialise on, so it takes the medication's PRN advisory lock
+///    (<see cref="PrnLockKey"/>) as well: two simultaneous doses cannot both read the same count and both pass.
 ///
 /// The order is: the gate, then the pure validations (reason, wrong-medication note, PRN reason - they need no database, so a 400 never opens a
-/// transaction or waits for a lock), then the slot lock, then 2, 3 and 4 above, then the witness rule, the PRN limits and the insert.
+/// transaction or waits for a lock), then the lock(s), then 2, 3 and 4 above, then the witness rule, the PRN limits and the insert.
 /// </summary>
 public sealed class MedicationAdministrationRecorder
 {
@@ -121,8 +125,12 @@ public sealed class MedicationAdministrationRecorder
     /// </summary>
     public const int ClockSkewMinutes = 15;
 
-    /// <summary>How far apart the <c>administeredAt</c> of a retried PRN request and the stored record may be and still read as the same dose.</summary>
-    public const int PrnReplayToleranceMinutes = 1;
+    /// <summary>
+    /// How far BEFORE the stored record the <c>administeredAt</c> of a retried PRN request may be and still read as the same dose (a client that re-stamps
+    /// a little differently on each attempt). AFTER it the tolerance is <see cref="ClockSkewMinutes"/>: a supplied time ahead of the server was stored as
+    /// the server's now, and the same retry supplies it again. A retry should resend the SAME administeredAt.
+    /// </summary>
+    public const int PrnReplayToleranceMinutes = 10;
 
     /// <summary>
     /// How long a request waits for another request's slot lock before giving up with <see cref="RecordAdministrationOutcome.SlotBusy"/>. The lock
@@ -225,7 +233,13 @@ public sealed class MedicationAdministrationRecorder
         // by disposal on every early return): a concurrent request for the same slot waits here, and once it gets in it sees the winner's
         // record - as a replay (200) when the key matches, as an AlreadyRecorded (409) when it does not. The wait is bounded: a holder that
         // never finishes gets this request a SlotBusy (409 ADMINISTRATION_SLOT_BUSY) rather than a connection pinned for 30 seconds.
-        var heldLock = await SlotLock.TryAcquireAsync(_db, med.Id, dto.ScheduledAt, _slotLockWait, ct);
+        var lockKeys = new List<long>(2);
+        // An Administered PRN dose also takes the medication's PRN lock (always FIRST when both apply, so two requests can never wait on each other):
+        // the 24-hour count and the minimum interval span every PRN record of the medication, and a PRN dose has no slot to serialise on, so without
+        // it two simultaneous records can both read the same count and both pass.
+        if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered) lockKeys.Add(PrnLockKey(med.Id));
+        if (dto.ScheduledAt is { } lockSlot) lockKeys.Add(SlotLock.KeyFor(med.Id, lockSlot));
+        var heldLock = await SlotLock.TryAcquireAsync(_db, lockKeys, _slotLockWait, ct);
         if (heldLock is null)
             return Fail(RecordAdministrationOutcome.SlotBusy,
                 "Another request is recording this dose right now. Check the dose, then try again.", MedicationErrorCodes.AdministrationSlotBusy);
@@ -306,27 +320,18 @@ public sealed class MedicationAdministrationRecorder
             }
         }
 
+        // The time the dose was GIVEN (what is stored, and what the PRN limits are judged at). A supplied time a few minutes AHEAD of the server
+        // (within ClockSkewMinutes, which validation let through) is a device clock running fast: store the server's now, never a future time.
+        var administeredAt = dto.AdministeredAt;
+        if (dto.Status == MedicationAdministrationStatus.Administered && administeredAt == null)
+            administeredAt = nowUtc;
+        else if (administeredAt is { } supplied && ProviderLocalTime.AsUtc(supplied) > nowUtc)
+            administeredAt = nowUtc;
+
         var limitBreachAcknowledged = false;
         if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered)
         {
-            var last24hCutoff = nowUtc.AddHours(-24);
-            var recent = await _db.MedicationAdministrations
-                .Where(a => a.ParticipantMedicationId == med.Id
-                    && a.Status == MedicationAdministrationStatus.Administered
-                    && a.AdministeredAt != null && a.AdministeredAt >= last24hCutoff)
-                .OrderByDescending(a => a.AdministeredAt)
-                .ToListAsync(ct);
-
-            string? breachMessage = null;
-            if (med.PrnMaxDosesPer24h.HasValue && recent.Count >= med.PrnMaxDosesPer24h.Value)
-                breachMessage = $"Maximum {med.PrnMaxDosesPer24h.Value} doses in 24 hours reached";
-            else if (med.PrnMinIntervalMinutes.HasValue && recent.Count > 0)
-            {
-                var last = recent[0].AdministeredAt!.Value;
-                if ((nowUtc - last).TotalMinutes < med.PrnMinIntervalMinutes.Value)
-                    breachMessage = $"Minimum interval of {med.PrnMinIntervalMinutes.Value} minutes not yet elapsed";
-            }
-
+            var breachMessage = await FindPrnLimitBreachAsync(med, ProviderLocalTime.AsUtc(administeredAt ?? nowUtc), provider.Zone, ct);
             if (breachMessage != null)
             {
                 if (!dto.AcknowledgeLimitBreach)
@@ -334,14 +339,6 @@ public sealed class MedicationAdministrationRecorder
                 limitBreachAcknowledged = true;
             }
         }
-
-        var administeredAt = dto.AdministeredAt;
-        if (dto.Status == MedicationAdministrationStatus.Administered && administeredAt == null)
-            administeredAt = nowUtc;
-        // A supplied time a few minutes AHEAD of the server (within ClockSkewMinutes, which validation let through) is a device clock running fast:
-        // store the server's now, never a time in the future.
-        else if (administeredAt is { } supplied && ProviderLocalTime.AsUtc(supplied) > nowUtc)
-            administeredAt = nowUtc;
 
         var admin = new MedicationAdministration
         {
@@ -450,18 +447,22 @@ public sealed class MedicationAdministrationRecorder
 
         private SlotLock(IDbContextTransaction? owned) => _owned = owned;
 
-        /// <summary>The held lock, or null when another request held it for longer than <paramref name="wait"/>.</summary>
-        public static async Task<SlotLock?> TryAcquireAsync(OdipDbContext db, Guid medicationId, DateTime? slot, TimeSpan wait, CancellationToken ct)
+        /// <summary>
+        /// The held lock, or null when another request held it for longer than <paramref name="wait"/>. <paramref name="keys"/> are taken in the order
+        /// given (the caller keeps one fixed order, so no two requests can wait on each other); none, or a provider without advisory locks, is a no-op.
+        /// </summary>
+        public static async Task<SlotLock?> TryAcquireAsync(OdipDbContext db, IReadOnlyList<long> keys, TimeSpan wait, CancellationToken ct)
         {
-            if (slot is null || !db.Database.IsNpgsql()) return new SlotLock(null);
+            if (keys.Count == 0 || !db.Database.IsNpgsql()) return new SlotLock(null);
 
             var owned = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
             try
             {
                 // One round trip: bound the wait, take the lock, then hand the setting back to the server's own value for the rest of the transaction.
+                var lockStatements = string.Concat(keys.Select((_, i) => $"SELECT pg_advisory_xact_lock({{{i}}}); "));
                 var sql = string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                    $"SET LOCAL lock_timeout = {(int)Math.Max(1, wait.TotalMilliseconds)}; SELECT pg_advisory_xact_lock({{0}}); SET LOCAL lock_timeout TO DEFAULT");
-                await db.Database.ExecuteSqlRawAsync(sql, new object[] { KeyFor(medicationId, slot.Value) }, ct);
+                    $"SET LOCAL lock_timeout = {(int)Math.Max(1, wait.TotalMilliseconds)}; {lockStatements}SET LOCAL lock_timeout TO DEFAULT");
+                await db.Database.ExecuteSqlRawAsync(sql, keys.Select(k => (object)k).ToArray(), ct);
                 return new SlotLock(owned);
             }
             catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable)
@@ -506,9 +507,72 @@ public sealed class MedicationAdministrationRecorder
     public static long SlotLockKey(Guid medicationId, DateTime slot) => SlotLock.KeyFor(medicationId, slot);
 
     /// <summary>
+    /// The advisory-lock key for the PRN doses of one medication: its 24-hour count and minimum interval span every PRN record, and a PRN dose has no
+    /// slot, so Administered PRN records of one medication are serialised on this key. The input (the medication id and the marker "prn", 19 bytes) can
+    /// never equal a slot key's input (the medication id and 8 bytes of ticks, 24 bytes).
+    /// </summary>
+    public static long PrnLockKey(Guid medicationId)
+    {
+        Span<byte> bytes = stackalloc byte[19];
+        medicationId.TryWriteBytes(bytes);
+        "prn"u8.CopyTo(bytes[16..]);
+        return BitConverter.ToInt64(SHA256.HashData(bytes), 0);
+    }
+
+    /// <summary>
+    /// The PRN limits, judged at the time the dose was GIVEN (<paramref name="doseUtc"/>), not at the time it is recorded: a dose given at 09:00 and
+    /// charted at 13:00 is 1 hour after a dose recorded at 08:00, not 5. Both rules look at the Administered records of the medication on BOTH sides of the
+    /// dose time. (1) The maximum per 24 hours: no 24-hour window that contains the dose may hold more than the maximum with this dose in it; the windows
+    /// that matter start at an existing record or at the dose itself, which also covers a back-dated dose that pushes a LATER window over the limit.
+    /// For a dose given now this is exactly "the count in the last 24 hours". (2) The minimum interval: from the nearest record before the dose and to the
+    /// nearest record after it. Null when there is no breach. The caller holds the medication's PRN lock, so two simultaneous doses cannot both pass.
+    /// </summary>
+    private async Task<string?> FindPrnLimitBreachAsync(ParticipantMedication med, DateTime doseUtc, TimeZoneInfo zone, CancellationToken ct)
+    {
+        if (med.PrnMaxDosesPer24h is null && med.PrnMinIntervalMinutes is null) return null;
+
+        var lower = doseUtc.AddHours(-24);
+        var upper = doseUtc.AddHours(24);
+        var recorded = (await _db.MedicationAdministrations
+                .Where(a => a.ParticipantMedicationId == med.Id
+                    && a.Status == MedicationAdministrationStatus.Administered && a.SupersededByAdministrationId == null
+                    && a.AdministeredAt != null && a.AdministeredAt >= lower && a.AdministeredAt <= upper)
+                .Select(a => a.AdministeredAt!.Value)
+                .ToListAsync(ct))
+            .Select(ProviderLocalTime.AsUtc)
+            .OrderBy(t => t)
+            .ToList();
+
+        if (med.PrnMaxDosesPer24h is { } max)
+        {
+            foreach (var start in recorded.Where(t => t >= lower && t <= doseUtc).Append(doseUtc))
+            {
+                var end = start.AddHours(24);
+                if (recorded.Count(t => t >= start && t <= end) >= max)   // this dose would be one more than the maximum in that window
+                    return $"Maximum {max} doses in 24 hours reached";
+            }
+        }
+
+        if (med.PrnMinIntervalMinutes is { } interval)
+        {
+            DateTime? before = recorded.Where(t => t <= doseUtc).Select(t => (DateTime?)t).LastOrDefault();
+            DateTime? after = recorded.Where(t => t > doseUtc).Select(t => (DateTime?)t).FirstOrDefault();
+            if (before is { } previous && (doseUtc - previous).TotalMinutes < interval)
+                return $"Minimum interval of {interval} minutes not yet elapsed";
+            if (after is { } next && (next - doseUtc).TotalMinutes < interval)
+            {
+                var nextLocal = ProviderLocalTime.UtcToLocal(next, zone);
+                return $"This dose is less than {interval} minutes before the dose recorded at {FormatLocal(nextLocal, ProviderLocalTime.UtcToLocal(doseUtc, zone))}";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Whether a retried as-needed (PRN) request is the SAME dose as the stored record. A PRN dose has no slot, so (medication, outcome) alone
     /// cannot tell two doses apart: the dose given, the PRN reason, the not-given reason and - when the request names one - the time it was given
-    /// (to within <see cref="PrnReplayToleranceMinutes"/>) must all match. A request with no <c>administeredAt</c> had the server stamp "now", so
+    /// (within <see cref="PrnReplayToleranceMinutes"/> before the stored time, or <see cref="ClockSkewMinutes"/> after it) must all match. A request with no <c>administeredAt</c> had the server stamp "now", so
     /// a retry minutes later still matches on the other fields.
     /// </summary>
     private static bool SamePrnRequest(MedicationAdministration prior, CreateAdministrationDto dto)
@@ -516,8 +580,9 @@ public sealed class MedicationAdministrationRecorder
         if (!SameText(prior.DoseGiven, dto.DoseGiven) || !SameText(prior.PrnReason, dto.PrnReason) || !SameText(prior.Reason, dto.Reason))
             return false;
         if (dto.AdministeredAt is not { } given) return true;
-        return prior.AdministeredAt is { } stored
-            && Math.Abs((ProviderLocalTime.AsUtc(given) - ProviderLocalTime.AsUtc(stored)).TotalMinutes) <= PrnReplayToleranceMinutes;
+        if (prior.AdministeredAt is not { } stored) return false;
+        var supplied = (ProviderLocalTime.AsUtc(given) - ProviderLocalTime.AsUtc(stored)).TotalMinutes;   // positive: the retry says a LATER time than was stored
+        return supplied >= -PrnReplayToleranceMinutes && supplied <= Math.Max(PrnReplayToleranceMinutes, ClockSkewMinutes);
     }
 
     /// <summary>Equal as submitted text: surrounding whitespace is ignored and null equals empty.</summary>

@@ -642,13 +642,16 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
 
         private HeldSlotLock(NpgsqlConnection connection, NpgsqlTransaction transaction) { _connection = connection; _transaction = transaction; }
 
-        public static async Task<HeldSlotLock> AcquireAsync(string connectionString, Guid medicationId, DateTime slot)
+        public static Task<HeldSlotLock> AcquireAsync(string connectionString, Guid medicationId, DateTime slot) =>
+            AcquireKeyAsync(connectionString, MedicationAdministrationRecorder.SlotLockKey(medicationId, slot));
+
+        public static async Task<HeldSlotLock> AcquireKeyAsync(string connectionString, long key)
         {
             var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync();
             var transaction = await connection.BeginTransactionAsync();
             await using var command = new NpgsqlCommand("SELECT pg_advisory_xact_lock(@key)", connection, transaction);
-            command.Parameters.AddWithValue("key", MedicationAdministrationRecorder.SlotLockKey(medicationId, slot));
+            command.Parameters.AddWithValue("key", key);
             await command.ExecuteNonQueryAsync();
             return new HeldSlotLock(connection, transaction);
         }
@@ -777,6 +780,86 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         await outer.CommitAsync();
         await using (var after = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object))
             Assert.Equal(1, await after.MedicationAdministrations.CountAsync(a => a.ParticipantMedicationId == med.Id));
+    }
+
+    // ── PRN doses are serialised per medication, so the limits cannot be passed together (review 3 finding m4) ──
+
+    private async Task<(Guid TenantId, Guid UserId, ParticipantMedication Med)> SeedPrnMedicationAsync(int? max, int? intervalMinutes)
+    {
+        var (setup, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _setup = setup;
+        var (participantId, userId, _, _) = await SeedCompletionAsync(setup);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, Name = "Paracetamol", DoseDescription = "500mg", Type = MedicationType.Prn, PrnIndication = "Pain",
+            PrnMaxDosesPer24h = max, PrnMinIntervalMinutes = intervalMinutes, StartDate = new DateTime(2026, 1, 1), Status = MedicationStatus.Active,
+        };
+        setup.ParticipantMedications.Add(med);
+        await setup.SaveChangesAsync();
+        return (tenantId, userId, med);
+    }
+
+    /// <summary>The race tests start eight requests on a cold process (JIT, EF query compilation on a starved thread pool): give the lock a generous wait so a slow holder never reads as a stuck one.</summary>
+    private static readonly TimeSpan RaceLockWait = TimeSpan.FromSeconds(60);
+
+    private static RecordAdministrationRequest PrnRequest(Guid medicationId, Guid userId, int n, MedicationAdministrationStatus status = MedicationAdministrationStatus.Administered) => new(medicationId,
+        new CreateAdministrationDto
+        {
+            Status = status, PrnReason = status == MedicationAdministrationStatus.Administered ? "Headache" : null, Reason = status == MedicationAdministrationStatus.Administered ? null : "Declined",
+            DoseGiven = "500mg", IdempotencyKey = $"prn-{n}-{Guid.NewGuid()}",
+        }, userId, "Ben Turner");
+
+    [SkippableFact]
+    public async Task SimultaneousPrnDoses_OnRealPostgres_CannotAllPassTheDailyMaximum()
+    {
+        // A PRN dose has no slot, so nothing serialised two requests for the same medication: each read the same count and both passed.
+        RequirePostgres();
+        var (tenantId, userId, med) = await SeedPrnMedicationAsync(max: 2, intervalMinutes: null);
+
+        var results = await RaceAsync(tenantId, 8, (db, n) => new MedicationAdministrationRecorder(db, slotLockWait: RaceLockWait).RecordAsync(PrnRequest(med.Id, userId, n), default));
+
+        Assert.Equal(2, results.Count(r => r.Outcome == RecordAdministrationOutcome.Created));
+        Assert.Equal(6, results.Count(r => r.Outcome == RecordAdministrationOutcome.Invalid && r.Message!.StartsWith("Maximum 2 doses in 24 hours")));
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.Equal(2, await verify.MedicationAdministrations.CountAsync(a => a.ParticipantMedicationId == med.Id));
+    }
+
+    [SkippableFact]
+    public async Task SimultaneousPrnDoses_OnRealPostgres_CannotAllPassTheMinimumInterval()
+    {
+        RequirePostgres();
+        var (tenantId, userId, med) = await SeedPrnMedicationAsync(max: null, intervalMinutes: 120);
+
+        var results = await RaceAsync(tenantId, 8, (db, n) => new MedicationAdministrationRecorder(db, slotLockWait: RaceLockWait).RecordAsync(PrnRequest(med.Id, userId, n), default));
+
+        Assert.Equal(1, results.Count(r => r.Outcome == RecordAdministrationOutcome.Created));
+        // Each loser is refused for the interval, from the winner's dose or - when its own time was stamped a moment BEFORE the winner's, because it
+        // started first but took the lock second - to it ("less than 120 minutes before the dose recorded at ...").
+        Assert.Equal(7, results.Count(r => r.Outcome == RecordAdministrationOutcome.Invalid && r.Message!.Contains("120 minutes")));
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.Equal(1, await verify.MedicationAdministrations.CountAsync(a => a.ParticipantMedicationId == med.Id));
+    }
+
+    [SkippableFact]
+    public async Task AnAdministeredPrnDose_WaitsForThePrnLock_ButANotGivenOutcomeDoesNot()
+    {
+        RequirePostgres();
+        var (tenantId, userId, med) = await SeedPrnMedicationAsync(max: 5, intervalMinutes: null);
+        await using var held = await HeldSlotLock.AcquireKeyAsync(_pg.ConnectionString, MedicationAdministrationRecorder.PrnLockKey(med.Id));
+        await using var db = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var recorder = new MedicationAdministrationRecorder(db, slotLockWait: TimeSpan.FromMilliseconds(700));
+
+        var refused = await recorder.RecordAsync(PrnRequest(med.Id, userId, 1, MedicationAdministrationStatus.Refused), default);   // no limits apply: no lock
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var busy = await recorder.RecordAsync(PrnRequest(med.Id, userId, 2), default);                                              // waits for the PRN lock
+        clock.Stop();
+
+        Assert.Equal(RecordAdministrationOutcome.Created, refused.Outcome);
+        Assert.Equal(RecordAdministrationOutcome.SlotBusy, busy.Outcome);
+        Assert.InRange(clock.ElapsedMilliseconds, 500, 4000);
+        Assert.Null(db.Database.CurrentTransaction);
+        await held.ReleaseAsync();
+        Assert.Equal(RecordAdministrationOutcome.Created, (await recorder.RecordAsync(PrnRequest(med.Id, userId, 3), default)).Outcome);
     }
 
     [SkippableFact]
