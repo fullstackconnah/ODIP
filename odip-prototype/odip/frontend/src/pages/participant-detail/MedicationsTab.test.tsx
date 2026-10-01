@@ -104,3 +104,29 @@ describe('participant-detail/MedicationsTab — connection map: incident link/fi
     expect(screen.queryByRole('button', { name: 'File incident' })).not.toBeInTheDocument()
   })
 })
+
+describe('participant-detail/MedicationsTab — loading and failure (PageState)', () => {
+  it('says "Loading medication list…" while it loads', () => {
+    mockUseParticipantMedications.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
+    renderTab()
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading medication list…')
+  })
+
+  it('does not show a failed request as an empty medication list: it names the failure and offers a retry', () => {
+    mockUseParticipantMedications.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
+    renderTab()
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this medication list")
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Medications' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the list on screen when a background refetch fails over data it already has', () => {
+    mockUseParticipantMedications.mockReturnValue({ data: [], isLoading: false, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
+    renderTab()
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Medications' })).toBeInTheDocument()
+  })
+})

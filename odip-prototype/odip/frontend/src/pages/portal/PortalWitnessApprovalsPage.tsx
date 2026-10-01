@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft, ShieldCheck, ShieldAlert, Check, X } from 'lucide-react'
+import { ShieldCheck, ShieldAlert, Check, X } from 'lucide-react'
 import {
   usePendingWitnessRequests, useApproveWitnessRequest, useDeclineWitnessRequest,
   useApproveIncidentWitnessRequest, useDeclineIncidentWitnessRequest,
 } from '@/api/hooks'
 import { PageHeader } from '@/components/PageHeader'
+import { BackButton } from '@/components/BackButton'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import type { PortalWitnessRequestDto } from '@/api/types'
@@ -137,9 +137,7 @@ export default function PortalWitnessApprovalsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader title="Witness approvals" subtitle="Medication doses and incident reports waiting for you to confirm you witnessed them">
-        <Link to="/portal" className="inline-flex items-center gap-1 text-sm text-[var(--color-primary)] hover:underline">
-          <ArrowLeft className="w-4 h-4" /> Back to My Shifts
-        </Link>
+        <BackButton to="/portal" label="my shifts" variant="link" history={false} />
       </PageHeader>
 
       {error && (

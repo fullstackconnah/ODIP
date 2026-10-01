@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import StaffDetailPage from './StaffDetailPage'
 import type { StaffOverviewDto } from '@/api/types/staff'
 import type { StaffDetailDto } from '@/api/types/staff'
@@ -95,7 +96,7 @@ describe('StaffDetailPage — loading/empty states', () => {
     mockUseStaffOverview.mockReturnValue({ data: undefined, isLoading: true })
     renderAt('staff-1')
 
-    expect(screen.getByText('Loading...')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading staff member…')
   })
 
   it('shows a not-found state when the overview is missing', () => {
@@ -402,5 +403,95 @@ describe('StaffDetailPage — mobile header and tap targets', () => {
     cleanup()
     renderAtTab('staff-1', 'incidents')
     expect(screen.getByRole('link', { name: 'Minor graze' })).toHaveClass('min-h-[var(--tap-min)]')
+  })
+})
+
+describe('StaffDetailPage — failed request vs. missing record (PageState)', () => {
+  it('names a failed request as a failure, with a retry, and does not call it "Staff member not found"', () => {
+    mockUseStaffOverview.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
+    renderAt('staff-1')
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this staff member")
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.queryByText('Staff member not found')).not.toBeInTheDocument()
+  })
+
+  it('shows "Staff member not found" for a 404, with nothing to retry', () => {
+    mockUseStaffOverview.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch: vi.fn() })
+    renderAt('staff-1')
+
+    expect(screen.getByText('Staff member not found')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to staff' })).toHaveAttribute('href', '/staff')
+  })
+
+  it('shows "Staff member not found" for an answer with no record, and says "Loading staff member…" while it loads', () => {
+    mockUseStaffOverview.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
+    const { unmount } = renderAt('staff-1')
+    expect(screen.getByText('Staff member not found')).toBeInTheDocument()
+    unmount()
+
+    mockUseStaffOverview.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
+    renderAt('staff-1')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading staff member…')
+  })
+})
+
+/** Exposes the router's live location, so a test can assert what a tab switch wrote to the URL. */
+function LocationProbe({ onChange }: { onChange: (value: string) => void }) {
+  const { pathname, search } = useLocation()
+  onChange(`${pathname}${search}`)
+  return null
+}
+
+describe('StaffDetailPage — the tab lives in the URL (useTabParam)', () => {
+  function renderWithUrl(url: string) {
+    let current = url
+    const view = render(
+      <MemoryRouter initialEntries={[url]}>
+        <LocationProbe onChange={value => { current = value }} />
+        <Routes>
+          <Route path="/staff/:id" element={<StaffDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    return { ...view, url: () => current }
+  }
+
+  beforeEach(() => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
+  })
+
+  it('writes ?tab= when a tab is chosen, and the chosen tab is the selected one', async () => {
+    const user = userEvent.setup()
+    const page = renderWithUrl('/staff/x-1')
+    await user.click(screen.getByRole('tab', { name: 'Credentials' }))
+    expect(page.url()).toBe('/staff/x-1?tab=credentials')
+    expect(screen.getByRole('tab', { name: 'Credentials' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('keeps the tab across a reload or a shared link: a fresh render of the written URL lands on the same tab', async () => {
+    const user = userEvent.setup()
+    const first = renderWithUrl('/staff/x-1')
+    await user.click(screen.getByRole('tab', { name: 'Credentials' }))
+    const written = first.url()
+    first.unmount()
+    renderWithUrl(written)
+    expect(screen.getByRole('tab', { name: 'Credentials' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('drops the param when the default tab is chosen, and every other param survives both ways', async () => {
+    const user = userEvent.setup()
+    const page = renderWithUrl('/staff/x-1?from=dash&tab=credentials')
+    await user.click(screen.getByRole('tab', { name: 'Availability' }))
+    expect(page.url()).toBe('/staff/x-1?from=dash')
+    await user.click(screen.getByRole('tab', { name: 'Credentials' }))
+    expect(page.url()).toBe('/staff/x-1?from=dash&tab=credentials')
+  })
+
+  it('reads an unknown ?tab= as the default tab', () => {
+    renderWithUrl('/staff/x-1?tab=bogus')
+    expect(screen.getByRole('tab', { name: 'Availability' })).toHaveAttribute('aria-selected', 'true')
   })
 })

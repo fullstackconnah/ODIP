@@ -1,15 +1,16 @@
 import type React from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
 import { apiGet, apiPost } from '@/api/client'
 import { useParticipant } from '@/api/hooks'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
-import { useBackTarget } from '@/hooks/useBackNavigation'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 
@@ -46,10 +47,12 @@ export default function OnboardingDetailPage() {
   const services = useMutation({ mutationFn: () => apiPost<Detail>(`/inquiries/${id}/onboarding/service-needs-confirmation`, {}), onSuccess: () => qc.invalidateQueries({ queryKey: ['onboarding', id] }) })
   const d = detail.data
 
-  const back = useBackTarget('/participants?tab=onboarding')
-
-  if (detail.isLoading) return <div>Loading onboarding…</div>
-  if (!d) return <Callout tone="error">Onboarding record was not found.</Callout>
+  if (detail.isLoading) return <PageState kind="loading" noun="onboarding record" />
+  if (!d) {
+    return detail.isError && !isNotFoundError(detail.error)
+      ? <PageState kind="error" noun="onboarding record" onRetry={() => detail.refetch()} />
+      : <PageState kind="not-found" noun="onboarding record" backTo="/participants?tab=onboarding" backLabel="onboarding" />
+  }
 
   const participantName = participant
     ? `${participant.preferredName?.trim() || participant.firstName} ${participant.lastName}`.trim()
@@ -113,12 +116,7 @@ export default function OnboardingDetailPage() {
       <PageHeader
         title={headingTitle}
         subtitle={<Link to={`/participants/${id}`} className="font-medium text-[var(--color-primary)] hover:underline">View participant record</Link>}
-        action={
-          <Button variant="secondary" size="md" onClick={back.onBack} aria-label={back.ariaLabel}>
-            <ArrowLeft className="w-4 h-4" />
-            Back
-          </Button>
-        }
+        action={<BackButton to="/participants?tab=onboarding" label="onboarding" />}
       />
       {/* min(26rem,100%) is what collapses this to one column on a phone (a bare 26rem floor
           overflows a 390px viewport), so the old max-md:grid-cols-1 override is redundant. */}

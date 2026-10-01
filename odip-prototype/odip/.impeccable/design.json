@@ -604,6 +604,116 @@
         "guards": [
           "src/lib/format.test.ts: table tests for every helper with an injectable now, in several zones"
         ]
+      },
+      {
+        "name": "Back control",
+        "status": "shared; the header's first action, secondary, names its destination (src/components/BackButton.tsx)",
+        "shipsOn": [
+          "Trip, staff, accommodation, incident and onboarding detail (button)",
+          "Participant detail, the intake and profile wizards, enquiry, medication and agreement-draft forms, caregiver review (icon)",
+          "Portal shift detail and witness approvals, claim batch detail, tenant detail (link)"
+        ],
+        "api": [
+          {
+            "component": "BackButton",
+            "prop": "to, label",
+            "effect": "a real link to `to`; the visible text is \"Back\", the accessible name \"Back to {label}\""
+          },
+          {
+            "component": "BackButton",
+            "prop": "variant",
+            "values": [
+              "button",
+              "icon",
+              "link"
+            ],
+            "effect": "button: secondary Button with an arrow; icon: ghost icon-only, 24px on a mouse and 44px on touch, tooltip carries the name; link: primary text link with a --tap-min floor and a keyboard-only focus ring"
+          },
+          {
+            "component": "BackButton",
+            "prop": "history",
+            "values": [
+              true,
+              false
+            ],
+            "effect": "default true: useBackTarget(to) runs inside the component and the previous in-app screen wins, `to` is the deep-link fallback; false pins Back to `to`"
+          },
+          {
+            "component": "BackButton",
+            "prop": "onBack",
+            "effect": "the in-page form for a view with no route: a real <button>, never a link that is not one"
+          }
+        ],
+        "guards": [
+          "src/components/BackButton.test.tsx: link and href, names, variants, history on and off, keyboard, the hook-order case, the in-page form"
+        ]
+      },
+      {
+        "name": "Page states",
+        "status": "shared; a page or tab that has no record yet shows PageState in place of itself (src/components/PageState.tsx, src/lib/httpStatus.ts)",
+        "shipsOn": [
+          "Trip, staff, accommodation, incident, participant, claim and onboarding detail",
+          "Caregiver submission review",
+          "Participant Medications and Support Profile tabs, trip Itinerary tab"
+        ],
+        "states": [
+          {
+            "state": "loading",
+            "renders": "Loading {noun}…, muted, centred in a 16rem band",
+            "role": "status"
+          },
+          {
+            "state": "error",
+            "renders": "danger Callout \"Couldn't load this {noun}. Check your connection and try again.\" with an optional Try again",
+            "role": "alert"
+          },
+          {
+            "state": "not-found",
+            "renders": "{Noun} not found and, for a whole page, a Back button",
+            "role": "none"
+          }
+        ],
+        "api": [
+          {
+            "component": "PageState",
+            "prop": "kind, noun",
+            "values": [
+              "loading",
+              "error",
+              "not-found"
+            ],
+            "effect": "one of three states; no heading in any (the one h1 comes from PageHeader)"
+          },
+          {
+            "component": "lib/httpStatus",
+            "prop": "isNotFoundError(error)",
+            "effect": "a 404 is the answer \"no such record\", not a failure: it is routed to not-found, and only a 500 or a dropped connection is an error"
+          }
+        ],
+        "guards": [
+          "src/components/PageState.test.tsx and src/lib/httpStatus.test.ts",
+          "each page test: a failed fetch shows the error and Try again, a 404 and an empty answer show not found"
+        ]
+      },
+      {
+        "name": "Tab state in the URL",
+        "status": "shared; the active tab is ?tab= (src/hooks/useTabParam.ts)",
+        "shipsOn": [
+          "Trip detail",
+          "Participant detail",
+          "Staff detail",
+          "Participants hub"
+        ],
+        "api": [
+          {
+            "component": "useTabParam(keys, defaultKey)",
+            "prop": "returns [tab, setTab]",
+            "effect": "tab is the URL value when it is one of keys, else defaultKey; setTab ignores a key not in the list, writes with replace, keeps other params and deletes `tab` at the default"
+          }
+        ],
+        "guards": [
+          "src/hooks/useTabParam.test.tsx: read, fallback, write, default drops the param, other params survive, replace, unknown key ignored"
+        ]
       }
     ]
   },
@@ -794,6 +904,7 @@
       "**Do** derive a glance segment's chip and tint from one tone with `glanceState`",
       "**Do** colour a status by its tone: add the word to `STATUS_TONE` (or pass a `colorMap` of tones for a domain whose word means something else), never a class string of its own",
       "**Do** make nouns agree with counts through `plural()`, spell ratios through `formatRatio()` (\"x / y\") and relative times through `formatRelative()` (`src/lib/format.ts`), and state a dated deadline through `deadlineState()` and `deadlineLabel()` (`src/lib/deadline.ts`), never by hand",
+      "**Do** early-return a record that is loading, failed or missing through `PageState`, give a detail page one `BackButton` that names its destination, and keep its active tab in the URL with `useTabParam`",
       "**Do** put what needs action in the attention band and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on",
       "**Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed (\"Couldn't load\"), and never an \"All clear\" without data",
       "**Do** use `Button` for every action; it owns height, radius and focus",

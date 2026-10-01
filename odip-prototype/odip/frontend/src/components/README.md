@@ -22,6 +22,7 @@ copying it.
 - [SearchableSelect](#searchableselect)
 - [ToggleGroup](#togglegroup)
 - [EmptyState](#emptystate)
+- [PageState](#pagestate) (loading, error and not found, in place of a page or a tab)
 - [Modal](#modal) / [ConfirmDialog](#confirmdialog)
 - [SearchInput](#searchinput)
 - [StatusBadge](#statusbadge)
@@ -30,8 +31,9 @@ copying it.
 - [Format helpers](#format-helpers) (`lib/format.ts`: `plural`, `formatRatio`, `formatRelative`, the date-time formatters)
 - [Card](#card) / [StatCard](#statcard)
 - [PageHeader](#pageheader) (and the opt-in detail variant, `PageHeaderMeta`)
+- [BackButton](#backbutton) (the one Back control)
 - [FactBar](#factbar) (the default strip and the opt-in glance variant)
-- [Tabs](#tabs)
+- [Tabs](#tabs) and [useTabParam](#usetabparam) (the active tab in the URL)
 - [ActionButtons](#actionbuttons)
 - [Touch hit areas](#touch-hit-areas) (`TAP_AREA`, `TAP_FLOOR`, `TAP_AREA_LINKS`, `--tap-min`)
 - [ErrorBoundary](#errorboundary)
@@ -428,6 +430,40 @@ data". **When not to**: a table that's merely *filtered* to zero rows — that's
 
 ---
 
+## PageState
+
+`PageState.tsx` (with `lib/httpStatus.ts`) is what a page, or a tab inside one, shows in place of itself while its record loads, when the load failed, and when there is no such
+record. They are three different facts, so there are three states, and none of them is a bare `<div>`.
+
+**Props**: `kind: 'loading' | 'error' | 'not-found'`, `noun` (lower case, singular: "trip", "staff member"; it fills the sentences), `onRetry?` (error), `backTo?` and `backLabel?`
+(not found).
+
+| `kind` | Renders | Role |
+|---|---|---|
+| `loading` | "Loading trip…", muted, centred in a 16rem band | `status` (polite) |
+| `error` | a danger `Callout`: "Couldn't load this trip. Check your connection and try again." and, with `onRetry`, a "Try again" button | `alert` (assertive) |
+| `not-found` | "Trip not found" and, with `backTo`, a `BackButton` to it | none |
+
+```tsx
+const { data: trip, isLoading, isError, error, refetch } = useTrip(id)
+if (isLoading) return <PageState kind="loading" noun="trip" />
+if (!trip) {
+  return isError && !isNotFoundError(error)
+    ? <PageState kind="error" noun="trip" onRetry={() => refetch()} />
+    : <PageState kind="not-found" noun="trip" backTo="/trips" backLabel="trips" />
+}
+```
+
+Two rules sit in that snippet. A 404 is the API's answer "no such record" (the detail endpoints return `NotFound` for an unknown id), so `isNotFoundError(error)` sends it to not-found; only a
+failure (a 500, a dropped connection) is an error. And the failed branch sits under `!trip`, so a background refetch that fails over data already on screen does not replace the page.
+
+**Accessibility**: loading is a polite `status`, error an `alert`; not found carries a real Back link. No state adds a heading: a screen's one `h1` comes from `PageHeader` (The One Heading Rule).
+
+**When to use**: the early return of a record page or tab (`kind="not-found"` without `backTo` inside a tab, because the page around it is still on screen). **When not to**: a page that keeps its header
+and shows skeletons for a region (the dashboard, the portal shift), a list with no rows (`EmptyState`), or a mutation failure (`Callout`).
+
+---
+
 ## Modal / ConfirmDialog
 
 `Modal.tsx` is the base dialog shell: focus trap, Escape-to-close, background scroll
@@ -651,6 +687,37 @@ The trip detail page opts in with a status-led meta row, and the dashboard opts 
 
 ---
 
+## BackButton
+
+`BackButton.tsx` is the one Back control: the first action in a detail header, secondary, and it names its destination.
+
+**Props**: `to` (a real route) **or** `onBack` (the in-page form, below), `label` (lower-case noun for where it goes: `label="staff"` names it "Back to staff"), `variant?: 'button' | 'icon' | 'link'`
+(default `button`), `history?: boolean` (default `true`), `className?` (spacing only: `mt-1`, `py-3`), `data-testid?`.
+
+| Variant | Look | Use it for |
+|---|---|---|
+| `button` | secondary `Button`, an arrow and "Back", `--control-h` tall | a detail page's action cluster (trip, staff, accommodation, incident, onboarding) |
+| `icon` | ghost icon-only `Button`, 24px on a mouse and a 44px square under a coarse pointer; its tooltip carries the name | a form or wizard header with the title beside it (participant, the intake and profile wizards, enquiry, medication, agreement draft, caregiver review) |
+| `link` | primary-coloured text link with an arrow, a `--tap-min` floor, a keyboard-only focus ring | a page with no action cluster (the portal, claim batch detail) |
+
+**Accessibility**: always a real `<a href>` (open in a new tab and copy-link work); it is never a `<button>` that navigates. The visible text is "Back" and the accessible name is "Back to {label}" (it contains
+the visible text). 44px under a coarse pointer in every variant, visible focus ring, first in the tab order of its header.
+
+**History.** With `history` on, the hook `useBackTarget(to)` runs inside the component: when the user arrived from another in-app screen, Back returns there and `to` is only the fallback for a deep link or a
+reload; the name then says where it really goes ("Back to Dashboard", or "Go back" for a screen with no known name). Because the hook lives in the component, a page can render a BackButton after an early return
+without a hook below it (the class of bug #155 fixed on the onboarding page). `history={false}` pins Back to `to`: use it on a record page reached from many places where "up to the list" is the meaning, and
+wherever the previous screen can be a form the user has just saved. A change of query on the same path (a tab or a filter written with `replace`) is the same screen, never a predecessor.
+
+**In-page back.** `onBack` (and no `to`) renders a real `<button>` for a view that is switched in place and has no route to link to (the tenant detail pane inside Settings). Prefer giving the view a URL.
+
+```tsx
+<BackButton to="/staff" label="staff" history={false} />                             {/* header action cluster */}
+<BackButton to={`/participants/${id}`} label="participant" variant="icon" className="mt-1" />   {/* beside a title */}
+<BackButton to="/portal" label="my shifts" variant="link" history={false} />
+```
+
+---
+
 ## FactBar
 
 `FactBar.tsx` — a read-only strip of `label / value [badge]` segments for a detail page. Props: `segments`
@@ -722,6 +789,22 @@ the strip whenever `active` changes; from `md` up it wraps onto extra rows as be
 > When a test previously did `getByRole('button', { name: <tab> })`, it is now
 > `getByRole('tab', { name: <tab> })` — the role change is the accessibility fix, not a
 > cosmetic one.
+
+---
+
+## useTabParam
+
+`hooks/useTabParam.ts` keeps a page's active tab in the URL as `?tab=`, so a reload, a bookmark and a shared link land on the same tab. The URL is the only source of truth: there is no copy in component
+state, so a link to `?tab=bookings` clicked while the page is open switches it too.
+
+```tsx
+const TAB_KEYS: Tab[] = ['overview', 'bookings', 'history']
+const [tab, setTab] = useTabParam(TAB_KEYS, 'overview')
+<Tabs tabs={tabs} active={tab} onChange={setTab} ariaLabel="Trip sections" />
+```
+
+`tab` is the key in the URL when it is one of `keys`, else `defaultKey`; `setTab(key)` ignores a key that is not in the list. It writes with `setSearchParams(prev => …, { replace: true })`, so switching tabs
+does not stack history entries, it keeps every other query param, and it deletes `tab` when the key is the default, so the default tab has the clean URL. Used by the trip, participant, staff and Participants hub pages.
 
 ---
 

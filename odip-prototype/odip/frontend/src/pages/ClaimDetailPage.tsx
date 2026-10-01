@@ -12,6 +12,8 @@ import { formatCurrency, formatDateAu } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { FactBar } from '@/components/FactBar'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
@@ -39,7 +41,7 @@ async function downloadFile(url: string, filename: string) {
 
 export default function ClaimDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { data: claim, isLoading } = useClaim(id)
+  const { data: claim, isLoading, isError, error, refetch } = useClaim(id)
   const updateClaim = useUpdateClaim()
   const updateLineItem = useUpdateClaimLineItem()
   const [noShowTarget, setNoShowTarget] = useState<ClaimLineItemDto | null>(null)
@@ -56,8 +58,12 @@ export default function ClaimDetailPage() {
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(!!claim && notes !== (claim.notes || ''))
 
-  if (isLoading) return <div className="p-[var(--card-pad)] text-[var(--color-muted-foreground)]">Loading...</div>
-  if (!claim) return <div className="p-[var(--card-pad)] text-[var(--color-muted-foreground)]">Claim not found</div>
+  if (isLoading) return <PageState kind="loading" noun="claim" />
+  if (!claim) {
+    return isError && !isNotFoundError(error)
+      ? <PageState kind="error" noun="claim" onRetry={() => refetch()} />
+      : <PageState kind="not-found" noun="claim" backTo="/billing" backLabel="billing" />
+  }
 
   const totalAmount = (claim.lineItems ?? []).reduce((sum: number, l: ClaimLineItemDto) => sum + (l.totalAmount ?? 0), 0)
 

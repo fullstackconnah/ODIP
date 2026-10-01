@@ -1,8 +1,11 @@
 import { useParams } from 'react-router-dom'
 import { useAccommodationDetail } from '@/api/hooks'
-import { ArrowLeft, Pencil } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Card } from '@/components/Card'
 import { FactList } from '@/components/FactList'
@@ -14,24 +17,14 @@ const FACT_LIST_WRAP = 'grid-cols-[10rem_minmax(0,1fr)]! [&_dd]:break-words'
 
 export default function AccommodationDetailPage() {
   const { id } = useParams()
-  const { data: property, isLoading, isError, refetch } = useAccommodationDetail(id)
+  const { data: property, isLoading, isError, error, refetch } = useAccommodationDetail(id)
 
-  if (isLoading) return <div className="text-center py-12 text-[var(--color-muted-foreground)]">Loading...</div>
-  if (isError) return (
-    <div className="text-center py-12 space-y-3">
-      <p className="text-sm text-[var(--color-muted-foreground)]" role="alert">
-        Failed to load this property. Check your connection and try again.
-      </p>
-      <button
-        type="button"
-        onClick={() => refetch()}
-        className="inline-flex items-center justify-center h-9 px-4 rounded-lg border border-[var(--color-border)] text-sm font-medium hover:bg-[var(--color-accent)] transition-colors"
-      >
-        Try again
-      </button>
-    </div>
-  )
-  if (!property) return <div className="text-center py-12 text-[var(--color-muted-foreground)]">Property not found</div>
+  if (isLoading) return <PageState kind="loading" noun="property" />
+  if (!property) {
+    return isError && !isNotFoundError(error)
+      ? <PageState kind="error" noun="property" onRetry={() => refetch()} />
+      : <PageState kind="not-found" noun="property" backTo="/accommodation" backLabel="accommodation" />
+  }
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
@@ -45,9 +38,7 @@ export default function AccommodationDetailPage() {
         }
         action={
           <div className="flex gap-2 shrink-0">
-            <Button to="/accommodation" variant="secondary" size="md">
-              <ArrowLeft className="w-4 h-4" /> Back
-            </Button>
+            <BackButton to="/accommodation" label="accommodation" history={false} />
             <Button to={`/accommodation/${id}/edit`} variant="primary" size="md">
               <Pencil className="w-4 h-4" /> Edit
             </Button>

@@ -1,4 +1,4 @@
-import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   useParticipant, useParticipantBookings, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf,
   useGenerateCaregiverLink, useRevokeCaregiverLink, useCaregiverSubmissions,
@@ -12,7 +12,11 @@ import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
 import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
-import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, FileText, CalendarRange } from 'lucide-react'
+import { BackButton } from '@/components/BackButton'
+import { useTabParam } from '@/hooks/useTabParam'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
+import { Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, FileText, CalendarRange } from 'lucide-react'
 import { useState, useSyncExternalStore } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
@@ -67,21 +71,19 @@ const ROW_LINK = 'inline-flex min-h-[var(--tap-min)] items-center font-medium ho
  */
 const COMPACT_EMPTY_TABLE = '[&_table:has(td[colspan])_thead]:hidden [&_td[colspan]]:py-5'
 
+/** The tabs, in strip order. The active one is `?tab=` (`useTabParam`), so a reload or a shared link keeps it; an unknown value reads as Details. */
+const TAB_KEYS = ['details', 'contacts', 'bookings', 'support', 'medications', 'notes', 'routines', 'restrictive-practices', 'claims', 'rostering', 'history'] as const
+
 export default function ParticipantDetailPage() {
   const { canWrite, canViewAlerts, canWriteParticipantDetails, canAccessPage, isAdmin, isSuperAdmin } = usePermissions()
   const { id } = useParams()
   const isMdUp = useIsMdUp()
-  const [searchParams] = useSearchParams()
-  type Tab = 'details' | 'contacts' | 'bookings' | 'support' | 'medications' | 'notes' | 'routines' | 'restrictive-practices' | 'claims' | 'rostering' | 'history'
-  const initialTab = searchParams.get('tab')
-  const [tab, setTab] = useState<Tab>(
-    initialTab === 'contacts' || initialTab === 'bookings' || initialTab === 'support' || initialTab === 'medications' || initialTab === 'notes' || initialTab === 'routines' || initialTab === 'restrictive-practices' || initialTab === 'claims' || initialTab === 'rostering' || initialTab === 'history' ? initialTab : 'details'
-  )
+  const [tab, setTab] = useTabParam(TAB_KEYS, 'details')
   const canAccessClaims = canAccessPage('claims')
   // Connection map item 12 — the Rostering tab, same canAccessPage gate RosterBoardPage itself
   // uses (see lib/permissions.ts's SUPPORT_WORKER_PAGES — SupportWorker is excluded).
   const canAccessRostering = canAccessPage('rostering')
-  const { data: p, isLoading } = useParticipant(id)
+  const { data: p, isLoading, isError, error, refetch } = useParticipant(id)
   const { data: bookings = [] } = useParticipantBookings(id)
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
   // DOC-01 — Documents header buttons. Hooks called unconditionally, ahead of the isLoading/!p
@@ -94,17 +96,19 @@ export default function ParticipantDetailPage() {
   // header. See this branch's report for the reversible product call.
   const downloadClientOverview = useDownloadClientOverviewPdf()
 
-  if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
-  if (!p) return <div className="text-center py-12">Participant not found</div>
+  if (isLoading) return <PageState kind="loading" noun="participant" />
+  if (!p) {
+    return isError && !isNotFoundError(error)
+      ? <PageState kind="error" noun="participant" onRetry={() => refetch()} />
+      : <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
+  }
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <div className="flex items-start gap-2">
-        {/* iconOnly is a --control-h-sm square (36px on a coarse pointer); the --tap-min floor lifts it to
+        {/* The icon variant is a --control-h-sm square (36px on a coarse pointer); its --tap-min floor lifts it to
             44 there and is 0 — no change — on a mouse. */}
-        <Button to="/participants" variant="ghost" size="md" iconOnly aria-label="Back to participants" className="mt-1 min-h-[var(--tap-min)] min-w-[var(--tap-min)] shrink-0">
-          <ArrowLeft className="w-4 h-4" />
-        </Button>
+        <BackButton to="/participants" label="participants" variant="icon" history={false} className="mt-1" />
         <div className="flex-1 min-w-0">
           <PageHeader
             title={p.fullName}
@@ -232,7 +236,7 @@ export default function ParticipantDetailPage() {
             </div>
           )}
           {canViewAlerts && alertsData && (
-            <ParticipantAlertsBanner alerts={alertsData.alerts} onSelectTab={(t) => setTab(t as typeof tab)} />
+            <ParticipantAlertsBanner alerts={alertsData.alerts} onSelectTab={setTab} />
           )}
         </div>
       </div>
@@ -252,7 +256,7 @@ export default function ParticipantDetailPage() {
           ...((isSuperAdmin || isAdmin) ? [{ id: 'history' as const, label: 'History' }] : []),
         ]}
         active={tab}
-        onChange={(key) => setTab(key as typeof tab)}
+        onChange={setTab}
         ariaLabel="Participant detail sections"
       />
 
@@ -349,7 +353,7 @@ export default function ParticipantDetailPage() {
       )}
 
       {tab === 'support' && (
-        <SupportProfileTab participantId={id} onNavigateToTab={(t) => setTab(t as typeof tab)} />
+        <SupportProfileTab participantId={id} onNavigateToTab={setTab} />
       )}
 
       {tab === 'medications' && (

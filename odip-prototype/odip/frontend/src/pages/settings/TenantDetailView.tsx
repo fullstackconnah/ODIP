@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
-import { Users, UserCheck, Clock, ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react'
+import { Users, UserCheck, Clock, ChevronDown, ChevronRight } from 'lucide-react'
+import { BackButton } from '@/components/BackButton'
 import { useAdminTenantUsers } from '@/api/hooks/settings'
 import { useAdminTenantProviderSettings } from '@/api/hooks/admin'
 import { DataTable } from '@/components/DataTable'
@@ -52,14 +53,7 @@ export default function TenantDetailView({
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
       {/* ── Back / Breadcrumb ──────────────────────────────────── */}
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to Tenants
-      </button>
+      <BackButton onBack={onBack} label="tenants" variant="link" />
 
       {/* ── Header ─────────────────────────────────────────────── */}
       <div className="flex items-start justify-between">

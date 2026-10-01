@@ -1,10 +1,10 @@
-import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
 import type { AxiosError } from 'axios'
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Plus, X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import { useCreateMedication, useUpdateMedication, useMedication, useParticipant } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField, labelClass } from '@/components/FormField'
@@ -19,6 +19,7 @@ import { formatDateAu } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
 import { plural } from '@/lib/format'
 
 // Which medication forms make clinical sense for a given administration route. Used only to
@@ -293,9 +294,7 @@ export default function MedicationFormPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="flex items-center gap-4">
-        <Link to={backTo} className="p-2 rounded-[var(--radius-md)] hover:bg-[var(--color-accent)] transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
+        <BackButton to={backTo} label="medications" variant="icon" history={false} />
         <div className="flex-1">
           <PageHeader title={isEdit ? 'Edit Medication' : 'New Medication'} subtitle={participant?.fullName} />
         </div>

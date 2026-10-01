@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, AlertTriangle, Accessibility, Armchair, Pill, Clock } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { AlertTriangle, Accessibility, Armchair, Pill, Clock } from 'lucide-react'
 import { usePortalShiftDetail, useShiftNotes, useStartShift, useFinishShift } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
 import { StatusBadge } from '@/components/StatusBadge'
+import { BackButton } from '@/components/BackButton'
 import { MedicationBadges } from '@/pages/medications/MedicationBadges'
 import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import { AT_RISK_PARTY_LABELS } from '@/api/types/risk-entries'
@@ -189,9 +190,7 @@ export default function PortalShiftDetailPage() {
   if (isError || !shift) {
     return (
       <div className="space-y-4 animate-fade-in">
-        <Link to="/portal" className="inline-flex items-center gap-1 py-3 text-sm text-[var(--color-primary)] hover:underline">
-          <ArrowLeft className="w-4 h-4" /> Back to My Shifts
-        </Link>
+        <BackButton to="/portal" label="my shifts" variant="link" history={false} className="py-3" />
         <p className="text-sm text-[var(--color-muted-foreground)]" role="alert">
           This shift couldn't be found. It may not be yours, it may have been removed from the roster, or the
           request may have failed to load — check your connection and try again.
@@ -229,9 +228,7 @@ export default function PortalShiftDetailPage() {
 
   return (
     <div className="space-y-6 animate-fade-in pb-8">
-      <Link to="/portal" className="inline-flex items-center gap-1 py-3 text-sm text-[var(--color-primary)] hover:underline">
-        <ArrowLeft className="w-4 h-4" /> Back to My Shifts
-      </Link>
+      <BackButton to="/portal" label="my shifts" variant="link" history={false} className="py-3" />
 
       {/* Shift time/status */}
       <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-5">

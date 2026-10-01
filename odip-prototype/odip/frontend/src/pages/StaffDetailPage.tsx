@@ -1,10 +1,14 @@
-import { useParams, useSearchParams, Link } from 'react-router-dom'
-import { useMemo, useState } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import { useMemo } from 'react'
 import { useStaffOverview, useSettings } from '@/api/hooks'
 import { Tabs } from '@/components/Tabs'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
+import { useTabParam } from '@/hooks/useTabParam'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { DataTable } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
@@ -15,7 +19,7 @@ import { DEADLINE_TONE, deadlineLabel } from '@/lib/deadline'
 import { formatShiftTimeRange, formatVarianceMinutes } from '@/pages/rostering/lib/roster'
 import AvailabilityList from '@/pages/schedule/AvailabilityList'
 import {
-  ArrowLeft, Pencil, CalendarOff, CalendarClock, ShieldCheck, ClipboardList, AlertTriangle, ClipboardCheck,
+  Pencil, CalendarOff, CalendarClock, ShieldCheck, ClipboardList, AlertTriangle, ClipboardCheck,
 } from 'lucide-react'
 import type { StaffOverviewUpcomingShiftDto, StaffOverviewTripAssignmentDto } from '@/api/types/staff'
 import type { IncidentListDto } from '@/api/types/incidents'
@@ -37,16 +41,12 @@ function credentialBadge(row: StaffCredential) {
 
 export default function StaffDetailPage() {
   const { id } = useParams()
-  const [searchParams] = useSearchParams()
   const { canWrite, canAccessPage } = usePermissions()
   const canAccessLeaveApprovals = canAccessPage('leave-approvals')
 
-  const initialTab = searchParams.get('tab')
-  const [tab, setTab] = useState<Tab>(
-    initialTab && (TAB_KEYS as string[]).includes(initialTab) ? (initialTab as Tab) : 'availability'
-  )
+  const [tab, setTab] = useTabParam(TAB_KEYS, 'availability')
 
-  const { data: overview, isLoading } = useStaffOverview(id)
+  const { data: overview, isLoading, isError, error, refetch } = useStaffOverview(id)
   const { data: settings } = useSettings()
   const warningDays = settings?.qualificationWarningDays ?? 30
 
@@ -55,8 +55,12 @@ export default function StaffDetailPage() {
     [overview, warningDays]
   )
 
-  if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
-  if (!overview) return <div className="text-center py-12">Staff member not found</div>
+  if (isLoading) return <PageState kind="loading" noun="staff member" />
+  if (!overview) {
+    return isError && !isNotFoundError(error)
+      ? <PageState kind="error" noun="staff member" onRetry={() => refetch()} />
+      : <PageState kind="not-found" noun="staff member" backTo="/staff" backLabel="staff" />
+  }
 
   const { staff } = overview
   // Join only the parts that exist: an empty position used to leave the row starting with a
@@ -75,9 +79,7 @@ export default function StaffDetailPage() {
         }
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <Button to="/staff" variant="secondary" size="md" aria-label="Back to staff">
-              <ArrowLeft className="w-4 h-4" /> Back
-            </Button>
+            <BackButton to="/staff" label="staff" history={false} />
             {canAccessLeaveApprovals && (
               <Button to={`/rostering/leave?userId=${id}`} variant="secondary" size="md">
                 <CalendarOff className="w-4 h-4" /> Leave & availability
@@ -101,7 +103,7 @@ export default function StaffDetailPage() {
           { id: 'completions', label: 'Completions', icon: ClipboardCheck },
         ]}
         active={tab}
-        onChange={(key) => setTab(key as Tab)}
+        onChange={setTab}
         ariaLabel="Staff detail sections"
       />
 

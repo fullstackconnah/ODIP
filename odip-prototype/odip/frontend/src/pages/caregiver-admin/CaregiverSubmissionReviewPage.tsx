@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
 import { useCaregiverSubmission, useAcceptCaregiverSubmission, useRejectCaregiverSubmission } from '@/api/hooks/caregiver'
 import { computeCaregiverDiff, type DiffRow } from '@/lib/caregiverDiff'
 import { usePermissions } from '@/lib/permissions'
@@ -8,6 +7,9 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Modal } from '@/components/Modal'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { formatDateAu } from '@/lib/utils'
 
 /**
@@ -24,7 +26,7 @@ export default function CaregiverSubmissionReviewPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { canWriteParticipantDetails } = usePermissions()
-  const { data: s, isLoading } = useCaregiverSubmission(id)
+  const { data: s, isLoading, isError, error, refetch } = useCaregiverSubmission(id)
   const accept = useAcceptCaregiverSubmission()
   const reject = useRejectCaregiverSubmission()
   const [confirmAccept, setConfirmAccept] = useState(false)
@@ -37,23 +39,18 @@ export default function CaregiverSubmissionReviewPage() {
     [rows],
   )
 
-  if (isLoading) return <p>Loading…</p>
-  if (!s) return <p>Submission not found.</p>
+  if (isLoading) return <PageState kind="loading" noun="submission" />
+  if (!s) {
+    return isError && !isNotFoundError(error)
+      ? <PageState kind="error" noun="submission" onRetry={() => refetch()} />
+      : <PageState kind="not-found" noun="submission" backTo="/caregiver-submissions" backLabel="caregiver submissions" />
+  }
   const canAct = canWriteParticipantDetails && s.status === 'Submitted'
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <div className="flex items-start gap-3">
-        <Button
-          to="/caregiver-submissions"
-          variant="ghost"
-          size="sm"
-          iconOnly
-          className="mt-0.5"
-          aria-label="Back to caregiver submissions"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </Button>
+        <BackButton to="/caregiver-submissions" label="caregiver submissions" variant="icon" history={false} className="mt-0.5" />
         <div className="flex-1">
           <PageHeader
             title={s.participantName}

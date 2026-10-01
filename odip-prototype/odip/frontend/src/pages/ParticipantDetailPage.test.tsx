@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import ParticipantDetailPage from './ParticipantDetailPage'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import type { ParticipantChecklistItemDto } from '@/api/types/checklist-items'
@@ -1018,5 +1018,95 @@ describe('ParticipantDetailPage — coarse-pointer targets and empty tables', ()
       const wrapper = screen.getByTestId(testId).parentElement!
       expect(wrapper).toHaveClass('col-span-full', '[&_table:has(td[colspan])_thead]:hidden', '[&_td[colspan]]:py-5')
     }
+  })
+})
+
+describe('ParticipantDetailPage — failed request vs. missing record (PageState)', () => {
+  it('names a failed request as a failure, with a retry, and does not call it "Participant not found"', () => {
+    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
+    renderAt('p-1')
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this participant")
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.queryByText('Participant not found')).not.toBeInTheDocument()
+  })
+
+  it('shows "Participant not found" for a 404, with nothing to retry', () => {
+    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch: vi.fn() })
+    renderAt('p-1')
+
+    expect(screen.getByText('Participant not found')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to participants' })).toHaveAttribute('href', '/participants')
+  })
+
+  it('shows "Participant not found" for an answer with no record, and says "Loading participant…" while it loads', () => {
+    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
+    const { unmount } = renderAt('p-1')
+    expect(screen.getByText('Participant not found')).toBeInTheDocument()
+    unmount()
+
+    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
+    renderAt('p-1')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading participant…')
+  })
+})
+
+/** Exposes the router's live location, so a test can assert what a tab switch wrote to the URL. */
+function LocationProbe({ onChange }: { onChange: (value: string) => void }) {
+  const { pathname, search } = useLocation()
+  onChange(`${pathname}${search}`)
+  return null
+}
+
+describe('ParticipantDetailPage — the tab lives in the URL (useTabParam)', () => {
+  function renderWithUrl(url: string) {
+    let current = url
+    const view = render(
+      <MemoryRouter initialEntries={[url]}>
+        <LocationProbe onChange={value => { current = value }} />
+        <Routes>
+          <Route path="/participants/:id" element={<ParticipantDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    return { ...view, url: () => current }
+  }
+
+  beforeEach(() => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+  })
+
+  it('writes ?tab= when a tab is chosen, and the chosen tab is the selected one', async () => {
+    const user = userEvent.setup()
+    const page = renderWithUrl('/participants/x-1')
+    await user.click(screen.getByRole('tab', { name: 'Bookings' }))
+    expect(page.url()).toBe('/participants/x-1?tab=bookings')
+    expect(screen.getByRole('tab', { name: 'Bookings' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('keeps the tab across a reload or a shared link: a fresh render of the written URL lands on the same tab', async () => {
+    const user = userEvent.setup()
+    const first = renderWithUrl('/participants/x-1')
+    await user.click(screen.getByRole('tab', { name: 'Bookings' }))
+    const written = first.url()
+    first.unmount()
+    renderWithUrl(written)
+    expect(screen.getByRole('tab', { name: 'Bookings' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('drops the param when the default tab is chosen, and every other param survives both ways', async () => {
+    const user = userEvent.setup()
+    const page = renderWithUrl('/participants/x-1?from=dash&tab=bookings')
+    await user.click(screen.getByRole('tab', { name: 'Details' }))
+    expect(page.url()).toBe('/participants/x-1?from=dash')
+    await user.click(screen.getByRole('tab', { name: 'Bookings' }))
+    expect(page.url()).toBe('/participants/x-1?from=dash&tab=bookings')
+  })
+
+  it('reads an unknown ?tab= as the default tab', () => {
+    renderWithUrl('/participants/x-1?tab=bogus')
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'true')
   })
 })

@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { generateItineraryPdf } from './ItineraryPdf'
 import { Dropdown } from './Dropdown'
 import { EmptyState } from './EmptyState'
+import { PageState } from './PageState'
 
 interface TripAdminData {
   eventTemplateName?: string | null
@@ -68,14 +69,16 @@ const activityStatusStyle: Record<string, string> = {
 }
 
 export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
-  const { data: itinerary, isLoading, isError } = useTripItinerary(tripId)
+  const { data: itinerary, isLoading, isError, refetch } = useTripItinerary(tripId)
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
-  if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading itinerary...</div>
-  // Rendered inline at the top of the pane (size="inline"), not centered in an otherwise-empty
-  // viewport void, so it reads as part of the page rather than a floating standalone state.
-  if (isError || !itinerary) {
+  if (isLoading) return <PageState kind="loading" noun="itinerary" />
+  if (!itinerary) {
+    // A failed request is not an empty itinerary: offer the retry instead of the "no schedule yet" hint.
+    if (isError) return <PageState kind="error" noun="itinerary" onRetry={() => refetch()} />
+    // Rendered inline at the top of the pane (size="inline"), not centered in an otherwise-empty
+    // viewport void, so it reads as part of the page rather than a floating standalone state.
     return (
       <EmptyState
         size="inline"

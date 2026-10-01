@@ -1,5 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useMemo } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
@@ -8,6 +7,7 @@ import { ParticipantsTable } from './ParticipantsPage'
 import { OnboardingTable } from './OnboardingPage'
 import { InquiriesTable } from './InquiriesPage'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import { useTabParam } from '@/hooks/useTabParam'
 import { usePermissions } from '@/lib/permissions'
 
 /** Canonical order for the lifecycle-stage tabs. */
@@ -36,10 +36,7 @@ const TABS: { id: TabId; label: string; title: string; description: string }[] =
 
 const DEFAULT_TAB: TabId = 'active'
 
-function readTabFromUrl(search: string): TabId {
-  const raw = new URLSearchParams(search).get('tab')
-  return TABS.some(t => t.id === raw) ? (raw as TabId) : DEFAULT_TAB
-}
+const TAB_KEYS: TabId[] = TABS.map(t => t.id)
 
 /**
  * Hub page that unifies the Enquiries, Onboarding and Active participants routes
@@ -53,24 +50,11 @@ function readTabFromUrl(search: string): TabId {
  * /participants/new-inquiry page.
  */
 export default function ParticipantsHubPage() {
-  // Read the tab from the ROUTER's location, never window.location: this keeps the page correct
-  // under MemoryRouter in tests and under BrowserRouter in the app, with no cross-test leakage.
-  const location = useLocation()
-  const navigate = useNavigate()
   const { canManageParticipantLifecycle } = usePermissions()
-  const [activeId, setActiveId] = useState<TabId>(() => readTabFromUrl(location.search))
+  // The stage is `?tab=` (shareable and bookmarkable; the default drops the param) and the URL is its only source, read from the ROUTER's
+  // location so the page is correct under MemoryRouter in tests and BrowserRouter in the app.
+  const [activeId, selectTab] = useTabParam(TAB_KEYS, DEFAULT_TAB)
   const activeMeta = TABS.find(t => t.id === activeId) ?? TABS[2]
-
-  // Mirror the active tab into the URL (?tab=…) so a stage is shareable/bookmarkable. Uses the
-  // router's history so the entry belongs to the same history stack the app navigates with.
-  const selectTab = useCallback((id: string) => {
-    setActiveId(id as TabId)
-    const params = new URLSearchParams(location.search)
-    if (id === DEFAULT_TAB) params.delete('tab')
-    else params.set('tab', id)
-    const query = params.toString()
-    navigate(`${location.pathname}${query ? `?${query}` : ''}`, { replace: true })
-  }, [location.pathname, location.search, navigate])
 
   // Each body export renders its own PageHeader via its standalone page wrapper
   // (e.g. ParticipantsPage), but inside the hub we only want ONE h1 / document

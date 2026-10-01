@@ -6,14 +6,11 @@ import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
 import { FactBar } from '@/components/FactBar'
 import { formatCurrency, formatDateAu } from '@/lib/utils'
 import { formatDateTimeAu, plural } from '@/lib/format'
 import { CheckCircle2, Clock, Download, FileWarning, Loader2 } from 'lucide-react'
-
-const linkBtn =
-  'text-xs font-medium text-[var(--color-primary)] hover:underline focus-visible:outline-none ' +
-  'focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded'
 
 // Decorative skeleton for the initial load — avoids a layout jump between the loading and
 // loaded states, and avoids a bare spinner per the surface's quality bar.
@@ -79,8 +76,8 @@ export default function ClaimBatchDetailPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/billing/claim-batches" className={linkBtn}>← Back to Claim Batches</Link>
+      <div className="flex">
+        <BackButton to="/billing/claim-batches" label="claim batches" variant="link" history={false} />
       </div>
 
       <PageHeader

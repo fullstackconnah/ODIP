@@ -1,9 +1,12 @@
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Pill, CalendarClock, FileText } from 'lucide-react'
+import { Pill, CalendarClock, FileText } from 'lucide-react'
 import { useIncident } from '@/api/hooks'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { FactList } from '@/components/FactList'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
@@ -28,10 +31,14 @@ function FlagChip({ category }: { category: ShiftNoteFlagCategory }) {
 
 export default function IncidentDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { data: incident, isLoading } = useIncident(id)
+  const { data: incident, isLoading, isError, error, refetch } = useIncident(id)
 
-  if (isLoading) return <div className="p-[var(--card-pad)] text-[var(--color-muted-foreground)]">Loading...</div>
-  if (!incident) return <div className="p-[var(--card-pad)] text-[var(--color-muted-foreground)]">Incident not found</div>
+  if (isLoading) return <PageState kind="loading" noun="incident" />
+  if (!incident) {
+    return isError && !isNotFoundError(error)
+      ? <PageState kind="error" noun="incident" onRetry={() => refetch()} />
+      : <PageState kind="not-found" noun="incident" backTo="/incidents" backLabel="incidents" />
+  }
 
   const hasContext = !!(incident.medicationContext || incident.shiftContext || incident.shiftNoteContext)
   const shiftNoteFlags = incident.shiftNoteContext ? incident.shiftNoteContext.flaggedCategories : []
@@ -52,10 +59,7 @@ export default function IncidentDetailPage() {
         }
         action={
           <div className="flex shrink-0 items-center gap-2">
-            <Button to="/incidents" variant="secondary" size="md">
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </Button>
+            <BackButton to="/incidents" label="incidents" history={false} />
             <Button to={`/incidents/${incident.id}/edit`} variant="secondary" size="md">
               Edit
             </Button>

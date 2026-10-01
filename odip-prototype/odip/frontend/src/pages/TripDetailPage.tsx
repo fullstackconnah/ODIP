@@ -1,13 +1,17 @@
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { usePermissions } from '@/lib/permissions'
 import { useTrip, useTripBookings, useTripAccommodation, useTripVehicles, useTripStaff, useTripTasks, useTripSchedule, useTripClaims, useTripIncidents, useParticipants } from '@/api/hooks'
 import { formatDateRange } from '@/lib/dateRange'
-import { ArrowLeft, Users, Building2, Truck, UserCog, ListChecks, Calendar, Pencil, ClipboardList, ClockIcon, FileText, ShieldAlert } from 'lucide-react'
+import { Users, Building2, Truck, UserCog, ListChecks, Calendar, Pencil, ClipboardList, ClockIcon, FileText, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { Tabs, type TabItem } from '@/components/Tabs'
 import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
+import { useTabParam } from '@/hooks/useTabParam'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TRIP_STATUS_LABELS } from '@/lib/tone'
 import { FactBar, type FactBarSegment } from '@/components/FactBar'
@@ -29,19 +33,10 @@ export default function TripDetailPage() {
   const currentUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
   const isAdmin = currentUser.role === 'Admin'
   // PP-60: URL-synced so a shared/reloaded link lands on the same tab.
-  const [searchParams, setSearchParams] = useSearchParams()
-  const tabParam = searchParams.get('tab')
-  const activeTab: Tab = (tabParam && (TAB_KEYS as string[]).includes(tabParam) ? tabParam : 'overview') as Tab
-  const setActiveTab = (tab: Tab) => {
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev)
-      next.set('tab', tab)
-      return next
-    }, { replace: true })
-  }
+  const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'overview')
   const [showEditTrip, setShowEditTrip] = useState(false)
 
-  const { data: trip, isLoading } = useTrip(id)
+  const { data: trip, isLoading, isError, error, refetch } = useTrip(id)
   const { data: bookings = [] } = useTripBookings(id)
   const { data: accommodation = [] } = useTripAccommodation(id)
   const { data: vehicles = [] } = useTripVehicles(id)
@@ -64,8 +59,12 @@ export default function TripDetailPage() {
   const isReadOnly = trip?.status === 'Cancelled' || trip?.status === 'Archived'
 
   if (!id) return null
-  if (isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading trip...</div>
-  if (!trip) return <div className="text-center py-12">Trip not found</div>
+  if (isLoading) return <PageState kind="loading" noun="trip" />
+  if (!trip) {
+    return isError && !isNotFoundError(error)
+      ? <PageState kind="error" noun="trip" onRetry={() => refetch()} />
+      : <PageState kind="not-found" noun="trip" backTo="/trips" backLabel="trips" />
+  }
 
   const tabs: TabItem[] = [
     { id: 'overview', label: 'Overview', icon: ClipboardList },
@@ -131,10 +130,7 @@ export default function TripDetailPage() {
         }
         action={
           <div className="flex gap-2 shrink-0">
-            <Button to="/trips" variant="secondary" size="md">
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </Button>
+            <BackButton to="/trips" label="trips" history={false} />
             {canWrite && (
               <Button variant="primary" size="md" onClick={() => setShowEditTrip(true)}>
                 <Pencil className="w-4 h-4" />
@@ -152,7 +148,7 @@ export default function TripDetailPage() {
         <Tabs
           tabs={tabs.map(t => ({ ...t, panelId: `trip-tabpanel-${t.id}` }))}
           active={activeTab}
-          onChange={key => setActiveTab(key as Tab)}
+          onChange={setActiveTab}
           ariaLabel="Trip detail sections"
         />
       </div>
