@@ -479,21 +479,39 @@ the room ("Grace Palmer-Hughes" reads whole at 1920).
 
 ### Navigation
 
+- **Menu:** one config (`components/layout/navConfig.ts`) feeds the sidebar, the drawer and the bottom bar, so a page is added, moved or
+  renamed in one place. Eight top-level entries, four of them collapsible groups: Dashboard, My Shifts, **Trips** (All Trips, Schedule,
+  Bookings, Accommodation, Vehicles, Tasks), **Participants** (Participants, Medications, Caregiver forms), **Staff & roster** (Board,
+  Patterns, Compatibility, Leave, Completions, Staff, Qualifications), **Finance** (Billing, Claim batches), Incidents, Settings.
+  Incidents stays flat on purpose: it is time-critical and one click. The menu is per role. A SupportWorker starts from My Shifts (`/`
+  sends them there) and sees only that, Trips (All Trips, Schedule, Tasks), Participants (Participants, Medications) and Incidents.
+  ReadOnly is not offered what its API refuses: the five Rostering pages, Finance, Caregiver forms and Settings. A group left with one
+  visible page is drawn as that page, and one with none is not drawn.
 - **Sidebar:** 232px, Sidebar Grey (`#f5f3ef`) surface, 12px padding, 48px brand block, and the nav
   straight under it: there is no call-to-action slot, and no create shortcut anywhere in the shell (a trip
   is created from the "New Trip" Button in the Trips page header). Items are 32px tall, `rounded-md` (not
   pills), `text-sm`; group children are 28px. Every item, and "Sign Out", carries a `--tap-min` floor, so
   on touch (the drawer, or a touch tablet's permanent sidebar) they are 44px and the list scrolls inside
   the drawer. The active item is Pale Sprout with near-black bold text; inactive is Slate Blue medium with
-  a Mist-step hover.
+  a Mist-step hover. A group header is a toggle (a native button with `aria-expanded`), not a link. Which groups are open is remembered
+  (localStorage, by group id: only the user's own toggles are saved, and a group opens by itself for the page you are on). A closed group
+  shows the total of its children's pending counts and announces it ("7 approvals pending, Staff & roster"); one that holds the current
+  page takes the Pale Sprout fill and `aria-current`. Icon ligatures are `aria-hidden`, so a name is the label alone.
 - **Header:** 48px sticky, translucent Warm Paper with backdrop blur; global search is 32px tall and 360px
   wide from `md` and 44px on touch (the box takes the floor, the input stretches to fill it). The SuperAdmin tenant and user switchers take a `--tap-min` floor (44px fits the header)
   and show only their badge below `sm`, the name moving into the button's accessible name and tooltip.
-- **Mobile:** below `lg` a bottom bar of the page links a role may open (Dashboard, Trips, People,
-  Settings; a SupportWorker sees the first three). They share the row in equal-width cells, so the spacing
-  stays even whichever are gated out, and each has a `--tap-min` floor; the bar has no create action. The
-  active item is olive text. The open drawer and its scrim sit above the bottom bar (z 60 and 55 over 50;
-  from `lg` the sidebar drops back to 50 so modals still cover it), so "Sign Out" is never covered by it.
+- **Mobile:** below `lg` a bottom bar of four pages and **More**, generated from the same config. Office roles: Dashboard, Trips, Roster
+  (the Staff & roster group, with its pending count) and Participants. A SupportWorker: My Shifts (with its count), Trips, Participants and
+  Incidents. A group's cell is lit on any page of the group, and **More** opens the drawer and is lit on every page the bar does not list,
+  so the bar always says where you are. The five cells share the row in equal widths (`flex-1`), each with a `--tap-min` floor; the bar has
+  no create action. The active item is olive text.
+- **Drawer:** the sidebar, slid over the page below `lg`. Open, it is a modal dialog ("Main menu"): Escape closes it, Tab stays inside it,
+  the page behind does not scroll, and focus goes onto its first item and comes back to what opened it (the header toggle or More).
+  Closed below `lg` it is `inert`, so its links are out of the Tab order and the accessibility tree; from `lg` it is the permanent
+  sidebar and none of this applies. The open drawer and its scrim sit above the bottom bar (z 60 and 55 over 50; from `lg` the sidebar
+  drops back to 50 so modals still cover it), so "Sign Out" is never covered by it.
+- **A page that throws, or is still loading,** takes over the page area, not the shell: the sidebar, header and bar stay (a lazy chunk
+  shows "Loading..." in the page area, and a crash shows the error with its nav a click from safety), and navigating away clears the error.
 - **Tabs:** `text-sm` medium, olive underline on the active tab, `--tap-min` minimum height; the active tab lives in the URL (`?tab=`, through `useTabParam`: written with `replace`, dropped at the default, other params kept), so a reload and a shared link land on the same tab; count
   chips are round. Below `md` the strip is ONE row that scrolls sideways (`flex-nowrap`, scrollbar hidden),
   so ten tabs cost a single 44px row on a phone instead of five wrapped ones, and the active tab is scrolled
