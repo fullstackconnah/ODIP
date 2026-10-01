@@ -84,16 +84,19 @@ describe('QualificationsPage: the list', () => {
     expect(screen.queryByText('Flo Fine')).not.toBeInTheDocument()
   })
 
-  it('spells every status in words and in sentence case', () => {
+  // The status cell is the compact form (a narrow table cell; each row is a wrapping card on a phone): "10 days", with "Expires in" left to the
+  // Credentials tab, which has the room.
+  it('spells every status in words and in sentence case, in the compact form', () => {
     renderList()
     expandAll()
 
     expect(screen.getAllByText('Expired')).toHaveLength(3)
     expect(screen.queryByText('EXPIRED')).not.toBeInTheDocument()
     expect(screen.getAllByText('Expires today')).toHaveLength(1)
-    for (const text of ['Expires in 1 day', 'Expires in 2 days', 'Expires in 4 days', 'Expires in 10 days', 'Expires in 30 days']) {
+    for (const text of ['1 day', '2 days', '4 days', '10 days', '30 days']) {
       expect(screen.getAllByText(text)).toHaveLength(1)
     }
+    expect(screen.queryByText(/^Expires in/)).not.toBeInTheDocument()
     expect(screen.getAllByText('Current')).toHaveLength(1)
     expect(screen.getAllByText('No date set')).toHaveLength(3)
   })
@@ -129,15 +132,15 @@ describe('QualificationsPage: the list', () => {
     expect(within(gus).queryByText('Worker Screening')).not.toBeInTheDocument()
   })
 
-  it('reads "Expires in 10 days" for a date 10 days away, even when the clocks go forward in between (Sydney, 4 Oct)', () => {
+  it('reads "10 days" for a date 10 days away, even when the clocks go forward in between (Sydney, 4 Oct)', () => {
     // In Sydney 1 Oct 00:00 to 11 Oct 00:00 is 239 hours, which the old floor(ms / 86 400 000) read as 9 days.
     if (!setZone('Australia/Sydney')) return // this runtime cannot switch zones
     pinToday() // the local parts of "today" are built in Sydney, so the local day is the 1st there
     renderList()
     expandAll()
 
-    expect(screen.getByText('Expires in 10 days')).toBeInTheDocument()
-    expect(screen.getByText('Expires in 30 days')).toBeInTheDocument() // 31 Oct
+    expect(screen.getByText('10 days')).toBeInTheDocument()
+    expect(screen.getByText('30 days')).toBeInTheDocument() // 31 Oct
     expect(screen.getByText('Current')).toBeInTheDocument() // 1 Nov, 31 days: it was "30 days" when the day count lost an hour
   })
 })

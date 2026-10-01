@@ -26,6 +26,7 @@ import type { TenantSummaryDto, AdminUserDto } from '@/api/types'
 import { usePermissions } from '@/lib/permissions'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import { plural } from '@/lib/format'
 
 function QualificationSettingsTab() {
   const { data: settings } = useSettings()
@@ -591,7 +592,7 @@ function PublicHolidaysTab() {
       { fromYear: syncFromYear, toYear: syncToYear },
       {
         onSuccess: (result) => {
-          const errSuffix = result.errors?.length > 0 ? ` (${result.errors.length} error${result.errors.length > 1 ? 's' : ''} — check server logs)` : ''
+          const errSuffix = result.errors?.length > 0 ? ` (${plural(result.errors.length, 'error')} — check server logs)` : ''
           setSyncMessage({ type: result.errors?.length > 0 ? 'warning' : 'success', text: `Sync complete: ${result.holidaysAdded} added, ${result.holidaysUpdated} updated${errSuffix}` })
           setTimeout(() => setSyncMessage(null), 4000)
         },

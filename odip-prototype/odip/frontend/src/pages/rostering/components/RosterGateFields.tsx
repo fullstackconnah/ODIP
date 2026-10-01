@@ -3,6 +3,7 @@ import { FormField } from '@/components/FormField'
 import { FindingsList } from './FindingsList'
 import { getRosterGate } from '../lib/rosterGate'
 import type { RosterFindingDto } from '@/api/types'
+import { plural } from '@/lib/format'
 
 export interface RosterGateFieldsProps {
   findings: RosterFindingDto[]
@@ -82,7 +83,7 @@ export function RosterGateFields({ findings, overrideReason, onOverrideReasonCha
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {findings.length === 0
           ? 'Roster check complete: no conflicts found.'
-          : `Roster check complete: ${findings.length} ${findings.length === 1 ? 'finding' : 'findings'}` +
+          : `Roster check complete: ${plural(findings.length, 'finding')}` +
             (blockingFindings.length > 0 ? `, ${blockingFindings.length} blocking` : '') + '.'}
       </div>
 

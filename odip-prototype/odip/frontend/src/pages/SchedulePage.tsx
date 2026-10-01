@@ -9,6 +9,7 @@ import {
 } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePermissions } from '@/lib/permissions'
+import { formatRatio, plural } from '@/lib/format'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
@@ -231,7 +232,7 @@ export default function SchedulePage() {
                           </span>
                           <TripStatusBadge status={trip.status} />
                           <span className="whitespace-nowrap">
-                            {trip.staffAssignedCount}/{trip.staffRequired ?? '?'} staff · {trip.currentParticipantCount}/{trip.maxParticipants ?? '?'} pax
+                            {formatRatio(trip.staffAssignedCount, trip.staffRequired ?? '?')} staff · {formatRatio(trip.currentParticipantCount, trip.maxParticipants ?? '?')} pax
                           </span>
                           {trip.preferenceMatchCount > 0 && (
                             <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[var(--color-warning-container)] px-2 py-0.5 text-xs font-semibold text-[var(--color-on-warning-container)]">
@@ -333,7 +334,7 @@ export default function SchedulePage() {
                                 {prefEntry && (
                                   <span
                                     className="inline-flex h-5 shrink-0 items-center rounded-full bg-[var(--color-warning)] px-1.5 text-xs font-bold leading-none text-[var(--color-foreground)]"
-                                    title={`${prefEntry.participantCount} participant${prefEntry.participantCount > 1 ? 's' : ''} prefer this staff member`}
+                                    title={`${plural(prefEntry.participantCount, 'participant')} prefer this staff member`}
                                   >
                                     ★{prefEntry.participantCount > 1 ? ` ${prefEntry.participantCount}` : ''}
                                   </span>

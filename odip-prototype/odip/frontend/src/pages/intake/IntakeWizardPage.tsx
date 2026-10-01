@@ -70,6 +70,7 @@ import { SupportNeedsStep } from './steps/SupportNeedsStep'
 import { MedicalSummaryStep } from './steps/MedicalSummaryStep'
 import { BehaviourSummaryStep } from './steps/BehaviourSummaryStep'
 import { RisksHazardsStep } from './steps/RisksHazardsStep'
+import { plural } from '@/lib/format'
 
 const CULTURAL_TRI_STATE_FIELDS = [
   'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
@@ -493,7 +494,7 @@ export default function IntakeWizardPage() {
                 surfaced here read-only so resuming doesn't look like they've vanished. */}
             {isEditMode && existingContactRoles.length > 0 && (
               <div className="mb-3 p-3 rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm">
-                <p className="font-medium mb-1">{existingContactRoles.length} contact{existingContactRoles.length === 1 ? '' : 's'} already recorded</p>
+                <p className="font-medium mb-1">{plural(existingContactRoles.length, 'contact')} already recorded</p>
                 <ul className="list-disc list-inside space-y-0.5">
                   {existingContactRoles.map((role) => (
                     <li key={role.id}>{role.personFullName || 'Unnamed contact'} — {role.roleType}</li>
@@ -533,7 +534,7 @@ export default function IntakeWizardPage() {
                 section, surfaced here read-only so resuming doesn't look like they've vanished. */}
             {isEditMode && existingRiskEntries.length > 0 && (
               <div className="mb-3 p-3 rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm">
-                <p className="font-medium mb-1">{existingRiskEntries.length} risk {existingRiskEntries.length === 1 ? 'entry' : 'entries'} already recorded</p>
+                <p className="font-medium mb-1">{plural(existingRiskEntries.length, 'risk entry', 'risk entries')} already recorded</p>
                 <ul className="list-disc list-inside space-y-0.5">
                   {existingRiskEntries.map((entry) => (
                     <li key={entry.id}>{entry.description}</li>

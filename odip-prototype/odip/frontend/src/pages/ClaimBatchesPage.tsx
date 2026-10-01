@@ -6,14 +6,8 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/Button'
 import { usePermissions } from '@/lib/permissions'
+import { formatDateTimeAu, plural } from '@/lib/format'
 import { Layers, FileStack } from 'lucide-react'
-
-function formatDateTimeAu(value: string | null | undefined): string {
-  if (!value) return '—'
-  return new Date(value).toLocaleString('en-AU', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  })
-}
 
 export default function ClaimBatchesPage() {
   const navigate = useNavigate()
@@ -62,7 +56,7 @@ export default function ClaimBatchesPage() {
           read as a real empty list rather than a failure. */}
       <PageHeader
         title="Claim Batches"
-        subtitle={isError ? undefined : `${batches.length} claim batch${batches.length !== 1 ? 'es' : ''}`}
+        subtitle={isError ? undefined : plural(batches.length, 'claim batch', 'claim batches')}
         action={canWrite && (
           <Button to="/billing/claim-batches/new" size="md">
             <Layers className="w-4 h-4" /> Build claim batch

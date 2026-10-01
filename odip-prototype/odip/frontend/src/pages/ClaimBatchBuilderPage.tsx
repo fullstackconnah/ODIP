@@ -21,6 +21,7 @@ import {
   Loader2,
   ShieldCheck,
 } from 'lucide-react'
+import { plural } from '@/lib/format'
 
 // ── Filter option list — driven by the shared IncomeStream enum ──
 
@@ -201,7 +202,7 @@ export default function ClaimBatchBuilderPage() {
   let createHelpText = ''
   if (selectedCount === 0) createHelpText = 'Select at least one event to create a batch.'
   else if (!validation || isValidationStale) createHelpText = 'Validate the current selection before creating a batch.'
-  else if (errorCount > 0) createHelpText = `Resolve ${errorCount} error${errorCount !== 1 ? 's' : ''} before creating a batch.`
+  else if (errorCount > 0) createHelpText = `Resolve ${plural(errorCount, 'error')} before creating a batch.`
   const createHelpId = 'create-batch-help'
 
   // ── Table columns ────────────────────────────────────────────────────────
@@ -309,7 +310,7 @@ export default function ClaimBatchBuilderPage() {
 
       <PageHeader
         title="Build Claim Batch"
-        subtitle={`${events.length} unclaimed event${events.length !== 1 ? 's' : ''}${filtersActive ? ' matching filters' : ''}`}
+        subtitle={`${plural(events.length, 'unclaimed event')}${filtersActive ? ' matching filters' : ''}`}
       />
 
       {/* Filters */}
@@ -370,7 +371,7 @@ export default function ClaimBatchBuilderPage() {
           <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--radius-md)] p-[var(--card-pad)]">
             <div>
               <p className="text-sm font-semibold text-[var(--color-foreground)]">
-                {selectedCount} event{selectedCount !== 1 ? 's' : ''} selected
+                {plural(selectedCount, 'event')} selected
               </p>
               <p className="text-xs text-[var(--color-muted-foreground)]">Total {formatCurrency(selectedTotal)}</p>
             </div>
@@ -440,8 +441,8 @@ export default function ClaimBatchBuilderPage() {
                 <>
                   <CircleAlert className="w-5 h-5 shrink-0 mt-0.5" />
                   <p>
-                    <strong>{errorCount} error{errorCount !== 1 ? 's' : ''}</strong>
-                    {warningCount > 0 ? ` and ${warningCount} warning${warningCount !== 1 ? 's' : ''}` : ''} found.
+                    <strong>{plural(errorCount, 'error')}</strong>
+                    {warningCount > 0 ? ` and ${plural(warningCount, 'warning')}` : ''} found.
                     Fix the flagged events before creating a batch — nothing was created.
                   </p>
                 </>
@@ -450,7 +451,7 @@ export default function ClaimBatchBuilderPage() {
                   <ShieldCheck className="w-5 h-5 shrink-0 mt-0.5" />
                   <p>
                     <strong>Validation passed</strong>
-                    {warningCount > 0 ? ` with ${warningCount} warning${warningCount !== 1 ? 's' : ''}` : ''} —
+                    {warningCount > 0 ? ` with ${plural(warningCount, 'warning')}` : ''} —
                     nothing was changed. You can now create the batch.
                   </p>
                 </>
@@ -514,7 +515,7 @@ export default function ClaimBatchBuilderPage() {
         message={
           <>
             <p>
-              Create a claim batch from <strong>{selectedCount} event{selectedCount !== 1 ? 's' : ''}</strong> totalling{' '}
+              Create a claim batch from <strong>{plural(selectedCount, 'event')}</strong> totalling{' '}
               <strong>{formatCurrency(selectedTotal)}</strong>? This consumes service-booking balance and cannot be undone.
             </p>
             {createMutation.isError && (

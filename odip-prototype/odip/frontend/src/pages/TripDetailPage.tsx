@@ -11,7 +11,8 @@ import { Button } from '@/components/Button'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TRIP_STATUS_LABELS } from '@/lib/tone'
 import { FactBar, type FactBarSegment } from '@/components/FactBar'
-import { glanceRatio, glanceState } from '@/components/glanceState'
+import { glanceState } from '@/components/glanceState'
+import { formatRatio, plural } from '@/lib/format'
 import { OverviewTab, BookingsTab, AccommodationTab, VehiclesTab, StaffTab, TasksTab, ActivitiesTab, ClaimsTab, IncidentsTab, EditTripModal } from './trip-detail'
 
 /** Material Symbols category glyph for a fact-bar segment — the same icons the pre-density stat
@@ -82,14 +83,14 @@ export default function TripDetailPage() {
   // Each segment's chip AND its attention tint come from one tone (`glanceState`), so the strip can never tint a
   // segment its own badge calls fine. Waitlist is warning; Action Needed and Outstanding are negative; the rest
   // (Active, On Track, Covered, the wheelchair count) are quiet and keep the card fill. Every "x / y" figure is spelled
-  // by `glanceRatio`, so the ratios in one strip cannot drift apart at display size.
+  // by `formatRatio`, so the ratios in one strip cannot drift apart at display size.
   const insuranceConfirmed = trip.insuranceConfirmedCount ?? 0
   const insuranceOutstanding = trip.insuranceOutstandingCount ?? 0
   const factBarSegments: FactBarSegment[] = [
     {
       label: 'Participants / Staff',
       icon: factIcon('groups'),
-      value: glanceRatio(trip.currentParticipantCount, trip.staffAssignedCount),
+      value: formatRatio(trip.currentParticipantCount, trip.staffAssignedCount),
       ...((trip.waitlistCount ?? 0) > 0 ? glanceState('warning', 'Waitlist') : glanceState('positive', 'Active')),
     },
     {
@@ -101,13 +102,13 @@ export default function TripDetailPage() {
     {
       label: 'High Support / Overnight',
       icon: factIcon('accessible'),
-      value: glanceRatio(trip.highSupportCount ?? 0, trip.overnightSupportCount ?? 0),
+      value: formatRatio(trip.highSupportCount ?? 0, trip.overnightSupportCount ?? 0),
       ...glanceState('neutral', `${trip.wheelchairCount ?? 0} WC`),
     },
     {
       label: 'Insurance',
       icon: factIcon('health_and_safety'),
-      value: glanceRatio(insuranceConfirmed, insuranceConfirmed + insuranceOutstanding),
+      value: formatRatio(insuranceConfirmed, insuranceConfirmed + insuranceOutstanding),
       ...(insuranceOutstanding > 0 ? glanceState('negative', 'Outstanding') : glanceState('positive', 'Covered')),
     },
   ]
@@ -125,7 +126,7 @@ export default function TripDetailPage() {
             {trip.destination}
             {trip.tripCode && <span className="font-mono text-[var(--color-secondary)]">{trip.tripCode}</span>}
             {formatDateRange(trip.startDate, trip.endDate)}
-            {typeof trip.durationDays === 'number' && `${trip.durationDays} ${trip.durationDays === 1 ? 'day' : 'days'}`}
+            {typeof trip.durationDays === 'number' && plural(trip.durationDays, 'day')}
           </PageHeaderMeta>
         }
         action={

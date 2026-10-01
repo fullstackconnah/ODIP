@@ -240,3 +240,29 @@ describe('NotesTab', () => {
     expect(screen.queryByRole('button', { name: /new note/i })).not.toBeInTheDocument()
   })
 })
+
+describe('NotesTab — how long ago', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('reads the age of a note in running text (formatRelative, long), counting a timestamp sent without a zone as UTC', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-09-30T13:30:00Z'))
+    mockUseParticipantNotes.mockReturnValue({
+      data: [
+        makeNote({ id: 'a', title: 'Two days', createdAt: '2026-09-28T12:00:00Z' }),
+        makeNote({ id: 'b', title: 'Zone-less', createdAt: '2026-09-30T11:30:00' }),
+        makeNote({ id: 'c', title: 'Moments', createdAt: '2026-09-30T13:29:40Z' }),
+        makeNote({ id: 'd', title: 'Old', createdAt: '2026-06-22T00:00:00Z' }),
+      ],
+      isLoading: false,
+    })
+    render(<NotesTab participantId="participant-1" />)
+
+    expect(screen.getByText(/Sam Coordinator · 2 days ago/)).toBeInTheDocument()
+    expect(screen.getByText(/Sam Coordinator · 2 hrs ago/)).toBeInTheDocument()
+    expect(screen.getByText(/Sam Coordinator · just now/)).toBeInTheDocument()
+    expect(screen.getByText(/Sam Coordinator · 3 months ago/)).toBeInTheDocument()
+  })
+})

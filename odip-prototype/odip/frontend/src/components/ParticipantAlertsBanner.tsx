@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { ParticipantAlertDto } from '@/api/types'
 import { ALERT_SEVERITY_STYLES } from './alertSeverityStyles'
+import { plural } from '@/lib/format'
 
 export type ParticipantAlertsBannerProps = {
   /** Already ranked Critical-first by the backend (ParticipantAlertsService) — rendered as-is. */
@@ -74,7 +75,7 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
           aria-expanded={false}
           className="w-full text-left text-xs font-medium text-[var(--color-muted-foreground)] px-3 py-1 rounded-[var(--radius-md)] hover:bg-[var(--color-accent)] transition-colors"
         >
-          +{hiddenCount} more alert{hiddenCount === 1 ? '' : 's'}
+          +{plural(hiddenCount, 'more alert')}
         </button>
       )}
       {expanded && alerts.length > VISIBLE_ALERT_LIMIT && (

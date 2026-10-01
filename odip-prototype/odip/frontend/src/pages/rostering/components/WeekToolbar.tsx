@@ -4,6 +4,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { formatWeekRange } from '../lib/roster'
 import type { BoardViewMode } from '../lib/useBoardViewMode'
+import { plural } from '@/lib/format'
 
 export type WeekToolbarProps = {
   days: string[]
@@ -110,7 +111,7 @@ export function WeekToolbar({
         )}
         <Button variant="secondary" size="md" onClick={onOpenExceptions}>
           <AlertTriangle className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          {exceptionsCount} exception{exceptionsCount === 1 ? '' : 's'}
+          {plural(exceptionsCount, 'exception')}
         </Button>
         {canWrite && (
           <Button size="md" onClick={onNewShift}>

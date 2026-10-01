@@ -10,6 +10,7 @@ import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
 import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
 import type { VehicleType, RosterFindingDto } from '@/api/types'
 import { Dropdown } from './Dropdown'
+import { plural } from '@/lib/format'
 
 interface AddVehicleModalProps {
   tripInstanceId: string
@@ -220,7 +221,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
             </div>
 
             <p className="text-xs text-[var(--color-muted-foreground)]">
-              {filteredVehicles.length} vehicle{filteredVehicles.length !== 1 ? 's' : ''} available
+              {plural(filteredVehicles.length, 'vehicle')} available
             </p>
 
             <div className="space-y-2 max-h-64 overflow-y-auto">

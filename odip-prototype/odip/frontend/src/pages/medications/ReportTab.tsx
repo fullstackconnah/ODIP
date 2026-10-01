@@ -9,6 +9,7 @@ import { WITNESS_STATUS_LABELS } from '@/api/types/medications'
 import type { AdministrationDto } from '@/api/types/medications'
 import { formatWithTimeZone } from '@/lib/utils'
 import type { Tone } from '@/lib/tone'
+import { plural } from '@/lib/format'
 
 const ADMIN_STATUS_COLOR_MAP: Record<string, Tone> = {
   administered: 'success',
@@ -109,7 +110,7 @@ export default function ReportTab() {
         </div>
         {report && !rangeInvalid && (
           <span className="text-sm text-[var(--color-muted-foreground)] ml-auto">
-            {report.totalCount} administration{report.totalCount === 1 ? '' : 's'}
+            {plural(report.totalCount, 'administration')}
           </span>
         )}
       </div>

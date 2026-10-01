@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { MessageSquare, AlertCircle, AlertTriangle, FileCheck } from 'lucide-react'
 import { useShiftNotes, useCreateShiftNote, useUpdateShiftNote, useAcknowledgeShiftNoteFlags } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
-import { formatWithTimeZone } from '@/lib/utils'
+import { formatNoteTimestamp, formatRatio } from '@/lib/format'
 import type { ShiftNoteDto } from '@/api/types'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
@@ -14,15 +14,11 @@ const textareaClass = 'w-full px-3 py-2 rounded-lg bg-[var(--color-input)] borde
 const primaryButtonClass = 'min-h-[44px] inline-flex items-center justify-center px-4 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2'
 const ghostButtonClass = 'min-h-[44px] inline-flex items-center justify-center px-3 rounded-lg text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2'
 
-function formatNoteTimestamp(iso: string): string {
-  return formatWithTimeZone(iso, undefined, { dateStyle: 'medium', timeStyle: 'short' })
-}
-
 function CharCount({ length }: { length: number }) {
   const nearCap = length >= BODY_MAX_LENGTH * 0.9
   return (
     <span className={`text-xs ${nearCap ? 'font-medium text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>
-      {length} / {BODY_MAX_LENGTH}
+      {formatRatio(length, BODY_MAX_LENGTH)}
     </span>
   )
 }

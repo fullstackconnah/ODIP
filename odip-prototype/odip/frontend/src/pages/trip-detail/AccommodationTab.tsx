@@ -10,6 +10,7 @@ import {
 } from '@/api/hooks'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { TONE } from '@/lib/tone'
+import { formatRatio, plural } from '@/lib/format'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { DataTable, type Column } from '@/components/DataTable'
@@ -300,7 +301,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-[var(--color-muted-foreground)]">{accommodation.length} reservation{accommodation.length !== 1 ? 's' : ''}</p>
+        <p className="text-sm text-[var(--color-muted-foreground)]">{plural(accommodation.length, 'reservation')}</p>
         {canWrite && (
           <Button variant="primary" size="md" onClick={() => { resetAccommForm(); setShowAddAccommodation(true) }}>
             <Plus className="w-4 h-4" /> Add Accommodation
@@ -332,7 +333,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
               <h3 className="text-sm font-semibold">Stay Timeline</h3>
               {coverage && (
                 <span className={`text-xs font-medium ${coverage.allCovered ? 'text-[var(--color-success)]' : 'text-[var(--color-destructive)]'}`}>
-                  {coverage.allCovered ? `All ${coverage.totalNights} nights covered` : `${coverage.coveredNights}/${coverage.totalNights} nights covered`}
+                  {coverage.allCovered ? `All ${coverage.totalNights} nights covered` : `${formatRatio(coverage.coveredNights, coverage.totalNights)} nights covered`}
                 </span>
               )}
             </div>

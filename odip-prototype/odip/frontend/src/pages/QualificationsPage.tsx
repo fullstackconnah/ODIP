@@ -291,7 +291,8 @@ export default function QualificationsPage() {
                       {
                         key: 'status',
                         header: 'Status',
-                        render: (q) => <StatusBadge tone={DEADLINE_TONE[q.state.status]} label={deadlineLabel(q.state, 'long')} />,
+                        // The compact form: this is a narrow table cell (on a phone each row is a wrapping card), and the column header already says Status.
+                        render: (q) => <StatusBadge tone={DEADLINE_TONE[q.state.status]} label={deadlineLabel(q.state, 'compact')} />,
                       },
                       {
                         key: 'actions',

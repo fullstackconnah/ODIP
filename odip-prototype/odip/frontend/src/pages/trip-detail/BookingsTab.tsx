@@ -7,6 +7,7 @@ import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { TAP_ICON_SQUARE } from '@/components/tapArea'
 import { getStatusColor } from '@/lib/utils'
+import { formatRatio, plural } from '@/lib/format'
 import { INSURANCE_STATUSES, type BookingStatus, type InsuranceStatus, type PaymentStatus, type SupportRatio } from '@/api/types/enums'
 import { Plus, X, AlertTriangle, Pencil, ExternalLink, Trash2, Download, Loader2 } from 'lucide-react'
 import type { TripDetailDto } from '@/api/types/trips'
@@ -603,12 +604,12 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
             <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-3">
               <p className="text-xs text-[var(--color-muted-foreground)]">Staff Required</p>
               <p className="text-xl font-bold mt-1">{rounded} <span className="text-sm font-normal text-[var(--color-muted-foreground)]">({rawTotal.toFixed(2)})</span></p>
-              {noRatioCount > 0 && <p className="text-xs text-[var(--color-warning)] mt-1">{noRatioCount} participant{noRatioCount > 1 ? 's' : ''} without ratio</p>}
+              {noRatioCount > 0 && <p className="text-xs text-[var(--color-warning)] mt-1">{plural(noRatioCount, 'participant')} without ratio</p>}
             </div>
             <div className={`rounded-[var(--radius-md)] p-3 ${isStaffed ? 'bg-[var(--color-primary-fixed)]/30' : 'bg-[var(--color-error-container)]/60'}`}>
               <p className="text-xs text-[var(--color-muted-foreground)]">Staff Assigned</p>
               <p className={`text-xl font-bold mt-1 ${isStaffed ? 'text-[var(--color-success)]' : 'text-[var(--color-destructive)]'}`}>
-                {assigned}/{rounded}
+                {formatRatio(assigned, rounded)}
               </p>
               <p className={`text-xs mt-1 ${isStaffed ? 'text-[var(--color-success)]' : 'text-[var(--color-destructive)]'}`}>
                 {isStaffed ? 'Fully staffed' : `Need ${rounded - assigned} more`}

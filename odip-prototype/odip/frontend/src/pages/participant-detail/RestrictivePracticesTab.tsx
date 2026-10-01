@@ -17,6 +17,7 @@ import {
   RESTRICTIVE_PRACTICE_TYPES, RESTRICTIVE_PRACTICE_TYPE_LABELS,
 } from '@/api/types/restrictive-practices'
 import type { RestrictivePracticeDto, RestrictivePracticeType, BulkCreateRestrictivePracticeDto } from '@/api/types/restrictive-practices'
+import { plural } from '@/lib/format'
 
 /** One row of the "Add entries" bulk table — client-side draft state before it becomes its own register entry. */
 type BulkRowState = {
@@ -752,7 +753,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
               disabled={bulkCreatePractices.isPending}
               className="min-h-[44px] px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
             >
-              {bulkCreatePractices.isPending ? 'Saving...' : `Save ${bulkRows.length} ${bulkRows.length === 1 ? 'entry' : 'entries'}`}
+              {bulkCreatePractices.isPending ? 'Saving...' : `Save ${plural(bulkRows.length, 'entry', 'entries')}`}
             </button>
           </>
         }

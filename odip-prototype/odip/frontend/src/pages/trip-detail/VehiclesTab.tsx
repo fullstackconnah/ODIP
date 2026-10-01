@@ -3,6 +3,7 @@ import { Plus, XCircle, AlertTriangle, Car } from 'lucide-react'
 import AddVehicleModal from '@/components/AddVehicleModal'
 import { getStatusColor } from '@/lib/utils'
 import { TONE } from '@/lib/tone'
+import { formatRatio } from '@/lib/format'
 import type { VehicleAssignmentDto } from '@/api/types/vehicles'
 import type { StaffAssignmentDto } from '@/api/types/staff'
 
@@ -39,7 +40,7 @@ export default function VehiclesTab({ tripId, vehicles, staff, canWrite }: Vehic
           <div className="flex items-center gap-3">
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${TONE.warning.soft} ${TONE.warning.ink}`}>
               <AlertTriangle className="w-4 h-4" />
-              <span>{assigned} / {needed} · need {shortfall} more</span>
+              <span>{formatRatio(assigned, needed)} · need {shortfall} more</span>
             </div>
             <span className="text-xs text-[var(--color-muted-foreground)]">
               {tripDrivers.map((s: StaffAssignmentDto) => s.staffName).join(', ')}
@@ -49,7 +50,7 @@ export default function VehiclesTab({ tripId, vehicles, staff, canWrite }: Vehic
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-[var(--color-primary-fixed)]/30 text-[var(--color-success)]">
               <Car className="w-4 h-4" />
-              <span>{assigned} / {needed}</span>
+              <span>{formatRatio(assigned, needed)}</span>
             </div>
             <span className="text-xs text-[var(--color-muted-foreground)]">
               {tripDrivers.map((s: StaffAssignmentDto) => s.staffName).join(', ')}

@@ -11,6 +11,7 @@ import { CalendarCheck } from 'lucide-react'
 import { useState } from 'react'
 import type { BookingStatus } from '@/api/types/enums'
 import type { BookingListDto } from '@/api/types/bookings'
+import { plural } from '@/lib/format'
 
 // Statuses that end a participant's involvement in a trip — confirmed before applying, same
 // pattern as AccommodationPage's/VehiclesPage's archive confirms.
@@ -47,7 +48,7 @@ export default function BookingsPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Bookings"
-        subtitle={`${totalCount} booking${totalCount !== 1 ? 's' : ''}`}
+        subtitle={plural(totalCount, 'booking')}
       />
 
       {isLoading ? <div className="text-center py-12 text-[var(--color-muted-foreground)]">Loading...</div> : bookings.length === 0 ? (

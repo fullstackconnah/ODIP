@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { usePermissions } from '@/lib/permissions'
 import { readIntakeCompleteNotice } from './intake/intakeComplete'
+import { plural } from '@/lib/format'
 
 type WorklistRow = {
   participantId: string
@@ -42,7 +43,7 @@ export default function OnboardingPage() {
     <div className="flex flex-col gap-[var(--section-gap)]">
       <PageHeader
         title="Onboarding"
-        subtitle={`${screen.allRowsCount} participant${screen.allRowsCount !== 1 ? 's' : ''} in progress. Onboarding doesn't activate a participant or allow bookings, rostering, invoicing or claims.`}
+        subtitle={`${plural(screen.allRowsCount, 'participant')} in progress. Onboarding doesn't activate a participant or allow bookings, rostering, invoicing or claims.`}
       >
         {screen.allRowsCount > 0 && <SearchInput value={screen.search} onChange={screen.setSearch} placeholder="Search participants, stages or gates..." />}
       </PageHeader>

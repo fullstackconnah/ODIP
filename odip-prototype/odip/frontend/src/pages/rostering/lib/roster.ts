@@ -1,5 +1,6 @@
 import { addDays, addWeeks, format, parseISO, startOfWeek } from 'date-fns'
 import { formatShiftTime } from '@/lib/utils'
+import { formatRatio } from '@/lib/format'
 
 // Re-exported so existing `from '../lib/roster'` imports across the rostering feature keep
 // working unchanged — the implementation itself now lives in the shared lib alongside
@@ -103,7 +104,7 @@ export function barOverlapsWeek(startDate: string, endDate: string, days: string
 
 export function formatHoursMeter(rostered: number, target: number): string {
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
-  return `${fmt(rostered)} / ${fmt(target)} h`
+  return `${formatRatio(fmt(rostered), fmt(target))} h`
 }
 
 /**

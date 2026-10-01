@@ -102,8 +102,9 @@ describe('SchedulePage — density (spec §7)', () => {
     const strip = screen.getByRole('group', { name: 'Resource health' })
     const value = (label: string) => within(strip).getByText(label).nextElementSibling?.textContent
     expect(value('Active Trips')).toBe('2')
-    expect(value('Staff')).toBe('1/2')
-    expect(value('Vehicles')).toBe('1/1')
+    // A ratio is always "x / y" (formatRatio), a space each side of the slash.
+    expect(value('Staff')).toBe('1 / 2')
+    expect(value('Vehicles')).toBe('1 / 1')
     // A plain count: the old zero-padded "01" read as a code, not a number.
     expect(value('Conflicts')).toBe('1')
     expect(value('Utilization')).toBe('67%')

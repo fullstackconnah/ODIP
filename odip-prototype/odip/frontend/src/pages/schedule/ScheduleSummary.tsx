@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { AlertTriangle, CheckCircle } from 'lucide-react'
+import { formatRatio } from '@/lib/format'
 
 export type ScheduleSummaryProps = {
   tripCount: number
@@ -39,11 +40,11 @@ export default function ScheduleSummary({
       <dl className="flex min-h-[var(--row-h)] flex-wrap items-center">
         <Segment label="Active Trips">{tripCount}</Segment>
         <Segment label="Staff">
-          {staffAssigned}/{staffTotal}
+          {formatRatio(staffAssigned, staffTotal)}
           <CheckCircle className="h-4 w-4 text-[var(--color-primary)]" aria-hidden="true" />
         </Segment>
         <Segment label="Vehicles">
-          {vehiclesAssigned}/{vehiclesTotal}
+          {formatRatio(vehiclesAssigned, vehiclesTotal)}
           <CheckCircle className="h-4 w-4 text-[var(--color-primary)]" aria-hidden="true" />
         </Segment>
         <Segment label="Conflicts">

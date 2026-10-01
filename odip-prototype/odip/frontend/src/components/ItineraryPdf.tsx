@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer'
+import { formatDateAu } from '@/lib/utils'
 import type { ItineraryDto, ItineraryAccommodationDto, ItineraryVehicleDto, ItineraryStaffDto, ItineraryParticipantDto, ItineraryDayDto, ItineraryActivityDto, ItineraryDayAccommodationEventDto } from '@/api/types'
 
 type ExportVersion = 'staff' | 'participant'
@@ -69,11 +70,6 @@ function formatTime(time: string | null | undefined) {
 function parseLocalDate(date: string) {
   const [y, m, d] = date.split('-').map(Number)
   return new Date(y, m - 1, d)
-}
-
-function formatDateAu(date: string | null | undefined) {
-  if (!date) return '—'
-  return parseLocalDate(date).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 function formatDateLong(date: string) {

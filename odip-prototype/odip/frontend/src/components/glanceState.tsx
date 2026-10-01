@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { attentionOf, toneOf } from '@/lib/tone'
+import { glanceRatio } from '@/lib/format'
 import { FactChip, type FactBarAttention, type FactBarSegment, type FactChipTone } from './FactBar'
 
 /**
@@ -15,14 +16,9 @@ export function attentionForTone(tone: FactChipTone): FactBarAttention | undefin
   return attentionOf(toneOf(tone))
 }
 
-/**
- * The ONE spelling of an "x / y" figure in a glance strip: a space each side of the slash. Build every ratio through
- * this (Participants / Staff, High Support / Overnight, Insurance ...) so two figures at display size can never drift
- * apart, "12 / 10" beside "12/14". It only joins the two parts; the caller decides what a missing count means.
- */
-export function glanceRatio(numerator: number | string, denominator: number | string): string {
-  return `${numerator} / ${denominator}`
-}
+// The glance strip's one spelling of an "x / y" figure is `formatRatio` in lib/format.ts (a space each side of the slash, so two figures at
+// display size can never drift apart: "12 / 10" beside "12/14"). `glanceRatio` is its earlier name and stays exported from here.
+export { glanceRatio }
 
 /**
  * One tone decides both the chip and the segment tint of a `FactBar variant="glance"` segment, so the fill can

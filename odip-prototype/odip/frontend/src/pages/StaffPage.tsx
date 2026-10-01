@@ -14,6 +14,7 @@ import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { deadlineState } from '@/lib/deadline'
 import type { StaffListDto, UpdateStaffDto } from '@/api/types/staff'
+import { plural } from '@/lib/format'
 
 // A worker screening is expired once its expiry day has passed (expiring today is not yet expired): lib/deadline.ts, a calendar-day compare.
 const isExpired = (date: string) => deadlineState(date, { warnDays: 0 }).status === 'overdue'
@@ -162,7 +163,7 @@ export default function StaffPage() {
       <div>
         <PageHeader
           title="Staff"
-          subtitle={`${staff.length} staff member${staff.length !== 1 ? 's' : ''}`}
+          subtitle={plural(staff.length, 'staff member')}
           action={!showArchived && canWrite && (
             <Button to="/staff/new" size="md">
               <Plus className="w-4 h-4" /> New Staff

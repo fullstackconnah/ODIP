@@ -8,6 +8,7 @@ import { Modal } from '@/components/Modal'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
+import { formatRelative } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
 import { RecordAdministrationModal } from './RecordAdministrationModal'
 import { MissedMedicationGuidance } from './MissedMedicationGuidance'
@@ -60,18 +61,6 @@ function addDays(iso: string, days: number): string {
   const [y, m, d] = iso.split('-').map(Number)
   const dt = new Date(y, m - 1, d + days)
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
-}
-
-function relativeTime(iso: string | null): string {
-  if (!iso) return 'never'
-  const diffMs = Date.now() - new Date(iso).getTime()
-  const mins = Math.round(diffMs / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins} min ago`
-  const hours = Math.round(mins / 60)
-  if (hours < 24) return `${hours} hr${hours === 1 ? '' : 's'} ago`
-  const days = Math.round(hours / 24)
-  return `${days} day${days === 1 ? '' : 's'} ago`
 }
 
 const ADMIN_STATUS_COLOR_MAP: Record<string, Tone> = {
@@ -320,7 +309,7 @@ export default function MarTab() {
                       {prn.dosesInLast24h}{prn.prnMaxDosesPer24h != null ? ` of ${prn.prnMaxDosesPer24h}` : ''} doses in last 24h
                       {remaining != null && <span className="text-[var(--color-muted-foreground)]"> · {remaining} remaining</span>}
                     </span>
-                    <span className="text-xs text-[var(--color-muted-foreground)]">Last dose {relativeTime(prn.lastDoseAt)}</span>
+                    <span className="text-xs text-[var(--color-muted-foreground)]">Last dose {formatRelative(prn.lastDoseAt, { style: 'long' })}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     {canRecordAdministrations && (

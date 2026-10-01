@@ -1,3 +1,5 @@
+import { plural } from '@/lib/format'
+
 /**
  * Builds the `aria-label` a nav link carries when it shows a `NavCountBadge` — `undefined` when
  * there's nothing pending, so callers can pass it straight through without an extra conditional.
@@ -8,5 +10,5 @@
  */
 export function navBadgeLabel(count: number, noun: string, label: string): string | undefined {
   if (count <= 0) return undefined
-  return `${count} ${noun}${count === 1 ? '' : 's'} pending, ${label}`
+  return `${plural(count, noun)} pending, ${label}`
 }

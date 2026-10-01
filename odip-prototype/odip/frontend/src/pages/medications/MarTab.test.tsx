@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -183,5 +183,37 @@ describe('MarTab — connection map: incident link/file action on scheduled rows
     renderTab()
 
     expect(screen.queryByRole('button', { name: 'File incident' })).not.toBeInTheDocument()
+  })
+})
+
+describe('MarTab — Last dose', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('reads the last dose in running text: never, just now, minutes, hours, days (formatRelative, long)', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-09-30T12:00:00Z'))
+    mockUseMar.mockReturnValue({
+      data: {
+        entries: [],
+        prnMedications: [
+          prnEntry({ medicationId: 'm1', name: 'Alpha', lastDoseAt: null }),
+          prnEntry({ medicationId: 'm2', name: 'Bravo', lastDoseAt: '2026-09-30T11:59:50Z' }),
+          prnEntry({ medicationId: 'm3', name: 'Charlie', lastDoseAt: '2026-09-30T11:54:20Z' }),
+          prnEntry({ medicationId: 'm4', name: 'Delta', lastDoseAt: '2026-09-30T10:30:00Z' }),
+          prnEntry({ medicationId: 'm5', name: 'Echo', lastDoseAt: '2026-09-27T12:00:00Z' }),
+        ],
+      },
+      isLoading: false,
+    })
+    mockUseParticipants.mockReturnValue({ data: [] })
+    mockUseRecordPrnOutcome.mockReturnValue({ mutateAsync: vi.fn() })
+
+    renderTab()
+
+    for (const text of ['Last dose never', 'Last dose just now', 'Last dose 5 min ago', 'Last dose 1 hr ago', 'Last dose 3 days ago']) {
+      expect(screen.getByText(text)).toBeInTheDocument()
+    }
   })
 })

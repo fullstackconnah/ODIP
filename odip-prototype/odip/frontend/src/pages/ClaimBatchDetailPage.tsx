@@ -8,18 +8,12 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { FactBar } from '@/components/FactBar'
 import { formatCurrency, formatDateAu } from '@/lib/utils'
+import { formatDateTimeAu, plural } from '@/lib/format'
 import { CheckCircle2, Clock, Download, FileWarning, Loader2 } from 'lucide-react'
 
 const linkBtn =
   'text-xs font-medium text-[var(--color-primary)] hover:underline focus-visible:outline-none ' +
   'focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded'
-
-function formatDateTimeAu(value: string | null | undefined): string {
-  if (!value) return '—'
-  return new Date(value).toLocaleString('en-AU', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  })
-}
 
 // Decorative skeleton for the initial load — avoids a layout jump between the loading and
 // loaded states, and avoids a bare spinner per the surface's quality bar.
@@ -139,7 +133,7 @@ export default function ClaimBatchDetailPage() {
       <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
         <div className="px-[var(--card-pad)] py-2 bg-[var(--color-surface-container-low)] flex items-center justify-between">
           <h2 className="font-semibold text-sm text-[var(--color-muted-foreground)]">Batch Events</h2>
-          <span className="text-xs text-[var(--color-muted-foreground)]">{events.length} events</span>
+          <span className="text-xs text-[var(--color-muted-foreground)]">{plural(events.length, 'event')}</span>
         </div>
         {events.length === 0 ? (
           <EmptyState
