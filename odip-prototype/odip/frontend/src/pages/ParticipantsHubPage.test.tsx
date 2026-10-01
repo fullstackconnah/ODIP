@@ -16,6 +16,8 @@ vi.mock('@/api/hooks', () => ({
   useParticipants: mockUseParticipants,
   useDeleteParticipant: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateParticipant: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateParticipantStatus: () => ({ mutate: vi.fn(), isPending: false }),
+  useRestoreParticipant: () => ({ mutate: vi.fn(), isPending: false }),
   useParticipantAlertsAggregate: () => ({ data: [], isLoading: false }),
   useParticipantInquiries: mockUseParticipantInquiries,
   useCreateParticipantInquiry: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
