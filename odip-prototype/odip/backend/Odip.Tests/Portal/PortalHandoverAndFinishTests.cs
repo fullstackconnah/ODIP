@@ -4,6 +4,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Medications;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Audit;
 using Xunit;
@@ -609,12 +610,12 @@ public class PortalFinishValidationTests
     // ── the checklist must stay satisfiable (independent review findings 1 and 3) ──
 
     [Fact]
-    public async Task AWorkerWithoutMedicationCompetency_OnAShiftWithDueDoses_IsNotLockedOutOfFinish()
+    public async Task Enforce_AWorkerWithoutMedicationCompetency_OnAShiftWithDueDoses_IsNotLockedOutOfFinish()
     {
-        // Recording a dose is gated on the credential, so a worker without one could never clear a dose blocker: the two rules
-        // would be mutually unsatisfiable and Finish would be 422 forever. No dose blocks them; the coordinator's review shows what
+        // In ENFORCE mode recording a dose is gated on the credential, so a worker without one could never clear a dose blocker: the two
+        // rules would be mutually unsatisfiable and Finish would be 422 forever. No dose blocks them; the coordinator's review shows what
         // was not recorded.
-        var f = Create(workerCompetent: false);
+        var f = Create(workerCompetent: false, competencyMode: MedicationCompetencyMode.Enforce);
         f.Advance(TimeSpan.FromHours(6));   // 17:00 local
         AddNote(f);
         AddMed(f, "Levetiracetam", "09:00");
@@ -629,9 +630,9 @@ public class PortalFinishValidationTests
     }
 
     [Fact]
-    public async Task AWorkerWithoutMedicationCompetency_StillMustEndARunningBreak()
+    public async Task Enforce_AWorkerWithoutMedicationCompetency_StillMustEndARunningBreak()
     {
-        var f = Create(workerCompetent: false);
+        var f = Create(workerCompetent: false, competencyMode: MedicationCompetencyMode.Enforce);
         AddNote(f);
         AddMed(f, "Levetiracetam", "09:00");
         Detail(await f.Controller.StartBreak(f.Shift.Id, default));
@@ -642,19 +643,41 @@ public class PortalFinishValidationTests
     }
 
     [Fact]
-    public async Task AWorkerWhoseCredentialHasExpired_IsNotBlockedOnDoses_ButACurrentOneIs()
+    public async Task Enforce_AWorkerWhoseCredentialHasExpired_IsNotBlockedOnDoses_ButACurrentOneIs()
     {
-        var expired = Create();
+        var expired = Create(competencyMode: MedicationCompetencyMode.Enforce);
         expired.Worker.MedicationCompetencyExpiryDate = new DateOnly(2026, 7, 13);   // last valid day was yesterday (provider-local)
         expired.Db.SaveChanges();
         AddNote(expired);
         AddMed(expired, "Levetiracetam", "09:00");
         Assert.Equal(ShiftStatus.PendingReview, Detail(await expired.Controller.FinishShift(expired.Shift.Id, new FinishShiftDto(), default)).Status);
 
-        var current = Create();
+        var current = Create(competencyMode: MedicationCompetencyMode.Enforce);
         AddNote(current);
         AddMed(current, "Levetiracetam", "09:00");
         Assert.Single((await FinishBlocked(current)).Data!.FinishBlockers);
+    }
+
+    [Fact]
+    public async Task Warn_AWorkerWithoutTheCredentialCanRecord_SoDueDosesBlockThemLikeAnyoneElse()
+    {
+        // WARN mode (the default): recording is allowed (and flagged), so the checklist applies as for a competent worker.
+        var f = Create(workerCompetent: false);
+        f.Advance(TimeSpan.FromHours(6));   // 17:00 local
+        AddNote(f);
+        var med = AddMed(f, "Levetiracetam", "09:00");
+
+        var before = Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default));
+        Assert.True(before.CanRecordDoses);
+        Assert.Equal(MedicationCompetencyGate.WarningMessage, before.CanRecordDosesReason);
+        Assert.Single(before.FinishBlockers);
+        Assert.Single((await FinishBlocked(f)).Data!.FinishBlockers);
+
+        // They can clear it - the record is accepted and flagged - and Finish then goes through.
+        var recorded = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id,
+            new CreateAdministrationDto { Status = MedicationAdministrationStatus.Missed, Reason = "Asleep", ScheduledAt = Nine }, default);
+        Assert.IsType<OkObjectResult>(recorded.Result);
+        Assert.Equal(ShiftStatus.PendingReview, Detail(await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto(), default)).Status);
     }
 
     [Fact]

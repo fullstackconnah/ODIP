@@ -385,9 +385,9 @@ public class PortalRecordShiftDoseTests
     // ── Medication Competency (D3) ──
 
     [Fact]
-    public async Task WithoutACurrentCredential_Is403_AndNothingIsRecorded()
+    public async Task Enforce_WithoutACurrentCredential_Is403_AndNothingIsRecorded()
     {
-        var f = Create(workerCompetent: false);
+        var f = Create(workerCompetent: false, competencyMode: MedicationCompetencyMode.Enforce);
         var med = AddMed(f);
 
         var result = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Nine), default);
@@ -398,9 +398,9 @@ public class PortalRecordShiftDoseTests
     }
 
     [Fact]
-    public async Task AnExpiredCredential_Is403WithTheExpiryInTheMessage()
+    public async Task Enforce_AnExpiredCredential_Is403WithTheExpiryInTheMessage()
     {
-        var f = Create();
+        var f = Create(competencyMode: MedicationCompetencyMode.Enforce);
         f.Worker.MedicationCompetencyExpiryDate = new DateOnly(2026, 7, 1);
         f.Db.SaveChanges();
         var med = AddMed(f);
@@ -410,6 +410,54 @@ public class PortalRecordShiftDoseTests
         Assert.Equal(403, Status(result));
         Assert.Equal("MEDICATION_COMPETENCY_EXPIRED", Body(result).Code);
         Assert.Contains("1 Jul 2026", Assert.Single(Body(result).Errors!));
+    }
+
+    // ── Warn mode (the default): recorded and flagged ──
+
+    [Fact]
+    public async Task Warn_WithoutACurrentCredential_Records_AndTheRecordIsFlagged_OnThePackagePath()
+    {
+        var f = Create(workerCompetent: false);   // provider mode defaults to Warn
+        var med = AddMed(f);
+
+        var result = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Nine, key: "k1"), default);
+
+        Assert.Equal(200, Status(result));
+        Assert.True(Body(result).Data!.RecordedWithoutCompetency);
+        Assert.True((await f.Db.MedicationAdministrations.SingleAsync()).RecordedWithoutCompetency);
+        // The flag travels to the shift detail outcome (and so to the coordinator review).
+        var outcome = Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default)).MedicationsDue.Single(s => s.ScheduledAt == Nine).Outcome!;
+        Assert.True(outcome.RecordedWithoutCompetency);
+    }
+
+    [Fact]
+    public async Task Warn_AnExpiredCredential_IsFlagged_ACurrentOneIsNot()
+    {
+        var expired = Create();
+        expired.Worker.MedicationCompetencyExpiryDate = new DateOnly(2026, 7, 13);
+        expired.Db.SaveChanges();
+        var current = Create();
+
+        var flagged = await expired.Controller.RecordShiftDose(expired.Shift.Id, AddMed(expired).Id, Dose(Nine), default);
+        var clean = await current.Controller.RecordShiftDose(current.Shift.Id, AddMed(current).Id, Dose(Nine), default);
+
+        Assert.True(Body(flagged).Data!.RecordedWithoutCompetency);
+        Assert.False(Body(clean).Data!.RecordedWithoutCompetency);
+    }
+
+    [Fact]
+    public async Task TheFlag_IsAPermanentFactAboutTheRecord_NotRecomputedWhenTheCredentialIsRenewedLater()
+    {
+        var f = Create(workerCompetent: false);
+        var med = AddMed(f);
+        await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Nine), default);
+
+        f.Worker.IsMedicationCompetent = true;
+        f.Worker.MedicationCompetencyExpiryDate = new DateOnly(2099, 1, 1);
+        f.Db.SaveChanges();
+
+        Assert.True((await f.Db.MedicationAdministrations.SingleAsync()).RecordedWithoutCompetency);
+        Assert.True(Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default)).MedicationsDue.Single(s => s.ScheduledAt == Nine).Outcome!.RecordedWithoutCompetency);
     }
 
     [Fact]

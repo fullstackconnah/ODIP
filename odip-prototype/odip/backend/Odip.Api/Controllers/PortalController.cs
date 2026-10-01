@@ -196,12 +196,13 @@ public class PortalController : ControllerBase
         var shiftRoutines = ShiftPackageService.MatchRoutines(shift, routines);
 
         // The End checklist: what would stop Finish right now (only meaningful while the shift is in progress). Derived from the dose
-        // slots already fetched above, so the detail never queries them twice. A worker without a current Medication Competency cannot
-        // record a dose, so no dose blocks them (see ShiftPackageService); a dose whose time has not arrived yet never blocks either.
-        var competency = await _recorder.CheckCompetencyAsync(shift.UserId, ct);
+        // slots already fetched above, so the detail never queries them twice. In ENFORCE mode a worker without a current Medication
+        // Competency cannot record a dose, so no dose blocks them; in WARN mode (the default) they can record (flagged), so doses block
+        // them like anyone (see ShiftPackageService). A dose whose time has not arrived yet never blocks either.
+        var access = await _recorder.CheckRecordingAccessAsync(shift.UserId, ct);
         var finishBlockers = shift.Status == ShiftStatus.InProgress
             ? ShiftPackageService.BuildFinishBlockers(
-                doses.Slots, breakRunning: breakDtos.Any(b => b.IsRunning), competency.IsCurrent, NowUtc, provider.Zone)
+                doses.Slots, breakRunning: breakDtos.Any(b => b.IsRunning), access.CanRecord, NowUtc, provider.Zone)
             : new List<PortalFinishBlockerDto>();
 
         // Return context (critique P2) — "return archives the completion and GET /portal/shifts/{id}
@@ -233,9 +234,9 @@ public class PortalController : ControllerBase
             doses.Slots,
             doses.Prn,
             shiftRoutines,
-            competency.IsCurrent,
-            competency.Message,
-            competency.Code);
+            access.CanRecord,
+            access.Reason,
+            access.Code);
     }
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and RosteringController's
@@ -404,8 +405,8 @@ public class PortalController : ControllerBase
         if (shift.Status == ShiftStatus.InProgress)
         {
             var checkedCompletion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
-            var competency = await _recorder.CheckCompetencyAsync(shift.UserId, ct);
-            var blockers = await _package.GetFinishBlockersAsync(shift, checkedCompletion, competency.IsCurrent, ct);
+            var access = await _recorder.CheckRecordingAccessAsync(shift.UserId, ct);
+            var blockers = await _package.GetFinishBlockersAsync(shift, checkedCompletion, access.CanRecord, ct);
             if (blockers.Count > 0)
             {
                 var detail = (await BuildShiftDetailDtoAsync(shift, ct)) with { FinishBlockers = blockers };
@@ -527,7 +528,8 @@ public class PortalController : ControllerBase
     /// <c>POST medications/{id}/administrations</c>, which stays as it is: the shift must be InProgress, the medication must
     /// belong to the shift's participant and be Active, and a scheduled dose's <c>scheduledAt</c> must be one of the shift
     /// window's due slots (a PRN dose has none). Then the same recorder as the general endpoint applies: Medication
-    /// Competency (403), idempotency key (200 replay), one record per slot (409 with the existing record), witness, PRN limits.
+    /// Competency (403 in the provider's Enforce mode; in Warn mode the record is accepted and flagged), idempotency key (200 replay),
+    /// one record per slot (409 with the existing record), witness, PRN limits.
     /// </summary>
     [HttpPost("shifts/{id:guid}/medications/{medicationId:guid}/administrations")]
     public async Task<ActionResult<ApiResponse<AdministrationDto>>> RecordShiftDose(

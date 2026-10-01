@@ -40,7 +40,8 @@ public class ProviderSettingsController : ControllerBase
             BankAccountName = s.BankAccountName, BSB = s.BSB,
             AccountNumber = s.AccountNumber, InvoiceFooterNotes = s.InvoiceFooterNotes,
             State = s.State, ManagerName = s.ManagerName, ManagerPhone = s.ManagerPhone,
-            ParticipantReadinessMode = s.ParticipantReadinessMode
+            ParticipantReadinessMode = s.ParticipantReadinessMode,
+            MedicationCompetencyMode = s.MedicationCompetencyMode
         }));
     }
 
@@ -80,6 +81,8 @@ public class ProviderSettingsController : ControllerBase
         s.BankAccountName = dto.BankAccountName; s.BSB = dto.BSB;
         s.AccountNumber = dto.AccountNumber; s.InvoiceFooterNotes = dto.InvoiceFooterNotes;
         s.State = dto.State; s.ManagerName = dto.ManagerName; s.ManagerPhone = dto.ManagerPhone;
+        // Only when sent: saving the other fields from a form that does not know the setting must not reset Enforce to Warn.
+        if (dto.MedicationCompetencyMode is { } mode) s.MedicationCompetencyMode = mode;
 
         if (dto.ParticipantReadinessMode is { } newMode && newMode != previousMode)
         {

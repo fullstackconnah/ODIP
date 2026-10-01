@@ -44,7 +44,8 @@ internal sealed class ShiftPackageFixture
 
     public static ShiftPackageFixture Create(
         ShiftStatus status = ShiftStatus.InProgress, bool workerCompetent = true, DateTimeOffset? now = null,
-        bool withAuditing = false, Guid? tenantId = null, bool endsNextDay = false, TimeOnly? start = null, TimeOnly? end = null)
+        bool withAuditing = false, Guid? tenantId = null, bool endsNextDay = false, TimeOnly? start = null, TimeOnly? end = null,
+        MedicationCompetencyMode competencyMode = MedicationCompetencyMode.Warn)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(tenantId);
@@ -62,7 +63,7 @@ internal sealed class ShiftPackageFixture
         var db = new OdipDbContext(options.Options, tenant.Object);
         var tid = tenantId ?? Guid.Empty;
 
-        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tid, State = "NSW" });
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tid, State = "NSW", MedicationCompetencyMode = competencyMode });
         var worker = new User
         {
             Id = Guid.NewGuid(), TenantId = tid, Email = $"{Guid.NewGuid()}@example.com", Username = Guid.NewGuid().ToString(),

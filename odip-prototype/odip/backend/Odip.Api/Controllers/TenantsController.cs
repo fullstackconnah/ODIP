@@ -93,6 +93,7 @@ public class TenantsController : ControllerBase
                 BSB = ps.BSB,
                 AccountNumber = ps.AccountNumber,
                 InvoiceFooterNotes = ps.InvoiceFooterNotes,
+                MedicationCompetencyMode = ps.MedicationCompetencyMode ?? MedicationCompetencyMode.Warn,
             };
             _db.ProviderSettings.Add(settings);
         }
@@ -203,7 +204,8 @@ public class TenantsController : ControllerBase
             GSTRegistered = ps.GSTRegistered, IsPaceProvider = ps.IsPaceProvider,
             BankAccountName = ps.BankAccountName, BSB = ps.BSB,
             AccountNumber = ps.AccountNumber, InvoiceFooterNotes = ps.InvoiceFooterNotes,
-            State = ps.State, ParticipantReadinessMode = ps.ParticipantReadinessMode
+            State = ps.State, ParticipantReadinessMode = ps.ParticipantReadinessMode,
+            MedicationCompetencyMode = ps.MedicationCompetencyMode
         }));
     }
 }

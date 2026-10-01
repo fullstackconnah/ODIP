@@ -110,6 +110,13 @@ public class MedicationAdministration : ITenantEntity
     /// </summary>
     public string? IdempotencyKey { get; set; }
 
+    /// <summary>
+    /// True when the recording user did NOT hold a current Medication Competency at the time (provider mode Warn lets the record through and
+    /// flags it here; in Enforce mode such a record is refused, so it can only be false). A permanent fact about the record, never recomputed
+    /// from the user later. NOT NULL with the constant default false: every existing record reads false.
+    /// </summary>
+    public bool RecordedWithoutCompetency { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -34,6 +34,13 @@ public enum RecordAdministrationOutcome
     AlreadyRecorded,
 }
 
+/// <summary>
+/// Whether a user may record a dose right now, per the provider mode. Warn: always (a not-current credential gets <see cref="Reason"/>
+/// as a warning and the record is flagged); Enforce: only with a current credential (otherwise <see cref="Reason"/> is the refusal).
+/// <see cref="Code"/> is the competency status code (MEDICATION_COMPETENCY_MISSING / _EXPIRED / _UNVERIFIABLE) in both cases.
+/// </summary>
+public sealed record RecordingAccess(bool CanRecord, bool IsCurrent, MedicationCompetencyMode Mode, string? Reason, string? Code);
+
 public sealed record RecordAdministrationResult(
     RecordAdministrationOutcome Outcome,
     AdministrationDto? Administration = null,
@@ -57,9 +64,10 @@ public sealed record RecordAdministrationRequest(
 /// wrong-medication note, PRN reason and limits, staff-witness rule, notifications and obligation tasks)
 /// plus, in order:
 ///
-/// 1. <b>The Medication Competency gate.</b> Recording ANY administration needs a current, unexpired
-///    Medication Competency credential on the recording user — see <see cref="MedicationCompetencyGate"/>.
-///    No role bypass, including the coordinator MAR path.
+/// 1. <b>The Medication Competency gate</b>, applied per the provider <see cref="MedicationCompetencyMode"/>. A current, unexpired
+///    credential on the recording user (<see cref="MedicationCompetencyGate"/>) always records. Without one: Enforce refuses
+///    (403, no role bypass, including the coordinator MAR path); Warn (the default) records the dose and FLAGS it
+///    (<see cref="MedicationAdministration.RecordedWithoutCompetency"/>).
 /// 2. <b>Idempotent replay.</b> A submit carrying an <see cref="CreateAdministrationDto.IdempotencyKey"/> already
 ///    used for the SAME request (medication, slot and outcome) returns the earlier record (a double tap is safe); the same
 ///    key on a different request is refused, never silently dropped. The unique filtered index on the key backs this up
@@ -89,13 +97,31 @@ public sealed class MedicationAdministrationRecorder
         _clock = clock ?? TimeProvider.System;
     }
 
-    /// <summary>Evaluates the Medication Competency gate for a user at the provider-local "today".</summary>
+    /// <summary>Evaluates the Medication Competency credential for a user at the provider-local "today" (the credential only; see <see cref="CheckRecordingAccessAsync"/> for what the provider mode makes of it).</summary>
     public async Task<MedicationCompetencyCheck> CheckCompetencyAsync(Guid? userId, CancellationToken ct)
     {
         var user = userId.HasValue ? await _db.Users.FirstOrDefaultAsync(u => u.Id == userId.Value, ct) : null;
         var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
         var providerToday = DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(_clock.GetUtcNow().UtcDateTime, provider.Zone));
         return MedicationCompetencyGate.Evaluate(user, providerToday);
+    }
+
+    /// <summary>Whether <paramref name="userId"/> may record a dose now: the credential check combined with the provider mode (default Warn when there are no settings).</summary>
+    public async Task<RecordingAccess> CheckRecordingAccessAsync(Guid? userId, CancellationToken ct)
+    {
+        var check = await CheckCompetencyAsync(userId, ct);
+        var mode = await _db.ProviderSettings.Select(p => (MedicationCompetencyMode?)p.MedicationCompetencyMode).FirstOrDefaultAsync(ct)
+            ?? MedicationCompetencyMode.Warn;
+        return DescribeAccess(check, mode);
+    }
+
+    /// <summary>The pure half of <see cref="CheckRecordingAccessAsync"/>.</summary>
+    public static RecordingAccess DescribeAccess(MedicationCompetencyCheck check, MedicationCompetencyMode mode)
+    {
+        if (check.IsCurrent) return new RecordingAccess(true, true, mode, null, null);
+        return mode == MedicationCompetencyMode.Warn
+            ? new RecordingAccess(true, false, mode, MedicationCompetencyGate.WarningMessage, check.Code)
+            : new RecordingAccess(false, false, mode, check.Message, check.Code);
     }
 
     public async Task<RecordAdministrationResult> RecordAsync(RecordAdministrationRequest request, CancellationToken ct)
@@ -113,13 +139,17 @@ public sealed class MedicationAdministrationRecorder
             ? await _db.Users.FirstOrDefaultAsync(u => u.Id == request.AdministeringUserId.Value, ct)
             : null;
 
-        // ── 1. Medication Competency gate (before any validation: a worker without the credential should be
-        //       told that first, not asked to fix a reason field they cannot then submit) ──
-        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
+        // ── 1. Medication Competency (before any validation: in Enforce mode a worker without the credential should be
+        //       told that first, not asked to fix a reason field they cannot then submit). In Warn mode the record goes ahead and
+        //       is flagged RecordedWithoutCompetency. ──
+        var settings = await _db.ProviderSettings.Select(p => new { p.State, p.MedicationCompetencyMode }).FirstOrDefaultAsync(ct);
+        var provider = ProviderTimeZoneResolver.FromState(settings?.State);
         var providerToday = DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(nowUtc, provider.Zone));
         var competency = MedicationCompetencyGate.Evaluate(administeringUser, providerToday);
-        if (!competency.IsCurrent)
-            return Fail(RecordAdministrationOutcome.CompetencyRequired, competency.Message!, competency.Code);
+        var access = DescribeAccess(competency, settings?.MedicationCompetencyMode ?? MedicationCompetencyMode.Warn);
+        if (!access.CanRecord)
+            return Fail(RecordAdministrationOutcome.CompetencyRequired, access.Reason!, access.Code);
+        var recordedWithoutCompetency = !competency.IsCurrent;
 
         var participantName = MedicationMapping.ParticipantName(med.Participant);
         AdministrationDto ToDto(MedicationAdministration a) =>
@@ -253,6 +283,7 @@ public sealed class MedicationAdministrationRecorder
             Notes = dto.Notes,
             LimitBreachAcknowledged = limitBreachAcknowledged,
             IdempotencyKey = key,
+            RecordedWithoutCompetency = recordedWithoutCompetency,
         };
         _db.MedicationAdministrations.Add(admin);
 

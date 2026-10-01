@@ -556,6 +556,20 @@ public enum MedicationStatus
     Ceased
 }
 
+/// <summary>
+/// How a provider (tenant) applies the Medication Competency credential when a user records a medication administration
+/// (<c>ProviderSettings.MedicationCompetencyMode</c>). Warn is the default and the rollout setting; Enforce is the end state.
+/// </summary>
+public enum MedicationCompetencyMode
+{
+    /// <summary>Recording is allowed for anyone. A record made by a user without a current credential is flagged
+    /// (<c>MedicationAdministration.RecordedWithoutCompetency</c>) so it can be reviewed, and the portal shows a warning.</summary>
+    Warn = 0,
+
+    /// <summary>A user without a current credential is refused: 403 MEDICATION_COMPETENCY_MISSING / _EXPIRED / _UNVERIFIABLE.</summary>
+    Enforce = 1,
+}
+
 public enum MedicationAdministrationStatus
 {
     Administered,

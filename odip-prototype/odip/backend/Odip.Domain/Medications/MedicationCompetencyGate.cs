@@ -65,6 +65,10 @@ public sealed record MedicationCompetencyCheck(MedicationCompetencyStatus Status
 /// </summary>
 public static class MedicationCompetencyGate
 {
+    /// <summary>What a worker sees (<c>canRecordDosesReason</c>) when the provider is in Warn mode and their credential is not current:
+    /// they may record, and the record is flagged.</summary>
+    public const string WarningMessage = "Medication Competency not current — this record will be flagged";
+
     public const string CodeMissing = "MEDICATION_COMPETENCY_MISSING";
     public const string CodeExpired = "MEDICATION_COMPETENCY_EXPIRED";
     public const string CodeUnverifiable = "MEDICATION_COMPETENCY_UNVERIFIABLE";

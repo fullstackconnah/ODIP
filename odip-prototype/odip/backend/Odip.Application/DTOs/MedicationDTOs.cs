@@ -176,6 +176,10 @@ public record AdministrationDto
     public string? Notes { get; init; }
     public DateTime CreatedAt { get; init; }
 
+    /// <summary>True when the recording user did not hold a current Medication Competency (the provider is in Warn mode): the record was
+    /// accepted and flagged for review. Always false in Enforce mode and for records that predate the flag.</summary>
+    public bool RecordedWithoutCompetency { get; init; }
+
     /// <summary>Connection-map reverse link (Deliverable 2): id of the newest active
     /// <see cref="Odip.Domain.Entities.IncidentReport"/> whose MedicationAdministrationId points
     /// back at this administration, or null when none does.</summary>

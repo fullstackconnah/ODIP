@@ -188,6 +188,7 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         {
             await conn.OpenAsync();
             await InsertMinimalRowAsync(conn, "Tenants", new() { ["Id"] = tenantId, ["Name"] = "Test Provider", ["EmailDomain"] = $"{tenantId:N}.example.com" });
+            await InsertMinimalRowAsync(conn, "ProviderSettings", new() { ["Id"] = Guid.NewGuid(), ["TenantId"] = tenantId });   // an existing provider, before the mode column
             await InsertMinimalRowAsync(conn, "Participants", new() { ["Id"] = participantId, ["TenantId"] = tenantId, ["FirstName"] = "Sophie", ["LastName"] = "Brown" });
             await InsertMinimalRowAsync(conn, "ParticipantMedications", new() { ["Id"] = medicationId, ["TenantId"] = tenantId, ["ParticipantId"] = participantId, ["Name"] = "Levetiracetam" });
             for (var n = 0; n < 2; n++)
@@ -210,6 +211,16 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         // ...and leave the duplicates untouched, with only a filtered unique index on the (all-NULL) idempotency key.
         await using var after = new NpgsqlConnection(connectionString);
         await after.OpenAsync();
+
+        // Every existing provider is on Warn (0) and every existing record is unflagged: the constant defaults make the new columns
+        // metadata-only and keep today's recording behaviour until an Admin chooses Enforce.
+        await using (var mode = new NpgsqlCommand("SELECT \"MedicationCompetencyMode\" FROM \"ProviderSettings\" WHERE \"TenantId\" = @t", after))
+        {
+            mode.Parameters.AddWithValue("t", tenantId);
+            Assert.Equal(0, await mode.ExecuteScalarAsync());
+        }
+        await using (var flagged = new NpgsqlCommand("SELECT count(*) FROM \"MedicationAdministrations\" WHERE \"RecordedWithoutCompetency\"", after))
+            Assert.Equal(0L, await flagged.ExecuteScalarAsync());
         await using (var count = new NpgsqlCommand("SELECT count(*) FROM \"MedicationAdministrations\" WHERE \"ParticipantMedicationId\" = @m", after))
         {
             count.Parameters.AddWithValue("m", medicationId);

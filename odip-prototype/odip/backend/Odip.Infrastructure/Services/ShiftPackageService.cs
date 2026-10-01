@@ -134,7 +134,7 @@ public sealed class ShiftPackageService
 
     public static PortalDoseOutcomeDto ToOutcomeDto(MedicationAdministration a) => new(
         a.Id, a.Status, a.RecordedByName, ProviderLocalTime.AsUtc(a.AdministeredAt), a.AdministeredAtTimeZone,
-        ProviderLocalTime.AsUtc(a.CreatedAt), Clean(a.Reason), Clean(a.DoseGiven), Clean(a.Notes));
+        ProviderLocalTime.AsUtc(a.CreatedAt), Clean(a.Reason), Clean(a.DoseGiven), Clean(a.Notes), a.RecordedWithoutCompetency);
 
     private static PortalPrnDto ToPrnDto(PrnMedicationStatus p, DateTime nowUtc)
     {

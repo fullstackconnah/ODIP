@@ -334,8 +334,9 @@ public class MedicationsController : ControllerBase
     // ── Administrations ──────────────────────────────────────────────
 
     /// <summary>
-    /// Records a dose (any outcome). The recording user needs a current Medication Competency credential —
-    /// 403 with code MEDICATION_COMPETENCY_MISSING / _EXPIRED / _UNVERIFIABLE otherwise, for every role. An
+    /// Records a dose (any outcome). Per the provider's Medication Competency mode: ENFORCE - the recording user needs a current
+    /// credential, 403 with code MEDICATION_COMPETENCY_MISSING / _EXPIRED / _UNVERIFIABLE otherwise, for every role; WARN (the
+    /// default) - the dose is recorded and flagged <c>recordedWithoutCompetency</c>. An
     /// optional <c>idempotencyKey</c> makes a retry safe (200 with the first record); a scheduled dose slot
     /// that already has a record returns 409 ADMINISTRATION_ALREADY_RECORDED with that record as <c>data</c>.
     /// The logic lives in <see cref="MedicationAdministrationRecorder"/>, shared with the shift package.

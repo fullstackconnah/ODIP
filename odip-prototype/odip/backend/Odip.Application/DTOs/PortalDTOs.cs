@@ -174,12 +174,16 @@ public record PortalShiftDetailDto(
     /// routine matches a 22:00-06:00 shift). Critical first, then in time order. <see cref="Routines"/> still carries
     /// every active routine, unfiltered.</summary>
     IReadOnlyList<PortalShiftRoutineDto> ShiftRoutines,
-    /// <summary>The caller holds a current Medication Competency credential, so may record doses. The server enforces it
-    /// on every administration (403 otherwise); this lets the UI explain instead of letting the worker tap and fail.</summary>
+    /// <summary>Whether the caller may record doses, per the provider Medication Competency mode. With a current credential: true. Without
+    /// one: in ENFORCE mode false (the server answers 403 on every administration; this lets the UI explain instead of letting the worker
+    /// tap and fail), in WARN mode (the default) still TRUE - the dose is recorded and FLAGGED, and <see cref="CanRecordDosesReason"/>
+    /// carries the warning to show.</summary>
     bool CanRecordDoses,
-    /// <summary>Plain-language reason when <see cref="CanRecordDoses"/> is false; null otherwise.</summary>
+    /// <summary>Null with a current credential. Otherwise plain language: the refusal reason when <see cref="CanRecordDoses"/> is false
+    /// (Enforce), or the warning "Medication Competency not current — this record will be flagged" when it is true (Warn).</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? CanRecordDosesReason,
-    /// <summary>MEDICATION_COMPETENCY_MISSING | MEDICATION_COMPETENCY_EXPIRED | MEDICATION_COMPETENCY_UNVERIFIABLE; null when allowed.</summary>
+    /// <summary>MEDICATION_COMPETENCY_MISSING | MEDICATION_COMPETENCY_EXPIRED | MEDICATION_COMPETENCY_UNVERIFIABLE whenever the credential is
+    /// not current (in both modes: <see cref="CanRecordDoses"/> says whether it blocks); null with a current credential.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? CanRecordDosesReasonCode);
 
 // ── At a glance (need-to-know critical facts) ─────────────────────────────
@@ -290,7 +294,9 @@ public record PortalDoseOutcomeDto(
     DateTime RecordedAt,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Reason,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? DoseGiven,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Notes);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Notes,
+    /// <summary>True when the recorder did not hold a current Medication Competency (provider Warn mode): flagged for the coordinator.</summary>
+    bool RecordedWithoutCompetency);
 
 /// <summary>Whether a witness is needed for a dose and where that sign-off stands.</summary>
 public record PortalDoseWitnessDto(

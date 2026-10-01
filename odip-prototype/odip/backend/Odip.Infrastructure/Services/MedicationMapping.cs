@@ -45,5 +45,6 @@ public static class MedicationMapping
         Notes = a.Notes,
         CreatedAt = a.CreatedAt,
         IncidentId = incidentId,
+        RecordedWithoutCompetency = a.RecordedWithoutCompetency,
     };
 }

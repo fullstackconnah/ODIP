@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Medications;
 using Odip.Domain.Rostering;
 using Xunit;
 using static Odip.Tests.Portal.ShiftPackageFixture;
@@ -565,9 +566,9 @@ public class PortalShiftPackageTests
     }
 
     [Fact]
-    public void CanRecordDoses_IsFalse_WithAReasonAndCode_WhenTheCredentialIsMissing()
+    public void Enforce_CanRecordDoses_IsFalse_WithAReasonAndCode_WhenTheCredentialIsMissing()
     {
-        var detail = Get(Create(ShiftStatus.Published, workerCompetent: false));
+        var detail = Get(Create(ShiftStatus.Published, workerCompetent: false, competencyMode: MedicationCompetencyMode.Enforce));
 
         Assert.False(detail.CanRecordDoses);
         Assert.Equal("MEDICATION_COMPETENCY_MISSING", detail.CanRecordDosesReasonCode);
@@ -575,9 +576,9 @@ public class PortalShiftPackageTests
     }
 
     [Fact]
-    public void CanRecordDoses_IsFalse_WhenTheCredentialHasExpired()
+    public void Enforce_CanRecordDoses_IsFalse_WhenTheCredentialHasExpired()
     {
-        var f = Create(ShiftStatus.Published);
+        var f = Create(ShiftStatus.Published, competencyMode: MedicationCompetencyMode.Enforce);
         f.Worker.MedicationCompetencyExpiryDate = new DateOnly(2026, 7, 13);   // provider-local today is 14 July
         f.Db.SaveChanges();
 
@@ -586,5 +587,29 @@ public class PortalShiftPackageTests
         Assert.False(detail.CanRecordDoses);
         Assert.Equal("MEDICATION_COMPETENCY_EXPIRED", detail.CanRecordDosesReasonCode);
         Assert.Contains("13 Jul 2026", detail.CanRecordDosesReason);
+    }
+
+    [Fact]
+    public void Warn_CanRecordDoses_IsTrue_WithTheWarning_AndTheSpecificCode_WhenTheCredentialIsMissing()
+    {
+        var detail = Get(Create(ShiftStatus.Published, workerCompetent: false));   // Warn is the default mode
+
+        Assert.True(detail.CanRecordDoses);
+        Assert.Equal("Medication Competency not current — this record will be flagged", detail.CanRecordDosesReason);
+        Assert.Equal("MEDICATION_COMPETENCY_MISSING", detail.CanRecordDosesReasonCode);
+    }
+
+    [Fact]
+    public void Warn_CanRecordDoses_IsTrue_WithTheWarning_AndTheExpiredCode_WhenTheCredentialHasExpired()
+    {
+        var f = Create(ShiftStatus.Published);
+        f.Worker.MedicationCompetencyExpiryDate = new DateOnly(2026, 7, 13);
+        f.Db.SaveChanges();
+
+        var detail = Get(f);
+
+        Assert.True(detail.CanRecordDoses);
+        Assert.Equal(MedicationCompetencyGate.WarningMessage, detail.CanRecordDosesReason);
+        Assert.Equal("MEDICATION_COMPETENCY_EXPIRED", detail.CanRecordDosesReasonCode);
     }
 }

@@ -879,6 +879,8 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.ParticipantReadinessMode)
                 .IsRequired()
                 .HasDefaultValue(ParticipantReadinessMode.Warn);
+            // NOT NULL DEFAULT 0 (= Warn): a constant default, so the column is added without rewriting the table.
+            entity.Property(e => e.MedicationCompetencyMode).HasDefaultValue(MedicationCompetencyMode.Warn);
 
             entity.HasOne(e => e.Tenant)
                 .WithMany()
@@ -1417,6 +1419,7 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.PrnReason).HasMaxLength(500);
             entity.Property(e => e.PrnOutcome).HasMaxLength(1000);
             entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.RecordedWithoutCompetency).HasDefaultValue(false);
 
             // Restrict: the MAR is a compliance record — its parent medication/participant
             // must not silently cascade it away.

@@ -16,9 +16,9 @@ using Xunit;
 namespace Odip.Tests.Medications;
 
 /// <summary>
-/// The Medication Competency gate (D3): recording ANY administration needs the recording user to hold a
-/// current, unexpired Medication Competency credential — for every role, including the existing coordinator
-/// MAR path. This changes behaviour for users without the credential; that is intended.
+/// The Medication Competency gate (D3), per the provider mode. In ENFORCE mode recording ANY administration needs the recording user to
+/// hold a current, unexpired Medication Competency credential - for every role, including the existing coordinator MAR path. In WARN
+/// mode (the default, the rollout setting) the same user may record and the record is flagged RecordedWithoutCompetency.
 /// </summary>
 public class MedicationCompetencyGateTests
 {
@@ -89,10 +89,11 @@ public class MedicationCompetencyGateTests
         finally { CultureInfo.CurrentCulture = previous; }
     }
 
-    // ── enforced on the existing endpoint (POST medications/{id}/administrations) ──
+    // ── the existing endpoint (POST medications/{id}/administrations); the tests below this line run in ENFORCE mode unless they say otherwise ──
 
     private static (MedicationsController Controller, OdipDbContext Db, Guid MedId) Arrange(
-        User? recorder, DateTimeOffset? now = null, string providerState = "NSW")
+        User? recorder, DateTimeOffset? now = null, string providerState = "NSW",
+        MedicationCompetencyMode mode = MedicationCompetencyMode.Enforce, bool withSettingsRow = true)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns((Guid?)null);
@@ -107,7 +108,7 @@ public class MedicationCompetencyGateTests
         };
         db.Participants.Add(p);
         db.ParticipantMedications.Add(med);
-        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), State = providerState });
+        if (withSettingsRow) db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), State = providerState, MedicationCompetencyMode = mode });
         if (recorder is not null)
         {
             db.Users.Add(recorder);
@@ -242,5 +243,171 @@ public class MedicationCompetencyGateTests
 
         if (allowed) Assert.IsType<OkObjectResult>(result.Result);
         else Assert.Equal(403, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+    }
+
+    // ── WARN mode (the default): the dose is recorded and flagged, never refused ──
+
+    private static AdministrationDto Recorded(ActionResult<ApiResponse<AdministrationDto>> result) =>
+        Assert.IsType<ApiResponse<AdministrationDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+
+    [Fact]
+    public async Task Warn_AUserWithoutTheCredential_Records_AndTheRecordIsFlagged()
+    {
+        var (controller, db, medId) = Arrange(Staff(UserRole.SupportWorker, false, null), mode: MedicationCompetencyMode.Warn);
+
+        var record = Recorded(await controller.RecordAdministration(medId, Given(), default));
+
+        Assert.True(record.RecordedWithoutCompetency);
+        Assert.True((await db.MedicationAdministrations.SingleAsync()).RecordedWithoutCompetency);
+    }
+
+    [Fact]
+    public async Task Warn_AnExpiredCredential_Records_AndIsFlagged()
+    {
+        var (controller, db, medId) = Arrange(Staff(UserRole.SupportWorker, true, new DateOnly(2026, 9, 12)), mode: MedicationCompetencyMode.Warn);
+
+        Assert.True(Recorded(await controller.RecordAdministration(medId, Given(), default)).RecordedWithoutCompetency);
+        Assert.True((await db.MedicationAdministrations.SingleAsync()).RecordedWithoutCompetency);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Admin)]
+    [InlineData(UserRole.Coordinator)]
+    [InlineData(UserRole.SuperAdmin)]
+    public async Task Warn_TheCoordinatorMarPath_WithoutTheCredential_Records_AndIsFlagged(UserRole role)
+    {
+        var (controller, db, medId) = Arrange(Staff(role, competent: false, expiry: null), mode: MedicationCompetencyMode.Warn);
+
+        Assert.True(Recorded(await controller.RecordAdministration(medId, Given(), default)).RecordedWithoutCompetency);
+        Assert.Single(await db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Warn_ACurrentCredential_IsNotFlagged()
+    {
+        var (controller, db, medId) = Arrange(Staff(UserRole.SupportWorker, true, new DateOnly(2099, 1, 1)), mode: MedicationCompetencyMode.Warn);
+
+        Assert.False(Recorded(await controller.RecordAdministration(medId, Given(), default)).RecordedWithoutCompetency);
+        Assert.False((await db.MedicationAdministrations.SingleAsync()).RecordedWithoutCompetency);
+    }
+
+    [Fact]
+    public async Task Enforce_ACurrentCredential_IsNotFlagged_BecauseNothingWithoutOneIsRecorded()
+    {
+        var (controller, db, medId) = Arrange(Staff(UserRole.SupportWorker, true, null), mode: MedicationCompetencyMode.Enforce);
+
+        Assert.False(Recorded(await controller.RecordAdministration(medId, Given(), default)).RecordedWithoutCompetency);
+        Assert.False((await db.MedicationAdministrations.SingleAsync()).RecordedWithoutCompetency);
+    }
+
+    [Fact]
+    public async Task Warn_NoResolvableUser_Records_Flagged_AgainstTheFallbackName()
+    {
+        var (controller, db, medId) = Arrange(recorder: null, mode: MedicationCompetencyMode.Warn);
+
+        var record = Recorded(await controller.RecordAdministration(medId, Given(), default));
+
+        Assert.True(record.RecordedWithoutCompetency);
+        Assert.Null(record.RecordedByUserId);
+        Assert.Equal("Unknown", record.RecordedByName);
+        Assert.Single(await db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Warn_TheOtherRulesStillApply_AFlaggedWorkerStillNeedsAReasonToRefuseADose()
+    {
+        var (controller, db, medId) = Arrange(Staff(UserRole.SupportWorker, false, null), mode: MedicationCompetencyMode.Warn);
+
+        var result = await controller.RecordAdministration(medId, new CreateAdministrationDto { Status = MedicationAdministrationStatus.Refused }, default);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
+    public async Task TheDefaultIsWarn_ForANewSettingsRow_AndWhenTheProviderHasNoSettingsAtAll()
+    {
+        Assert.Equal(MedicationCompetencyMode.Warn, new ProviderSettings().MedicationCompetencyMode);
+
+        // No ProviderSettings row at all (a tenant that never filled the form in): records, flagged - not refused.
+        var (controller, db, medId) = Arrange(Staff(UserRole.SupportWorker, false, null), withSettingsRow: false);
+        Assert.True(Recorded(await controller.RecordAdministration(medId, Given(), default)).RecordedWithoutCompetency);
+        Assert.Single(await db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
+    public async Task TheModeIsPerTenant_OneProviderEnforcingDoesNotMakeAnotherEnforce()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var (tenantA, tenantB) = (Guid.NewGuid(), Guid.NewGuid());
+        (OdipDbContext Db, Mock<ICurrentTenant> Tenant) ContextFor(Guid? tenantId, Guid? viewAs = null)
+        {
+            var t = new Mock<ICurrentTenant>();
+            t.Setup(x => x.TenantId).Returns(tenantId);
+            t.Setup(x => x.IsSuperAdmin).Returns(tenantId is null);
+            t.Setup(x => x.ViewAsUserId).Returns(viewAs);
+            return (new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options, t.Object), t);
+        }
+
+        var userA = Staff(UserRole.SupportWorker, false, null); userA.TenantId = tenantA;
+        var userB = Staff(UserRole.SupportWorker, false, null); userB.TenantId = tenantB;
+        var medA = Guid.NewGuid(); var medB = Guid.NewGuid();
+        var (seed, _) = ContextFor(null);
+        using (seed)
+        {
+            seed.ProviderSettings.AddRange(
+                new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantA, State = "NSW", MedicationCompetencyMode = MedicationCompetencyMode.Enforce },
+                new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantB, State = "NSW", MedicationCompetencyMode = MedicationCompetencyMode.Warn });
+            seed.Users.AddRange(userA, userB);
+            foreach (var (tenant, med) in new[] { (tenantA, medA), (tenantB, medB) })
+            {
+                var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenant, FirstName = "Sophie", LastName = "Brown", IsActive = true };
+                seed.Participants.Add(participant);
+                seed.ParticipantMedications.Add(new ParticipantMedication
+                {
+                    Id = med, TenantId = tenant, ParticipantId = participant.Id, Name = "Paracetamol", DoseDescription = "2 tablets",
+                    Type = MedicationType.Regular, TimesOfDay = "08:00", StartDate = new DateTime(2026, 1, 1), Status = MedicationStatus.Active,
+                });
+            }
+            seed.SaveChanges();
+        }
+
+        var (dbA, tenantMockA) = ContextFor(tenantA, userA.Id);
+        var (dbB, tenantMockB) = ContextFor(tenantB, userB.Id);
+        using var _a = dbA; using var _b = dbB;
+        var resultA = await new MedicationsController(dbA, tenantMockA.Object).RecordAdministration(medA, Given(), default);
+        var resultB = await new MedicationsController(dbB, tenantMockB.Object).RecordAdministration(medB, Given(), default);
+
+        Assert.Equal(403, Assert.IsType<ObjectResult>(resultA.Result).StatusCode);   // tenant A enforces
+        Assert.True(Recorded(resultB).RecordedWithoutCompetency);                      // tenant B only warns
+    }
+
+    [Theory]
+    [InlineData(MedicationCompetencyStatus.Current, MedicationCompetencyMode.Warn, true, null)]
+    [InlineData(MedicationCompetencyStatus.Current, MedicationCompetencyMode.Enforce, true, null)]
+    [InlineData(MedicationCompetencyStatus.NotRecorded, MedicationCompetencyMode.Warn, true, "MEDICATION_COMPETENCY_MISSING")]
+    [InlineData(MedicationCompetencyStatus.Expired, MedicationCompetencyMode.Warn, true, "MEDICATION_COMPETENCY_EXPIRED")]
+    [InlineData(MedicationCompetencyStatus.Unverifiable, MedicationCompetencyMode.Warn, true, "MEDICATION_COMPETENCY_UNVERIFIABLE")]
+    [InlineData(MedicationCompetencyStatus.NotRecorded, MedicationCompetencyMode.Enforce, false, "MEDICATION_COMPETENCY_MISSING")]
+    [InlineData(MedicationCompetencyStatus.Expired, MedicationCompetencyMode.Enforce, false, "MEDICATION_COMPETENCY_EXPIRED")]
+    [InlineData(MedicationCompetencyStatus.Unverifiable, MedicationCompetencyMode.Enforce, false, "MEDICATION_COMPETENCY_UNVERIFIABLE")]
+    public void DescribeAccess_CombinesTheCredentialWithTheMode(
+        MedicationCompetencyStatus status, MedicationCompetencyMode mode, bool canRecord, string? code)
+    {
+        var access = MedicationAdministrationRecorder.DescribeAccess(
+            new MedicationCompetencyCheck(status, status == MedicationCompetencyStatus.Expired ? new DateOnly(2026, 7, 1) : null), mode);
+
+        Assert.Equal(canRecord, access.CanRecord);
+        Assert.Equal(code, access.Code);
+        Assert.Equal(status == MedicationCompetencyStatus.Current, access.IsCurrent);
+        if (status == MedicationCompetencyStatus.Current) Assert.Null(access.Reason);
+        else if (mode == MedicationCompetencyMode.Warn) Assert.Equal(MedicationCompetencyGate.WarningMessage, access.Reason);
+        else Assert.False(string.IsNullOrWhiteSpace(access.Reason));
+    }
+
+    [Fact]
+    public void TheWarning_IsTheTextTheCoordinatorSpecified()
+    {
+        Assert.Equal("Medication Competency not current — this record will be flagged", MedicationCompetencyGate.WarningMessage);
     }
 }
