@@ -548,22 +548,30 @@ click on a scrim that does not dismiss) is pulled back in on the next Tab. Hidde
 keyboard focus in, but the background is not `inert`: a layer rendered inline cannot make its own ancestors inert, so it
 needs a portal first.
 
-### The nav drawer should adopt it (not done here)
+### The nav drawer
 
-`AppLayout`'s mobile drawer still has its own Escape effect and `menuButtonRef.focus()`; it is out of scope for the SlideOver
-change and belongs to the nav regroup. How it should move over:
+`AppLayout`'s drawer runs on the hook. It is the one layer whose element is also something else: below `lg` the `<aside>` IS a drawer,
+from `lg` it is the permanent sidebar (a landmark). So the layer is open only while it is a drawer:
 
-1. Below `lg` the `<aside>` IS a drawer; from `lg` it is the permanent sidebar. Open the layer only when it is a drawer:
-   `useDialogBehavior({ open: sidebarOpen && isBelowLg, onClose: () => setSidebarOpen(false), containerRef: drawerRef })`,
-   with `isBelowLg` from a `matchMedia('(max-width: 1023px)')` hook. Otherwise a stale `sidebarOpen` after a resize would lock
-   scroll and trap Tab on desktop.
-2. Give the aside `role="dialog" aria-modal="true" aria-label="Main menu" tabIndex={-1}` ONLY while it is a drawer, not
-   permanently (at `lg` it is a landmark).
-3. Delete the Escape `useEffect` and the manual `menuButtonRef.current?.focus()`: Escape and focus return come from the hook
-   (the opener is the menu button). Closing by a link click navigates, so give the links `returnFocus` care: pass
-   `returnFocus={false}` and let the route change move focus to `#main`, or the hook will pull focus back to the menu button.
-4. The scrim (`z-[55]`) and drawer (`z-[60]`) stay as they are; the hook does not touch z-index. Add tests: Escape closes the
-   drawer and focus is on the menu button; Tab does not leave the drawer; at `lg` none of it applies.
+```tsx
+const isBelowLg = useIsBelowLg()            // hooks/useIsBelowLg.ts: matchMedia('(min-width: 64rem)'), the same switch as `lg:`
+const drawerOpen = sidebarOpen && isBelowLg
+useDialogBehavior({ open: drawerOpen, onClose: () => setSidebarOpen(false), containerRef: drawerRef })
+```
+
+- `role="dialog" aria-modal="true" aria-label="Main menu" tabIndex={-1}` are set only while `drawerOpen`. Closed, or from `lg`, the aside
+  is a plain `complementary` landmark.
+- A stale `sidebarOpen` after a resize is dropped during render (`if (!isBelowLg && sidebarOpen) setSidebarOpen(false)`), so it can neither
+  lock the scroll or trap Tab on a desktop nor reopen the drawer on the way back down.
+- Closed below `lg` the aside is `max-lg:invisible`, which takes its links out of the Tab order and the accessibility tree (they were 13
+  off-screen tab stops before the page). `visibility` rides the slide: closing uses `transition-[transform,visibility]` and waits for the
+  slide-out to finish, opening uses `transition-transform` so the aside is visible at once, because a hidden element cannot take the
+  focus the hook moves in.
+- Focus moves onto the first item and comes back to the opener (the header toggle, or the bottom bar's "More") on Escape and after a link is
+  followed: `returnFocus` stays on, because the opener is the best place to leave focus once the menu has closed.
+- Not done: an `inert` page behind it. The header toggle that opens the drawer sits inside the page region, so inerting that region would
+  take focus away from the opener before the hook records it. `aria-modal` and the Tab trap cover it.
+- It is not a `SlideOver`: its element is also the permanent sidebar, so it cannot be mounted only while open.
 
 ---
 
@@ -594,7 +602,7 @@ of which had no Escape, no focus handling and no dialog role.
 | `description` | One muted line under the title; the dialog's accessible description. None of the nine uses it yet. |
 | `footer` | The sticky strip under the body: the actions. Omit it for a read-only panel (the rostering panels do when `canWrite` is false). |
 | `size` | `md` = `max-w-md` (28rem, the default), `lg` = `max-w-lg` (32rem). Full width below that. Keep a panel's width when migrating. |
-| `side` | `'right'` is the only edge; `left` arrives with the nav drawer. |
+| `side` | `'right'` is the only edge. (The nav drawer, the one left-hand layer, runs on [useDialogBehavior](#usedialogbehavior) directly.) |
 | `dirty` | The form has unsaved edits: Escape, the scrim and the close button then ask "Discard changes?" (**Keep editing** / **Discard**) instead of closing. |
 | `beforeClose` | `() => boolean \| Promise<boolean>`; `false` vetoes Escape, the scrim and the close button. Runs before `dirty`. |
 | `initialFocusRef` | Where focus lands. Default: the first focusable element, which is the close button. |
