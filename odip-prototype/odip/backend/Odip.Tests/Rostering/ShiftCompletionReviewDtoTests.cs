@@ -201,7 +201,7 @@ public class ShiftCompletionReviewDtoTests
             new MedicationAdministration
             {
                 Id = Guid.NewGuid(), TenantId = med.TenantId, ParticipantMedicationId = med.Id, ParticipantId = med.ParticipantId, ScheduledAt = new DateTime(2026, 7, 14, 12, 30, 0),
-                Status = MedicationAdministrationStatus.Missed, Reason = "Asleep; not given this shift", RecordedByName = "Ben Turner",
+                Status = MedicationAdministrationStatus.Missed, Reason = "Asleep; could not be woken", RecordedByName = "Ben Turner",
             });
         a.Db.SaveChanges();
 
@@ -210,7 +210,7 @@ public class ShiftCompletionReviewDtoTests
         Assert.Equal(["09:00", "12:30", "16:30"], doses.Select(d => d.ScheduledTime));
         Assert.Equal(MedicationAdministrationStatus.Administered, doses[0].Outcome!.Status);
         Assert.Equal(MedicationAdministrationStatus.Missed, doses[1].Outcome!.Status);
-        Assert.Equal("Asleep; not given this shift", doses[1].Outcome!.Reason);
+        Assert.Equal("Asleep; could not be woken", doses[1].Outcome!.Reason);
         Assert.Null(doses[2].Outcome);
         Assert.Equal([PortalDoseState.Recorded, PortalDoseState.Recorded, PortalDoseState.Overdue], doses.Select(d => d.State));
     }

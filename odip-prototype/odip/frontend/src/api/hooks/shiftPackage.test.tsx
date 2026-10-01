@@ -191,7 +191,7 @@ describe('shift package hooks — recording a dose from the shift', () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: ['participant-administrations'] })
   })
 
-  it('"not given this shift" is a Missed record with its reason', async () => {
+  it('"not given" is a Missed record with its reason', async () => {
     const qc = new QueryClient()
     mockApiPost.mockResolvedValueOnce({ id: 'adm-2' })
     const { result } = renderHook(() => useRecordShiftDose(), { wrapper: wrapper(qc) })

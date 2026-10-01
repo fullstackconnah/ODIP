@@ -65,13 +65,13 @@ public class MedicationSupersedeTests
     /// A second worker with their own InProgress shift for the same participant (competent, so any mode lets them record). By default the
     /// same 09:00-17:00 window started at the same time; pass a window and an actual start for a later, overlapping shift.
     /// </summary>
-    private static (PortalController Controller, Guid ShiftId, User Worker) CoverWorker(
+    private static (PortalController Controller, Guid ShiftId, User Worker) SecondWorker(
         ShiftPackageFixture f, TimeOnly? start = null, TimeOnly? end = null, DateTime? actualStartUtc = null)
     {
-        var cover = f.AddWorker("Cover", "Worker");
+        var second = f.AddWorker("Second", "Worker");
         var shift = new Shift
         {
-            Id = Guid.NewGuid(), TenantId = f.Worker.TenantId, ParticipantId = f.Participant.Id, UserId = cover.Id, ServiceDate = ServiceDate,
+            Id = Guid.NewGuid(), TenantId = f.Worker.TenantId, ParticipantId = f.Participant.Id, UserId = second.Id, ServiceDate = ServiceDate,
             StartTime = start ?? new TimeOnly(9, 0), EndTime = end ?? new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None,
             Status = ShiftStatus.InProgress,
         };
@@ -79,10 +79,10 @@ public class MedicationSupersedeTests
         f.Db.ShiftCompletions.Add(new ShiftCompletion
         {
             Id = Guid.NewGuid(), TenantId = f.Worker.TenantId, ShiftId = shift.Id, ActualStart = actualStartUtc ?? ActualStartUtc, TimeZoneId = "Australia/Sydney",
-            SubmittedByUserId = cover.Id, StartedAt = actualStartUtc ?? ActualStartUtc, IsActive = true,
+            SubmittedByUserId = second.Id, StartedAt = actualStartUtc ?? ActualStartUtc, IsActive = true,
         });
         f.Db.SaveChanges();
-        return (f.ControllerFor(cover.Id), shift.Id, cover);
+        return (f.ControllerFor(second.Id), shift.Id, second);
     }
 
     // ── the supersede ──
@@ -93,14 +93,14 @@ public class MedicationSupersedeTests
         var f = Create();
         var med = AddMed(f);
         Assert.Equal(200, Status(await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Missed(), default)));
-        var (cover, coverShiftId, coverWorker) = CoverWorker(f);
+        var (second, secondShiftId, secondWorker) = SecondWorker(f);
 
-        var result = await cover.RecordShiftDose(coverShiftId, med.Id, Given("k-cover"), default);
+        var result = await second.RecordShiftDose(secondShiftId, med.Id, Given("k-second"), default);
 
         Assert.Equal(200, Status(result));
         var record = Body(result).Data!;
         Assert.Equal(MedicationAdministrationStatus.Administered, record.Status);
-        Assert.Equal(coverWorker.Id, record.RecordedByUserId);
+        Assert.Equal(secondWorker.Id, record.RecordedByUserId);
         Assert.Null(record.SupersededByAdministrationId);   // the new record is the active one
         var all = await f.Db.MedicationAdministrations.ToListAsync();
         Assert.Equal(2, all.Count);   // nothing was deleted or overwritten
@@ -131,8 +131,8 @@ public class MedicationSupersedeTests
         var f = Create();
         var med = AddMed(f);
         await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Missed(), default);
-        var (cover, coverShiftId, _) = CoverWorker(f);
-        await cover.RecordShiftDose(coverShiftId, med.Id, Given(), default);
+        var (second, secondShiftId, _) = SecondWorker(f);
+        await second.RecordShiftDose(secondShiftId, med.Id, Given(), default);
 
         var detail = Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default));
         var slot = Assert.Single(detail.MedicationsDue);
@@ -150,8 +150,8 @@ public class MedicationSupersedeTests
         var f = Create();
         var med = AddMed(f);
         await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Missed(), default);
-        var (cover, coverShiftId, _) = CoverWorker(f);
-        var replacement = Body(await cover.RecordShiftDose(coverShiftId, med.Id, Given(), default)).Data!;
+        var (second, secondShiftId, _) = SecondWorker(f);
+        var replacement = Body(await second.RecordShiftDose(secondShiftId, med.Id, Given(), default)).Data!;
 
         var history = Assert.IsType<ApiResponse<List<AdministrationDto>>>(Assert.IsType<OkObjectResult>(
             (await new MedicationsController(f.Db, f.Tenant.Object).GetParticipantAdministrations(f.Participant.Id, null, null, default)).Result).Value).Data!;
@@ -167,9 +167,9 @@ public class MedicationSupersedeTests
         var f = Create(withAuditing: true);
         var med = AddMed(f);
         await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Missed(), default);
-        var (cover, coverShiftId, _) = CoverWorker(f);
+        var (second, secondShiftId, _) = SecondWorker(f);
 
-        var replacement = Body(await cover.RecordShiftDose(coverShiftId, med.Id, Given(), default)).Data!;
+        var replacement = Body(await second.RecordShiftDose(secondShiftId, med.Id, Given(), default)).Data!;
 
         var earlierId = (await f.Db.MedicationAdministrations.SingleAsync(a => a.Status == MedicationAdministrationStatus.Missed)).Id;
         var earlierActions = await f.Db.AuditLogs.Where(a => a.EntityType == nameof(MedicationAdministration) && a.EntityId == earlierId).Select(a => a.Action).ToListAsync();
@@ -193,9 +193,9 @@ public class MedicationSupersedeTests
         var f = Create();
         var med = AddMed(f);
         var first = Body(await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Given("k1"), default)).Data!;
-        var (cover, coverShiftId, _) = CoverWorker(f);
+        var (second, secondShiftId, _) = SecondWorker(f);
 
-        var result = await cover.RecordShiftDose(coverShiftId, med.Id, Dose(later, "k2", "a reason", notes: "gave the 250mg by mistake"), default);
+        var result = await second.RecordShiftDose(secondShiftId, med.Id, Dose(later, "k2", "a reason", notes: "gave the 250mg by mistake"), default);
 
         Assert.Equal(409, Status(result));
         Assert.Equal(MedicationErrorCodes.AdministrationAlreadyRecorded, Body(result).Code);
@@ -214,9 +214,9 @@ public class MedicationSupersedeTests
         var med = AddMed(f);
         var first = Body(await f.Controller.RecordShiftDose(f.Shift.Id, med.Id,
             Dose(MedicationAdministrationStatus.WrongMedication, "k1", "gave the wrong tablet", notes: "gave the 250mg by mistake"), default)).Data!;
-        var (cover, coverShiftId, _) = CoverWorker(f);
+        var (second, secondShiftId, _) = SecondWorker(f);
 
-        var result = await cover.RecordShiftDose(coverShiftId, med.Id, Dose(later, "k2", "another reason", notes: "another note"), default);
+        var result = await second.RecordShiftDose(secondShiftId, med.Id, Dose(later, "k2", "another reason", notes: "another note"), default);
 
         Assert.Equal(409, Status(result));
         Assert.Equal(first.Id, Body(result).Data!.Id);
@@ -277,7 +277,7 @@ public class MedicationSupersedeTests
         Assert.Equal(200, Status(await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Missed("k-w1", TwelveThirty), default)));
         f.Advance(TimeSpan.FromMinutes(5));   // 13:00: worker 1 finishes (the dose has its outcome) and worker 2 starts
         Detail(await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto { NothingToNote = true, NothingToHandOver = true }, default));
-        var (w2, w2ShiftId, worker2) = CoverWorker(f, new TimeOnly(12, 30), new TimeOnly(20, 0), Utc(2026, 7, 14, 3, 0).UtcDateTime);
+        var (w2, w2ShiftId, worker2) = SecondWorker(f, new TimeOnly(12, 30), new TimeOnly(20, 0), Utc(2026, 7, 14, 3, 0).UtcDateTime);
         f.Advance(TimeSpan.FromMinutes(5));   // 13:05
 
         var result = await w2.RecordShiftDose(w2ShiftId, med.Id, Given("k-w2", TwelveThirty, Utc(2026, 7, 14, 3, 5).UtcDateTime), default);
@@ -335,9 +335,9 @@ public class MedicationSupersedeTests
             var f = Create();
             var med = AddMed(f);
             Assert.Equal(200, Status(await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(first, "k1", "first reason"), default)));
-            var (cover, coverShiftId, _) = CoverWorker(f);
+            var (second, secondShiftId, _) = SecondWorker(f);
 
-            var result = await cover.RecordShiftDose(coverShiftId, med.Id, Dose(later, "k2", "another reason"), default);
+            var result = await second.RecordShiftDose(secondShiftId, med.Id, Dose(later, "k2", "another reason"), default);
 
             Assert.True(Status(result) == 409, $"{first} then {later} should be 409");
             Assert.Null(Assert.Single(await f.Db.MedicationAdministrations.ToListAsync()).SupersededByAdministrationId);
@@ -350,8 +350,8 @@ public class MedicationSupersedeTests
         var f = Create();
         var med = AddMed(f);
         await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Missed(), default);
-        var (cover, coverShiftId, _) = CoverWorker(f);
-        var replacement = Body(await cover.RecordShiftDose(coverShiftId, med.Id, Given("k-first"), default)).Data!;
+        var (second, secondShiftId, _) = SecondWorker(f);
+        var replacement = Body(await second.RecordShiftDose(secondShiftId, med.Id, Given("k-first"), default)).Data!;
 
         var again = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Given("k-second"), default);
 
@@ -368,10 +368,10 @@ public class MedicationSupersedeTests
         var f = Create();
         var med = AddMed(f);
         await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Missed(), default);
-        var (cover, coverShiftId, _) = CoverWorker(f);
-        var first = Body(await cover.RecordShiftDose(coverShiftId, med.Id, Given("k-cover"), default)).Data!;
+        var (second, secondShiftId, _) = SecondWorker(f);
+        var first = Body(await second.RecordShiftDose(secondShiftId, med.Id, Given("k-second"), default)).Data!;
 
-        var retry = await cover.RecordShiftDose(coverShiftId, med.Id, Given("k-cover"), default);
+        var retry = await second.RecordShiftDose(secondShiftId, med.Id, Given("k-second"), default);
 
         Assert.Equal(200, Status(retry));
         Assert.Equal(first.Id, Body(retry).Data!.Id);
