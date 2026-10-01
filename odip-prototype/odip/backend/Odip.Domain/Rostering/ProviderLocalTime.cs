@@ -33,9 +33,29 @@ public static class ProviderLocalTime
         }
         catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
         {
-            return lookup(FallbackZoneId);
+            try
+            {
+                return lookup(FallbackZoneId);
+            }
+            catch (Exception fallbackEx) when (fallbackEx is TimeZoneNotFoundException or InvalidTimeZoneException)
+            {
+                // No tz database at all (an alpine image, a stripped container, Windows with invariant globalization): answer with a fixed
+                // +10:00 instead of throwing from every endpoint that needs "today" or a local time.
+                return LastResortZone;
+            }
         }
     }
+
+    /// <summary>
+    /// What a runtime with no tz database resolves to: a fixed +10:00 with no daylight saving. Right for AEST (about half the year) and an hour
+    /// out in AEDT, which beats a 500 from the dashboard, the task filters, alerts, the medication register and obligation completion. Install
+    /// tzdata (the Debian aspnet image has it) and the real zones apply; <see cref="TzDataAvailable"/> says which is in force.
+    /// </summary>
+    public static readonly TimeZoneInfo LastResortZone =
+        TimeZoneInfo.CreateCustomTimeZone($"{FallbackZoneId} (fixed +10:00, no tz database)", TimeSpan.FromHours(10), "AEST (fixed)", "AEST (fixed)");
+
+    /// <summary>True when the runtime can resolve the fallback zone from a tz database, false when <see cref="LastResortZone"/> is what answers.</summary>
+    public static bool TzDataAvailable => !ReferenceEquals(ResolveZone(FallbackZoneId), LastResortZone);
 
     /// <summary>
     /// Converts a zone-less provider-local wall-clock value to the UTC instant it denotes. A local time
