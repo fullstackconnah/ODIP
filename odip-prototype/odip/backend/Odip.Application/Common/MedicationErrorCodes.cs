@@ -26,6 +26,10 @@ public static class MedicationErrorCodes
     /// given (the shift's actual start on the portal; the start of the slot's day on the MAR).</summary>
     public const string AdministrationTimeOutOfRange = "ADMINISTRATION_TIME_OUT_OF_RANGE";
 
+    /// <summary>409: another request is recording the same dose slot and did not finish within the wait (a stuck holder, not a normal double tap,
+    /// which just waits milliseconds and then gets the winner's record). Nothing was written; look at the dose and try again. <c>data</c> is null.</summary>
+    public const string AdministrationSlotBusy = "ADMINISTRATION_SLOT_BUSY";
+
     /// <summary>409: the medication is OnHold or Ceased, so it can't be recorded from a shift.</summary>
     public const string MedicationNotActive = "MEDICATION_NOT_ACTIVE";
 }

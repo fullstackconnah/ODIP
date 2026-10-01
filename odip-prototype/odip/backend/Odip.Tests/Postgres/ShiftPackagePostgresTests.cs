@@ -575,6 +575,154 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(1, await verify.MedicationAdministrations.CountAsync(a => a.ParticipantMedicationId == med.Id));
     }
 
+    // ── the slot lock under failure (review 2 findings m2, n2 and n5) ──
+
+    /// <summary>Holds the advisory lock a request for this slot would take, on its own connection, until released or disposed.</summary>
+    private sealed class HeldSlotLock : IAsyncDisposable
+    {
+        private readonly NpgsqlConnection _connection;
+        private readonly NpgsqlTransaction _transaction;
+        private bool _released;
+
+        private HeldSlotLock(NpgsqlConnection connection, NpgsqlTransaction transaction) { _connection = connection; _transaction = transaction; }
+
+        public static async Task<HeldSlotLock> AcquireAsync(string connectionString, Guid medicationId, DateTime slot)
+        {
+            var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            var transaction = await connection.BeginTransactionAsync();
+            await using var command = new NpgsqlCommand("SELECT pg_advisory_xact_lock(@key)", connection, transaction);
+            command.Parameters.AddWithValue("key", MedicationAdministrationRecorder.SlotLockKey(medicationId, slot));
+            await command.ExecuteNonQueryAsync();
+            return new HeldSlotLock(connection, transaction);
+        }
+
+        public async Task ReleaseAsync()
+        {
+            if (_released) return;
+            _released = true;
+            await _transaction.RollbackAsync();
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await ReleaseAsync();
+            await _transaction.DisposeAsync();
+            await _connection.DisposeAsync();
+        }
+    }
+
+    private static readonly DateTime OpenSlot = new(2026, 7, 14, 8, 0, 0);
+
+    /// <summary>A scheduled medication whose 08:00 slot on 14 July 2026 has no record yet.</summary>
+    private async Task<(Guid TenantId, Guid UserId, ParticipantMedication Med)> SeedMedicationWithAnOpenSlotAsync()
+    {
+        var (setup, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _setup = setup;
+        var (participantId, userId, _, _) = await SeedCompletionAsync(setup);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, Name = "Levetiracetam", DoseDescription = "1 tablet", Type = MedicationType.Regular,
+            TimesOfDay = "08:00", StartDate = new DateTime(2026, 1, 1), Status = MedicationStatus.Active,
+        };
+        setup.ParticipantMedications.Add(med);
+        await setup.SaveChangesAsync();
+        return (tenantId, userId, med);
+    }
+
+    private static RecordAdministrationRequest GivenRequest(Guid medicationId, Guid userId) => new(medicationId,
+        new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, ScheduledAt = OpenSlot }, userId, "Ben Turner");
+
+    [SkippableFact]
+    public async Task CancellingWhileWaitingForTheSlotLock_LeavesNoTransactionOpen_AndTheContextStillWorks_TheReviewsProbeP4()
+    {
+        // Before: the transaction began for the lock was never disposed when the lock statement was cancelled, so the context stayed inside an
+        // aborted transaction and the next thing that used it (error handling, audit, a later query) failed.
+        RequirePostgres();
+        var (tenantId, userId, med) = await SeedMedicationWithAnOpenSlotAsync();
+        await using var held = await HeldSlotLock.AcquireAsync(_pg.ConnectionString, med.Id, OpenSlot);
+        await using var db = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(600));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => new MedicationAdministrationRecorder(db).RecordAsync(GivenRequest(med.Id, userId), cancel.Token));
+
+        Assert.Null(db.Database.CurrentTransaction);
+        Assert.Equal(1, await db.ParticipantMedications.CountAsync(m => m.Id == med.Id));   // the same context is not stuck in an aborted transaction
+        await held.ReleaseAsync();
+        var recorded = await new MedicationAdministrationRecorder(db).RecordAsync(GivenRequest(med.Id, userId), default);
+        Assert.Equal(RecordAdministrationOutcome.Created, recorded.Outcome);
+    }
+
+    [SkippableFact]
+    public async Task ASlotLockHeldTooLong_GivesSlotBusy_AfterTheConfiguredWait_AndLeavesNothingBehind()
+    {
+        RequirePostgres();
+        var (tenantId, userId, med) = await SeedMedicationWithAnOpenSlotAsync();
+        await using var held = await HeldSlotLock.AcquireAsync(_pg.ConnectionString, med.Id, OpenSlot);
+        await using var db = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var recorder = new MedicationAdministrationRecorder(db, slotLockWait: TimeSpan.FromMilliseconds(700));
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var result = await recorder.RecordAsync(GivenRequest(med.Id, userId), default);
+        clock.Stop();
+
+        Assert.Equal(RecordAdministrationOutcome.SlotBusy, result.Outcome);
+        Assert.Equal(MedicationErrorCodes.AdministrationSlotBusy, result.Code);
+        Assert.Null(result.Administration);
+        Assert.InRange(clock.ElapsedMilliseconds, 500, 4000);   // it waited the configured time, not the 30 second command timeout
+        Assert.Null(db.Database.CurrentTransaction);
+        Assert.Equal(0, await db.MedicationAdministrations.CountAsync(a => a.ParticipantMedicationId == med.Id));
+        await held.ReleaseAsync();
+        Assert.Equal(RecordAdministrationOutcome.Created, (await recorder.RecordAsync(GivenRequest(med.Id, userId), default)).Outcome);
+    }
+
+    [SkippableTheory]
+    [InlineData("reason")]
+    [InlineData("note")]
+    public async Task AnInvalidRequest_IsRefusedBeforeTheSlotLock_SoItNeverWaitsBehindAHolder(string missing)
+    {
+        // The pure validations come before the lock: a 400 takes no lock, opens no transaction and cannot be held up by another request.
+        RequirePostgres();
+        var (tenantId, userId, med) = await SeedMedicationWithAnOpenSlotAsync();
+        await using var held = await HeldSlotLock.AcquireAsync(_pg.ConnectionString, med.Id, OpenSlot);
+        await using var db = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var recorder = new MedicationAdministrationRecorder(db, slotLockWait: TimeSpan.FromSeconds(30));
+        var dto = missing == "reason"
+            ? new CreateAdministrationDto { Status = MedicationAdministrationStatus.Refused, ScheduledAt = OpenSlot }
+            : new CreateAdministrationDto { Status = MedicationAdministrationStatus.WrongMedication, Reason = "wrong tablet", ScheduledAt = OpenSlot };
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var result = await recorder.RecordAsync(new RecordAdministrationRequest(med.Id, dto, userId, "Ben Turner"), default);
+        clock.Stop();
+
+        Assert.Equal(RecordAdministrationOutcome.Invalid, result.Outcome);
+        Assert.True(clock.ElapsedMilliseconds < 3000, $"a 400 waited {clock.ElapsedMilliseconds} ms - it must not wait for the lock");
+        Assert.Null(db.Database.CurrentTransaction);
+    }
+
+    [SkippableFact]
+    public async Task WhenTheContextIsAlreadyInATransaction_TheSlotLockJoinsIt_TheOwnerCommits_AndLockTimeoutIsBackToTheServerSetting()
+    {
+        // The documented limit (finding n5): the lock joins an existing transaction rather than beginning one, and the owner commits.
+        RequirePostgres();
+        var (tenantId, userId, med) = await SeedMedicationWithAnOpenSlotAsync();
+        await using var db = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        await using var outer = await db.Database.BeginTransactionAsync();
+
+        var result = await new MedicationAdministrationRecorder(db).RecordAsync(GivenRequest(med.Id, userId), default);
+
+        Assert.Equal(RecordAdministrationOutcome.Created, result.Outcome);
+        Assert.NotNull(db.Database.CurrentTransaction);   // still the owner's: the recorder neither committed nor disposed it
+        var lockTimeout = await db.Database.SqlQuery<string>($"SELECT current_setting('lock_timeout') AS \"Value\"").SingleAsync();
+        Assert.Equal("0", lockTimeout);   // the bounded wait was handed back once the lock was taken, so later statements are not cut short
+        await using (var other = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object))
+            Assert.Equal(0, await other.MedicationAdministrations.CountAsync(a => a.ParticipantMedicationId == med.Id));   // not visible until the owner commits
+        await outer.CommitAsync();
+        await using (var after = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object))
+            Assert.Equal(1, await after.MedicationAdministrations.CountAsync(a => a.ParticipantMedicationId == med.Id));
+    }
+
     [SkippableFact]
     public async Task DifferentSlotsOfOneMedication_AreNotSerialisedIntoConflicts_EachGetsItsOwnRecord()
     {

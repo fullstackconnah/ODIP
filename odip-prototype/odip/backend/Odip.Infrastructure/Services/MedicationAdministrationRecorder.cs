@@ -35,6 +35,10 @@ public enum RecordAdministrationOutcome
 
     /// <summary>The dose is charted too early, or the time it was given is outside the allowed range (422); see the result <c>Code</c>.</summary>
     TimeRejected,
+
+    /// <summary>Another request held the lock for this dose slot and did not finish within the wait (409 ADMINISTRATION_SLOT_BUSY). Nothing was written;
+    /// the caller should look at the dose and try again.</summary>
+    SlotBusy,
 }
 
 /// <summary>
@@ -96,7 +100,11 @@ public sealed record RecordAdministrationRequest(
 ///    hold duplicates per slot — see <see cref="MedicationAdministration.IdempotencyKey"/>. On PostgreSQL the replay check, the slot
 ///    check and the insert run under a transaction-scoped advisory lock keyed on the slot, so two requests for one slot (two
 ///    devices, two workers, a double tap with no key) cannot both pass the check: the loser waits, then gets the winner's record
-///    as a replay when its key matches and as a 409 when it does not.
+///    as a replay when its key matches and as a 409 when it does not. The wait is bounded (<see cref="DefaultSlotLockWait"/>): a stuck
+///    holder gets the waiter <see cref="RecordAdministrationOutcome.SlotBusy"/> (409 ADMINISTRATION_SLOT_BUSY), not a pinned connection.
+///
+/// The order is: the gate, then the pure validations (reason, wrong-medication note, PRN reason - they need no database, so a 400 never opens a
+/// transaction or waits for a lock), then the slot lock, then 2, 3 and 4 above, then the witness rule, the PRN limits and the insert.
 /// </summary>
 public sealed class MedicationAdministrationRecorder
 {
@@ -109,19 +117,28 @@ public sealed class MedicationAdministrationRecorder
     /// <summary>How far apart the <c>administeredAt</c> of a retried PRN request and the stored record may be and still read as the same dose.</summary>
     public const int PrnReplayToleranceMinutes = 1;
 
+    /// <summary>
+    /// How long a request waits for another request's slot lock before giving up with <see cref="RecordAdministrationOutcome.SlotBusy"/>. The lock
+    /// is held for milliseconds (check and insert); a wait this long means the holder is stuck, and failing here is better than pinning a pooled
+    /// connection until the 30 second command timeout.
+    /// </summary>
+    public static readonly TimeSpan DefaultSlotLockWait = TimeSpan.FromSeconds(5);
+
     private readonly OdipDbContext _db;
     private readonly INotificationRaiser _notificationRaiser;
     private readonly IObligationTaskService _obligationTasks;
     private readonly TimeProvider _clock;
+    private readonly TimeSpan _slotLockWait;
 
     public MedicationAdministrationRecorder(
         OdipDbContext db, INotificationRaiser? notificationRaiser = null, IObligationTaskService? obligationTasks = null,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null, TimeSpan? slotLockWait = null)
     {
         _db = db;
         _notificationRaiser = notificationRaiser ?? new Notifications.NotificationRaiser(db);
         _obligationTasks = obligationTasks ?? new Tasks.ObligationTaskService(db);
         _clock = clock ?? TimeProvider.System;
+        _slotLockWait = slotLockWait ?? DefaultSlotLockWait;
     }
 
     /// <summary>Evaluates the Medication Competency credential for a user at the provider-local "today" (the credential only; see <see cref="CheckRecordingAccessAsync"/> for what the provider mode makes of it).</summary>
@@ -178,16 +195,36 @@ public sealed class MedicationAdministrationRecorder
             return Fail(RecordAdministrationOutcome.CompetencyRequired, access.Reason!, access.Code);
         var recordedWithoutCompetency = !competency.IsCurrent;
 
+        // ── 2. The pure validations (they need no database), BEFORE the slot lock: a 400 must not open a transaction, take a lock or wait behind
+        //       another request, and a lock is never held while a request is being refused for its own content. A retry whose content is invalid
+        //       is a 400 like any other request, even if its key was used before. ──
+        if (dto.Status != MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.Reason))
+            return Fail(RecordAdministrationOutcome.Invalid, "A reason is required when a dose is refused, withheld, missed or the wrong medication was given.");
+
+        // MED-03: wrong-medication recording additionally requires a note on what was actually
+        // given instead of the prescribed medication — required on both ends (see
+        // RecordAdministrationModal's requiresWrongMedNote).
+        if (dto.Status == MedicationAdministrationStatus.WrongMedication && string.IsNullOrWhiteSpace(dto.Notes))
+            return Fail(RecordAdministrationOutcome.Invalid, "A note describing what was given instead is required when recording a wrong medication administration.");
+
+        if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.PrnReason))
+            return Fail(RecordAdministrationOutcome.Invalid, "A PRN reason is required when recording an administered PRN dose.");
+
         var participantName = MedicationMapping.ParticipantName(med.Participant);
         AdministrationDto ToDto(MedicationAdministration a) =>
             MedicationMapping.ToAdministrationDto(a, participantName, med.Name, med.DoseDescription);
 
         // The slot lock comes BEFORE both the replay check and the one-record-per-slot check and is held until the insert commits (released
         // by disposal on every early return): a concurrent request for the same slot waits here, and once it gets in it sees the winner's
-        // record - as a replay (200) when the key matches, as an AlreadyRecorded (409) when it does not.
-        await using var slotLock = await SlotLock.AcquireAsync(_db, med.Id, dto.ScheduledAt, ct);
+        // record - as a replay (200) when the key matches, as an AlreadyRecorded (409) when it does not. The wait is bounded: a holder that
+        // never finishes gets this request a SlotBusy (409 ADMINISTRATION_SLOT_BUSY) rather than a connection pinned for 30 seconds.
+        var heldLock = await SlotLock.TryAcquireAsync(_db, med.Id, dto.ScheduledAt, _slotLockWait, ct);
+        if (heldLock is null)
+            return Fail(RecordAdministrationOutcome.SlotBusy,
+                "Another request is recording this dose right now. Check the dose, then try again.", MedicationErrorCodes.AdministrationSlotBusy);
+        await using var slotLock = heldLock;
 
-        // ── 2. Idempotent replay ──
+        // ── 3. Idempotent replay ──
         // A key means "this exact request": a replay is only honoured when the medication, slot and outcome all match - and, for an as-needed
         // (PRN) dose, which has no slot to tell two doses apart, when the dose itself matches (see SamePrnRequest). A client that reused one key
         // for two doses (generated once per page instead of per sheet) would otherwise have its second dose silently dropped while the screen
@@ -211,23 +248,11 @@ public sealed class MedicationAdministrationRecorder
             if (prior != null) return ReplayOf(prior);
         }
 
-        if (dto.Status != MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.Reason))
-            return Fail(RecordAdministrationOutcome.Invalid, "A reason is required when a dose is refused, withheld, missed or the wrong medication was given.");
-
-        // MED-03: wrong-medication recording additionally requires a note on what was actually
-        // given instead of the prescribed medication — required on both ends (see
-        // RecordAdministrationModal's requiresWrongMedNote).
-        if (dto.Status == MedicationAdministrationStatus.WrongMedication && string.IsNullOrWhiteSpace(dto.Notes))
-            return Fail(RecordAdministrationOutcome.Invalid, "A note describing what was given instead is required when recording a wrong medication administration.");
-
-        if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.PrnReason))
-            return Fail(RecordAdministrationOutcome.Invalid, "A PRN reason is required when recording an administered PRN dose.");
-
-        // ── 3. Temporal validation (422) ──
+        // ── 4. Temporal validation (422) ──
         var timeRejection = ValidateTimes(dto, request.AdministeredAtLowerBoundUtc, nowUtc, provider.Zone);
         if (timeRejection is not null) return timeRejection;
 
-        // ── 4. One ACTIVE record per scheduled dose slot (under the slot lock taken above) ──
+        // ── 5. One ACTIVE record per scheduled dose slot (under the slot lock taken above) ──
         var toSupersede = new List<MedicationAdministration>();
         if (dto.ScheduledAt is { } scheduledAt)
         {
@@ -390,8 +415,23 @@ public sealed class MedicationAdministrationRecorder
     /// (medication, slot) - existing data may hold duplicates and a migration over them could fail on deploy - so this lock is what
     /// makes the one-record-per-slot rule hold under concurrency. The key is computed here (not with a server hash function) so it does
     /// not depend on the server version; a hash collision only serialises two unrelated slots briefly. A no-op for an unscheduled (PRN)
-    /// dose and on a provider without advisory locks (the in-memory test provider). If the context is already inside a transaction the
-    /// lock joins it and that transaction's owner commits.
+    /// dose and on a provider without advisory locks (the in-memory test provider).
+    ///
+    /// <para><b>The wait is bounded.</b> The lock statement runs under <c>SET LOCAL lock_timeout</c> (restored to the server setting as soon as
+    /// the lock is held, so later statements are unaffected): a holder that never finishes makes <see cref="TryAcquireAsync"/> return null
+    /// after the wait (the caller answers 409 ADMINISTRATION_SLOT_BUSY) instead of pinning a pooled connection until the command timeout.</para>
+    ///
+    /// <para><b>A failed acquire leaves nothing open.</b> If the lock statement fails or is cancelled, the transaction this class began is
+    /// disposed (rolled back) before the exception leaves, so the caller's DbContext is not left inside an aborted transaction.</para>
+    ///
+    /// <para><b>Two limits that matter to a future caller.</b> (1) If the context is ALREADY inside a transaction, the lock joins it and that
+    /// transaction's owner commits. Then the idempotency-conflict recovery in <see cref="RecordAsync"/> cannot work: after a unique violation the
+    /// outer transaction is aborted (PostgreSQL 25P02), so re-reading the winner fails instead of returning the replay, and a failed or timed-out
+    /// lock statement leaves the outer transaction aborted for its owner to roll back. No caller wraps the recorder in a transaction today. If one
+    /// ever needs to, put a savepoint (<c>CreateSavepointAsync</c> / <c>RollbackToSavepointAsync</c>) around the insert. (2) The API registers
+    /// <c>UseNpgsql</c> without <c>EnableRetryOnFailure</c>. Enabling a retrying execution strategy makes <c>BeginTransactionAsync</c> throw for
+    /// every scheduled dose ("does not support user-initiated transactions"); the whole of <see cref="RecordAsync"/> would then have to run inside
+    /// <c>Database.CreateExecutionStrategy().ExecuteAsync(...)</c> as one re-runnable unit, and the lock and its transaction with it.</para>
     /// </summary>
     private sealed class SlotLock : IAsyncDisposable
     {
@@ -399,13 +439,38 @@ public sealed class MedicationAdministrationRecorder
 
         private SlotLock(IDbContextTransaction? owned) => _owned = owned;
 
-        public static async Task<SlotLock> AcquireAsync(OdipDbContext db, Guid medicationId, DateTime? slot, CancellationToken ct)
+        /// <summary>The held lock, or null when another request held it for longer than <paramref name="wait"/>.</summary>
+        public static async Task<SlotLock?> TryAcquireAsync(OdipDbContext db, Guid medicationId, DateTime? slot, TimeSpan wait, CancellationToken ct)
         {
             if (slot is null || !db.Database.IsNpgsql()) return new SlotLock(null);
 
             var owned = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({KeyFor(medicationId, slot.Value)})", ct);
-            return new SlotLock(owned);
+            try
+            {
+                // One round trip: bound the wait, take the lock, then hand the setting back to the server's own value for the rest of the transaction.
+                var sql = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"SET LOCAL lock_timeout = {(int)Math.Max(1, wait.TotalMilliseconds)}; SELECT pg_advisory_xact_lock({{0}}); SET LOCAL lock_timeout TO DEFAULT");
+                await db.Database.ExecuteSqlRawAsync(sql, new object[] { KeyFor(medicationId, slot.Value) }, ct);
+                return new SlotLock(owned);
+            }
+            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable)
+            {
+                await ReleaseAfterFailureAsync(owned);
+                return null;
+            }
+            catch
+            {
+                await ReleaseAfterFailureAsync(owned);
+                throw;
+            }
+        }
+
+        /// <summary>Rolls back the transaction this class began (never one it joined); a failure to do so must not hide the original error.</summary>
+        private static async Task ReleaseAfterFailureAsync(IDbContextTransaction? owned)
+        {
+            if (owned is null) return;
+            try { await owned.DisposeAsync(); }
+            catch { /* the failure being reported is the one that matters */ }
         }
 
         public Task CommitAsync(CancellationToken ct) => _owned?.CommitAsync(ct) ?? Task.CompletedTask;
@@ -414,7 +479,7 @@ public sealed class MedicationAdministrationRecorder
 
         public ValueTask DisposeAsync() => _owned?.DisposeAsync() ?? ValueTask.CompletedTask;
 
-        private static long KeyFor(Guid medicationId, DateTime slot)
+        internal static long KeyFor(Guid medicationId, DateTime slot)
         {
             Span<byte> bytes = stackalloc byte[24];
             medicationId.TryWriteBytes(bytes);
@@ -425,6 +490,9 @@ public sealed class MedicationAdministrationRecorder
 
     private static RecordAdministrationResult Fail(RecordAdministrationOutcome outcome, string message, string? code = null) =>
         new(outcome, null, message, code);
+
+    /// <summary>The advisory-lock key for one dose slot (exposed so a test can hold exactly the lock a request would take).</summary>
+    public static long SlotLockKey(Guid medicationId, DateTime slot) => SlotLock.KeyFor(medicationId, slot);
 
     /// <summary>
     /// Whether a retried as-needed (PRN) request is the SAME dose as the stored record. A PRN dose has no slot, so (medication, outcome) alone
