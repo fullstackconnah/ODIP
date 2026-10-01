@@ -7,6 +7,8 @@ import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable, type Column } from '@/components/DataTable'
 import { usePermissions } from '@/lib/permissions'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import AddContactRoleForm from '@/components/contacts/AddContactRoleForm'
 import {
   CONTACT_ROLE_TYPE_LABELS, CONTACT_ROLE_STATUS_LABELS, NOMINEE_SCOPE_LABELS,
@@ -41,7 +43,10 @@ function roleSummaryLine(role: ParticipantContactRoleDto): string {
 
 export default function ContactsTab({ participantId }: { participantId: string | undefined }) {
   const { canWriteContacts: canWrite } = usePermissions()
-  const { data: roles = [], isLoading } = useParticipantContactRoles(participantId)
+  const rolesQuery = useParticipantContactRoles(participantId)
+  const roles = rolesQuery.data ?? []
+  // A failed or paused request is not an empty list: "No contacts recorded" is only for one that succeeded and came back empty.
+  const phase = queryPhase(rolesQuery)
   const deleteRole = useDeleteContactRole()
 
   const [modalState, setModalState] = useState<{ mode: 'create' | 'edit'; role?: ParticipantContactRoleDto } | null>(null)
@@ -164,7 +169,11 @@ export default function ContactsTab({ participantId }: { participantId: string |
         </div>
       )}
 
-      {!isLoading && roles.length === 0 ? (
+      {phase === 'loading' ? (
+        <PageState kind="loading" noun="contacts" />
+      ) : phase === 'error' ? (
+        <PageState kind="error" noun="contacts" onRetry={() => rolesQuery.refetch()} />
+      ) : roles.length === 0 ? (
         <EmptyState
           icon={Contact2}
           title="No contacts recorded"
@@ -177,7 +186,6 @@ export default function ContactsTab({ participantId }: { participantId: string |
           columns={columns}
           keyField="id"
           sortable
-          loading={isLoading}
           emptyMessage="No contacts recorded"
         />
       )}

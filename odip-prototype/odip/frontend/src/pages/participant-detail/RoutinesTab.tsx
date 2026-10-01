@@ -8,6 +8,8 @@ import { FormField, labelClass } from '@/components/FormField'
 import { EmptyState } from '@/components/EmptyState'
 import { Dropdown } from '@/components/Dropdown'
 import { usePermissions } from '@/lib/permissions'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import { ROUTINE_CATEGORIES } from '@/api/types/enums'
 import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import type { ParticipantRoutineDto } from '@/api/types/routines'
@@ -105,16 +107,6 @@ const EMPTY_FORM: RoutineFormState = {
   startTime: '', endTime: '', isCritical: false, isActive: true,
 }
 
-function RoutineSkeleton() {
-  return (
-    <div className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] animate-pulse space-y-2.5">
-      <div className="h-4 w-1/3 bg-[var(--color-muted)] rounded" />
-      <div className="h-3 w-full bg-[var(--color-muted)] rounded" />
-      <div className="h-3 w-2/3 bg-[var(--color-muted)] rounded" />
-    </div>
-  )
-}
-
 function RoutineCard({ routine, canWrite, canDelete, onEdit, onDelete }: {
   routine: ParticipantRoutineDto
   canWrite: boolean
@@ -188,7 +180,10 @@ export default function RoutinesTab({ participantId }: { participantId: string |
   // field below), so the list has to fetch inactive ones too and surface them in their own
   // disclosure — otherwise toggling a routine off would make it vanish with no way back,
   // unlike every sibling tab's soft-hide pattern (Notes' Archived, Medications' Ceased).
-  const { data: routines = [], isLoading } = useParticipantRoutines(participantId, true)
+  const routinesQuery = useParticipantRoutines(participantId, true)
+  const routines = useMemo(() => routinesQuery.data ?? [], [routinesQuery.data])
+  // A failed or paused request is not an empty list: "No routines yet" is only for one that succeeded and came back empty.
+  const phase = queryPhase(routinesQuery)
   const createRoutine = useCreateRoutine()
   const updateRoutine = useUpdateRoutine()
   const deleteRoutine = useDeleteRoutine()
@@ -310,11 +305,10 @@ export default function RoutinesTab({ participantId }: { participantId: string |
         </div>
       )}
 
-      {isLoading ? (
-        <div className="space-y-3">
-          <RoutineSkeleton />
-          <RoutineSkeleton />
-        </div>
+      {phase === 'loading' ? (
+        <PageState kind="loading" noun="routines" />
+      ) : phase === 'error' ? (
+        <PageState kind="error" noun="routines" onRetry={() => routinesQuery.refetch()} />
       ) : groups.length === 0 ? (
         <EmptyState
           icon={ListChecks}
