@@ -177,6 +177,22 @@ describe('ParticipantsHubPage (wire) — the other two tabs have their search an
     expect(screen.getByRole('textbox', { name: /search participants, stages or gates/i })).toBeInTheDocument()
   })
 
+  it('shows loading, not "No participants in onboarding", while the browser reports offline and the worklist has not loaded (review F-1, same class)', async () => {
+    onlineManager.setOnline(false)
+    renderHub('/participants?tab=onboarding')
+
+    expect(await screen.findByText('Loading...')).toBeInTheDocument()
+    expect(screen.queryByText('No participants in onboarding')).not.toBeInTheDocument()
+  })
+
+  it('shows loading, not "No enquiries captured yet", while the browser reports offline and the list has not loaded (review F-1, same class)', async () => {
+    onlineManager.setOnline(false)
+    renderHub('/participants?tab=enquiries')
+
+    expect(await screen.findByText('Loading...')).toBeInTheDocument()
+    expect(screen.queryByText('No enquiries captured yet')).not.toBeInTheDocument()
+  })
+
   it('shows the enquiries status filter and search', async () => {
     serve({ enquiries: [{ id: 'e1', firstName: 'Eve', lastName: 'Enquiry', phone: '0400', email: null, source: 'Phone', provenance: null, participantId: null, createdAt: '2026-09-01' }] })
     renderHub('/participants?tab=enquiries')
