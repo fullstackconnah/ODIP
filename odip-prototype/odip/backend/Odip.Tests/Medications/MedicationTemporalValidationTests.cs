@@ -7,6 +7,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Portal;
 using Xunit;
@@ -16,8 +17,9 @@ namespace Odip.Tests.Medications;
 
 /// <summary>
 /// Temporal validation of a recorded dose (422): an ADMINISTERED dose cannot be charted more than 60 minutes before its slot, and a supplied
-/// <c>administeredAt</c> must lie between the earliest the dose could have been given (the shift's actual start on the portal; the start of the
-/// slot's provider-local day on the MAR) and now + 15 minutes; a time in the future but within that tolerance is a device clock running fast and is
+/// <c>administeredAt</c> must lie between the earliest the dose could have been given (on the portal the earlier of the start of any of the shift's
+/// completions and an hour before the rostered start; on the MAR the start of the slot's provider-local day, or an hour before the slot when that is
+/// earlier) and now + 15 minutes; a time in the future but within that tolerance is a device clock running fast and is
 /// stored as the server's now. Fixture clock: 11:00 on Tue 14 July 2026 in Sydney (01:00Z, AEST = UTC+10); the shift started 09:05 local (13 Jul 23:05Z).
 /// </summary>
 public class MedicationTemporalValidationTests
@@ -206,19 +208,98 @@ public class MedicationTemporalValidationTests
         Assert.Equal(earlier, Body(result).Data!.AdministeredAt);
     }
 
+    /// <summary>A provider-local (Sydney, AEST = UTC+10) time on 14 July as the UTC instant the API receives.</summary>
+    private static DateTime UtcAt(int hour, int minute = 0, int day = 14) => new DateTime(2026, 7, day, hour, minute, 0, DateTimeKind.Utc).AddHours(-10);
+
     [Fact]
-    public async Task OnThePortal_AdministeredAt_CannotBeBeforeTheShiftsActualStart()
+    public async Task OnThePortal_AdministeredAt_CannotBeBeforeTheEarliestTheShiftAllows_AnHourBeforeTheRosteredStart()
     {
-        var f = Create();   // actual start 09:05 local = 13 Jul 23:05Z
+        var f = Create();   // rostered 09:00-17:00, started 09:05: the earliest allowed is 08:00 (an hour before the rostered start)
         var med = AddMed(f);
 
-        var before = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(9, 0), administeredAt: ActualStartUtc.AddMinutes(-1)), default);
-        var exactly = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(9, 0), administeredAt: ActualStartUtc), default);
+        var before = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(9, 0), administeredAt: UtcAt(7, 59)), default);
+        var exactly = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(9, 0), administeredAt: UtcAt(8, 0)), default);
 
         Assert.Equal(422, Status(before));
         Assert.Equal(MedicationErrorCodes.AdministrationTimeOutOfRange, Body(before).Code);
-        Assert.Contains("09:05", Assert.Single(Body(before).Errors!));   // provider-local, not UTC
+        Assert.Contains("08:00", Assert.Single(Body(before).Errors!));   // provider-local, not UTC
         Assert.Equal(200, Status(exactly));
+    }
+
+    // ── the active completion's start is not the bound: a Return and a late Start tap (review 3 finding m2) ──
+
+    private static ShiftCompletion AddCompletion(ShiftPackageFixture f, DateTime startUtc, bool active) => f.Db.ShiftCompletions.Add(new ShiftCompletion
+    {
+        Id = Guid.NewGuid(), TenantId = f.Worker.TenantId, ShiftId = f.Shift.Id, ActualStart = startUtc, TimeZoneId = "Australia/Sydney",
+        SubmittedByUserId = f.Worker.Id, StartedAt = startUtc, IsActive = active,
+    }).Entity;
+
+    [Fact]
+    public async Task ScenarioA_AfterACoordinatorReturn_TheWorkerRestartsAt1530_AndStillChartsTheDoseGivenAt1005()
+    {
+        // The 10:00 dose was given at 10:05 but never charted. The coordinator Returns the shift (the completion started at 09:05 is archived and the shift
+        // reopened); the worker re-Starts at 15:30, which gives the shift a NEW completion starting at 15:30. The true time must still be accepted: the old
+        // bound (the active completion's start, 15:30) refused it and left only a false 15:30.
+        var f = Create();
+        var med = AddMed(f, "10:00");
+        f.Completion!.IsActive = false;
+        AddCompletion(f, UtcAt(15, 30), active: true);
+        f.Db.SaveChanges();
+        f.Clock.Set(new DateTimeOffset(UtcAt(15, 35), TimeSpan.Zero));
+
+        var result = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(10, 0), administeredAt: UtcAt(10, 5)), default);
+
+        Assert.Equal(200, Status(result));
+        Assert.Equal(UtcAt(10, 5), Body(result).Data!.AdministeredAt);   // the real time, not 15:30
+    }
+
+    [Fact]
+    public async Task ScenarioB_TheWorkerGaveTheDoseOnArrival_TappedStartAt0910_AndChartsItAt0912WithTheTrue0905()
+    {
+        var f = Create();
+        var med = AddMed(f, "09:00");
+        f.Completion!.ActualStart = UtcAt(9, 10);
+        f.Completion.StartedAt = UtcAt(9, 10);
+        f.Db.SaveChanges();
+        f.Clock.Set(new DateTimeOffset(UtcAt(9, 12), TimeSpan.Zero));
+
+        var result = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(9, 0), administeredAt: UtcAt(9, 5)), default);
+
+        Assert.Equal(200, Status(result));
+        Assert.Equal(UtcAt(9, 5), Body(result).Data!.AdministeredAt);
+    }
+
+    [Fact]
+    public async Task AWorkerWhoStartedEarly_KeepsThatEarlyStartAsTheBound_EvenAfterAReturnAndARestart()
+    {
+        // The first completion started at 07:30, more than an hour before the rostered start, and was archived by a Return; the restart is at 15:30. The earliest
+        // of the completions' starts (07:30) is the bound, so a dose given at 07:45 is accepted and one given at 07:29 is not.
+        var f = Create();
+        var med = AddMed(f, "09:00");
+        f.Completion!.ActualStart = UtcAt(7, 30);
+        f.Completion.IsActive = false;
+        AddCompletion(f, UtcAt(15, 30), active: true);
+        f.Db.SaveChanges();
+        f.Clock.Set(new DateTimeOffset(UtcAt(15, 35), TimeSpan.Zero));
+
+        var tooEarly = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(9, 0), administeredAt: UtcAt(7, 29)), default);
+        var fine = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(9, 0), administeredAt: UtcAt(7, 45)), default);
+
+        Assert.Equal(422, Status(tooEarly));
+        Assert.Contains("07:30", Assert.Single(Body(tooEarly).Errors!));
+        Assert.Equal(200, Status(fine));
+    }
+
+    [Fact]
+    public async Task OnThePortal_TheFutureBoundIsUnchanged_AndAnEarlyBoundDoesNotLetAFutureTimeThrough()
+    {
+        var f = Create();
+        var med = AddMed(f);
+
+        var future = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Local(9, 0), administeredAt: NowUtc(f).AddMinutes(16)), default);
+
+        Assert.Equal(422, Status(future));
+        Assert.Contains("future", Assert.Single(Body(future).Errors!));
     }
 
     [Fact]

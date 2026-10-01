@@ -610,14 +610,10 @@ public class PortalController : ControllerBase
             TripInstanceId = null,
         };
 
-        // The time a dose was given cannot be before the worker started the shift (the active completion's actual start).
-        var actualStart = await _db.ShiftCompletions
-            .Where(c => c.ShiftId == shift.Id && c.IsActive)
-            .Select(c => (DateTime?)c.ActualStart)
-            .FirstOrDefaultAsync(ct);
+        var lowerBound = await EarliestDoseTimeAsync(shift, ct);
         var result = await _recorder.RecordAsync(
             new RecordAdministrationRequest(
-                medicationId, dto, staffId, GetCallerName(), RequiredParticipantId: shift.ParticipantId, AdministeredAtLowerBoundUtc: actualStart), ct);
+                medicationId, dto, staffId, GetCallerName(), RequiredParticipantId: shift.ParticipantId, AdministeredAtLowerBoundUtc: lowerBound), ct);
 
         // Every instant this endpoint returns is UTC with a Z. The record a request just created carries Kind=Utc, but the one a replay
         // or a 409 hands back is read from PostgreSQL as Kind=Unspecified and would otherwise serialise without the Z - so the same field
@@ -625,6 +621,27 @@ public class PortalController : ControllerBase
         if (result.Administration is { } administration)
             result = result with { Administration = WithUtcInstants(administration) };
         return result.ToActionResult(this);
+    }
+
+    /// <summary>
+    /// The earliest instant a dose recorded from this shift can have been given: the EARLIER of the start of any of the shift's completions and an hour
+    /// before the rostered start. The active completion's start is not enough on its own: a coordinator Return archives the completion and the worker's
+    /// re-Start gives the shift a NEW one starting at that moment, and a worker who gives a dose on arrival and taps Start a few minutes later has a
+    /// start after the dose; either way the true time of the dose would be refused (scenarios A and B of review 3, finding m2), leaving the worker to
+    /// chart a false time. The rostered start less the early window (the same 60 minutes an Administered dose may be charted before its slot) covers
+    /// both. The upper bound (now, within the device-clock tolerance) is unchanged.
+    /// </summary>
+    private async Task<DateTime> EarliestDoseTimeAsync(Shift shift, CancellationToken ct)
+    {
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
+        var (rosteredStartLocal, _) = ProviderLocalTime.RosteredWindowLocal(shift);
+        var rosteredLimit = ProviderLocalTime.LocalToUtc(rosteredStartLocal, provider.Zone).AddMinutes(-MedicationAdministrationRecorder.EarlyAdministrationMinutes);
+
+        // Every completion of the shift, the archived ones too (a Return archives the one the worker started).
+        var earliestStart = await _db.ShiftCompletions
+            .Where(c => c.ShiftId == shift.Id)
+            .MinAsync(c => (DateTime?)c.ActualStart, ct);
+        return earliestStart is { } start && ProviderLocalTime.AsUtc(start) < rosteredLimit ? ProviderLocalTime.AsUtc(start) : rosteredLimit;
     }
 
     private static AdministrationDto WithUtcInstants(AdministrationDto a) => a with

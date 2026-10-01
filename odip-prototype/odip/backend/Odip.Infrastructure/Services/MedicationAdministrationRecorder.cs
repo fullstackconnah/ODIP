@@ -61,7 +61,7 @@ public sealed record RecordAdministrationResult(
 /// <param name="FallbackRecordedByName">The JWT display name, used only when no user row can be resolved.</param>
 /// <param name="RequiredParticipantId">When set (the portal package), the medication must belong to this participant.</param>
 /// <param name="AdministeredAtLowerBoundUtc">The earliest instant the dose can have been given, when the caller knows one: the portal passes the
-/// shift's actual start. When null, a scheduled dose is bounded below by the start of the slot's provider-local day (the MAR path) and a PRN
+/// earliest the shift allows (the earlier of the start of any of its completions and an hour before the rostered start). When null, a scheduled dose is bounded below by the start of the slot's provider-local day (the MAR path) and a PRN
 /// dose has no lower bound.</param>
 public sealed record RecordAdministrationRequest(
     Guid MedicationId, CreateAdministrationDto Dto, Guid? AdministeringUserId, string FallbackRecordedByName,
@@ -85,7 +85,8 @@ public sealed record RecordAdministrationRequest(
 ///    against a true race.
 /// 3. <b>Temporal validation (422).</b> An Administered dose is refused when the slot is more than <see cref="EarlyAdministrationMinutes"/>
 ///    minutes away (ADMINISTRATION_TOO_EARLY), and a supplied <c>administeredAt</c> must lie between the earliest the dose could have been given
-///    (the shift's actual start on the portal path; on the MAR path the start of the slot's provider-local day, or an hour before the slot when that
+///    (on the portal path the earliest the shift allows: the earlier of the start of any of its completions and an hour before the rostered start; on
+///    the MAR path the start of the slot's provider-local day, or an hour before the slot when that
 ///    is earlier, so a slot just after midnight can be charted in the hour before it) and now plus
 ///    <see cref="ClockSkewMinutes"/> (ADMINISTRATION_TIME_OUT_OF_RANGE). A time that is in the future but within that tolerance is a device clock
 ///    running fast, not an error: the record is stored with the SERVER's now instead. All comparisons are on UTC instants; times in messages are
@@ -592,7 +593,7 @@ public sealed class MedicationAdministrationRecorder
     /// <summary>
     /// The temporal rules. (1) An Administered scheduled dose is refused when its slot is more than <see cref="EarlyAdministrationMinutes"/> minutes
     /// ahead of now (exactly 60 is allowed). (2) A supplied <c>administeredAt</c> (any status) must be no later than now + <see cref="ClockSkewMinutes"/>
-    /// and no earlier than the lower bound: the caller's (the shift's actual start), else the start of the slot's provider-local day or an hour before
+    /// and no earlier than the lower bound: the caller's (the portal's: the earliest the shift allows), else the start of the slot's provider-local day or an hour before
     /// the slot when that is earlier (a slot in the first hour after midnight), else none (PRN on the MAR path has no slot to anchor to). Slots are
     /// provider-local wall clock and compared as UTC instants; messages show provider-local time.
     /// </summary>
@@ -625,7 +626,7 @@ public sealed class MedicationAdministrationRecorder
             if (callerLowerBoundUtc is { } caller)
             {
                 lowerUtc = ProviderLocalTime.AsUtc(caller);
-                lowerWhat = $"when the shift started ({FormatLocal(ProviderLocalTime.UtcToLocal(lowerUtc.Value, zone), nowLocal)})";
+                lowerWhat = $"{FormatLocal(ProviderLocalTime.UtcToLocal(lowerUtc.Value, zone), nowLocal)}, the earliest this shift allows";
             }
             else if (dto.ScheduledAt is { } scheduled)
             {
