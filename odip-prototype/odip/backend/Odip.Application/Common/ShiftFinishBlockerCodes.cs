@@ -7,7 +7,7 @@ namespace Odip.Application.Common;
 /// </summary>
 public static class ShiftFinishBlockerCodes
 {
-    /// <summary>A dose due in the shift window has no outcome (and no "not given this shift" reason).</summary>
+    /// <summary>A dose due in the shift window has no outcome (and no "not given" reason).</summary>
     public const string DoseOutcomeMissing = "DOSE_OUTCOME_MISSING";
 
     /// <summary>A break is still running.</summary>

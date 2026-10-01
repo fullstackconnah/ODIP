@@ -18,14 +18,15 @@ public sealed record ShiftDoses(IReadOnlyList<PortalDoseSlotDto> Slots, IReadOnl
 /// window, the End checklist - so the two surfaces cannot disagree.
 ///
 /// The End checklist (BRIEF section 3) is ENFORCED by the server, not merely shown: every dose that has come due in the shift's
-/// ROSTERED window needs an outcome (given, refused, withheld, or "not given this shift" with a reason, recorded as a Missed
-/// administration), and a running break must be ended. The portal DTO carries the same list as <c>finishBlockers</c> so the
+/// ROSTERED window needs an outcome (given, refused, withheld, or "not given" with a reason, recorded as a Missed
+/// administration), and a running break must be ended. A Missed record says the dose was not given; it is not a hand-over (what the next
+/// worker needs to know goes in the handover text), and a later record saying the dose WAS given supersedes it. The portal DTO carries the same list as <c>finishBlockers</c> so the
 /// client can render the checklist before it ever calls Finish.
 ///
 /// Two rules keep that checklist satisfiable - an unsatisfiable checklist locks the worker out of Finish and strands the
 /// completion before review:
 ///  - a dose blocks only once its time has ARRIVED (a 15:00 dose does not block a 13:00 early finish - recording it "not given"
-///    would be permanent, because a slot takes one record, and would stop the next worker giving it);
+///    would put a false Missed record on the MAR for a dose nobody had yet been able to give);
 ///  - a dose blocks only a worker who CAN record it (Medication Competency): recording is gated, so a worker without a current
 ///    credential could never clear it. Their unrecorded doses show to the coordinator as "nothing recorded" in the completion review.
 /// Every medication support level blocks alike, matching the existing MAR (which has never filtered by it).
@@ -92,7 +93,7 @@ public sealed class ShiftPackageService
             blockers.Add(new PortalFinishBlockerDto(
                 ShiftFinishBlockerCodes.DoseOutcomeMissing,
                 $"{label} at {slot.ScheduledAt.ToString("HH:mm", CultureInfo.InvariantCulture)} has no outcome. "
-                + "Record it, or mark it not given this shift with a reason.",
+                + "Record it, or mark it not given with a reason.",
                 slot.MedicationId, slot.MedicationName, slot.ScheduledAt));
         }
 

@@ -180,7 +180,7 @@ public record AdministrationDto
     /// accepted and flagged for review. Always false in Enforce mode and for records that predate the flag.</summary>
     public bool RecordedWithoutCompetency { get; init; }
 
-    /// <summary>Set on a Refused or Missed record that a later Administered record superseded: the id of the replacement. Null = the active record
+    /// <summary>Set on a Refused, Withheld or Missed record that a later Administered (or WrongMedication) record superseded: the id of the replacement. Null = the active record
     /// for its slot. Superseded records stay in the history lists; the MAR and the shift package show only the active one.</summary>
     public Guid? SupersededByAdministrationId { get; init; }
 

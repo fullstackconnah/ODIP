@@ -478,7 +478,7 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
     [SkippableFact]
     public async Task ConcurrentAdministeredOverAMissedSlot_OnRealPostgres_SupersedeExactlyOnce_AndTheRestAreTold409()
     {
-        // The supersede happens inside the slot lock: eight cover workers all try to record the dose the first worker marked Missed. One wins and
+        // The supersede happens inside the slot lock: eight workers all try to record the dose that was recorded Missed (it was in fact given). One wins and
         // supersedes the Missed record; the other seven see an ACTIVE Administered record and get the 409 with it. Never two active records.
         RequirePostgres();
         var slot = new DateTime(2026, 7, 14, 8, 0, 0);
@@ -503,27 +503,33 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
-    public async Task AMissedSlot_RacedByAdministeredRefusedAndMissed_OnRealPostgres_OnlyAnAdministeredRecordCanWin()
+    public async Task AMissedSlot_RacedByEveryOutcome_OnRealPostgres_OnlyAGivenRecordCanWin_AndOnlyOne()
     {
         RequirePostgres();
         var slot = new DateTime(2026, 7, 14, 8, 0, 0);
         var (tenantId, userId, med) = await SeedMedicationWithAMissedSlotAsync(slot);
 
-        var results = await RaceAsync(tenantId, 6, (db, n) => new MedicationAdministrationRecorder(db).RecordAsync(
+        var results = await RaceAsync(tenantId, 8, (db, n) => new MedicationAdministrationRecorder(db).RecordAsync(
             new RecordAdministrationRequest(
                 med.Id,
                 new CreateAdministrationDto
                 {
-                    Status = (n % 3) switch { 0 => MedicationAdministrationStatus.Administered, 1 => MedicationAdministrationStatus.Refused, _ => MedicationAdministrationStatus.Missed },
-                    Reason = "second opinion", ScheduledAt = slot, IdempotencyKey = $"key-{n}-{Guid.NewGuid()}",
+                    Status = (n % 4) switch
+                    {
+                        0 => MedicationAdministrationStatus.Administered, 1 => MedicationAdministrationStatus.WrongMedication,
+                        2 => MedicationAdministrationStatus.Refused, _ => MedicationAdministrationStatus.Missed,
+                    },
+                    Reason = "second opinion", Notes = "gave the 250mg instead", ScheduledAt = slot, IdempotencyKey = $"key-{n}-{Guid.NewGuid()}",
                 },
                 userId, "Ben Turner"),
             default));
 
-        // Refused and Missed can never replace a Missed record; of the two Administered attempts exactly one is the replacement.
+        // Refused and Missed can never replace a Missed record; of the Administered and WrongMedication attempts exactly one is the replacement,
+        // and once it is in, the other given attempt is refused too (a given record is never superseded).
         Assert.Equal(1, results.Count(r => r.Outcome == RecordAdministrationOutcome.Created));
-        Assert.Equal(MedicationAdministrationStatus.Administered, results.Single(r => r.Outcome == RecordAdministrationOutcome.Created).Administration!.Status);
-        Assert.Equal(5, results.Count(r => r.Outcome == RecordAdministrationOutcome.AlreadyRecorded));
+        Assert.Contains(results.Single(r => r.Outcome == RecordAdministrationOutcome.Created).Administration!.Status,
+            new[] { MedicationAdministrationStatus.Administered, MedicationAdministrationStatus.WrongMedication });
+        Assert.Equal(7, results.Count(r => r.Outcome == RecordAdministrationOutcome.AlreadyRecorded));
         await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
         var records = await verify.MedicationAdministrations.Where(a => a.ParticipantMedicationId == med.Id && a.ScheduledAt == slot).ToListAsync();
         Assert.Equal(2, records.Count);

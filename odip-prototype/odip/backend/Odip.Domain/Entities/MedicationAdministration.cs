@@ -112,8 +112,9 @@ public class MedicationAdministration : ITenantEntity
 
     /// <summary>
     /// Set on an EARLIER record when a later one superseded it: the id of the record that replaced it. Null = this is the ACTIVE record for
-    /// its slot (the only one the MAR, the shift package and the coordinator review show). Only a Refused or Missed record is ever
-    /// superseded, and only by an Administered one (the participant refused then took it at 09:40; a cover worker takes over): the earlier
+    /// its slot (the only one the MAR, the shift package and the coordinator review show). Only a Refused, Withheld or Missed record is ever
+    /// superseded, and only by a record saying the dose was given (Administered or WrongMedication: the participant refused at 09:00 and took
+    /// it at 09:40; a Missed record turned out to be wrong because the dose was given): the earlier
     /// record is KEPT as history (it still appears in the participant history and the administration report, marked by this link) and the
     /// change is audited. Nullable uuid with no foreign key, so adding it is metadata-only and cannot fail on existing data. Soft link by
     /// design: administration records are never deleted.

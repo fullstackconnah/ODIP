@@ -84,10 +84,13 @@ public sealed record RecordAdministrationRequest(
 ///    <see cref="ClockSkewMinutes"/> (ADMINISTRATION_TIME_OUT_OF_RANGE). All comparisons are on UTC instants; times in messages are provider-local.
 /// 4. <b>One ACTIVE record per scheduled dose slot.</b> For a scheduled dose (ScheduledAt set), an active record that already
 ///    exists for (medication, ScheduledAt) blocks a second one: <see cref="RecordAdministrationOutcome.AlreadyRecorded"/>
-///    with the existing record. The one exception: a later ADMINISTERED record SUPERSEDES an active Refused or Missed one (the
-///    participant refused then took it; a cover worker takes over) - the earlier record is kept as history, linked through
-///    <see cref="MedicationAdministration.SupersededByAdministrationId"/>, in the same transaction and under the same slot lock. An
-///    Administered record is never superseded here; only the coordinator amend path changes it.
+///    with the newest active record. The one exception: a record saying the dose WAS given (Administered, or WrongMedication) SUPERSEDES
+///    earlier records saying it was NOT (Refused, Withheld, Missed) - the participant refused at 09:00 and took it at 09:40; a Missed record
+///    turned out to be wrong because the dose was given - and the earlier records are kept as history, linked through
+///    <see cref="MedicationAdministration.SupersededByAdministrationId"/>, in the same transaction and under the same slot lock. Nothing
+///    supersedes a record saying a dose was given (an Administered record closes the slot; a WrongMedication record is an incident that must
+///    stay visible on the MAR), a not-given outcome never replaces another record, and one given record anywhere in the slot (legacy duplicate
+///    rows) blocks the supersede; only the coordinator amend path changes a given record.
 ///    This is an application rule, not a unique index, because existing data may already
 ///    hold duplicates per slot — see <see cref="MedicationAdministration.IdempotencyKey"/>. On PostgreSQL the replay check, the slot
 ///    check and the insert run under a transaction-scoped advisory lock keyed on the slot, so two requests for one slot (two
@@ -229,10 +232,15 @@ public sealed class MedicationAdministrationRecorder
                 .ToListAsync(ct);
             if (active.Count > 0)
             {
-                // Only Administered supersedes, and only Refused or Missed records (legacy duplicates are all checked: a single
-                // Administered one anywhere in the slot blocks it). Anything else is the existing 409 with the newest active record.
-                var supersedes = dto.Status == MedicationAdministrationStatus.Administered
-                    && active.All(a => a.Status is MedicationAdministrationStatus.Refused or MedicationAdministrationStatus.Missed);
+                // A record saying the dose WAS given (Administered, or WrongMedication) supersedes records saying it was NOT (Refused, Withheld,
+                // Missed): the participant refused then took it; a Missed record turned out to be wrong. Every replaced record stays as history.
+                // Anything else is the 409 with the newest active record: nothing replaces a record that says the dose was given (a
+                // WrongMedication record is an incident that has to stay on the MAR), and a not-given outcome never replaces another record.
+                // Legacy duplicate rows are all checked, so one given record anywhere in the slot blocks the supersede and a second "given"
+                // record can never be created for a slot that already has one.
+                var supersedes = (dto.Status is MedicationAdministrationStatus.Administered or MedicationAdministrationStatus.WrongMedication)
+                    && active.All(a => a.Status is MedicationAdministrationStatus.Refused or MedicationAdministrationStatus.Withheld
+                                                  or MedicationAdministrationStatus.Missed);
                 if (!supersedes)
                     return new RecordAdministrationResult(
                         RecordAdministrationOutcome.AlreadyRecorded, ToDto(active[0]),

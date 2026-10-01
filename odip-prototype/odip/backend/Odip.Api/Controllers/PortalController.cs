@@ -547,7 +547,7 @@ public class PortalController : ControllerBase
     // ══════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Records a dose (any outcome, including "not given this shift" = Missed with a reason) for one of the participant's
+    /// Records a dose (any outcome, including "not given" = Missed with a reason) for one of the participant's
     /// medications, from the caller's OWN shift. Scoped tighter than the general
     /// <c>POST medications/{id}/administrations</c>, which stays as it is: the shift must be InProgress, the medication must
     /// belong to the shift's participant and be Active, and a scheduled dose's <c>scheduledAt</c> must be one of the shift

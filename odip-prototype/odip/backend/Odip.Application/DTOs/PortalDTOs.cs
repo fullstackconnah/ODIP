@@ -155,7 +155,7 @@ public record PortalShiftDetailDto(
     /// <summary>What still blocks Finish right now (only while InProgress; empty otherwise): a running break, and the doses in the
     /// shift's rostered window that have COME DUE (their time has arrived) and have no outcome - but only for a worker who can record
     /// doses (<see cref="CanRecordDoses"/>); a worker without a current Medication Competency is never blocked on a dose they could
-    /// not record. A dose still ahead is handed over, not blocked. Finish rejects with 422 SHIFT_FINISH_BLOCKED while this is
+    /// not record. A dose still ahead does not block (it is recorded when it falls due). Finish rejects with 422 SHIFT_FINISH_BLOCKED while this is
     /// non-empty; the list is computed by the same rule the server applies at Finish.</summary>
     IReadOnlyList<PortalFinishBlockerDto> FinishBlockers,
     /// <summary>The provider's IANA time zone (e.g. "Australia/Sydney"). Every wall-clock time in this DTO
@@ -299,7 +299,7 @@ public record PortalDoseSlotDto(
 /// <summary>A recorded outcome for a dose.</summary>
 public record PortalDoseOutcomeDto(
     Guid AdministrationId,
-    /// <summary>Administered, Refused, Withheld, Missed (also how "not given this shift" is recorded, with its reason) or WrongMedication.</summary>
+    /// <summary>Administered, Refused, Withheld, Missed (how "not given" is recorded, with its reason; it is not a hand-over) or WrongMedication.</summary>
     MedicationAdministrationStatus Status,
     string RecordedByName,
     /// <summary>When the dose was given (UTC), for Administered records.</summary>

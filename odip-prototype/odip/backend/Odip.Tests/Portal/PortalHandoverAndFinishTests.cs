@@ -344,7 +344,7 @@ public class PortalHandoverTests
 
 /// <summary>
 /// Finish validation: the End checklist is ENFORCED by the server - every dose due in the shift's rostered window needs an
-/// outcome (or a "not given this shift" reason, stored as a Missed record) and no break may still be running - plus the
+/// outcome (or a "not given" reason, stored as a Missed record) and no break may still be running - plus the
 /// "nothing to note" confirmation and the handover written at Finish.
 /// </summary>
 public class PortalFinishValidationTests
@@ -370,7 +370,7 @@ public class PortalFinishValidationTests
         f.Db.MedicationAdministrations.Add(new MedicationAdministration
         {
             Id = Guid.NewGuid(), TenantId = med.TenantId, ParticipantMedicationId = med.Id, ParticipantId = med.ParticipantId, ScheduledAt = slotLocal,
-            Status = status, Reason = status == MedicationAdministrationStatus.Administered ? null : "Finished early; handed to the evening worker",
+            Status = status, Reason = status == MedicationAdministrationStatus.Administered ? null : "Participant asleep, could not be woken",
             RecordedByName = "Ben Turner", AdministeredAt = status == MedicationAdministrationStatus.Administered ? DateTime.UtcNow : null,
         });
         f.Db.SaveChanges();
@@ -525,7 +525,7 @@ public class PortalFinishValidationTests
         var med = AddMed(f, "Levetiracetam", "09:00,12:30,15:00");
         Record(f, med, Nine, MedicationAdministrationStatus.Administered);
         Record(f, med, Noon, MedicationAdministrationStatus.Refused);
-        Record(f, med, new DateTime(2026, 7, 14, 15, 0, 0), MedicationAdministrationStatus.Missed);   // "not given this shift" + reason
+        Record(f, med, new DateTime(2026, 7, 14, 15, 0, 0), MedicationAdministrationStatus.Missed);   // "not given" + reason
 
         var detail = Detail(await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto(), default));
 
@@ -683,8 +683,8 @@ public class PortalFinishValidationTests
     [Fact]
     public async Task ADoseWhoseTimeHasNotArrived_DoesNotBlockAnEarlyFinish_AndNoRecordIsInvented()
     {
-        // 11:00 local. The 09:00 dose is done; the 15:00 one is for whoever is on then (recording it "not given" would be permanent:
-        // a slot takes one record, so the next worker could no longer give it).
+        // 11:00 local. The 09:00 dose is done; the 15:00 one is for whoever is on then (recording it "not given" would put a false Missed
+        // record on the MAR for a dose nobody had yet been able to give).
         var f = Create();
         AddNote(f);
         var med = AddMed(f, "Levetiracetam", "09:00,15:00");

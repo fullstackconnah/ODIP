@@ -83,11 +83,11 @@ public class PortalRecordShiftDoseTests
         f.Db.SaveChanges();
 
         var result = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id,
-            Dose(Nine, MedicationAdministrationStatus.Missed, reason: "Participant asleep; handed to the evening worker"), default);
+            Dose(Nine, MedicationAdministrationStatus.Missed, reason: "Participant asleep, could not be woken"), default);
 
         Assert.Equal(200, Status(result));
         Assert.Equal(MedicationAdministrationStatus.Missed, Body(result).Data!.Status);
-        Assert.Equal("Participant asleep; handed to the evening worker", Body(result).Data!.Reason);
+        Assert.Equal("Participant asleep, could not be woken", Body(result).Data!.Reason);
         Assert.Empty(Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default)).FinishBlockers);
         Assert.Equal(ShiftStatus.PendingReview, Detail(await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto(), default)).Status);
     }
