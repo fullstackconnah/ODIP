@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useId } from 'react'
 import { X } from 'lucide-react'
 import { useUpdateTrip, useEventTemplates, useStaff } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
+import { TAP_AREA } from '@/components/tapArea'
+import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import type { TripDetailDto, UpdateTripDto } from '@/api/types/trips'
 import type { TripStatus } from '@/api/types/enums'
 import type { EventTemplateDto } from '@/api/types/events'
@@ -40,60 +42,9 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
   const initialized = useRef(false)
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<Element | null>(null)
 
-  // Escape to close + Tab focus trap
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-        return
-      }
-      if (e.key === 'Tab') {
-        const dialog = dialogRef.current
-        if (!dialog) return
-        const focusable = Array.from(
-          dialog.querySelectorAll<HTMLElement>(
-            'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
-          )
-        )
-        if (focusable.length === 0) {
-          e.preventDefault()
-          return
-        }
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault()
-          last.focus()
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault()
-          first.focus()
-        }
-      }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [onClose])
-
-  // Lock background scroll while open
-  useEffect(() => {
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
-  }, [])
-
-  // Move focus into the dialog on mount, return it to the trigger on unmount
-  useEffect(() => {
-    triggerRef.current = document.activeElement
-    const dialog = dialogRef.current
-    const firstFocusable = dialog?.querySelector<HTMLElement>(
-      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    )
-    ;(firstFocusable ?? dialog)?.focus()
-    return () => {
-      if (triggerRef.current instanceof HTMLElement) triggerRef.current.focus()
-    }
-  }, [])
+  // Escape, the Tab trap, scroll lock and focus in / back (the parent mounts this only while it is open).
+  useDialogBehavior({ open: true, onClose, containerRef: dialogRef })
 
   useEffect(() => {
     if (!trip || initialized.current) return
@@ -162,7 +113,8 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
             <h2 id={titleId} className="text-lg font-bold text-[var(--color-foreground)]">Edit Trip</h2>
             {!tripEditForm && <p className="text-xs text-[var(--color-muted-foreground)] mt-0.5">Loading trip details…</p>}
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-[var(--color-surface-container-low)] transition-colors">
+          {/* TAP_AREA: the 32px button keeps its look and gets a 44px hit area on touch. */}
+          <button type="button" onClick={onClose} aria-label="Close dialog" className={`${TAP_AREA} p-2 rounded-full hover:bg-[var(--color-surface-container-low)] transition-colors`}>
             <X className="w-4 h-4 text-[var(--color-muted-foreground)]" />
           </button>
         </div>
