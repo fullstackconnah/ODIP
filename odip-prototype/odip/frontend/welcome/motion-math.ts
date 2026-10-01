@@ -2,19 +2,22 @@
 
 export const clamp01 = (n: number): number => Math.min(1, Math.max(0, n))
 
-/** Exponential-style ease-out: fast start, gentle landing. */
-export function easeOutCubic(t: number): number {
-  return 1 - Math.pow(1 - clamp01(t), 3)
+/** Smoothstep: eases in and out, so the middle of the range carries most of the change. */
+export function smoothstep(t: number): number {
+  const x = clamp01(t)
+  return x * x * (3 - 2 * x)
 }
 
 /**
  * How far a fold has opened: 0 fully folded, 1 flat.
- * A fold starts opening as its top edge enters the bottom of the viewport (98%) and is flat by the time it reaches 42%.
+ * A fold starts opening as its top edge enters the bottom of the viewport (100%) and is flat once it reaches 45%.
+ * Smoothstep spreads the angle across that whole scroll, so the sheet is still visibly folded (about 25 degrees
+ * of a 58 degree peak) when its brown sign is fully on screen at 70%, and nearly flat at the reading line (60%).
  */
 export function unfoldAmount(top: number, viewportHeight: number): number {
-  const start = viewportHeight * 0.98
-  const end = viewportHeight * 0.42
-  return easeOutCubic((start - top) / (start - end))
+  const start = viewportHeight
+  const end = viewportHeight * 0.45
+  return smoothstep((start - top) / (start - end))
 }
 
 /** How much of a fold the reading line has passed, 0 to 1. Draws the route line down the page. */

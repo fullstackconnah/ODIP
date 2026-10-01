@@ -222,10 +222,12 @@ a.sign--mini:hover { transform: translateY(-2px); }
 .stops__odo-km { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 4.4ch; text-align: right; }
 
 .strip { position: relative; border: 1px solid #b9c0a9; border-radius: 12px; overflow: clip; background: var(--paper); box-shadow: 0 40px 60px -36px rgba(31, 61, 5, 0.6); }
-.fold { position: relative; scroll-margin-top: calc(var(--header-h) + 84px); }
+/* The darker paper behind a sheet shows at the crease while the sheet folds; the 1px inset highlight is the crease's lit edge. */
+.fold { position: relative; scroll-margin-top: calc(var(--header-h) + 84px); background: #cdc7b2; }
 .fold__sheet {
   position: relative; display: grid; grid-template-columns: 88px minmax(0, 1fr);
   background: var(--paper); border-top: 1px solid rgba(60, 50, 20, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 .fold:first-child .fold__sheet { border-top: 0; }
 .fold:nth-child(even) .fold__sheet { background: var(--paper-2); }
@@ -395,8 +397,8 @@ a.sign--mini:hover { transform: translateY(-2px); }
   .plates::before, .plates::after { display: block; }
   .fold__screens--pair { grid-template-columns: minmax(0, 1fr) 300px; align-items: start; }
   .fold__screens--pair .screen--wide { grid-column: 1 / -1; }
-  .strip { perspective: 1800px; perspective-origin: 50% 12%; }
-  .fold.is-folding .fold__sheet { transform-origin: 50% 0; transform: rotateX(calc((1 - var(--unfold, 1)) * -34deg)); will-change: transform; }
+  .strip { perspective: 1400px; perspective-origin: 50% 12%; }
+  .fold.is-folding .fold__sheet { transform-origin: 50% 0; transform: rotateX(calc((1 - var(--unfold, 1)) * -58deg)); will-change: transform; }
 }
 
 /* ---------- Phones and tablets: each fold shows its folded and open frames, stacked ---------- */

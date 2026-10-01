@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { clamp01, currentFold, easeOutCubic, kmAt, routeFill, unfoldAmount } from './motion-math'
+import { clamp01, currentFold, kmAt, routeFill, smoothstep, unfoldAmount } from './motion-math'
+
+const PEAK = 58 // degrees, as in welcome.css
+const angle = (topFraction: number, vh = 900) => (1 - unfoldAmount(vh * topFraction, vh)) * PEAK
 
 describe('motion maths', () => {
   it('clamps to 0..1', () => {
@@ -8,20 +11,31 @@ describe('motion maths', () => {
     expect(clamp01(9)).toBe(1)
   })
 
-  it('eases out: fast start, gentle landing, fixed ends', () => {
-    expect(easeOutCubic(0)).toBe(0)
-    expect(easeOutCubic(1)).toBe(1)
-    expect(easeOutCubic(0.5)).toBeGreaterThan(0.5)
+  it('smoothstep eases in and out with fixed ends and a flat middle slope', () => {
+    expect(smoothstep(0)).toBe(0)
+    expect(smoothstep(1)).toBe(1)
+    expect(smoothstep(0.5)).toBe(0.5)
+    expect(smoothstep(0.25)).toBeLessThan(0.25)
+    expect(smoothstep(0.75)).toBeGreaterThan(0.75)
   })
 
-  it('a fold is folded below the viewport, flat once its top passes 42% of the height, and never overshoots', () => {
+  it('a fold is folded below the viewport, flat once its top reaches 45% of the height, and never overshoots', () => {
     const vh = 900
     expect(unfoldAmount(vh, vh)).toBe(0)
-    expect(unfoldAmount(vh * 0.98, vh)).toBe(0)
-    expect(unfoldAmount(vh * 0.42, vh)).toBe(1)
+    expect(unfoldAmount(vh * 1.2, vh)).toBe(0)
+    expect(unfoldAmount(vh * 0.45, vh)).toBe(1)
     expect(unfoldAmount(-500, vh)).toBe(1)
-    const samples = [0.95, 0.8, 0.65, 0.5, 0.42].map((f) => unfoldAmount(vh * f, vh))
+    const samples = [0.95, 0.8, 0.65, 0.5, 0.45].map((f) => unfoldAmount(vh * f, vh))
     for (let i = 1; i < samples.length; i++) expect(samples[i]).toBeGreaterThanOrEqual(samples[i - 1])
+  })
+
+  it('keeps the sheet visibly folded while its sign arrives and nearly flat at the reading line (measured by the review)', () => {
+    expect(angle(0.85)).toBeCloseTo(47.4, 0)
+    expect(angle(0.7)).toBeCloseTo(25, 0)
+    expect(angle(0.6)).toBeCloseTo(10.6, 0)
+    expect(angle(0.5)).toBeLessThan(2)
+    // the old curve was at 4 degrees by 70% of the viewport: the new one must be at least five times that
+    expect(angle(0.7)).toBeGreaterThan(20)
   })
 
   it('draws the route as the reading line passes a fold', () => {
