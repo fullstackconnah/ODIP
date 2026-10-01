@@ -1,12 +1,12 @@
 /**
- * Stage 6: STAY COMPLIANT shots that live outside shots.mjs (body map crop, trip history). Same shape as shots.mjs.
+ * Stage 6: REPORT ON TIME shots that live outside shots.mjs (body map crop, trip history). Same shape as shots.mjs.
  */
 import { driveIncidentToDetails } from './drivers.mjs'
 
 export const shots = []
 
 shots.push({
-  name: 'compliant-body-map',
+  name: 'report-body-map',
   stage: 'report-on-time',
   priority: 'P1',
   route: '/incidents/new',
@@ -15,7 +15,7 @@ shots.push({
   now: '2026-07-11T15:00:00+10:00',
   viewport: { width: 1000, height: 900 },
   alt: 'Injuries card from the incident wizard: grouped body region buttons (head and torso, arms, legs, other) beside a front and back body map with the left forearm highlighted, then the selected region, an injury type of Abrasion and an injury description reading "Small graze, cleaned and dressed on site."',
-  notes: 'Mock data; filled through the real UI, no fixtures. The step rail cannot be included: on this step the Incident Details card sits between the rail and the Injuries card, so they are not contiguous (see compliant-incident-wizard for the rail). The crop is cut inside the card just below the Injury Description field, which leaves out the Add injury button (dark text on dark green in the app) and the empty recorded-injuries table. 1000px viewport, same as the wizard shot.',
+  notes: 'Mock data; filled through the real UI, no fixtures. The step rail cannot be included: on this step the Incident Details card sits between the rail and the Injuries card, so they are not contiguous (see report-incident-wizard for the rail). The crop is cut inside the card just below the Injury Description field, which leaves out the Add injury button (dark text on dark green in the app) and the empty recorded-injuries table. 1000px viewport, same as the wizard shot.',
   async run({ page, goto, settle, unionRect }) {
     await driveIncidentToDetails(page, goto, { addInjury: false })
     await page.getByText('Selected region:').waitFor()
@@ -56,7 +56,7 @@ const auditEntries = [
 ]
 
 shots.push({
-  name: 'compliant-history',
+  name: 'report-history',
   stage: 'report-on-time',
   priority: 'P2',
   route: '/trips/t-0001?tab=history',

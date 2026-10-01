@@ -348,10 +348,10 @@
     "variantOf": "fund-claim-batch"
   },
   {
-    "name": "compliant-overdue",
+    "name": "report-overdue",
     "stage": "report-on-time",
-    "file1x": "compliant-overdue.webp",
-    "file2x": "compliant-overdue@2x.webp",
+    "file1x": "report-overdue.webp",
+    "file2x": "report-overdue@2x.webp",
     "width1x": 1024,
     "height1x": 242,
     "width2x": 2048,
@@ -365,10 +365,10 @@
     "notes": "Mock data, no fixtures. Clock pinned to 2026-08-04 so the 30 Jul incident is past its 24-hour QSC deadline. The banner description is truncated with an ellipsis by the app itself at this width."
   },
   {
-    "name": "compliant-history",
+    "name": "report-history",
     "stage": "report-on-time",
-    "file1x": "compliant-history.webp",
-    "file2x": "compliant-history@2x.webp",
+    "file1x": "report-history.webp",
+    "file2x": "report-history@2x.webp",
     "width1x": 1024,
     "height1x": 309,
     "width2x": 2048,
@@ -382,10 +382,10 @@
     "notes": "Fixture: the mock has no audit route, so GET audit/TripInstance/t-0001 is fed five entries consistent with the mock trip record. The real endpoint returns its body without the usual ApiResponse envelope and the fixture does the same. Round 2: the fixture uses only plain single-word field names (Status, Notes, Destination, Region) and plain values, so no row shows a camelCase or snake_case property name. The real endpoint prints whatever property names the audit log holds."
   },
   {
-    "name": "compliant-overdue-m",
+    "name": "report-overdue-m",
     "stage": "report-on-time",
-    "file1x": "compliant-overdue-m.webp",
-    "file2x": "compliant-overdue-m@2x.webp",
+    "file1x": "report-overdue-m.webp",
+    "file2x": "report-overdue-m@2x.webp",
     "width1x": 616,
     "height1x": 624,
     "width2x": 1232,
@@ -396,14 +396,14 @@
     "cropTarget": "Incident Reports at a small-screen width: the red QSC banner (its description wraps in full here) and the incidents as stacked cards, the last with the solid OVERDUE badge in its QSC field",
     "fixture": false,
     "alt": "Incident Reports on a narrow screen: a red banner reading \"1 incident requires QSC reporting: 24-hour deadline exceeded\" with its explanation and a View overdue incidents link, then three incident cards, the last for the escalation incident with Grace Palmer-Hughes, High severity, Submitted status and a solid red OVERDUE badge in its QSC field.",
-    "notes": "Narrow variant of compliant-overdue (same mock data and clock). 640px app viewport: the banner description wraps in full and the table becomes stacked cards.",
-    "variantOf": "compliant-overdue"
+    "notes": "Narrow variant of report-overdue (same mock data and clock). 640px app viewport: the banner description wraps in full and the table becomes stacked cards.",
+    "variantOf": "report-overdue"
   },
   {
-    "name": "compliant-body-map-m",
+    "name": "report-body-map-m",
     "stage": "report-on-time",
-    "file1x": "compliant-body-map-m.webp",
-    "file2x": "compliant-body-map-m@2x.webp",
+    "file1x": "report-body-map-m.webp",
+    "file2x": "report-body-map-m@2x.webp",
     "width1x": 608,
     "height1x": 400,
     "width2x": 1216,
@@ -417,10 +417,10 @@
     "notes": "Used at every width. The full-width shot (region buttons plus the map) shows the app selected pill as dark text on dark green, so the page uses this crop instead: from the body map down through the description field. 640px app viewport, same flow and clock as the wizard shots."
   },
   {
-    "name": "compliant-history-m",
+    "name": "report-history-m",
     "stage": "report-on-time",
-    "file1x": "compliant-history-m.webp",
-    "file2x": "compliant-history-m@2x.webp",
+    "file1x": "report-history-m.webp",
+    "file2x": "report-history-m@2x.webp",
     "width1x": 616,
     "height1x": 325,
     "width2x": 1232,
@@ -431,7 +431,7 @@
     "cropTarget": "Trip History tab at a small-screen width: event count and the audit timeline of who changed what and when",
     "fixture": true,
     "alt": "History tab for Sunshine Coast Beach Escape on a narrow screen listing five recorded events, newest first, each with who and how long ago: Priya Nadarajah changed Status from Planning to Confirmed 3 hours ago, Callum Radford updated Notes, Priya changed Destination to Caloundra QLD, Callum changed Region to Sunshine Coast, and Callum created the trip 26 days ago.",
-    "notes": "Narrow variant of compliant-history (same fixture and clock), 640px app viewport.",
-    "variantOf": "compliant-history"
+    "notes": "Narrow variant of report-history (same fixture and clock), 640px app viewport.",
+    "variantOf": "report-history"
   }
 ]

@@ -26,9 +26,9 @@ LOCAL.push({
   },
 })
 
-// ---- Stage 6: STAY COMPLIANT ---------------------------------------------------------------------
+// ---- Stage 6: REPORT ON TIME ---------------------------------------------------------------------
 LOCAL.push({
-  name: 'compliant-overdue',
+  name: 'report-overdue',
   stage: 'report-on-time',
   priority: 'P1',
   route: '/incidents',
@@ -48,7 +48,7 @@ LOCAL.push({
 })
 
 LOCAL.push({
-  name: 'compliant-incident-wizard',
+  name: 'report-incident-wizard',
   stage: 'report-on-time',
   priority: 'P1',
   route: '/incidents/new',
@@ -139,12 +139,12 @@ LOCAL.push({
 import { shots as crewShots } from './shots-crew.mjs'
 import { shots as stayShots } from './shots-stay.mjs'
 import { shots as fundShots } from './shots-fund.mjs'
-import { shots as compliantShots } from './shots-compliant.mjs'
+import { shots as reportShots } from './shots-report.mjs'
 import { shots as careShots } from './shots-care.mjs'
 import { shots as planShots } from './shots-plan.mjs'
 
 const STAGE_ORDER = ['plan', 'stay', 'crew', 'care', 'fund-and-claim', 'report-on-time']
-const BASE = [...LOCAL, ...planShots, ...crewShots, ...stayShots, ...fundShots, ...compliantShots, ...careShots]
+const BASE = [...LOCAL, ...planShots, ...crewShots, ...stayShots, ...fundShots, ...reportShots, ...careShots]
 
 // Narrow "-m" variants (round 2): the base shot's fixtures and clock, a 640px viewport by default, per-variant overrides.
 import { variantSpecs } from './variants.mjs'

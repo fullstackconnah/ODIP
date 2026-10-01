@@ -22,9 +22,9 @@ function reply(status: number, body: unknown = {}, headers: Record<string, strin
 /** The form under test is the real markup from welcome/index.html, so markup and module cannot drift apart. */
 function mountForm(fetchFn: typeof fetch) {
   const page = new DOMParser().parseFromString(indexHtml, 'text/html')
-  const sign = page.querySelector('.sign--form')!
+  const panel = page.querySelector('[data-form-panel]')!
   document.body.replaceChildren()
-  document.body.append(document.importNode(sign, true))
+  document.body.append(document.importNode(panel, true))
   const form = document.querySelector<HTMLFormElement>('#early-access-form')!
   const controller = initEarlyAccessForm(form, { fetchFn })
   const input = (name: string) => form.querySelector<HTMLInputElement>(`[data-field="${name}"]`)!

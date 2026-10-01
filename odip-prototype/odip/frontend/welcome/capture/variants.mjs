@@ -97,16 +97,16 @@ export const variantSpecs = {
     notes: 'Narrow variant of care-risk-alerts (same fixture), 572px app viewport: the panel is 540px wide, which ends the scrolling tab strip between two tabs so no tab label is cut off.',
   },
 
-  'compliant-overdue': {
+  'report-overdue': {
     cropTarget: 'Incident Reports at a small-screen width: the red QSC banner (its description wraps in full here) and the incidents as stacked cards, the last with the solid OVERDUE badge in its QSC field',
     alt: 'Incident Reports on a narrow screen: a red banner reading "1 incident requires QSC reporting: 24-hour deadline exceeded" with its explanation and a View overdue incidents link, then three incident cards, the last for the escalation incident with Grace Palmer-Hughes, High severity, Submitted status and a solid red OVERDUE badge in its QSC field.',
-    notes: 'Narrow variant of compliant-overdue (same mock data and clock). 640px app viewport: the banner description wraps in full and the table becomes stacked cards.',
+    notes: 'Narrow variant of report-overdue (same mock data and clock). 640px app viewport: the banner description wraps in full and the table becomes stacked cards.',
   },
 
-  'compliant-body-map': {
+  'report-body-map': {
     cropTarget: 'Injuries card at a small-screen width, from the front and back body map down through the selected region, injury type and injury description (the region buttons above the map are left out)',
     alt: "Lower part of the Injuries card on a narrow screen: a front and back body map with the left forearm highlighted in green, the line Selected region: Left forearm, an Injury type of Abrasion and an Injury Description reading Small graze, cleaned and dressed on site.",
-    notes: "Narrow variant of compliant-body-map (same flow and clock), 640px app viewport. Cropped from the body map down to the description field: the region buttons above the map (they wrap over many rows on a narrow screen) are left out, so the card top border is not in the crop.",
+    notes: "Narrow variant of report-body-map (same flow and clock), 640px app viewport. Cropped from the body map down to the description field: the region buttons above the map (they wrap over many rows on a narrow screen) are left out, so the card top border is not in the crop.",
     async run(ctx) {
       const { page, goto, settle, unionRect } = ctx
       await driveIncidentToDetails(page, goto, { addInjury: false })
@@ -129,9 +129,9 @@ export const variantSpecs = {
     notes: 'Narrow variant of plan-trip-glance (same mock data and clock), 640px app viewport. The tab strip scrolls sideways on narrow screens, so only the first four tabs are in view.',
   },
 
-  'compliant-history': {
+  'report-history': {
     cropTarget: 'Trip History tab at a small-screen width: event count and the audit timeline of who changed what and when',
     alt: 'History tab for Sunshine Coast Beach Escape on a narrow screen listing five recorded events, newest first, each with who and how long ago: Priya Nadarajah changed Status from Planning to Confirmed 3 hours ago, Callum Radford updated Notes, Priya changed Destination to Caloundra QLD, Callum changed Region to Sunshine Coast, and Callum created the trip 26 days ago.',
-    notes: 'Narrow variant of compliant-history (same fixture and clock), 640px app viewport.',
+    notes: 'Narrow variant of report-history (same fixture and clock), 640px app viewport.',
   },
 }

@@ -22,7 +22,7 @@
  * Layout of this folder
  *   capture.mjs          this runner: browser/context setup, crop + screenshot, WebP conversion, manifest upsert
  *   shots.mjs            shot registry (assembles the shots-*.mjs modules, ordered by stage) + the first shots
- *   shots-<stage>.mjs    one module per stage: crew, stay, care, fund, compliant (same shot shape)
+ *   shots-<stage>.mjs    one module per stage: crew, stay, care, fund, report (same shot shape)
  *   drivers.mjs          helpers that drive the real UI (dropdown picking, the incident wizard walk-through)
  *   fixtures*.mjs        realistic API JSON for screens the mock cannot show (only shots flagged fixture: true use it)
  *   webp.py              PNG -> WebP at 1x/2x (quality 82 stepping down to 70 to stay under 90 KB / 260 KB)
