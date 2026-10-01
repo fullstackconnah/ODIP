@@ -180,6 +180,8 @@ public record ProviderSettingsDto
     /// <summary>MED-02: primary manager contact — shown first by the (future) MED-01 missed-medication guidance.</summary>
     public string? ManagerName { get; init; }
     public string? ManagerPhone { get; init; }
+    /// <summary>How strictly this organisation applies participant readiness. Warn unless an Admin chose Enforce.</summary>
+    public ParticipantReadinessMode ParticipantReadinessMode { get; init; } = ParticipantReadinessMode.Warn;
 }
 
 public record UpsertProviderSettingsDto
@@ -208,6 +210,13 @@ public record UpsertProviderSettingsDto
     public string? ManagerName { get; init; }
     [StringLength(30)]
     public string? ManagerPhone { get; init; }
+    /// <summary>
+    /// OPTIONAL, and the PUT changes the readiness mode ONLY when this is present: a request that
+    /// leaves it out (null or absent) never touches the stored mode, so an older client or a stale
+    /// browser tab that saves an unrelated field cannot revert a mode another Admin set. Only
+    /// Admin (and SuperAdmin viewing as a tenant) may send it; an undefined value is rejected.
+    /// </summary>
+    public ParticipantReadinessMode? ParticipantReadinessMode { get; init; }
 }
 
 // ══════════════════════════════════════════════════════════════

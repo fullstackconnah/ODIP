@@ -132,8 +132,9 @@ public class RosteringController : ControllerBase
         // that the active set didn't already cover — still just two queries total. ──
         // This is a read-only coordinator surface. Active non-draft participants remain visible
         // even when the current source is not approved (or their evidence later becomes stale),
-        // so legacy bookings and shifts do not disappear. Readiness is still enforced on every
-        // new placement and reported as a warning on existing shifts above.
+        // so legacy bookings and shifts do not disappear. Every new placement goes through the
+        // organisation's readiness mode (ParticipantReadiness.CheckAsync), and what is missing is
+        // reported on each row and shift below (ReadinessIssues).
         var activeParticipants = await _db.Participants
             .Where(p => p.IsActive && !p.IsDraft)
             .OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
@@ -154,6 +155,15 @@ public class RosteringController : ControllerBase
             .OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
             .ToList();
 
+        // Readiness (ParticipantReadiness): every participant row and shift says what is missing, in
+        // either mode. An organisation that ENFORCES readiness also keeps the per-shift
+        // PARTICIPANT_NOT_READY exception for a participant who fails the strict rule, exactly as
+        // before. In Warn the gap is the quiet note on the row instead: an exception on every shift
+        // of every participant would bury the findings that need a coordinator's attention.
+        var readinessIssuesById = await ParticipantReadiness.IssuesAsync(_db, allParticipantIds, ct);
+        var enforcingTenants = await ParticipantReadiness.EnforcingTenantsAsync(
+            _db, participantById.Values.Select(p => p.TenantId), ct);
+
         var compatByPair = await _db.StaffParticipantCompatibilities
             .Where(c => staffIds.Contains(c.UserId) && allParticipantIds.Contains(c.ParticipantId))
             .ToDictionaryAsync(c => (c.UserId, c.ParticipantId), c => c.Level, ct);
@@ -162,7 +172,8 @@ public class RosteringController : ControllerBase
         {
             if (!participantById.TryGetValue(shift.ParticipantId, out var participant))
                 return new List<RosterFinding>();
-            var readinessFinding = !readyParticipantIdSet.Contains(shift.ParticipantId)
+            var readinessFinding = enforcingTenants.Contains(participant.TenantId)
+                && !readyParticipantIdSet.Contains(shift.ParticipantId)
                 ? new RosterFinding(
                     "PARTICIPANT_NOT_READY",
                     RosterFindingSeverity.Warning,
@@ -215,7 +226,8 @@ public class RosteringController : ControllerBase
                 DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
                 ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, OverrideReason = shift.OverrideReason,
                 Findings = findings.Select(ToFindingDto).ToList(),
-                AssigneeOnApprovedLeave = IsAssigneeOnApprovedLeave(shift)
+                AssigneeOnApprovedLeave = IsAssigneeOnApprovedLeave(shift),
+                ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssuesById, shift.ParticipantId)
             };
         }
 
@@ -298,7 +310,8 @@ public class RosteringController : ControllerBase
                     SupportRatio = participant.SupportRatio, OvernightSupport = participant.OvernightSupport,
                     HasRestrictivePractice = participant.HasRestrictivePracticeFlag,
                     Shifts = shiftDtos, TripBars = myTripBars,
-                    ScheduledHours = scheduledHours, DaysWithoutCover = daysWithoutCover
+                    ScheduledHours = scheduledHours, DaysWithoutCover = daysWithoutCover,
+                    ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssuesById, participant.Id)
                 });
             }
 
@@ -599,9 +612,10 @@ public class RosteringController : ControllerBase
             return BadRequest(ApiResponse<ShiftDto>.Fail("Staff member not found."));
 
         // Clearing an old assignment is safe management, but assigning or reassigning staff
-        // is a new operational placement and requires participant readiness.
+        // is a new operational placement and goes through the readiness check: Warn lets it
+        // proceed (the response carries what is missing), Enforce refuses it as it always did.
         if (dto.StaffId != shift.UserId && dto.StaffId.HasValue
-            && !await ParticipantReadinessGate.IsActiveReadyAsync(_db, shift.ParticipantId, ct))
+            && !(await ParticipantReadiness.CheckAsync(_db, shift.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<ShiftDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
         var candidate = new Shift
@@ -1061,7 +1075,7 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftPatternDto>>> CreatePattern(
         [FromBody] CreateShiftPatternDto dto, CancellationToken ct)
     {
-        if (!await ParticipantReadinessGate.IsActiveReadyAsync(_db, dto.ParticipantId, ct))
+        if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
         if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
@@ -1088,7 +1102,7 @@ public class RosteringController : ControllerBase
         var pattern = await _db.ShiftPatterns.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<ShiftPatternDto>.Fail("Pattern not found."));
 
-        if (!await ParticipantReadinessGate.IsActiveReadyAsync(_db, dto.ParticipantId, ct))
+        if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
         if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
@@ -1127,7 +1141,7 @@ public class RosteringController : ControllerBase
     {
         var pattern = await _db.ShiftPatterns.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<GeneratePatternResultDto>.Fail("Pattern not found."));
-        if (!await ParticipantReadinessGate.IsActiveReadyAsync(_db, pattern.ParticipantId, ct))
+        if (!(await ParticipantReadiness.CheckAsync(_db, pattern.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<GeneratePatternResultDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
         var occurrences = _expander.Occurrences(pattern, from, to);
@@ -1181,7 +1195,7 @@ public class RosteringController : ControllerBase
     {
         if (!await _db.Users.AnyAsync(s => s.Id == dto.StaffId && s.IsActive, ct))
             return BadRequest(ApiResponse<CompatibilityRowDto>.Fail("Staff member not found."));
-        if (!await ParticipantReadinessGate.IsActiveReadyAsync(_db, dto.ParticipantId, ct))
+        if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<CompatibilityRowDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
         var row = await _db.StaffParticipantCompatibilities
@@ -1376,6 +1390,7 @@ public class RosteringController : ControllerBase
         var staff = shift.UserId.HasValue
             ? await _db.Users.FirstOrDefaultAsync(s => s.Id == shift.UserId.Value, ct)
             : null;
+        var readinessIssues = await ParticipantReadiness.IssuesAsync(_db, new[] { shift.ParticipantId }, ct);
 
         return new ShiftDto
         {
@@ -1384,7 +1399,8 @@ public class RosteringController : ControllerBase
             ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
             DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
             ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, OverrideReason = shift.OverrideReason,
-            Findings = findings.Select(ToFindingDto).ToList()
+            Findings = findings.Select(ToFindingDto).ToList(),
+            ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssues, shift.ParticipantId)
         };
     }
 
@@ -1396,8 +1412,11 @@ public class RosteringController : ControllerBase
     private async Task<string?> ValidateRefsAsync(Guid participantId, Guid? staffId, CancellationToken ct)
     {
         // Every one-off creation/update/assignment validation funnels through this readiness
-        // gate. It also blocks incomplete intake and a missing/incomplete onboarding record.
-        if (!await ParticipantReadinessGate.IsActiveReadyAsync(_db, participantId, ct))
+        // check. A participant who does not exist, is a draft, or is inactive is refused in either
+        // mode; beyond that, Enforce refuses incomplete intake, a missing/incomplete onboarding
+        // record and missing signed-agreement evidence, while Warn lets the write proceed and
+        // reports what is missing on the response (ShiftDto.ReadinessIssues).
+        if (!(await ParticipantReadiness.CheckAsync(_db, participantId, ct)).Allowed)
             return ParticipantReadinessGate.NotReadyMessage;
         if (staffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == staffId.Value && s.IsActive, ct))
             return "Staff member not found.";

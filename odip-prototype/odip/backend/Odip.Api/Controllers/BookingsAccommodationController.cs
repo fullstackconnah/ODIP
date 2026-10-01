@@ -114,9 +114,12 @@ public class BookingsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<BookingDetailDto>>> Create([FromBody] CreateBookingDto dto, CancellationToken ct)
     {
-        // A booking is operational work. The participant must pass the derived onboarding gate;
-        // client-supplied booking fields can never assert readiness.
-        if (!await ParticipantReadinessGate.IsActiveReadyAsync(_db, dto.ParticipantId, ct))
+        // A booking is operational work and goes through the readiness check; client-supplied
+        // booking fields can never assert readiness. A participant who does not exist, is a draft
+        // or is inactive is refused in either mode. Warn lets the booking proceed and reports what
+        // is missing on the response; Enforce refuses it unless the strict gate accepts the participant.
+        var readiness = await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct);
+        if (!readiness.Allowed)
             return BadRequest(ApiResponse<BookingDetailDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
         var booking = new ParticipantBooking
@@ -183,7 +186,8 @@ public class BookingsController : ControllerBase
                 InsuranceProvider = booking.InsuranceProvider, InsurancePolicyNumber = booking.InsurancePolicyNumber,
                 InsuranceCoverageStart = booking.InsuranceCoverageStart, InsuranceCoverageEnd = booking.InsuranceCoverageEnd,
                 IsInsuranceValid = booking.InsuranceStatus == InsuranceStatus.Confirmed,
-                CreatedAt = booking.CreatedAt, UpdatedAt = booking.UpdatedAt
+                CreatedAt = booking.CreatedAt, UpdatedAt = booking.UpdatedAt,
+                ReadinessIssues = readiness.IssuesOrNull
             }));
     }
 

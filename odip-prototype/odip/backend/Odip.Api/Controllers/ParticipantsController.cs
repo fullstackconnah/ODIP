@@ -210,10 +210,14 @@ public class ParticipantsController : ControllerBase
         {
             // The register is a stage boundary, not a presentation-only draft filter. A record
             // introduced through the new onboarding workflow has an onboarding row and must not
-            // enter operational read surfaces until the fail-closed readiness gate accepts it.
+            // enter operational read surfaces until it has been activated. For an organisation
+            // that ENFORCES readiness, activated means the fail-closed readiness gate accepts it
+            // (unchanged). In Warn mode (the default) activation proceeds without signed-agreement
+            // evidence, so an activated participant is on the register like any other.
             // Older non-draft records have no onboarding row, so retain their historic visibility.
             query = query.Where(p => !p.IsDraft &&
                 (!_db.ParticipantOnboardings.Any(o => o.ParticipantId == p.Id && o.TenantId == p.TenantId)
+                 || (p.IsActive && !ParticipantReadiness.EnforcingTenantIds(_db).Contains(p.TenantId))
                  || ParticipantReadinessGate.ActiveReadyParticipants(_db).Any(ready => ready.Id == p.Id)));
         }
 
@@ -237,6 +241,14 @@ public class ParticipantsController : ControllerBase
             });
 
         var result = await PagedResult<ParticipantListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
+
+        // What is missing for each participant on this page (intake, onboarding, signed agreement),
+        // for the quiet "Not ready" note in pickers and the register. Three queries for the page.
+        var readinessIssues = await ParticipantReadiness.IssuesAsync(_db, result.Items.Select(i => i.Id).ToList(), ct);
+        result.Items = result.Items
+            .Select(i => i with { ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssues, i.Id) })
+            .ToList();
+
         return Ok(ApiResponse<PagedResult<ParticipantListDto>>.Ok(result));
     }
 
@@ -260,6 +272,11 @@ public class ParticipantsController : ControllerBase
         // without duplicating this ~150-line construction. Behaviour-preserving: output is
         // byte-for-byte identical to the pre-extraction inline construction this replaced.
         var dto = await ParticipantDetailMapper.ToDetailDtoAsync(_db, p, ct);
+        // The coordinator-facing read carries what is missing before this participant is fully
+        // ready. The mapper is shared with the caregiver forms, which must not show it, so it is
+        // set here and nowhere else.
+        var readinessIssues = await ParticipantReadiness.IssuesAsync(_db, new[] { p.Id }, ct);
+        dto = dto with { ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssues, p.Id) };
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(dto));
     }
 
@@ -689,11 +706,14 @@ public class ParticipantsController : ControllerBase
         // A full-profile PUT may edit profile data, but it cannot promote an intake-incomplete
         // participant. More importantly, neither CompleteIntake nor raw IsActive/IsDraft values
         // can bypass tenant-matched persisted onboarding and verified immutable agreement evidence.
-        // Preserve already-active legacy rows instead of mass-deactivating them; operational write
-        // gates independently fail closed when their evidence is absent.
+        // Preserve already-active legacy rows instead of mass-deactivating them. Intake must be
+        // complete in every mode (a draft is never activated). Beyond that the organisation's
+        // readiness mode decides: Warn (the default) activates a non-draft participant and the
+        // gaps show as readiness issues; Enforce keeps the fail-closed rule, activating only on
+        // persisted, tenant-matched, verified agreement evidence.
         p.IsDraft = !p.IntakeCompletedAt.HasValue || dto.IsDraft;
         if (!p.IsActive)
-            p.IsActive = !p.IsDraft && await ParticipantReadinessGate.HasActivationEvidenceAsync(_db, p.Id, ct);
+            p.IsActive = !p.IsDraft && await ParticipantReadiness.MayActivateAsync(_db, p, ct);
 
         // A full profile submission can change identity, DOB, gender, or NDIS details. It never
         // preserves a prior onboarding attestation: staff must re-run the separate server-side

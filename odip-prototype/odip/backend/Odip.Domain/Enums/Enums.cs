@@ -476,6 +476,21 @@ public enum AuditAction
     Deleted
 }
 
+/// <summary>
+/// How strictly an organisation applies participant readiness (intake complete, onboarding
+/// complete, signed service agreement) before a participant can be rostered, booked or activated.
+/// Chosen per organisation on <c>ProviderSettings.ParticipantReadinessMode</c>.
+/// <see cref="Warn"/> is the default for every existing and new organisation: the work proceeds
+/// and what is missing is reported as readiness issues. <see cref="Enforce"/> keeps the strict,
+/// fail-closed rule (<c>ParticipantReadinessGate</c>). The integer values are persisted (0 = Warn
+/// is also the column's database default): never renumber or reorder.
+/// </summary>
+public enum ParticipantReadinessMode
+{
+    Warn = 0,
+    Enforce = 1
+}
+
 // ══════════════════════════════════════════════════════════════
 // MEDICATION MANAGEMENT
 // ══════════════════════════════════════════════════════════════

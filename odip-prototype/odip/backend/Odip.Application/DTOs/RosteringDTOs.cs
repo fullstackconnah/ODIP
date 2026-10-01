@@ -58,6 +58,12 @@ public record ShiftDto
     /// RosteringController.GetBoard.
     /// </summary>
     public bool AssigneeOnApprovedLeave { get; init; }
+    /// <summary>
+    /// What is missing before this shift's participant is fully ready (intake, onboarding, signed
+    /// service agreement). Null (omitted from the JSON) when nothing is. In Warn mode this is a
+    /// quiet warning and never blocks a save; see <c>ParticipantReadiness</c>.
+    /// </summary>
+    public List<string>? ReadinessIssues { get; init; }
 }
 
 public record TripBarDto
@@ -134,6 +140,12 @@ public record RosterParticipantRowDto
     public decimal ScheduledHours { get; init; }
     /// <summary>Days in the week with neither a shift nor a trip covering them.</summary>
     public int DaysWithoutCover { get; init; }
+    /// <summary>
+    /// What is missing before this participant is fully ready (intake, onboarding, signed service
+    /// agreement). Null (omitted from the JSON) when nothing is. Every active, non-draft
+    /// participant has a row either way: in Warn mode this is the quiet warning on it.
+    /// </summary>
+    public List<string>? ReadinessIssues { get; init; }
 }
 
 public record RosterExceptionDto
