@@ -537,6 +537,45 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task APrnKeyReusedForADifferentDose_OnRealPostgres_IsRefused_AndAnExactRetryStillReplays()
+    {
+        // Review probe P2 on the real database. The supplied administeredAt round-trips through a timestamp column, so an exact retry must still
+        // match what was stored; the second, different PRN dose under the same key must be refused, not replayed as the first.
+        RequirePostgres();
+        var (setup, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _setup = setup;
+        var (participantId, userId, _, _) = await SeedCompletionAsync(setup);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, Name = "Paracetamol", DoseDescription = "500mg", Type = MedicationType.Prn,
+            StartDate = new DateTime(2026, 1, 1), Status = MedicationStatus.Active,
+        };
+        setup.ParticipantMedications.Add(med);
+        await setup.SaveChangesAsync();
+        var t0 = DateTime.UtcNow.AddHours(-5);
+        RecordAdministrationRequest Request(string reason, string dose, DateTime at) => new(med.Id,
+            new CreateAdministrationDto
+            {
+                Status = MedicationAdministrationStatus.Administered, PrnReason = reason, DoseGiven = dose, AdministeredAt = at, IdempotencyKey = "page-key",
+            }, userId, "Ben Turner");
+
+        await using var db1 = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var first = await new MedicationAdministrationRecorder(db1).RecordAsync(Request("headache", "500mg", t0), default);
+        await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var retry = await new MedicationAdministrationRecorder(db2).RecordAsync(Request("headache", "500mg", t0), default);
+        await using var db3 = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var different = await new MedicationAdministrationRecorder(db3).RecordAsync(Request("migraine, worse", "1000mg", t0.AddHours(4)), default);
+
+        Assert.Equal(RecordAdministrationOutcome.Created, first.Outcome);
+        Assert.Equal(RecordAdministrationOutcome.Replayed, retry.Outcome);
+        Assert.Equal(first.Administration!.Id, retry.Administration!.Id);
+        Assert.Equal(RecordAdministrationOutcome.Invalid, different.Outcome);
+        Assert.Equal(MedicationErrorCodes.AdministrationIdempotencyKeyReused, different.Code);
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.Equal(1, await verify.MedicationAdministrations.CountAsync(a => a.ParticipantMedicationId == med.Id));
+    }
+
+    [SkippableFact]
     public async Task DifferentSlotsOfOneMedication_AreNotSerialisedIntoConflicts_EachGetsItsOwnRecord()
     {
         // The lock is per (medication, slot): recording the 08:00 and the 12:30 dose at the same moment must both succeed.

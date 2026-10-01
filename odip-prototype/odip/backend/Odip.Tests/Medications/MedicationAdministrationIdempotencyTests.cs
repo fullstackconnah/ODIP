@@ -125,6 +125,23 @@ public class MedicationAdministrationIdempotencyTests
     }
 
     [Fact]
+    public async Task TheSameKey_ForADifferentPrnDose_IsRejected_OnTheMarPathToo()
+    {
+        // A PRN dose has no slot, so the key binds the dose itself (dose given, reason, time): the second dose is refused, never replayed as the first.
+        var f = Arrange();
+        var first = await f.Controller.RecordAdministration(f.PrnMedId,
+            new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, PrnReason = "Headache", DoseGiven = "500mg", IdempotencyKey = "page-key" }, default);
+
+        var second = await f.Controller.RecordAdministration(f.PrnMedId,
+            new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, PrnReason = "Migraine, worse", DoseGiven = "1000mg", IdempotencyKey = "page-key" }, default);
+
+        Assert.IsType<OkObjectResult>(first.Result);
+        Assert.IsType<BadRequestObjectResult>(second.Result);
+        Assert.Equal(MedicationErrorCodes.AdministrationIdempotencyKeyReused, Body(second).Code);
+        Assert.Single(await f.Db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
     public async Task TheKey_IsTrimmed_AndStoredOnTheRecord()
     {
         var f = Arrange();

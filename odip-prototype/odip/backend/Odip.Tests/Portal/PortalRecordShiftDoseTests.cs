@@ -356,6 +356,94 @@ public class PortalRecordShiftDoseTests
         Assert.Equal(Body(first).Data!.Id, Body(retry).Data!.Id);
     }
 
+    // ── a PRN dose has no slot, so the key must bind the dose itself (review 2 finding m1) ──
+
+    private static readonly DateTime PrnGivenAt = new(2026, 7, 13, 23, 30, 0, DateTimeKind.Utc);   // 09:30 local, inside the shift
+
+    private static CreateAdministrationDto PrnDose(string key, string reason = "headache", string dose = "500mg", DateTime? at = null) => new()
+    {
+        Status = MedicationAdministrationStatus.Administered, PrnReason = reason, DoseGiven = dose, AdministeredAt = at ?? PrnGivenAt, IdempotencyKey = key,
+    };
+
+    [Fact]
+    public async Task APrnKeyReusedForADifferentDose_IsRefused_NotSilentlyDropped_TheReviewsProbeP2()
+    {
+        // The client generated one key per page and reused it: the second, different PRN dose (1000mg for a migraine four hours later) used to come
+        // back as the FIRST record, with no error and no second row - and the 24-hour limit then under-counted.
+        var f = Create();
+        var prn = AddMed(f, "Paracetamol", type: MedicationType.Prn);
+        var first = await f.Controller.RecordShiftDose(f.Shift.Id, prn.Id, PrnDose("page-key"), default);
+        f.Advance(TimeSpan.FromHours(3));
+
+        var second = await f.Controller.RecordShiftDose(
+            f.Shift.Id, prn.Id, PrnDose("page-key", "migraine, worse", "1000mg", PrnGivenAt.AddHours(4)), default);
+
+        Assert.Equal(200, Status(first));
+        Assert.Equal(400, Status(second));
+        Assert.Equal(MedicationErrorCodes.AdministrationIdempotencyKeyReused, Body(second).Code);
+        var only = Assert.Single(await f.Db.MedicationAdministrations.ToListAsync());
+        Assert.Equal("500mg", only.DoseGiven);
+    }
+
+    [Theory]
+    [InlineData("dose")]
+    [InlineData("reason")]
+    [InlineData("time")]
+    public async Task APrnKeyReused_IsRefused_WhenAnyOneOfTheDoseTheReasonOrTheTimeDiffers(string differing)
+    {
+        var f = Create();
+        var prn = AddMed(f, "Paracetamol", type: MedicationType.Prn);
+        await f.Controller.RecordShiftDose(f.Shift.Id, prn.Id, PrnDose("k1"), default);
+
+        var changed = differing switch
+        {
+            "dose" => PrnDose("k1", dose: "1000mg"),
+            "reason" => PrnDose("k1", reason: "toothache"),
+            _ => PrnDose("k1", at: PrnGivenAt.AddMinutes(10)),
+        };
+        var second = await f.Controller.RecordShiftDose(f.Shift.Id, prn.Id, changed, default);
+
+        Assert.Equal(400, Status(second));
+        Assert.Equal(MedicationErrorCodes.AdministrationIdempotencyKeyReused, Body(second).Code);
+        Assert.Single(await f.Db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
+    public async Task AnExactPrnRetry_StillReplays_AndSoDoesOneWithinAMinuteOrWithSpaceAroundTheText()
+    {
+        var f = Create();
+        var prn = AddMed(f, "Paracetamol", type: MedicationType.Prn);
+        var first = Body(await f.Controller.RecordShiftDose(f.Shift.Id, prn.Id, PrnDose("k1"), default)).Data!;
+
+        var identical = await f.Controller.RecordShiftDose(f.Shift.Id, prn.Id, PrnDose("k1"), default);
+        var withinAMinute = await f.Controller.RecordShiftDose(f.Shift.Id, prn.Id, PrnDose("k1", at: PrnGivenAt.AddSeconds(45)), default);
+        var spaced = await f.Controller.RecordShiftDose(f.Shift.Id, prn.Id, PrnDose("k1", reason: " headache ", dose: "500mg "), default);
+
+        foreach (var retry in new[] { identical, withinAMinute, spaced })
+        {
+            Assert.Equal(200, Status(retry));
+            Assert.Equal(first.Id, Body(retry).Data!.Id);
+        }
+        Assert.Single(await f.Db.MedicationAdministrations.ToListAsync());
+    }
+
+    [Fact]
+    public async Task APrnRetryWithNoAdministeredAt_ReplaysMinutesLater_BecauseTheServerStampedTheFirstTime()
+    {
+        // No administeredAt means "now": the first record got the server clock, and a retry after a dropped connection arrives minutes later.
+        var f = Create();
+        var prn = AddMed(f, "Paracetamol", type: MedicationType.Prn);
+        var noTime = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, PrnReason = "headache", DoseGiven = "500mg", IdempotencyKey = "k1" };
+        var first = Body(await f.Controller.RecordShiftDose(f.Shift.Id, prn.Id, noTime, default)).Data!;
+        f.Advance(TimeSpan.FromMinutes(4));
+
+        var retry = await f.Controller.RecordShiftDose(f.Shift.Id, prn.Id, noTime, default);
+
+        Assert.Equal(200, Status(retry));
+        Assert.Equal(first.Id, Body(retry).Data!.Id);
+        Assert.Single(await f.Db.MedicationAdministrations.ToListAsync());
+    }
+
     // ── every instant is UTC with a Z, on every path (independent review finding 14) ──
 
     [Fact]

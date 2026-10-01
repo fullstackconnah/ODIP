@@ -75,7 +75,8 @@ public sealed record RecordAdministrationRequest(
 ///    (403, no role bypass, including the coordinator MAR path); Warn (the default) records the dose and FLAGS it
 ///    (<see cref="MedicationAdministration.RecordedWithoutCompetency"/>).
 /// 2. <b>Idempotent replay.</b> A submit carrying an <see cref="CreateAdministrationDto.IdempotencyKey"/> already
-///    used for the SAME request (medication, slot and outcome) returns the earlier record (a double tap is safe); the same
+///    used for the SAME request (medication, slot and outcome; for a PRN dose, which has no slot, also the dose given, the reasons and the
+///    time it was given) returns the earlier record (a double tap is safe); the same
 ///    key on a different request is refused, never silently dropped. The unique filtered index on the key backs this up
 ///    against a true race.
 /// 3. <b>Temporal validation (422).</b> An Administered dose is refused when the slot is more than <see cref="EarlyAdministrationMinutes"/>
@@ -104,6 +105,9 @@ public sealed class MedicationAdministrationRecorder
 
     /// <summary>How far past "now" the time a dose was given may be (device clock skew) before it is refused (422 ADMINISTRATION_TIME_OUT_OF_RANGE).</summary>
     public const int ClockSkewMinutes = 5;
+
+    /// <summary>How far apart the <c>administeredAt</c> of a retried PRN request and the stored record may be and still read as the same dose.</summary>
+    public const int PrnReplayToleranceMinutes = 1;
 
     private readonly OdipDbContext _db;
     private readonly INotificationRaiser _notificationRaiser;
@@ -184,15 +188,16 @@ public sealed class MedicationAdministrationRecorder
         await using var slotLock = await SlotLock.AcquireAsync(_db, med.Id, dto.ScheduledAt, ct);
 
         // ── 2. Idempotent replay ──
-        // A key means "this exact request": a replay is only honoured when the medication, slot and outcome all match. A client that
-        // reused one key for two doses (generated once per page instead of per sheet) would otherwise have its second dose silently
-        // dropped while the screen shows success.
+        // A key means "this exact request": a replay is only honoured when the medication, slot and outcome all match - and, for an as-needed
+        // (PRN) dose, which has no slot to tell two doses apart, when the dose itself matches (see SamePrnRequest). A client that reused one key
+        // for two doses (generated once per page instead of per sheet) would otherwise have its second dose silently dropped while the screen
+        // shows success.
         RecordAdministrationResult ReplayOf(MedicationAdministration prior)
         {
             if (prior.ParticipantMedicationId != med.Id)
                 return Fail(RecordAdministrationOutcome.Invalid,
                     "This request key was already used for a different medication.", MedicationErrorCodes.AdministrationIdempotencyKeyReused);
-            if (prior.ScheduledAt != dto.ScheduledAt || prior.Status != dto.Status)
+            if (prior.ScheduledAt != dto.ScheduledAt || prior.Status != dto.Status || (dto.ScheduledAt is null && !SamePrnRequest(prior, dto)))
                 return Fail(RecordAdministrationOutcome.Invalid,
                     "This request key was already used for a different dose.", MedicationErrorCodes.AdministrationIdempotencyKeyReused);
             return new RecordAdministrationResult(RecordAdministrationOutcome.Replayed, ToDto(prior));
@@ -420,6 +425,25 @@ public sealed class MedicationAdministrationRecorder
 
     private static RecordAdministrationResult Fail(RecordAdministrationOutcome outcome, string message, string? code = null) =>
         new(outcome, null, message, code);
+
+    /// <summary>
+    /// Whether a retried as-needed (PRN) request is the SAME dose as the stored record. A PRN dose has no slot, so (medication, outcome) alone
+    /// cannot tell two doses apart: the dose given, the PRN reason, the not-given reason and - when the request names one - the time it was given
+    /// (to within <see cref="PrnReplayToleranceMinutes"/>) must all match. A request with no <c>administeredAt</c> had the server stamp "now", so
+    /// a retry minutes later still matches on the other fields.
+    /// </summary>
+    private static bool SamePrnRequest(MedicationAdministration prior, CreateAdministrationDto dto)
+    {
+        if (!SameText(prior.DoseGiven, dto.DoseGiven) || !SameText(prior.PrnReason, dto.PrnReason) || !SameText(prior.Reason, dto.Reason))
+            return false;
+        if (dto.AdministeredAt is not { } given) return true;
+        return prior.AdministeredAt is { } stored
+            && Math.Abs((ProviderLocalTime.AsUtc(given) - ProviderLocalTime.AsUtc(stored)).TotalMinutes) <= PrnReplayToleranceMinutes;
+    }
+
+    /// <summary>Equal as submitted text: surrounding whitespace is ignored and null equals empty.</summary>
+    private static bool SameText(string? a, string? b) =>
+        string.Equals(a?.Trim() ?? string.Empty, b?.Trim() ?? string.Empty, StringComparison.Ordinal);
 
     /// <summary>
     /// The temporal rules. (1) An Administered scheduled dose is refused when its slot is more than <see cref="EarlyAdministrationMinutes"/> minutes
