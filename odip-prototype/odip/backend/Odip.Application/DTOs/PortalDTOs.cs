@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Odip.Application.Serialization;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 
@@ -287,7 +288,7 @@ public record PortalDoseSlotDto(
     bool IsHighRisk,
     /// <summary>The slot as a provider-local wall-clock time (no zone suffix) - exactly what must be echoed back as
     /// <c>scheduledAt</c> when recording the dose.</summary>
-    DateTime ScheduledAt,
+    [property: WallClock] DateTime ScheduledAt,
     /// <summary>"08:00".</summary>
     string ScheduledTime,
     PortalDoseState State,
@@ -360,7 +361,7 @@ public record PortalShiftRoutineDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] TimeOnly? EndTime,
     /// <summary>Provider-local start of the routine's first occurrence inside the window (clipped to the shift's start when it began
     /// earlier) - the time to group it under. Null for an untimed critical routine ("Anytime").</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? OccursAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] [property: WallClock] DateTime? OccursAt,
     /// <summary>The occurrence falls on the day AFTER the shift's service date (an overnight shift's early hours).</summary>
     bool AfterMidnight,
     /// <summary>The worker ticked this routine done (persisted on the shift's completion: <c>POST portal/shifts/{id}/routines/{routineId}/check</c>).</summary>
@@ -413,7 +414,7 @@ public record PortalFinishBlockerDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] Guid? MedicationId,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? MedicationName,
     /// <summary>For a dose: the provider-local slot time (no zone suffix).</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? ScheduledAt);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] [property: WallClock] DateTime? ScheduledAt);
 
 /// <summary>
 /// A medication administration OR an incident report (IN-7) awaiting (or already given) the
@@ -445,7 +446,7 @@ public record PortalWitnessRequestDto(
     string RecordedByName,
     DateTime? AdministeredAt,
     string? AdministeredAtTimeZone,
-    DateTime? IncidentDateTime,
+    [property: WallClock] DateTime? IncidentDateTime,
     WitnessStatus WitnessStatus,
     DateTime? WitnessRespondedAt,
     DateTime CreatedAt);

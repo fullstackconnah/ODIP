@@ -21,6 +21,16 @@ public static class ProviderTimeZoneResolver
         return FromState(state);
     }
 
+    /// <summary>
+    /// The provider's calendar date now (see <see cref="ProviderLocalTime.TodayIn"/>): the "today" every calendar rule uses. Pass the
+    /// request's <see cref="TimeProvider"/> so a test can fix the clock.
+    /// </summary>
+    public static async Task<DateOnly> TodayAsync(OdipDbContext db, TimeProvider clock, CancellationToken ct)
+    {
+        var provider = await ResolveAsync(db, ct);
+        return ProviderLocalTime.TodayIn(clock.GetUtcNow().UtcDateTime, provider.Zone);
+    }
+
     public static ProviderTimeZone FromState(string? state)
     {
         var id = StateTimeZoneMap.Resolve(state);

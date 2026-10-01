@@ -6,6 +6,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Tasks;
+using Odip.Tests.Medications;
 using Xunit;
 
 namespace Odip.Tests.Tasks;
@@ -163,7 +164,9 @@ public class ObligationTaskServiceTests
     public async Task CompleteAsync_ExistingNotStartedTask_MarksCompletedWithAutoCompletedAt()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var service = new ObligationTaskService(db);
+        // A fixed clock where the provider's date and the UTC date agree (Sunday 20 Sep 2026, 13:00 AEST = 03:00Z). CompletedDate is the
+        // PROVIDER's calendar date; ProviderTodayTests covers the hours where Sydney and UTC are on different dates.
+        var service = new ObligationTaskService(db, FakeClock.AtUtc(2026, 9, 20, 3, 0));
         await service.EnsureAsync(new ObligationTaskSpec("key-5", TaskType.IncidentQscReport, "Report it", new DateOnly(2026, 9, 1), null), CancellationToken.None);
         await db.SaveChangesAsync();
 
@@ -172,7 +175,7 @@ public class ObligationTaskServiceTests
 
         var task = await db.BookingTasks.SingleAsync();
         Assert.Equal(TaskItemStatus.Completed, task.Status);
-        Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow), task.CompletedDate);
+        Assert.Equal(new DateOnly(2026, 9, 20), task.CompletedDate);
         Assert.NotNull(task.AutoCompletedAt);
     }
 

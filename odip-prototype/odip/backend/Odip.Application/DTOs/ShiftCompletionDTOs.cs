@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using Odip.Application.Serialization;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 
@@ -114,7 +115,7 @@ public record ShiftCompletionDto(
 
 /// <summary>Connection-map reverse link (Deliverable 2) summary row — one active IncidentReport
 /// raised against a shift, as surfaced on <see cref="ShiftCompletionDto.Incidents"/>.</summary>
-public record IncidentSummaryDto(Guid Id, string Title, IncidentSeverity Severity, IncidentStatus Status, DateTime IncidentDateTime);
+public record IncidentSummaryDto(Guid Id, string Title, IncidentSeverity Severity, IncidentStatus Status, [property: WallClock] DateTime IncidentDateTime);
 
 /// <summary>
 /// Everything a coordinator needs to review one submitted shift in a single payload: the completion (times, variance,

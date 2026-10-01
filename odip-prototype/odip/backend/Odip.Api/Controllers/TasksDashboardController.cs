@@ -6,7 +6,9 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Incidents;
+using Odip.Domain.Tasks;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -41,11 +43,17 @@ public class TasksController : ControllerBase
     {
         var query = _db.BookingTasks.Include(t => t.TripInstance).Include(t => t.Owner).AsQueryable();
         if (tripId.HasValue) query = query.Where(t => t.TripInstanceId == tripId.Value);
-        if (status.HasValue) query = query.Where(t => t.Status == status.Value);
+        if (status == TaskItemStatus.Overdue)
+        {
+            // "Overdue" is not only the stored status (nothing writes it): it is the rule the dashboard's Overdue figure counts, judged
+            // on the provider's today, so the tile's number and this filter's rows are the same tasks (L3-03).
+            query = query.Where(TaskOverdue.IsOverdueExpr(await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct)));
+        }
+        else if (status.HasValue) query = query.Where(t => t.Status == status.Value);
         if (ownerId.HasValue) query = query.Where(t => t.OwnerId == ownerId.Value);
         if (dueThisWeek == true)
         {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
             var weekEnd = today.AddDays(7);
             query = query.Where(t => t.DueDate != null && t.DueDate >= today && t.DueDate <= weekEnd);
         }
@@ -409,7 +417,9 @@ public class DashboardController : ControllerBase
     [HttpGet("summary")]
     public async Task<ActionResult<ApiResponse<DashboardSummaryDto>>> GetSummary(CancellationToken ct)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        // "Today" is the provider's calendar date, not the UTC date (which is still yesterday until 10:00 or 11:00 in Sydney), so an
+        // overdue task or a trip that started yesterday is judged from the provider's midnight.
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var sixtyDays = today.AddDays(60);
 
         var activeStatuses = new[] { TripStatus.Draft, TripStatus.Planning, TripStatus.OpenForBookings, TripStatus.WaitlistOnly, TripStatus.Confirmed, TripStatus.InProgress };
@@ -429,7 +439,7 @@ public class DashboardController : ControllerBase
             }).ToListAsync(ct);
 
         var overdueTasks = await _db.BookingTasks.Include(t => t.TripInstance).Include(t => t.Owner)
-            .Where(t => t.Status == TaskItemStatus.Overdue || (t.DueDate != null && t.DueDate < today && t.Status != TaskItemStatus.Completed && t.Status != TaskItemStatus.Cancelled))
+            .Where(TaskOverdue.IsOverdueExpr(today))
             .Select(t => new TaskDto
             {
                 Id = t.Id, TripInstanceId = t.TripInstanceId, TripName = t.TripInstance != null ? t.TripInstance.TripName : null,
@@ -461,7 +471,7 @@ public class DashboardController : ControllerBase
         var openIncidentCount = await _db.IncidentReports.CountAsync(
             i => i.IsActive && i.Status != IncidentStatus.Closed && i.Status != IncidentStatus.Resolved, ct);
 
-        var qscOverdueCount = await _db.IncidentReports.CountAsync(QscReporting.IsOverdueExpr(DateTime.UtcNow), ct);
+        var qscOverdueCount = await _db.IncidentReports.CountAsync(QscReporting.IsOverdueExpr(_clock.GetUtcNow().UtcDateTime), ct);
 
         return Ok(ApiResponse<DashboardSummaryDto>.Ok(new DashboardSummaryDto
         {

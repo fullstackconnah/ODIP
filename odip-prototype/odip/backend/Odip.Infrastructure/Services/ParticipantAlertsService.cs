@@ -88,9 +88,13 @@ public class ParticipantAlertsService
     /// </summary>
     public async Task<List<ParticipantAlertsDto>> GetAlertsAsync(Guid? participantId, bool activeOnly = false, CancellationToken ct = default)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        // "Today" for the date rules (plan expiry, restrictive-practice review) is the provider's calendar date, not the UTC date: a plan
+        // that ended yesterday in Sydney is expired from Sydney's midnight, not from 10:00 or 11:00 the next morning. The 7-day
+        // administration lookback is a span of instants, so it stays on the UTC clock.
+        var nowUtc = _clock.GetUtcNow().UtcDateTime;
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var planWarningCutoff = today.AddDays(PlanExpiryWarningDays);
-        var administrationWindowStart = DateTime.UtcNow.AddDays(-AdministrationWindowDays);
+        var administrationWindowStart = nowUtc.AddDays(-AdministrationWindowDays);
 
         var participantsQuery = _db.Participants.AsQueryable();
         if (participantId.HasValue) participantsQuery = participantsQuery.Where(p => p.Id == participantId.Value);
@@ -257,7 +261,7 @@ public class ParticipantAlertsService
 
                 // Rule 7: QSC report overdue — same predicate as the dashboard summary and the
                 // incidents "overdue QSC" endpoint (already IsActive-filtered above).
-                if (QscReporting.IsOverdue(true, incident.QscReportingStatus, incident.QscReportedAt, incident.CreatedAt, DateTime.UtcNow))
+                if (QscReporting.IsOverdue(true, incident.QscReportingStatus, incident.QscReportedAt, incident.CreatedAt, nowUtc))
                 {
                     Add(p.Id, "qsc-report-overdue", AlertSeverity.Critical,
                         $"QSC report overdue: {incident.Title}",

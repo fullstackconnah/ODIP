@@ -71,6 +71,13 @@ public static class ProviderLocalTime
             DateTimeKind.Unspecified);
 
     /// <summary>
+    /// The provider's CALENDAR DATE at the UTC instant <paramref name="utcNow"/>: what a wall calendar in the provider's zone shows. This
+    /// is "today" for every calendar rule (a task is overdue, a plan has expired, a review is due, "the date this was completed"). The UTC
+    /// date is the wrong answer for 10-11 hours of every Sydney day: at 08:00 on Saturday 3 Oct it is still Friday the 2nd.
+    /// </summary>
+    public static DateOnly TodayIn(DateTime utcNow, TimeZoneInfo zone) => DateOnly.FromDateTime(UtcToLocal(utcNow, zone));
+
+    /// <summary>
     /// The shift's rostered window as zone-less provider-local wall-clock values: ServiceDate +
     /// StartTime to ServiceDate (+1 day when <see cref="Shift.EndsNextDay"/>) + EndTime. This is the
     /// window "doses due in the shift" are computed over — the ROSTERED window, deliberately not the
