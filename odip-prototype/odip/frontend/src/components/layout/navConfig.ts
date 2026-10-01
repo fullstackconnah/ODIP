@@ -96,6 +96,9 @@ export const navItems: NavEntry[] = [
       { to: '/bookings', label: 'Bookings', msIcon: 'description', page: 'bookings' },
       { to: '/accommodation', label: 'Accommodation', msIcon: 'home_work', page: 'accommodation' },
       { to: '/vehicles', label: 'Vehicles', msIcon: 'directions_car', page: 'vehicles' },
+      // Today's tasks are trip-bound (a task needs a trip; the create form says so), so they live with the trips. The obligation
+      // engine is making them a general work queue: if that lands, Tasks goes back to a top-level entry (one line to move).
+      { to: '/tasks', label: 'Tasks', msIcon: 'checklist', page: 'tasks' },
     ],
   },
   {
@@ -141,14 +144,22 @@ export const navItems: NavEntry[] = [
     ],
   },
   {
-    to: '/billing',
-    label: 'Billing',
-    msIcon: 'receipt_long',
-    page: 'billing',
-    // A claim is opened from a trip or a participant and has no entry of its own: Billing is the nearest thing to light.
-    matchActive: pathname => pathname === '/billing' || pathname.startsWith('/billing/') || pathname.startsWith('/claims/'),
+    id: 'finance',
+    label: 'Finance',
+    msIcon: 'payments',
+    children: [
+      // /billing is exact-only (isExactMatchOnly: Claim batches is nested under it), so the batch and claim pages light Claim batches.
+      { to: '/billing', label: 'Billing', msIcon: 'receipt_long', page: 'billing' },
+      {
+        to: '/billing/claim-batches',
+        label: 'Claim batches',
+        msIcon: 'inventory_2',
+        page: 'billing',
+        // A claim is opened from a trip or a participant, so /claims/:id has no entry of its own: it belongs with the batches.
+        matchActive: pathname => pathname.startsWith('/billing/claim-batches') || pathname.startsWith('/claims/'),
+      },
+    ],
   },
-  { to: '/tasks', label: 'Tasks', msIcon: 'checklist', page: 'tasks' },
   { to: '/incidents', label: 'Incidents', msIcon: 'emergency', page: 'incidents', bar: { order: 5, audience: 'field' } },
   { to: '/settings', label: 'Settings', msIcon: 'settings', page: 'settings' },
 ]
@@ -173,7 +184,7 @@ export function isRouteActive(to: string, pathname: string): boolean {
 
 /**
  * Whether a leaf needs an EXACT path match rather than the prefix match. It does when another leaf is nested under it
- * (/rostering has /rostering/patterns, /billing may have /billing/claim-batches): otherwise it would stay lit on every one of its
+ * (/rostering has /rostering/patterns, /billing has /billing/claim-batches): otherwise it would stay lit on every one of its
  * children's pages next to their own entry. A leaf with no such nested sibling (/trips, whose /trips/:id is not a leaf) keeps the
  * prefix match so it stays lit on its own detail pages.
  */

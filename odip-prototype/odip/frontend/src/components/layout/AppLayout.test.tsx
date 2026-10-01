@@ -528,10 +528,11 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
 
     expect(hrefs(mainNav())).toEqual([
       '/', '/portal',
-      '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles',
+      '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles', '/tasks',
       '/participants', '/medications', '/caregiver-submissions',
       '/rostering', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/staff', '/qualifications',
-      '/billing', '/tasks', '/incidents', '/settings',
+      '/billing', '/billing/claim-batches',
+      '/incidents', '/settings',
     ])
   })
 
@@ -542,9 +543,9 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
     // Caregiver forms used to be listed here: the link is shown to a role the route then bounces (it needs write access).
     expect(hrefs(mainNav())).toEqual([
       '/', '/portal',
-      '/trips', '/schedule',
+      '/trips', '/schedule', '/tasks',
       '/participants', '/medications',
-      '/tasks', '/incidents',
+      '/incidents',
     ])
   })
 })
@@ -582,15 +583,14 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
   const FULL_MENU = [
     'Dashboard',
     'My Shifts',
-    'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles',
+    'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
     'Participants: Participants | Medications | Caregiver forms',
     'Staff & roster: Board | Patterns | Compatibility | Leave | Completions | Staff | Qualifications',
-    'Billing',
-    'Tasks',
+    'Finance: Billing | Claim batches',
     'Incidents',
     'Settings',
   ]
-  const SUPPORT_WORKER_MENU = ['Dashboard', 'My Shifts', 'Trips: All Trips | Schedule', 'Participants: Participants | Medications', 'Tasks', 'Incidents']
+  const SUPPORT_WORKER_MENU = ['Dashboard', 'My Shifts', 'Trips: All Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents']
 
   it.each(['SuperAdmin', 'Admin', 'Coordinator', 'ReadOnly'])('gives %s the full menu: Rostering, Staff and Qualifications are one Staff & roster group', role => {
     signIn(role)
@@ -618,6 +618,19 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     renderAt('/onboarding/p-1')
     // NavLink's own matching would not light it (the path is not under /participants), and its aria-current would have said nothing.
     expect(within(mainNav()).getByRole('link', { name: /Participants$/ })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('lights Claim batches, not Billing, on the batch pages and on a claim (/claims/:id has no entry of its own); Billing only on /billing', () => {
+    for (const [path, lit] of [
+      ['/claims/claim-1', 'Claim batches'], ['/billing/claim-batches', 'Claim batches'], ['/billing/claim-batches/cb-1', 'Claim batches'], ['/billing', 'Billing'],
+    ] as const) {
+      const { unmount } = renderAt(path)
+      const links = within(mainNav()).getAllByRole('link', { name: /(Billing|Claim batches)$/ })
+      expect(links.filter(link => link.getAttribute('aria-current') === 'page').map(link => link.textContent), path).toEqual([expect.stringContaining(lit)])
+      // Whichever of the two is lit, Finance opens itself for the page.
+      expect(openGroupToggle(/Finance$/), path).toHaveAttribute('aria-expanded', 'true')
+      unmount()
+    }
   })
 
   it('opens the group that holds the page you navigate to, and closes the drawer you navigated from', async () => {
@@ -699,12 +712,12 @@ describe('AppLayout — open groups are remembered (U1)', () => {
     localStorage.setItem(KEY, JSON.stringify(['gone-group', 42, 'trips']))
     const { unmount } = renderAt('/')
     expect(expanded(/Trips$/)).toBe('true')
-    expect(navShape()).toHaveLength(9)
+    expect(navShape()).toHaveLength(8)
     unmount()
 
     localStorage.setItem(KEY, '{not json')
     renderAt('/')
-    expect(navShape()).toHaveLength(9)
+    expect(navShape()).toHaveLength(8)
     expect(expanded(/Trips$/)).toBe('false')
   })
 
@@ -838,7 +851,7 @@ describe('AppLayout — the bottom bar is generated from the same config (U6)', 
   it('lights the cell of the section that holds the page, not only the cell that links to it exactly', () => {
     signIn('Coordinator')
     for (const [path, expected] of [
-      ['/', 'Dashboard'], ['/trips/t-1', 'Trips'], ['/schedule', 'Trips'], ['/vehicles', 'Trips'],
+      ['/', 'Dashboard'], ['/trips/t-1', 'Trips'], ['/schedule', 'Trips'], ['/vehicles', 'Trips'], ['/tasks', 'Trips'],
       ['/rostering/leave', 'Roster'], ['/staff', 'Roster'], ['/qualifications', 'Roster'],
       ['/participants/p-1', 'Participants'], ['/onboarding/p-1', 'Participants'], ['/medications', 'Participants'],
     ] as const) {

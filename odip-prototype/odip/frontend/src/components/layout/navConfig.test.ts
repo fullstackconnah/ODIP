@@ -85,10 +85,17 @@ describe('navConfig — active state', () => {
     for (const path of ['/participantsx', '/medications', '/onboarding']) expect(isLeafActive(hub, path), path).toBe(false)
   })
 
-  it('lights Billing on the pages that belong to money but have no entry of their own (claim batches, a claim)', () => {
+  it('keeps /billing exact-only now that Claim batches is nested under it, and lights Claim batches on the batch pages and on a claim', () => {
+    expect(isExactMatchOnly('/billing')).toBe(true)
     const billing = leaf('/billing')
-    for (const path of ['/billing', '/billing/claim-batches', '/billing/claim-batches/new', '/claims/claim-1']) expect(isLeafActive(billing, path), path).toBe(true)
-    expect(isLeafActive(billing, '/billingx')).toBe(false)
+    const batches = leaf('/billing/claim-batches')
+    expect(isLeafActive(billing, '/billing')).toBe(true)
+    for (const path of ['/billing/claim-batches', '/billing/claim-batches/new', '/billing/claim-batches/cb-1', '/claims/claim-1']) {
+      expect(isLeafActive(billing, path), `Billing on ${path}`).toBe(false)
+      expect(isLeafActive(batches, path), `Claim batches on ${path}`).toBe(true)
+    }
+    expect(isLeafActive(batches, '/billing')).toBe(false)
+    expect(isLeafActive(batches, '/claimsx/1')).toBe(false)
   })
 })
 
@@ -102,7 +109,7 @@ describe('navConfig — who sees what', () => {
 
   it('drops a group that has no visible child, and keeps one with several', () => {
     expect(shape(resolveNav(navItems, accessFor('SupportWorker')))).toEqual([
-      'Dashboard', 'My Shifts', 'Trips: All Trips | Schedule', 'Participants: Participants | Medications', 'Tasks', 'Incidents',
+      'Dashboard', 'My Shifts', 'Trips: All Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents',
     ])
   })
 
@@ -110,11 +117,10 @@ describe('navConfig — who sees what', () => {
     expect(shape(resolveNav(navItems, accessFor('Admin')))).toEqual([
       'Dashboard',
       'My Shifts',
-      'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles',
+      'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
       'Participants: Participants | Medications | Caregiver forms',
       'Staff & roster: Board | Patterns | Compatibility | Leave | Completions | Staff | Qualifications',
-      'Billing',
-      'Tasks',
+      'Finance: Billing | Claim batches',
       'Incidents',
       'Settings',
     ])
