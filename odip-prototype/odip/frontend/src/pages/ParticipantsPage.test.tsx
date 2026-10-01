@@ -196,11 +196,16 @@ describe('ParticipantsPage — alerts badge column', () => {
 })
 
 describe('ParticipantsPage — operational register stage boundary', () => {
-  it('does not render a client-side Draft control because incomplete records belong to Onboarding', () => {
+  it('offers a Drafts view, so a draft that has no onboarding row is listed somewhere, and asks the server only for drafts there (L2-04)', async () => {
+    // This used to assert that there is NO Drafts control "because incomplete records belong to Onboarding". A draft saved from the Intake
+    // wizard has no onboarding row, so it belonged to no tab at all. Drafts that do have a row still appear under Onboarding as well.
+    const user = userEvent.setup()
     mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
     renderPage()
 
-    expect(screen.queryByRole('radio', { name: 'Drafts' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'Drafts' }))
+
+    expect(mockUseParticipants).toHaveBeenLastCalledWith({ isDraft: 'true' })
   })
 
   it('requests the server-owned operational stage predicate as well as non-drafts', () => {

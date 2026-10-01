@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { usePermissions } from '@/lib/permissions'
+import { extractErrorMessage } from '@/lib/utils'
 import { readIntakeCompleteNotice } from './intake/intakeComplete'
 import { plural } from '@/lib/format'
 
@@ -45,7 +46,7 @@ export default function OnboardingPage() {
         title="Onboarding"
         subtitle={`${plural(screen.allRowsCount, 'participant')} in progress. Onboarding doesn't activate a participant or allow bookings, rostering, invoicing or claims.`}
       >
-        {screen.allRowsCount > 0 && <SearchInput value={screen.search} onChange={screen.setSearch} placeholder="Search participants, stages or gates..." />}
+        {screen.toolbar}
       </PageHeader>
       {screen.body}
     </div>
@@ -60,7 +61,13 @@ export default function OnboardingPage() {
  */
 export function OnboardingTable() {
   const screen = useOnboardingScreen()
-  return <>{screen.body}</>
+  // The search used to live in the standalone page's header only, which no route reaches any more (L2-02).
+  return (
+    <>
+      {screen.toolbar && <div className="flex flex-wrap items-center gap-3 mb-4">{screen.toolbar}</div>}
+      {screen.body}
+    </>
+  )
 }
 
 function useOnboardingScreen() {
@@ -164,7 +171,7 @@ function useOnboardingScreen() {
           tone="error"
           actions={<button type="button" className="font-medium underline shrink-0" onClick={() => worklist.refetch()}>Retry</button>}
         >
-          Could not load the onboarding worklist. Please try again.
+          {extractErrorMessage(worklist.error, 'Could not load the onboarding worklist. Please try again.')}
         </Callout>
       )}
       {!worklist.isError && (!worklist.isLoading && rows.length === 0 ? (
@@ -180,10 +187,13 @@ function useOnboardingScreen() {
     </>
   )
 
+  const toolbar = allRows.length > 0
+    ? <SearchInput value={search} onChange={setSearch} placeholder="Search participants, stages or gates..." />
+    : null
+
   return {
     allRowsCount: allRows.length,
-    search,
-    setSearch,
+    toolbar,
     body,
   }
 }
