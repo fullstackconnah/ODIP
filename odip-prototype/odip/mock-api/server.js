@@ -730,7 +730,10 @@ function portalParticipantSummary(participantId) {
 // superseded, and a not-given outcome never replaces another record.
 // Routine ticks persist for the process (`routineChecks`): POST/DELETE portal/shifts/:id/routines/:id/check, InProgress only, the routine must be
 // in the shift's own list (404 SHIFT_ROUTINE_NOT_FOUND), idempotent; a fixture `checked` pre-ticks a routine of a finished shift (shift-0002 has
-// two of its three ticked, so the review shows a mix).
+// two of its three ticked, so the review shows a mix). A tick is found by ROUTINE (a routine has one occurrence per shift window), so editing the
+// routine's time afterwards neither hides the tick nor lets it be ticked twice. A tick whose routine was LATER edited out of the window, retired or
+// deleted still shows on the coordinator's review, listed from the title and time recorded when it was ticked (`fromTickSnapshot: true`; shift-0002
+// has one, `packageOrphanTicks`); the worker's shiftRoutines list never carries those.
 // NEED-TO-KNOW BY SHIFT STATUS: handover, emergency contacts and address only for a Published or InProgress shift. Any other status (the
 // Completed and PendingReview fixtures, and shift-0003 once finished) gets explicit nulls for them (and an empty handoverTrail) plus
 // `sensitiveInfoWithheldReason`.
@@ -901,6 +904,14 @@ const packageRoutines = {
     { id: 'rt-0203', title: 'Wake-up', description: 'Knock first. Hearing aid in before any conversation.', category: 'PersonalCare', isCritical: false, startTime: '06:00:00', endTime: '07:00:00', occursAt: '2026-09-11T06:00:00', afterMidnight: true },
   ],
   'shift-0001': [],
+}
+
+// shiftId -> ticks whose routine no longer matches the shift (retired or edited out of the window since): review-only rows from the tick's snapshot.
+const packageOrphanTicks = {
+  'shift-0002': [
+    { id: 'rt-0204', title: 'Supper', description: 'Hot milk and a biscuit if she wants one.', category: 'Meals', isCritical: false, startTime: '20:30:00', endTime: '21:00:00', occursAt: '2026-09-10T20:30:00', afterMidnight: false,
+      isChecked: true, checkedAt: '2026-09-10T10:40:00Z', checkedByName: 'Mei Zhang', fromTickSnapshot: true },
+  ],
 }
 
 // shiftId -> history (completed/pending shifts): breaks already on the completion.
@@ -1078,7 +1089,7 @@ function routineWithCheck(shiftId, r) {
   const st = pkgState(shiftId)
   const { checked, ...routine } = r
   const state = Object.prototype.hasOwnProperty.call(st.routineChecks, r.id) ? st.routineChecks[r.id] : (checked ?? null)
-  return { ...routine, isChecked: !!state, checkedAt: state ? state.at : null, checkedByName: state ? state.by : null }
+  return { ...routine, isChecked: !!state, checkedAt: state ? state.at : null, checkedByName: state ? state.by : null, fromTickSnapshot: false }
 }
 
 function packageFor(shiftId, participantId, status) {
@@ -1356,7 +1367,7 @@ function buildCompletionReview(shiftId) {
       outcome: { administrationId: g.id, status: g.status, recordedByName: g.recordedByName, administeredAt: g.administeredAt, administeredAtTimeZone: g.administeredAtTimeZone, recordedAt: g.createdAt, reason: g.reason, doseGiven: g.doseGiven, notes: g.notes, recordedWithoutCompetency: !!g.recordedWithoutCompetency },
     })),
     notes: shiftNotesByShiftId[base.id] || [],
-    routines: (packageRoutines[base.id] || []).map((r) => routineWithCheck(base.id, r)),
+    routines: [...(packageRoutines[base.id] || []).map((r) => routineWithCheck(base.id, r)), ...(packageOrphanTicks[base.id] || [])],
   }
 }
 

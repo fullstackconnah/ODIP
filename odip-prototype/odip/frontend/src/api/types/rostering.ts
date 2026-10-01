@@ -172,7 +172,9 @@ export interface ShiftCompletionReviewDto {
   prnDoses: ReviewPrnDoseDto[]
   notes: ShiftNoteDto[]
   /** The routines matched to the rostered window with the worker's tick state on this completion (`isChecked`, `checkedAt`, `checkedByName`):
-   * critical first, then in time order. An unticked routine is one the worker did not tick off. */
+   * critical first, then in time order. An unticked routine is one the worker did not tick off. After them come the ticks whose routine no longer
+   * matches the shift (edited out of the window, retired or deleted since the worker ticked it), marked `fromTickSnapshot` and shown as they were
+   * recorded: always `isChecked`, with the title and time of the tick. */
   routines: PortalShiftRoutineDto[]
 }
 

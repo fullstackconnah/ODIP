@@ -226,6 +226,12 @@ export interface PortalShiftRoutineDto {
   checkedAt: string | null
   /** Who ticked it; `null` when it is not. */
   checkedByName: string | null
+  /**
+   * `true` only on the coordinator's review (`GET rostering/shifts/{id}/completion-review`): this tick's routine no longer matches the shift (it was
+   * edited out of the window, retired or deleted after the worker ticked it), so the row is listed from what was recorded at the tick - the title and
+   * occurrence time as they were. Always `false` on the worker's shift detail and for a routine that still applies.
+   */
+  fromTickSnapshot: boolean
 }
 
 // ── Handover ────────────────────────────────────────────────

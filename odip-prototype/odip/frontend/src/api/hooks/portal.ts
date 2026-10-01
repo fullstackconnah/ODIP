@@ -101,7 +101,8 @@ export function useDeleteBreak() {
 /**
  * POST portal/shifts/{id}/routines/{routineId}/check - tick a routine done (persisted on the shift's completion; audited). The caller's OWN
  * InProgress shift, and the routine must be one of `shiftRoutines` (404 SHIFT_ROUTINE_NOT_FOUND otherwise). Idempotent: ticking again keeps
- * the first who and when. Replaces the cached shift detail with the response (`shiftRoutines[].isChecked` / `checkedAt` / `checkedByName`).
+ * the first who and when, and it stays ticked if a coordinator edits the routine's time afterwards (a tick is found by routine, with the title and
+ * occurrence time recorded on it). Replaces the cached shift detail with the response (`shiftRoutines[].isChecked` / `checkedAt` / `checkedByName`).
  */
 export function useCheckRoutine() {
   return useShiftDetailWrite(({ id, routineId }: { id: string; routineId: string }) =>
