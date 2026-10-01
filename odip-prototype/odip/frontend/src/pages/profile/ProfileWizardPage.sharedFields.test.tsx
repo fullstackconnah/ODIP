@@ -12,10 +12,11 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import ProfileWizardPage from './ProfileWizardPage'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 
-const { mockUseParticipant, mockPatchMutateAsync, mockUpdateMutateAsync, mockContactRoles } = vi.hoisted(() => ({
+const { mockUseParticipant, mockPatchMutateAsync, mockUpdateMutateAsync, mockCompleteMutateAsync, mockContactRoles } = vi.hoisted(() => ({
   mockUseParticipant: vi.fn(),
   mockPatchMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
+  mockCompleteMutateAsync: vi.fn(),
   mockContactRoles: { current: [] as unknown[] },
 }))
 
@@ -23,6 +24,7 @@ vi.mock('@/api/hooks', () => ({
   useParticipant: mockUseParticipant,
   usePatchParticipant: () => ({ mutateAsync: mockPatchMutateAsync, isPending: false }),
   useUpdateParticipant: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
+  useCompleteParticipantProfile: () => ({ mutateAsync: mockCompleteMutateAsync, isPending: false }),
   useUpsertCommunityAccessRiskItem: () => ({ mutateAsync: vi.fn().mockResolvedValue({ success: true }) }),
   useStaff: () => ({ data: [] }),
   useParticipantContactRoles: () => ({ data: mockContactRoles.current, isLoading: false }),
@@ -85,6 +87,7 @@ beforeEach(() => {
   mockUseParticipant.mockReset()
   mockPatchMutateAsync.mockReset().mockResolvedValue({ success: true })
   mockUpdateMutateAsync.mockReset().mockResolvedValue({ success: true })
+  mockCompleteMutateAsync.mockReset().mockResolvedValue({ success: true })
   mockContactRoles.current = []
   localStorage.clear()
 })
@@ -352,8 +355,8 @@ describe('Profile wizard: contacts are edited in place with the Contacts tab edi
   })
 })
 
-describe('Profile wizard: Complete Profile sends every value back', () => {
-  it('the final PUT carries the corrected values AND the intake-only fields the wizard never shows, so the server does not null them', async () => {
+describe('Profile wizard: Complete Profile finalises without sending any profile value', () => {
+  it('saves a correction through its own step PATCH, then finalises with the complete-profile call; the full-record PUT is never used, so nothing the wizard does not show can be nulled', async () => {
     const user = userEvent.setup()
     renderProfilePage()
     await expectStep(/key identifiers/i)
@@ -364,16 +367,12 @@ describe('Profile wizard: Complete Profile sends every value back', () => {
     await expectStep(/review/i)
     await user.click(screen.getByRole('button', { name: /complete profile/i }))
 
-    await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1))
-    const { id, data } = mockUpdateMutateAsync.mock.calls[0][0]
-    expect(id).toBe('participant-1')
-    expect(data).toEqual(expect.objectContaining({
-      isDraft: false, isActive: true,
-      firstName: 'Alexandra', lastName: 'Citizen-Smith', phone: '0400 000 000', addressPostcode: '4000', planType: 'PlanManaged', medicalSummary: 'Asthma; carries an inhaler',
-      // Not displayed by this wizard, so they used to be omitted and the full PUT nulled them on the server.
-      livingArrangement: 'Family', mainSupportPersonName: 'Pat Citizen', mainSupportPersonRelationship: 'Mother', region: 'QLD', notes: 'Prefers morning calls',
-    }))
-    expect(data).not.toHaveProperty('contactRoles')
+    // The correction went out with its step (and only that step's groups): the fields this wizard does not show were never part of it.
+    expect(mockPatchMutateAsync.mock.calls.some(([arg]) => arg.data.personalDetails?.lastName === 'Citizen-Smith')).toBe(true)
+    await waitFor(() => expect(mockCompleteMutateAsync).toHaveBeenCalledTimes(1))
+    expect(mockCompleteMutateAsync).toHaveBeenCalledWith({ id: 'participant-1' })
+    // The old final call was a full PUT with isDraft false and every field the wizard knew about; it replaced the rest with nulls.
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
     expect(await screen.findByText('Participant detail')).toBeInTheDocument()
   })
 })

@@ -237,17 +237,19 @@ describe('IntakeWizardPage', () => {
   it('completing a resumed draft (edit mode) also lands on the Onboarding table, for that participant', async () => {
     const user = userEvent.setup()
     mockParticipant.mockReturnValue({ data: draft(), isLoading: false })
-    mockUpdate.mockResolvedValue({ success: true, data: { id: 'draft-1', fullName: 'Jamie Rivers' } })
+    mockSave.mockResolvedValue({ success: true, data: { id: 'draft-1', fullName: 'Jamie Rivers' } })
     renderPage('/participants/draft-1/intake')
     for (let i = 0; i < 8; i++) await user.click(screen.getByRole('button', { name: /^next$/i }))
     await expectStep(/review/i)
     await user.click(screen.getByRole('button', { name: /complete intake/i }))
 
-    expect(mockUpdate).toHaveBeenCalledTimes(1)
-    expect(mockUpdate.mock.calls[0][0]).toEqual({
+    // The scoped intake save, never the full-record update.
+    expect(mockSave).toHaveBeenCalledTimes(1)
+    expect(mockSave.mock.calls[0][0]).toEqual({
       id: 'draft-1',
       data: expect.objectContaining({ isDraft: true, completeIntake: true, completionRequestId: expect.any(String) }),
     })
+    expect(mockUpdate).not.toHaveBeenCalled()
     expect(mockCreate).not.toHaveBeenCalled()
     expect(await screen.findByText('Participants list')).toBeInTheDocument()
     expect(screen.queryByText(/profile wizard/i)).not.toBeInTheDocument()
@@ -386,16 +388,17 @@ describe('IntakeWizardPage', () => {
   it('saves an inquiry-converted resume through the wizard update contract', async () => {
     const user = userEvent.setup()
     mockParticipant.mockReturnValue({ data: draft(), isLoading: false })
-    mockUpdate.mockResolvedValue({ success: false })
+    mockSave.mockResolvedValue({ success: false })
     renderPage('/participants/draft-1/intake')
     await user.click(screen.getByRole('button', { name: /save as draft/i }))
-    expect(mockUpdate).toHaveBeenCalledWith({
+    expect(mockSave).toHaveBeenCalledWith({
       id: 'draft-1',
       data: expect.objectContaining({ firstName: 'Jamie', lastName: 'Rivers', isDraft: true, completeIntake: false }),
     })
-    expect(mockUpdate.mock.calls[0][0].data).not.toHaveProperty('riskEntries')
-    expect(mockUpdate.mock.calls[0][0].data).not.toHaveProperty('contactRoles')
-    expect(mockSave).not.toHaveBeenCalled()
+    // The contacts and risks are sent (empty here): the server creates the new ones and skips the ones it already has.
+    expect(mockSave.mock.calls[0][0].data).toHaveProperty('riskEntries', [])
+    expect(mockSave.mock.calls[0][0].data).toHaveProperty('contactRoles', [])
+    expect(mockUpdate).not.toHaveBeenCalled()
   })
 })
 
