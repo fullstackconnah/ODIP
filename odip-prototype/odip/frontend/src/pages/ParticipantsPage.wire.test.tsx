@@ -197,6 +197,19 @@ describe('ParticipantsPage (wire) — Change status', () => {
     expect(mockApiPostRaw).toHaveBeenLastCalledWith('/participants/p1/status', { isActive: false, reason: 'Moved interstate' })
   })
 
+  it('drops the status notice when the view is switched: it belongs to the list it was made on', async () => {
+    mockApiPostRaw.mockResolvedValue(statusResult({ warnings: ['3 upcoming shifts still reference this participant. They were not cancelled.'] }))
+    const user = userEvent.setup()
+    renderPage()
+    const dialog = await openStatusDialog(user)
+    await user.click(within(dialog).getByRole('button', { name: /set jamie smith as inactive/i }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Jamie Smith is now Inactive')
+
+    await user.click(screen.getByRole('radio', { name: 'Archived' }))
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
   it('falls back to a plain message when the failure carries no server text', async () => {
     mockApiPostRaw.mockRejectedValueOnce(new Error('Network Error'))
     const user = userEvent.setup()

@@ -97,6 +97,7 @@ function useParticipantsScreen() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [view, setView] = useState<View>('active')
+  const [statusNotice, setStatusNotice] = useState<{ message: string; warnings: string[] } | null>(null)
 
   const deleteParticipant = useDeleteParticipant()
   const restoreParticipant = useRestoreParticipant()
@@ -121,6 +122,8 @@ function useParticipantsScreen() {
   const changeView = (next: View) => {
     setView(next)
     setShowArchived(next === 'archived')
+    // A status notice belongs to the list it was made on, like the archive and restore failure banner.
+    setStatusNotice(null)
   }
 
   const { data: participants = [], isLoading, isError, refetch } = useParticipants(listParams(view, search.trim()))
@@ -145,7 +148,6 @@ function useParticipantsScreen() {
   // or cancel), and only a saved change closes it and leaves a notice, with the server's warnings, above the table.
   const [statusReason, setStatusReason] = useState('')
   const [statusError, setStatusError] = useState<string | null>(null)
-  const [statusNotice, setStatusNotice] = useState<{ message: string; warnings: string[] } | null>(null)
 
   const openStatusDialog = (p: ParticipantListDto) => {
     setStatusReason('')
