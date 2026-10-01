@@ -708,15 +708,6 @@ export interface UpdateParticipantDto extends CreateParticipantDto {
 }
 
 /**
- * Narrow write contract for a lifecycle-only change. The participants endpoint applies a
- * partial patch server-side (ParticipantPatchApplier), so a status flip must send ONLY
- * `isActive` — never a whole list DTO, which omits CreateParticipantDto's required fields.
- */
-export interface UpdateParticipantStatusDto {
-  isActive: boolean
-}
-
-/**
  * What `POST /participants/{id}/status` and `POST /participants/{id}/restore` answer. `changed` is false when the
  * participant was already in the requested state. `warnings` never block the change (upcoming shifts that still
  * reference an archived participant, readiness gaps on activation); the screen shows them verbatim after a success.

@@ -5,8 +5,6 @@ import type {
   ParticipantListDto,
   ParticipantDetailDto,
   CreateParticipantDto,
-  UpdateParticipantDto,
-  UpdateParticipantStatusDto,
   ParticipantStatusResultDto,
   SaveParticipantIntakeDto,
   PatchParticipantDto,
@@ -110,20 +108,6 @@ export function useCreateParticipant() {
   })
 }
 
-export function useUpdateParticipant() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateParticipantDto | UpdateParticipantStatusDto }) =>
-      apiPutRaw<ParticipantDetailDto>(`/participants/${id}`, data),
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['participants'] })
-      qc.invalidateQueries({ queryKey: ['participant', vars.id] })
-      // Completing (or re-completing) intake creates the onboarding record; a full save also drops a stale profile validation.
-      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
-    },
-  })
-}
-
 /**
  * Saves or completes an intake the Intake wizard is RESUMING (PUT /participants/{id}/intake). The server writes only the intake
  * scope, so nothing else on the participant can be wiped, and it creates the contacts and risk entries in the payload that the
@@ -196,7 +180,7 @@ export function useDownloadParticipantIntakeSnapshotPdf() {
  * PatchParticipantDto's doc), leaving every absent group untouched server-side. One generic hook
  * for every group combination a caller needs (a wizard step's 1-4 groups, or a detail-tab
  * section's 1-2 groups) rather than a hook per section. Same invalidate-on-success shape as
- * useUpdateParticipant above. Every consumer of this hook must gate on `canWriteParticipantDetails`
+ * the other participant writes. Every consumer of this hook must gate on `canWriteParticipantDetails`
  * (never the broader `canWrite`) — see SPEC-00's CORE-02 section.
  */
 export function usePatchParticipant() {
