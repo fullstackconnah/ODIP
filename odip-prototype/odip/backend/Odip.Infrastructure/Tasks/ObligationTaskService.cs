@@ -10,10 +10,12 @@ namespace Odip.Infrastructure.Tasks;
 public sealed class ObligationTaskService : IObligationTaskService
 {
     private readonly OdipDbContext _db;
+    private readonly TimeProvider _clock;
 
-    public ObligationTaskService(OdipDbContext db)
+    public ObligationTaskService(OdipDbContext db, TimeProvider? clock = null)
     {
         _db = db;
+        _clock = clock ?? TimeProvider.System;
     }
 
     public async Task EnsureAsync(ObligationTaskSpec spec, CancellationToken ct = default)

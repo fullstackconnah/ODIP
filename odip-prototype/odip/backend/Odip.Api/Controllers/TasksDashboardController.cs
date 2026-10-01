@@ -16,7 +16,13 @@ namespace Odip.Api.Controllers;
 public class TasksController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public TasksController(OdipDbContext db) => _db = db;
+    private readonly TimeProvider _clock;
+
+    public TasksController(OdipDbContext db, TimeProvider? clock = null)
+    {
+        _db = db;
+        _clock = clock ?? TimeProvider.System;
+    }
 
     /// <summary>
     /// §4.4 same-tenant validation for the task-owner picker: null is always fine, otherwise the
@@ -392,7 +398,13 @@ public class TripDayScheduleController : ControllerBase
 public class DashboardController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public DashboardController(OdipDbContext db) => _db = db;
+    private readonly TimeProvider _clock;
+
+    public DashboardController(OdipDbContext db, TimeProvider? clock = null)
+    {
+        _db = db;
+        _clock = clock ?? TimeProvider.System;
+    }
 
     [HttpGet("summary")]
     public async Task<ActionResult<ApiResponse<DashboardSummaryDto>>> GetSummary(CancellationToken ct)

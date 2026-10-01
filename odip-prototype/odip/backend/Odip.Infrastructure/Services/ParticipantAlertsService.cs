@@ -57,7 +57,13 @@ public class ParticipantAlertsService
     private const int AdministrationWindowDays = 7;
 
     private readonly OdipDbContext _db;
-    public ParticipantAlertsService(OdipDbContext db) => _db = db;
+    private readonly TimeProvider _clock;
+
+    public ParticipantAlertsService(OdipDbContext db, TimeProvider? clock = null)
+    {
+        _db = db;
+        _clock = clock ?? TimeProvider.System;
+    }
 
     /// <summary>Narrow projection of a recent <see cref="MedicationAdministration"/> — just what rules 2/5 need.</summary>
     private sealed record RecentAdministration(Guid ParticipantMedicationId, MedicationAdministrationStatus Status, WitnessStatus WitnessStatus);
