@@ -127,12 +127,14 @@ export function useAcknowledgeHandover() {
 
 /**
  * POST portal/shifts/{id}/medications/{medicationId}/administrations — record a dose from the package. The caller's OWN shift,
- * InProgress; `scheduledAt` (the slot's wall-clock `scheduledAt`, unchanged) for a scheduled dose, omitted for PRN. "Not given this
- * shift" is `status: 'Missed'` with a `reason`. Send an `idempotencyKey`. 403 = no Medication Competency (Enforce mode only; in Warn mode the
+ * InProgress; `scheduledAt` (the slot's wall-clock `scheduledAt`, unchanged) for a scheduled dose, omitted for PRN. "Not given" is
+ * `status: 'Missed'` (or `Refused` / `Withheld`) with a `reason`; it says the dose was not given, it is not a hand-over (what the next worker needs
+ * goes in the handover text). Send an `idempotencyKey`. 403 = no Medication Competency (Enforce mode only; in Warn mode the
  * dose is recorded and flagged `recordedWithoutCompetency`); 409 ADMINISTRATION_ALREADY_RECORDED carries the existing record as `data`. The
- * one exception to "a slot takes one record": a later `Administered` supersedes an active `Refused` or `Missed` record (the participant took
- * it after all; a cover worker takes over) - the earlier record is kept as history and the slot then reads the new one. Nothing else is
- * superseded. 422 ADMINISTRATION_TOO_EARLY: an Administered dose cannot be charted more than 60 minutes before its slot (the message says
+ * one exception to "a slot takes one record": a later `Administered` (or `WrongMedication`) supersedes an active `Refused`, `Withheld` or
+ * `Missed` record (the participant refused then took it; a Missed record was wrong because the dose was given) - the earlier record is kept as
+ * history and the slot then reads the new one. Nothing else is superseded: an `Administered` or `WrongMedication` record is final (409, `data` is
+ * that record) and a not-given outcome never replaces another record. 422 ADMINISTRATION_TOO_EARLY: an Administered dose cannot be charted more than 60 minutes before its slot (the message says
  * from when); 422 ADMINISTRATION_TIME_OUT_OF_RANGE: `administeredAt` must lie between the shift's actual start and now + 5 minutes.
  * Refreshes the shift detail and the medication caches.
  * Every instant in the returned record (`administeredAt`, `createdAt`, ...) is UTC with a Z - on a replay and on the 409 body too;

@@ -250,7 +250,7 @@ export interface AdministrationDto {
   /** True when the recording user did not hold a current Medication Competency (the provider is in Warn mode): the record was accepted and
    * flagged for review. Always false in Enforce mode and for records that predate the flag. */
   recordedWithoutCompetency: boolean
-  /** Set on a Refused or Missed record that a later Administered record superseded: the id of its replacement. Absent or null = the active
+  /** Set on a Refused, Withheld or Missed record that a later Administered (or WrongMedication) record superseded: the id of its replacement. Absent or null = the active
    * record for its slot. Superseded records stay in the history lists (participant history, administration report) and are never shown by
    * the MAR or the shift package, which show the active record only. */
   supersededByAdministrationId?: string | null

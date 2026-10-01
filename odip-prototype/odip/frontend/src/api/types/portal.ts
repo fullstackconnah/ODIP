@@ -146,7 +146,7 @@ export interface PortalShiftDetailDto {
   handoverTrail: PortalHandoverTrailEntryDto[]
   /**
    * What still blocks Finish right now (only while InProgress; empty otherwise): a running break, and the doses that have COME DUE with no
-   * outcome - for a worker who can record doses only (`canRecordDoses`). A dose still ahead is handed over, not blocked. Finish answers
+   * outcome - for a worker who can record doses only (`canRecordDoses`). A dose still ahead does not block (it is recorded when it falls due). Finish answers
    * 422 while non-empty, by the same rule.
    */
   finishBlockers: PortalFinishBlockerDto[]

@@ -719,12 +719,13 @@ function portalParticipantSummary(participantId) {
 // cannot record a dose is never asked to clear one). Default worker: current.
 //
 // The Finish checklist follows the real server: a running break blocks; a dose blocks only once its
-// time has ARRIVED (a slot flagged `upcoming` in the fixtures does not - it is handed over, and it also stands for "more than an hour
+// time has ARRIVED (a slot flagged `upcoming` in the fixtures does not - it is recorded when it falls due, and it also stands for "more than an hour
 // away": an Administered dose cannot be charted for it yet, 422 ADMINISTRATION_TOO_EARLY) and only
 // for a worker who can record doses. A slot takes one record; an idempotencyKey may only be reused for
 // the SAME dose (medication, slot, outcome) - anything else is 400 ADMINISTRATION_IDEMPOTENCY_KEY_REUSED.
-// The one exception to a slot taking one record: an Administered record supersedes an active Refused or Missed one (the earlier record is
-// kept as history in `superseded`, the slot reads the new one).
+// The one exception to a slot taking one record: a record saying the dose WAS given (Administered, or WrongMedication) supersedes an active
+// Refused, Withheld or Missed one (the earlier record is kept as history in `superseded`, the slot reads the new one). A given record is never
+// superseded, and a not-given outcome never replaces another record.
 // Routine ticks persist for the process (`routineChecks`): POST/DELETE portal/shifts/:id/routines/:id/check, InProgress only, the routine must be
 // in the shift's own list (404 SHIFT_ROUTINE_NOT_FOUND), idempotent; a fixture `checked` pre-ticks a routine of a finished shift (shift-0002 has
 // two of its three ticked, so the review shows a mix).
@@ -1024,12 +1025,12 @@ function finishBlockersFor(shiftId) {
   }
   if (!competencyView().canRecordDoses) return blockers   // no dose blocks a worker who could not record it
   for (const def of (packageDoses[shiftId]?.slots || [])) {
-    if (def.upcoming) continue   // its time has not arrived: handed over, not blocked
+    if (def.upcoming) continue   // its time has not arrived: it does not block
     if (doseSlotDto(shiftId, def).outcome) continue
     const label = def.strength ? `${def.name} ${def.strength}` : def.name
     blockers.push({
       code: 'DOSE_OUTCOME_MISSING', medicationId: def.medicationId, medicationName: def.name, scheduledAt: def.at,
-      message: `${label} at ${def.at.slice(11, 16)} has no outcome. Record it, or mark it not given this shift with a reason.`,
+      message: `${label} at ${def.at.slice(11, 16)} has no outcome. Record it, or mark it not given with a reason.`,
     })
   }
   return blockers
@@ -1231,8 +1232,10 @@ const packageRoutesPost = [
 
     const key = `${medicationId}|${slotDef.at}`
     const existing = st.administrations[key] || (slotDef.recorded ? prefilledAdministration(shiftId, slotDef) : null)
-    // One ACTIVE record per slot. The one exception: an Administered record supersedes an active Refused or Missed one (kept as history).
-    const supersedes = !!existing && body.status === 'Administered' && (existing.status === 'Refused' || existing.status === 'Missed')
+    // One ACTIVE record per slot. The one exception: a record saying the dose WAS given (Administered or WrongMedication) supersedes an active
+    // Refused, Withheld or Missed one (kept as history). Nothing replaces a given record; a not-given outcome never replaces another record.
+    const supersedes = !!existing && (body.status === 'Administered' || body.status === 'WrongMedication')
+      && ['Refused', 'Withheld', 'Missed'].includes(existing.status)
     if (existing && !supersedes) return respond(409, failEnvelope(existing, ['This dose has already been recorded.'], 'ADMINISTRATION_ALREADY_RECORDED'))
     if (slotDef.isHighRisk && body.status === 'Administered' && !body.witnessStaffId && !body.witnessName) {
       return respond(400, failEnvelope(null, ['A witness is required for high-risk medication administration.'], null))

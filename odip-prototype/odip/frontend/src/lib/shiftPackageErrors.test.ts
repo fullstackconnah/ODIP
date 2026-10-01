@@ -12,7 +12,7 @@ function axiosError(status: number, body: unknown) {
 
 const blocker: PortalFinishBlockerDto = {
   code: 'DOSE_OUTCOME_MISSING',
-  message: 'Levetiracetam 500mg at 12:30 has no outcome. Record it, or mark it not given this shift with a reason.',
+  message: 'Levetiracetam 500mg at 12:30 has no outcome. Record it, or mark it not given with a reason.',
   medicationId: 'med-1',
   medicationName: 'Levetiracetam',
   scheduledAt: '2026-09-13T12:30:00',

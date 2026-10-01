@@ -196,7 +196,7 @@ describe('shift package hooks — recording a dose from the shift', () => {
     mockApiPost.mockResolvedValueOnce({ id: 'adm-2' })
     const { result } = renderHook(() => useRecordShiftDose(), { wrapper: wrapper(qc) })
 
-    const body = { status: 'Missed' as const, scheduledAt: '2026-09-13T12:30:00', reason: 'Finished early; handed to the evening worker', acknowledgeLimitBreach: false, idempotencyKey: 'k-2' }
+    const body = { status: 'Missed' as const, scheduledAt: '2026-09-13T12:30:00', reason: 'Participant asleep, could not be woken', acknowledgeLimitBreach: false, idempotencyKey: 'k-2' }
     await result.current.mutateAsync({ shiftId: 'shift-1', medicationId: 'med-2', data: body })
 
     expect(mockApiPost).toHaveBeenCalledWith('/portal/shifts/shift-1/medications/med-2/administrations', body)

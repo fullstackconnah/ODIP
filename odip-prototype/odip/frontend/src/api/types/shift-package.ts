@@ -132,7 +132,7 @@ export interface PortalEmergencyContactDto {
 /** `Overdue` = unrecorded and more than 60 minutes past its provider-local time. */
 export type PortalDoseState = 'Due' | 'Overdue' | 'Recorded'
 
-/** A recorded outcome for a dose. `Missed` is also how "not given this shift" is recorded, with its reason. */
+/** A recorded outcome for a dose. `Missed` is how "not given" is recorded, with its reason; it is not a hand-over. */
 export interface PortalDoseOutcomeDto {
   administrationId: string
   status: MedicationAdministrationStatus
@@ -313,8 +313,9 @@ export const SHIFT_PACKAGE_ERROR_CODES = {
   competencyMissing: 'MEDICATION_COMPETENCY_MISSING',
   competencyExpired: 'MEDICATION_COMPETENCY_EXPIRED',
   competencyUnverifiable: 'MEDICATION_COMPETENCY_UNVERIFIABLE',
-  /** 409 on recording a dose — the slot already has an ACTIVE record this request cannot supersede (only an Administered record supersedes a
-   * Refused or Missed one); `data` is that record (an AdministrationDto). */
+  /** 409 on recording a dose — the slot already has an ACTIVE record this request cannot supersede (only a record saying the dose was given,
+   * Administered or WrongMedication, supersedes Refused, Withheld or Missed records; an Administered or WrongMedication record is never
+   * superseded); `data` is the newest active record (an AdministrationDto). */
   administrationAlreadyRecorded: 'ADMINISTRATION_ALREADY_RECORDED',
   /** 400 — the idempotency key was used for a different medication. */
   idempotencyKeyReused: 'ADMINISTRATION_IDEMPOTENCY_KEY_REUSED',
