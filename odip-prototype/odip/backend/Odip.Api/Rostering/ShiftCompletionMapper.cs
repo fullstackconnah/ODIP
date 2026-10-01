@@ -131,7 +131,7 @@ public static class ShiftCompletionMapper
                 row.ServiceDate, rosteredStartUtc, rosteredEndUtc, completion.ActualStart, completion.ActualEnd,
                 completion.VarianceMinutesStart, completion.VarianceMinutesEnd, row.Status,
                 completion.TimeZoneId, isOutlier, varianceReviewMinutes, row.ReturnCount,
-                extras[completion.Id].DosesWithoutOutcome, extras[completion.Id].BreakMinutes));
+                extras[completion.Id].DosesWithoutOutcome, extras[completion.Id].BreakMinutes, completion.StartWasManual));
         }
         return items;
     }

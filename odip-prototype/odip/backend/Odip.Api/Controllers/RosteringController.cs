@@ -816,7 +816,7 @@ public class RosteringController : ControllerBase
                 ParticipantName = x.Shift.Participant != null ? x.Shift.Participant.FullName : string.Empty,
                 StaffName = x.Shift.User != null ? x.Shift.User.FullName : string.Empty,
                 CompletionId = x.Completion.Id, x.Completion.TimeZoneId, x.Completion.ActualStart, x.Completion.ActualEnd,
-                x.Completion.VarianceMinutesStart, x.Completion.VarianceMinutesEnd,
+                x.Completion.VarianceMinutesStart, x.Completion.VarianceMinutesEnd, x.Completion.StartWasManual,
             })
             .ToListAsync(ct);
 
@@ -840,7 +840,7 @@ public class RosteringController : ControllerBase
                 row.ServiceDate, rosteredStartUtc, rosteredEndUtc, row.ActualStart, row.ActualEnd,
                 row.VarianceMinutesStart, row.VarianceMinutesEnd, row.Status,
                 row.TimeZoneId, isOutlier, thresholdMinutes, row.ReturnCount,
-                extras[row.CompletionId].DosesWithoutOutcome, extras[row.CompletionId].BreakMinutes);
+                extras[row.CompletionId].DosesWithoutOutcome, extras[row.CompletionId].BreakMinutes, row.StartWasManual);
         }).ToList();
 
         return Ok(ApiResponse<PagedResult<CompletionQueueItemDto>>.Ok(

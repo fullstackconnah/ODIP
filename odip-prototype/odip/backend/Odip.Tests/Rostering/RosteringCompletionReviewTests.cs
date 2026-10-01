@@ -1280,6 +1280,28 @@ public class RosteringCompletionReviewTests
 
         Assert.Equal(2, item.DosesWithoutOutcome);   // any outcome counts - a Missed record is an outcome, an empty slot is not
         Assert.Equal(30, item.BreakMinutes);
+        Assert.False(item.StartWasManual);           // the worker pressed Start
+    }
+
+    [Fact]
+    public async Task TheQueueRow_FlagsAManualStart_SoTheCoordinatorCanSeeThatTheDoseChecklistWasSkipped()
+    {
+        // The manual-start path (the worker never pressed Start and supplied the start time at Finish) skips the dose checklist, so the queue
+        // says so next to the count of doses without an outcome, and the coordinator does not have to open the shift to find out.
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var amy = SeedParticipant(db);
+        var mia = Seed(db, new Participant { Id = Guid.NewGuid(), FirstName = "Mia", LastName = "Chen", IsActive = true });
+        var manual = SeedCompletion(db, SeedShift(db, amy.Id, staff.Id, ShiftStatus.PendingReview).Id, staff.Id);
+        manual.StartWasManual = true;
+        SeedCompletion(db, SeedShift(db, mia.Id, staff.Id, ShiftStatus.PendingReview).Id, staff.Id);
+        db.SaveChanges();
+
+        var items = await QueueAsync(db);
+
+        Assert.Equal(2, items.Count);
+        Assert.True(items.Single(i => i.ParticipantName.StartsWith("Amy")).StartWasManual);
+        Assert.False(items.Single(i => i.ParticipantName.StartsWith("Mia")).StartWasManual);
     }
 
     [Fact]
@@ -1352,6 +1374,11 @@ public class RosteringCompletionReviewTests
 
         Assert.Equal(2, item.DosesWithoutOutcome);
         Assert.Equal(45, item.BreakMinutes);
+        Assert.False(item.StartWasManual);
+
+        completion.StartWasManual = true;
+        db.SaveChanges();
+        Assert.True(Assert.Single(await ShiftCompletionMapper.BuildQueueItemsAsync(db, db.Shifts.Where(s => s.Id == shift.Id), 15, CancellationToken.None)).StartWasManual);
     }
 
     [Fact]

@@ -1207,5 +1207,12 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         var row = queue.Single(r => r.ShiftId == shiftId);   // (the previous worker's PendingReview shift is in the queue too)
         Assert.Equal(0, row.DosesWithoutOutcome);
         Assert.Equal(30, row.BreakMinutes);
+        Assert.False(row.StartWasManual);
+
+        // ...and so does the manual-start flag, read back from the column.
+        await db.ShiftCompletions.Where(c => c.Id == completionId).ExecuteUpdateAsync(c => c.SetProperty(x => x.StartWasManual, true));
+        var flagged = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(
+            Assert.IsType<OkObjectResult>((await rostering.GetCompletions(null, null, null, 1, 50, default)).Result).Value).Data!.Items;
+        Assert.True(flagged.Single(r => r.ShiftId == shiftId).StartWasManual);
     }
 }
