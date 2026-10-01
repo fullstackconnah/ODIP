@@ -45,7 +45,7 @@ export function TextAreaField({
       className={className}
       descriptionId={descriptionId}
     >
-      <textarea {...textareaProps} />
+      <textarea required={required} {...textareaProps} />
     </FormField>
   )
 }
