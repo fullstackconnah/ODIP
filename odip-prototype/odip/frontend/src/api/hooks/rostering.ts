@@ -18,6 +18,7 @@ import type {
   FlaggedShiftNoteDto,
   ShiftStatus,
   ShiftCompletionDto,
+  ShiftCompletionReviewDto,
   CompletionQueueItemDto,
   ReturnCompletionDto,
   ApproveBatchResultDto,
@@ -146,6 +147,19 @@ export function useCompletions(filters: CompletionFilters = {}, page = 1, pageSi
 }
 
 /**
+ * The coordinator's one-call review of a submitted shift — GET /rostering/shifts/{id}/completion/review: the completion (breaks,
+ * net worked minutes, handover, nothing-to-note), every scheduled dose in the rostered window with its outcome, PRN doses given
+ * during the shift, and the shift notes. Read-only; Approve / Return are the existing mutations.
+ */
+export function useShiftCompletionReview(shiftId: string | undefined) {
+  return useQuery({
+    queryKey: ['rostering-completion-review', shiftId],
+    queryFn: () => apiGet<ShiftCompletionReviewDto>(`/rostering/shifts/${shiftId}/completion/review`),
+    enabled: !!shiftId,
+  })
+}
+
+/**
  * Lazily-fetched completion detail (incidents included) for one shift — used on expand/before
  * Approve/Return so the queue itself never N+1s a detail call per row.
  */
@@ -164,6 +178,7 @@ export function useApproveCompletion() {
     onSuccess: (_, shiftId) => {
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
+      qc.invalidateQueries({ queryKey: ['rostering-completion-review', shiftId] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
   })
@@ -177,6 +192,7 @@ export function useReturnCompletion() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', vars.shiftId] })
+      qc.invalidateQueries({ queryKey: ['rostering-completion-review', vars.shiftId] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
   })
@@ -190,6 +206,8 @@ export function useApproveCompletionsBatch() {
       apiPost<ApproveBatchResultDto[]>('/rostering/completions/approve-batch', { shiftIds }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
+      // Any open review is now stale: a batch names many shifts, and the prefix key covers every one of them.
+      qc.invalidateQueries({ queryKey: ['rostering-completion-review'] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
   })

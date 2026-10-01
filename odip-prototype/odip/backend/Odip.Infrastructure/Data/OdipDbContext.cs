@@ -108,6 +108,15 @@ public class OdipDbContext : DbContext
 
     /// <summary>Shift-completion state machine: see <see cref="Rostering.ShiftCompletion"/>'s type doc.</summary>
     public DbSet<ShiftCompletion> ShiftCompletions => Set<ShiftCompletion>();
+
+    /// <summary>Breaks taken during a shift, hung off the active <see cref="ShiftCompletion"/> — see <see cref="Rostering.ShiftBreak"/>'s type doc.</summary>
+    public DbSet<ShiftBreak> ShiftBreaks => Set<ShiftBreak>();
+
+    /// <summary>The next worker marking a handover as read - see <see cref="Rostering.HandoverAcknowledgement"/>.</summary>
+    public DbSet<HandoverAcknowledgement> HandoverAcknowledgements => Set<HandoverAcknowledgement>();
+
+    /// <summary>Routines a worker ticked off during a shift, hung off the active completion - see <see cref="Rostering.ShiftRoutineCheck"/>.</summary>
+    public DbSet<ShiftRoutineCheck> ShiftRoutineChecks => Set<ShiftRoutineCheck>();
     /// <summary>Staff leave + recurring unavailability: see <see cref="Entities.User"/>-scoped <see cref="LeaveRequest"/>.</summary>
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<RecurringUnavailability> RecurringUnavailabilities => Set<RecurringUnavailability>();
@@ -873,6 +882,8 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.ParticipantReadinessMode)
                 .IsRequired()
                 .HasDefaultValue(ParticipantReadinessMode.Warn);
+            // NOT NULL DEFAULT 0 (= Warn): a constant default, so the column is added without rewriting the table.
+            entity.Property(e => e.MedicationCompetencyMode).HasDefaultValue(MedicationCompetencyMode.Warn);
 
             entity.HasOne(e => e.Tenant)
                 .WithMany()
@@ -1227,6 +1238,7 @@ public class OdipDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TimeZoneId).HasMaxLength(100);
             entity.Property(e => e.ReturnReason).HasMaxLength(2000);
+            entity.Property(e => e.HandoverText).HasMaxLength(2000);
 
             // Restrict: same idiom as ShiftNote -> Shift — a shift's completion history must
             // not be silently cascade-deleted out from under it.
@@ -1243,6 +1255,72 @@ public class OdipDbContext : DbContext
                 .IsUnique()
                 .HasDatabaseName(ShiftCompletion.ActiveIndexName)
                 .HasFilter("\"IsActive\"");
+        });
+
+        // ── ShiftBreak (shift package) ────────────────────────────
+        modelBuilder.Entity<ShiftBreak>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            // Restrict: same idiom as ShiftNote/ShiftCompletion -> Shift — a completion's break history must
+            // not be silently cascade-deleted out from under it.
+            entity.HasOne(e => e.ShiftCompletion)
+                .WithMany()
+                .HasForeignKey(e => e.ShiftCompletionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => new { e.TenantId, e.ShiftCompletionId });
+
+            // "At most one running break" per completion — mirrors ShiftCompletion's own partial unique index.
+            entity.HasIndex(e => e.ShiftCompletionId)
+                .IsUnique()
+                .HasDatabaseName(ShiftBreak.OneRunningIndexName)
+                .HasFilter("\"EndedAt\" IS NULL");
+        });
+
+        // ── HandoverAcknowledgement (shift package) ─────────────────
+        modelBuilder.Entity<HandoverAcknowledgement>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            // Restrict throughout: an acknowledgement is an audit-worthy record of who read what; the completion,
+            // shift and user it points at must not cascade it away.
+            entity.HasOne(e => e.SourceCompletion).WithMany().HasForeignKey(e => e.SourceCompletionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Shift).WithMany().HasForeignKey(e => e.ShiftId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
+
+            // One acknowledgement per reader per handover - acknowledging again is an idempotent no-op.
+            entity.HasIndex(e => new { e.SourceCompletionId, e.UserId })
+                .IsUnique()
+                .HasDatabaseName(HandoverAcknowledgement.UniqueReaderIndexName);
+            entity.HasIndex(e => new { e.TenantId, e.ShiftId });
+        });
+
+        // ── ShiftRoutineCheck (shift package) ────────────────────────
+        modelBuilder.Entity<ShiftRoutineCheck>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            // Restrict: a completion's tick history must not be cascade-deleted out from under it (same idiom as ShiftBreak); the worker too.
+            entity.HasOne(e => e.ShiftCompletion).WithMany().HasForeignKey(e => e.ShiftCompletionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.CheckedByUser).WithMany().HasForeignKey(e => e.CheckedByUserId).OnDelete(DeleteBehavior.Restrict);
+            // Restrict: a tick is history. The routine endpoints retire a routine (IsActive = false) rather than delete it, so a routine that has been
+            // ticked on a shift can never be removed out from under its ticks (a hard delete now fails instead of erasing the record).
+            entity.HasOne(e => e.ParticipantRoutine).WithMany().HasForeignKey(e => e.ParticipantRoutineId).OnDelete(DeleteBehavior.Restrict);
+            entity.Property(e => e.RoutineTitle).HasMaxLength(200);
+
+            entity.HasIndex(e => new { e.TenantId, e.ShiftCompletionId });
+
+            // One tick per (completion, routine, occurrence). A plain unique index treats NULL ScheduledAt (an untimed routine) as distinct, so
+            // there are two partial unique indexes: timed occurrences, and untimed routines.
+            entity.HasIndex(e => new { e.ShiftCompletionId, e.ParticipantRoutineId, e.ScheduledAt })
+                .IsUnique()
+                .HasDatabaseName(ShiftRoutineCheck.UniqueTimedIndexName)
+                .HasFilter("\"ScheduledAt\" IS NOT NULL");
+            entity.HasIndex(e => new { e.ShiftCompletionId, e.ParticipantRoutineId })
+                .IsUnique()
+                .HasDatabaseName(ShiftRoutineCheck.UniqueUntimedIndexName)
+                .HasFilter("\"ScheduledAt\" IS NULL");
         });
 
         // ── LeaveRequest ─────────────────────────────────────────
@@ -1371,6 +1449,7 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.PrnReason).HasMaxLength(500);
             entity.Property(e => e.PrnOutcome).HasMaxLength(1000);
             entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.RecordedWithoutCompetency).HasDefaultValue(false);
 
             // Restrict: the MAR is a compliance record — its parent medication/participant
             // must not silently cascade it away.
@@ -1406,6 +1485,15 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.ParticipantId);
             entity.HasIndex(e => new { e.ParticipantMedicationId, e.AdministeredAt });
             entity.HasIndex(e => new { e.WitnessUserId, e.WitnessStatus });
+
+            // Idempotent submits: unique per tenant over NON-NULL keys only. Filtered so every existing row
+            // (all NULL) is outside the index and the migration cannot fail on existing data. Deliberately
+            // NOT a unique index on (ParticipantMedicationId, ScheduledAt): see MedicationAdministration.IdempotencyKey.
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(100);
+            entity.HasIndex(e => new { e.TenantId, e.IdempotencyKey })
+                .IsUnique()
+                .HasDatabaseName(MedicationAdministration.IdempotencyIndexName)
+                .HasFilter("\"IdempotencyKey\" IS NOT NULL");
         });
 
         // ── ParticipantNote ───────────────────────────────────────
@@ -1811,6 +1899,21 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ShiftCompletion>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ShiftCompletion>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ShiftBreak>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ShiftBreak>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<HandoverAcknowledgement>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<HandoverAcknowledgement>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ShiftRoutineCheck>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ShiftRoutineCheck>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<LeaveRequest>()

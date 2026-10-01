@@ -182,6 +182,9 @@ public record ProviderSettingsDto
     public string? ManagerPhone { get; init; }
     /// <summary>How strictly this organisation applies participant readiness. Warn unless an Admin chose Enforce.</summary>
     public ParticipantReadinessMode ParticipantReadinessMode { get; init; } = ParticipantReadinessMode.Warn;
+
+    /// <summary>"Warn" (default): a user without a current Medication Competency may record, and the record is flagged. "Enforce": refused (403).</summary>
+    public MedicationCompetencyMode MedicationCompetencyMode { get; init; } = MedicationCompetencyMode.Warn;
 }
 
 public record UpsertProviderSettingsDto
@@ -217,6 +220,12 @@ public record UpsertProviderSettingsDto
     /// Admin (and SuperAdmin viewing as a tenant) may send it; an undefined value is rejected.
     /// </summary>
     public ParticipantReadinessMode? ParticipantReadinessMode { get; init; }
+
+    /// <summary>Null = leave the setting as it is (a client that does not send it must not reset it to Warn by saving the other fields);
+    /// on a brand-new settings row null means the default, Warn. The settings form sends it ONLY when the user changed it from the value it loaded
+    /// (it is last-write-wins: a form that re-sent a stale value would silently undo another admin's change). Only Warn and Enforce are accepted
+    /// (400 otherwise). A change that actually alters the stored mode writes one audit row (ProviderSettings, MedicationCompetencyMode, old, new, who).</summary>
+    public MedicationCompetencyMode? MedicationCompetencyMode { get; init; }
 }
 
 // ══════════════════════════════════════════════════════════════

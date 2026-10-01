@@ -247,6 +247,13 @@ export interface AdministrationDto {
   limitBreachAcknowledged: boolean
   notes: string | null
   createdAt: string
+  /** True when the recording user did not hold a current Medication Competency (the provider is in Warn mode): the record was accepted and
+   * flagged for review. Always false in Enforce mode and for records that predate the flag. */
+  recordedWithoutCompetency: boolean
+  /** Set on a Refused, Withheld or Missed record that a later Administered (or WrongMedication) record superseded: the id of its replacement. Absent or null = the active
+   * record for its slot. Superseded records stay in the history lists (participant history, administration report) and are never shown by
+   * the MAR or the shift package, which show the active record only. */
+  supersededByAdministrationId?: string | null
   /** Connection map: the incident this administration was filed into, if any (set once the
    * coordinator/support worker submits the drop-into-draft incident form — see
    * lib/incidentPrefill.ts's buildMarIncidentPrefill). Null until then. */
@@ -270,6 +277,13 @@ export interface CreateAdministrationDto {
   notes?: string
   tripInstanceId?: string
   acknowledgeLimitBreach: boolean
+  /**
+   * Optional idempotency key — generate one UUID when the record-dose sheet opens (see newCompletionRequestId) and send
+   * the same one on every retry / double tap: a second submit with the same key returns the FIRST record with 200 instead
+   * of creating another. Independent of the one-record-per-scheduled-slot rule, which also answers 409
+   * ADMINISTRATION_ALREADY_RECORDED (with the existing record as `data`) for a different key.
+   */
+  idempotencyKey?: string
 }
 
 export interface UpdateAdministrationDto {

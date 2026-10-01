@@ -134,6 +134,13 @@ export function usePermissions() {
     canWriteRoutines: isSuperAdmin || isAdmin || isCoordinator || isSupportWorker,
 
     /**
+     * Removing a routine is narrower than writing one: a support worker can add and edit a routine but not remove it. DELETE participants/routines/{id}
+     * now retires the routine (IsActive = false; the ticks recorded against it on past shifts survive) and answers 403 to any other role. Mirrors the
+     * backend's ParticipantRoutinesController.Delete role gate exactly.
+     */
+    canDeleteRoutines: isSuperAdmin || isAdmin || isCoordinator,
+
+    /**
      * INTAKE-09: participant risk entries are shift-facing in the same way routines/notes are —
      * any role that works a shift can write one. Only ReadOnly is excluded. Mirrors the
      * backend's ParticipantRiskEntriesController role gate exactly.

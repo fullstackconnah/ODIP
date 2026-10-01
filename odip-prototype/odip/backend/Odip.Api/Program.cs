@@ -177,6 +177,15 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.SafetyNoteSyncService>()
 builder.Services.AddScoped<Odip.Infrastructure.Rostering.IStaffUnavailabilityQuery, Odip.Infrastructure.Rostering.StaffUnavailabilityQuery>();
 builder.Services.AddScoped<Odip.Infrastructure.Rostering.IStaffAvailabilityItemsQuery, Odip.Infrastructure.Rostering.StaffAvailabilityItemsQuery>();
 
+// ── Shift package: MAR slot computation with a window form (shared by the MAR and the portal) ──
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<Odip.Infrastructure.Services.MedicationSlotService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.MedicationAdministrationRecorder>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftBreakService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftHandoverService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftRoutineCheckService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftPackageService>();
+
 // ── Public Holiday Sync ───────────────────────────────────────
 builder.Services.AddHttpClient<Odip.Infrastructure.Services.NagerHolidayProvider>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.IHolidayProvider, Odip.Infrastructure.Services.NagerHolidayProvider>();
@@ -379,11 +388,7 @@ builder.Services.AddCors(options =>
 
 // ── Controllers ──────────────────────────────────────────────
 builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
-        options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
-    });
+    .AddJsonOptions(options => Odip.Api.Serialization.ApiJsonOptions.Configure(options.JsonSerializerOptions));
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();

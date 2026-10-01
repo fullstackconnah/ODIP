@@ -176,6 +176,14 @@ public record AdministrationDto
     public string? Notes { get; init; }
     public DateTime CreatedAt { get; init; }
 
+    /// <summary>True when the recording user did not hold a current Medication Competency (the provider is in Warn mode): the record was
+    /// accepted and flagged for review. Always false in Enforce mode and for records that predate the flag.</summary>
+    public bool RecordedWithoutCompetency { get; init; }
+
+    /// <summary>Set on a Refused, Withheld or Missed record that a later Administered (or WrongMedication) record superseded: the id of the replacement. Null = the active record
+    /// for its slot. Superseded records stay in the history lists; the MAR and the shift package show only the active one.</summary>
+    public Guid? SupersededByAdministrationId { get; init; }
+
     /// <summary>Connection-map reverse link (Deliverable 2): id of the newest active
     /// <see cref="Odip.Domain.Entities.IncidentReport"/> whose MedicationAdministrationId points
     /// back at this administration, or null when none does.</summary>
@@ -217,6 +225,15 @@ public record CreateAdministrationDto
     public string? Notes { get; init; }
     public Guid? TripInstanceId { get; init; }
     public bool AcknowledgeLimitBreach { get; init; }
+
+    /// <summary>
+    /// Optional idempotency key (a UUID generated when the record-dose sheet opens is ideal). A second
+    /// submit with the same key returns the first request's record with 200 instead of creating another —
+    /// so a double tap or a retry after a dropped response is safe. Independent of the one-record-per-
+    /// scheduled-slot rule, which also rejects a different key for an already-recorded slot with 409.
+    /// </summary>
+    [StringLength(100)]
+    public string? IdempotencyKey { get; init; }
 }
 
 public record UpdateAdministrationDto

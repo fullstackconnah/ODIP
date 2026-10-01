@@ -38,4 +38,11 @@ public class ProviderSettings : ITenantEntity
     /// this row holds bank details (see ProviderSettingsController.Upsert).
     /// </summary>
     public ParticipantReadinessMode ParticipantReadinessMode { get; set; } = ParticipantReadinessMode.Warn;
+
+    /// <summary>
+    /// Whether recording a medication administration without a current Medication Competency is only flagged (Warn, the default) or
+    /// refused (Enforce). Per tenant. The column is NOT NULL with the constant default 0 (= Warn), so adding it is metadata-only and
+    /// every existing provider keeps today's recording behaviour until an Admin chooses Enforce.
+    /// </summary>
+    public MedicationCompetencyMode MedicationCompetencyMode { get; set; } = MedicationCompetencyMode.Warn;
 }

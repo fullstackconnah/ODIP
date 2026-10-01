@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost, apiPostRaw, apiPut } from '../client'
-import type { PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto, ShiftNoteDto, StartShiftDto, FinishShiftDto } from '../types'
+import { apiGet, apiPost, apiPostRaw, apiPut, apiDeleteRaw } from '../client'
+import type {
+  PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto, ShiftNoteDto, StartShiftDto, FinishShiftDto,
+  EditShiftBreakDto, AcknowledgeHandoverDto, CreateAdministrationDto, AdministrationDto,
+} from '../types'
 
 export function useMyShifts(from?: string, to?: string) {
   return useQuery({
@@ -48,6 +51,115 @@ export function useFinishShift() {
       qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.id] })
       qc.invalidateQueries({ queryKey: ['portal-shift-notes', vars.id] })
       qc.invalidateQueries({ queryKey: ['portal-my-shifts'] })
+    },
+  })
+}
+
+// ══════════════════════════════════════════════════════════════
+// SHIFT PACKAGE (PR 1 contract) — breaks, handover acknowledgement, recording a dose from the shift.
+// Every write that returns the shift detail replaces the cached detail in one step (setQueryData) and
+// then refetches, so the page never shows a stale break timer or dose state. Error handling: a failed
+// call rejects with the axios error; see lib/shiftPackageErrors.ts for reading `code` and `data`.
+// ══════════════════════════════════════════════════════════════
+
+function useShiftDetailWrite<TVars extends { id: string }>(mutationFn: (vars: TVars) => Promise<PortalShiftDetailDto>) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn,
+    onSuccess: (detail, vars) => {
+      qc.setQueryData(['portal-shift-detail', vars.id], detail)
+      qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.id] })
+    },
+  })
+}
+
+/** POST portal/shifts/{id}/breaks/start — 409 SHIFT_BREAK_ALREADY_RUNNING if a break is already running. */
+export function useStartBreak() {
+  return useShiftDetailWrite(({ id }: { id: string }) => apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/breaks/start`))
+}
+
+/** POST portal/shifts/{id}/breaks/{breakId}/end — idempotent. */
+export function useEndBreak() {
+  return useShiftDetailWrite(({ id, breakId }: { id: string; breakId: string }) =>
+    apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/breaks/${breakId}/end`))
+}
+
+/** PUT portal/shifts/{id}/breaks/{breakId} — correct a break's times (UTC) before Finish. */
+export function useEditBreak() {
+  return useShiftDetailWrite(({ id, breakId, data }: { id: string; breakId: string; data: EditShiftBreakDto }) =>
+    apiPut<PortalShiftDetailDto>(`/portal/shifts/${id}/breaks/${breakId}`, data))
+}
+
+/** DELETE portal/shifts/{id}/breaks/{breakId} — remove a break before Finish (audited). */
+export function useDeleteBreak() {
+  return useShiftDetailWrite(async ({ id, breakId }: { id: string; breakId: string }) => {
+    const response = await apiDeleteRaw<PortalShiftDetailDto>(`/portal/shifts/${id}/breaks/${breakId}`)
+    return response.data as PortalShiftDetailDto
+  })
+}
+
+/**
+ * POST portal/shifts/{id}/routines/{routineId}/check - tick a routine done (persisted on the shift's completion; audited). The caller's OWN
+ * InProgress shift, and the routine must be one of `shiftRoutines` (404 SHIFT_ROUTINE_NOT_FOUND otherwise). Idempotent: ticking again keeps
+ * the first who and when, and it stays ticked if a coordinator edits the routine's time afterwards (a tick is found by routine, with the title and
+ * occurrence time recorded on it). Replaces the cached shift detail with the response (`shiftRoutines[].isChecked` / `checkedAt` / `checkedByName`).
+ */
+export function useCheckRoutine() {
+  return useShiftDetailWrite(({ id, routineId }: { id: string; routineId: string }) =>
+    apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/routines/${routineId}/check`))
+}
+
+/** DELETE portal/shifts/{id}/routines/{routineId}/check - untick a routine (the removal is audited). Idempotent; same scoping as `useCheckRoutine`. */
+export function useUncheckRoutine() {
+  return useShiftDetailWrite(async ({ id, routineId }: { id: string; routineId: string }) => {
+    const response = await apiDeleteRaw<PortalShiftDetailDto>(`/portal/shifts/${id}/routines/${routineId}/check`)
+    return response.data as PortalShiftDetailDto
+  })
+}
+
+/**
+ * POST portal/shifts/{id}/handover/ack — the next worker marks the latest handover read (who and when are recorded). Pass the
+ * `completionId` of the handover on screen so a newer one arriving meanwhile is 409 SHIFT_HANDOVER_CHANGED, not a silent ack. 404 SHIFT_HANDOVER_NOT_FOUND
+ * when there is nothing to read, which includes a Published shift more than 48 hours before its rostered start (its handover is not shown yet: the
+ * message says from when).
+ */
+export function useAcknowledgeHandover() {
+  return useShiftDetailWrite(({ id, data }: { id: string; data?: AcknowledgeHandoverDto }) =>
+    apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/handover/ack`, data ?? {}))
+}
+
+/**
+ * POST portal/shifts/{id}/medications/{medicationId}/administrations — record a dose from the package. The caller's OWN shift,
+ * InProgress; `scheduledAt` (the slot's wall-clock `scheduledAt`, unchanged) for a scheduled dose, omitted for PRN. "Not given" is
+ * `status: 'Missed'` (or `Refused` / `Withheld`) with a `reason`; it says the dose was not given, it is not a hand-over (what the next worker needs
+ * goes in the handover text). Send an `idempotencyKey`. 403 = no Medication Competency (Enforce mode only; in Warn mode the
+ * dose is recorded and flagged `recordedWithoutCompetency`); 409 ADMINISTRATION_ALREADY_RECORDED carries the existing record as `data`. The
+ * one exception to "a slot takes one record": a later `Administered` (or `WrongMedication`) supersedes an active `Refused`, `Withheld` or
+ * `Missed` record (the participant refused then took it; a Missed record was wrong because the dose was given) - the earlier record is kept as
+ * history and the slot then reads the new one. Nothing else is superseded: an `Administered` or `WrongMedication` record is final (409, `data` is
+ * that record) and a not-given outcome never replaces another record. 409 ADMINISTRATION_SLOT_BUSY: another request held the slot's lock too
+ * long (nothing written, no `data`): look at the dose, then try again. 422 ADMINISTRATION_TOO_EARLY: an Administered dose cannot be charted more than
+ * 60 minutes before its slot (the message says from when); 422 ADMINISTRATION_TIME_OUT_OF_RANGE: `administeredAt` must lie between the earliest the
+ * shift allows (the earlier of the start of any of its completions, including one archived by a coordinator Return, and an hour before the rostered
+ * start) and now. A time up to 15 minutes AHEAD of the server is a device clock running fast: the dose is recorded with the server's now (the response
+ * says what was stored); beyond 15 minutes it is the 422. A PRN dose's limits (maximum per 24 hours, minimum interval) are judged at `administeredAt`,
+ * against the doses recorded on both sides of that time, so a 400 for a limit can name a dose recorded AFTER it (acknowledge with `acknowledgeLimitBreach`).
+ * A retry of a dose must resend the SAME `administeredAt` (and dose and reasons) with the same `idempotencyKey`: for a PRN dose, which has no slot to
+ * identify it, the key is honoured only when those match (10 minutes before the stored time or 15 after), else 400 ADMINISTRATION_IDEMPOTENCY_KEY_REUSED.
+ * Refreshes the shift detail and the medication caches.
+ * Every instant in the returned record (`administeredAt`, `createdAt`, ...) is UTC with a Z - on a replay and on the 409 body too;
+ * `scheduledAt` stays the slot's provider-local wall-clock value. The same `idempotencyKey` may only be reused for the SAME dose
+ * (medication, slot and outcome): reusing it for a different one is 400 ADMINISTRATION_IDEMPOTENCY_KEY_REUSED, never a silent replay.
+ */
+export function useRecordShiftDose() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ shiftId, medicationId, data }: { shiftId: string; medicationId: string; data: CreateAdministrationDto }) =>
+      apiPost<AdministrationDto>(`/portal/shifts/${shiftId}/medications/${medicationId}/administrations`, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.shiftId] })
+      qc.invalidateQueries({ queryKey: ['mar'] })
+      qc.invalidateQueries({ queryKey: ['participant-administrations'] })
     },
   })
 }

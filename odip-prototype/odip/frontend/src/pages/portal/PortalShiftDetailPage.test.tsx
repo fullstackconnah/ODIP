@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import PortalShiftDetailPage from './PortalShiftDetailPage'
 import type { PortalShiftDetailDto } from '@/api/types'
+import { emptyShiftPackage, emptyCompletionPackage } from '@/test/fixtures/shiftPackage'
 
 const {
   mockUsePortalShiftDetail, mockUseShiftNotes, mockUseStartShift, mockUseFinishShift,
@@ -134,6 +135,7 @@ function makeDetail(overrides: Partial<PortalShiftDetailDto> = {}): PortalShiftD
     completion: null,
     returnCount: 0,
     lastReturnReason: null,
+    ...emptyShiftPackage(),
     ...overrides,
   }
 }
@@ -162,6 +164,7 @@ function makeCompletion(overrides: Partial<NonNullable<PortalShiftDetailDto['com
     varianceReviewMinutes: 15,
     shiftReturnCount: 0,
     incidents: [],
+    ...emptyCompletionPackage(),
     ...overrides,
   }
 }

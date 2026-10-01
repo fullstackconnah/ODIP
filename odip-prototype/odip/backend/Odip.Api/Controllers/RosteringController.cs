@@ -46,11 +46,13 @@ public class RosteringController : ControllerBase
 
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
     private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
+    private readonly ShiftPackageService _package;
 
     public RosteringController(
         OdipDbContext db, StaffCompatibilityLinkService compatLink, IStaffUnavailabilityQuery unavailabilityQuery,
         IConfiguration? config = null, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
-        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null)
+        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null,
+        ShiftPackageService? package = null)
     {
         _db = db;
         _compatLink = compatLink;
@@ -58,6 +60,7 @@ public class RosteringController : ControllerBase
         _config = config;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
+        _package = package ?? new ShiftPackageService(db);
     }
 
     private int VarianceReviewMinutes => ShiftCompletionMapper.ClampVarianceReviewMinutes(_config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15);
@@ -585,7 +588,15 @@ public class RosteringController : ControllerBase
         return Ok(ApiResponse<ShiftDto>.Ok(await ToShiftDtoAsync(shift, findings, ct)));
     }
 
-    /// <summary>Delete a shift outright. Not roster-checked — removing a shift can never itself create a conflict.</summary>
+    /// <summary>
+    /// Delete a shift outright. Not roster-checked — removing a shift can never itself create a conflict. The shift's OWN handover
+    /// acknowledgements (a worker marking the previous handover as read, recorded against the shift they read it from) go with it: they only
+    /// say that a reader saw a handover from that shift, they mean nothing without it, and they are restricted by a foreign key, so without
+    /// this a Published shift whose worker had opened the handover could not be deleted (500, a foreign-key violation) - the everyday case
+    /// of a sick call or a re-roster by delete. They are removed in the same save (one transaction) and the removal is audited. The
+    /// acknowledgements OTHER shifts made of THIS shift's handover are not touched: the shift has none while it has no completion, and a
+    /// shift with a completion is still refused by the completion's own foreign key, as before.
+    /// </summary>
     [HttpDelete("shifts/{id:guid}")]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteShift(Guid id, CancellationToken ct)
     {
@@ -595,6 +606,7 @@ public class RosteringController : ControllerBase
         // Item 9: deleting the shift removes whatever coverage gap it represented.
         await _obligationTasks.CompleteByShiftAsync(shift.Id, TaskType.LeaveCoverage, ct);
 
+        _db.HandoverAcknowledgements.RemoveRange(await _db.HandoverAcknowledgements.Where(a => a.ShiftId == shift.Id).ToListAsync(ct));
         _db.Shifts.Remove(shift);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
@@ -800,13 +812,20 @@ public class RosteringController : ControllerBase
             .Take(pageSize)
             .Select(x => new
             {
-                x.Shift.Id, x.Shift.ServiceDate, x.Shift.StartTime, x.Shift.EndTime, x.Shift.EndsNextDay, x.Shift.Status, x.Shift.ReturnCount,
+                x.Shift.Id, x.Shift.ServiceDate, x.Shift.StartTime, x.Shift.EndTime, x.Shift.EndsNextDay, x.Shift.Status, x.Shift.ReturnCount, x.Shift.ParticipantId,
                 ParticipantName = x.Shift.Participant != null ? x.Shift.Participant.FullName : string.Empty,
                 StaffName = x.Shift.User != null ? x.Shift.User.FullName : string.Empty,
                 CompletionId = x.Completion.Id, x.Completion.TimeZoneId, x.Completion.ActualStart, x.Completion.ActualEnd,
-                x.Completion.VarianceMinutesStart, x.Completion.VarianceMinutesEnd,
+                x.Completion.VarianceMinutesStart, x.Completion.VarianceMinutesEnd, x.Completion.StartWasManual,
             })
             .ToListAsync(ct);
+
+        // Doses without an outcome and break minutes for the page's rows (bounded by the page size).
+        var extras = await ShiftCompletionMapper.QueueExtrasAsync(
+            _db,
+            pageRows.Select(r => new ShiftCompletionMapper.QueueExtrasInput(
+                r.CompletionId, r.ParticipantId, r.ServiceDate, r.StartTime, r.EndTime, r.EndsNextDay, r.ActualStart, r.ActualEnd)).ToList(),
+            ct);
 
         var items = pageRows.Select(row =>
         {
@@ -820,7 +839,8 @@ public class RosteringController : ControllerBase
                 row.Id, row.CompletionId, row.ParticipantName, row.StaffName,
                 row.ServiceDate, rosteredStartUtc, rosteredEndUtc, row.ActualStart, row.ActualEnd,
                 row.VarianceMinutesStart, row.VarianceMinutesEnd, row.Status,
-                row.TimeZoneId, isOutlier, thresholdMinutes, row.ReturnCount);
+                row.TimeZoneId, isOutlier, thresholdMinutes, row.ReturnCount,
+                extras[row.CompletionId].DosesWithoutOutcome, extras[row.CompletionId].BreakMinutes, row.StartWasManual);
         }).ToList();
 
         return Ok(ApiResponse<PagedResult<CompletionQueueItemDto>>.Ok(
@@ -844,6 +864,25 @@ public class RosteringController : ControllerBase
 
         var shiftReturnCount = await _db.Shifts.Where(s => s.Id == id).Select(s => s.ReturnCount).FirstOrDefaultAsync(ct);
         return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shiftReturnCount, ct, includeIncidents: true)));
+    }
+
+    /// <summary>
+    /// Everything a coordinator needs to review one submitted shift in a single call (shift package, PR 3): the active
+    /// completion (times, variance, breaks, net worked minutes, handover, the "nothing to note" confirmation, incidents),
+    /// every scheduled dose due in the rostered window with its outcome, PRN doses given during the shift, and the shift
+    /// notes. Same 404 as <see cref="GetShiftCompletion"/> when the shift has no active completion. Read-only: the Approve and
+    /// Return endpoints are unchanged.
+    /// </summary>
+    [HttpGet("shifts/{id:guid}/completion/review")]
+    public async Task<ActionResult<ApiResponse<ShiftCompletionReviewDto>>> GetShiftCompletionReview(Guid id, CancellationToken ct)
+    {
+        var completion = await _db.ShiftCompletions.Where(c => c.ShiftId == id && c.IsActive).FirstOrDefaultAsync(ct);
+        var shift = completion is null ? null : await _db.Shifts.Include(s => s.Participant).FirstOrDefaultAsync(s => s.Id == id, ct);
+        if (completion is null || shift is null)
+            return NotFound(ApiResponse<ShiftCompletionReviewDto>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound));
+
+        var completionDto = await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct, includeIncidents: true);
+        return Ok(ApiResponse<ShiftCompletionReviewDto>.Ok(await _package.BuildReviewAsync(shift, completion, completionDto, ct)));
     }
 
     /// <summary>

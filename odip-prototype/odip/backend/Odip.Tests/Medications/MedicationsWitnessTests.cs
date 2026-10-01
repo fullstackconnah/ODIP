@@ -24,7 +24,9 @@ namespace Odip.Tests.Medications;
 /// </summary>
 public class MedicationsWitnessTests
 {
-    private static (OdipDbContext Db, Mock<ICurrentTenant> Tenant) CreateDb(Guid? viewAsUserId = null)
+    /// <param name="competentRecorder">Recording a dose needs a current Medication Competency credential (the D3
+    /// gate). Tests that don't set up their own administering identity pass true to record as a competent user.</param>
+    private static (OdipDbContext Db, Mock<ICurrentTenant> Tenant) CreateDb(Guid? viewAsUserId = null, bool competentRecorder = false)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns((Guid?)null);
@@ -35,7 +37,10 @@ public class MedicationsWitnessTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-        return (new OdipDbContext(options, tenant.Object), tenant);
+        var db = new OdipDbContext(options, tenant.Object);
+        if (competentRecorder && viewAsUserId is null)
+            tenant.Setup(t => t.ViewAsUserId).Returns(MedicationTestIdentities.SeedCompetentUser(db).Id);
+        return (db, tenant);
     }
 
     private static Participant SeedParticipant(OdipDbContext db)
@@ -65,6 +70,7 @@ public class MedicationsWitnessTests
         {
             Id = Guid.NewGuid(), Email = $"{Guid.NewGuid()}@example.com", Username = Guid.NewGuid().ToString(),
             FirstName = firstName, LastName = lastName, Role = UserRole.SupportWorker, IsActive = true,
+            IsMedicationCompetent = true, MedicationCompetencyExpiryDate = new DateOnly(2099, 1, 1),
         };
         db.Users.Add(user);
         db.SaveChanges();
@@ -74,7 +80,7 @@ public class MedicationsWitnessTests
     [Fact]
     public async Task RecordAdministration_HighRiskWithWitnessStaffId_SetsPendingAndPopulatesWitnessName()
     {
-        var (db, tenant) = CreateDb();
+        var (db, tenant) = CreateDb(competentRecorder: true);
         var participant = SeedParticipant(db);
         var med = SeedHighRiskMed(db, participant.Id);
         var witness = SeedUser(db, "Rachel", "Thompson");
@@ -99,7 +105,7 @@ public class MedicationsWitnessTests
     [Fact]
     public async Task RecordAdministration_HighRiskWithWitnessStaffId_RaisesWitnessRequestedForTheWitness()
     {
-        var (db, tenant) = CreateDb();
+        var (db, tenant) = CreateDb(competentRecorder: true);
         var participant = SeedParticipant(db);
         var med = SeedHighRiskMed(db, participant.Id);
         var witness = SeedUser(db, "Rachel", "Thompson");
@@ -118,7 +124,7 @@ public class MedicationsWitnessTests
     [Fact]
     public async Task RecordAdministration_LegacyWitnessNameOnly_RaisesNoWitnessNotification()
     {
-        var (db, tenant) = CreateDb();
+        var (db, tenant) = CreateDb(competentRecorder: true);
         var participant = SeedParticipant(db);
         var med = SeedHighRiskMed(db, participant.Id);
         var controller = new MedicationsController(db, tenant.Object);
@@ -136,7 +142,7 @@ public class MedicationsWitnessTests
         // Back-compat: a caller that only supplies free-text WitnessName (no staff selection)
         // still passes the high-risk gate, exactly as before this feature existed — no Pending
         // workflow is started since there's no staff record to approve/decline it.
-        var (db, tenant) = CreateDb();
+        var (db, tenant) = CreateDb(competentRecorder: true);
         var participant = SeedParticipant(db);
         var med = SeedHighRiskMed(db, participant.Id);
         var controller = new MedicationsController(db, tenant.Object);
@@ -154,7 +160,7 @@ public class MedicationsWitnessTests
     [Fact]
     public async Task RecordAdministration_HighRiskAdministeredWithoutAnyWitness_ReturnsBadRequest()
     {
-        var (db, tenant) = CreateDb();
+        var (db, tenant) = CreateDb(competentRecorder: true);
         var participant = SeedParticipant(db);
         var med = SeedHighRiskMed(db, participant.Id);
         var controller = new MedicationsController(db, tenant.Object);
@@ -172,7 +178,7 @@ public class MedicationsWitnessTests
     public async Task RecordAdministration_WitnessStaffIdInactive_ReturnsBadRequest()
     {
         // §4.4: the witness ref must resolve to an ACTIVE user, not merely an existing one.
-        var (db, tenant) = CreateDb();
+        var (db, tenant) = CreateDb(competentRecorder: true);
         var participant = SeedParticipant(db);
         var med = SeedHighRiskMed(db, participant.Id);
         var inactiveWitness = SeedUser(db, "Inactive", "Witness");
@@ -192,7 +198,7 @@ public class MedicationsWitnessTests
     [Fact]
     public async Task RecordAdministration_WitnessStaffIdNotFound_ReturnsBadRequest()
     {
-        var (db, tenant) = CreateDb();
+        var (db, tenant) = CreateDb(competentRecorder: true);
         var participant = SeedParticipant(db);
         var med = SeedHighRiskMed(db, participant.Id);
         var controller = new MedicationsController(db, tenant.Object);

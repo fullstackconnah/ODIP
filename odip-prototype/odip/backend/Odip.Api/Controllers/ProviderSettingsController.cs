@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
@@ -40,7 +41,8 @@ public class ProviderSettingsController : ControllerBase
             BankAccountName = s.BankAccountName, BSB = s.BSB,
             AccountNumber = s.AccountNumber, InvoiceFooterNotes = s.InvoiceFooterNotes,
             State = s.State, ManagerName = s.ManagerName, ManagerPhone = s.ManagerPhone,
-            ParticipantReadinessMode = s.ParticipantReadinessMode
+            ParticipantReadinessMode = s.ParticipantReadinessMode,
+            MedicationCompetencyMode = s.MedicationCompetencyMode
         }));
     }
 
@@ -48,12 +50,11 @@ public class ProviderSettingsController : ControllerBase
     [Authorize(Roles = "SuperAdmin,Admin")]
     public async Task<ActionResult<ApiResponse<bool>>> Upsert([FromBody] UpsertProviderSettingsDto dto, CancellationToken ct)
     {
-        // The readiness mode changes ONLY when the request carries it, so a client that does not
-        // know about it (or a stale tab saving an unrelated field) can never revert it. Validate
-        // before anything is touched, so a refused request writes nothing.
-        if (dto.ParticipantReadinessMode is { } requestedMode)
+        // Each mode changes ONLY when the request carries it, so a client that does not know about it (or a stale tab saving an unrelated
+        // field) can never revert it. Validate before anything is touched, so a refused request writes nothing.
+        if (dto.ParticipantReadinessMode is { } requestedReadiness)
         {
-            if (!Enum.IsDefined(requestedMode))
+            if (!Enum.IsDefined(requestedReadiness))
                 return BadRequest(ApiResponse<bool>.Fail("Unknown participant readiness mode. Use Warn or Enforce."));
 
             // The setting belongs to one organisation. A SuperAdmin with no view-as tenant has none
@@ -64,6 +65,11 @@ public class ProviderSettingsController : ControllerBase
                     "Choose an organisation to view as before changing the participant readiness check."));
         }
 
+        // JsonStringEnumConverter also accepts a bare integer, so "medicationCompetencyMode": 7 would otherwise be stored; the recorder reads any
+        // value other than Warn as Enforce, but GET would send back 7 and the dropdown would show nothing.
+        if (dto.MedicationCompetencyMode is { } requestedCompetency && !Enum.IsDefined(requestedCompetency))
+            return BadRequest(ApiResponse<bool>.Fail("The medication competency mode must be Warn or Enforce."));
+
         var s = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
         if (s == null)
         {
@@ -71,8 +77,9 @@ public class ProviderSettingsController : ControllerBase
             _db.ProviderSettings.Add(s);
         }
 
-        // A brand-new row starts at the default (Warn), which is what applied until now.
-        var previousMode = s.ParticipantReadinessMode;
+        // A brand-new row starts at the defaults (Warn for both modes), which is what applied until now.
+        var previousReadiness = s.ParticipantReadinessMode;
+        var previousCompetency = s.MedicationCompetencyMode;
 
         s.RegistrationNumber = dto.RegistrationNumber; s.ABN = dto.ABN;
         s.OrganisationName = dto.OrganisationName; s.Address = dto.Address;
@@ -81,15 +88,23 @@ public class ProviderSettingsController : ControllerBase
         s.AccountNumber = dto.AccountNumber; s.InvoiceFooterNotes = dto.InvoiceFooterNotes;
         s.State = dto.State; s.ManagerName = dto.ManagerName; s.ManagerPhone = dto.ManagerPhone;
 
-        if (dto.ParticipantReadinessMode is { } newMode && newMode != previousMode)
+        // Each mode is applied, and audited, independently and only when sent and different. ProviderSettings is deliberately NOT an audited
+        // entity: the generic interceptor would copy the bank details into AuditLog, so each change is recorded here on its own, as exactly
+        // ONE single-field row (field, old, new, actor) in the same save as the change, and none when the mode is not changed.
+        if (dto.ParticipantReadinessMode is { } newReadiness && newReadiness != previousReadiness)
         {
-            s.ParticipantReadinessMode = newMode;
-            // Exactly ONE audit row for the mode change: field, old, new, actor. ProviderSettings is
-            // deliberately not an audited entity (the generic interceptor would copy the bank
-            // details into AuditLog), so the change is recorded here, on its own.
+            s.ParticipantReadinessMode = newReadiness;
             _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(
                 nameof(ProviderSettings), s.Id, nameof(ProviderSettings.ParticipantReadinessMode),
-                previousMode.ToString(), newMode.ToString(), User));
+                previousReadiness.ToString(), newReadiness.ToString(), User));
+        }
+
+        if (dto.MedicationCompetencyMode is { } newCompetency && newCompetency != previousCompetency)
+        {
+            s.MedicationCompetencyMode = newCompetency;
+            _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(
+                nameof(ProviderSettings), s.Id, nameof(ProviderSettings.MedicationCompetencyMode),
+                previousCompetency.ToString(), newCompetency.ToString(), User));
         }
 
         await _db.SaveChangesAsync(ct);

@@ -17,6 +17,10 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <!-- Golden outputs for MarCharacterizationTests (produced by the pre-refactor implementation). -->
+    <None Include="Medications\Golden\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Odip.Api\Odip.Api.csproj" />
     <ProjectReference Include="..\Odip.Application\Odip.Application.csproj" />
     <ProjectReference Include="..\Odip.Domain\Odip.Domain.csproj" />

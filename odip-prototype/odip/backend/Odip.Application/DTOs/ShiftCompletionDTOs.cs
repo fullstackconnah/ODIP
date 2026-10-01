@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 
@@ -27,6 +28,46 @@ public record FinishShiftDto
     public bool GeolocationDeclined { get; init; }
     /// <summary>Supplied only on the manual-start path — Start was skipped, so Finish supplies the real ActualStart.</summary>
     public DateTime? ActualStart { get; init; }
+
+    /// <summary>
+    /// The handover note for the next worker (max 2000 chars; blank is allowed - the handover is prompted but
+    /// optional). Stored on the completion and shown to the participant's next worker.
+    /// </summary>
+    [StringLength(2000)]
+    public string? HandoverText { get; init; }
+
+    /// <summary>"Nothing to hand over", confirmed explicitly. Mutually exclusive with a non-blank <see cref="HandoverText"/> (400 SHIFT_HANDOVER_CONFLICT).</summary>
+    public bool NothingToHandOver { get; init; }
+
+    /// <summary>
+    /// "Nothing to note", confirmed explicitly. Lets Finish proceed when the shift has no notes (otherwise
+    /// 409 SHIFT_NOTE_REQUIRED, unchanged). Stored on the completion only when there really are no notes.
+    /// </summary>
+    public bool NothingToNote { get; init; }
+}
+
+/// <summary>
+/// One break inside a shift. <see cref="Minutes"/> is whole minutes: for an ended break the time between
+/// start and end, for a RUNNING break the time so far. Times are UTC instants.
+/// </summary>
+public record ShiftBreakDto(
+    Guid Id,
+    DateTime StartedAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? EndedAt,
+    bool IsRunning,
+    int Minutes,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? EditedAt,
+    Guid CreatedByUserId);
+
+/// <summary>
+/// PUT portal/shifts/{id}/breaks/{breakId} body: the corrected times, as UTC instants (ISO 8601 with a Z;
+/// an unsuffixed value is treated as UTC). <see cref="EndedAt"/> null keeps a RUNNING break running; an ended
+/// break must keep an end. Only allowed while the shift is in progress (before Finish).
+/// </summary>
+public record EditShiftBreakDto
+{
+    public DateTime StartedAt { get; init; }
+    public DateTime? EndedAt { get; init; }
 }
 
 public record ShiftCompletionDto(
@@ -55,11 +96,54 @@ public record ShiftCompletionDto(
     // populated on the RosteringController.GetShiftCompletion DETAIL endpoint only; every other
     // caller of ShiftCompletionMapper.ToDtoAsync gets an empty list (see the mapper's
     // includeIncidents parameter).
-    IReadOnlyList<IncidentSummaryDto> Incidents);
+    IReadOnlyList<IncidentSummaryDto> Incidents,
+    // ── Shift package: breaks and net worked time. Billing stays on ROSTERED hours; these are a record. ──
+    /// <summary>Breaks taken during this completion, oldest first.</summary>
+    IReadOnlyList<ShiftBreakDto> Breaks,
+    /// <summary>Whole minutes spent on breaks (a running break counts up to now).</summary>
+    int BreakMinutes,
+    /// <summary>Whole minutes worked: actual start to actual end (or now while in progress) minus breaks. Never negative.</summary>
+    int NetWorkedMinutes,
+    // ── Shift package: what the worker left at Finish ──
+    /// <summary>The handover note left for the next worker; null when none was written.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? HandoverText,
+    /// <summary>The worker confirmed "nothing to hand over".</summary>
+    bool NothingToHandOver,
+    /// <summary>The worker confirmed "nothing to note" instead of writing a shift note.</summary>
+    bool NothingToNoteConfirmed);
 
 /// <summary>Connection-map reverse link (Deliverable 2) summary row — one active IncidentReport
 /// raised against a shift, as surfaced on <see cref="ShiftCompletionDto.Incidents"/>.</summary>
 public record IncidentSummaryDto(Guid Id, string Title, IncidentSeverity Severity, IncidentStatus Status, DateTime IncidentDateTime);
+
+/// <summary>
+/// Everything a coordinator needs to review one submitted shift in a single payload: the completion (times, variance,
+/// breaks, net worked minutes, handover, "nothing to note" confirmation, incidents), every scheduled dose in the rostered
+/// window with its outcome, PRN doses given during the shift, and the shift notes. Returned by
+/// <c>GET rostering/shifts/{id}/completion/review</c>; the Approve / Return endpoints are unchanged.
+/// </summary>
+public record ShiftCompletionReviewDto(
+    ShiftCompletionDto Completion,
+    string ParticipantName,
+    string StaffName,
+    DateOnly ServiceDate,
+    /// <summary>The provider's IANA zone; scheduled dose times are wall-clock values in it.</summary>
+    string TimeZoneId,
+    /// <summary>Scheduled doses due in the rostered window, in time order. A slot whose <c>outcome</c> is null had nothing recorded.</summary>
+    IReadOnlyList<PortalDoseSlotDto> Doses,
+    /// <summary>"As needed" (PRN) doses the submitting worker administered between the actual start and end.</summary>
+    IReadOnlyList<ReviewPrnDoseDto> PrnDoses,
+    IReadOnlyList<ShiftNoteDto> Notes,
+    /// <summary>The routines matched to the rostered window, with the worker's tick state on this completion (<c>isChecked</c>, <c>checkedAt</c>,
+    /// <c>checkedByName</c>): critical first, then in time order. An unticked routine is one the worker did not tick off.</summary>
+    IReadOnlyList<PortalShiftRoutineDto> Routines);
+
+public record ReviewPrnDoseDto(
+    Guid MedicationId,
+    string MedicationName,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Strength,
+    string DoseDescription,
+    PortalDoseOutcomeDto Outcome);
 
 public record CompletionQueueItemDto(
     Guid ShiftId,
@@ -77,7 +161,17 @@ public record CompletionQueueItemDto(
     string TimeZoneId,
     bool IsOutlierVariance,
     int VarianceReviewMinutes,
-    int ReturnCount);
+    int ReturnCount,
+    /// <summary>How many scheduled doses in the shift's ROSTERED window have no outcome recorded (Administered, Refused, Withheld, Missed and
+    /// WrongMedication all count as an outcome; a superseded record is history). Lets the review queue flag "doses without outcome" without
+    /// opening each shift; the review (<c>GET rostering/shifts/{id}/completion/review</c>) lists them.</summary>
+    int DosesWithoutOutcome,
+    /// <summary>Total minutes of breaks on the completion (the same figure as <c>ShiftCompletionDto.breakMinutes</c>).</summary>
+    int BreakMinutes,
+    /// <summary>True when the worker never pressed Start and supplied the start time when finishing (the manual-start path). That path skips the
+    /// dose checklist (a Published shift has no route to record a dose), so the queue can flag such a row for a closer look without opening it;
+    /// the same flag is on <c>ShiftCompletionDto.startWasManual</c>.</summary>
+    bool StartWasManual);
 
 public record ReturnCompletionDto
 {

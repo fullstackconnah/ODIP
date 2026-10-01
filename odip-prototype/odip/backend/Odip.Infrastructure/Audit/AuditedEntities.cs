@@ -68,6 +68,18 @@ public static class AuditedEntities
         // recoverable — same reasoning as Shift.OverrideReason above.
         typeof(ShiftCompletion),
 
+        // Shift breaks (shift package): the times a worker took off during a shift, and any edit to them before
+        // Finish, feed the coordinator's review of the shift's worked time — who adjusted a break and when
+        // must be recoverable, same reasoning as ShiftCompletion above.
+        typeof(ShiftBreak),
+
+        // Handover acknowledgement (shift package): who marked a handover as read, and when - a compliance-adjacent
+        // "did the next worker actually see this?" record, audited like the shift notes it comes from.
+        typeof(HandoverAcknowledgement),
+        // A routine tick is the worker's record that a routine was done on a shift (and the untick, a removal of it): who and when is
+        // recoverable, like the breaks.
+        typeof(ShiftRoutineCheck),
+
         // Compliance-coverage report (item 11): these six were flagged as audited-entity gaps.
         // Restrictive practices, claims/line items, participant consent decisions, shift notes
         // (compliance-adjacent per its own remarks — falls/medication/injury/behaviour keyword

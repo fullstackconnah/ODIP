@@ -74,7 +74,7 @@ function makeAdministration(overrides: Partial<AdministrationDto> = {}): Adminis
     status: 'Administered', doseGiven: '18 units', recordedByName: 'Jordan Lee', recordedByUserId: 'staff-2',
     witnessName: null, witnessStaffId: null, witnessStatus: 'NotRequired', witnessRequestedAt: null,
     witnessRespondedAt: null, reason: null, prnReason: null, prnOutcome: null, prnOutcomeAt: null,
-    limitBreachAcknowledged: false, notes: null, createdAt: '2026-08-01T01:00:00Z', incidentId: null,
+    limitBreachAcknowledged: false, notes: null, createdAt: '2026-08-01T01:00:00Z', recordedWithoutCompetency: false, incidentId: null,
     ...overrides,
   }
 }

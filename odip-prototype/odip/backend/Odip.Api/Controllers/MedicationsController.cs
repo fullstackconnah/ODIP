@@ -3,13 +3,16 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Medications;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -29,15 +32,22 @@ public class MedicationsController : ControllerBase
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
     private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
 
+    private readonly MedicationSlotService _slots;
+    private readonly MedicationAdministrationRecorder _recorder;
+
     public MedicationsController(
         OdipDbContext db, ICurrentTenant currentTenant,
         Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
-        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null)
+        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null,
+        MedicationSlotService? slots = null,
+        MedicationAdministrationRecorder? recorder = null)
     {
         _db = db;
         _currentTenant = currentTenant;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
+        _slots = slots ?? new MedicationSlotService(db);
+        _recorder = recorder ?? new MedicationAdministrationRecorder(db, _notificationRaiser, _obligationTasks);
     }
 
     // ── Participant medication list / create ─────────────────────────
@@ -239,113 +249,63 @@ public class MedicationsController : ControllerBase
     public async Task<ActionResult<ApiResponse<MarDayDto>>> GetMar(
         [FromQuery] DateOnly? date, [FromQuery] Guid? participantId, CancellationToken ct)
     {
-        var targetDate = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        // The MAR's "one calendar day" is the provider-local window [00:00, next 00:00). "Today" (when no
+        // date is supplied) and "overdue" are both the PROVIDER's local notion, never UTC: a slot is an
+        // unrecorded dose more than 60 minutes past its provider-local time.
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
+        var targetDate = date ?? DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(_slots.UtcNow, provider.Zone));
         var dateStart = targetDate.ToDateTime(TimeOnly.MinValue);
         var dateEndExclusive = targetDate.AddDays(1).ToDateTime(TimeOnly.MinValue);
-        var now = DateTime.UtcNow;
 
-        var medQuery = _db.ParticipantMedications
-            .Include(m => m.Participant)
-            .Where(m => m.Status == MedicationStatus.Active);
-        if (participantId.HasValue)
-            medQuery = medQuery.Where(m => m.ParticipantId == participantId.Value);
-
-        // ── Regular medications expanded into per-time-of-day entries ──
-        var regularMeds = await medQuery
-            .Where(m => m.Type == MedicationType.Regular
-                && m.StartDate < dateEndExclusive
-                && (m.EndDate == null || m.EndDate >= dateStart))
-            .ToListAsync(ct);
-
-        var regularMedIds = regularMeds.Select(m => m.Id).ToList();
-        var dayAdministrations = regularMedIds.Count == 0
-            ? new List<MedicationAdministration>()
-            : await _db.MedicationAdministrations
-                .Where(a => regularMedIds.Contains(a.ParticipantMedicationId)
-                    && a.ScheduledAt != null && a.ScheduledAt >= dateStart && a.ScheduledAt < dateEndExclusive)
-                .ToListAsync(ct);
+        var window = await _slots.GetWindowAsync(dateStart, dateEndExclusive, participantId, provider.Zone, includePrn: true, ct);
 
         // Deliverable 2 reverse link: ONE query for every administration that could show up in
         // today's MAR entries below, rather than one per entry.
-        var dayIncidentIds = await GetIncidentIdsByAdministrationIdsAsync(dayAdministrations.Select(a => a.Id).ToList(), ct);
+        var dayIncidentIds = await GetIncidentIdsByAdministrationIdsAsync(
+            window.Slots.Where(s => s.Administration != null).Select(s => s.Administration!.Id).ToList(), ct);
 
         var entries = new List<MarEntryDto>();
-        foreach (var m in regularMeds)
+        foreach (var slot in window.Slots)
         {
-            if (!TryValidateTimesOfDayCsv(m.TimesOfDay, out var times)) continue;
-            if (!MedicationScheduleCalculator.IsDue(m, targetDate)) continue;
+            var m = slot.Medication;
             var participantName = FullName(m.Participant);
+            var admin = slot.Administration;
+            var incidentId = admin == null ? null : LookupIncidentId(dayIncidentIds, admin.Id);
 
-            foreach (var t in times)
+            entries.Add(new MarEntryDto
             {
-                var scheduledAt = dateStart.Add(t);
-                var admin = dayAdministrations
-                    .Where(a => a.ParticipantMedicationId == m.Id && a.ScheduledAt == scheduledAt)
-                    .OrderByDescending(a => a.CreatedAt)
-                    .FirstOrDefault();
-                var isOverdue = admin == null && scheduledAt.AddMinutes(60) < now;
-                var incidentId = admin == null ? null : LookupIncidentId(dayIncidentIds, admin.Id);
-
-                entries.Add(new MarEntryDto
-                {
-                    MedicationId = m.Id,
-                    ParticipantId = m.ParticipantId,
-                    ParticipantName = participantName,
-                    MedicationName = m.Name,
-                    Strength = m.Strength,
-                    DoseDescription = m.DoseDescription,
-                    Form = m.Form,
-                    Route = m.Route,
-                    Packaging = m.Packaging,
-                    PharmacyName = m.PharmacyName,
-                    PharmacyPhone = m.PharmacyPhone,
-                    ScheduledTime = t.ToString(@"hh\:mm"),
-                    ScheduledAt = scheduledAt,
-                    IsHighRisk = m.IsHighRisk,
-                    SupportLevel = m.SupportLevel,
-                    IsOverdue = isOverdue,
-                    Administration = admin == null ? null : ToAdministrationDto(admin, participantName, m.Name, m.DoseDescription, incidentId),
-                    IncidentId = incidentId,
-                });
-            }
+                MedicationId = m.Id,
+                ParticipantId = m.ParticipantId,
+                ParticipantName = participantName,
+                MedicationName = m.Name,
+                Strength = m.Strength,
+                DoseDescription = m.DoseDescription,
+                Form = m.Form,
+                Route = m.Route,
+                Packaging = m.Packaging,
+                PharmacyName = m.PharmacyName,
+                PharmacyPhone = m.PharmacyPhone,
+                ScheduledTime = slot.TimeOfDay.ToString(@"hh\:mm"),
+                ScheduledAt = slot.ScheduledAt,
+                IsHighRisk = m.IsHighRisk,
+                SupportLevel = m.SupportLevel,
+                IsOverdue = slot.IsOverdue,
+                Administration = admin == null ? null : ToAdministrationDto(admin, participantName, m.Name, m.DoseDescription, incidentId),
+                IncidentId = incidentId,
+            });
         }
 
-        // ── PRN medications with rolling 24h counts ──
-        var prnMeds = await medQuery.Where(m => m.Type == MedicationType.Prn).ToListAsync(ct);
-        var prnMedIds = prnMeds.Select(m => m.Id).ToList();
-        var last24hCutoff = now.AddHours(-24);
-
-        var recentPrnAdmins = prnMedIds.Count == 0
-            ? new List<MedicationAdministration>()
-            : await _db.MedicationAdministrations
-                .Where(a => prnMedIds.Contains(a.ParticipantMedicationId)
-                    && a.Status == MedicationAdministrationStatus.Administered
-                    && a.AdministeredAt != null && a.AdministeredAt >= last24hCutoff)
-                .ToListAsync(ct);
-
-        var pendingOutcomeAdmins = prnMedIds.Count == 0
-            ? new List<MedicationAdministration>()
-            : await _db.MedicationAdministrations
-                .Where(a => prnMedIds.Contains(a.ParticipantMedicationId)
-                    && a.Status == MedicationAdministrationStatus.Administered
-                    && a.PrnOutcome == null)
-                .OrderByDescending(a => a.AdministeredAt)
-                .ToListAsync(ct);
-
         // Connection-map item 8 (tiny seam fix): the only administration id a MarPrnDto carries
-        // is OutcomePendingAdministrationId — batch-resolve incident ids for every candidate
-        // administration across both PRN queries in ONE call, same as dayIncidentIds above.
-        var prnAdministrationIds = recentPrnAdmins.Select(a => a.Id)
-            .Concat(pendingOutcomeAdmins.Select(a => a.Id))
-            .Distinct()
-            .ToList();
-        var prnIncidentIds = await GetIncidentIdsByAdministrationIdsAsync(prnAdministrationIds, ct);
+        // is OutcomePendingAdministrationId — batch-resolve incident ids for every pending-outcome
+        // administration in ONE call, same as dayIncidentIds above.
+        var prnIncidentIds = await GetIncidentIdsByAdministrationIdsAsync(
+            window.Prn.Where(p => p.OutcomePendingAdministration != null).Select(p => p.OutcomePendingAdministration!.Id).Distinct().ToList(), ct);
 
         var prnDtos = new List<MarPrnDto>();
-        foreach (var m in prnMeds)
+        foreach (var status in window.Prn)
         {
-            var doses = recentPrnAdmins.Where(a => a.ParticipantMedicationId == m.Id).ToList();
-            var pending = pendingOutcomeAdmins.FirstOrDefault(a => a.ParticipantMedicationId == m.Id);
+            var m = status.Medication;
+            var pending = status.OutcomePendingAdministration;
 
             prnDtos.Add(new MarPrnDto
             {
@@ -361,8 +321,8 @@ public class MedicationsController : ControllerBase
                 Packaging = m.Packaging,
                 PharmacyName = m.PharmacyName,
                 PharmacyPhone = m.PharmacyPhone,
-                DosesInLast24h = doses.Count,
-                LastDoseAt = doses.Count > 0 ? doses.Max(a => a.AdministeredAt) : null,
+                DosesInLast24h = status.DosesInLast24h,
+                LastDoseAt = status.LastDoseAt,
                 OutcomePendingAdministrationId = pending?.Id,
                 IncidentId = pending == null ? null : LookupIncidentId(prnIncidentIds, pending.Id),
             });
@@ -373,139 +333,33 @@ public class MedicationsController : ControllerBase
 
     // ── Administrations ──────────────────────────────────────────────
 
+    /// <summary>
+    /// Records a dose (any outcome). Per the provider's Medication Competency mode: ENFORCE - the recording user needs a current
+    /// credential, 403 with code MEDICATION_COMPETENCY_MISSING / _EXPIRED / _UNVERIFIABLE otherwise, for every role; WARN (the
+    /// default) - the dose is recorded and flagged <c>recordedWithoutCompetency</c>. An
+    /// optional <c>idempotencyKey</c> makes a retry safe (200 with the first record); a scheduled dose slot
+    /// that already has a record returns 409 ADMINISTRATION_ALREADY_RECORDED with that record as <c>data</c>.
+    /// The logic lives in <see cref="MedicationAdministrationRecorder"/>, shared with the shift package.
+    /// </summary>
     [HttpPost("medications/{id:guid}/administrations")]
     [Authorize(Roles = "Admin,Coordinator,SupportWorker,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<AdministrationDto>>> RecordAdministration(
         Guid id, [FromBody] CreateAdministrationDto dto, CancellationToken ct)
     {
-        var med = await _db.ParticipantMedications.Include(m => m.Participant).FirstOrDefaultAsync(m => m.Id == id, ct);
-        if (med == null) return NotFound(ApiResponse<AdministrationDto>.Fail("Medication not found"));
-
-        if (dto.Status != MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.Reason))
-            return BadRequest(ApiResponse<AdministrationDto>.Fail("A reason is required when a dose is refused, withheld, missed or the wrong medication was given."));
-
-        // MED-03: wrong-medication recording additionally requires a note on what was actually
-        // given instead of the prescribed medication — required on both ends (see
-        // RecordAdministrationModal's requiresWrongMedNote).
-        if (dto.Status == MedicationAdministrationStatus.WrongMedication && string.IsNullOrWhiteSpace(dto.Notes))
-            return BadRequest(ApiResponse<AdministrationDto>.Fail("A note describing what was given instead is required when recording a wrong medication administration."));
-
-        if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.PrnReason))
-            return BadRequest(ApiResponse<AdministrationDto>.Fail("A PRN reason is required when recording an administered PRN dose."));
-
-        // Resolved once and reused for both the self-witness check below and RecordedByName/
-        // RecordedByUserId on the saved record — the administering identity, honouring the
-        // SuperAdmin "view as" mechanism exactly like PortalController does (§4.3).
+        // Resolved once and reused for the competency gate, the self-witness check and RecordedByName/
+        // RecordedByUserId on the saved record — the administering identity, honouring the SuperAdmin
+        // "view as" mechanism exactly like PortalController does (§4.3).
         var administeringUserId = await ResolveCurrentStaffIdAsync(ct);
-        var administeringUser = administeringUserId.HasValue
-            ? await _db.Users.FirstOrDefaultAsync(u => u.Id == administeringUserId.Value, ct)
-            : null;
-
-        User? witnessStaff = null;
-        if (med.IsHighRisk && dto.Status == MedicationAdministrationStatus.Administered)
-        {
-            if (dto.WitnessStaffId is null && string.IsNullOrWhiteSpace(dto.WitnessName))
-                return BadRequest(ApiResponse<AdministrationDto>.Fail("A witness is required for high-risk medication administration."));
-
-            if (dto.WitnessStaffId.HasValue)
-            {
-                // Same-tenant scoping comes for free here: _db.Users is ambient-tenant-filtered
-                // by OdipDbContext for any non-SuperAdmin caller, so a cross-tenant witness id
-                // simply resolves to no row, same as "not found" (§4.4).
-                witnessStaff = await _db.Users.FirstOrDefaultAsync(s => s.Id == dto.WitnessStaffId.Value && s.IsActive, ct);
-                if (witnessStaff == null)
-                    return BadRequest(ApiResponse<AdministrationDto>.Fail("Selected witness staff member was not found."));
-
-                if (administeringUserId.HasValue && administeringUserId.Value == witnessStaff.Id)
-                    return BadRequest(ApiResponse<AdministrationDto>.Fail("A staff member cannot witness their own administration."));
-            }
-        }
-
-        var limitBreachAcknowledged = false;
-        if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered)
-        {
-            var now = DateTime.UtcNow;
-            var last24hCutoff = now.AddHours(-24);
-            var recent = await _db.MedicationAdministrations
-                .Where(a => a.ParticipantMedicationId == med.Id
-                    && a.Status == MedicationAdministrationStatus.Administered
-                    && a.AdministeredAt != null && a.AdministeredAt >= last24hCutoff)
-                .OrderByDescending(a => a.AdministeredAt)
-                .ToListAsync(ct);
-
-            string? breachMessage = null;
-            if (med.PrnMaxDosesPer24h.HasValue && recent.Count >= med.PrnMaxDosesPer24h.Value)
-                breachMessage = $"Maximum {med.PrnMaxDosesPer24h.Value} doses in 24 hours reached";
-            else if (med.PrnMinIntervalMinutes.HasValue && recent.Count > 0)
-            {
-                var last = recent[0].AdministeredAt!.Value;
-                if ((now - last).TotalMinutes < med.PrnMinIntervalMinutes.Value)
-                    breachMessage = $"Minimum interval of {med.PrnMinIntervalMinutes.Value} minutes not yet elapsed";
-            }
-
-            if (breachMessage != null)
-            {
-                if (!dto.AcknowledgeLimitBreach)
-                    return BadRequest(ApiResponse<AdministrationDto>.Fail(breachMessage));
-                limitBreachAcknowledged = true;
-            }
-        }
-
-        var administeredAt = dto.AdministeredAt;
-        if (dto.Status == MedicationAdministrationStatus.Administered && administeredAt == null)
-            administeredAt = DateTime.UtcNow;
-
-        var admin = new MedicationAdministration
-        {
-            Id = Guid.NewGuid(),
-            ParticipantMedicationId = med.Id,
-            ParticipantId = med.ParticipantId,
-            TripInstanceId = dto.TripInstanceId,
-            ScheduledAt = dto.ScheduledAt,
-            AdministeredAt = administeredAt,
-            AdministeredAtTimeZone = dto.AdministeredAtTimeZone,
-            Status = dto.Status,
-            DoseGiven = dto.DoseGiven,
-            RecordedByName = administeringUser?.FullName ?? GetRecordedByName(),
-            RecordedByUserId = administeringUser?.Id,
-            WitnessName = witnessStaff?.FullName ?? dto.WitnessName,
-            WitnessUserId = witnessStaff?.Id,
-            WitnessStatus = witnessStaff != null ? WitnessStatus.Pending : WitnessStatus.NotRequired,
-            WitnessRequestedAt = witnessStaff != null ? DateTime.UtcNow : null,
-            Reason = dto.Reason,
-            PrnReason = dto.PrnReason,
-            Notes = dto.Notes,
-            LimitBreachAcknowledged = limitBreachAcknowledged,
-        };
-        _db.MedicationAdministrations.Add(admin);
-
-        // NotificationEventType.WitnessRequested — only when a staff witness was nominated
-        // (witnessStaff is null for a free-text/external witness, which has nothing to
-        // approve). Design spec §5.
-        if (witnessStaff is not null)
-        {
-            await _notificationRaiser.RaiseAsync(
-                Odip.Domain.Notifications.NotificationEventType.WitnessRequested, "MedicationAdministration", admin.Id,
-                new[] { witnessStaff.Id },
-                new Odip.Infrastructure.Notifications.Templates.WitnessRequestedPayload(
-                    witnessStaff.Email, admin.RecordedByName, FullName(med.Participant)),
-                ct);
-
-            // Item 9 of the connection map: a staff witness was nominated and is pending sign-off.
-            await _obligationTasks.EnsureAsync(new Odip.Application.Interfaces.ObligationTaskSpec(
-                SourceKey: $"med-witness:{admin.Id}",
-                Type: TaskType.MedicationWitness,
-                Title: $"Witness sign-off needed: {med.Name} for {FullName(med.Participant)}",
-                DueDate: DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
-                LinkTo: "/portal/witness-approvals",
-                MedicationAdministrationId: admin.Id), ct);
-        }
-
-        await _db.SaveChangesAsync(ct);
-
-        return Ok(ApiResponse<AdministrationDto>.Ok(ToAdministrationDto(admin, FullName(med.Participant), med.Name, med.DoseDescription)));
+        var result = await _recorder.RecordAsync(
+            new RecordAdministrationRequest(id, dto, administeringUserId, GetRecordedByName()), ct);
+        return result.ToActionResult(this);
     }
 
+    // The amend path is a COORDINATOR CORRECTION and deliberately sits outside the Medication Competency gate and outside the supersede
+    // rule (decision recorded with the Warn/Enforce rollout): it is the only way to change an Administered record, and the only way to
+    // change a record after it has been superseded.
+    // TODO(amendment-reason): require and store a reason for every amendment (who changed what, and why) so a correction is explainable
+    // beyond the audit row; not built yet, tracked for a later round.
     [HttpPut("medications/administrations/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<AdministrationDto>>> UpdateAdministration(
@@ -712,24 +566,10 @@ public class MedicationsController : ControllerBase
         return null;
     }
 
-    private static bool TryValidateTimesOfDayCsv(string? csv, out List<TimeSpan> times)
-    {
-        times = new List<TimeSpan>();
-        if (string.IsNullOrWhiteSpace(csv)) return false;
+    private static bool TryValidateTimesOfDayCsv(string? csv, out List<TimeSpan> times) =>
+        MedicationSlotCalculator.TryParseTimesOfDay(csv, out times);
 
-        foreach (var part in csv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (!TimeSpan.TryParseExact(part, "hh\\:mm", CultureInfo.InvariantCulture, out var t))
-                return false;
-            times.Add(t);
-        }
-
-        return times.Count > 0;
-    }
-
-    private static string FullName(Participant? p) =>
-        p == null ? string.Empty
-        : string.IsNullOrEmpty(p.PreferredName) ? p.FirstName + " " + p.LastName : p.PreferredName + " " + p.LastName;
+    private static string FullName(Participant? p) => MedicationMapping.ParticipantName(p);
 
     private static MedicationListDto ToListDto(ParticipantMedication m, string participantName)
     {
@@ -848,34 +688,6 @@ public class MedicationsController : ControllerBase
         map.TryGetValue(key, out var incidentId) ? incidentId : null;
 
     private static AdministrationDto ToAdministrationDto(
-        MedicationAdministration a, string participantName, string medicationName, string doseDescription, Guid? incidentId = null) => new()
-    {
-        Id = a.Id,
-        ParticipantMedicationId = a.ParticipantMedicationId,
-        ParticipantId = a.ParticipantId,
-        ParticipantName = participantName,
-        MedicationName = medicationName,
-        DoseDescription = doseDescription,
-        TripInstanceId = a.TripInstanceId,
-        ScheduledAt = a.ScheduledAt,
-        AdministeredAt = a.AdministeredAt,
-        AdministeredAtTimeZone = a.AdministeredAtTimeZone,
-        Status = a.Status,
-        DoseGiven = a.DoseGiven,
-        RecordedByName = a.RecordedByName,
-        RecordedByUserId = a.RecordedByUserId,
-        WitnessName = a.WitnessName,
-        WitnessStaffId = a.WitnessUserId,
-        WitnessStatus = a.WitnessStatus,
-        WitnessRequestedAt = a.WitnessRequestedAt,
-        WitnessRespondedAt = a.WitnessRespondedAt,
-        Reason = a.Reason,
-        PrnReason = a.PrnReason,
-        PrnOutcome = a.PrnOutcome,
-        PrnOutcomeAt = a.PrnOutcomeAt,
-        LimitBreachAcknowledged = a.LimitBreachAcknowledged,
-        Notes = a.Notes,
-        CreatedAt = a.CreatedAt,
-        IncidentId = incidentId,
-    };
+        MedicationAdministration a, string participantName, string medicationName, string doseDescription, Guid? incidentId = null) =>
+        MedicationMapping.ToAdministrationDto(a, participantName, medicationName, doseDescription, incidentId);
 }

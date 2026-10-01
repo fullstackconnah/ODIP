@@ -63,6 +63,19 @@ public class ShiftCompletion : ITenantEntity
     public int VarianceMinutesEnd { get; set; }
 
     /// <summary>
+    /// The handover note the worker leaves for the next worker, written at Finish (one per completion; empty is
+    /// allowed). The latest handover for a participant is the most recent submitted-or-approved completion's - see
+    /// <c>ShiftHandoverService</c>.
+    /// </summary>
+    public string? HandoverText { get; set; }
+
+    /// <summary>The worker explicitly confirmed "nothing to hand over" at Finish (distinct from simply leaving it blank).</summary>
+    public bool NothingToHandOver { get; set; }
+
+    /// <summary>The worker explicitly confirmed "nothing to note" at Finish instead of writing a shift note.</summary>
+    public bool NothingToNoteConfirmed { get; set; }
+
+    /// <summary>
     /// True for the one "current" row per Shift. Return sets this false in the same
     /// transaction that flips Shift.Status back to Published, excluding it from the active 1:1
     /// without deleting it — full history stays queryable by ShiftId alone. Approve never

@@ -14,7 +14,7 @@ import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import TemplateFormPanel from '@/components/TemplateFormPanel'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
-import type { EventTemplateDto, ActivityDto, ProviderSettingsDto, ParticipantReadinessMode, UpsertProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
+import type { MedicationCompetencyMode, EventTemplateDto, ActivityDto, ProviderSettingsDto, ParticipantReadinessMode, UpsertProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
 import type { AxiosError } from 'axios'
 import TenantsTab from '@/pages/settings/TenantsTab'
 import TenantFormPanel from '@/pages/settings/TenantFormPanel'
@@ -301,6 +301,10 @@ function ProviderSettingsTab() {
   const { data: settings, isLoading } = useProviderSettings()
   const upsert = useUpsertProviderSettings()
   const [form, setForm] = useState<Partial<ProviderSettingsDto>>({})
+  // The medication competency mode this form LOADED (and, after a save, last saved). The mode is last-write-wins on the server and nothing refreshes
+  // this form while it is open, so it is sent only when the user changed it from this value: re-sending a stale one would silently undo another
+  // admin's change (and, being a medication-safety control, nothing would say so).
+  const [loadedMode, setLoadedMode] = useState<MedicationCompetencyMode>('Warn')
   const [init, setInit] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -317,7 +321,7 @@ function ProviderSettingsTab() {
   const shownMode = pickedMode ?? serverMode
   const modeChanged = pickedMode !== null && pickedMode !== serverMode
 
-  if (settings && !init) { setForm(settings); setInit(true) }
+  if (settings && !init) { setForm(settings); setLoadedMode(settings.medicationCompetencyMode ?? 'Warn'); setInit(true) }
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(dirty)
 
@@ -335,15 +339,17 @@ function ProviderSettingsTab() {
 
   function handleSave() {
     setError(null)
-    // `form` is the whole GET response, so it carries `participantReadinessMode` as it was when this tab loaded. That must never go back up
-    // as it is: the server changes the mode whenever the field is present, so a stale tab saving an unrelated field (a manager name) would
-    // silently revert a mode another admin has since set. Strip it, then add it back only for a deliberate change.
+    // `form` is the whole GET response, so it carries BOTH modes as they were when this tab loaded. Neither may go back up as it is: the server
+    // changes a mode whenever its field is present, so a stale tab saving an unrelated field (a manager name) would silently revert a mode
+    // another admin has since set. Strip both, then add each back only for a deliberate change.
     const body: Partial<ProviderSettingsDto> = { ...form }
     delete body.participantReadinessMode
+    const chosenMode = form.medicationCompetencyMode ?? 'Warn'
+    if (chosenMode === loadedMode) delete body.medicationCompetencyMode   // untouched: leave the server value alone
     const payload = body as UpsertProviderSettingsDto
     if (modeChanged) payload.participantReadinessMode = shownMode
     upsert.mutate(payload, {
-      onSuccess: () => { setDirty(false); setSaved(true); setTimeout(() => setSaved(false), 2000) },
+      onSuccess: () => { setLoadedMode(chosenMode); setDirty(false); setSaved(true); setTimeout(() => setSaved(false), 2000) },
       onError: (err: unknown) => {
         const status = (err as AxiosError)?.response?.status
         if (status === 403) setError('Admin role is required to update provider settings. Ask an Admin to make this change.')
@@ -414,6 +420,25 @@ function ProviderSettingsTab() {
           onChange={v => { setModePick({ value: v as ParticipantReadinessMode, base: serverMode }); setDirty(true) }}
           disabled={!canEditProviderSettings || isLoading}
         />
+      </div>
+      <div>
+        <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Medication Competency</h2>
+        <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
+          What happens when a staff member without a current Medication Competency records a dose. Warn only lets them record it and flags the record for review; Enforce refuses it.
+        </p>
+        <div className="max-w-xs">
+          <label id="medication-competency-mode-label" className={labelClass}>Medication competency check</label>
+          <Dropdown
+            variant="form"
+            id="medication-competency-mode"
+            aria-labelledby="medication-competency-mode-label"
+            value={form.medicationCompetencyMode ?? 'Warn'}
+            onChange={v => { setForm((p) => ({ ...p, medicationCompetencyMode: v as MedicationCompetencyMode })); setDirty(true) }}
+            items={[{ value: 'Warn', label: 'Warn only' }, { value: 'Enforce', label: 'Enforce' }]}
+            label="Medication competency check"
+            disabled={!canEditProviderSettings}
+          />
+        </div>
       </div>
       <div>
         <h2 className="font-semibold text-[var(--color-foreground)] mb-2">Invoice Footer Notes</h2>

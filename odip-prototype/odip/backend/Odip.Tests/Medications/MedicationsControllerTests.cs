@@ -37,7 +37,13 @@ public class MedicationsControllerTests
             .UseInMemoryDatabase(dbName)
             .Options;
 
-        return (new OdipDbContext(options, tenant.Object), tenant.Object);
+        var db = new OdipDbContext(options, tenant.Object);
+        // Recording a dose needs a current Medication Competency credential (D3 gate): every controller built
+        // from this fixture records as a competent staff member, resolved the same way the SuperAdmin
+        // "view as" mechanism resolves one.
+        var recorder = MedicationTestIdentities.SeedCompetentUser(db);
+        tenant.Setup(t => t.ViewAsUserId).Returns(recorder.Id);
+        return (db, tenant.Object);
     }
 
     private static Participant SeedParticipant(OdipDbContext db, string firstName = "Sophie", string lastName = "Brown")
