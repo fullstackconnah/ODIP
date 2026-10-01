@@ -177,7 +177,7 @@ main,
   /* never wider than the page gutter, so a full-width block cannot push the page sideways */
   inset: -28px calc(-1 * min(40px, var(--gutter)));
   z-index: -1;
-  border-radius: 48px;
+  border-radius: var(--radius-lg);
   background: rgb(15 32 0 / 0.8);
   filter: blur(24px);
   pointer-events: none;
@@ -777,7 +777,7 @@ main,
   right: 1px;
   bottom: 1px;
   width: 48px;
-  border-radius: 0 7px 7px 0;
+  border-radius: 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0;
   background: linear-gradient(to right, rgb(251 249 245 / 0), var(--paper) 90%);
   pointer-events: none;
 }
