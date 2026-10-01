@@ -207,6 +207,9 @@ export interface CompletionQueueItemDto {
   dosesWithoutOutcome: number
   /** Total minutes of breaks on the completion (same figure as `ShiftCompletionDto.breakMinutes`). */
   breakMinutes: number
+  /** True when the worker never pressed Start and supplied the start time at Finish (the manual-start path). That path skips the dose checklist,
+   * so the queue can flag the row next to `dosesWithoutOutcome` without opening the shift. Same flag as `ShiftCompletionDto.startWasManual`. */
+  startWasManual: boolean
 }
 
 /** POST rostering/shifts/{id}/completion/return body — reason is required server-side (400

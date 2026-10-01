@@ -637,7 +637,9 @@ const shiftCompletions = [
   },
   {
     id: 'sc-0002', shiftId: 'shift-0002', actualStart: '2026-09-10T19:32:00Z', actualEnd: '2026-09-10T23:50:00Z',
-    timeZoneId: 'Australia/Brisbane', geolocationDeclined: false, startWasManual: false,
+    // A manual start (the worker never pressed Start and supplied the time at Finish): that path skips the dose checklist, which is why this
+    // fixture also has a dose with no outcome - the queue shows both.
+    timeZoneId: 'Australia/Brisbane', geolocationDeclined: false, startWasManual: true,
     submittedByUserId: 's-0004', submittedByName: 'Mei Zhang',
     startedAt: '2026-09-10T19:32:00Z', submittedAt: '2026-09-10T23:50:00Z',
     reviewedByUserId: null, reviewedByName: null, reviewedAt: null,
@@ -1396,6 +1398,8 @@ const completionQueueItems = Object.values(portalShiftBase)
       // The same figures the server computes: scheduled doses in the window with no outcome, and the completion's break minutes.
       dosesWithoutOutcome: (packageDoses[base.id]?.slots || []).filter((slot) => !slot.recorded).length,
       breakMinutes: (packageHistoryBreaks[base.id] || []).reduce((sum, b) => sum + Math.round((Date.parse(b.endedAt) - Date.parse(b.startedAt)) / 60000), 0),
+      // True on the manual-start path (the worker never pressed Start and supplied the start time at Finish), which skips the dose checklist.
+      startWasManual: !!completion.startWasManual,
     }
   })
   .filter(Boolean)
