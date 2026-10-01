@@ -4,6 +4,7 @@ import {
   useGenerateCaregiverLink, useRevokeCaregiverLink, useCaregiverSubmissions,
 } from '@/api/hooks'
 import type { BookingListDto } from '@/api/types/bookings'
+import { PLAN_TYPE_LABELS, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
 import { DataTable } from '@/components/DataTable'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Tabs } from '@/components/Tabs'
@@ -118,7 +119,7 @@ export default function ParticipantDetailPage() {
                 <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} />
                 {/* What is still missing, as a quiet warning-tone chip beside the status. Informational: nothing on this page is gated on it. */}
                 <ReadinessNote issues={p.readinessIssues} variant="chip" />
-                <span>{p.region || 'No region'} · {p.planType} · Support Ratio: {p.supportRatio}</span>
+                <span>{p.region || 'No region'} · {PLAN_TYPE_LABELS[p.planType] ?? p.planType} · Support Ratio: {SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio}</span>
                 <ServiceStreamBadges value={p.serviceStreams} />
               </div>
             }

@@ -220,9 +220,9 @@ export function BodyDiagram({ injuries, onAdd, onRemove }: BodyDiagramProps) {
                         onClick={() => selectRegion(region)}
                         className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                           pressed
-                            ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)]'
+                            ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
                             : marked
-                            ? 'border-[var(--color-border)] bg-[var(--color-primary-container,#ede9fe)] text-[var(--color-foreground)]'
+                            ? 'border-[var(--color-border)] bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
                             : 'border-[var(--color-border)] bg-[var(--color-input)] text-[var(--color-foreground)]'
                         }`}
                       >
@@ -281,7 +281,7 @@ export function BodyDiagram({ injuries, onAdd, onRemove }: BodyDiagramProps) {
       <button
         type="button"
         onClick={handleAdd}
-        className="rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-medium text-[var(--color-on-primary)]"
+        className="rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-medium text-[var(--color-primary-foreground)]"
       >
         Add injury
       </button>
