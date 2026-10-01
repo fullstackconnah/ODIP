@@ -99,6 +99,24 @@ export function useDeleteBreak() {
 }
 
 /**
+ * POST portal/shifts/{id}/routines/{routineId}/check - tick a routine done (persisted on the shift's completion; audited). The caller's OWN
+ * InProgress shift, and the routine must be one of `shiftRoutines` (404 SHIFT_ROUTINE_NOT_FOUND otherwise). Idempotent: ticking again keeps
+ * the first who and when. Replaces the cached shift detail with the response (`shiftRoutines[].isChecked` / `checkedAt` / `checkedByName`).
+ */
+export function useCheckRoutine() {
+  return useShiftDetailWrite(({ id, routineId }: { id: string; routineId: string }) =>
+    apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/routines/${routineId}/check`))
+}
+
+/** DELETE portal/shifts/{id}/routines/{routineId}/check - untick a routine (the removal is audited). Idempotent; same scoping as `useCheckRoutine`. */
+export function useUncheckRoutine() {
+  return useShiftDetailWrite(async ({ id, routineId }: { id: string; routineId: string }) => {
+    const response = await apiDeleteRaw<PortalShiftDetailDto>(`/portal/shifts/${id}/routines/${routineId}/check`)
+    return response.data as PortalShiftDetailDto
+  })
+}
+
+/**
  * POST portal/shifts/{id}/handover/ack — the next worker marks the latest handover read (who and when are recorded). Pass the
  * `completionId` of the handover on screen so a newer one arriving meanwhile is 409 SHIFT_HANDOVER_CHANGED, not a silent ack.
  */

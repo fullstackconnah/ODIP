@@ -25,6 +25,7 @@ vi.mock('../client', () => ({
 
 import {
   useStartBreak, useEndBreak, useEditBreak, useDeleteBreak, useAcknowledgeHandover, useRecordShiftDose, useFinishShift,
+  useCheckRoutine, useUncheckRoutine,
 } from './portal'
 import { useShiftCompletionReview, useApproveCompletion, useReturnCompletion, useApproveCompletionsBatch } from './rostering'
 
@@ -102,6 +103,43 @@ describe('shift package hooks — breaks', () => {
     const { result } = renderHook(() => useStartBreak(), { wrapper: wrapper(qc) })
 
     await expect(result.current.mutateAsync({ id: 'shift-1' })).rejects.toMatchObject({ response: { status: 409 } })
+
+    expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toBe(cached)
+  })
+})
+
+describe('shift package hooks — routine ticks', () => {
+  it('useCheckRoutine posts to /portal/shifts/{id}/routines/{routineId}/check with no body, and replaces the cached shift detail', async () => {
+    const qc = new QueryClient()
+    qc.setQueryData(['portal-shift-detail', 'shift-1'], { id: 'shift-1', shiftRoutines: [] })
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    const { result } = renderHook(() => useCheckRoutine(), { wrapper: wrapper(qc) })
+
+    await result.current.mutateAsync({ id: 'shift-1', routineId: 'rt-1' })
+
+    expect(mockApiPost).toHaveBeenCalledWith('/portal/shifts/shift-1/routines/rt-1/check')
+    expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toEqual(detail)
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['portal-shift-detail', 'shift-1'] })
+  })
+
+  it('useUncheckRoutine deletes /portal/shifts/{id}/routines/{routineId}/check and caches the returned shift detail', async () => {
+    const qc = new QueryClient()
+    const { result } = renderHook(() => useUncheckRoutine(), { wrapper: wrapper(qc) })
+
+    await result.current.mutateAsync({ id: 'shift-1', routineId: 'rt-1' })
+
+    expect(mockApiDeleteRaw).toHaveBeenCalledWith('/portal/shifts/shift-1/routines/rt-1/check')
+    expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toBe(detail)
+  })
+
+  it('a rejected tick (404 SHIFT_ROUTINE_NOT_FOUND) rejects and leaves the cached shift untouched', async () => {
+    const qc = new QueryClient()
+    const cached = { id: 'shift-1', shiftRoutines: [] }
+    qc.setQueryData(['portal-shift-detail', 'shift-1'], cached)
+    mockApiPost.mockRejectedValueOnce({ response: { status: 404, data: { success: false, code: 'SHIFT_ROUTINE_NOT_FOUND' } } })
+    const { result } = renderHook(() => useCheckRoutine(), { wrapper: wrapper(qc) })
+
+    await expect(result.current.mutateAsync({ id: 'shift-1', routineId: 'rt-9' })).rejects.toMatchObject({ response: { status: 404 } })
 
     expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toBe(cached)
   })

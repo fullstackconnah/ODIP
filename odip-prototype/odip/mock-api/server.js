@@ -725,6 +725,9 @@ function portalParticipantSummary(participantId) {
 // the SAME dose (medication, slot, outcome) - anything else is 400 ADMINISTRATION_IDEMPOTENCY_KEY_REUSED.
 // The one exception to a slot taking one record: an Administered record supersedes an active Refused or Missed one (the earlier record is
 // kept as history in `superseded`, the slot reads the new one).
+// Routine ticks persist for the process (`routineChecks`): POST/DELETE portal/shifts/:id/routines/:id/check, InProgress only, the routine must be
+// in the shift's own list (404 SHIFT_ROUTINE_NOT_FOUND), idempotent; a fixture `checked` pre-ticks a routine of a finished shift (shift-0002 has
+// two of its three ticked, so the review shows a mix).
 // NEED-TO-KNOW BY SHIFT STATUS: handover, emergency contacts and address only for a Published or InProgress shift. Any other status (the
 // Completed and PendingReview fixtures, and shift-0003 once finished) gets explicit nulls for them (and an empty handoverTrail) plus
 // `sensitiveInfoWithheldReason`.
@@ -885,8 +888,10 @@ const packageRoutines = {
     { id: 'rt-0303', title: 'Afternoon walk', description: 'Short walk along the path, back before 2:30.', category: 'Activity', isCritical: false, startTime: '13:30:00', endTime: '14:30:00', occursAt: '2026-09-13T13:30:00', afterMidnight: false },
   ],
   'shift-0002': [
-    { id: 'rt-0201', title: 'Evening wind-down', description: 'Dim lights, radio on low, tea.', category: 'Sleep', isCritical: false, startTime: '21:00:00', endTime: '22:00:00', occursAt: '2026-09-10T21:00:00', afterMidnight: false },
-    { id: 'rt-0202', title: 'Night check', description: 'Quietly check on her and her hearing aid case.', category: 'Sleep', isCritical: true, startTime: '02:00:00', endTime: '02:30:00', occursAt: '2026-09-11T02:00:00', afterMidnight: true },
+    { id: 'rt-0201', title: 'Evening wind-down', description: 'Dim lights, radio on low, tea.', category: 'Sleep', isCritical: false, startTime: '21:00:00', endTime: '22:00:00', occursAt: '2026-09-10T21:00:00', afterMidnight: false,
+      checked: { at: '2026-09-10T11:05:00Z', by: 'Mei Zhang' } },
+    { id: 'rt-0202', title: 'Night check', description: 'Quietly check on her and her hearing aid case.', category: 'Sleep', isCritical: true, startTime: '02:00:00', endTime: '02:30:00', occursAt: '2026-09-11T02:00:00', afterMidnight: true,
+      checked: { at: '2026-09-10T16:10:00Z', by: 'Mei Zhang' } },
     { id: 'rt-0203', title: 'Wake-up', description: 'Knock first. Hearing aid in before any conversation.', category: 'PersonalCare', isCritical: false, startTime: '06:00:00', endTime: '07:00:00', occursAt: '2026-09-11T06:00:00', afterMidnight: true },
   ],
   'shift-0001': [],
@@ -910,7 +915,7 @@ const shiftPackageState = {}
 function pkgState(shiftId) {
   if (!shiftPackageState[shiftId]) {
     shiftPackageState[shiftId] = {
-      status: null, completion: null, breaks: null, administrations: {}, keys: {}, prnGiven: [], superseded: [], handoverReadAt: null, n: 0,
+      status: null, completion: null, breaks: null, administrations: {}, keys: {}, prnGiven: [], superseded: [], routineChecks: {}, handoverReadAt: null, n: 0,
     }
   }
   return shiftPackageState[shiftId]
@@ -1033,6 +1038,14 @@ function withheldReason(status) {
   return `The participant's emergency contacts, address and handover are only shown for a shift that is published or in progress. This shift is ${state}.`
 }
 
+/** A fixture routine with the worker's tick state: ticks made in this process win; otherwise a fixture `checked` ({ at, by }) pre-ticks it. */
+function routineWithCheck(shiftId, r) {
+  const st = pkgState(shiftId)
+  const { checked, ...routine } = r
+  const state = Object.prototype.hasOwnProperty.call(st.routineChecks, r.id) ? st.routineChecks[r.id] : (checked ?? null)
+  return { ...routine, isChecked: !!state, checkedAt: state ? state.at : null, checkedByName: state ? state.by : null }
+}
+
 function packageFor(shiftId, participantId, status) {
   const pp = packageParticipants[participantId] || packageParticipants['p-0001']
   const st = pkgState(shiftId)
@@ -1052,7 +1065,7 @@ function packageFor(shiftId, participantId, status) {
     emergencyContacts: showSensitive ? pp.emergencyContacts : null,
     sensitiveInfoWithheldReason: showSensitive ? null : withheldReason(status),
     medicationsDue: doses.slots.map((def) => doseSlotDto(shiftId, def)), prn: doses.prn.map((def) => prnDto(shiftId, def)),
-    shiftRoutines: packageRoutines[shiftId] || [], ...competencyView(),
+    shiftRoutines: (packageRoutines[shiftId] || []).map((r) => routineWithCheck(shiftId, r)), ...competencyView(),
   }
 }
 
@@ -1125,6 +1138,14 @@ const packageRoutesPost = [
     if (!b) return respond(404, failEnvelope(null, ['Break not found.'], 'SHIFT_BREAK_NOT_FOUND'))
     if (!b.endedAt) b.endedAt = new Date().toISOString()   // idempotent: ending an ended break is a no-op
     return buildPortalShiftDetail(id)
+  }],
+  ['portal/shifts/:id/routines/:id/check', (shiftId, routineId) => {
+    const { st, error } = routineTarget(shiftId, routineId)
+    if (error) return error
+    // Idempotent: ticking again keeps the first who and when.
+    const already = routineWithCheck(shiftId, packageRoutines[shiftId].find((r) => r.id === routineId))
+    if (!already.isChecked) st.routineChecks[routineId] = { at: new Date().toISOString(), by: MOCK_WORKER_NAME }
+    return buildPortalShiftDetail(shiftId)
   }],
   ['portal/shifts/:id/handover/ack', (id, body) => {
     const base = portalShiftBase[id] || portalShiftBase['shift-0003']
@@ -1221,6 +1242,16 @@ const packageRoutesPost = [
   }],
 ]
 
+/** The routine route's guard: an InProgress shift (else the server's 409) and a routine from the shift's own list (else 404 SHIFT_ROUTINE_NOT_FOUND). */
+function routineTarget(shiftId, routineId) {
+  const guard = notInProgress(shiftId)
+  if (guard) return { error: guard }
+  if (!(packageRoutines[shiftId] || []).some((r) => r.id === routineId)) {
+    return { error: respond(404, failEnvelope(null, ["This routine isn't part of this shift."], 'SHIFT_ROUTINE_NOT_FOUND')) }
+  }
+  return { st: pkgState(shiftId) }
+}
+
 const packageRoutesPut = [
   ['portal/shifts/:id/breaks/:id', (id, breakId, body) => {
     const guard = notInProgress(id)
@@ -1248,6 +1279,12 @@ const packageRoutesPut = [
 ]
 
 const packageRoutesDelete = [
+  ['portal/shifts/:id/routines/:id/check', (shiftId, routineId) => {
+    const { st, error } = routineTarget(shiftId, routineId)
+    if (error) return error
+    st.routineChecks[routineId] = null   // an explicit null overrides a fixture pre-tick
+    return buildPortalShiftDetail(shiftId)
+  }],
   ['portal/shifts/:id/breaks/:id', (id, breakId) => {
     const guard = notInProgress(id)
     if (guard) return guard
@@ -1273,6 +1310,7 @@ function buildCompletionReview(shiftId) {
       outcome: { administrationId: g.id, status: g.status, recordedByName: g.recordedByName, administeredAt: g.administeredAt, administeredAtTimeZone: g.administeredAtTimeZone, recordedAt: g.createdAt, reason: g.reason, doseGiven: g.doseGiven, notes: g.notes, recordedWithoutCompetency: !!g.recordedWithoutCompetency },
     })),
     notes: shiftNotesByShiftId[base.id] || [],
+    routines: (packageRoutines[base.id] || []).map((r) => routineWithCheck(base.id, r)),
   }
 }
 

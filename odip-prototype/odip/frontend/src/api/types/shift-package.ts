@@ -214,6 +214,12 @@ export interface PortalShiftRoutineDto {
   occursAt: string | null
   /** The occurrence falls on the day AFTER the shift's service date (an overnight shift's early hours). */
   afterMidnight: boolean
+  /** The worker ticked this routine done. Persisted on the shift's completion (`POST portal/shifts/{id}/routines/{routineId}/check`). */
+  isChecked: boolean
+  /** UTC instant it was ticked; `null` when it is not. */
+  checkedAt: string | null
+  /** Who ticked it; `null` when it is not. */
+  checkedByName: string | null
 }
 
 // ── Handover ────────────────────────────────────────────────
@@ -306,6 +312,8 @@ export const SHIFT_PACKAGE_ERROR_CODES = {
   administrationAlreadyRecorded: 'ADMINISTRATION_ALREADY_RECORDED',
   /** 400 — the idempotency key was used for a different medication. */
   idempotencyKeyReused: 'ADMINISTRATION_IDEMPOTENCY_KEY_REUSED',
+  /** 404 on ticking or unticking a routine that is not one of the routines matched to the shift's window (`shiftRoutines`). */
+  routineNotFound: 'SHIFT_ROUTINE_NOT_FOUND',
   /** 422 — `scheduledAt` is not one of the dose slots due in the shift window. */
   doseSlotNotDue: 'DOSE_SLOT_NOT_DUE',
   /** 422 — an Administered dose was charted more than 60 minutes before its slot (provider-local time). The message says when it can be recorded from. */

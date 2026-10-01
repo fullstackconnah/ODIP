@@ -2,6 +2,7 @@ import type {
   ShiftBreakDto,
   PortalDoseSlotDto,
   PortalDoseOutcomeDto,
+  PortalShiftRoutineDto,
 } from './shift-package'
 import type { SupportRatio, SleepoverType, ShiftStatus, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel, IncidentSeverity, IncidentStatus } from './enums'
 import type { UnavailabilityKind } from './leave'
@@ -170,6 +171,9 @@ export interface ShiftCompletionReviewDto {
   /** "As needed" (PRN) doses the submitting worker administered between the actual start and end. */
   prnDoses: ReviewPrnDoseDto[]
   notes: ShiftNoteDto[]
+  /** The routines matched to the rostered window with the worker's tick state on this completion (`isChecked`, `checkedAt`, `checkedByName`):
+   * critical first, then in time order. An unticked routine is one the worker did not tick off. */
+  routines: PortalShiftRoutineDto[]
 }
 
 export interface ReviewPrnDoseDto {
