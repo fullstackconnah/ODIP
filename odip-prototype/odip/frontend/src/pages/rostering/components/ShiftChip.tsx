@@ -48,8 +48,11 @@ const LABEL_LINK =
  * reserved for "something is wrong" — a healthy chip is a neutral surface; only the warning dot and
  * the dashed/unfilled variant carry meaning.
  *
- * One line, `--row-h` minus 6px tall (28px at a fine pointer; grows with the row under
- * `pointer: coarse`): `time · name`, with the time never clipping and the name yielding first.
+ * At least `--row-h` minus 6px tall (28px at a fine pointer; grows with the row under `pointer: coarse`). Where the chip is 14rem or
+ * wider it is one line, `time · name`, with the time never clipping and the name yielding first. Narrower (a day column is 123-130px
+ * at the board's native widths) the name sits UNDER the time on its own line, because on one line the time, the drag handle and the
+ * actions trigger left the name 0-5px: a one-letter link. The chip is its own container (`@container`), so this follows the chip's
+ * width, not the window's.
  */
 export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, onAssignTo, onUnassign, onDelete }: ShiftChipProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -146,7 +149,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
       // On-leave gets the explanation on the whole chip too: on a narrow day column the inline marker
       // below is the first thing to clip, so the hover text must not depend on it being visible.
       title={onApprovedLeave ? onLeaveTitle : undefined}
-      className={`group @container relative flex h-[calc(var(--row-h)_-_6px)] items-stretch rounded-sm border bg-surface-container-low text-[13px] transition-opacity duration-150 ${
+      className={`group @container relative flex min-h-[calc(var(--row-h)_-_6px)] items-stretch rounded-sm border bg-surface-container-low text-[13px] transition-opacity duration-150 ${
         dashed || onApprovedLeave ? 'border-dashed border-border' : 'border-border'
       } ${isDragging ? 'opacity-50' : ''}`}
     >
@@ -212,12 +215,12 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
         )}
 
         {/*
-          Content wrapper: one line — `time · name`. overflow-hidden: on a narrow day column the name can
+          Content wrapper: `time · name` on one line from 14rem, the name under the time below it. overflow-hidden: on a narrow day column the name can
           be squeezed to nothing and the fixed-width tail (override icon, on-leave marker) can still
           exceed the box; without a clip boundary here that excess would render over the actions menu
           beside it instead of just yielding.
         */}
-        <span className="flex min-w-0 flex-1 items-center overflow-hidden rounded-sm px-0.5">
+        <span className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden rounded-sm px-0.5 @[14rem]:flex-row @[14rem]:items-center">
           <span
             className="shrink-0 font-medium tabular-nums text-foreground"
             title={shift.endsNextDay ? `${timeRange} — ends the next day` : undefined}
@@ -231,39 +234,43 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
               above) and for assistive tech (the control's aria-label).
             */}
           </span>
-          {/* Visual separator between time and name; the accessible name (aria-label above) uses a comma. */}
-          <span className="shrink-0 px-0.5 text-muted-foreground" aria-hidden="true">·</span>
-          {label}
-          {/*
-            Priority on a chip, narrowest-first: time > name > ratio > everything else. Time is what a
-            coordinator scans for and must never clip; the name yields (truncate, above); the ratio badge
-            yields *entirely* — it drops from the visible layout rather than squeezing time or name, since
-            a day column is never wide enough to show all three. It stays discoverable: it is part of this
-            control's aria-label, visible in the slide-over, and (the case that actually matters
-            operationally) an under-covered ratio surfaces as a RATIO_SHORTFALL finding, which the severity
-            marker already makes visible.
-          */}
-          {shift.overrideReason && (
-            <span
-              className="ml-1 shrink-0 text-muted-foreground"
-              role="img"
-              aria-label={`Assigned with an override: ${shift.overrideReason}`}
-              title={`Assigned with an override: ${shift.overrideReason}`}
-            >
-              <ShieldCheck className="h-3 w-3" aria-hidden="true" />
-            </span>
-          )}
-          {/* On-leave marker — a filled chip whose assignee's leave got approved after the fact. The
-              dashed border makes the hole visible at a glance; this names why. Icon at rest, with the
-              words shown only once the chip is wide enough (container query on the chip): below that they
-              are display:none, never a clipped or half-drawn word. Assistive tech and the hover title get
-              "On leave" / the full explanation from the control's aria-label and the chip's title. */}
-          {onApprovedLeave && (
-            <span className="ml-1 inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-muted-foreground" title={onLeaveTitle}>
-              <CalendarOff className="h-3 w-3" aria-hidden="true" />
-              <span className="hidden @[15rem]:inline" title={onLeaveTitle}>On leave</span>
-            </span>
-          )}
+          {/* Visual separator between time and name on the one-line layout; the accessible name (aria-label above) uses a comma. Gone
+              while the name is under the time: a dot ending the first line reads as a typo. */}
+          <span className="hidden shrink-0 px-0.5 text-muted-foreground @[14rem]:inline" aria-hidden="true">·</span>
+          {/* The name and its markers are one row of their own, so under the time they stay one line and never become a third. */}
+          <span className="flex min-w-0 items-center @[14rem]:flex-1">
+            {label}
+            {/*
+              Priority on a chip, narrowest-first: time > name > ratio > everything else. Time is what a
+              coordinator scans for and must never clip; the name yields (truncate, above); the ratio badge
+              yields *entirely* — it drops from the visible layout rather than squeezing time or name, since
+              a day column is never wide enough to show all three. It stays discoverable: it is part of this
+              control's aria-label, visible in the slide-over, and (the case that actually matters
+              operationally) an under-covered ratio surfaces as a RATIO_SHORTFALL finding, which the severity
+              marker already makes visible.
+            */}
+            {shift.overrideReason && (
+              <span
+                className="ml-1 shrink-0 text-muted-foreground"
+                role="img"
+                aria-label={`Assigned with an override: ${shift.overrideReason}`}
+                title={`Assigned with an override: ${shift.overrideReason}`}
+              >
+                <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+              </span>
+            )}
+            {/* On-leave marker — a filled chip whose assignee's leave got approved after the fact. The
+                dashed border makes the hole visible at a glance; this names why. Icon at rest, with the
+                words shown only once the chip is wide enough (container query on the chip): below that they
+                are display:none, never a clipped or half-drawn word. Assistive tech and the hover title get
+                "On leave" / the full explanation from the control's aria-label and the chip's title. */}
+            {onApprovedLeave && (
+              <span className="ml-1 inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-muted-foreground" title={onLeaveTitle}>
+                <CalendarOff className="h-3 w-3" aria-hidden="true" />
+                <span className="hidden @[15rem]:inline" title={onLeaveTitle}>On leave</span>
+              </span>
+            )}
+          </span>
         </span>
       </div>
 
