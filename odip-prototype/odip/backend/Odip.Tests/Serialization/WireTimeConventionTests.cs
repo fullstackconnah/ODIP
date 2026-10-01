@@ -167,6 +167,40 @@ public class WireTimeConventionTests
         Assert.Equal(DateTimeKind.Utc, dto.StartedAt.Kind);
     }
 
+    // ── The provider-local values that are NOT DateTimes cannot shift: real DTOs, real options ──
+
+    [Fact]
+    public void ShiftTimes_AreTimeOnlyAndDateOnly_AndGoOutExactlyAsRostered()
+    {
+        // Rostered shift times are a DateOnly plus TimeOnly pair in provider-local time: no DateTime, so no converter can touch them.
+        var json = JsonSerializer.Serialize(new ShiftDto
+        {
+            ServiceDate = new DateOnly(2026, 10, 3), StartTime = new TimeOnly(8, 0), EndTime = new TimeOnly(16, 30), EndsNextDay = false,
+        }, Api);
+
+        Assert.Contains("\"serviceDate\":\"2026-10-03\"", json);
+        Assert.Contains("\"startTime\":\"08:00:00\"", json);
+        Assert.Contains("\"endTime\":\"16:30:00\"", json);
+    }
+
+    [Fact]
+    public void TripDates_AreDateOnly_AndGoOutAsPlainDays()
+    {
+        var json = JsonSerializer.Serialize(new TripListDto { StartDate = new DateOnly(2026, 10, 1), EndDate = new DateOnly(2026, 10, 8) }, Api);
+
+        Assert.Contains("\"startDate\":\"2026-10-01\"", json);
+        Assert.Contains("\"endDate\":\"2026-10-08\"", json);
+    }
+
+    [Fact]
+    public void RosteredTimesOnTheCompletionQueue_AreUtcInstantsWithZ_ConvertedFromTheProvidersClock()
+    {
+        // 08:00 Sydney on 3 Oct (UTC+10) is 22:00Z on the 2nd. ResolveRosteredTimesUtc already returns Kind Utc, so it was and stays "...Z".
+        var rostered = Odip.Domain.Rostering.ProviderLocalTime.LocalToUtc(new DateTime(2026, 10, 3, 8, 0, 0), Odip.Domain.Rostering.ProviderLocalTime.ResolveZone("Australia/Sydney"));
+
+        Assert.Equal("2026-10-02T22:00:00Z", WireTypeWalker.WriteAlone(Field(typeof(CompletionQueueItemDto), nameof(CompletionQueueItemDto.RosteredStart)), rostered));
+    }
+
     // ── Everything that is not a DateTime is untouched ───────────────────
 
     [Fact]
