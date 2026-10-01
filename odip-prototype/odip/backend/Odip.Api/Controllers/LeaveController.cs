@@ -12,6 +12,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -505,7 +506,7 @@ public class LeaveController : ControllerBase
     /// </summary>
     private async Task<(List<RosterFindingDto> Overlaps, List<OverlapShiftDto> OverlapShifts)> FindRecurringOverlapsAsync(RecurringUnavailability rule, CancellationToken ct)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var horizonStart = today > rule.EffectiveFrom ? today : rule.EffectiveFrom;
         var horizonEnd = rule.EffectiveTo ?? today.AddDays(84);
         var occurrences = new RecurringUnavailabilityExpander().Occurrences(rule, horizonStart, horizonEnd).ToHashSet();

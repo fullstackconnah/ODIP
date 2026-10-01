@@ -6,6 +6,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -279,7 +280,7 @@ public class TripsController : ControllerBase
                     Title = taskTitle,
                     Priority = TaskPriority.High,
                     Status = TaskItemStatus.NotStarted,
-                    DueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7)),
+                    DueDate = (await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct)).AddDays(7),
                     OwnerId = t.LeadCoordinatorId
                 });
             }

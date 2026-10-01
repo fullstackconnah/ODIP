@@ -106,7 +106,7 @@ public class PortalController : ControllerBase
                 new PortalShiftsResponseDto(new List<PortalShiftSummaryDto>(), new List<PortalTripAssignmentSummaryDto>())));
         }
 
-        var start = from ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var start = from ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var end = to ?? start.AddDays(13);
 
         // INTAKE-08: a draft participant can't have a real shift going forward (Rostering's
@@ -1067,7 +1067,7 @@ public class PortalController : ControllerBase
                 SourceKey: $"flagged-note:{note.Id}",
                 Type: TaskType.FlaggedNoteFollowUp,
                 Title: $"Flagged shift note ({categories}) — decide whether an incident is needed",
-                DueDate: DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
+                DueDate: (await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct)).AddDays(1),
                 LinkTo: "/incidents?view=flagged-notes",
                 ShiftNoteId: note.Id, ShiftId: note.ShiftId), ct);
         }

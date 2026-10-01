@@ -92,7 +92,7 @@ public class RosteringController : ControllerBase
                 $"Unrecognised groupBy value '{groupBy}'. Expected 'participant' or 'staff'."));
         }
 
-        var start = WeekStart(weekStart ?? DateOnly.FromDateTime(DateTime.UtcNow));
+        var start = WeekStart(weekStart ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct));
         var end = start.AddDays(6);
         var days = Enumerable.Range(0, 7).Select(i => start.AddDays(i)).ToList();
 
@@ -406,7 +406,7 @@ public class RosteringController : ControllerBase
         if (participant == null)
             return NotFound(ApiResponse<ParticipantRosteringDto>.Fail("Participant not found."));
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var windowEnd = today.AddDays(28);
 
         var shifts = await _db.Shifts

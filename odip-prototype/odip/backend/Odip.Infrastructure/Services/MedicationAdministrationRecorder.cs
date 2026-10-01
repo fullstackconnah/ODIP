@@ -391,7 +391,7 @@ public sealed class MedicationAdministrationRecorder
                 SourceKey: $"med-witness:{admin.Id}",
                 Type: TaskType.MedicationWitness,
                 Title: $"Witness sign-off needed: {med.Name} for {participantName}",
-                DueDate: DateOnly.FromDateTime(nowUtc.AddDays(1)),
+                DueDate: providerToday.AddDays(1),
                 LinkTo: "/portal/witness-approvals",
                 MedicationAdministrationId: admin.Id), ct);
         }

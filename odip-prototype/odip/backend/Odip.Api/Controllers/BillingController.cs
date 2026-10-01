@@ -8,6 +8,7 @@ using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -118,7 +119,7 @@ public class BillingController : ControllerBase
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
 
         var query = _db.ServiceBookings.AsQueryable();
         if (participantId.HasValue) query = query.Where(b => b.FundingSource!.ParticipantId == participantId.Value);
@@ -530,7 +531,7 @@ public class BillingController : ControllerBase
             .Select(e => e.ClaimReference)
             .ToListAsync(ct);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         return (events, bookings, new HashSet<string>(priorClaimedReferences), today);
     }
 }

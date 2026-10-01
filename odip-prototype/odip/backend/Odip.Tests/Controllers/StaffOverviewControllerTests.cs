@@ -11,6 +11,7 @@ using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Xunit;
+using Odip.Tests.Medications;
 
 namespace Odip.Tests.Controllers;
 
@@ -22,6 +23,8 @@ namespace Odip.Tests.Controllers;
 public class StaffOverviewControllerTests
 {
     private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
+    // The overview's windows start at the PROVIDER's date; at 12:00 UTC it is the UTC date Today is built from, whatever the time of day the suite runs.
+    private static readonly FakeClock Clock = FakeClock.AtUtcNoonToday();
 
     private static OdipDbContext CreateDb(Guid? tenantId, bool isSuperAdmin)
     {
@@ -103,7 +106,7 @@ public class StaffOverviewControllerTests
         var completionShift = SeedShift(db, tenantId, participant.Id, staff.Id, Today.AddDays(-1), ShiftStatus.Completed);
         var completion = SeedCompletion(db, tenantId, completionShift.Id, staff.Id, DateTime.UtcNow.AddHours(-1));
 
-        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db));
+        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db), clock: Clock);
 
         var result = await controller.GetOverview(staff.Id, CancellationToken.None);
 
@@ -142,7 +145,7 @@ public class StaffOverviewControllerTests
         using var db = CreateDb(callerTenantId, isSuperAdmin: false);
         var otherTenantsStaff = SeedStaff(db, ownerTenantId);
 
-        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db));
+        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db), clock: Clock);
 
         var result = await controller.GetOverview(otherTenantsStaff.Id, CancellationToken.None);
 
@@ -153,7 +156,7 @@ public class StaffOverviewControllerTests
     public async Task GetOverview_StaffNotFound_ReturnsNotFound()
     {
         using var db = CreateDb(Guid.NewGuid(), isSuperAdmin: true);
-        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db));
+        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db), clock: Clock);
 
         var result = await controller.GetOverview(Guid.NewGuid(), CancellationToken.None);
 
@@ -170,7 +173,7 @@ public class StaffOverviewControllerTests
         SeedShift(db, tenantId, participant.Id, staff.Id, Today.AddDays(15), ShiftStatus.Published);
         SeedShift(db, tenantId, participant.Id, staff.Id, Today.AddDays(-1), ShiftStatus.Published);
 
-        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db));
+        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db), clock: Clock);
 
         var result = await controller.GetOverview(staff.Id, CancellationToken.None);
 
@@ -190,7 +193,7 @@ public class StaffOverviewControllerTests
         SeedShift(db, tenantId, participant.Id, staff.Id, Today.AddDays(1), ShiftStatus.Cancelled);
         SeedShift(db, tenantId, participant.Id, staff.Id, Today.AddDays(1), ShiftStatus.Completed);
 
-        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db));
+        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db), clock: Clock);
 
         var result = await controller.GetOverview(staff.Id, CancellationToken.None);
 
@@ -207,7 +210,7 @@ public class StaffOverviewControllerTests
         var staff = SeedStaff(db, tenantId);
         SeedIncident(db, reportedByUserId: staff.Id, involvedUserId: null, incidentDateTime: DateTime.UtcNow);
 
-        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db));
+        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db), clock: Clock);
 
         var result = await controller.GetOverview(staff.Id, CancellationToken.None);
 
@@ -226,7 +229,7 @@ public class StaffOverviewControllerTests
         var shift = SeedShift(db, tenantId, participant.Id, staff.Id, Today.AddDays(-1), ShiftStatus.Published);
         SeedCompletion(db, tenantId, shift.Id, staff.Id, DateTime.UtcNow, isActive: false);
 
-        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db));
+        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db), clock: Clock);
 
         var result = await controller.GetOverview(staff.Id, CancellationToken.None);
 

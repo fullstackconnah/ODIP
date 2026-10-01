@@ -23,6 +23,16 @@ internal sealed class FakeClock(DateTimeOffset start) : TimeProvider
     public void Set(DateTimeOffset now) => _now = now;
     public static FakeClock AtUtc(int y, int mo, int d, int h, int mi) =>
         new(new DateTimeOffset(y, mo, d, h, mi, 0, TimeSpan.Zero));
+
+    /// <summary>
+    /// 12:00 UTC on today's UTC date: the UTC date and the provider's (Sydney 22:00 AEST / 23:00 AEDT) agree, so a test whose fixtures and expectations
+    /// are built from the UTC date cannot flake in the 10-11 hours a day when the two dates differ.
+    /// </summary>
+    public static FakeClock AtUtcNoonToday()
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new(new DateTimeOffset(now.Year, now.Month, now.Day, 12, 0, 0, TimeSpan.Zero));
+    }
 }
 
 /// <summary>

@@ -436,7 +436,9 @@ public class MedicationsControllerTests
         db.ParticipantMedications.Add(med);
         db.SaveChanges();
 
-        var controller = new MedicationsController(db, tenant);
+        // Sat 3 Oct 08:00 in Sydney, still Fri 2 Oct in UTC: the sign-off is due Sun 4 Oct, not Sat 3 Oct.
+        var clock = FakeClock.AtUtc(2026, 10, 2, 22, 0);
+        var controller = new MedicationsController(db, tenant, recorder: new Odip.Infrastructure.Services.MedicationAdministrationRecorder(db, clock: clock));
         var dto = new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, WitnessStaffId = witness.Id };
 
         var result = await controller.RecordAdministration(med.Id, dto, CancellationToken.None);
@@ -447,7 +449,7 @@ public class MedicationsControllerTests
         Assert.Equal(TaskType.MedicationWitness, task.TaskType);
         Assert.Equal($"med-witness:{admin.Id}", task.SourceKey);
         Assert.Equal(admin.Id, task.MedicationAdministrationId);
-        Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), task.DueDate);
+        Assert.Equal(new DateOnly(2026, 10, 4), task.DueDate);
         Assert.Equal("/portal/witness-approvals", task.LinkTo);
         Assert.Contains("Insulin", task.Title);
         Assert.Contains(participant.FirstName, task.Title);

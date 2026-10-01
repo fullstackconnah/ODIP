@@ -6,6 +6,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -27,7 +28,12 @@ namespace Odip.Api.Controllers;
 public class ParticipantContactRolesController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    public ParticipantContactRolesController(OdipDbContext db) => _db = db;
+    private readonly TimeProvider _clock;
+    public ParticipantContactRolesController(OdipDbContext db, TimeProvider? clock = null)
+    {
+        _db = db;
+        _clock = clock ?? TimeProvider.System;
+    }
 
     [HttpGet("participants/{participantId:guid}/contact-roles")]
     public async Task<ActionResult<ApiResponse<List<ParticipantContactRoleDto>>>> GetForParticipant(
@@ -50,7 +56,7 @@ public class ParticipantContactRolesController : ControllerBase
         var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == participantId, ct);
         if (participant == null) return NotFound(ApiResponse<ParticipantContactRoleDto>.Fail("Participant not found"));
 
-        var gateError = ContactRoleRules.Validate(dto.RoleType, participant.PlanType, participant.DateOfBirth, dto.RegisteredProviderFlag);
+        var gateError = ContactRoleRules.Validate(dto.RoleType, participant.PlanType, participant.DateOfBirth, dto.RegisteredProviderFlag, await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct));
         if (gateError != null) return BadRequest(ApiResponse<ParticipantContactRoleDto>.Fail(gateError));
 
         var existingRoles = await _db.ParticipantContactRoles
@@ -108,7 +114,7 @@ public class ParticipantContactRolesController : ControllerBase
         var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == role.ParticipantId, ct);
         if (participant == null) return NotFound(ApiResponse<ParticipantContactRoleDto>.Fail("Participant not found"));
 
-        var gateError = ContactRoleRules.Validate(dto.RoleType, participant.PlanType, participant.DateOfBirth, dto.RegisteredProviderFlag);
+        var gateError = ContactRoleRules.Validate(dto.RoleType, participant.PlanType, participant.DateOfBirth, dto.RegisteredProviderFlag, await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct));
         if (gateError != null) return BadRequest(ApiResponse<ParticipantContactRoleDto>.Fail(gateError));
 
         var otherRoles = await _db.ParticipantContactRoles

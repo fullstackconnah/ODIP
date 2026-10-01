@@ -17,6 +17,7 @@ using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
+using Odip.Tests.Medications;
 
 namespace Odip.Tests.Rostering;
 
@@ -1713,7 +1714,8 @@ public class RosteringControllerTests
             NightType = SleepoverType.None, Status = ShiftStatus.Published,
         });
         db.SaveChanges();
-        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        // The window starts at the PROVIDER's date; at 12:00 UTC it is the UTC date `today` is built from, whatever the time of day the suite runs.
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db), clock: FakeClock.AtUtcNoonToday());
 
         var result = await controller.GetParticipantRostering(participant.Id, CancellationToken.None);
 
