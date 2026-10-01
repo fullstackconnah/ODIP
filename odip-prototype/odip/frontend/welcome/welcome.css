@@ -51,7 +51,9 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Anchors and focus scroll clear of the fixed header and, below 1200px, of the bottom pill. */
   scroll-padding-top: calc(var(--header-h) + 24px);
+  scroll-padding-bottom: calc(var(--pill-h) + 12px);
   background: var(--forest);
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -206,7 +208,9 @@ main,
 .brand {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
+  min-width: 44px;
   min-height: 44px;
   margin-right: auto;
   border-radius: var(--radius-sm);
@@ -712,11 +716,16 @@ main,
 .band {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: clamp(48px, 5vw, 72px);
+  gap: clamp(28px, 3vw, 40px);
   padding: clamp(20px, 3.4vw, 48px);
   border-radius: var(--radius-lg);
   background: var(--paper);
   color: var(--ink);
+}
+/* A ledger: each screen in a band is ruled off from the one before, in the app's Ruled Line. */
+.band > * + * {
+  padding-top: clamp(28px, 3vw, 40px);
+  border-top: 1px solid var(--color-border);
 }
 .band__pair {
   display: flex;
@@ -791,7 +800,7 @@ main,
   justify-content: center;
   text-align: center;
 }
-@media (min-width: 1360px) {
+@media (min-width: 1280px) {
   .screen--side {
     display: grid;
     grid-template-columns: var(--w) minmax(0, 1fr);
@@ -1295,7 +1304,7 @@ main,
     padding: 16px;
   }
   .band {
-    gap: 48px;
+    gap: 28px;
   }
 }
 @media (max-width: 639.98px) {
