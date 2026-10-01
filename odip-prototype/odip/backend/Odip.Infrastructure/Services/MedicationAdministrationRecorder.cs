@@ -72,9 +72,13 @@ public sealed record RecordAdministrationRequest(
 ///    used for the SAME request (medication, slot and outcome) returns the earlier record (a double tap is safe); the same
 ///    key on a different request is refused, never silently dropped. The unique filtered index on the key backs this up
 ///    against a true race.
-/// 3. <b>One record per scheduled dose slot.</b> For a scheduled dose (ScheduledAt set), a record that already
+/// 3. <b>One ACTIVE record per scheduled dose slot.</b> For a scheduled dose (ScheduledAt set), an active record that already
 ///    exists for (medication, ScheduledAt) blocks a second one: <see cref="RecordAdministrationOutcome.AlreadyRecorded"/>
-///    with the existing record. This is an application rule, not a unique index, because existing data may already
+///    with the existing record. The one exception: a later ADMINISTERED record SUPERSEDES an active Refused or Missed one (the
+///    participant refused then took it; a cover worker takes over) - the earlier record is kept as history, linked through
+///    <see cref="MedicationAdministration.SupersededByAdministrationId"/>, in the same transaction and under the same slot lock. An
+///    Administered record is never superseded here; only the coordinator amend path changes it.
+///    This is an application rule, not a unique index, because existing data may already
 ///    hold duplicates per slot — see <see cref="MedicationAdministration.IdempotencyKey"/>. On PostgreSQL the replay check, the slot
 ///    check and the insert run under a transaction-scoped advisory lock keyed on the slot, so two requests for one slot (two
 ///    devices, two workers, a double tap with no key) cannot both pass the check: the loser waits, then gets the winner's record
@@ -195,17 +199,26 @@ public sealed class MedicationAdministrationRecorder
         if (med.Type == MedicationType.Prn && dto.Status == MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.PrnReason))
             return Fail(RecordAdministrationOutcome.Invalid, "A PRN reason is required when recording an administered PRN dose.");
 
-        // ── 3. One record per scheduled dose slot (under the slot lock taken above) ──
+        // ── 3. One ACTIVE record per scheduled dose slot (under the slot lock taken above) ──
+        var toSupersede = new List<MedicationAdministration>();
         if (dto.ScheduledAt is { } scheduledAt)
         {
-            var existing = await _db.MedicationAdministrations
-                .Where(a => a.ParticipantMedicationId == med.Id && a.ScheduledAt == scheduledAt)
+            var active = await _db.MedicationAdministrations
+                .Where(a => a.ParticipantMedicationId == med.Id && a.ScheduledAt == scheduledAt && a.SupersededByAdministrationId == null)
                 .OrderByDescending(a => a.CreatedAt)
-                .FirstOrDefaultAsync(ct);
-            if (existing != null)
-                return new RecordAdministrationResult(
-                    RecordAdministrationOutcome.AlreadyRecorded, ToDto(existing),
-                    "This dose has already been recorded.", MedicationErrorCodes.AdministrationAlreadyRecorded);
+                .ToListAsync(ct);
+            if (active.Count > 0)
+            {
+                // Only Administered supersedes, and only Refused or Missed records (legacy duplicates are all checked: a single
+                // Administered one anywhere in the slot blocks it). Anything else is the existing 409 with the newest active record.
+                var supersedes = dto.Status == MedicationAdministrationStatus.Administered
+                    && active.All(a => a.Status is MedicationAdministrationStatus.Refused or MedicationAdministrationStatus.Missed);
+                if (!supersedes)
+                    return new RecordAdministrationResult(
+                        RecordAdministrationOutcome.AlreadyRecorded, ToDto(active[0]),
+                        "This dose has already been recorded.", MedicationErrorCodes.AdministrationAlreadyRecorded);
+                toSupersede = active;
+            }
         }
 
         User? witnessStaff = null;
@@ -286,6 +299,13 @@ public sealed class MedicationAdministrationRecorder
             RecordedWithoutCompetency = recordedWithoutCompetency,
         };
         _db.MedicationAdministrations.Add(admin);
+
+        // The replaced Refused/Missed records stay as history, linked to their replacement (saved with it, or not at all).
+        foreach (var earlier in toSupersede)
+        {
+            earlier.SupersededByAdministrationId = admin.Id;
+            earlier.UpdatedAt = nowUtc;
+        }
 
         // NotificationEventType.WitnessRequested — only when a staff witness was nominated
         // (witnessStaff is null for a free-text/external witness, which has nothing to

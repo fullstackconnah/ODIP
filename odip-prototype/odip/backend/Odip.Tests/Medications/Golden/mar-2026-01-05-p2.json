@@ -46,6 +46,7 @@
         "notes": null,
         "createdAt": "2026-01-03T01:00:00Z",
         "recordedWithoutCompetency": false,
+        "supersededByAdministrationId": null,
         "incidentId": "00000000-0000-0000-0000-000000000301"
       },
       "incidentId": "00000000-0000-0000-0000-000000000301"

@@ -221,6 +221,9 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         }
         await using (var flagged = new NpgsqlCommand("SELECT count(*) FROM \"MedicationAdministrations\" WHERE \"RecordedWithoutCompetency\"", after))
             Assert.Equal(0L, await flagged.ExecuteScalarAsync());
+        // And no existing record reads as superseded: the new link column starts NULL (every existing record is an active record).
+        await using (var superseded = new NpgsqlCommand("SELECT count(*) FROM \"MedicationAdministrations\" WHERE \"SupersededByAdministrationId\" IS NOT NULL", after))
+            Assert.Equal(0L, await superseded.ExecuteScalarAsync());
         await using (var count = new NpgsqlCommand("SELECT count(*) FROM \"MedicationAdministrations\" WHERE \"ParticipantMedicationId\" = @m", after))
         {
             count.Parameters.AddWithValue("m", medicationId);
@@ -448,6 +451,80 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         Assert.All(results.Where(r => r.Outcome == RecordAdministrationOutcome.AlreadyRecorded), r => Assert.Equal(winner.Id, r.Administration!.Id));
         await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
         Assert.Equal(1, await verify.MedicationAdministrations.CountAsync(a => a.ParticipantMedicationId == med.Id && a.ScheduledAt == slot));
+    }
+
+    private async Task<(Guid TenantId, Guid UserId, ParticipantMedication Med)> SeedMedicationWithAMissedSlotAsync(DateTime slot)
+    {
+        var (setup, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _setup = setup;
+        var (participantId, userId, _, _) = await SeedCompletionAsync(setup);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, Name = "Levetiracetam", DoseDescription = "1 tablet", Type = MedicationType.Regular,
+            TimesOfDay = "08:00", StartDate = new DateTime(2026, 1, 1), Status = MedicationStatus.Active,
+        };
+        setup.ParticipantMedications.Add(med);
+        await setup.SaveChangesAsync();
+        var missed = await new MedicationAdministrationRecorder(setup).RecordAsync(
+            new RecordAdministrationRequest(med.Id,
+                new CreateAdministrationDto { Status = MedicationAdministrationStatus.Missed, Reason = "Asleep", ScheduledAt = slot }, userId, "Ben Turner"), default);
+        Assert.Equal(RecordAdministrationOutcome.Created, missed.Outcome);
+        return (tenantId, userId, med);
+    }
+
+    [SkippableFact]
+    public async Task ConcurrentAdministeredOverAMissedSlot_OnRealPostgres_SupersedeExactlyOnce_AndTheRestAreTold409()
+    {
+        // The supersede happens inside the slot lock: eight cover workers all try to record the dose the first worker marked Missed. One wins and
+        // supersedes the Missed record; the other seven see an ACTIVE Administered record and get the 409 with it. Never two active records.
+        RequirePostgres();
+        var slot = new DateTime(2026, 7, 14, 8, 0, 0);
+        var (tenantId, userId, med) = await SeedMedicationWithAMissedSlotAsync(slot);
+
+        var results = await RaceAsync(tenantId, 8, (db, n) => new MedicationAdministrationRecorder(db).RecordAsync(
+            new RecordAdministrationRequest(
+                med.Id,
+                new CreateAdministrationDto { Status = MedicationAdministrationStatus.Administered, ScheduledAt = slot, IdempotencyKey = $"key-{n}-{Guid.NewGuid()}" },
+                userId, "Ben Turner"),
+            default));
+
+        Assert.Equal(1, results.Count(r => r.Outcome == RecordAdministrationOutcome.Created));
+        Assert.Equal(7, results.Count(r => r.Outcome == RecordAdministrationOutcome.AlreadyRecorded));
+        var winner = results.Single(r => r.Outcome == RecordAdministrationOutcome.Created).Administration!;
+        Assert.All(results.Where(r => r.Outcome == RecordAdministrationOutcome.AlreadyRecorded), r => Assert.Equal(winner.Id, r.Administration!.Id));
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var records = await verify.MedicationAdministrations.Where(a => a.ParticipantMedicationId == med.Id && a.ScheduledAt == slot).ToListAsync();
+        Assert.Equal(2, records.Count);                                                          // the Missed record is history, not deleted
+        Assert.Equal(1, records.Count(a => a.SupersededByAdministrationId == null));             // exactly ONE active record for the slot
+        Assert.Equal(winner.Id, records.Single(a => a.Status == MedicationAdministrationStatus.Missed).SupersededByAdministrationId);
+    }
+
+    [SkippableFact]
+    public async Task AMissedSlot_RacedByAdministeredRefusedAndMissed_OnRealPostgres_OnlyAnAdministeredRecordCanWin()
+    {
+        RequirePostgres();
+        var slot = new DateTime(2026, 7, 14, 8, 0, 0);
+        var (tenantId, userId, med) = await SeedMedicationWithAMissedSlotAsync(slot);
+
+        var results = await RaceAsync(tenantId, 6, (db, n) => new MedicationAdministrationRecorder(db).RecordAsync(
+            new RecordAdministrationRequest(
+                med.Id,
+                new CreateAdministrationDto
+                {
+                    Status = (n % 3) switch { 0 => MedicationAdministrationStatus.Administered, 1 => MedicationAdministrationStatus.Refused, _ => MedicationAdministrationStatus.Missed },
+                    Reason = "second opinion", ScheduledAt = slot, IdempotencyKey = $"key-{n}-{Guid.NewGuid()}",
+                },
+                userId, "Ben Turner"),
+            default));
+
+        // Refused and Missed can never replace a Missed record; of the two Administered attempts exactly one is the replacement.
+        Assert.Equal(1, results.Count(r => r.Outcome == RecordAdministrationOutcome.Created));
+        Assert.Equal(MedicationAdministrationStatus.Administered, results.Single(r => r.Outcome == RecordAdministrationOutcome.Created).Administration!.Status);
+        Assert.Equal(5, results.Count(r => r.Outcome == RecordAdministrationOutcome.AlreadyRecorded));
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var records = await verify.MedicationAdministrations.Where(a => a.ParticipantMedicationId == med.Id && a.ScheduledAt == slot).ToListAsync();
+        Assert.Equal(2, records.Count);
+        Assert.Single(records, a => a.SupersededByAdministrationId == null);
     }
 
     [SkippableFact]

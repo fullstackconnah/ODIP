@@ -216,14 +216,31 @@ public class MedicationAdministrationIdempotencyTests
     }
 
     [Fact]
-    public async Task EveryStatusCountsAsTheSlotsRecord_ARefusalBlocksAnAdministeredRecordForTheSameSlot()
+    public async Task EveryStatusCountsAsTheSlotsRecord_ARefusalBlocksAnotherNotGivenOutcome_ButYieldsToALaterAdministeredOne()
     {
+        // One ACTIVE record per slot. A Refused (or Missed) record is the one kind that can be replaced - by an Administered record, kept as
+        // history (MedicationSupersedeTests covers the detail); every other combination is still the 409.
         var f = Arrange();
         await f.Controller.RecordAdministration(f.MedId, Dose(Slot, "k1", MedicationAdministrationStatus.Refused), default);
 
-        var second = await f.Controller.RecordAdministration(f.MedId, Dose(Slot, "k2"), default);
+        var anotherNotGiven = await f.Controller.RecordAdministration(f.MedId, Dose(Slot, "k2", MedicationAdministrationStatus.Missed), default);
+        var given = await f.Controller.RecordAdministration(f.MedId, Dose(Slot, "k3"), default);
 
-        Assert.IsType<ConflictObjectResult>(second.Result);
+        Assert.IsType<ConflictObjectResult>(anotherNotGiven.Result);
+        Assert.IsType<OkObjectResult>(given.Result);
+    }
+
+    [Fact]
+    public async Task AnAdministeredRecord_BlocksEveryOtherOutcomeForTheSameSlot()
+    {
+        var f = Arrange();
+        await f.Controller.RecordAdministration(f.MedId, Dose(Slot, "k1"), default);
+
+        var refused = await f.Controller.RecordAdministration(f.MedId, Dose(Slot, "k2", MedicationAdministrationStatus.Refused), default);
+        var again = await f.Controller.RecordAdministration(f.MedId, Dose(Slot, "k3"), default);
+
+        Assert.IsType<ConflictObjectResult>(refused.Result);
+        Assert.IsType<ConflictObjectResult>(again.Result);
     }
 
     [Fact]

@@ -78,7 +78,8 @@ public sealed class MedicationSlotService
             ? new List<MedicationAdministration>()
             : await _db.MedicationAdministrations
                 .Where(a => regularMedIds.Contains(a.ParticipantMedicationId)
-                    && a.ScheduledAt != null && a.ScheduledAt >= windowStartLocal && a.ScheduledAt < windowEndLocal)
+                    && a.ScheduledAt != null && a.ScheduledAt >= windowStartLocal && a.ScheduledAt < windowEndLocal
+                    && a.SupersededByAdministrationId == null)   // a superseded Refused/Missed record is history: the slot reads its replacement
                 .ToListAsync(ct);
 
         var slots = new List<MedicationSlot>();

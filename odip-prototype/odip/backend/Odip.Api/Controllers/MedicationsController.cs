@@ -355,6 +355,11 @@ public class MedicationsController : ControllerBase
         return result.ToActionResult(this);
     }
 
+    // The amend path is a COORDINATOR CORRECTION and deliberately sits outside the Medication Competency gate and outside the supersede
+    // rule (decision recorded with the Warn/Enforce rollout): it is the only way to change an Administered record, and the only way to
+    // change a record after it has been superseded.
+    // TODO(amendment-reason): require and store a reason for every amendment (who changed what, and why) so a correction is explainable
+    // beyond the audit row; not built yet, tracked for a later round.
     [HttpPut("medications/administrations/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<AdministrationDto>>> UpdateAdministration(

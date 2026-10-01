@@ -111,6 +111,16 @@ public class MedicationAdministration : ITenantEntity
     public string? IdempotencyKey { get; set; }
 
     /// <summary>
+    /// Set on an EARLIER record when a later one superseded it: the id of the record that replaced it. Null = this is the ACTIVE record for
+    /// its slot (the only one the MAR, the shift package and the coordinator review show). Only a Refused or Missed record is ever
+    /// superseded, and only by an Administered one (the participant refused then took it at 09:40; a cover worker takes over): the earlier
+    /// record is KEPT as history (it still appears in the participant history and the administration report, marked by this link) and the
+    /// change is audited. Nullable uuid with no foreign key, so adding it is metadata-only and cannot fail on existing data. Soft link by
+    /// design: administration records are never deleted.
+    /// </summary>
+    public Guid? SupersededByAdministrationId { get; set; }
+
+    /// <summary>
     /// True when the recording user did NOT hold a current Medication Competency at the time (provider mode Warn lets the record through and
     /// flags it here; in Enforce mode such a record is refused, so it can only be false). A permanent fact about the record, never recomputed
     /// from the user later. NOT NULL with the constant default false: every existing record reads false.

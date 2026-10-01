@@ -8,7 +8,8 @@ namespace Odip.Application.Common;
 /// </summary>
 public static class MedicationErrorCodes
 {
-    /// <summary>409: the scheduled dose slot already has a record. The response <c>data</c> is that record.</summary>
+    /// <summary>409: the scheduled dose slot already has an ACTIVE record that this request cannot supersede (only an Administered record
+    /// supersedes a Refused or Missed one). The response <c>data</c> is that record.</summary>
     public const string AdministrationAlreadyRecorded = "ADMINISTRATION_ALREADY_RECORDED";
 
     /// <summary>400: the idempotency key was already used for a different medication.</summary>

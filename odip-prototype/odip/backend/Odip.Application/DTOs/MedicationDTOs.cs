@@ -180,6 +180,10 @@ public record AdministrationDto
     /// accepted and flagged for review. Always false in Enforce mode and for records that predate the flag.</summary>
     public bool RecordedWithoutCompetency { get; init; }
 
+    /// <summary>Set on a Refused or Missed record that a later Administered record superseded: the id of the replacement. Null = the active record
+    /// for its slot. Superseded records stay in the history lists; the MAR and the shift package show only the active one.</summary>
+    public Guid? SupersededByAdministrationId { get; init; }
+
     /// <summary>Connection-map reverse link (Deliverable 2): id of the newest active
     /// <see cref="Odip.Domain.Entities.IncidentReport"/> whose MedicationAdministrationId points
     /// back at this administration, or null when none does.</summary>
