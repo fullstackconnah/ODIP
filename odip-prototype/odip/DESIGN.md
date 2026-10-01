@@ -362,6 +362,13 @@ link with a line to itself ("View All", "← Back to Trips"): the link is 44px t
 height on touch and needs no neighbour spacing. Controls that already floor to `--tap-min` (Tabs, sidebar and drawer items,
 bottom-nav links, the header switchers) need neither.
 
+### Page states
+
+A page that does not have its record yet shows `PageState` in place of itself, never a `div` of its own: **loading** (a muted, centred "Loading trip…", a polite
+status), **error** (a danger Callout, announced at once, with "Try again" when a retry exists) and **not found** (the message, and a Back to where the user can go).
+They are three facts and three states: a failed request is not a missing record, and a 404 from the API is the answer "no such record", not a failure. None of them
+adds a heading: the screen's one `h1` still comes from `PageHeader`.
+
 ## Elevation & Depth
 
 Depth is tonal, not shadowed. Cards are flat, white and bordered; separation comes from Warm Paper
@@ -469,7 +476,7 @@ the room ("Grace Palmer-Hughes" reads whole at 1920).
   stays even whichever are gated out, and each has a `--tap-min` floor; the bar has no create action. The
   active item is olive text. The open drawer and its scrim sit above the bottom bar (z 60 and 55 over 50;
   from `lg` the sidebar drops back to 50 so modals still cover it), so "Sign Out" is never covered by it.
-- **Tabs:** `text-sm` medium, olive underline on the active tab, `--tap-min` minimum height; count
+- **Tabs:** `text-sm` medium, olive underline on the active tab, `--tap-min` minimum height; the active tab lives in the URL (`?tab=`, through `useTabParam`: written with `replace`, dropped at the default, other params kept), so a reload and a shared link land on the same tab; count
   chips are round. Below `md` the strip is ONE row that scrolls sideways (`flex-nowrap`, scrollbar hidden),
   so ten tabs cost a single 44px row on a phone instead of five wrapped ones, and the active tab is scrolled
   into view inside the strip when it changes; from `md` the strip wraps as it always did. Keyboard
@@ -504,6 +511,11 @@ their own facts to tones. It stops at the header: the tab strip and every panel 
   Tasks, 2, Action Needed"). Two columns (2×2) below 768px, one row from there; a chip that does not fit wraps under its figure instead
   of overflowing. Figures are counts, ratios or short amounts: anything longer belongs in a `FactList`. A ratio is always spelled
   "x / y", a space each side of the slash, through the one `formatRatio` formatter (`glanceRatio` is its earlier name), so no two figures drift ("12 / 10" beside "12/14").
+
+- **Back.** `BackButton` is the header's first action: secondary, an arrow and the word "Back", and it names its destination ("Back to staff") in its
+  accessible name, so the one word on screen never leaves a screen-reader user guessing. It is always a real link, 44px on touch, and has three shapes: the secondary
+  `button` in the action cluster, a ghost `icon` square beside the title on a form or wizard page, and a `link` for a page with no cluster (the portal). Where it
+  goes is `to`; with `history` on (the default) the previous in-app screen wins and `to` is the fallback for a deep link.
 
 **The Attention Tint Rule.** A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family:
 `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Everything in
@@ -618,6 +630,7 @@ issue counts.
 - **Do** derive a glance segment's chip and tint from one tone with `glanceState`
 - **Do** colour a status by its tone: add the word to `STATUS_TONE` (or pass a `colorMap` of tones for a domain whose word means something else), never a class string of its own
 - **Do** make nouns agree with counts through `plural()`, spell ratios through `formatRatio()` ("x / y") and relative times through `formatRelative()` (`src/lib/format.ts`), and state a dated deadline through `deadlineState()` and `deadlineLabel()` (`src/lib/deadline.ts`), never by hand
+- **Do** early-return a record that is loading, failed or missing through `PageState`, give a detail page one `BackButton` that names its destination, and keep its active tab in the URL with `useTabParam`
 - **Do** put what needs action in the attention band and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on
 - **Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed ("Couldn't load"), and never an "All clear" without data
 - **Do** use `Button` for every action; it owns height, radius and focus
