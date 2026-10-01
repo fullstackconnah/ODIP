@@ -225,8 +225,18 @@ describe('finish-review corrections', () => {
     expect(`${visibleText} ${altText}`).not.toMatch(/\brooms?\b/i)
   })
 
-  it('defines QSC once, as the NDIS Commission, in a caption', () => {
-    expect(visibleText.split('QSC is the NDIS Commission').length - 1).toBe(1)
+  it('defines QSC once, by its full name (the NDIS Quality and Safeguards Commission), in a caption', () => {
+    expect(visibleText.split('QSC is the NDIS Quality and Safeguards Commission').length - 1).toBe(1)
+    expect(visibleText).not.toContain('QSC is the NDIS Commission')
+  })
+
+  it('words the shift-note caption as what the screen shows (a keyword prompt), not as detection', () => {
+    // ShiftNoteFlagging.cs is advisory: it scans a note for injury words, with false positives and false negatives.
+    const fig = Array.from(doc.querySelectorAll('#stage-care figure')).find((f) => f.querySelector('img')!.getAttribute('src')!.includes('care-shift-notes-phone'))!
+    expect(fig.querySelector('figcaption')!.textContent!.replace(/\s+/g, ' ').trim()).toBe(
+      'Sample data A shift note that mentions an injury prompts an incident report.',
+    )
+    expect(visibleText).not.toMatch(/shift notes flag/i)
   })
 
   it('puts the dashboard, the roster checks, the claim checks and the audit history on screen, not only in words', () => {
