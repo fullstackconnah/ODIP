@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act } from 'react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ShiftSlideOver } from './ShiftSlideOver'
 import { makeShift, makeFinding } from '../test-fixtures'
@@ -800,5 +801,484 @@ describe('ShiftSlideOver shift notes (NOTES-01, read-only)', () => {
     )
 
     expect(screen.getByText('falls and medication')).toBeInTheDocument()
+  })
+})
+
+// ── Participant readiness (WARN mode) ────────────────────────────────────────────────────────────────────────────────
+// The server either lets the write through and reports what is missing (Warn), or refuses with a 400 whose message is
+// "Participant is not ready for booking or rostering." (Enforce). The panel must show that real message, never the generic
+// line, keep what the user typed, and never block a save on the quiet warning.
+const NOT_READY_MESSAGE = 'Participant is not ready for booking or rostering.'
+const GENERIC_SHIFT_ERROR = /Something went wrong saving this shift/i
+
+/** What axios rejects with for a 400 carrying the API's ApiResponse envelope. */
+function badRequest(...errors: string[]) {
+  return { response: { status: 400, data: { success: false, errors } } }
+}
+
+describe('ShiftSlideOver — the server\'s refusal reaches the user', () => {
+  it('create: shows the server\'s own message, not the generic line, keeps what was typed, and sent the full body', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(badRequest(NOT_READY_MESSAGE))
+    const onClose = vi.fn()
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'create', participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17' }}
+        onClose={onClose}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    await user.type(screen.getByLabelText('Notes'), 'Bring the sling')
+    await user.click(screen.getByLabelText('Ends the next day'))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync).toHaveBeenCalledWith({
+      participantId: 'participant-1',
+      staffId: null,
+      serviceDate: '2026-08-17',
+      startTime: '09:00',
+      endTime: '09:00',
+      endsNextDay: true,
+      ratio: 'OneToOne',
+      nightType: 'None',
+      status: 'Draft',
+      notes: 'Bring the sling',
+      overrideReason: null,
+      acknowledgedFindingCodes: [],
+    })
+    const message = await screen.findByText(NOT_READY_MESSAGE)
+    expect(message.closest('[role="alert"]')).not.toBeNull()
+    expect(screen.queryByText(GENERIC_SHIFT_ERROR)).not.toBeInTheDocument()
+    // The panel stays open and the form is exactly as the user left it.
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Notes')).toHaveValue('Bring the sling')
+    expect(screen.getByLabelText('Ends the next day')).toBeChecked()
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
+  })
+
+  it('edit: shows the server\'s own message, keeps the edited values, and sent the full body', async () => {
+    const user = userEvent.setup()
+    mockUpdateMutateAsync.mockRejectedValueOnce(badRequest(NOT_READY_MESSAGE))
+    const shift = makeShift({ status: 'Published', findings: [], notes: null })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    await user.type(screen.getByLabelText('Notes'), 'Swap with Tuesday')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({
+      id: 'shift-1',
+      data: {
+        participantId: 'participant-1',
+        staffId: 'staff-1',
+        serviceDate: '2026-08-17',
+        startTime: '09:00',
+        endTime: '17:00',
+        endsNextDay: false,
+        ratio: 'OneToOne',
+        nightType: 'None',
+        status: 'Published',
+        notes: 'Swap with Tuesday',
+        overrideReason: null,
+        acknowledgedFindingCodes: [],
+      },
+    })
+    expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
+    expect(screen.queryByText(GENERIC_SHIFT_ERROR)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Notes')).toHaveValue('Swap with Tuesday')
+  })
+
+  it('reads the top-level message when the error has no errors list', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce({ response: { status: 400, data: { success: false, message: 'Participant is archived.' } } })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'create', participantId: 'participant-1' }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(await screen.findByText('Participant is archived.')).toBeInTheDocument()
+    expect(screen.queryByText(GENERIC_SHIFT_ERROR)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['a network failure with no response', new Error('Network Error')],
+    ['a 500 with an empty body', { response: { status: 500, data: {} } }],
+    ['a 400 with an empty errors list', { response: { status: 400, data: { success: false, errors: [] } } }],
+  ])('falls back to the generic line for %s', async (_label, failure) => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(failure)
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'create', participantId: 'participant-1' }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(await screen.findByText('Something went wrong saving this shift. Please try again.')).toBeInTheDocument()
+    expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
+  })
+
+  it('keeps the 422 findings protocol first: the findings show, and the response\'s own errors line is not made the error', async () => {
+    const user = userEvent.setup()
+    const finding = makeFinding({ code: 'STAFF_LEAVE_PENDING', severity: 'Warning', message: 'Pending leave overlaps this window.', requiresReason: false })
+    mockGetRosterFindings.mockReturnValueOnce([finding] as never)
+    mockCreateMutateAsync.mockRejectedValueOnce({ response: { status: 422, data: { success: false, errors: ['Roster findings need review.'], data: [finding] } } })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'create', participantId: 'participant-1' }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(await screen.findByText('Pending leave overlaps this window.')).toBeInTheDocument()
+    expect(screen.queryByText('Roster findings need review.')).not.toBeInTheDocument()
+    expect(screen.queryByText(GENERIC_SHIFT_ERROR)).not.toBeInTheDocument()
+  })
+})
+
+describe('ShiftSlideOver — readiness note (WARN mode)', () => {
+  const ISSUES = ['Intake not complete', 'No signed service agreement']
+  const WARNING = 'Not ready: Intake not complete · No signed service agreement'
+
+  it('shows the quiet warning directly under the Participant field, and the shift still saves with the same body', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockResolvedValueOnce(makeShift({ readinessIssues: ISSUES }))
+    const onClose = vi.fn()
+    const { container } = render(
+      <ShiftSlideOver
+        target={{ mode: 'create', participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17' }}
+        onClose={onClose}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+        participantReadiness={{ 'participant-1': ISSUES }}
+      />,
+    )
+
+    const note = screen.getByText(WARNING)
+    expect(note.closest('[title]')).toHaveAttribute('title', WARNING)
+    // Under the Participant field, inside its own block, after the picker.
+    const participantBlock = container.querySelector('[data-shift-field="participant"]') as HTMLElement
+    expect(participantBlock).toContainElement(note)
+    const picker = screen.getByLabelText(/^participant/i)
+    expect(participantBlock).toContainElement(picker)
+    expect(Boolean(picker.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    // Informational: not an alert, and Save is as available as ever.
+    expect(note.closest('[role="alert"]')).toBeNull()
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledWith({
+      participantId: 'participant-1',
+      staffId: null,
+      serviceDate: '2026-08-17',
+      startTime: '09:00',
+      endTime: '09:00',
+      endsNextDay: false,
+      ratio: 'OneToOne',
+      nightType: 'None',
+      status: 'Draft',
+      notes: null,
+      overrideReason: null,
+      acknowledgedFindingCodes: [],
+    })
+    expect(mockCreateMutateAsync.mock.calls[0][0]).not.toHaveProperty('readinessIssues')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('follows the participant dropdown: the warning of whoever is selected, nothing for a ready participant', async () => {
+    const user = userEvent.setup()
+    const options = [
+      { value: 'p1', label: 'Mia Chen' },
+      { value: 'p2', label: 'Noah Reid' },
+      { value: 'p3', label: 'Ivy Tran' },
+    ]
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'create', serviceDate: '2026-08-17' }}
+        onClose={noop}
+        canWrite
+        participantOptions={options}
+        staffOptions={staffOptions}
+        participantReadiness={{
+          p1: ['Intake not complete'],
+          p2: [],
+          p3: ['Onboarding not complete: profile', 'No signed service agreement'],
+        }}
+      />,
+    )
+    expect(screen.queryByText(/not ready/i)).not.toBeInTheDocument()
+
+    await user.click(screen.getByLabelText(/^participant/i))
+    await user.click(screen.getByRole('option', { name: 'Mia Chen' }))
+    expect(screen.getByText('Not ready: Intake not complete')).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText(/^participant/i))
+    await user.click(screen.getByRole('option', { name: 'Noah Reid' }))
+    expect(screen.queryByText(/not ready/i)).not.toBeInTheDocument()
+
+    await user.click(screen.getByLabelText(/^participant/i))
+    await user.click(screen.getByRole('option', { name: 'Ivy Tran' }))
+    expect(screen.getByText('Not ready: Onboarding not complete: profile · No signed service agreement')).toBeInTheDocument()
+    expect(screen.queryByText('Not ready: Intake not complete')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
+  })
+
+  it('edit: falls back to the shift\'s own readinessIssues when the list does not know the participant', () => {
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift: makeShift({ readinessIssues: ['Intake not complete'] }) }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+        participantReadiness={{}}
+      />,
+    )
+
+    expect(screen.getByText('Not ready: Intake not complete')).toBeInTheDocument()
+  })
+
+  it('edit: shows the shift\'s own readinessIssues when no list is given at all', () => {
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift: makeShift({ readinessIssues: ['No signed service agreement'] }) }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    expect(screen.getByText('Not ready: No signed service agreement')).toBeInTheDocument()
+  })
+
+  it('edit: a list that says the participant is ready wins over the shift\'s older snapshot', () => {
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift: makeShift({ readinessIssues: ['Intake not complete'] }) }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+        participantReadiness={{ 'participant-1': [] }}
+      />,
+    )
+
+    expect(screen.queryByText(/not ready/i)).not.toBeInTheDocument()
+  })
+
+  it('draws nothing for a participant with no issues, with or without the prop', () => {
+    const { rerender } = render(
+      <ShiftSlideOver
+        target={{ mode: 'create', participantId: 'participant-1' }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+    expect(screen.queryByText(/not ready/i)).not.toBeInTheDocument()
+
+    rerender(
+      <ShiftSlideOver
+        target={{ mode: 'create', participantId: 'participant-1' }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+        participantReadiness={{ 'participant-1': [] }}
+      />,
+    )
+    expect(screen.queryByText(/not ready/i)).not.toBeInTheDocument()
+  })
+
+  it('never changes what Save is allowed to do: readiness issues alone never disable it, Blocking findings still do', () => {
+    const { unmount } = render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift: makeShift({ findings: [], readinessIssues: ISSUES }) }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+        participantReadiness={{ 'participant-1': ISSUES }}
+      />,
+    )
+    expect(screen.getByText(WARNING)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
+    unmount()
+
+    // A fresh mount (the board keys the panel by shift): the same warning alongside a Blocking finding still disables Save, for its own reason.
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift: makeShift({ findings: [makeFinding({ severity: 'Blocking', message: 'Hard conflict' })], readinessIssues: ISSUES }) }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+        participantReadiness={{ 'participant-1': ISSUES }}
+      />,
+    )
+    expect(screen.getByText(WARNING)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+  })
+})
+
+// ── The live dry-run is gated too ────────────────────────────────────────────────────────────────────────────────────
+// POST /rostering/shifts/check runs the same readiness gate as the save, so in Enforce mode (or for an inactive participant, in either
+// mode) it answers 400 with the same message. The panel used to ignore a failed preview, so the user learned it only at Save.
+describe('ShiftSlideOver — the live dry-run\'s refusal', () => {
+  const twoParticipants = [
+    { value: 'participant-1', label: 'Mia Chen' },
+    { value: 'participant-2', label: 'Noah Reid' },
+  ]
+  type PreviewCallbacks = { onSuccess?: (findings: unknown[]) => void; onError?: (err: unknown) => void }
+
+  afterEach(() => {
+    mockCheckMutate.mockReset()
+  })
+
+  function renderCreate(participantOptionsToUse = twoParticipants) {
+    return render(
+      <ShiftSlideOver
+        target={{ mode: 'create', participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17' }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptionsToUse}
+        staffOptions={staffOptions}
+      />,
+    )
+  }
+
+  it('shows the server\'s message as soon as the preview is refused, with no Save needed, and never disables Save', async () => {
+    mockCheckMutate.mockImplementation((_candidate: unknown, opts?: PreviewCallbacks) => opts?.onError?.(badRequest(NOT_READY_MESSAGE)))
+    renderCreate()
+
+    const message = await screen.findByText(NOT_READY_MESSAGE)
+    expect(message.closest('[role="alert"]')).not.toBeNull()
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled()
+    expect(mockCheckMutate).toHaveBeenCalledWith(
+      { id: undefined, participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '09:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None' },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    )
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
+  })
+
+  it('hides it the moment the candidate changes, and shows nothing once the new candidate previews fine', async () => {
+    const user = userEvent.setup()
+    mockCheckMutate.mockImplementation((candidate: { participantId: string }, opts?: PreviewCallbacks) => {
+      if (candidate.participantId === 'participant-1') opts?.onError?.(badRequest(NOT_READY_MESSAGE))
+      else opts?.onSuccess?.([])
+    })
+    renderCreate()
+    expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText(/^participant/i))
+    await user.click(screen.getByRole('option', { name: 'Noah Reid' }))
+
+    // Gone at once (it was about Mia), before the next preview has even been asked.
+    expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenCalledWith(expect.objectContaining({ participantId: 'participant-2' }), expect.anything()))
+    expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
+  })
+
+  it('never shows a late reply for an older candidate', async () => {
+    const user = userEvent.setup()
+    const pending: Array<{ candidate: { participantId: string }; opts: PreviewCallbacks }> = []
+    mockCheckMutate.mockImplementation((candidate: { participantId: string }, opts?: PreviewCallbacks) => { pending.push({ candidate, opts: opts ?? {} }) })
+    renderCreate()
+    await waitFor(() => expect(pending).toHaveLength(1))
+
+    await user.click(screen.getByLabelText(/^participant/i))
+    await user.click(screen.getByRole('option', { name: 'Noah Reid' }))
+    await waitFor(() => expect(pending).toHaveLength(2))
+
+    // Mia's preview is refused after the user has moved on to Noah: it is about a candidate that is no longer on screen.
+    await act(async () => { pending[0].opts.onError?.(badRequest(NOT_READY_MESSAGE)) })
+    expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
+
+    // Noah's own refusal does show.
+    await act(async () => { pending[1].opts.onError?.(badRequest('Participant is archived.')) })
+    expect(await screen.findByText('Participant is archived.')).toBeInTheDocument()
+  })
+
+  it('says nothing when the preview fails without a server message (a network blip, a 500)', async () => {
+    mockCheckMutate.mockImplementation((_candidate: unknown, opts?: PreviewCallbacks) => opts?.onError?.(new Error('Network Error')))
+    renderCreate()
+
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
+  })
+
+  it('shows the same message once, not twice, when the save is refused with it too, and the save still sends the full body', async () => {
+    const user = userEvent.setup()
+    mockCheckMutate.mockImplementation((_candidate: unknown, opts?: PreviewCallbacks) => opts?.onError?.(badRequest(NOT_READY_MESSAGE)))
+    mockCreateMutateAsync.mockRejectedValueOnce(badRequest(NOT_READY_MESSAGE))
+    renderCreate()
+    await screen.findByText(NOT_READY_MESSAGE)
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledWith({
+      participantId: 'participant-1',
+      staffId: null,
+      serviceDate: '2026-08-17',
+      startTime: '09:00',
+      endTime: '09:00',
+      endsNextDay: false,
+      ratio: 'OneToOne',
+      nightType: 'None',
+      status: 'Draft',
+      notes: null,
+      overrideReason: null,
+      acknowledgedFindingCodes: [],
+    })
+    await waitFor(() => expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1))
+    expect(screen.getAllByText(NOT_READY_MESSAGE)).toHaveLength(1)
+  })
+
+  it('clears a save\'s refusal when another participant is picked: it was about the participant it was for', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(badRequest(NOT_READY_MESSAGE))
+    renderCreate()
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText(/^participant/i))
+    await user.click(screen.getByRole('option', { name: 'Noah Reid' }))
+
+    expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
   })
 })

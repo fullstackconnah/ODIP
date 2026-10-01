@@ -37,6 +37,9 @@ export interface ShiftDto {
    * `findings` (those are computed at assign-time). Renders as a distinct "On leave" hole on the
    * board rather than a normal filled chip. */
   assigneeOnApprovedLeave: boolean
+  /** What is still missing for this shift's participant (e.g. "Intake not complete"), shown verbatim as a
+   * quiet warning. Omitted by the server when there is nothing missing. Never blocks a save in Warn mode. */
+  readinessIssues?: string[]
 }
 
 // ── Shift Notes (NOTES-01) — shared shape read by both the portal (own-shift
@@ -218,6 +221,9 @@ export interface RosterParticipantRowDto {
   tripBars: TripBarDto[]
   scheduledHours: number
   daysWithoutCover: number    // days in the week with no shift and no trip
+  /** What is still missing for this participant (e.g. "No signed service agreement"), shown verbatim as a
+   * quiet warning. Omitted by the server when there is nothing missing. */
+  readinessIssues?: string[]
 }
 
 export interface RosterExceptionDto {

@@ -8,12 +8,13 @@ import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
+import { ToggleGroup } from '@/components/ToggleGroup'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { formatDateAu } from '@/lib/utils'
+import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import TemplateFormPanel from '@/components/TemplateFormPanel'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
-import type { EventTemplateDto, ActivityDto, ProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
+import type { EventTemplateDto, ActivityDto, ProviderSettingsDto, ParticipantReadinessMode, UpsertProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
 import type { AxiosError } from 'axios'
 import TenantsTab from '@/pages/settings/TenantsTab'
 import TenantFormPanel from '@/pages/settings/TenantFormPanel'
@@ -290,15 +291,31 @@ export default function SettingsPage() {
   )
 }
 
+const READINESS_MODE_OPTIONS: { key: ParticipantReadinessMode; label: string }[] = [
+  { key: 'Warn', label: 'Warn only' },
+  { key: 'Enforce', label: 'Enforce' },
+]
+
 function ProviderSettingsTab() {
   const { canEditProviderSettings, showBankDetails } = usePermissions()
-  const { data: settings } = useProviderSettings()
+  const { data: settings, isLoading } = useProviderSettings()
   const upsert = useUpsertProviderSettings()
   const [form, setForm] = useState<Partial<ProviderSettingsDto>>({})
   const [init, setInit] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
+  // The readiness check is kept out of `form` on purpose. `serverMode` is the server's current value (an org with no settings row yet is
+  // Warn); `modePick` is what the user chose on the control, with the server value they chose it against. Only a deliberate pick that
+  // differs from the server is ever sent. A pick is good only while the server still holds the value it was made against: once that
+  // moves on (our own save landed, or another admin changed it) the pick is dropped for good, so a stale tab can never push an old
+  // choice back over a newer one, not even if the server later returns to the value the pick was made against.
+  const serverMode: ParticipantReadinessMode = settings?.participantReadinessMode ?? 'Warn'
+  const [modePick, setModePick] = useState<{ value: ParticipantReadinessMode; base: ParticipantReadinessMode } | null>(null)
+  if (modePick && modePick.base !== serverMode) setModePick(null)
+  const pickedMode = modePick && modePick.base === serverMode ? modePick.value : null
+  const shownMode = pickedMode ?? serverMode
+  const modeChanged = pickedMode !== null && pickedMode !== serverMode
 
   if (settings && !init) { setForm(settings); setInit(true) }
 
@@ -318,15 +335,20 @@ function ProviderSettingsTab() {
 
   function handleSave() {
     setError(null)
-    upsert.mutate(form as import('@/api/types').UpsertProviderSettingsDto, {
+    // `form` is the whole GET response, so it carries `participantReadinessMode` as it was when this tab loaded. That must never go back up
+    // as it is: the server changes the mode whenever the field is present, so a stale tab saving an unrelated field (a manager name) would
+    // silently revert a mode another admin has since set. Strip it, then add it back only for a deliberate change.
+    const body: Partial<ProviderSettingsDto> = { ...form }
+    delete body.participantReadinessMode
+    const payload = body as UpsertProviderSettingsDto
+    if (modeChanged) payload.participantReadinessMode = shownMode
+    upsert.mutate(payload, {
       onSuccess: () => { setDirty(false); setSaved(true); setTimeout(() => setSaved(false), 2000) },
       onError: (err: unknown) => {
-        const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-        const status = axiosErr?.response?.status
-        const msg = axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message
+        const status = (err as AxiosError)?.response?.status
         if (status === 403) setError('Admin role is required to update provider settings. Ask an Admin to make this change.')
-        else if (status === 400) setError(msg || 'Validation failed — check Registration Number, ABN, Organisation Name and Address are filled in.')
-        else setError(msg || 'Failed to save. Please try again.')
+        else if (status === 400) setError(extractErrorMessage(err, 'Validation failed — check Registration Number, ABN, Organisation Name and Address are filled in.'))
+        else setError(extractErrorMessage(err, 'Failed to save. Please try again.'))
       },
     })
   }
@@ -379,6 +401,19 @@ function ProviderSettingsTab() {
           <div><label className={labelClass}>Manager Name</label><input {...f('managerName')} placeholder="e.g. Priya Sharma" /></div>
           <div><label className={labelClass}>Manager Phone</label><input {...f('managerPhone')} placeholder="e.g. 0412 345 007" /></div>
         </div>
+      </div>
+      <div>
+        <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Participant readiness check</h2>
+        <p className="text-sm text-[var(--color-muted-foreground)] mb-3">
+          Warn only: staff can roster, book and activate participants who are not fully ready, and the gaps show as warnings. Enforce: participants must be fully ready first.
+        </p>
+        <ToggleGroup
+          ariaLabel="Participant readiness check"
+          options={READINESS_MODE_OPTIONS}
+          value={shownMode}
+          onChange={v => { setModePick({ value: v as ParticipantReadinessMode, base: serverMode }); setDirty(true) }}
+          disabled={!canEditProviderSettings || isLoading}
+        />
       </div>
       <div>
         <h2 className="font-semibold text-[var(--color-foreground)] mb-2">Invoice Footer Notes</h2>

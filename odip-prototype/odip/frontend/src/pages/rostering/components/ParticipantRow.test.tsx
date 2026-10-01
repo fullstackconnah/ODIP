@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ParticipantRow } from './ParticipantRow'
 import { makeParticipantRow, WEEK_DAYS } from '../test-fixtures'
+import { TONE } from '@/lib/tone'
 
 function noop() {}
 
@@ -175,5 +176,89 @@ describe('ParticipantRow header — coverage badge (a compact count; the words a
     const { container } = renderRow({ hasRestrictivePractice: true, daysWithoutCover: 6 })
 
     expect(container.querySelector('.sr-only')).toBeNull()
+  })
+})
+
+// A participant who is not fully ready carries a quiet warning chip in the name group. It is informational (WARN mode never blocks),
+// and it must not cost the row its one --row-h line or its name; a participant with nothing missing must render exactly as before.
+describe('ParticipantRow header — readiness chip', () => {
+  const ISSUES = ['Intake not complete', 'No signed service agreement']
+  const WARNING = 'Not ready: Intake not complete · No signed service agreement'
+
+  it('draws no chip, and leaves the header markup exactly as it was, for a participant with nothing missing', () => {
+    const { unmount } = renderRow({ fullName: 'Mia Chen', hasRestrictivePractice: true, daysWithoutCover: 3 })
+    const before = headerOf('Mia Chen').innerHTML
+    unmount()
+
+    for (const readinessIssues of [undefined, [] as string[]]) {
+      const { unmount: unmountThis } = renderRow({ fullName: 'Mia Chen', hasRestrictivePractice: true, daysWithoutCover: 3, readinessIssues })
+      expect(headerOf('Mia Chen').innerHTML).toBe(before)
+      expect(screen.queryByText(/not ready/i)).not.toBeInTheDocument()
+      unmountThis()
+    }
+  })
+
+  it('puts the chip in the name group, after the name and the restrictive-practice marker and ahead of the ratio chip and coverage badge', () => {
+    renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, daysWithoutCover: 6, readinessIssues: ISSUES })
+
+    const name = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
+    const marker = screen.getByRole('img', { name: 'Restrictive practice authorised' })
+    const chip = screen.getByText(WARNING).closest('[title]') as HTMLElement
+    const ratio = screen.getByRole('img', { name: '1:1 support' })
+    const badge = screen.getByRole('img', { name: '6 days uncovered' })
+
+    expect(name.parentElement).toContainElement(chip)
+    expect(isBefore(name, marker)).toBe(true)
+    expect(isBefore(marker, chip)).toBe(true)
+    expect(isBefore(chip, ratio)).toBe(true)
+    expect(isBefore(chip, badge)).toBe(true)
+  })
+
+  it('carries the whole text in its title and wears the warning tone, nothing else', () => {
+    renderRow({ readinessIssues: ISSUES })
+
+    const chip = screen.getByText(WARNING).closest('[title]') as HTMLElement
+    expect(chip).toHaveAttribute('title', WARNING)
+    for (const cls of TONE.warning.solid.split(' ')) expect(chip).toHaveClass(cls)
+    // Informational: no alert, nothing to press.
+    expect(chip).not.toHaveAttribute('role')
+    expect(chip.closest('[role="alert"]')).toBeNull()
+    expect(chip.querySelector('button, input, a')).toBeNull()
+  })
+
+  it('stays on the one --row-h line and gives the name the room first: it takes what is left (never stretched past its text), shrinks to its icon, and truncates', () => {
+    renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, daysWithoutCover: 6, readinessIssues: ISSUES })
+
+    const head = headerOf('Grace Palmer-Hughes')
+    const chip = screen.getByText(WARNING).closest('[title]') as HTMLElement
+    // Same single flex line as before: the header is not stacked and not taller than its token.
+    expect(head).toHaveClass('flex', 'items-center', 'min-h-[var(--row-h)]')
+    expect(head).not.toHaveClass('flex-col')
+    // Sized like the row's other chips (h-5, rounded-sm, px-1.5), so it adds no height to a 34px row.
+    expect(chip).toHaveClass('h-5', 'rounded-sm', 'px-1.5')
+    expect(chip).not.toHaveClass('rounded-full')
+    // The room it takes: the leftover after the name (flex-1), up to its own text width (max-w-max), never below its icon (min-w-6).
+    expect(chip).toHaveClass('flex-1', 'min-w-6', 'max-w-max')
+    expect(screen.getByText(WARNING)).toHaveClass('min-w-0', 'truncate')
+  })
+
+  it('does not change what the name does: it still truncates with its title, in a group that can shrink', () => {
+    renderRow({ fullName: 'Grace Palmer-Hughes', readinessIssues: ISSUES })
+
+    const name = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
+    expect(name).toHaveClass('min-w-0', 'truncate')
+    expect(name).toHaveAttribute('title', 'Grace Palmer-Hughes')
+    expect(name.parentElement).toHaveClass('min-w-0')
+  })
+
+  it('leaves the ratio chip and coverage badge as they were: shrink-0 and in the right-hand group', () => {
+    renderRow({ daysWithoutCover: 6, readinessIssues: ISSUES })
+
+    const ratio = screen.getByRole('img', { name: '1:1 support' })
+    const badge = screen.getByRole('img', { name: '6 days uncovered' })
+    const tail = ratio.parentElement as HTMLElement
+    expect(tail).toHaveClass('shrink-0', 'ml-auto', 'gap-2')
+    expect(tail).toContainElement(badge)
+    expect(tail.textContent).not.toMatch(/not ready/i)
   })
 })

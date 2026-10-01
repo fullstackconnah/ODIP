@@ -200,3 +200,121 @@ describe('PatternSlideOver Default staff field — SearchableSelect (DS-01/UX-01
     expect(screen.getByRole('combobox', { name: 'Default staff' })).toBeDisabled()
   })
 })
+
+// ── The server's refusal (readiness Enforce mode) ────────────────────────────────────────────────────────────────────
+// In Enforce mode the API answers a pattern write for a participant who is not ready with a 400 carrying
+// "Participant is not ready for booking or rostering." The panel used to swallow it behind a generic line.
+const NOT_READY_MESSAGE = 'Participant is not ready for booking or rostering.'
+const GENERIC_PATTERN_ERROR = 'Something went wrong saving this pattern. Please try again.'
+
+/** What axios rejects with for a 400 carrying the API's ApiResponse envelope. */
+function badRequest(...errors: string[]) {
+  return { response: { status: 400, data: { success: false, errors } } }
+}
+
+describe('PatternSlideOver — the server\'s refusal reaches the user', () => {
+  it('edit: shows the server\'s own message, not the generic line, keeps the edited values, and sent the full body', async () => {
+    const user = userEvent.setup()
+    mockUpdateMutateAsync.mockRejectedValueOnce(badRequest(NOT_READY_MESSAGE))
+    const onClose = vi.fn()
+    render(
+      <PatternSlideOver
+        target={{ mode: 'edit', pattern: makePattern() }}
+        onClose={onClose}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    await user.type(screen.getByLabelText('Notes'), 'Fortnightly review')
+    await user.click(screen.getByLabelText('Ends the next day'))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({
+      id: 'pattern-1',
+      data: {
+        participantId: 'participant-1',
+        defaultStaffId: 'staff-1',
+        dayOfWeek: 'Monday',
+        startTime: '09:00',
+        endTime: '17:00',
+        endsNextDay: true,
+        ratio: 'OneToOne',
+        nightType: 'None',
+        effectiveFrom: '2026-01-01',
+        effectiveTo: null,
+        isActive: true,
+        notes: 'Fortnightly review',
+      },
+    })
+    const message = await screen.findByText(NOT_READY_MESSAGE)
+    expect(message.closest('[role="alert"]')).not.toBeNull()
+    expect(screen.queryByText(GENERIC_PATTERN_ERROR)).not.toBeInTheDocument()
+    // The panel stays open and the form is as the user left it.
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Notes')).toHaveValue('Fortnightly review')
+    expect(screen.getByLabelText('Ends the next day')).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+  })
+
+  it('create: shows the server\'s own message and sent the full body', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(badRequest(NOT_READY_MESSAGE))
+    render(
+      <PatternSlideOver
+        target={{ mode: 'create' }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    await user.click(screen.getByLabelText(/^participant/i))
+    await user.click(screen.getByRole('option', { name: 'Mia Chen' }))
+    await user.type(screen.getByLabelText(/effective from/i), '2026-10-05')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync).toHaveBeenCalledWith({
+      participantId: 'participant-1',
+      defaultStaffId: null,
+      dayOfWeek: 'Monday',
+      startTime: '09:00',
+      endTime: '09:00',
+      endsNextDay: false,
+      ratio: 'OneToOne',
+      nightType: 'None',
+      effectiveFrom: '2026-10-05',
+      effectiveTo: null,
+      isActive: true,
+      notes: null,
+    })
+    expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
+    expect(screen.queryByText(GENERIC_PATTERN_ERROR)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['a network failure with no response', new Error('Network Error')],
+    ['a 500 with an empty body', { response: { status: 500, data: {} } }],
+  ])('falls back to the generic line for %s', async (_label, failure) => {
+    const user = userEvent.setup()
+    mockUpdateMutateAsync.mockRejectedValueOnce(failure)
+    render(
+      <PatternSlideOver
+        target={{ mode: 'edit', pattern: makePattern() }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText(GENERIC_PATTERN_ERROR)).toBeInTheDocument()
+    expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
+  })
+})

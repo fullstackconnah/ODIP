@@ -8,6 +8,7 @@ import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useCreatePattern, useUpdatePattern, useDeletePattern } from '@/api/hooks'
 import { Button } from '@/components/Button'
+import { extractErrorMessage } from '@/lib/utils'
 import { modalGrid } from '@/lib/formGrid'
 import { useSlideOverA11y } from '../lib/useSlideOverA11y'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS } from '../lib/roster'
@@ -97,8 +98,10 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
         await createPattern.mutateAsync(payload)
       }
       onClose()
-    } catch {
-      setError('Something went wrong saving this pattern. Please try again.')
+    } catch (err: unknown) {
+      // The server's own words when it sent any (e.g. Enforce mode's "Participant is not ready for booking or rostering."),
+      // the generic line only when it did not. The form stays as the user left it.
+      setError(extractErrorMessage(err, 'Something went wrong saving this pattern. Please try again.'))
     }
   }
 

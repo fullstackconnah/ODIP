@@ -64,6 +64,16 @@ public class BookingsControllerTests
         return participant;
     }
 
+    /// <summary>
+    /// Puts the (default-tenant) organisation in Enforce mode: the strict, fail-closed readiness
+    /// rule these tests exercise. Warn is the default, so a test of the strict rule says so.
+    /// </summary>
+    private static void EnforceReadiness(OdipDbContext db, Guid tenantId = default)
+    {
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantReadinessMode = ParticipantReadinessMode.Enforce });
+        db.SaveChanges();
+    }
+
     private static CreateBookingDto BookingDto(Guid tripId, Guid participantId) => new()
     {
         TripInstanceId = tripId, ParticipantId = participantId,
@@ -108,6 +118,7 @@ public class BookingsControllerTests
     public async Task Create_IncompleteOnboarding_ReturnsBadRequest(string missing)
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
+        EnforceReadiness(db);
         var trip = SeedTrip(db);
         var participant = SeedParticipant(db);
         var onboarding = await db.ParticipantOnboardings.SingleAsync();
@@ -127,6 +138,7 @@ public class BookingsControllerTests
     public async Task Create_CompletedIntakeButNoOnboardingRecord_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
+        EnforceReadiness(db);
         var trip = SeedTrip(db);
         var participant = SeedParticipant(db, ready: false);
         participant.IntakeCompletedAt = DateTime.UtcNow;
@@ -172,6 +184,7 @@ public class BookingsControllerTests
     public async Task Create_PreExistingVerifiedEvidenceFromUnapprovedSource_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
+        EnforceReadiness(db);
         var trip = SeedTrip(db);
         var participant = SeedParticipant(db);
         var controller = new BookingsController(db);

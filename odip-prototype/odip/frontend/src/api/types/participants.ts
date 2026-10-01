@@ -262,6 +262,12 @@ export interface ParticipantListDto {
    * none of them assert on.
    */
   intakeCompletedAt?: string | null
+  /**
+   * What is still missing before this participant is fully ready to roster, book or activate (e.g. "Intake not complete",
+   * "No signed service agreement"), shown verbatim as a quiet warning. Omitted by the server when nothing is missing.
+   * Optional for the same reason as `intakeCompletedAt`: the many existing fixtures do not need to carry it.
+   */
+  readinessIssues?: string[]
 }
 
 export interface ParticipantDetailDto extends ParticipantListDto {

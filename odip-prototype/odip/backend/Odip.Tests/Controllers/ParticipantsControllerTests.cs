@@ -44,6 +44,16 @@ public class ParticipantsControllerTests
         return new OdipDbContext(options, tenant.Object);
     }
 
+    /// <summary>
+    /// Puts the (default-tenant) organisation in Enforce mode: the strict, fail-closed readiness
+    /// rule these tests exercise. Warn is the default, so a test of the strict rule says so.
+    /// </summary>
+    private static void EnforceReadiness(OdipDbContext db, Guid tenantId = default)
+    {
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantReadinessMode = Domain.Enums.ParticipantReadinessMode.Enforce });
+        db.SaveChanges();
+    }
+
     private static CreateParticipantDto MinimalCreateDto(string firstName = "Sophie", string lastName = "Brown") => new()
     {
         FirstName = firstName,
@@ -177,6 +187,7 @@ public class ParticipantsControllerTests
             new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = incomplete.Id },
             new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = foreignTenantId, ParticipantId = foreignOnly.Id });
         await db.SaveChangesAsync();
+        EnforceReadiness(db, tenantId);
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
 
         var result = await controller.GetAll(null, null, null, null, null, false, 1, 50, CancellationToken.None, operationalOnly: true);
@@ -405,6 +416,7 @@ public class ParticipantsControllerTests
     public async Task Update_ObservedCompleteIntakeAndClientActivationPayload_RemainsInactiveWithoutEvidence()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
+        EnforceReadiness(db);
         var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Audit", LastName = "Synthetic", IsActive = false, IsDraft = true };
         db.Participants.Add(participant);
         await db.SaveChangesAsync();
@@ -440,6 +452,7 @@ public class ParticipantsControllerTests
     public async Task Update_PreExistingVerifiedEvidenceFromUnapprovedSource_CannotActivate()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
+        EnforceReadiness(db);
         var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Approved", LastName = "Evidence", IsActive = false, IsDraft = true, IntakeCompletedAt = DateTime.UtcNow };
         db.Participants.Add(participant);
         SeedVerifiedAgreementEvidence(db, participant);
@@ -460,6 +473,7 @@ public class ParticipantsControllerTests
     public async Task Update_OldRowSnapshotAfterNewerDraft_CannotActivate()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
+        EnforceReadiness(db);
         var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Stale", LastName = "Revision", IsActive = false, IsDraft = true, IntakeCompletedAt = DateTime.UtcNow };
         db.Participants.Add(participant);
         SeedVerifiedAgreementEvidence(db, participant);
@@ -526,6 +540,7 @@ public class ParticipantsControllerTests
     public async Task Update_StaleOrForeignEvidence_CannotActivate(string caseName)
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
+        EnforceReadiness(db);
         var participant = new Participant { Id = Guid.NewGuid(), FirstName = "No", LastName = "Bypass", IsActive = false, IsDraft = true, IntakeCompletedAt = DateTime.UtcNow };
         db.Participants.Add(participant);
         SeedVerifiedAgreementEvidence(db, participant, caseName == "foreign" ? Guid.NewGuid() : null, caseName == "stale" ? 1 : 1);

@@ -8,9 +8,11 @@ import type { DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { ReadinessNote } from '@/components/ReadinessNote'
 import {
   useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, useCompatibility, useRosterShiftNotes, getRosterFindings,
 } from '@/api/hooks'
+import { extractErrorMessage } from '@/lib/utils'
 import { formatNoteTimestamp } from '@/lib/format'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { RosterGateFields } from './RosterGateFields'
@@ -40,6 +42,12 @@ export type ShiftSlideOverProps = {
   staffOptions: { value: string; label: string }[]
   /** Which board grouping opened this panel — only changes the "leave unassigned" hint copy, since an unfilled shift has no separate lane to point to in participant view. */
   groupBy?: 'participant' | 'staff'
+  /**
+   * participantId to what is still missing for them ("Intake not complete"), from the participants list. Shown as a quiet, never-blocking
+   * line under the Participant field for whoever is selected. A participant the list does not know about falls back to the shift's own
+   * `readinessIssues` in edit mode; an entry holding an empty list means "ready", and wins over that fallback.
+   */
+  participantReadiness?: Record<string, string[]>
 }
 
 /** Normalises a Shift/TimeOnly string ("HH:mm:ss" or "HH:mm") to the "HH:mm" a <input type="time"> needs. */
@@ -50,7 +58,7 @@ function toTimeInputValue(time: string | undefined): string {
 /** Sort-boost order for the Staff dropdown: Preferred first, then Allowed/no row, Excluded last. */
 const COMPATIBILITY_RANK = { Preferred: 0, Allowed: 1, Excluded: 2 } as const
 
-export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, groupBy = 'participant' }: ShiftSlideOverProps) {
+export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, groupBy = 'participant', participantReadiness }: ShiftSlideOverProps) {
   const titleId = useId()
   const staffCompatibilityNoticeId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
@@ -88,6 +96,12 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const [findings, setFindings] = useState<RosterFindingDto[]>(existing?.findings ?? [])
   const [reasonRequired, setReasonRequired] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The live dry-run below runs the same readiness gate as the save, so in Enforce mode (or for an inactive participant, in either
+  // mode) the server refuses it with the same 400 message. That is shown as soon as the preview says so, not only at Save. It is tied
+  // to the exact candidate it was computed for: it hides itself the moment any field of the candidate changes, and a late reply for an
+  // older candidate can never show. It never gates Save; a preview that fails without a server message (a network blip) says nothing.
+  const [previewRefusal, setPreviewRefusal] = useState<{ key: string; message: string } | null>(null)
+  const candidateKey = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType])
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const checkShift = useCheckShift()
@@ -147,9 +161,14 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         {
           onSuccess: f => {
             setFindings(f)
+            setPreviewRefusal(null)
             // A fresh dry-run can clear the finding that forced the reason (e.g. the coordinator
             // changed staff/date) — don't leave the error copy pinned once it no longer applies.
             if (!getRosterGate(f).needsReason) setReasonRequired(false)
+          },
+          onError: err => {
+            const message = extractErrorMessage(err, '')
+            setPreviewRefusal(message ? { key: candidateKey, message } : null)
           },
         },
       )
@@ -181,6 +200,10 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // findings (via getRosterGate) rather than warningFindings alone is equivalent here.
   const { blockingFindings, reasonRequiredFindings } = getRosterGate(findings)
   const isBusy = createShift.isPending || updateShift.isPending
+  // Informational only: never read by the save gate above or by the Save button, so it can never block a save.
+  const readinessIssues = participantReadiness?.[participantId] ?? existing?.readinessIssues
+  // A save's own failure wins; otherwise the dry-run's refusal of exactly what is on screen now (one box, so the same text never shows twice).
+  const shownError = error ?? (previewRefusal?.key === candidateKey ? previewRefusal.message : null)
 
   async function handleSave() {
     setError(null)
@@ -219,7 +242,9 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         setFindings(serverFindings)
         if (getRosterGate(serverFindings).needsReason && !overrideReason.trim()) setReasonRequired(true)
       } else {
-        setError('Something went wrong saving this shift. Please try again.')
+        // The server's own words when it sent any (e.g. Enforce mode's "Participant is not ready for booking or rostering."),
+        // the generic line only when it did not. The form stays as the user left it.
+        setError(extractErrorMessage(err, 'Something went wrong saving this shift. Please try again.'))
       }
     }
   }
@@ -257,13 +282,15 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               <Dropdown
                 variant="form"
                 value={participantId}
-                onChange={setParticipantId}
+                // A save's refusal ("not ready") is about the participant it was for: picking another one clears it.
+                onChange={id => { setParticipantId(id); setError(null) }}
                 disabled={!canWrite || isEdit}
                 searchable
                 label="Select a participant"
                 items={participantOptions}
               />
             </FormField>
+            <ReadinessNote issues={readinessIssues} className="mt-1.5" />
           </div>
 
           <div data-shift-field="staff">
@@ -435,9 +462,9 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             disabled={!canWrite}
           />
 
-          {error && (
+          {shownError && (
             <div role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
-              {error}
+              {shownError}
             </div>
           )}
         </div>

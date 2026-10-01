@@ -5,6 +5,7 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import ParticipantDetailPage from './ParticipantDetailPage'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import type { ParticipantChecklistItemDto } from '@/api/types/checklist-items'
+import { TONE } from '@/lib/tone'
 
 const {
   mockUseParticipant, mockUseParticipantBookings, mockUseParticipantAlerts,
@@ -1108,5 +1109,48 @@ describe('ParticipantDetailPage — the tab lives in the URL (useTabParam)', () 
   it('reads an unknown ?tab= as the default tab', () => {
     renderWithUrl('/participants/x-1?tab=bogus')
     expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'true')
+  })
+})
+
+// ── Participant readiness (WARN mode) in the header ──────────────────────────────────────────────────────────────────
+// What is still missing shows as a quiet warning-tone chip in the meta row, right after the Active / Inactive badge. It is
+// informational: nothing on the page is gated on it, and a participant with nothing missing gets no chip at all.
+describe('ParticipantDetailPage — readiness chip in the header', () => {
+  const ISSUES = ['Intake not complete', 'Onboarding not complete: service type']
+  const WARNING = 'Not ready: Intake not complete · Onboarding not complete: service type'
+
+  it('shows the chip beside the status badge when the server lists issues', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isActive: true, readinessIssues: ISSUES }), isLoading: false })
+    renderAt('participant-1')
+
+    const chip = screen.getByText(WARNING).closest('[title]') as HTMLElement
+    expect(chip).toHaveAttribute('title', WARNING)
+    for (const cls of TONE.warning.solid.split(' ')) expect(chip).toHaveClass(cls)
+    // In the same meta row as the Active badge, straight after it.
+    const badge = screen.getByText('Active')
+    expect(chip.parentElement).toBe(badge.parentElement)
+    expect(badge.nextElementSibling).toBe(chip)
+    // Not an alert, and the page's actions are untouched by it.
+    expect(chip.closest('[role="alert"]')).toBeNull()
+    expect(screen.getByRole('heading', { level: 1, name: 'Sophie Brown' })).toBeInTheDocument()
+  })
+
+  it('shows the chip next to an Inactive badge too', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isActive: false, readinessIssues: ['No signed service agreement'] }), isLoading: false })
+    renderAt('participant-1')
+
+    const badge = screen.getByText('Inactive')
+    expect(badge.nextElementSibling).toBe(screen.getByText('Not ready: No signed service agreement').closest('[title]'))
+  })
+
+  it.each([
+    ['omits readinessIssues', undefined],
+    ['sends an empty list', [] as string[]],
+  ])('draws no chip when the server %s', (_label, readinessIssues) => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ readinessIssues }), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.queryByText(/not ready/i)).not.toBeInTheDocument()
+    expect(screen.getByText('Active')).toBeInTheDocument()
   })
 })

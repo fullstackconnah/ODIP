@@ -8,6 +8,7 @@ import { DataTable } from '@/components/DataTable'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Tabs } from '@/components/Tabs'
 import { StatusBadge } from '@/components/StatusBadge'
+import { ReadinessNote } from '@/components/ReadinessNote'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
 import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
 import { PageHeader } from '@/components/PageHeader'
@@ -115,6 +116,8 @@ export default function ParticipantDetailPage() {
             subtitle={
               <div className="flex flex-wrap items-center gap-3 text-[13px] text-[var(--color-muted-foreground)]">
                 <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} />
+                {/* What is still missing, as a quiet warning-tone chip beside the status. Informational: nothing on this page is gated on it. */}
+                <ReadinessNote issues={p.readinessIssues} variant="chip" />
                 <span>{p.region || 'No region'} · {p.planType} · Support Ratio: {p.supportRatio}</span>
                 <ServiceStreamBadges value={p.serviceStreams} />
               </div>

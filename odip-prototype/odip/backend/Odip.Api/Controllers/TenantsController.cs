@@ -203,7 +203,7 @@ public class TenantsController : ControllerBase
             GSTRegistered = ps.GSTRegistered, IsPaceProvider = ps.IsPaceProvider,
             BankAccountName = ps.BankAccountName, BSB = ps.BSB,
             AccountNumber = ps.AccountNumber, InvoiceFooterNotes = ps.InvoiceFooterNotes,
-            State = ps.State
+            State = ps.State, ParticipantReadinessMode = ps.ParticipantReadinessMode
         }));
     }
 }

@@ -34,6 +34,13 @@ public record ParticipantListDto
     public bool HasActiveMedications { get; init; }
     /// <summary>INTAKE-08. See <see cref="Odip.Domain.Entities.Participant.IsDraft"/>.</summary>
     public bool IsDraft { get; init; }
+    /// <summary>
+    /// What is missing before this participant is fully ready (intake, onboarding, signed service
+    /// agreement), as human strings. Null (omitted from the JSON) when nothing is missing. Shown as
+    /// a quiet warning in Warn mode; never blocks anything on its own. Set by the participant list
+    /// and detail reads only.
+    /// </summary>
+    public List<string>? ReadinessIssues { get; init; }
     /// <summary>SPEC-05 PF-10.5. See <see cref="Odip.Domain.Entities.Participant.IntakeCompletedAt"/>.</summary>
     public DateTime? IntakeCompletedAt { get; init; }
 }
@@ -1069,6 +1076,11 @@ public record BookingDetailDto : BookingListDto
     public DateOnly? InsuranceCoverageStart { get; init; }
     public DateOnly? InsuranceCoverageEnd { get; init; }
     public bool IsInsuranceValid { get; init; }
+    /// <summary>
+    /// Set on the create response only: what was missing for this participant when the booking was
+    /// made (Warn mode lets the booking proceed). Null (omitted from the JSON) when nothing was.
+    /// </summary>
+    public List<string>? ReadinessIssues { get; init; }
 }
 
 public record CreateBookingDto

@@ -17,6 +17,7 @@ function makeProviderSettings(overrides: Partial<ProviderSettingsDto> = {}): Pro
     address: '1 Test St', state: 'VIC', gstRegistered: true, isPaceProvider: false,
     bankAccountName: null, bsb: null, accountNumber: null, invoiceFooterNotes: null,
     managerName: 'Priya Sharma', managerPhone: '0412 345 007',
+    participantReadinessMode: 'Warn',
     ...overrides,
   }
 }

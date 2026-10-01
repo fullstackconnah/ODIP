@@ -121,4 +121,22 @@ describe('useParticipants', () => {
     expect(result.current.data?.isTruncated).toBe(false)
     expect(result.current.data?.totalCount).toBe(2)
   })
+
+  // WARN mode: each list item may carry what is still missing for that participant (omitted when nothing is). The hook flattens the
+  // page but must hand each item over untouched, so the roster board's shift panel and the trip booking modal can show it.
+  it('hands every item over untouched: readinessIssues survives, and is simply absent where the server omitted it', async () => {
+    const items = [
+      { id: 'p1', fullName: 'Mia Chen', readinessIssues: ['Intake not complete', 'No signed service agreement'] },
+      { id: 'p2', fullName: 'Noah Reid' },
+    ]
+    mockApiGet.mockResolvedValue({ items, totalCount: 2, page: 1, pageSize: 200, totalPages: 1, hasNext: false, hasPrevious: false })
+    const queryClient = new QueryClient()
+    const { result } = renderHook(() => useParticipants({ isDraft: 'false' }), { wrapper: createWrapper(queryClient) })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    const [mia, noah] = result.current.data ?? []
+    expect(mia.readinessIssues).toEqual(['Intake not complete', 'No signed service agreement'])
+    expect(noah).not.toHaveProperty('readinessIssues')
+    expect([...(result.current.data ?? [])]).toEqual(items)
+  })
 })

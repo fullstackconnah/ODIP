@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { useState } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import BookingsTab from './BookingsTab'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { BookingListDto } from '@/api/types/bookings'
+import type { ParticipantListDto } from '@/api/types/participants'
 import { TAP_AREA } from '@/components/tapArea'
 
 // PF-10.6 — primary Client Overview PDF surface (Trip-detail roster). Only
@@ -12,13 +14,14 @@ import { TAP_AREA } from '@/components/tapArea'
 // from '@/api/hooks' are stubbed inertly since this suite is about the new per-row action, not
 // booking CRUD (which has no dedicated existing test file of its own to defer to, but is out of
 // scope for PF-10.6).
-const { mockDownloadMutate, mockUseDownloadClientOverviewPdf } = vi.hoisted(() => ({
+const { mockDownloadMutate, mockUseDownloadClientOverviewPdf, mockUseCreateBooking } = vi.hoisted(() => ({
   mockDownloadMutate: vi.fn(),
+  mockUseCreateBooking: vi.fn(),
   mockUseDownloadClientOverviewPdf: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
 }))
 
 vi.mock('@/api/hooks', () => ({
-  useCreateBooking: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useCreateBooking: mockUseCreateBooking,
   useUpdateBooking: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   usePatchBooking: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useDeleteBooking: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
@@ -44,15 +47,17 @@ function makeBooking(overrides: Partial<BookingListDto> = {}): BookingListDto {
   }
 }
 
-function renderTab(bookings: BookingListDto[] = [makeBooking()]) {
+function renderTab(bookings: BookingListDto[] = [makeBooking()], participants: ParticipantListDto[] = []) {
   return render(
     <MemoryRouter>
-      <BookingsTab tripId="trip-1" trip={trip} bookings={bookings} participants={[]} canWrite isReadOnly={false} />
+      <BookingsTab tripId="trip-1" trip={trip} bookings={bookings} participants={participants} canWrite isReadOnly={false} />
     </MemoryRouter>,
   )
 }
 
 beforeEach(() => {
+  mockUseCreateBooking.mockReset()
+  mockUseCreateBooking.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
   mockDownloadMutate.mockReset()
   mockUseDownloadClientOverviewPdf.mockReturnValue({ mutate: mockDownloadMutate, isPending: false, isError: false })
 })
@@ -129,5 +134,169 @@ describe('BookingsTab — touch targets in the row actions', () => {
     expect(screen.getByTitle('View participant')).toHaveAttribute('href', '/participants/participant-1')
     await user.click(screen.getByTitle('Client Overview PDF'))
     expect(mockDownloadMutate).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ── Participant readiness (WARN mode) in the Add Booking modal ───────────────────────────────────────────────────────
+// In Warn mode the server books a participant who is not fully ready and reports what is missing; in Enforce mode it refuses with
+// a 400 "Participant is not ready for booking or rostering." The modal shows the first as a quiet line under the picker (it never
+// disables Add Booking) and the second as the real message, never the generic line, with everything the user entered kept.
+const NOT_READY_MESSAGE = 'Participant is not ready for booking or rostering.'
+const GENERIC_BOOKING_ERROR = 'Failed to create booking. Please try again.'
+const ISSUES = ['Intake not complete', 'No signed service agreement']
+const WARNING = 'Not ready: Intake not complete · No signed service agreement'
+
+function makeParticipant(overrides: Partial<ParticipantListDto> = {}): ParticipantListDto {
+  return {
+    id: 'p-ready', firstName: 'Noah', lastName: 'Reid', preferredName: null, fullName: 'Noah Reid', maskedNdisNumber: null,
+    planType: 'SelfManaged', region: null, isRepeatClient: false, isActive: true, mobilityAidWheelchair: false,
+    mobilityAidWalker: false, mobilitySupportOptions: [], isHighSupport: false, isIntensiveSupport: false,
+    overnightSupport: 'None', overnightRatio: 'OneToOne', requiresHiLoBed: false, requiresHoist: false,
+    requiresShowerChair: false, requiresCommode: false, requiresStandingMachine: false, supportRatio: 'OneToOne',
+    serviceStreams: 'None', hasActiveMedications: false, isDraft: false,
+    ...overrides,
+  }
+}
+
+const readyParticipant = makeParticipant()
+const notReadyParticipant = makeParticipant({ id: 'p-notready', firstName: 'Mia', lastName: 'Chen', fullName: 'Mia Chen', readinessIssues: ISSUES })
+
+/** Opens the Add Participant modal and picks a participant by name. */
+async function openModalAndPick(user: ReturnType<typeof userEvent.setup>, name?: string) {
+  await user.click(screen.getByRole('button', { name: /add participant/i }))
+  if (!name) return
+  await user.click(screen.getByRole('combobox', { name: /participant/i }))
+  await user.click(screen.getByRole('option', { name }))
+}
+
+/** A create hook that fails the way TanStack's does: `mutate` records the call, then `isError` and `error` flip on. */
+function useFailingCreateBooking(mutate: ReturnType<typeof vi.fn>, failure: unknown) {
+  const [error, setError] = useState<unknown>(null)
+  return {
+    mutate: (payload: unknown, opts: unknown) => { mutate(payload, opts); setError(failure) },
+    isPending: false,
+    isError: error !== null,
+    error,
+  }
+}
+
+describe('BookingsTab — Add Booking: readiness warning', () => {
+  it('shows nothing under the picker until a participant is chosen, and nothing for one who is ready', async () => {
+    const user = userEvent.setup()
+    renderTab([], [readyParticipant, notReadyParticipant])
+
+    await openModalAndPick(user)
+    expect(screen.queryByText(/not ready/i)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('combobox', { name: /participant/i }))
+    await user.click(screen.getByRole('option', { name: 'Noah Reid' }))
+    expect(screen.queryByText(/not ready/i)).not.toBeInTheDocument()
+  })
+
+  it('shows the quiet warning under the picker once a not-ready participant is chosen, follows a change of participant, and never disables Add Booking', async () => {
+    const user = userEvent.setup()
+    renderTab([], [readyParticipant, notReadyParticipant])
+
+    await openModalAndPick(user, 'Mia Chen')
+
+    const note = screen.getByText(WARNING)
+    expect(note.closest('[title]')).toHaveAttribute('title', WARNING)
+    expect(note.closest('[role="alert"]')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Add Booking' })).toBeEnabled()
+    // Directly under the picker: after it, ahead of the Booking Status field.
+    const picker = screen.getByRole('combobox', { name: /participant/i })
+    expect(Boolean(picker.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    expect(Boolean(note.compareDocumentPosition(screen.getByText('Booking Status')) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+
+    await user.click(screen.getByRole('combobox', { name: /participant/i }))
+    await user.click(screen.getByRole('option', { name: 'Noah Reid' }))
+    expect(screen.queryByText(/not ready/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add Booking' })).toBeEnabled()
+  })
+
+  it('still books a not-ready participant, sending the full body and no readiness field', async () => {
+    const user = userEvent.setup()
+    const mutate = vi.fn()
+    mockUseCreateBooking.mockReturnValue({ mutate, isPending: false, isError: false })
+    renderTab([], [readyParticipant, notReadyParticipant])
+
+    await openModalAndPick(user, 'Mia Chen')
+    await user.type(screen.getByPlaceholderText('Optional notes...'), 'Needs the hoist')
+    await user.click(screen.getByRole('button', { name: 'Add Booking' }))
+
+    expect(mutate).toHaveBeenCalledTimes(1)
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        tripInstanceId: 'trip-1',
+        participantId: 'p-notready',
+        bookingStatus: 'Enquiry',
+        wheelchairRequired: false,
+        highSupportRequired: false,
+        nightSupportRequired: false,
+        hasRestrictivePracticeFlag: false,
+        supportRatioOverride: 'OneToOne',
+        bookingNotes: 'Needs the hoist',
+        insuranceStatus: 'None',
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
+    expect(mutate.mock.calls[0][0]).not.toHaveProperty('readinessIssues')
+  })
+})
+
+describe('BookingsTab — Add Booking: the server\'s refusal reaches the user', () => {
+  it('shows the server\'s own message, not the generic line, and keeps the modal and everything entered', async () => {
+    const user = userEvent.setup()
+    const mutate = vi.fn()
+    mockUseCreateBooking.mockImplementation(() => useFailingCreateBooking(mutate, {
+      response: { status: 400, data: { success: false, errors: [NOT_READY_MESSAGE] } },
+    }))
+    renderTab([], [readyParticipant, notReadyParticipant])
+
+    await openModalAndPick(user, 'Mia Chen')
+    await user.type(screen.getByPlaceholderText('Optional notes...'), 'Needs the hoist')
+    await user.click(screen.getByLabelText('Wheelchair'))
+    await user.click(screen.getByRole('button', { name: 'Add Booking' }))
+
+    expect(mutate).toHaveBeenCalledTimes(1)
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        tripInstanceId: 'trip-1',
+        participantId: 'p-notready',
+        bookingStatus: 'Enquiry',
+        wheelchairRequired: true,
+        highSupportRequired: false,
+        nightSupportRequired: false,
+        hasRestrictivePracticeFlag: false,
+        supportRatioOverride: 'OneToOne',
+        bookingNotes: 'Needs the hoist',
+        insuranceStatus: 'None',
+      },
+      expect.anything(),
+    )
+    const message = await screen.findByText(NOT_READY_MESSAGE)
+    expect(message.closest('[role="alert"]')).not.toBeNull()
+    expect(screen.queryByText(GENERIC_BOOKING_ERROR)).not.toBeInTheDocument()
+    // The modal is still open with the participant, the notes and the checkbox exactly as entered.
+    expect(screen.getByRole('heading', { name: 'Add Participant to Trip' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /participant/i })).toHaveValue('Mia Chen')
+    expect(screen.getByPlaceholderText('Optional notes...')).toHaveValue('Needs the hoist')
+    expect(screen.getByLabelText('Wheelchair')).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Add Booking' })).toBeEnabled()
+  })
+
+  it.each([
+    ['a network failure with no response', new Error('Network Error')],
+    ['a 500 with an empty body', { response: { status: 500, data: {} } }],
+  ])('falls back to the generic line for %s', async (_label, failure) => {
+    const user = userEvent.setup()
+    mockUseCreateBooking.mockImplementation(() => useFailingCreateBooking(vi.fn(), failure))
+    renderTab([], [readyParticipant])
+
+    await openModalAndPick(user, 'Noah Reid')
+    await user.click(screen.getByRole('button', { name: 'Add Booking' }))
+
+    expect(await screen.findByText(GENERIC_BOOKING_ERROR)).toBeInTheDocument()
+    expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
   })
 })
