@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import ParticipantsHubPage from './ParticipantsHubPage'
 
 // L2-02: ParticipantsHubPage rendered only the three tables' bodies, so the Active/Archived toggle and the #146 search and status
@@ -60,6 +60,7 @@ beforeEach(() => {
 afterEach(() => {
   localStorage.clear()
   mockApiGet.mockReset()
+  onlineManager.setOnline(true)
 })
 
 describe('ParticipantsHubPage (wire) — the register has its controls back', () => {
@@ -146,6 +147,16 @@ describe('ParticipantsHubPage (wire) — the register has its controls back', ()
     serve({ active: [row()] })
     await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByText('Jamie Smith')).toBeInTheDocument()
+  })
+
+  it('shows loading, not "No participants yet", while the browser reports offline and the first request has not run (review F-1)', async () => {
+    // TanStack Query pauses a request while offline: isLoading false, isError false, data undefined. That is not an empty register.
+    onlineManager.setOnline(false)
+    renderHub()
+
+    expect(await screen.findByText('Loading...')).toBeInTheDocument()
+    expect(screen.queryByText('No participants yet')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Add participant' })).not.toBeInTheDocument()
   })
 
   it('still says "No participants yet" for a register that loaded and is empty', async () => {

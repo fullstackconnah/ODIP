@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import ProfileWizardPage from './ProfileWizardPage'
 
 // Wire level. "Complete Profile" used to send the whole form to the full-record PUT /participants/{id} (with isDraft: false and the
@@ -69,6 +69,7 @@ beforeEach(() => {
 afterEach(() => {
   localStorage.clear()
   for (const mock of [mockApiGet, mockApiPatchRaw, mockApiPostRaw, mockApiPutRaw, mockApiPut]) mock.mockReset()
+  onlineManager.setOnline(true)
 })
 
 async function walkToReview(user: ReturnType<typeof userEvent.setup>) {
@@ -101,6 +102,79 @@ describe('ProfileWizardPage (wire) — completing the profile', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent("Complete the participant's intake before completing their profile.")
     expect(screen.queryByText('Participant detail')).not.toBeInTheDocument()
+  })
+})
+
+// Review F-5: Complete Profile used to PATCH every step whenever the form was dirty. One edited field meant up to seven PATCHes, a refusal in
+// a step nobody touched blocked completion, and untouched sections were rewritten from the form's copy. Now only a step whose fields differ from
+// what was last known to match the server is saved.
+describe('ProfileWizardPage (wire) — Complete Profile saves only the steps that changed (review F-5)', () => {
+  const railTo = (name: RegExp) => within(stepNav()).getByRole('button', { name })
+
+  /** Reaches Review with every step saved by its own Next, then edits the Medical step through the rail (which does not save the step it leaves). */
+  async function editMedicalFromReview(user: ReturnType<typeof userEvent.setup>) {
+    await walkToReview(user)
+    await user.click(railTo(/medical detail/i))
+    await expectStep(/medical detail/i)
+    await user.type(screen.getByLabelText('Medical Summary'), 'Allergic to peanuts, carries an EpiPen')
+    await user.click(railTo(/review/i))
+    await expectStep(/review/i)
+  }
+
+  it('sends no PATCH at all when nothing has changed since the last save', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+    await walkToReview(user)
+    mockApiPatchRaw.mockClear()
+
+    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+
+    await waitFor(() => expect(mockApiPostRaw).toHaveBeenCalledTimes(1))
+    expect(mockApiPatchRaw).not.toHaveBeenCalled()
+  })
+
+  it('saves only the step that was edited after its save, then finalises', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+    await editMedicalFromReview(user)
+    mockApiPatchRaw.mockClear()
+
+    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+
+    await waitFor(() => expect(mockApiPostRaw).toHaveBeenCalledTimes(1))
+    expect(mockApiPatchRaw).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(mockApiPatchRaw.mock.calls[0][1])).toContain('Allergic to peanuts, carries an EpiPen')
+    expect(mockApiPostRaw).toHaveBeenCalledWith('/participants/participant-1/complete-profile', {})
+  })
+
+  it('is not blocked by a refusal in a step the user never touched', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+    await editMedicalFromReview(user)
+    // From here on the server refuses every PATCH except the one that carries the edit.
+    mockApiPatchRaw.mockReset()
+    mockApiPatchRaw.mockImplementation(async (_url: string, body: unknown) => {
+      if (!JSON.stringify(body).includes('Allergic to peanuts')) throw apiError(400, 'Some other section was refused.')
+      return { success: true, data: { id: 'participant-1' } }
+    })
+
+    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+
+    await waitFor(() => expect(mockApiPostRaw).toHaveBeenCalledTimes(1))
+    expect(screen.queryByText('Some other section was refused.')).not.toBeInTheDocument()
+  })
+
+  it('does not finalise when the step that WAS edited is refused, and says why', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+    await editMedicalFromReview(user)
+    mockApiPatchRaw.mockReset()
+    mockApiPatchRaw.mockRejectedValue(apiError(400, 'Medical summary is too long.'))
+
+    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Medical summary is too long.')
+    expect(mockApiPostRaw).not.toHaveBeenCalled()
   })
 })
 
@@ -141,6 +215,14 @@ describe('ProfileWizardPage (wire) — when the participant cannot be loaded', (
     serve()
     await user.click(screen.getByRole('button', { name: /try again/i }))
     expect(await screen.findByRole('heading', { name: /profile/i })).toBeInTheDocument()
+  })
+
+  it('shows loading, not "Participant not found", while the browser reports offline and the request has not run (review F-1)', async () => {
+    onlineManager.setOnline(false)
+    renderWizard()
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/loading participant/i)
+    expect(screen.queryByText('Participant not found')).not.toBeInTheDocument()
   })
 
   it('says the participant was not found, with a way back, when the server answers 404', async () => {

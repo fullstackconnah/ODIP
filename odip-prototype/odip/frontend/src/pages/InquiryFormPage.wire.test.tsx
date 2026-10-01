@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import InquiryFormPage from './InquiryFormPage'
 
 // Wire level: only the HTTP helpers are mocked, so the real hooks, the real form and a real query client run, and every assertion
@@ -47,6 +47,7 @@ beforeEach(() => {
 afterEach(() => {
   localStorage.clear()
   mockApiGet.mockReset(); mockApiPost.mockReset(); mockApiPut.mockReset()
+  onlineManager.setOnline(true)
 })
 
 describe('InquiryFormPage (wire) — capturing an enquiry', () => {
@@ -149,6 +150,14 @@ describe('InquiryFormPage (wire) — editing an enquiry opened cold', () => {
       firstName: 'Ro', lastName: 'Blake', phone: '0400 000 999', email: 'rowan@example.com', source: 'Web',
       provenance: 'Referred by Dr Patel, Brisbane',
     })
+  })
+
+  it('shows loading, not "Enquiry not found", while the browser reports offline and the request has not run (review F-1)', async () => {
+    onlineManager.setOnline(false)
+    renderForm('/participants/new-inquiry?id=i1')
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/loading enquiry/i)
+    expect(screen.queryByText(/enquiry not found/i)).not.toBeInTheDocument()
   })
 
   it('says so when there is no such enquiry, with a way back', async () => {
