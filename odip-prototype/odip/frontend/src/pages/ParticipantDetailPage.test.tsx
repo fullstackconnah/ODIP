@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import ParticipantDetailPage from './ParticipantDetailPage'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import type { ParticipantChecklistItemDto } from '@/api/types/checklist-items'
@@ -1050,5 +1050,63 @@ describe('ParticipantDetailPage — failed request vs. missing record (PageState
     mockUseParticipant.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
     renderAt('p-1')
     expect(screen.getByRole('status')).toHaveTextContent('Loading participant…')
+  })
+})
+
+/** Exposes the router's live location, so a test can assert what a tab switch wrote to the URL. */
+function LocationProbe({ onChange }: { onChange: (value: string) => void }) {
+  const { pathname, search } = useLocation()
+  onChange(`${pathname}${search}`)
+  return null
+}
+
+describe('ParticipantDetailPage — the tab lives in the URL (useTabParam)', () => {
+  function renderWithUrl(url: string) {
+    let current = url
+    const view = render(
+      <MemoryRouter initialEntries={[url]}>
+        <LocationProbe onChange={value => { current = value }} />
+        <Routes>
+          <Route path="/participants/:id" element={<ParticipantDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    return { ...view, url: () => current }
+  }
+
+  beforeEach(() => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+  })
+
+  it('writes ?tab= when a tab is chosen, and the chosen tab is the selected one', async () => {
+    const user = userEvent.setup()
+    const page = renderWithUrl('/participants/x-1')
+    await user.click(screen.getByRole('tab', { name: 'Bookings' }))
+    expect(page.url()).toBe('/participants/x-1?tab=bookings')
+    expect(screen.getByRole('tab', { name: 'Bookings' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('keeps the tab across a reload or a shared link: a fresh render of the written URL lands on the same tab', async () => {
+    const user = userEvent.setup()
+    const first = renderWithUrl('/participants/x-1')
+    await user.click(screen.getByRole('tab', { name: 'Bookings' }))
+    const written = first.url()
+    first.unmount()
+    renderWithUrl(written)
+    expect(screen.getByRole('tab', { name: 'Bookings' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('drops the param when the default tab is chosen, and every other param survives both ways', async () => {
+    const user = userEvent.setup()
+    const page = renderWithUrl('/participants/x-1?from=dash&tab=bookings')
+    await user.click(screen.getByRole('tab', { name: 'Details' }))
+    expect(page.url()).toBe('/participants/x-1?from=dash')
+    await user.click(screen.getByRole('tab', { name: 'Bookings' }))
+    expect(page.url()).toBe('/participants/x-1?from=dash&tab=bookings')
+  })
+
+  it('reads an unknown ?tab= as the default tab', () => {
+    renderWithUrl('/participants/x-1?tab=bogus')
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'true')
   })
 })

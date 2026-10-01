@@ -1,4 +1,4 @@
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { usePermissions } from '@/lib/permissions'
 import { useTrip, useTripBookings, useTripAccommodation, useTripVehicles, useTripStaff, useTripTasks, useTripSchedule, useTripClaims, useTripIncidents, useParticipants } from '@/api/hooks'
 import { formatDateRange } from '@/lib/dateRange'
@@ -9,6 +9,7 @@ import { Tabs, type TabItem } from '@/components/Tabs'
 import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
+import { useTabParam } from '@/hooks/useTabParam'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -32,16 +33,7 @@ export default function TripDetailPage() {
   const currentUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
   const isAdmin = currentUser.role === 'Admin'
   // PP-60: URL-synced so a shared/reloaded link lands on the same tab.
-  const [searchParams, setSearchParams] = useSearchParams()
-  const tabParam = searchParams.get('tab')
-  const activeTab: Tab = (tabParam && (TAB_KEYS as string[]).includes(tabParam) ? tabParam : 'overview') as Tab
-  const setActiveTab = (tab: Tab) => {
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev)
-      next.set('tab', tab)
-      return next
-    }, { replace: true })
-  }
+  const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'overview')
   const [showEditTrip, setShowEditTrip] = useState(false)
 
   const { data: trip, isLoading, isError, error, refetch } = useTrip(id)
@@ -156,7 +148,7 @@ export default function TripDetailPage() {
         <Tabs
           tabs={tabs.map(t => ({ ...t, panelId: `trip-tabpanel-${t.id}` }))}
           active={activeTab}
-          onChange={key => setActiveTab(key as Tab)}
+          onChange={setActiveTab}
           ariaLabel="Trip detail sections"
         />
       </div>

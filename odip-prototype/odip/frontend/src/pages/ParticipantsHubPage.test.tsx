@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ParticipantsHubPage from './ParticipantsHubPage'
 
@@ -188,5 +188,35 @@ describe('ParticipantsHubPage — one description line, not two', () => {
     expect(root).toContainElement(h1)
     // Plain block flow: a flex column with a section gap is what opened 16px between the two.
     expect(root.className).toBe('animate-fade-in')
+  })
+})
+
+describe('ParticipantsHubPage — the URL is the only source of the stage (useTabParam)', () => {
+  it('follows the URL when a link elsewhere on the page points at another stage', async () => {
+    const user = userEvent.setup()
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={['/participants']}>
+          <Link to="/participants?tab=onboarding">to onboarding</Link>
+          <Routes>
+            <Route path="/participants" element={<ParticipantsHubPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    expect(screen.getByRole('tab', { name: 'Active participants' })).toHaveAttribute('aria-selected', 'true')
+
+    await user.click(screen.getByRole('link', { name: 'to onboarding' }))
+
+    expect(screen.getByRole('tab', { name: 'Onboarding' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('keeps other query params when it switches stage', async () => {
+    const user = userEvent.setup()
+    const hub = renderHub('/participants?q=sophie')
+    await user.click(screen.getByRole('tab', { name: 'Onboarding' }))
+    expect(hub.location.current).toBe('/participants?q=sophie&tab=onboarding')
+    await user.click(screen.getByRole('tab', { name: 'Active participants' }))
+    expect(hub.location.current).toBe('/participants?q=sophie')
   })
 })

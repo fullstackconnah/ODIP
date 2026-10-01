@@ -1,11 +1,12 @@
-import { useParams, useSearchParams, Link } from 'react-router-dom'
-import { useMemo, useState } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import { useMemo } from 'react'
 import { useStaffOverview, useSettings } from '@/api/hooks'
 import { Tabs } from '@/components/Tabs'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
+import { useTabParam } from '@/hooks/useTabParam'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { DataTable } from '@/components/DataTable'
@@ -40,14 +41,10 @@ function credentialBadge(row: StaffCredential) {
 
 export default function StaffDetailPage() {
   const { id } = useParams()
-  const [searchParams] = useSearchParams()
   const { canWrite, canAccessPage } = usePermissions()
   const canAccessLeaveApprovals = canAccessPage('leave-approvals')
 
-  const initialTab = searchParams.get('tab')
-  const [tab, setTab] = useState<Tab>(
-    initialTab && (TAB_KEYS as string[]).includes(initialTab) ? (initialTab as Tab) : 'availability'
-  )
+  const [tab, setTab] = useTabParam(TAB_KEYS, 'availability')
 
   const { data: overview, isLoading, isError, error, refetch } = useStaffOverview(id)
   const { data: settings } = useSettings()
@@ -106,7 +103,7 @@ export default function StaffDetailPage() {
           { id: 'completions', label: 'Completions', icon: ClipboardCheck },
         ]}
         active={tab}
-        onChange={(key) => setTab(key as Tab)}
+        onChange={setTab}
         ariaLabel="Staff detail sections"
       />
 

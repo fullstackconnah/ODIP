@@ -1,4 +1,4 @@
-import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   useParticipant, useParticipantBookings, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf,
   useGenerateCaregiverLink, useRevokeCaregiverLink, useCaregiverSubmissions,
@@ -13,6 +13,7 @@ import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
+import { useTabParam } from '@/hooks/useTabParam'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, FileText, CalendarRange } from 'lucide-react'
@@ -70,16 +71,14 @@ const ROW_LINK = 'inline-flex min-h-[var(--tap-min)] items-center font-medium ho
  */
 const COMPACT_EMPTY_TABLE = '[&_table:has(td[colspan])_thead]:hidden [&_td[colspan]]:py-5'
 
+/** The tabs, in strip order. The active one is `?tab=` (`useTabParam`), so a reload or a shared link keeps it; an unknown value reads as Details. */
+const TAB_KEYS = ['details', 'contacts', 'bookings', 'support', 'medications', 'notes', 'routines', 'restrictive-practices', 'claims', 'rostering', 'history'] as const
+
 export default function ParticipantDetailPage() {
   const { canWrite, canViewAlerts, canWriteParticipantDetails, canAccessPage, isAdmin, isSuperAdmin } = usePermissions()
   const { id } = useParams()
   const isMdUp = useIsMdUp()
-  const [searchParams] = useSearchParams()
-  type Tab = 'details' | 'contacts' | 'bookings' | 'support' | 'medications' | 'notes' | 'routines' | 'restrictive-practices' | 'claims' | 'rostering' | 'history'
-  const initialTab = searchParams.get('tab')
-  const [tab, setTab] = useState<Tab>(
-    initialTab === 'contacts' || initialTab === 'bookings' || initialTab === 'support' || initialTab === 'medications' || initialTab === 'notes' || initialTab === 'routines' || initialTab === 'restrictive-practices' || initialTab === 'claims' || initialTab === 'rostering' || initialTab === 'history' ? initialTab : 'details'
-  )
+  const [tab, setTab] = useTabParam(TAB_KEYS, 'details')
   const canAccessClaims = canAccessPage('claims')
   // Connection map item 12 — the Rostering tab, same canAccessPage gate RosterBoardPage itself
   // uses (see lib/permissions.ts's SUPPORT_WORKER_PAGES — SupportWorker is excluded).
@@ -237,7 +236,7 @@ export default function ParticipantDetailPage() {
             </div>
           )}
           {canViewAlerts && alertsData && (
-            <ParticipantAlertsBanner alerts={alertsData.alerts} onSelectTab={(t) => setTab(t as typeof tab)} />
+            <ParticipantAlertsBanner alerts={alertsData.alerts} onSelectTab={setTab} />
           )}
         </div>
       </div>
@@ -257,7 +256,7 @@ export default function ParticipantDetailPage() {
           ...((isSuperAdmin || isAdmin) ? [{ id: 'history' as const, label: 'History' }] : []),
         ]}
         active={tab}
-        onChange={(key) => setTab(key as typeof tab)}
+        onChange={setTab}
         ariaLabel="Participant detail sections"
       />
 
@@ -354,7 +353,7 @@ export default function ParticipantDetailPage() {
       )}
 
       {tab === 'support' && (
-        <SupportProfileTab participantId={id} onNavigateToTab={(t) => setTab(t as typeof tab)} />
+        <SupportProfileTab participantId={id} onNavigateToTab={setTab} />
       )}
 
       {tab === 'medications' && (

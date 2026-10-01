@@ -66,3 +66,17 @@ describe('PageState', () => {
     }
   })
 })
+
+describe('useTabParam', () => {
+  it('is the only code that reads or writes ?tab= for a page tab: no page keeps its own copy of the logic', () => {
+    // useBackNavigation only PARSES a path string to name a hub tab for its accessible label; it never reads the live URL.
+    expect(offendersOf(text => /\.get\(['"]tab['"]\)/.test(text), ['hooks/useTabParam.ts', 'hooks/useBackNavigation.tsx'])).toEqual([])
+  })
+
+  it.each(['pages/TripDetailPage.tsx', 'pages/ParticipantDetailPage.tsx', 'pages/StaffDetailPage.tsx', 'pages/ParticipantsHubPage.tsx'])(
+    '%s keeps its active tab in the URL through useTabParam',
+    (path) => {
+      expect(FILES.find(f => f.path === path)!.text).toContain('useTabParam(')
+    },
+  )
+})
