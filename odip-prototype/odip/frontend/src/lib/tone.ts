@@ -56,7 +56,7 @@ export const TONE: Record<Tone, ToneClasses> = {
     soft: 'bg-[var(--color-error-container)]/30',
     ink: 'text-[var(--color-destructive)]',
   },
-  // Accessibility, and the plan-manager / in-progress categories that already use its pink.
+  // Accessibility, and the plan-manager and shift-claim categories that already use its pink. Never a state: "In progress" is info.
   accessible: {
     solid: 'bg-[var(--color-accessible-container)] text-[var(--color-on-accessible-container)]',
     soft: 'bg-[var(--color-accessible-container)]/60',
@@ -105,8 +105,14 @@ export function attentionOf(tone: Tone): Attention | undefined {
 }
 
 /**
- * A status word to its tone, keyed the way StatusBadge keys it (`statusKey`: lower case, no spaces). Unlisted statuses are
- * warning (see `statusClass`). A `colorMap` on a StatusBadge overrides this for one domain whose word means something else there.
+ * A status word to its tone, keyed the way StatusBadge keys it (`statusKey`: lower case, no spaces). Every status the API can send
+ * has a row here (`src/lib/statusToneCoverage.test.ts` walks the C# enums and fails for a value or an enum with no tone), so a
+ * status is never coloured by omission. A status that has no row anyway is NEUTRAL (see `statusClass`): an unknown word must never
+ * claim "awaiting a decision". A `colorMap` on a StatusBadge overrides this for one domain whose word means something else there.
+ *
+ * How to read the tones, for a new status: neutral is "no state yet or no longer" (a draft, nothing started, closed, none); info is
+ * "in the pipeline, nothing wrong" (submitted, ready, in progress, validated); success is done or good; warning is awaiting somebody
+ * (a decision, a reply, a confirmation, a hold running out, a waitlist); danger is a failure, a refusal or something that needs action.
  */
 export const STATUS_TONE: Record<string, Tone> = {
   // Booking / General
@@ -126,6 +132,12 @@ export const STATUS_TONE: Record<string, Tone> = {
   overdue: 'danger',
   conflict: 'danger',
 
+  // Decisions: a request, claim, witness or submission that somebody has answered. Leave's cancelled is its own (neutral) override.
+  approved: 'success',
+  accepted: 'success',
+  declined: 'danger',
+  revoked: 'danger',
+
   // Severity, and task priority (Urgent had no entry: it fell to the amber fallback on the Tasks page and to Medium on the dashboard)
   low: 'info',
   medium: 'warning',
@@ -133,11 +145,21 @@ export const STATUS_TONE: Record<string, Tone> = {
   urgent: 'danger',
   critical: 'danger',
 
-  // Claims
+  // Claims, billable events and payments. The billable-event words match billing/constants.ts, so the claim batch page agrees with Billing.
   submitted: 'info',
+  ready: 'info',
   paid: 'success',
   rejected: 'danger',
   partiallypaid: 'warning',
+  validated: 'info',
+  routed: 'info',
+  claimed: 'success',
+  invoiced: 'success',
+  notclaimed: 'neutral',
+  inclaim: 'info',
+  notinvoiced: 'neutral',
+  invoicesent: 'info',
+  partial: 'warning',
 
   // QSC
   reportedwithin24h: 'success',
@@ -168,7 +190,45 @@ export const STATUS_TONE: Record<string, Tone> = {
   planning: 'info',
   openforbookings: 'success',
   waitlistonly: 'warning',
-  inprogress: 'accessible',
+  // In progress is information (owner decision, 2026-10-02): blue for a trip, a task and a shift alike, never the accessibility pink.
+  inprogress: 'info',
+
+  // Bookings, reservations, vehicle requests and activities that are not yet on the trip or not yet confirmed: awaiting a decision, a
+  // reply or a confirmation, a hold running out, a queue. "Researching" and "Planned" have asked nobody anything yet, so they are quiet.
+  enquiry: 'warning',
+  held: 'warning',
+  waitlist: 'warning',
+  requested: 'warning',
+  booked: 'warning',
+  researching: 'neutral',
+  planned: 'neutral',
+
+  // Tasks and shifts (in progress is above). A shift is Published to staff, then waits for a manager once the worker finishes it.
+  notstarted: 'neutral',
+  published: 'info',
+  pendingreview: 'warning',
+
+  // Incidents. Draft and Submitted are above; the register's colours agree with the dashboard's "Open incidents" tile (Closed and
+  // Resolved are not open).
+  underreview: 'warning',
+  escalated: 'danger',
+  resolved: 'success',
+  closed: 'neutral',
+
+  // Medication. A wrong-medication dose is as red as a refused or missed one (it was amber on the participant's Medications tab).
+  administered: 'success',
+  refused: 'danger',
+  withheld: 'warning',
+  missed: 'danger',
+  wrongmedication: 'danger',
+  onhold: 'warning',
+  ceased: 'danger',
+
+  // Contact roles, and the outbox of notifications.
+  superseded: 'neutral',
+  sent: 'success',
+  failed: 'danger',
+  skipped: 'neutral',
 
   // Service agreement drafts
   unapproveddraft: 'warning',
@@ -188,8 +248,8 @@ export function toneForStatus(status: string): Tone | undefined {
   return Object.hasOwn(STATUS_TONE, key) ? STATUS_TONE[key] : undefined
 }
 
-/** The pill classes of a status: its tone's solid pair (`soft` and `ink` for a QUIET_STATUS), or `fallback` (warning) for a status with no tone. */
-export function statusClass(status: string, fallback: Tone = 'warning'): string {
+/** The pill classes of a status: its tone's solid pair (`soft` and `ink` for a QUIET_STATUS), or `fallback` (neutral) for a status with no tone. */
+export function statusClass(status: string, fallback: Tone = 'neutral'): string {
   const tone = toneForStatus(status) ?? fallback
   return QUIET_STATUS.has(statusKey(status)) ? `${TONE[tone].soft} ${TONE[tone].ink}` : TONE[tone].solid
 }

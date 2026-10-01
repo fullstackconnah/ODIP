@@ -35,6 +35,19 @@ public class TripsController : ControllerBase
             ? _db.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive, ct)
             : Task.FromResult(true);
 
+    /// <summary>
+    /// The insurance figures of a trip's header (L3-01). Insurance is chased for the people who are on the trip, so both figures count the
+    /// Confirmed bookings only: the same population as <c>CurrentParticipantCount</c>, which keeps "x / y" no larger than the participant
+    /// count printed beside it. Enquiry, Held and Waitlist people are not travelling (yet), Completed ones have travelled, and Cancelled and
+    /// NoLongerAttending ones are off the trip: none of them is insurance work, and none may turn the header red.
+    /// </summary>
+    private static (int Insured, int Outstanding) InsuranceCounts(IEnumerable<ParticipantBooking> bookings)
+    {
+        var onTrip = bookings.Where(b => b.BookingStatus == BookingStatus.Confirmed).ToList();
+        var insured = onTrip.Count(b => b.InsuranceStatus == InsuranceStatus.Confirmed);
+        return (insured, onTrip.Count - insured);
+    }
+
     /// <summary>List trips with optional filters.</summary>
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<TripListDto>>>> GetAll(
@@ -98,14 +111,8 @@ public class TripsController : ControllerBase
             OvernightSupportCount = t.Bookings.Count(b => b.NightSupportRequired && b.BookingStatus == BookingStatus.Confirmed),
             StaffAssignedCount = t.StaffAssignments.Count(s => s.Status != AssignmentStatus.Cancelled),
             OutstandingTaskCount = t.Tasks.Count(tk => tk.Status != TaskItemStatus.Completed && tk.Status != TaskItemStatus.Cancelled),
-            InsuranceConfirmedCount = t.Bookings.Count(b =>
-                b.InsuranceStatus == InsuranceStatus.Confirmed
-                && b.BookingStatus != BookingStatus.Cancelled
-                && b.BookingStatus != BookingStatus.NoLongerAttending),
-            InsuranceOutstandingCount = t.Bookings.Count(b =>
-                b.InsuranceStatus != InsuranceStatus.Confirmed
-                && b.BookingStatus != BookingStatus.Cancelled
-                && b.BookingStatus != BookingStatus.NoLongerAttending),
+            InsuranceConfirmedCount = InsuranceCounts(t.Bookings).Insured,
+            InsuranceOutstandingCount = InsuranceCounts(t.Bookings).Outstanding,
             CreatedAt = t.CreatedAt, UpdatedAt = t.UpdatedAt
         }));
     }
@@ -159,14 +166,8 @@ public class TripsController : ControllerBase
                 OvernightSupportCount = created.Bookings.Count(b => b.NightSupportRequired && b.BookingStatus == BookingStatus.Confirmed),
                 StaffAssignedCount = created.StaffAssignments.Count(s => s.Status != AssignmentStatus.Cancelled),
                 OutstandingTaskCount = created.Tasks.Count(tk => tk.Status != TaskItemStatus.Completed && tk.Status != TaskItemStatus.Cancelled),
-                InsuranceConfirmedCount = created.Bookings.Count(b =>
-                    b.InsuranceStatus == InsuranceStatus.Confirmed
-                    && b.BookingStatus != BookingStatus.Cancelled
-                    && b.BookingStatus != BookingStatus.NoLongerAttending),
-                InsuranceOutstandingCount = created.Bookings.Count(b =>
-                    b.InsuranceStatus != InsuranceStatus.Confirmed
-                    && b.BookingStatus != BookingStatus.Cancelled
-                    && b.BookingStatus != BookingStatus.NoLongerAttending),
+                InsuranceConfirmedCount = InsuranceCounts(created.Bookings).Insured,
+                InsuranceOutstandingCount = InsuranceCounts(created.Bookings).Outstanding,
                 CreatedAt = created.CreatedAt, UpdatedAt = created.UpdatedAt
             }));
     }
@@ -221,14 +222,8 @@ public class TripsController : ControllerBase
             OvernightSupportCount = updated.Bookings.Count(b => b.NightSupportRequired && b.BookingStatus == BookingStatus.Confirmed),
             StaffAssignedCount = updated.StaffAssignments.Count(s => s.Status != AssignmentStatus.Cancelled),
             OutstandingTaskCount = updated.Tasks.Count(tk => tk.Status != TaskItemStatus.Completed && tk.Status != TaskItemStatus.Cancelled),
-            InsuranceConfirmedCount = updated.Bookings.Count(b =>
-                b.InsuranceStatus == InsuranceStatus.Confirmed
-                && b.BookingStatus != BookingStatus.Cancelled
-                && b.BookingStatus != BookingStatus.NoLongerAttending),
-            InsuranceOutstandingCount = updated.Bookings.Count(b =>
-                b.InsuranceStatus != InsuranceStatus.Confirmed
-                && b.BookingStatus != BookingStatus.Cancelled
-                && b.BookingStatus != BookingStatus.NoLongerAttending),
+            InsuranceConfirmedCount = InsuranceCounts(updated.Bookings).Insured,
+            InsuranceOutstandingCount = InsuranceCounts(updated.Bookings).Outstanding,
             CreatedAt = updated.CreatedAt, UpdatedAt = updated.UpdatedAt
         }));
     }

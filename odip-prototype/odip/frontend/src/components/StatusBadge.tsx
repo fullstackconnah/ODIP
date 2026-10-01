@@ -40,8 +40,9 @@ const SIZE_CLASS: Record<StatusBadgeSize, string> = {
   md: 'text-[13px] leading-5 font-semibold px-2.5 py-0.5',
 }
 
-// A status with no tone anywhere falls back to the amber "awaiting" pair rather than an unstyled pill.
-const DEFAULT_TONE: Tone = 'warning'
+// A status with no tone anywhere falls back to the quiet neutral pair, never the amber "awaiting a decision" one: an unknown word must not
+// claim attention. Every status the API sends has a row in STATUS_TONE (lib/statusToneCoverage.test.ts holds that), so this is for a new word only.
+const DEFAULT_TONE: Tone = 'neutral'
 
 function colorFor(key: string, tone: Tone | undefined, colorMap: StatusBadgeBaseProps['colorMap']): string {
   if (tone) return TONE[tone].solid

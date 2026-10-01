@@ -15,7 +15,6 @@ import { MissedMedicationGuidance } from './MissedMedicationGuidance'
 import { ROUTE_LABELS, FORM_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
 import type { MarEntryDto, MarPrnDto, AdministrationDto } from '@/api/types/medications'
 import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/incidentPrefill'
-import type { Tone } from '@/lib/tone'
 
 /**
  * Connection map: for a Refused/Withheld/Missed/WrongMedication administration, either a link to
@@ -61,14 +60,6 @@ function addDays(iso: string, days: number): string {
   const [y, m, d] = iso.split('-').map(Number)
   const dt = new Date(y, m - 1, d + days)
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
-}
-
-const ADMIN_STATUS_COLOR_MAP: Record<string, Tone> = {
-  administered: 'success',
-  refused: 'danger',
-  withheld: 'warning',
-  missed: 'danger',
-  wrongmedication: 'danger',
 }
 
 function SkeletonRow() {
@@ -236,7 +227,7 @@ export default function MarTab() {
                     <div className="shrink-0 flex items-center gap-2">
                       {entry.administration ? (
                         <div className="text-right space-y-1">
-                          <StatusBadge status={entry.administration.status} colorMap={ADMIN_STATUS_COLOR_MAP} />
+                          <StatusBadge status={entry.administration.status} />
                           <p className="text-xs text-[var(--color-muted-foreground)]">
                             {formatWithTimeZone(entry.administration.administeredAt, entry.administration.administeredAtTimeZone, { hour: '2-digit', minute: '2-digit' })}
                             {entry.administration.recordedByName ? ` · ${entry.administration.recordedByName}` : ''}

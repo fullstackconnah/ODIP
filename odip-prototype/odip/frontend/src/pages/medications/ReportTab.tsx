@@ -9,23 +9,7 @@ import { WITNESS_STATUS_LABELS } from '@/api/types/medications'
 import type { AdministrationDto } from '@/api/types/medications'
 import { formatWithTimeZone } from '@/lib/utils'
 import { formatWallClock } from '@/lib/wallClock'
-import type { Tone } from '@/lib/tone'
 import { plural } from '@/lib/format'
-
-const ADMIN_STATUS_COLOR_MAP: Record<string, Tone> = {
-  administered: 'success',
-  refused: 'danger',
-  withheld: 'warning',
-  missed: 'danger',
-  wrongmedication: 'danger',
-}
-
-const WITNESS_STATUS_COLOR_MAP: Record<string, Tone> = {
-  notrequired: 'neutral',
-  pending: 'warning',
-  approved: 'success',
-  declined: 'danger',
-}
 
 /**
  * Medication administration report (task 6b): every administration, filterable by participant
@@ -87,12 +71,12 @@ export default function ReportTab() {
         ? <span className="text-[var(--color-muted-foreground)]">—</span>
         : (
           <div className="space-y-0.5">
-            <StatusBadge status={a.witnessStatus} label={WITNESS_STATUS_LABELS[a.witnessStatus]} colorMap={WITNESS_STATUS_COLOR_MAP} />
+            <StatusBadge status={a.witnessStatus} label={WITNESS_STATUS_LABELS[a.witnessStatus]} />
             {a.witnessName && <p className="text-xs text-[var(--color-muted-foreground)]">{a.witnessName}</p>}
           </div>
         ),
     },
-    { key: 'status', header: 'Status', render: a => <StatusBadge status={a.status} colorMap={ADMIN_STATUS_COLOR_MAP} /> },
+    { key: 'status', header: 'Status', render: a => <StatusBadge status={a.status} /> },
   ]
 
   return (
