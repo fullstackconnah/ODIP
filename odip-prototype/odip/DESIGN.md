@@ -377,6 +377,7 @@ against white and the warm-grey container steps. Shadows belong to elements that
 ### Shadow Vocabulary
 - **Tinted Button Halo** (`shadow-md shadow-[var(--color-primary)]/20`): primary buttons.
 - **Floating Panel** (`0 24px 40px -12px rgba(27,28,26,0.14)`): dropdown and searchable-select panels.
+- **Side Panel** (`shadow-xl`): the `SlideOver` panel docked to the right edge over its scrim.
 - **Header Hairline** (`0 24px 32px -12px rgba(27,28,26,0.04)`): the sticky 48px header, a near-invisible
   ambient lift over scrolling content.
 - **Focus Ring** (`ring-2 ring-[var(--color-ring)]`): every focusable element; ring only, the border does
@@ -384,6 +385,23 @@ against white and the warm-grey container steps. Shadows belong to elements that
 
 **The Flat-By-Default Rule.** Surfaces are flat at rest. If a panel in the page flow needs a drop shadow
 to be visible, its background is wrong. Floating layers may carry one.
+
+### Layers
+
+Overlays share a short z-scale, and equal z means the later element in the DOM paints on top, so a dialog rendered after a
+panel covers it.
+
+| z | Layer |
+|---|---|
+| 40 | `SlideOver` scrim (`bg-black/40`) |
+| 50 | `Modal` and its backdrop (`bg-black/50`), the `SlideOver` panel, the desktop sidebar, the mobile bottom nav |
+| 55 / 60 | The mobile nav drawer's scrim / the drawer, below `lg` only: above the bottom nav it overlays |
+
+**Dialog stacking.** Every modal layer runs on `useDialogBehavior`, which keeps the open layers in the order they opened:
+Escape and the Tab trap act on the topmost only, focus returns to the control that opened it, and the page stays locked until
+the last layer closes. A ConfirmDialog opened from a panel therefore closes by itself and leaves the panel (and its focus)
+where it was. Below `lg` the `SlideOver` stops above the bottom nav (which is z-50 and later in the DOM) instead of
+running under it.
 
 ## Shapes
 
@@ -617,6 +635,15 @@ issue counts.
 
 `--radius-lg`, 16px padding, 90vh max height with internal scroll.
 
+**Side panel (`SlideOver`).** Creating or editing a record from a list opens a panel docked to the right edge, not a centred
+modal, so the list stays in view behind it: full height, 28rem wide (`md`) or 32rem (`lg`), a ruled left edge, the
+Side Panel shadow, over a `bg-black/40` scrim. The header is a `font-display` 16px title and a ghost icon-only close button
+(a 44px hit area on touch). The body scrolls and the footer (Cancel and Save on the right, a destructive action on the left)
+stays put. The panel slides in over 200ms and simply appears under reduced motion. It behaves as a dialog: focus moves in and
+returns to the opener, Tab stays inside, Escape closes, and the page behind does not scroll. A form with unsaved edits asks
+"Discard changes?" before Escape, the scrim or the close button closes it; a footer Cancel is an explicit discard and does
+not. Never hand-roll a `fixed right-0` panel: use `SlideOver`.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -638,8 +665,9 @@ issue counts.
 - **Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed ("Couldn't load"), and never an "All clear" without data
 - **Do** use `Button` for every action; it owns height, radius and focus
 - **Do** keep compliance state, alerts and countdowns visually equal to ordinary data
-- **Do** express depth with warm tonal surfaces; reserve shadow for the primary button, floating panels
-  and the header hairline
+- **Do** express depth with warm tonal surfaces; reserve shadow for the primary button, floating panels,
+  the side panel and the header hairline
+- **Do** open a record from a list in a `SlideOver`, and run any dialog on `useDialogBehavior`: Escape, the Tab trap, focus return and the scroll lock come with it, and a dialog opened over another closes alone
 
 ### Don't:
 - **Don't** hardcode hex, `rgb()` or any literal colour in feature code; use `var(--color-*)` or a
