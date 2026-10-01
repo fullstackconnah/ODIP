@@ -1012,6 +1012,48 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task AFinishBehindAReassignmentInFlight_IsA404_AndWritesNothing_OnRealPostgres()
+    {
+        // The shift is reassigned to another worker (not yet committed) when the first worker's Finish arrives having resolved the shift as their own. After the
+        // wait Finish re-reads the shift, sees it is no longer theirs, and answers 404 like any request that arrives a moment later: nothing is written.
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var (_, userId, shiftId, completionId) = await SeedCompletionAsync(db);
+        var other = new User
+        {
+            Id = Guid.NewGuid(), Email = $"{Guid.NewGuid()}@example.com", Username = Guid.NewGuid().ToString(),
+            FirstName = "Cleo", LastName = "Park", Role = UserRole.SupportWorker, IsActive = true,
+        };
+        db.Users.Add(other);
+        await db.SaveChangesAsync();
+
+        await using var reassigning = new NpgsqlConnection(_pg.ConnectionString);
+        await reassigning.OpenAsync();
+        await using var reassign = await reassigning.BeginTransactionAsync();
+        await using (var update = new NpgsqlCommand("UPDATE \"Shifts\" SET \"UserId\" = @other WHERE \"Id\" = @shift", reassigning, reassign))
+        {
+            update.Parameters.AddWithValue("other", other.Id);
+            update.Parameters.AddWithValue("shift", shiftId);
+            await update.ExecuteNonQueryAsync();
+        }
+
+        await using var request = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var portal = PortalFor(request, tenantId, userId, new DateTime(2026, 7, 14, 7, 30, 0, DateTimeKind.Utc));
+        var finish = portal.FinishShift(shiftId, new FinishShiftDto { NothingToNote = true, NothingToHandOver = true }, default);
+        await Task.Delay(700);
+        Assert.False(finish.IsCompleted, "Finish must wait for the reassignment that holds the shift row");
+        await reassign.CommitAsync();
+        var result = await finish;
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.Equal(ShiftStatus.InProgress, (await verify.Shifts.SingleAsync(x => x.Id == shiftId)).Status);
+        Assert.Null((await verify.ShiftCompletions.SingleAsync(c => c.Id == completionId)).SubmittedAt);
+        Assert.Null(request.Database.CurrentTransaction);
+    }
+
+    [SkippableFact]
     public async Task AFinishOnAnOpenShift_OnRealPostgres_CommitsTheFlip_AndLeavesNoTransactionOpen()
     {
         RequirePostgres();
