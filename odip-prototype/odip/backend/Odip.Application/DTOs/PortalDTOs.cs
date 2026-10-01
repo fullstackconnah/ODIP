@@ -247,7 +247,8 @@ public record PortalAddressDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? State,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Postcode);
 
-/// <summary>One emergency contact: who to call, and how.</summary>
+/// <summary>One emergency contact: who to call, and how. When a participant has NO Emergency Contact role the list falls back to their Next of
+/// Kin roles, and each entry says which role it is (<see cref="RoleType"/> / <see cref="RoleLabel"/>) so the UI can show "Next of kin".</summary>
 public record PortalEmergencyContactDto(
     Guid Id,
     string Name,
@@ -256,7 +257,11 @@ public record PortalEmergencyContactDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Mobile,
     bool IsPrimary,
     /// <summary>1 = first call; null when no order was recorded (those sort after the ranked ones).</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] int? PriorityOrder);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] int? PriorityOrder,
+    /// <summary>The contact role this entry comes from: EmergencyContact, or NextOfKin when the participant has no Emergency Contact role.</summary>
+    ContactRoleType RoleType,
+    /// <summary>Plain-language role: "Emergency contact" or "Next of kin" (distinct from <see cref="Relationship"/>, the free-text "Mother").</summary>
+    string RoleLabel);
 
 // ── Doses and routines in the shift window ─────────────────────────────────
 

@@ -324,6 +324,93 @@ public class PortalShiftPackageTests
         Assert.Equal(["Keep Me", "EndsToday Still"], Get(f).EmergencyContacts.Select(c => c.Name));
     }
 
+    // ── next of kin: the fallback when there is no Emergency Contact role ──
+
+    [Fact]
+    public void WhenThereIsNoEmergencyContact_TheNextOfKinAreShown_EachLabelledWithItsRole()
+    {
+        var f = Create(ShiftStatus.Published);
+        AddContact(f, "Second", "Kin", role: ContactRoleType.NextOfKin, priority: 2, relationship: "Brother");
+        AddContact(f, "First", "Kin", role: ContactRoleType.NextOfKin, priority: 1, primary: true, relationship: "Mother");
+
+        var contacts = Get(f).EmergencyContacts!;
+
+        Assert.Equal(["First Kin", "Second Kin"], contacts.Select(c => c.Name));
+        Assert.All(contacts, c => Assert.Equal(ContactRoleType.NextOfKin, c.RoleType));
+        Assert.All(contacts, c => Assert.Equal("Next of kin", c.RoleLabel));
+        Assert.Equal("Mother", contacts[0].Relationship);   // the free-text relationship is a separate thing from the role
+    }
+
+    [Fact]
+    public void WhenThereIsAnEmergencyContact_TheNextOfKinAreNotMixedIn()
+    {
+        var f = Create(ShiftStatus.Published);
+        AddContact(f, "Emergency", "Person", priority: 1);
+        AddContact(f, "Next", "Kin", role: ContactRoleType.NextOfKin);
+
+        var contacts = Get(f).EmergencyContacts!;
+
+        var only = Assert.Single(contacts);
+        Assert.Equal("Emergency Person", only.Name);
+        Assert.Equal(ContactRoleType.EmergencyContact, only.RoleType);
+        Assert.Equal("Emergency contact", only.RoleLabel);
+    }
+
+    [Fact]
+    public void AnEmergencyContactThatHasEndedOrExpired_DoesNotBlockTheNextOfKinFallback()
+    {
+        var f = Create(ShiftStatus.Published);
+        AddContact(f, "Ended", "Yesterday", endDate: new DateOnly(2026, 7, 13));
+        AddContact(f, "Expired", "Role", status: ContactRoleStatus.Expired);
+        AddContact(f, "Still", "Here", role: ContactRoleType.NextOfKin);
+
+        var contacts = Get(f).EmergencyContacts!;
+
+        Assert.Equal("Still Here", Assert.Single(contacts).Name);
+        Assert.Equal("Next of kin", contacts[0].RoleLabel);
+    }
+
+    [Fact]
+    public void TheNextOfKinFallback_AppliesTheSameActiveUnendedAndSameParticipantRules()
+    {
+        var f = Create(ShiftStatus.Published);
+        AddContact(f, "Keep", "Kin", role: ContactRoleType.NextOfKin);
+        AddContact(f, "Ended", "Kin", role: ContactRoleType.NextOfKin, endDate: new DateOnly(2026, 7, 13));
+        AddContact(f, "Expired", "Kin", role: ContactRoleType.NextOfKin, status: ContactRoleStatus.Expired);
+        var other = new Participant { Id = Guid.NewGuid(), TenantId = f.Worker.TenantId, FirstName = "Mia", LastName = "Chen", IsActive = true };
+        f.Db.Participants.Add(other);
+        f.Db.SaveChanges();
+        AddContact(f, "Someone", "Else", role: ContactRoleType.NextOfKin, participantId: other.Id);
+
+        Assert.Equal(["Keep Kin"], Get(f).EmergencyContacts!.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void NoEmergencyContactAndNoNextOfKin_IsAnEmptyList_NotNull()
+    {
+        var f = Create(ShiftStatus.Published);
+        AddContact(f, "Plan", "Manager", role: ContactRoleType.PlanManager);   // some other role: never a person to call in an emergency
+
+        Assert.Empty(Get(f).EmergencyContacts!);
+    }
+
+    [Fact]
+    public void NextOfKin_OfAnotherTenant_AreNeverReturned_ToANonSuperAdminCaller()
+    {
+        var tenantA = Guid.NewGuid();
+        var f = Create(ShiftStatus.Published, tenantId: tenantA);
+        var person = new Person { Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), FirstName = "Other", LastName = "Tenant", Mobile = "0400 999 999" };
+        f.Db.People.Add(person);
+        f.Db.ParticipantContactRoles.Add(new ParticipantContactRole
+        {
+            Id = Guid.NewGuid(), TenantId = person.TenantId, ParticipantId = f.Participant.Id, PersonId = person.Id, RoleType = ContactRoleType.NextOfKin,
+            Status = ContactRoleStatus.Active,
+        });
+        f.Db.SaveChanges();
+
+        Assert.Empty(Get(f).EmergencyContacts!);
+    }
+
     [Fact]
     public void EmergencyContacts_BlankPhoneAndRelationshipAreNull_NotEmptyStrings()
     {

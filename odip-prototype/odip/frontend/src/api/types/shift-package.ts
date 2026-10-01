@@ -109,7 +109,7 @@ export interface PortalAtAGlanceDto {
   address: PortalAddressDto | null
 }
 
-/** One emergency contact, first call first. `mobile`/`phone` are nullable independently. */
+/** One person to call, first call first: the participant's Emergency Contacts, or - when they have none - their Next of Kin. `mobile`/`phone` are nullable independently. */
 export interface PortalEmergencyContactDto {
   id: string
   name: string
@@ -119,6 +119,12 @@ export interface PortalEmergencyContactDto {
   isPrimary: boolean
   /** 1 = first call; null when no order was recorded (sorted after the ranked ones). */
   priorityOrder: number | null
+  /** The contact role this entry comes from. A participant with NO Emergency Contact role falls back to their Next of Kin roles, so this is
+   * `'NextOfKin'` for every entry of such a list (never a mix). */
+  roleType: 'EmergencyContact' | 'NextOfKin'
+  /** Plain-language role: "Emergency contact" or "Next of kin" (distinct from `relationship`, the free-text "Mother"). Show it so the worker
+   * knows when they are calling next of kin rather than a nominated emergency contact. */
+  roleLabel: string
 }
 
 // ── Doses ───────────────────────────────────────────────────

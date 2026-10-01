@@ -203,26 +203,32 @@ public sealed class ShiftPackageService
 
     /// <summary>
     /// Active Emergency Contact roles for the participant that have not ended, first call first: ranked contacts by priority,
-    /// then primary ones, then the rest by name. Tenant-scoped by the ParticipantContactRole / Person query filters.
+    /// then primary ones, then the rest by name. When the participant has NO such role the list falls back to their active Next of Kin
+    /// roles (same ordering), each labelled with its role so the UI can say "Next of kin". Never mixes the two: one or more Emergency
+    /// Contacts means those are the people to call. Tenant-scoped by the ParticipantContactRole / Person query filters.
     /// </summary>
     public async Task<List<PortalEmergencyContactDto>> GetEmergencyContactsAsync(Guid participantId, DateOnly providerToday, CancellationToken ct)
     {
         var roles = await _db.ParticipantContactRoles
             .Include(r => r.Person)
             .Where(r => r.ParticipantId == participantId
-                && r.RoleType == ContactRoleType.EmergencyContact
+                && (r.RoleType == ContactRoleType.EmergencyContact || r.RoleType == ContactRoleType.NextOfKin)
                 && r.Status == ContactRoleStatus.Active
                 && (r.EndDate == null || r.EndDate >= providerToday))
             .ToListAsync(ct);
 
+        var hasEmergencyContacts = roles.Any(r => r.RoleType == ContactRoleType.EmergencyContact && r.Person is not null);
+        var chosen = hasEmergencyContacts ? ContactRoleType.EmergencyContact : ContactRoleType.NextOfKin;
+
         return roles
+            .Where(r => r.RoleType == chosen)
             .Where(r => r.Person is not null)
             .OrderBy(r => r.PriorityOrder ?? int.MaxValue)
             .ThenByDescending(r => r.IsPrimary)
             .ThenBy(r => r.Person!.FullName, StringComparer.Ordinal)
             .Select(r => new PortalEmergencyContactDto(
                 r.Id, r.Person!.FullName, Clean(r.RelationshipToParticipant), Clean(r.Person.Phone), Clean(r.Person.Mobile),
-                r.IsPrimary, r.PriorityOrder))
+                r.IsPrimary, r.PriorityOrder, r.RoleType, r.RoleType == ContactRoleType.NextOfKin ? "Next of kin" : "Emergency contact"))
             .ToList();
     }
 

@@ -804,8 +804,8 @@ const packageParticipants = {
       address: { street: '14 Banksia Court', suburb: 'Robina', state: 'QLD', postcode: '4226' },
     },
     emergencyContacts: [
-      { id: 'ec-0001', name: 'Priya Whitfield', relationship: 'Mother', phone: '07 5555 0142', mobile: '0400 555 142', isPrimary: true, priorityOrder: 1 },
-      { id: 'ec-0002', name: 'Daniel Whitfield', relationship: 'Brother', phone: null, mobile: '0411 222 908', isPrimary: false, priorityOrder: 2 },
+      { id: 'ec-0001', name: 'Priya Whitfield', relationship: 'Mother', phone: '07 5555 0142', mobile: '0400 555 142', isPrimary: true, priorityOrder: 1, roleType: 'EmergencyContact', roleLabel: 'Emergency contact' },
+      { id: 'ec-0002', name: 'Daniel Whitfield', relationship: 'Brother', phone: null, mobile: '0411 222 908', isPrimary: false, priorityOrder: 2, roleType: 'EmergencyContact', roleLabel: 'Emergency contact' },
     ],
     handover: {
       completionId: 'sc-prev-0002', text: 'Sienna slept badly and was tired from 10am. Left heel looks a bit red - keep an eye on it and tell Priya at pick-up. New EpiPen is in the red bag.',
@@ -831,7 +831,8 @@ const packageParticipants = {
       address: { street: '3/22 Jacaranda Avenue', suburb: 'Chermside', state: 'QLD', postcode: '4032' },
     },
     emergencyContacts: [
-      { id: 'ec-0003', name: 'Helen Palmer', relationship: 'Mother', phone: '07 5555 0177', mobile: null, isPrimary: true, priorityOrder: 1 },
+      // No Emergency Contact role on this participant, so the list falls back to her Next of Kin (labelled), like the server.
+      { id: 'ec-0003', name: 'Helen Palmer', relationship: 'Mother', phone: '07 5555 0177', mobile: null, isPrimary: true, priorityOrder: 1, roleType: 'NextOfKin', roleLabel: 'Next of kin' },
     ],
     handover: {
       completionId: 'sc-prev-0004', text: 'Grace was unsettled at bedtime last night; settled by 11pm. Hearing aid battery was replaced.',
