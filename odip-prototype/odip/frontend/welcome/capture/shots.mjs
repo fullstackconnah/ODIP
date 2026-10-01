@@ -29,7 +29,7 @@ LOCAL.push({
 // ---- Stage 6: STAY COMPLIANT ---------------------------------------------------------------------
 LOCAL.push({
   name: 'compliant-overdue',
-  stage: 'stay-compliant',
+  stage: 'report-on-time',
   priority: 'P1',
   route: '/incidents',
   cropTarget: 'Red QSC banner ("1 incident requires QSC reporting: 24-hour deadline exceeded") plus the incident table with the solid OVERDUE badge in the QSC column',
@@ -49,7 +49,7 @@ LOCAL.push({
 
 LOCAL.push({
   name: 'compliant-incident-wizard',
-  stage: 'stay-compliant',
+  stage: 'report-on-time',
   priority: 'P1',
   route: '/incidents/new',
   cropTarget: 'Report New Incident wizard on the Incident Details step: step rail, the details card and the Injuries card with the front/back body map',
@@ -106,9 +106,9 @@ LOCAL.push({
   stage: 'care',
   priority: 'P1',
   route: '/participants/p-0004',
-  cropTarget: 'Participant header (name, status, action buttons) with the ranked risk-alert banner, the tab strip and the top of the first Identity card (cut below the Date of Birth row)',
+  cropTarget: 'The ranked risk-alert stack starting at the red Critical alert, the participant tab strip and the top of the first Identity card (cut below the Date of Birth row); the page header and its status line are not included',
   fixture: true,
-  alt: 'Participant page for Grace Palmer-Hughes with a stack of risk alerts under her name: a red Critical alert that a QSC report is overdue, then Warning alerts for an open High incident and an overdue restrictive practice review, and a note of one more alert; below are the participant tabs and the start of an Identity card.',
+  alt: 'A stack of risk alerts on a participant page: a red Critical alert that a QSC report is overdue for the escalation incident, then Warning alerts for an open High incident and an overdue restrictive practice review, and a note of one more alert; below are the participant tabs (Details, Contacts, Bookings and more) and the start of an Identity card for Grace Palmer-Hughes.',
   notes: 'Fixture: the mock returns no alerts, so GET participants/p-0004/alerts is fed alerts worded like the backend ParticipantAlertsService, based on the mock incident inc-0003 (open High, QSC overdue). The plan end date and practice review date are fixture values.',
   async setup(page) {
     await page.route(/\/api\/v1\/participants\/p-0004\/alerts(\?.*)?$/, (route) =>
@@ -125,8 +125,9 @@ LOCAL.push({
     const tabs = page.getByRole('tablist', { name: 'Participant detail sections' })
     const dob = page.getByText('Date of Birth', { exact: true }).first()
     await dob.waitFor()
-    // Header, alert stack and tab strip, then the top of the first details card, cut just below its Date of Birth row.
-    const top = await unionRect([head, firstAction, banner, more, tabs], 8)
+    // Round 2: start at the first (red) alert so the header line (region, plan type, support ratio) is not in the crop; then the
+    // alert stack, the tab strip and the top of the first details card, cut just below its Date of Birth row.
+    const top = await unionRect([banner, more, tabs], { x: 8, y: 4 })
     const dobBox = await unionRect([dob])
     const nextBox = await unionRect([page.getByText('Gender', { exact: true }).first()])
     const cutY = (dobBox.y + dobBox.height + nextBox.y) / 2 // midway between the two rows, so no row is sliced
@@ -134,15 +135,34 @@ LOCAL.push({
   },
 })
 
-// ---- Assemble: every shot module, ordered plan > stay > crew > care > fund-and-claim > stay-compliant ----------
+// ---- Assemble: every shot module, ordered plan > stay > crew > care > fund-and-claim > report-on-time ----------
 import { shots as crewShots } from './shots-crew.mjs'
 import { shots as stayShots } from './shots-stay.mjs'
 import { shots as fundShots } from './shots-fund.mjs'
 import { shots as compliantShots } from './shots-compliant.mjs'
 import { shots as careShots } from './shots-care.mjs'
+import { shots as planShots } from './shots-plan.mjs'
 
-const STAGE_ORDER = ['plan', 'stay', 'crew', 'care', 'fund-and-claim', 'stay-compliant']
-const ALL = [...LOCAL, ...crewShots, ...stayShots, ...fundShots, ...compliantShots, ...careShots]
+const STAGE_ORDER = ['plan', 'stay', 'crew', 'care', 'fund-and-claim', 'report-on-time']
+const BASE = [...LOCAL, ...planShots, ...crewShots, ...stayShots, ...fundShots, ...compliantShots, ...careShots]
+
+// Narrow "-m" variants (round 2): the base shot's fixtures and clock, a 640px viewport by default, per-variant overrides.
+import { variantSpecs } from './variants.mjs'
+const VARIANTS = Object.entries(variantSpecs).map(([baseName, spec]) => {
+  const base = BASE.find((s) => s.name === baseName)
+  if (!base) throw new Error(`variants.mjs: no base shot named ${baseName}`)
+  const { run: specRun, ...overrides } = spec
+  return {
+    ...base,
+    ...overrides,
+    name: `${baseName}-m`,
+    variantOf: baseName,
+    viewport: spec.viewport || { width: 640, height: 900 },
+    run: specRun ? (ctx) => specRun(ctx, () => base.run(ctx)) : base.run,
+  }
+})
+
+const ALL = [...BASE, ...VARIANTS]
 export const SHOTS = ALL
   .map((s, i) => [s, i])
   .sort((a, b) => STAGE_ORDER.indexOf(a[0].stage) - STAGE_ORDER.indexOf(b[0].stage) || a[1] - b[1])

@@ -241,6 +241,7 @@ async function runShot(browser, shot, order) {
       fixture: !!shot.fixture,
       alt: shot.alt,
       notes: shot.notes || '',
+      ...(shot.variantOf ? { variantOf: shot.variantOf } : {}),
     })
     console.log(
       `OK   ${shot.name}  ${info.width1x}x${info.height1x} (1x ${info.kb1x} KB q${info.q1x}, 2x ${info.kb2x} KB q${info.q2x})` +

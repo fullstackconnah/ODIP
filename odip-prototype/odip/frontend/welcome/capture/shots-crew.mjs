@@ -77,7 +77,7 @@ shots.push({
   now: '2026-08-10T08:00:00+10:00',
   viewport: { width: 1390, height: 900 },
   alt: 'Assign with warnings dialog listing three roster findings for Tom Beattie (approved leave covers this window, marked Reason required; not overnight-eligible for Grace Palmer-Hughes; first aid certificate expired 1 Jul 2026), with an empty reason box and Cancel and a disabled Assign anyway button.',
-  notes: 'Fixture: the board (By staff) and the 422 assign response are both fed; the dialog itself is the app reacting to a real drag of the Unfilled Thu 13 Aug overnight shift onto Tom Beattie row. Finding wording follows the backend RosterConflictService. The dark page scrim is switched off for the crop so the rounded corners are not dark wedges.',
+  notes: 'Fixture: the board (By staff) and the 422 assign response are both fed; the dialog itself is the app reacting to a real drag of the Unfilled Thu 13 Aug overnight shift onto Tom Beattie row. Finding wording follows the backend RosterConflictService. The dark page scrim is painted in the page background colour for the crop, so the rounded corners are clean (no dark wedges, no page text bleeding through).',
   async setup(page) {
     await routeStaffBoard(page)
     await page.route(/\/api\/v1\/rostering\/shifts\/rs-0015\/assign(\?.*)?$/, (route) =>
@@ -109,7 +109,7 @@ shots.push({
     await page.mouse.up()
     const dialog = page.getByRole('alertdialog', { name: 'Assign with warnings' })
     await dialog.waitFor()
-    await page.addStyleTag({ content: '.bg-black\/50 { background: transparent !important; }' })
+    await page.addStyleTag({ content: '.bg-black\/50 { background: var(--color-background) !important; }' })
     await settle()
     return { locator: dialog, pad: -1 }
   },
@@ -124,17 +124,19 @@ shots.push({
   cropTarget: 'Staff Qualification Expiry page: warning-window line, All Issues / Expired / Expiring Soon tabs and the two staff groups expanded to their credential rows with EXPIRED and days-left chips',
   fixture: false,
   now: '2026-08-08T10:00:00+10:00',
+  viewport: { width: 768, height: 900 },
   alt: 'Staff Qualification Expiry page with tabs All Issues, Expired, Expiring Soon and No Date Set, showing two staff groups expanded: a credential marked EXPIRED for Tom Beattie and one expiring in 12 days for Jack O\'Sullivan.',
-  notes: 'Mock data, no fixtures. Clock pinned to 2026-08-08 so Jack O\'Sullivan\'s first aid expiry (20 Aug) reads as 12 days. The warning window (30 days) is the app setting.',
+  notes: 'Mock data, no fixtures. Clock pinned to 2026-08-08 so Jack O\'Sullivan\'s first aid expiry (20 Aug) reads as 12 days. The warning window (30 days) is the app setting. Round 2: shot at a 768px viewport (no sidebar) so the crop is about 720px wide at natural text size.',
   async run({ page, goto, settle }) {
     await goto('/qualifications')
     await page.getByRole('heading', { level: 1, name: /Staff Qualification Expiry/ }).waitFor()
     await page.getByRole('button', { name: "Jack O'Sullivan" }).first().click()
     await page.getByRole('button', { name: 'Tom Beattie' }).first().click()
-    await page.getByText('EXPIRED', { exact: true }).first().waitFor()
+    await page.getByText('12 days').first().waitFor()
+    await page.getByText(/^expired$/i).first().waitFor()
     await settle()
     const title = page.getByRole('heading', { level: 1, name: /Staff Qualification Expiry/ })
     const lastGroup = page.getByRole('button', { name: 'Tom Beattie' }).first().locator('xpath=ancestor::div[contains(@class,"overflow-hidden")][1]')
-    return { locator: [title, lastGroup], pad: 8 }
+    return { locator: [title, lastGroup], pad: { x: 4, y: 8 } }
   },
 })
