@@ -17,6 +17,14 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
     /// </summary>
     public const string ActorItemKey = "AuditActor";
 
+    /// <summary>
+    /// HttpContext.Items key under which a request handler may leave a free-text reason for the change it is making to ONE entity.
+    /// The reason is recorded as a "Reason" field on that entity's audit row (the same row, not a second one), so the history of
+    /// "why was this participant archived" sits next to what changed. Keyed by the entity's id, so a save that touches several
+    /// audited entities attaches the reason only to the one it belongs to.
+    /// </summary>
+    public static string ReasonItemKey(Guid entityId) => $"AuditReason:{entityId:N}";
+
     private readonly IHttpContextAccessor _httpContextAccessor;
 
     public AuditInterceptor(IHttpContextAccessor httpContextAccessor)
@@ -81,6 +89,11 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
             var changes = BuildChanges(entry);
             // Skip Updated entries with no actual field changes (e.g. spurious EF tracking)
             if (action == AuditAction.Updated && changes.Count == 0) continue;
+
+            if (action == AuditAction.Updated
+                && _httpContextAccessor.HttpContext?.Items.TryGetValue(ReasonItemKey(entityId), out var reasonValue) == true
+                && reasonValue is string reason && !string.IsNullOrWhiteSpace(reason))
+                changes.Add(new FieldChange("Reason", null, reason.Trim()));
 
             entries.Add(new AuditLog
             {

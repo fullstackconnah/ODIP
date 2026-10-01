@@ -708,37 +708,25 @@ export interface UpdateParticipantDto extends CreateParticipantDto {
 }
 
 /**
- * Narrow write contract for a lifecycle-only change. The participants endpoint applies a
- * partial patch server-side (ParticipantPatchApplier), so a status flip must send ONLY
- * `isActive` — never a whole list DTO, which omits CreateParticipantDto's required fields.
+ * What `POST /participants/{id}/status` and `POST /participants/{id}/restore` answer. `changed` is false when the
+ * participant was already in the requested state. `warnings` never block the change (upcoming shifts that still
+ * reference an archived participant, readiness gaps on activation); the screen shows them verbatim after a success.
  */
-export interface UpdateParticipantStatusDto {
+export interface ParticipantStatusResultDto {
+  id: string
   isActive: boolean
+  isDraft: boolean
+  changed: boolean
+  warnings: string[]
 }
 
-/** Narrow write contract for a converted participant's incomplete intake. */
-export interface SaveParticipantIntakeDto {
-  firstName: string
-  lastName: string
-  preferredName?: string | null
-  dateOfBirth?: string | null
-  gender?: Gender | null
-  ndisNumber?: string | null
-  phone?: string | null
-  email?: string | null
-  addressStreet?: string | null
-  addressSuburb?: string | null
-  addressState?: string | null
-  addressPostcode?: string | null
-  primaryDiagnosis?: string | null
-  medicalSummary?: string | null
-  mobilityNotes?: string | null
-  behaviourRiskSummary?: string | null
-  notes?: string | null
-  inquiryId?: string | null
-  inquirySource?: 'Web' | 'Email' | 'Phone' | null
-  inquiryProvenance?: string | null
-}
+/**
+ * What `PUT /participants/{id}/intake` takes: the Intake wizard's own payload, the same shape `POST /participants` takes. The
+ * server reads only the intake scope from it (never gender, diagnoses, allergies, key identifiers or any other profile-owned
+ * field, and never whether the participant is a draft or active), creates the contacts and risk entries in it that the
+ * participant does not already have, and is idempotent on `completionRequestId`.
+ */
+export type SaveParticipantIntakeDto = Partial<CreateParticipantDto>
 
 /** Tenant-scoped immutable intake evidence; use its exact revision for the PDF download route. */
 export interface ParticipantIntakeSnapshotDto {

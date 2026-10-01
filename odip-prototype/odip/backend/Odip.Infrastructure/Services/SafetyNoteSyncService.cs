@@ -44,10 +44,10 @@ public class SafetyNoteSyncService
     /// </summary>
     public async Task SyncFromParticipantAsync(Participant p, CancellationToken ct)
     {
-        await SyncCategoryAsync(p.Id, AllergiesKey, ComputeAllergiesState(p), ct);
-        await SyncCategoryAsync(p.Id, BehavioursOfConcernKey, ComputeBehavioursOfConcernState(p), ct);
-        await SyncCategoryAsync(p.Id, FallsRiskKey, ComputeFallsRiskState(p), ct);
-        await SyncCategoryAsync(p.Id, RisksHazardsKey, await ComputeRisksHazardsStateAsync(p, ct), ct);
+        await SyncCategoryAsync(p, AllergiesKey, ComputeAllergiesState(p), ct);
+        await SyncCategoryAsync(p, BehavioursOfConcernKey, ComputeBehavioursOfConcernState(p), ct);
+        await SyncCategoryAsync(p, FallsRiskKey, ComputeFallsRiskState(p), ct);
+        await SyncCategoryAsync(p, RisksHazardsKey, await ComputeRisksHazardsStateAsync(p, ct), ct);
     }
 
     /// <summary>
@@ -60,7 +60,7 @@ public class SafetyNoteSyncService
     {
         var participant = await _db.Participants.FirstOrDefaultAsync(x => x.Id == participantId, ct);
         if (participant == null) return;
-        await SyncCategoryAsync(participant.Id, RisksHazardsKey, await ComputeRisksHazardsStateAsync(participant, ct), ct);
+        await SyncCategoryAsync(participant, RisksHazardsKey, await ComputeRisksHazardsStateAsync(participant, ct), ct);
     }
 
     /// <summary>
@@ -71,7 +71,7 @@ public class SafetyNoteSyncService
     /// </summary>
     public async Task SyncRestrictivePracticeNoteAsync(Participant p, CancellationToken ct)
     {
-        await SyncCategoryAsync(p.Id, RestrictivePracticesKey, ComputeRestrictivePracticeState(p), ct);
+        await SyncCategoryAsync(p, RestrictivePracticesKey, ComputeRestrictivePracticeState(p), ct);
     }
 
     /// <summary>
@@ -283,8 +283,9 @@ public class SafetyNoteSyncService
     /// <item><description>Value present + note exists, manually edited → leave content/archived state untouched; recompute drift only.</description></item>
     /// </list>
     /// </summary>
-    private async Task SyncCategoryAsync(Guid participantId, string sourceKey, CategoryState state, CancellationToken ct)
+    private async Task SyncCategoryAsync(Participant participant, string sourceKey, CategoryState state, CancellationToken ct)
     {
+        var participantId = participant.Id;
         var existing = _db.ChangeTracker.Entries<ParticipantNote>()
             .Select(e => e.Entity)
             .FirstOrDefault(n => n.ParticipantId == participantId && n.SourceKey == sourceKey);
@@ -315,6 +316,11 @@ public class SafetyNoteSyncService
             var note = new ParticipantNote
             {
                 Id = Guid.NewGuid(),
+                // The PARTICIPANT's tenant, set explicitly: SaveChanges stamps only a default TenantId, and with the CALLER's tenant, so a
+                // SuperAdmin acting on another tenant's participant used to leave the safety notes in their own tenant, invisible to the
+                // participant's own coordinators (review F-3). A brand-new participant's tenant is still default here and is stamped, with
+                // the note's, by SaveChanges.
+                TenantId = participant.TenantId,
                 ParticipantId = participantId,
                 SourceKey = sourceKey,
                 Title = state.Title,

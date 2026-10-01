@@ -12,6 +12,8 @@ import { EmptyState } from '@/components/EmptyState'
 import { Dropdown } from '@/components/Dropdown'
 import { DataTable, type Column } from '@/components/DataTable'
 import { usePermissions } from '@/lib/permissions'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import {
   RESTRICTIVE_PRACTICE_TYPES, RESTRICTIVE_PRACTICE_TYPE_LABELS,
@@ -106,16 +108,6 @@ const EMPTY_FORM: PracticeFormState = {
   relatedMedicationId: '', isActive: true,
 }
 
-function PracticeSkeleton() {
-  return (
-    <div className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] animate-pulse space-y-2.5">
-      <div className="h-4 w-1/3 bg-[var(--color-muted)] rounded" />
-      <div className="h-3 w-full bg-[var(--color-muted)] rounded" />
-      <div className="h-3 w-2/3 bg-[var(--color-muted)] rounded" />
-    </div>
-  )
-}
-
 function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
   practice: RestrictivePracticeDto
   canWrite: boolean
@@ -192,7 +184,10 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
 
 export default function RestrictivePracticesTab({ participantId }: { participantId: string | undefined }) {
   const { canWriteRestrictivePractices } = usePermissions()
-  const { data: practices = [], isLoading } = useRestrictivePractices(participantId, true)
+  const practicesQuery = useRestrictivePractices(participantId, true)
+  const practices = useMemo(() => practicesQuery.data ?? [], [practicesQuery.data])
+  // A failed or paused request is not an empty register: "No restrictive practices recorded" is only for one that succeeded and came back empty.
+  const phase = queryPhase(practicesQuery)
   const { data: medications = [] } = useParticipantMedications(participantId, false)
   const updatePractice = useUpdateRestrictivePractice()
   const deletePractice = useDeleteRestrictivePractice()
@@ -540,11 +535,10 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         </div>
       )}
 
-      {isLoading ? (
-        <div className="space-y-3">
-          <PracticeSkeleton />
-          <PracticeSkeleton />
-        </div>
+      {phase === 'loading' ? (
+        <PageState kind="loading" noun="restrictive practices" />
+      ) : phase === 'error' ? (
+        <PageState kind="error" noun="restrictive practices" onRetry={() => practicesQuery.refetch()} />
       ) : activePractices.length === 0 ? (
         <EmptyState
           icon={ShieldAlert}

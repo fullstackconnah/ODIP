@@ -27,16 +27,16 @@
  * Per-step save: each step's "Next" both zod-validates AND PATCHes that step's CORE-02 group(s)
  * (via the wizard shell's async `validate` hook — CORE-01 explicitly anticipates this) before
  * advancing, so a Profile can be completed across multiple sessions without losing earlier steps'
- * work. The final Review step's "Complete Profile" does one full `PUT` (isDraft=false) — see this
- * branch's report for why a `profileCompletedAt` timestamp (PF-10.5) is NOT set here: no backend
- * support for it exists yet on `main` (PF-10.5 hasn't landed) — flipping `IsDraft` via the existing
- * full-PUT path is the one part of PF-10.4's acceptance criteria achievable today.
+ * work. The final Review step's "Complete Profile" is `POST /participants/{id}/complete-profile`: it carries no
+ * profile field, so it cannot wipe one (it used to send the whole form to the full-record PUT with isDraft=false,
+ * which replaced every field and brought an archived participant back). Anything typed on a step that was left
+ * without saving is saved by the same per-step PATCHes first.
  */
 import { useNavigate, useParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useFieldArray, useWatch } from 'react-hook-form'
-import { useEffect, useMemo, useState } from 'react'
-import { useParticipant, usePatchParticipant, useUpdateParticipant, useStaff, useUpsertCommunityAccessRiskItem } from '@/api/hooks'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useParticipant, usePatchParticipant, useCompleteParticipantProfile, useStaff, useUpsertCommunityAccessRiskItem } from '@/api/hooks'
 import {
   useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, WizardStepHeading, WizardShell,
   REVIEW_STEP_KEY,
@@ -49,11 +49,10 @@ import {
   PROFILE_STEP_MOBILITY_FIELDS, PROFILE_STEP_BEHAVIOUR_FIELDS, PROFILE_STEP_DAILY_LIVING_FIELDS,
   PROFILE_STEP_COMMUNITY_ACCESS_FIELDS,
 } from '@/lib/participantSchema'
-import { buildProfileStepPatch, buildParticipantWirePayload, PROFILE_WIZARD_STEP_TO_PATCH_GROUPS } from '@/lib/participantPatchGroups'
+import { buildProfileStepPatch, PROFILE_WIZARD_STEP_TO_PATCH_GROUPS } from '@/lib/participantPatchGroups'
 import { parseServiceStreams, parseHidpaCategories, DIAGNOSIS_OPTIONS, DIAGNOSIS_OTHER_SENTINEL } from '@/api/types/participants'
 import { CONSENT_TYPES, HEALTH_CONDITION_TYPES, ADL_TYPES, CHECKLIST_ITEM_TYPES, COMMUNITY_ACCESS_RISK_ITEM_TYPES } from '@/api/types/enums'
 import { useDeriveFieldValues, type FieldDerivationDef } from '@/lib/conditionalFields'
-import type { UpdateParticipantDto } from '@/api/types/participants'
 import { boolToTriState, focusField, extractErrorMessage } from '../intake/intakeFormat'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { KeyIdentifiersStep } from './steps/KeyIdentifiersStep'
@@ -64,6 +63,9 @@ import { BehaviourCognitionStep } from './steps/BehaviourCognitionStep'
 import { DailyLivingStep } from './steps/DailyLivingStep'
 import { CommunityAccessStep } from './steps/CommunityAccessStep'
 import { Card } from '@/components/Card'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
+import { queryPhase } from '@/lib/queryPhase'
 
 const CA_SECTION = PROFILE_CONDITIONAL_SECTIONS.find((s) => s.key === 'communityAccess')!
 const STA_SECTION = PROFILE_CONDITIONAL_SECTIONS.find((s) => s.key === 'holidaySta')!
@@ -107,9 +109,9 @@ const FIELD_DERIVATIONS: FieldDerivationDef<ParticipantFormData>[] = [
 export default function ProfileWizardPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data: participant, isLoading } = useParticipant(id)
+  const { data: participant, isLoading, isError, error, refetch } = useParticipant(id)
   const patchParticipant = usePatchParticipant()
-  const updateParticipant = useUpdateParticipant()
+  const completeProfile = useCompleteParticipantProfile()
   const upsertRiskItem = useUpsertCommunityAccessRiskItem()
   const { data: staffList = [] } = useStaff()
   const activeStaff = staffList.filter((s) => s.isActive)
@@ -142,6 +144,14 @@ export default function ProfileWizardPage() {
   // the same accepted "sync local state from just-arrived external data" pattern already used by
   // SettingsPage.tsx/TenantFormPanel.tsx/UserFormPanel.tsx/BookingsTab.tsx in this codebase.
   const [hydrated, setHydrated] = useState(false)
+
+  // What each step's fields held the last time they were known to match the server: the form as first hydrated, then updated each time a step
+  // is saved. Complete Profile saves only the steps whose fields now differ from this (review F-5), not every step whenever the form is dirty:
+  // one edited field used to mean up to seven PATCHes, a refusal in a step nobody touched blocked completion, and untouched sections were
+  // rewritten from the form's copy. Compared by value, not by react-hook-form's dirty flags: a refetch reset with keepDirtyValues leaves those
+  // flags stale, so a step that WAS saved still read as dirty (and isDirty itself can read false while typed values are kept).
+  const baselineValues = useRef<Record<string, unknown> | null>(null)
+  const savedSnapshots = useRef<Record<string, string>>({})
 
   // Full round-trip — every field either wizard touches, both Shared/Intake-owned (read-only here,
   // but must still be echoed back on every PATCH group that carries one — see THE TRAP note in
@@ -277,12 +287,18 @@ export default function ProfileWizardPage() {
       supportsLookLikeAfternoonEvening: participant.supportsLookLikeAfternoonEvening ?? '', supportsLookLikeOvernight: participant.supportsLookLikeOvernight ?? '',
       // Not editable/displayed by this wizard, but a live array so useFieldArray hooks stay valid.
       riskEntries: [], contactRoles: [],
-    } as unknown as Parameters<typeof reset>[0])
+    } as unknown as Parameters<typeof reset>[0],
+    // Every step's PATCH invalidates the participant, and the refetch brings a new object (the server stamps updatedAt). Without this the
+    // reset below replaced the whole form with the server's copy and discarded what had been typed on a step not yet saved (L2-15):
+    // dirty (typed) fields keep their values, the rest take the server's.
+    { keepDirtyValues: true })
+    // The first hydration is the baseline every step's "unchanged" is measured against until that step is saved.
+    if (!baselineValues.current) baselineValues.current = JSON.parse(JSON.stringify(getValues()))
     // See the `hydrated` flag doc below — flips true in the SAME effect flush as this reset(),
     // so useDeriveFieldValues' resetKey and the reset() values it re-baselines against always
     // change together, never one render apart.
     setHydrated(true)
-  }, [participant, reset])
+  }, [participant, reset, getValues])
 
   const serviceStreamsList = useMemo(() => parseServiceStreams(participant?.serviceStreams), [participant?.serviceStreams])
   const caVisible = CA_SECTION.isVisible(serviceStreamsList)
@@ -308,6 +324,14 @@ export default function ProfileWizardPage() {
 
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  /** A step's fields as one comparable string: what the form holds for exactly the fields that step saves. */
+  const snapshotOf = (step: WizardStepDef<ParticipantFormData>, values: unknown) =>
+    JSON.stringify((step.fields as string[]).map((name) => (values as Record<string, unknown>)[name] ?? null))
+  const markSaved = (stepKey: string, values: unknown) => {
+    const step = WIZARD_STEPS.find((candidate) => candidate.key === stepKey)
+    if (step) savedSnapshots.current[stepKey] = snapshotOf(step, values)
+  }
+
   const saveStep = async (stepKey: string) => {
     if (!id) return
     const values = getValues()
@@ -326,11 +350,12 @@ export default function ProfileWizardPage() {
           }),
         ),
       )
+      markSaved(stepKey, values)
       return
     }
     const dto = buildProfileStepPatch(stepKey, values, staVisible, PROFILE_WIZARD_STEP_TO_PATCH_GROUPS)
-    if (!dto) return
-    await patchParticipant.mutateAsync({ id, data: dto })
+    if (dto) await patchParticipant.mutateAsync({ id, data: dto })
+    markSaved(stepKey, values)
   }
 
   const validateStep: WizardValidate<ParticipantFormData> = async (step, values) => {
@@ -376,11 +401,14 @@ export default function ProfileWizardPage() {
     setCompleting(true)
     setSaveError(null)
     try {
-      const payload = buildParticipantWirePayload(getValues())
-      delete payload.riskEntries
-      delete payload.contactRoles
-      const data: UpdateParticipantDto = { ...(payload as unknown as UpdateParticipantDto), isActive: participant.isActive, isDraft: false }
-      const res = await updateParticipant.mutateAsync({ id, data })
+      // A step left with Back or the rail is not saved by that: a step edited since it was last saved goes out through its own per-step
+      // PATCH first, so finishing the wizard never drops it, and a step nobody touched is not sent at all (review F-5). Then the finalise
+      // call itself, which carries no profile field.
+      const current = getValues()
+      const changedSteps = WIZARD_STEPS.filter((step) =>
+        snapshotOf(step, current) !== (savedSnapshots.current[step.key] ?? snapshotOf(step, baselineValues.current ?? {})))
+      for (const step of changedSteps) await saveStep(step.key)
+      const res = await completeProfile.mutateAsync({ id })
       if (res.success) {
         // Clear the dirty flag synchronously first (the documented useUnsavedChangesWarning idiom, as the Intake
         // wizard does): the per-step saves never reset the form, so without this a finished wizard that had any
@@ -418,7 +446,16 @@ export default function ProfileWizardPage() {
 
   const fallbackBack = `/participants/${id}`
 
-  if (isLoading || !participant) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
+  // Three different facts, three different states: still loading, the load failed, and there is no such participant. A failed or
+  // missing record used to leave this page on "Loading..." for ever (L2-06 = L5-02).
+  // A paused request (the browser is offline and the load has not run) is loading, not "not found" (review F-1).
+  if (!participant) {
+    const phase = queryPhase({ data: participant, isLoading, isError })
+    if (phase === 'loading') return <PageState kind="loading" noun="participant" />
+    return phase === 'error' && !isNotFoundError(error)
+      ? <PageState kind="error" noun="participant" onRetry={() => refetch()} />
+      : <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
+  }
 
   return (
     <div className="w-full min-w-0 max-w-full flex flex-col gap-[var(--section-gap)]">
@@ -445,7 +482,8 @@ export default function ProfileWizardPage() {
         }
       >
         <form
-          onSubmit={handleSubmit(onComplete, wizard.handleInvalidSubmit)}
+          // Built when the form submits, not while rendering: onComplete reads the saved-step snapshots (refs).
+          onSubmit={(event) => handleSubmit(onComplete, wizard.handleInvalidSubmit)(event)}
           noValidate
           // The form now fills the full content-column width (no max-w cap) so the rail's
           // sidebar and the form's step panel share the row; the step's heading + body sit

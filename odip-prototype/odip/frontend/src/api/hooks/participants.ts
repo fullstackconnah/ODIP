@@ -5,8 +5,7 @@ import type {
   ParticipantListDto,
   ParticipantDetailDto,
   CreateParticipantDto,
-  UpdateParticipantDto,
-  UpdateParticipantStatusDto,
+  ParticipantStatusResultDto,
   SaveParticipantIntakeDto,
   PatchParticipantDto,
   SupportProfileDto,
@@ -109,21 +108,11 @@ export function useCreateParticipant() {
   })
 }
 
-export function useUpdateParticipant() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateParticipantDto | UpdateParticipantStatusDto }) =>
-      apiPutRaw<ParticipantDetailDto>(`/participants/${id}`, data),
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['participants'] })
-      qc.invalidateQueries({ queryKey: ['participant', vars.id] })
-      // Completing (or re-completing) intake creates the onboarding record; a full save also drops a stale profile validation.
-      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
-    },
-  })
-}
-
-/** Saves only the approved intake subset for an already-created participant. */
+/**
+ * Saves or completes an intake the Intake wizard is RESUMING (PUT /participants/{id}/intake). The server writes only the intake
+ * scope, so nothing else on the participant can be wiped, and it creates the contacts and risk entries in the payload that the
+ * participant does not already have. Never send the whole participant to PUT /participants/{id} for this: that is a full replace.
+ */
 export function useSaveParticipantIntake() {
   const qc = useQueryClient()
   return useMutation({
@@ -132,6 +121,28 @@ export function useSaveParticipantIntake() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['participants'] })
       qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+      // Completing intake puts the participant on the onboarding worklist, new contacts and risks now exist, and the enquiry the
+      // participant came from keeps its name and contact details in step.
+      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      qc.invalidateQueries({ queryKey: ['participant-contact-roles', vars.id] })
+      qc.invalidateQueries({ queryKey: ['participant-risk-entries', vars.id] })
+      qc.invalidateQueries({ queryKey: ['participant-inquiries'] })
+    },
+  })
+}
+
+/**
+ * Finalises a participant whose intake is complete (POST /participants/{id}/complete-profile, empty body): the Profile wizard's
+ * "Complete Profile". It carries no profile field (each step is saved by its own PATCH), so it cannot wipe one.
+ */
+export function useCompleteParticipantProfile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => apiPostRaw<ParticipantDetailDto>(`/participants/${id}/complete-profile`, {}),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['participants'] })
+      qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
     },
   })
 }
@@ -169,7 +180,7 @@ export function useDownloadParticipantIntakeSnapshotPdf() {
  * PatchParticipantDto's doc), leaving every absent group untouched server-side. One generic hook
  * for every group combination a caller needs (a wizard step's 1-4 groups, or a detail-tab
  * section's 1-2 groups) rather than a hook per section. Same invalidate-on-success shape as
- * useUpdateParticipant above. Every consumer of this hook must gate on `canWriteParticipantDetails`
+ * the other participant writes. Every consumer of this hook must gate on `canWriteParticipantDetails`
  * (never the broader `canWrite`) — see SPEC-00's CORE-02 section.
  */
 export function usePatchParticipant() {
@@ -191,6 +202,42 @@ export function useDeleteParticipant() {
   return useMutation({
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/participants/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['participants'] }),
+  })
+}
+
+/**
+ * Archives or reactivates a participant through the dedicated status endpoint (POST /participants/{id}/status). The server owns
+ * the rules (a draft cannot be activated; archiving warns about upcoming shifts instead of cancelling them), so a screen shows
+ * its `errors[0]` on a 400 and the result's `warnings` after a success. `reason` (max 500) is sent only when it is not blank.
+ * Never send the whole participant for this: PUT /participants/{id} is a full replace.
+ */
+export function useUpdateParticipantStatus() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, isActive, reason }: { id: string; isActive: boolean; reason?: string | null }) =>
+      apiPostRaw<ParticipantStatusResultDto>(`/participants/${id}/status`, { isActive, ...(reason ? { reason } : {}) }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['participants'] })
+      qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+      // Archiving or reactivating changes who the onboarding worklist lists.
+      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+    },
+  })
+}
+
+/**
+ * Restores an archived participant (POST /participants/{id}/restore, empty body). It reactivates and changes no other field, so
+ * a list row can never be sent back and wipe the profile, which is what restoring through the full-record PUT did.
+ */
+export function useRestoreParticipant() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => apiPostRaw<ParticipantStatusResultDto>(`/participants/${id}/restore`, {}),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['participants'] })
+      qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+    },
   })
 }
 

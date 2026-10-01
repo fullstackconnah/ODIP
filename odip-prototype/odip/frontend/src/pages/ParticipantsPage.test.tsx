@@ -4,10 +4,12 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import ParticipantsPage from './ParticipantsPage'
 
-const { mockUseParticipants, mockDeleteMutate, mockUpdateMutate, mockUseParticipantAlertsAggregate } = vi.hoisted(() => ({
+const { mockUseParticipants, mockDeleteMutate, mockUpdateMutate, mockStatusMutate, mockRestoreMutate, mockUseParticipantAlertsAggregate } = vi.hoisted(() => ({
   mockUseParticipants: vi.fn(),
   mockDeleteMutate: vi.fn(),
   mockUpdateMutate: vi.fn(),
+  mockStatusMutate: vi.fn(),
+  mockRestoreMutate: vi.fn(),
   mockUseParticipantAlertsAggregate: vi.fn(),
 }))
 
@@ -15,8 +17,13 @@ vi.mock('@/api/hooks', () => ({
   useParticipants: mockUseParticipants,
   useDeleteParticipant: () => ({ mutate: mockDeleteMutate, isPending: false }),
   useUpdateParticipant: () => ({ mutate: mockUpdateMutate, isPending: false }),
+  useUpdateParticipantStatus: () => ({ mutate: mockStatusMutate, isPending: false }),
+  useRestoreParticipant: () => ({ mutate: mockRestoreMutate, isPending: false }),
   useParticipantAlertsAggregate: mockUseParticipantAlertsAggregate,
 }))
+
+/** An axios-shaped failure: the API's envelope sits on `response.data`, where `extractErrorMessage` reads it. */
+const apiError = (message: string) => ({ response: { data: { success: false, errors: [message] } } })
 
 function baseParticipant(overrides: Record<string, unknown> = {}) {
   return {
@@ -57,6 +64,9 @@ beforeEach(() => {
 afterEach(() => {
   localStorage.clear()
   vi.clearAllMocks()
+  // clearAllMocks keeps implementations: a test that made the mutation succeed or fail must not leak that into the next.
+  mockStatusMutate.mockReset()
+  mockRestoreMutate.mockReset()
 })
 
 describe('ParticipantsPage — service stream badges', () => {
@@ -186,11 +196,16 @@ describe('ParticipantsPage — alerts badge column', () => {
 })
 
 describe('ParticipantsPage — operational register stage boundary', () => {
-  it('does not render a client-side Draft control because incomplete records belong to Onboarding', () => {
+  it('offers a Drafts view, so a draft that has no onboarding row is listed somewhere, and asks the server only for drafts there (L2-04)', async () => {
+    // This used to assert that there is NO Drafts control "because incomplete records belong to Onboarding". A draft saved from the Intake
+    // wizard has no onboarding row, so it belonged to no tab at all. Drafts that do have a row still appear under Onboarding as well.
+    const user = userEvent.setup()
     mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
     renderPage()
 
-    expect(screen.queryByRole('radio', { name: 'Drafts' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'Drafts' }))
+
+    expect(mockUseParticipants).toHaveBeenLastCalledWith({ isDraft: 'true' })
   })
 
   it('requests the server-owned operational stage predicate as well as non-drafts', () => {
@@ -269,15 +284,92 @@ describe('ParticipantsPage — status change safety', () => {
 
     await user.click(confirmBtn)
 
-    // Exactly one mutation, with the full participant payload and the flipped flag.
-    expect(mockUpdateMutate).toHaveBeenCalledTimes(1)
-    expect(mockUpdateMutate).toHaveBeenCalledWith({
-      id: 'p1',
-      data: { isActive: false },
-    })
+    // Exactly one mutation: the dedicated status call with the flipped flag and nothing else (no reason typed).
+    // The full-record PUT (`useUpdateParticipant`) answered 400 "First name is required." and is never used here.
+    expect(mockStatusMutate).toHaveBeenCalledTimes(1)
+    expect(mockStatusMutate).toHaveBeenCalledWith(
+      { id: 'p1', isActive: false },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    )
+    expect(mockUpdateMutate).not.toHaveBeenCalled()
     // Cancel-style false positives: must not mutate on Cancel and must not mutate the
     // archive/restore path.
     expect(mockDeleteMutate).not.toHaveBeenCalled()
+  })
+
+  it('sends the typed reason with the change, trimmed', async () => {
+    const user = userEvent.setup()
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true })],
+      isLoading: false,
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /change status for jamie smith/i }))
+    await user.type(screen.getByLabelText(/reason/i), '  Moved interstate  ')
+    await user.click(screen.getByRole('button', { name: /set jamie smith as inactive/i }))
+
+    expect(mockStatusMutate).toHaveBeenCalledWith(
+      { id: 'p1', isActive: false, reason: 'Moved interstate' },
+      expect.any(Object),
+    )
+  })
+
+  it('closes the dialog and confirms with the server\'s warnings once the change is saved', async () => {
+    const user = userEvent.setup()
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true })],
+      isLoading: false,
+    })
+    mockStatusMutate.mockImplementation((_vars: unknown, options: { onSuccess: (response: unknown) => void }) => options.onSuccess({
+      success: true,
+      data: { id: 'p1', isActive: false, isDraft: false, changed: true, warnings: ['2 upcoming shifts still reference this participant. They were not cancelled.'] },
+    }))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /change status for jamie smith/i }))
+    await user.click(screen.getByRole('button', { name: /set jamie smith as inactive/i }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    const notice = screen.getByRole('status')
+    expect(notice).toHaveTextContent('Jamie Smith is now Inactive')
+    expect(notice).toHaveTextContent('2 upcoming shifts still reference this participant. They were not cancelled.')
+  })
+
+  it('says so when the participant was already in the requested state', async () => {
+    const user = userEvent.setup()
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true })],
+      isLoading: false,
+    })
+    mockStatusMutate.mockImplementation((_vars: unknown, options: { onSuccess: (response: unknown) => void }) => options.onSuccess({
+      success: true,
+      data: { id: 'p1', isActive: false, isDraft: false, changed: false, warnings: [] },
+    }))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /change status for jamie smith/i }))
+    await user.click(screen.getByRole('button', { name: /set jamie smith as inactive/i }))
+
+    expect(screen.getByRole('status')).toHaveTextContent('Jamie Smith was already Inactive')
+  })
+
+  it('keeps the dialog open and shows the server\'s message when the change is refused', async () => {
+    const user = userEvent.setup()
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true })],
+      isLoading: false,
+    })
+    mockStatusMutate.mockImplementation((_vars: unknown, options: { onError: (error: unknown) => void }) =>
+      options.onError(apiError('A draft participant cannot be activated. Complete their intake and profile first.')))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /change status for jamie smith/i }))
+    await user.click(screen.getByRole('button', { name: /set jamie smith as inactive/i }))
+
+    const dialog = screen.getByRole('alertdialog')
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('A draft participant cannot be activated. Complete their intake and profile first.')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
   it('cancelling the confirmation does not mutate', async () => {
@@ -291,7 +383,7 @@ describe('ParticipantsPage — status change safety', () => {
     await user.click(screen.getByRole('button', { name: /change status for jamie smith/i }))
     await user.click(screen.getByRole('button', { name: /^cancel$/i }))
 
-    expect(mockUpdateMutate).not.toHaveBeenCalled()
+    expect(mockStatusMutate).not.toHaveBeenCalled()
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
@@ -324,11 +416,8 @@ describe('ParticipantsPage — status change safety', () => {
     await user.click(screen.getByRole('button', { name: /change status for alex rivera/i }))
     await user.click(screen.getByRole('button', { name: /set alex rivera as inactive/i }))
 
-    expect(mockUpdateMutate).toHaveBeenCalledTimes(1)
-    expect(mockUpdateMutate).toHaveBeenCalledWith({
-      id: 'p2',
-      data: { isActive: false },
-    })
+    expect(mockStatusMutate).toHaveBeenCalledTimes(1)
+    expect(mockStatusMutate).toHaveBeenCalledWith({ id: 'p2', isActive: false }, expect.any(Object))
   })
 
   it('no longer navigates when clicking the Status cell itself (row click target is the Name link, not the whole row)', async () => {
@@ -345,7 +434,39 @@ describe('ParticipantsPage — status change safety', () => {
     await user.click(within(jamieRow3).getByText('Active'))
 
     expect(screen.queryByText('Participant detail page')).not.toBeInTheDocument()
+    expect(mockStatusMutate).not.toHaveBeenCalled()
+  })
+})
+
+describe('ParticipantsPage — Restore from the Archived view', () => {
+  async function openRestoreDialog(user: ReturnType<typeof userEvent.setup>) {
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: false })],
+      isLoading: false,
+    })
+    renderPage()
+    await user.click(screen.getByRole('radio', { name: 'Archived' }))
+    await user.click(screen.getByRole('button', { name: 'Restore' }))
+    return screen.getByRole('alertdialog')
+  }
+
+  it('restores through the restore hook with an empty body: never the list row, never the full-record PUT', async () => {
+    const user = userEvent.setup()
+    const dialog = await openRestoreDialog(user)
+    await user.click(within(dialog).getByRole('button', { name: 'Restore' }))
+
+    expect(mockRestoreMutate).toHaveBeenCalledTimes(1)
+    expect(mockRestoreMutate).toHaveBeenCalledWith({ id: 'p1', data: {} }, expect.objectContaining({ onError: expect.any(Function) }))
     expect(mockUpdateMutate).not.toHaveBeenCalled()
+  })
+
+  it('shows the server\'s message above the table when the restore is refused', async () => {
+    mockRestoreMutate.mockImplementation((_vars: unknown, options: { onError: (error: unknown) => void }) => options.onError(apiError('Participant not found')))
+    const user = userEvent.setup()
+    const dialog = await openRestoreDialog(user)
+    await user.click(within(dialog).getByRole('button', { name: 'Restore' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Participant not found')
   })
 })
 

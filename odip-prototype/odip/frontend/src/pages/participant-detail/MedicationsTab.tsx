@@ -8,6 +8,7 @@ import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
+import { queryPhase } from '@/lib/queryPhase'
 import { MedicationBadges, ComplianceFlagChips } from '../medications'
 import { SUPPORT_LEVEL_LABELS, ROUTE_LABELS, FORM_LABELS } from '@/api/types/medications'
 import type { MedicationListDto, AdministrationDto } from '@/api/types/medications'
@@ -118,9 +119,10 @@ export default function MedicationsTab({ participantId }: { participantId: strin
   const activeCount = useMemo(() => medications.filter(m => m.status === 'Active').length, [medications])
   const showPolypharmacyNotice = activeCount >= 5 || activePsychotropicCount >= 2
 
-  if (isLoading) return <PageState kind="loading" noun="medication list" />
-  // A failed request is not an empty list: without data, say so instead of showing "no medications".
-  if (isError && !medicationsData) return <PageState kind="error" noun="medication list" onRetry={() => refetch()} />
+  // A failed request is not an empty list, and neither is one that has not run (paused offline): without data, say so instead of showing "no medications".
+  const phase = queryPhase({ data: medicationsData, isLoading, isError })
+  if (phase === 'loading') return <PageState kind="loading" noun="medication list" />
+  if (phase === 'error') return <PageState kind="error" noun="medication list" onRetry={() => refetch()} />
 
   return (
     <div className="space-y-6">

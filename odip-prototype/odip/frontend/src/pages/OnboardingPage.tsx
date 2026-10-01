@@ -12,6 +12,8 @@ import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { usePermissions } from '@/lib/permissions'
+import { extractErrorMessage } from '@/lib/utils'
+import { queryPhase } from '@/lib/queryPhase'
 import { readIntakeCompleteNotice } from './intake/intakeComplete'
 import { plural } from '@/lib/format'
 
@@ -45,7 +47,7 @@ export default function OnboardingPage() {
         title="Onboarding"
         subtitle={`${plural(screen.allRowsCount, 'participant')} in progress. Onboarding doesn't activate a participant or allow bookings, rostering, invoicing or claims.`}
       >
-        {screen.allRowsCount > 0 && <SearchInput value={screen.search} onChange={screen.setSearch} placeholder="Search participants, stages or gates..." />}
+        {screen.toolbar}
       </PageHeader>
       {screen.body}
     </div>
@@ -60,7 +62,13 @@ export default function OnboardingPage() {
  */
 export function OnboardingTable() {
   const screen = useOnboardingScreen()
-  return <>{screen.body}</>
+  // The search used to live in the standalone page's header only, which no route reaches any more (L2-02).
+  return (
+    <>
+      {screen.toolbar && <div className="flex flex-wrap items-center gap-3 mb-4">{screen.toolbar}</div>}
+      {screen.body}
+    </>
+  )
 }
 
 function useOnboardingScreen() {
@@ -78,6 +86,8 @@ function useOnboardingScreen() {
   const { canManageParticipantLifecycle, canAccessPage } = usePermissions()
   // The API scopes this query to the current tenant; this page does not add a client-side tenant filter.
   const worklist = useQuery({ queryKey: ['participant-onboarding-worklist'], queryFn: () => apiGet<WorklistRow[]>('/inquiries/onboarding-worklist') })
+  // A request that has not run (paused while the browser reports offline) is loading, not an empty worklist.
+  const worklistLoading = queryPhase(worklist) === 'loading'
   const [search, setSearch] = useState('')
   const allRows = useMemo(() => worklist.data ?? [], [worklist.data])
   // The onboarding worklist endpoint takes no query parameters, so search is client-side.
@@ -164,10 +174,10 @@ function useOnboardingScreen() {
           tone="error"
           actions={<button type="button" className="font-medium underline shrink-0" onClick={() => worklist.refetch()}>Retry</button>}
         >
-          Could not load the onboarding worklist. Please try again.
+          {extractErrorMessage(worklist.error, 'Could not load the onboarding worklist. Please try again.')}
         </Callout>
       )}
-      {!worklist.isError && (!worklist.isLoading && rows.length === 0 ? (
+      {!worklist.isError && (!worklistLoading && rows.length === 0 ? (
         <EmptyState
           icon={ClipboardCheck}
           title="No participants in onboarding"
@@ -175,15 +185,18 @@ function useOnboardingScreen() {
           action={canAccessPage('participants') ? { label: 'View enquiries', to: '/participants?tab=enquiries' } : undefined}
         />
       ) : (
-        <DataTable data={rows} columns={columns} keyField="participantId" loading={worklist.isLoading} sortable emptyMessage="No incomplete onboarding work." rowClassName={row => (completed && row.participantId === completed.participantId ? 'bg-[var(--color-primary)]/10 outline outline-2 -outline-offset-2 outline-[var(--color-primary)]/40' : '')} />
+        <DataTable data={rows} columns={columns} keyField="participantId" loading={worklistLoading} sortable emptyMessage="No incomplete onboarding work." rowClassName={row => (completed && row.participantId === completed.participantId ? 'bg-[var(--color-primary)]/10 outline outline-2 -outline-offset-2 outline-[var(--color-primary)]/40' : '')} />
       ))}
     </>
   )
 
+  const toolbar = allRows.length > 0
+    ? <SearchInput value={search} onChange={setSearch} placeholder="Search participants, stages or gates..." />
+    : null
+
   return {
     allRowsCount: allRows.length,
-    search,
-    setSearch,
+    toolbar,
     body,
   }
 }

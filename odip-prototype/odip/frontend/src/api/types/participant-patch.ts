@@ -25,7 +25,7 @@ import type { CreateParticipantChecklistItemDto } from './checklist-items'
  * must carry every one of its member fields (mirrors a mini full-submit for just that group); a
  * present group's own field set to null/undefined CLEARS that field. An absent (undefined) group
  * leaves every one of its fields completely untouched. There is no IsDraft/IsActive here at
- * all — those stay `useUpdateParticipant`'s (PUT's) job exclusively.
+ * all — those stay the dedicated status, restore and complete-profile endpoints' job.
  */
 export interface PatchParticipantDto {
   personalDetails?: PatchPersonalDetailsDto

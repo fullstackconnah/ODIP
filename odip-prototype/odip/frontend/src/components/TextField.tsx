@@ -46,7 +46,8 @@ export function TextField({
       className={className}
       descriptionId={descriptionId}
     >
-      <input type={type} {...inputProps} />
+      {/* `required` also goes on the control: FormField only draws the star and sets aria-required, so a plain form lost the browser's own check. */}
+      <input type={type} required={required} {...inputProps} />
     </FormField>
   )
 }

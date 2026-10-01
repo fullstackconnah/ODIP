@@ -6,22 +6,14 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
 import { EmptyState } from '@/components/EmptyState'
 import { usePermissions } from '@/lib/permissions'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import { parseApiDate, extractErrorMessage } from '@/lib/utils'
 import { formatRelative } from '@/lib/format'
 import type { ParticipantNoteDto } from '@/api/types/notes'
 
 type NoteFormState = { title: string; description: string; isPinned: boolean }
 const EMPTY_FORM: NoteFormState = { title: '', description: '', isPinned: false }
-
-function NoteSkeleton() {
-  return (
-    <div className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] animate-pulse space-y-2.5">
-      <div className="h-4 w-1/3 bg-[var(--color-muted)] rounded" />
-      <div className="h-3 w-full bg-[var(--color-muted)] rounded" />
-      <div className="h-3 w-2/3 bg-[var(--color-muted)] rounded" />
-    </div>
-  )
-}
 
 function NoteCard({ note, canWrite, onEdit, onArchive, onRestore, onDismissDrift, onRegenerate, isDriftActionPending }: {
   note: ParticipantNoteDto
@@ -117,7 +109,10 @@ function NoteCard({ note, canWrite, onEdit, onArchive, onRestore, onDismissDrift
 export default function NotesTab({ participantId }: { participantId: string | undefined }) {
   const { canWriteNotes } = usePermissions()
   const [showArchivedSection, setShowArchivedSection] = useState(false)
-  const { data: notes = [], isLoading } = useParticipantNotes(participantId, true)
+  const notesQuery = useParticipantNotes(participantId, true)
+  const notes = useMemo(() => notesQuery.data ?? [], [notesQuery.data])
+  // A failed or paused request is not an empty list: "No notes yet" is only for one that succeeded and came back empty.
+  const phase = queryPhase(notesQuery)
   const createNote = useCreateNote()
   const updateNote = useUpdateNote()
   const dismissDrift = useDismissNoteDrift()
@@ -272,11 +267,10 @@ export default function NotesTab({ participantId }: { participantId: string | un
         </div>
       )}
 
-      {isLoading ? (
-        <div className="space-y-3">
-          <NoteSkeleton />
-          <NoteSkeleton />
-        </div>
+      {phase === 'loading' ? (
+        <PageState kind="loading" noun="notes" />
+      ) : phase === 'error' ? (
+        <PageState kind="error" noun="notes" onRetry={() => notesQuery.refetch()} />
       ) : activeNotes.length === 0 ? (
         <EmptyState
           icon={StickyNote}

@@ -25,6 +25,13 @@ public sealed class ParticipantIntakeSnapshotService
         nameof(Participant.MobilityAidWheelchair), nameof(Participant.MobilityAidWalker), nameof(Participant.IsHighSupport), nameof(Participant.IsIntensiveSupport), nameof(Participant.OvernightSupport), nameof(Participant.OvernightRatio), nameof(Participant.RequiresHiLoBed), nameof(Participant.RequiresHoist), nameof(Participant.RequiresShowerChair), nameof(Participant.RequiresCommode), nameof(Participant.RequiresStandingMachine), nameof(Participant.SupportRatio),
         nameof(Participant.MedicalSummary), nameof(Participant.IsCald), nameof(Participant.IsLgbtqi), nameof(Participant.IsFamilyCommunity), nameof(Participant.IsAboriginalOrTorresStraitIslander), nameof(Participant.ReceivedRightsAndResponsibilitiesInfo), nameof(Participant.ReceivedPrivacyAndConfidentialityInfo), nameof(Participant.ReceivedFeedbackInfo), nameof(Participant.ReceivedBeingSafeInfo), nameof(Participant.ReceivedAdvocacyInfo), nameof(Participant.BehavioursOfConcernCurrent), nameof(Participant.BehavioursOfConcernFiveYearHistory), nameof(Participant.ExpressiveSkills), nameof(Participant.HidpaNotes), nameof(Participant.BehaviourRiskSummary), nameof(Participant.Notes)
     ];
+    /// <summary>
+    /// The participant columns the Intake wizard owns: what the immutable completion evidence records, and also exactly what
+    /// PUT /participants/{id}/intake is allowed to write. One list for both, so the save and the evidence cannot drift apart
+    /// (ParticipantIntakeControllerTests.SaveIntake_WritesExactlyTheIntakeScope_AndNothingElse holds them together).
+    /// </summary>
+    public static IReadOnlyList<string> IntakeScopeFieldNames => IntakeFieldNames;
+
     public ParticipantIntakeSnapshotService(OdipDbContext db) { _db = db; QuestPDF.Settings.License = LicenseType.Community; }
 
     /// <summary>

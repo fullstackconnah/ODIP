@@ -52,7 +52,7 @@ export function SelectField({
       className={className}
       descriptionId={descriptionId}
     >
-      <select {...selectProps}>
+      <select required={required} {...selectProps}>
         {placeholder !== undefined && (
           <option value="" disabled hidden>
             {placeholder}

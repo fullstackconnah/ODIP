@@ -22,23 +22,21 @@
  * detail page's "Resume intake" banner, routed to `/participants/{id}/intake`): this same
  * component, keyed off an optional `:id` route param. Loads the existing row via `useParticipant`,
  * hydrates every Intake-owned field via `reset()` (mirrors ProfileWizardPage.tsx's own hydration
- * effect), and both "Save as draft"/"Complete Intake" go through `PUT /api/participants/{id}`
- * (`useUpdateParticipant`) instead of `POST`, with `isDraft` always resubmitted `true` — Intake
- * alone never finalises a participant, only a subsequent Profile completion (PF-10.4) does.
- * `CompleteIntake: true` on the edit-mode "Complete Intake" call stamps IntakeCompletedAt via the
- * same server-side handling Update now has (SPEC-05 PF-10.5, see ParticipantsController.Update).
- * Contacts/Risks are edit-mode-omitted from the PUT payload entirely, matching
- * the retired single-step wizard's own established edit-mode convention (those two rows-collections are
- * create-mode-only on this DTO; Update never reads them) — existing rows are shown read-only
- * (fetched via their own nested-CRUD endpoints) rather than re-editable here, so nothing already
- * recorded is lost or silently resubmitted.
+ * effect), and both "Save as draft"/"Complete Intake" go through `PUT /api/participants/{id}/intake`
+ * (`useSaveParticipantIntake`) instead of `POST`. That endpoint is SCOPED: the server writes only the
+ * intake fields and never reads whether the participant is a draft or active, so resuming an intake
+ * cannot wipe what the Profile wizard recorded (it used to go through the full-record PUT and did).
+ * `completeIntake: true` stamps IntakeCompletedAt, idempotently on `completionRequestId`.
+ * Contacts and risk entries added while resuming ARE sent: the server creates the ones the participant
+ * does not already have and skips the rest. The ones already recorded are listed read-only (fetched via
+ * their own nested-CRUD endpoints) and are managed from the participant's detail page.
  */
 import { useNavigate, useParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useFieldArray, useWatch } from 'react-hook-form'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  useCreateParticipant, useUpdateParticipant, useParticipant, usePersons,
+  useCreateParticipant, useSaveParticipantIntake, useParticipant, usePersons,
   useParticipantContactRoles, useParticipantRiskEntries,
 } from '@/api/hooks'
 import {
@@ -49,6 +47,9 @@ import {
 import { BackButton } from '@/components/BackButton'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
+import { queryPhase } from '@/lib/queryPhase'
 import {
   type ParticipantFormData, intakeParticipantResolver, INTAKE_STEP_SCHEMAS_BY_KEY,
   STEP_PARTICIPANT_DETAILS_FIELDS, STEP_NDIS_FUNDING_FIELDS, STEP_CONTACTS_FIELDS,
@@ -88,13 +89,12 @@ export default function IntakeWizardPage() {
   const isEditMode = !!id
   const navigate = useNavigate()
   const createParticipant = useCreateParticipant()
-  const updateParticipant = useUpdateParticipant()
-  const saveMutation = isEditMode ? updateParticipant : createParticipant
-  const { data: participant, isLoading: participantLoading } = useParticipant(id)
-  // PF-10.5 edit mode: Contacts/Risks stay create-mode-only on the wizard's own field arrays (see
-  // this file's header doc) — existing rows are surfaced read-only from their own nested-CRUD
-  // endpoints instead, same data source ParticipantContactRolesSection/RiskEntriesSection already
-  // use on the detail page.
+  const saveIntake = useSaveParticipantIntake()
+  const saveMutation = isEditMode ? saveIntake : createParticipant
+  const { data: participant, isLoading: participantLoading, isError: participantFailed, error: participantError, refetch: refetchParticipant } = useParticipant(id)
+  // PF-10.5 edit mode: the wizard's own contact and risk field arrays hold only the NEW rows added in this session — existing rows
+  // are surfaced read-only from their own nested-CRUD endpoints, same data source ParticipantContactRolesSection/RiskEntriesSection
+  // already use on the detail page.
   const { data: existingContactRoles = [] } = useParticipantContactRoles(isEditMode ? id : undefined)
   const { data: existingRiskEntries = [] } = useParticipantRiskEntries(isEditMode ? id : undefined)
   const { data: people = [] } = usePersons()
@@ -280,15 +280,6 @@ export default function IntakeWizardPage() {
     return payload
   }
 
-  // PF-10.5 edit mode: Contacts/Risks are create-mode-only on this DTO (Update never reads them —
-  // see this file's header doc) — stripped from every edit-mode payload so an edit-mode save can
-  // never silently clear/resubmit rows already managed via their own nested-CRUD endpoints.
-  function stripCreateOnlyCollections(payload: Record<string, unknown>) {
-    delete payload.riskEntries
-    delete payload.contactRoles
-    return payload
-  }
-
   const onSubmit = async (data: ParticipantFormData) => {
     // SPEC-05 (PF-10.5): IsDraft stays true across the entire Intake-done/Profile-pending span —
     // only the Profile wizard (PF-10.4) ever flips it false. completeIntake=true stamps
@@ -298,7 +289,7 @@ export default function IntakeWizardPage() {
     const typedName = [data.firstName, data.lastName].filter(Boolean).join(' ')
     try {
       if (isEditMode && id) {
-        const res = await updateParticipant.mutateAsync({ id, data: stripCreateOnlyCollections(payload) as never })
+        const res = await saveIntake.mutateAsync({ id, data: payload as never })
         if (res.success) {
           flushSync(() => reset(data))
           // Completing Intake puts the participant on the onboarding worklist: show them there.
@@ -326,7 +317,7 @@ export default function IntakeWizardPage() {
     const payload = buildIntakePayload(data, true, false)
     try {
       if (isEditMode && id) {
-        const res = await updateParticipant.mutateAsync({ id, data: stripCreateOnlyCollections(payload) as never })
+        const res = await saveIntake.mutateAsync({ id, data: payload as never })
         if (res.success) {
           flushSync(() => reset(data))
           navigate(`/participants/${id}`)
@@ -417,8 +408,15 @@ export default function IntakeWizardPage() {
   // blank create-mode defaults, then jump once the fetch resolves.
   const fallbackBack = isEditMode ? `/participants/${id}` : '/participants'
 
-  if (isEditMode && (participantLoading || !participant)) {
-    return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
+  // Three different facts, three different states: still loading, the load failed, and there is no such participant. A failed or
+  // missing record used to leave this page on "Loading..." for ever (L2-06 = L5-02), with no message, no retry and no way back.
+  // A paused request (the browser is offline and the load has not run) is loading, not "not found" (review F-1).
+  if (isEditMode && !participant) {
+    const phase = queryPhase({ data: participant, isLoading: participantLoading, isError: participantFailed })
+    if (phase === 'loading') return <PageState kind="loading" noun="participant" />
+    return phase === 'error' && !isNotFoundError(participantError)
+      ? <PageState kind="error" noun="participant" onRetry={() => refetchParticipant()} />
+      : <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
   }
 
   return (
@@ -430,8 +428,10 @@ export default function IntakeWizardPage() {
       </div>
 
       {saveMutation.isError && (
+        // The server's own reason when it gave one ("Postcode must be exactly 4 digits.", "Plan Manager contacts are only available for
+        // plan-managed participants."), a plain sentence when it did not. "Save as draft" below always did this; Complete Intake did not.
         <Callout tone="error">
-          Failed to save this participant's intake details. Please check your input and try again.
+          {extractErrorMessage(saveMutation.error, "Failed to save this participant's intake details. Please check your input and try again.")}
         </Callout>
       )}
       {draftError && (
