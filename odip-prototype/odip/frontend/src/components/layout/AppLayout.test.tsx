@@ -1,3 +1,4 @@
+import { lazy } from 'react'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
@@ -579,6 +580,8 @@ const barLabels = () => Array.from(mobileNav().children).map(cell => cell.textCo
 describe('AppLayout — the menu each role sees is generated from navConfig', () => {
   afterEach(() => {
     localStorage.clear()
+    mockUsePendingLeaveCount.mockReturnValue(0)
+    mockUsePendingCompletionCount.mockReturnValue(0)
   })
 
   const FULL_MENU = [
@@ -667,6 +670,20 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
 
     expect(openGroupToggle(/Staff & roster$/)).toHaveAttribute('aria-expanded', 'true')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it.each(['SuperAdmin', 'Admin', 'Coordinator', 'ReadOnly', 'SupportWorker'])('gives every link and button in the shell an accessible name for %s (the old centre "+" had none)', role => {
+    signIn(role)
+    mockUsePendingLeaveCount.mockReturnValue(3)
+    mockUsePendingCompletionCount.mockReturnValue(4)
+    const { container } = renderAt('/')
+    // Closed groups are `aria-hidden` and so are not in the accessibility tree: ask the DOM for everything, then the names of what is.
+    const controls = Array.from(container.querySelectorAll<HTMLElement>('a[href], button'))
+    expect(controls.length).toBeGreaterThan(10)
+    for (const control of controls) {
+      expect(control, `${control.tagName} ${control.textContent}`).toHaveAccessibleName()
+      expect(control.getAttribute('aria-label') ?? control.textContent ?? '').not.toBe('')
+    }
   })
 
   it('hides every icon ligature from assistive technology, so an accessible name is the label alone', () => {
@@ -967,9 +984,12 @@ describe('AppLayout — the drawer is a dialog while it is a drawer (below lg)',
     expect(screen.getByRole('complementary')).toBe(aside())
     expect(aside()).not.toHaveAttribute('role')
     expect(aside()).not.toHaveAttribute('aria-modal')
-    // `invisible` takes its links out of the Tab order and the accessibility tree (they were 13 off-screen tab stops before the page);
-    // it waits for the slide-out to finish, so it is a visibility transition, and it only applies below lg.
-    expect(aside()).toHaveClass('-translate-x-full', 'max-lg:invisible', 'transition-[transform,visibility]')
+    // `inert` takes its links out of the Tab order and the accessibility tree (they were 13 off-screen tab stops before the page).
+    // Not `invisible`: that is inherited, and the nav items' `transition-all` makes each link start hidden, so the focus the dialog moves
+    // in on opening was refused for the first frames (found in a real browser, not in jsdom).
+    expect(aside()).toHaveAttribute('inert')
+    expect(aside()).toHaveClass('-translate-x-full')
+    expect(aside().className).not.toContain('invisible')
   })
 
   it('becomes a modal dialog named "Main menu" while open: visible at once, with focus moved onto its first item', () => {
@@ -978,9 +998,9 @@ describe('AppLayout — the drawer is a dialog while it is a drawer (below lg)',
     expect(dialog()).toBe(aside())
     expect(dialog()).toHaveAttribute('aria-modal', 'true')
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
-    // Opening must not wait on a visibility transition: a hidden element cannot take the focus the dialog moves in.
-    expect(dialog()).toHaveClass('translate-x-0', 'transition-transform')
-    expect(dialog()).not.toHaveClass('max-lg:invisible')
+    // An inert element cannot take the focus the dialog moves in, so opening drops `inert` in the same commit.
+    expect(dialog()).toHaveClass('translate-x-0')
+    expect(dialog()).not.toHaveAttribute('inert')
     expect(document.activeElement).toBe(within(dialog()).getByRole('link', { name: 'Dashboard' }))
   })
 
@@ -1027,10 +1047,12 @@ describe('AppLayout — the drawer is a dialog while it is a drawer (below lg)',
     expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('is not a dialog from lg up, whatever the state says: no role, no scroll lock, no scrim', () => {
+  it('is not a dialog from lg up, whatever the state says: no role, not inert, no scroll lock, no scrim', () => {
     stubViewport(true)
     renderAt('/trips')
+    expect(aside()).not.toHaveAttribute('inert')
     openWithHeaderToggle()
+    expect(aside()).not.toHaveAttribute('inert')
     expect(screen.getByRole('complementary')).toBe(aside())
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(document.body.style.overflow).toBe('')
@@ -1047,16 +1069,19 @@ describe('AppLayout — the drawer is a dialog while it is a drawer (below lg)',
     viewport.resize(true)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(document.body.style.overflow).toBe('')
+    expect(aside()).not.toHaveAttribute('inert')
 
     viewport.resize(false)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'false')
+    expect(aside()).toHaveAttribute('inert')
   })
 })
 
 
-// A page that throws takes the page area down, not the shell: the nav is how the user leaves it.
-describe('AppLayout — a page that throws leaves the shell standing', () => {
+// A page that throws takes the page area down, not the shell: the nav is how the user leaves it. A page that is still loading does the
+// same: it suspends inside the shell, not at the app's root boundary.
+describe('AppLayout — a page that throws, or is still loading, leaves the shell standing', () => {
   function Boom(): never {
     throw new Error('page exploded')
   }
@@ -1089,6 +1114,16 @@ describe('AppLayout — a page that throws leaves the shell standing', () => {
     expect(screen.getByRole('button', { name: 'Open menu' })).toBeInTheDocument()
     // The error fills the page area, not the viewport: the shell around it is not pushed off screen.
     expect(main.querySelector('.min-h-screen')).toBeNull()
+  })
+
+  it('keeps the shell on screen, with a loading status in the page area, while a lazy page loads', () => {
+    // The root boundary would replace the whole app with "Loading..." for a frame, dropping the focus the drawer had just returned.
+    const Pending = lazy(() => new Promise<{ default: () => null }>(() => {}))
+    const router = createMemoryRouter([{ element: <AppLayout />, children: [{ path: '*', element: <Pending /> }] }], { initialEntries: ['/trips'] })
+    render(<RouterProvider router={router} />)
+    expect(within(document.getElementById('main') as HTMLElement).getByRole('status')).toHaveTextContent('Loading...')
+    expect(mainNav()).toBeInTheDocument()
+    expect(mobileNav()).toBeInTheDocument()
   })
 
   it('recovers when the user follows a nav link away from the broken page', () => {

@@ -563,10 +563,11 @@ useDialogBehavior({ open: drawerOpen, onClose: () => setSidebarOpen(false), cont
   is a plain `complementary` landmark.
 - A stale `sidebarOpen` after a resize is dropped during render (`if (!isBelowLg && sidebarOpen) setSidebarOpen(false)`), so it can neither
   lock the scroll or trap Tab on a desktop nor reopen the drawer on the way back down.
-- Closed below `lg` the aside is `max-lg:invisible`, which takes its links out of the Tab order and the accessibility tree (they were 13
-  off-screen tab stops before the page). `visibility` rides the slide: closing uses `transition-[transform,visibility]` and waits for the
-  slide-out to finish, opening uses `transition-transform` so the aside is visible at once, because a hidden element cannot take the
-  focus the hook moves in.
+- Closed below `lg` the aside is `inert`, which takes its links out of the Tab order and the accessibility tree (they were 13 off-screen
+  tab stops before the page). Not `visibility: hidden`: it is inherited, every nav item has `transition-all`, and a visibility
+  transition starts at `hidden`, so for the first frames after opening each link is still hidden and the `focus()` the hook makes is
+  refused. jsdom has no transitions, so only a real browser shows it. `inert` is dropped in the very commit that opens the layer, before
+  the hook's effect runs.
 - Focus moves onto the first item and comes back to the opener (the header toggle, or the bottom bar's "More") on Escape and after a link is
   followed: `returnFocus` stays on, because the opener is the best place to leave focus once the menu has closed.
 - Not done: an `inert` page behind it. The header toggle that opens the drawer sits inside the page region, so inerting that region would
@@ -1044,6 +1045,12 @@ hook equivalent). Catches render errors, shows a "Something went wrong" fallback
 custom `fallback`) with a retry button, and specifically detects stale-chunk errors after
 a deploy (`Failed to fetch dynamically imported module`, etc.) to force a one-time reload
 so users aren't stuck on an old JS bundle referencing chunks that no longer exist.
+
+Two boundaries run in the app. The one in `App.tsx` wraps the whole shell, as a last resort for a crash in the shell itself. The one in
+`AppLayout` wraps the `<Outlet/>` with `inline` and `resetKey={pathname}`, so a page that throws takes down only the page area: the
+sidebar, the header and the bottom bar stay, and following a nav link away clears the error. `inline` fills the area the boundary sits in
+instead of the viewport (`min-h-screen`); `resetKey` clears a caught error when it changes, without remounting a healthy page. A page that
+is still loading suspends inside the shell too (a `<Suspense>` in `AppLayout`), so a lazy chunk never replaces the nav with "Loading...".
 
 ---
 

@@ -3,7 +3,7 @@ import { usePreviousAppPathTracker } from '@/hooks/useBackNavigation'
 import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { useIsBelowLg } from '@/hooks/useIsBelowLg'
 import { LogOut, Menu, X, ChevronDown } from 'lucide-react'
-import { useState, useRef } from 'react'
+import { Suspense, useState, useRef } from 'react'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { TAP_AREA } from '@/components/tapArea'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
@@ -207,6 +207,8 @@ export default function AppLayout() {
   useDialogBehavior({ open: drawerOpen, onClose: () => setSidebarOpen(false), containerRef: drawerRef })
   // A drawer left open while the window grew past lg would open again on the way back down: forget it.
   if (!isBelowLg && sidebarOpen) setSidebarOpen(false)
+  // Closed below lg the drawer is off screen: `inert` takes its links out of the Tab order and the accessibility tree.
+  const drawerInert = isBelowLg && !drawerOpen
 
   // Which groups are open: what the user chose to keep open last time, plus the group that holds the current page.
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => withActiveGroups(readStoredOpenGroups(), location.pathname))
@@ -270,10 +272,11 @@ export default function AppLayout() {
       )}
 
       {/*
-        Sidebar / drawer. While the drawer is open it is a modal dialog ("Main menu"); closed below lg it is `invisible`, which takes its
-        links out of the Tab order and the accessibility tree (they used to be 13 off-screen tab stops before the page). The
-        visibility change rides the slide: opening sets it at once (a hidden element cannot take the focus the dialog moves in),
-        closing waits for the slide-out to finish. At lg and up it is a plain landmark, always visible.
+        Sidebar / drawer. While the drawer is open it is a modal dialog ("Main menu"); closed below lg it is `inert`, which takes its links
+        out of the Tab order and the accessibility tree (they used to be 13 off-screen tab stops before the page). Not `visibility:
+        hidden`: that is inherited, every nav item has `transition-all`, and a visibility transition starts hidden, so the first
+        frame after opening would still have every link hidden and the focus the dialog moves in would be refused. At lg and up it is a
+        plain landmark, always on screen.
       */}
       <aside
         ref={drawerRef}
@@ -282,8 +285,9 @@ export default function AppLayout() {
         aria-modal={drawerOpen ? true : undefined}
         aria-label={drawerOpen ? 'Main menu' : undefined}
         tabIndex={drawerOpen ? -1 : undefined}
-        className={`fixed inset-y-0 left-0 z-[60] lg:z-50 w-[232px] flex flex-col bg-[var(--color-sidebar)] pt-3 pb-3 px-3 duration-200 lg:translate-x-0 ${
-          drawerOpen ? 'translate-x-0 transition-transform' : '-translate-x-full lg:translate-x-0 max-lg:invisible transition-[transform,visibility]'
+        inert={drawerInert}
+        className={`fixed inset-y-0 left-0 z-[60] lg:z-50 w-[232px] flex flex-col bg-[var(--color-sidebar)] pt-3 pb-3 px-3 transition-transform duration-200 lg:translate-x-0 ${
+          drawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
         {/* Brand — ~48px tall total */}
@@ -425,9 +429,13 @@ export default function AppLayout() {
               where the user actually came from instead of a hardcoded fallback. */}
           <BackPathTracker />
           {/* A page that throws takes the page area down, not the shell: the nav stays on screen so the user can leave the broken
-              page. The error clears when the pathname changes (App.tsx keeps its own boundary around the shell for a crash in the shell). */}
+              page. The error clears when the pathname changes (App.tsx keeps its own boundary around the shell for a crash in the shell).
+              The same goes for a page that is still loading: its lazy chunk suspends HERE, not at the app's root boundary, which would
+              replace the whole shell with "Loading..." for a frame and drop the focus (the drawer's link, the bar's More) with it. */}
           <ErrorBoundary inline resetKey={location.pathname}>
-            <Outlet />
+            <Suspense fallback={<div role="status" className="flex items-center justify-center py-16 text-sm text-[var(--color-muted-foreground)]">Loading...</div>}>
+              <Outlet />
+            </Suspense>
           </ErrorBoundary>
         </main>
       </div>
