@@ -102,8 +102,9 @@ public class ProviderSettingsController : ControllerBase
         if (dto.MedicationCompetencyMode is { } newCompetency && newCompetency != previousCompetency)
         {
             s.MedicationCompetencyMode = newCompetency;
-            _db.AuditLogs.Add(AuditRows.FieldChanged(
-                nameof(ProviderSettings), s.Id, nameof(ProviderSettings.MedicationCompetencyMode), previousCompetency.ToString(), newCompetency.ToString(), User));
+            _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(
+                nameof(ProviderSettings), s.Id, nameof(ProviderSettings.MedicationCompetencyMode),
+                previousCompetency.ToString(), newCompetency.ToString(), User));
         }
 
         await _db.SaveChangesAsync(ct);
