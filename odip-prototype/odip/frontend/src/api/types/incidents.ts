@@ -60,6 +60,7 @@ export interface IncidentListDto {
   severity: IncidentSeverity
   status: IncidentStatus
   title: string
+  /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   incidentDateTime: string
   location: string | null
   reportedByName: string | null
@@ -114,6 +115,7 @@ export interface IncidentDetailDto extends IncidentListDto {
   injuries: IncidentInjuryDto[]
   /** IN-7: witnesses — staff (approvable) and free-text external witnesses in one list. */
   witnesses: IncidentWitnessDto[]
+  /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   qscReportedAt: string | null
   qscReferenceNumber: string | null
   reviewedByStaffId: string | null
@@ -123,8 +125,10 @@ export interface IncidentDetailDto extends IncidentListDto {
   correctiveActions: string | null
   resolvedAt: string | null
   familyNotified: boolean
+  /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   familyNotifiedAt: string | null
   supportCoordinatorNotified: boolean
+  /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   supportCoordinatorNotifiedAt: string | null
   updatedAt: string
   /** Connection map: resolved medication-administration context for the Context panel — present
@@ -181,6 +185,7 @@ export interface CreateIncidentDto {
   severity: IncidentSeverity
   title: string
   description: string
+  /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   incidentDateTime: string
   location?: string
   immediateActionsTaken?: string
@@ -203,13 +208,16 @@ export interface CreateIncidentDto {
 export interface UpdateIncidentDto extends CreateIncidentDto {
   status: IncidentStatus
   qscReportingStatus: QscReportingStatus
+  /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   qscReportedAt?: string
   qscReferenceNumber?: string
   reviewedByStaffId?: string
   reviewNotes?: string
   correctiveActions?: string
   familyNotified: boolean
+  /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   familyNotifiedAt?: string
   supportCoordinatorNotified: boolean
+  /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   supportCoordinatorNotifiedAt?: string
 }

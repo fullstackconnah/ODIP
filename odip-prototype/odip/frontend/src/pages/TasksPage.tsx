@@ -8,11 +8,12 @@ import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/Button'
 import { getStatusColor } from '@/lib/utils'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
 import { Filter, CheckCircle, Plus, ListChecks } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { plural } from '@/lib/format'
+import { localIsoDate } from '@/lib/dateOnly'
 
 const TASK_STATUS_ITEMS = [
   { value: 'NotStarted', label: 'Not Started' },
@@ -24,7 +25,12 @@ const TASK_STATUS_ITEMS = [
 
 export default function TasksPage() {
   const { canWrite } = usePermissions()
-  const [statusFilter, setStatusFilter] = useState('')
+  // The dashboard's Overdue tile links to /tasks?status=Overdue: open on that filter (the server answers it with the dashboard's own rule).
+  const [searchParams] = useSearchParams()
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const fromAddress = searchParams.get('status')
+    return TASK_STATUS_ITEMS.some(item => item.value === fromAddress) ? fromAddress! : ''
+  })
   const [failedRowId, setFailedRowId] = useState<string | null>(null)
   const updateTask = useUpdateTask()
   const deleteTask = useDeleteTask()
@@ -48,7 +54,7 @@ export default function TasksPage() {
 
   const markComplete = async (e: React.MouseEvent, task: any) => {
     e.stopPropagation()
-    await updateTask.mutateAsync({ id: task.id, data: { ...task, status: 'Completed', completedDate: new Date().toISOString().split('T')[0] } })
+    await updateTask.mutateAsync({ id: task.id, data: { ...task, status: 'Completed', completedDate: localIsoDate() } })
   }
 
   const taskColumns: Column<any>[] = [
@@ -105,7 +111,7 @@ export default function TasksPage() {
                 data: {
                   ...t,
                   status: val,
-                  ...(val === 'Completed' ? { completedDate: new Date().toISOString().split('T')[0] } : {}),
+                  ...(val === 'Completed' ? { completedDate: localIsoDate() } : {}),
                 },
               }, {
                 onError: () => setFailedRowId(t.id),

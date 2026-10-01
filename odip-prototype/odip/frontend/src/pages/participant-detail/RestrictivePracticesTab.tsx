@@ -18,6 +18,7 @@ import {
 } from '@/api/types/restrictive-practices'
 import type { RestrictivePracticeDto, RestrictivePracticeType, BulkCreateRestrictivePracticeDto } from '@/api/types/restrictive-practices'
 import { plural } from '@/lib/format'
+import { isPastDue } from '@/lib/deadline'
 
 /** One row of the "Add entries" bulk table — client-side draft state before it becomes its own register entry. */
 type BulkRowState = {
@@ -67,7 +68,8 @@ function parseBulkErrors(err: unknown, rows: BulkRowState[]): { general: string 
   return { general, rowErrors }
 }
 
-const isReviewOverdue = (dateStr: string | null) => !!dateStr && new Date(dateStr).getTime() < Date.now()
+// Overdue from the day AFTER the review date (a DateOnly), the rule the server's own alert uses (ReviewDate < today), not from UTC midnight.
+const isReviewOverdue = (dateStr: string | null) => isPastDue(dateStr)
 
 const TYPE_BADGE_STYLES: Record<RestrictivePracticeType, string> = {
   Seclusion: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',

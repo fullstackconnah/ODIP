@@ -4,7 +4,8 @@ import { useAdminUsers, useAdminTenantsSummary } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { DataTable } from '@/components/DataTable'
-import { formatRelative } from '@/lib/format'
+import { formatRelative, plural } from '@/lib/format'
+import { parseApiDate } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -46,7 +47,7 @@ const MONTH_MS = 30 * 86_400_000
 /** "Never", "Just now", "5m ago", "3d ago", then the date itself once the login is a month old or more. */
 function formatRelativeTime(dateStr: string | null): string {
   if (!dateStr) return 'Never'
-  const date = new Date(dateStr)
+  const date = parseApiDate(dateStr) // an instant: UTC, never the viewer's local time
   if (Date.now() - date.getTime() >= MONTH_MS) return date.toLocaleDateString()
   return formatRelative(date, { style: 'compact' })
 }
@@ -219,7 +220,7 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
       {totalCount > 0 && (
         <div className="flex items-center justify-between text-sm">
           <span className="text-[var(--color-muted-foreground)]">
-            Showing {startItem}-{endItem} of {totalCount} users
+            Showing {startItem}-{endItem} of {plural(totalCount, 'user')}
           </span>
           <div className="flex items-center gap-2">
             <button

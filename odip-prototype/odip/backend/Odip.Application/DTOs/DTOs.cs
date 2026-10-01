@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Odip.Application.Serialization;
 using Odip.Domain.Billing;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Enums;
@@ -1510,7 +1511,9 @@ public record StaffAvailabilityDto
 {
     public Guid Id { get; init; }
     public Guid StaffId { get; init; }
+    [WallClock]
     public DateTime StartDateTime { get; init; }
+    [WallClock]
     public DateTime EndDateTime { get; init; }
     public AvailabilityType AvailabilityType { get; init; }
     public bool IsRecurring { get; init; }
@@ -1521,7 +1524,9 @@ public record StaffAvailabilityDto
 public record CreateStaffAvailabilityDto
 {
     public Guid StaffId { get; init; }
+    [WallClock]
     public DateTime StartDateTime { get; init; }
+    [WallClock]
     public DateTime EndDateTime { get; init; }
     public AvailabilityType AvailabilityType { get; init; }
     public bool IsRecurring { get; init; }
@@ -2106,6 +2111,7 @@ public record IncidentListDto
     public IncidentSeverity Severity { get; init; }
     public IncidentStatus Status { get; init; }
     public string Title { get; init; } = string.Empty;
+    [WallClock]
     public DateTime IncidentDateTime { get; init; }
     public string? Location { get; init; }
     public string? ReportedByName { get; init; }
@@ -2154,6 +2160,7 @@ public record IncidentDetailDto : IncidentListDto
     public List<IncidentInjuryDto> Injuries { get; init; } = new();
     /// <summary>IN-7: witnesses — staff (approvable) and free-text external witnesses in one list. See <see cref="Entities.IncidentWitness"/>.</summary>
     public List<IncidentWitnessDto> Witnesses { get; init; } = new();
+    [WallClock]
     public DateTime? QscReportedAt { get; init; }
     public string? QscReferenceNumber { get; init; }
     public Guid? ReviewedByStaffId { get; init; }
@@ -2163,8 +2170,10 @@ public record IncidentDetailDto : IncidentListDto
     public string? CorrectiveActions { get; init; }
     public DateTime? ResolvedAt { get; init; }
     public bool FamilyNotified { get; init; }
+    [WallClock]
     public DateTime? FamilyNotifiedAt { get; init; }
     public bool SupportCoordinatorNotified { get; init; }
+    [WallClock]
     public DateTime? SupportCoordinatorNotifiedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
 
@@ -2242,6 +2251,7 @@ public record CreateIncidentDto
     public string Title { get; init; } = string.Empty;
     [Required, StringLength(10000, MinimumLength = 1)]
     public string Description { get; init; } = string.Empty;
+    [WallClock]
     public DateTime IncidentDateTime { get; init; }
     [StringLength(300)]
     public string? Location { get; init; }
@@ -2337,14 +2347,17 @@ public record UpdateIncidentDto : CreateIncidentDto
 {
     public IncidentStatus Status { get; init; }
     public QscReportingStatus QscReportingStatus { get; init; }
+    [WallClock]
     public DateTime? QscReportedAt { get; init; }
     public string? QscReferenceNumber { get; init; }
     public Guid? ReviewedByStaffId { get; init; }
     public string? ReviewNotes { get; init; }
     public string? CorrectiveActions { get; init; }
     public bool FamilyNotified { get; init; }
+    [WallClock]
     public DateTime? FamilyNotifiedAt { get; init; }
     public bool SupportCoordinatorNotified { get; init; }
+    [WallClock]
     public DateTime? SupportCoordinatorNotifiedAt { get; init; }
 }
 

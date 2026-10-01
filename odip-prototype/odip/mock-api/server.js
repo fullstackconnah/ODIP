@@ -392,7 +392,7 @@ const incidents = [
     id: 'inc-0001', tripInstanceId: 't-0004', tripName: 'Byron Bay Winter Weekender',
     incidentType: 'Injury', severity: 'Low', status: 'Closed',
     title: 'Minor graze from beach walk slip',
-    incidentDateTime: '2026-07-11T10:45:00Z', location: 'Main Beach boardwalk, Byron Bay',
+    incidentDateTime: '2026-07-11T10:45:00', location: 'Main Beach boardwalk, Byron Bay',
     reportedByName: "Jack O'Sullivan", involvedParticipantId: 'p-0001', involvedParticipantName: 'Liam Okafor',
     qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-07-11T11:30:00Z',
     // Connection map: no medication/shift/shift-note link on this one.
@@ -402,7 +402,7 @@ const incidents = [
     id: 'inc-0002', tripInstanceId: 't-0004', tripName: 'Byron Bay Winter Weekender',
     incidentType: 'MedicationError', severity: 'Medium', status: 'UnderReview',
     title: 'Missed evening medication dose',
-    incidentDateTime: '2026-07-11T20:15:00Z', location: 'Accommodation — Byron Bay',
+    incidentDateTime: '2026-07-11T20:15:00', location: 'Accommodation — Byron Bay',
     reportedByName: 'Mei Zhang', involvedParticipantId: 'p-0004', involvedParticipantName: 'Grace Palmer-Hughes',
     qscReportingStatus: 'ReportedWithin24h', isOverdue24h: false, createdAt: '2026-07-11T21:05:00Z',
     // Connection map: this is the one incident fixture carrying a medication context, so the
@@ -413,7 +413,7 @@ const incidents = [
     id: 'inc-0003', tripInstanceId: 't-0001', tripName: 'Sunshine Coast Beach Escape',
     incidentType: 'BehaviourOfConcern', severity: 'High', status: 'Submitted',
     title: 'Escalation during pre-trip meet and greet',
-    incidentDateTime: '2026-07-29T14:00:00Z', location: 'Head office, Brisbane',
+    incidentDateTime: '2026-07-29T14:00:00', location: 'Head office, Brisbane',
     reportedByName: 'Callum Radford', involvedParticipantId: 'p-0004', involvedParticipantName: 'Grace Palmer-Hughes',
     qscReportingStatus: 'Pending', isOverdue24h: true, createdAt: '2026-07-29T16:20:00Z',
     medicationAdministrationId: null, shiftId: null, shiftNoteId: null,
@@ -429,7 +429,7 @@ const medicationAdministrations = [
   {
     id: 'admin-0001', participantMedicationId: 'med-0001', participantId: 'p-0004', participantName: 'Grace Palmer-Hughes',
     medicationName: 'Insulin', doseDescription: '18 units', tripInstanceId: 't-0004',
-    scheduledAt: '2026-07-11T20:00:00Z', administeredAt: '2026-07-11T20:15:00Z', administeredAtTimeZone: 'Australia/Brisbane',
+    scheduledAt: '2026-07-11T20:00:00', administeredAt: '2026-07-11T20:15:00Z', administeredAtTimeZone: 'Australia/Brisbane',
     status: 'Missed', doseGiven: null, recordedByName: 'Tom Beattie', recordedByUserId: 's-0005',
     witnessName: null, witnessStaffId: null, witnessStatus: 'NotRequired', witnessRequestedAt: null, witnessRespondedAt: null,
     reason: 'Dinner ran over schedule; dose given 90 minutes late.', prnReason: null, prnOutcome: null, prnOutcomeAt: null,
@@ -439,7 +439,7 @@ const medicationAdministrations = [
   {
     id: 'admin-0002', participantMedicationId: 'med-0002', participantId: 'p-0001', participantName: 'Liam Okafor',
     medicationName: 'Levetiracetam', doseDescription: '500mg', tripInstanceId: null,
-    scheduledAt: '2026-09-12T22:00:00Z', administeredAt: '2026-09-12T22:05:00Z', administeredAtTimeZone: 'Australia/Brisbane',
+    scheduledAt: '2026-09-12T22:00:00', administeredAt: '2026-09-12T22:05:00Z', administeredAtTimeZone: 'Australia/Brisbane',
     status: 'Administered', doseGiven: '500mg', recordedByName: "Jack O'Sullivan", recordedByUserId: 's-0003',
     witnessName: null, witnessStaffId: null, witnessStatus: 'NotRequired', witnessRequestedAt: null, witnessRespondedAt: null,
     reason: null, prnReason: null, prnOutcome: null, prnOutcomeAt: null, limitBreachAcknowledged: false, notes: null,
@@ -448,7 +448,7 @@ const medicationAdministrations = [
   {
     id: 'admin-0003', participantMedicationId: 'med-0003', participantId: 'p-0004', participantName: 'Grace Palmer-Hughes',
     medicationName: 'Risperidone', doseDescription: '2mg', tripInstanceId: null,
-    scheduledAt: '2026-09-12T20:00:00Z', administeredAt: null, administeredAtTimeZone: null,
+    scheduledAt: '2026-09-12T20:00:00', administeredAt: null, administeredAtTimeZone: null,
     status: 'Refused', doseGiven: null, recordedByName: 'Mei Zhang', recordedByUserId: 's-0004',
     witnessName: null, witnessStaffId: null, witnessStatus: 'NotRequired', witnessRequestedAt: null, witnessRespondedAt: null,
     reason: 'Participant declined after prompting.', prnReason: null, prnOutcome: null, prnOutcomeAt: null,
@@ -465,7 +465,7 @@ const marEntries = [
     medicationName: 'Levetiracetam', strength: '500mg', doseDescription: '1 tablet',
     form: 'Tablet', route: 'Oral', packaging: 'WebsterPack',
     pharmacyName: 'Riverside Pharmacy', pharmacyPhone: '07 3000 1111',
-    scheduledTime: '22:00', scheduledAt: '2026-09-12T22:00:00Z',
+    scheduledTime: '22:00', scheduledAt: '2026-09-12T22:00:00',
     isHighRisk: false, supportLevel: 'Administer', isOverdue: false,
     administration: medicationAdministrations[1],
     incidentId: medicationAdministrations[1].incidentId,
@@ -475,7 +475,7 @@ const marEntries = [
     medicationName: 'Risperidone', strength: '2mg', doseDescription: '1 tablet',
     form: 'Tablet', route: 'Oral', packaging: 'DosetteBox',
     pharmacyName: 'Riverside Pharmacy', pharmacyPhone: '07 3000 1111',
-    scheduledTime: '20:00', scheduledAt: '2026-09-12T20:00:00Z',
+    scheduledTime: '20:00', scheduledAt: '2026-09-12T20:00:00',
     isHighRisk: true, supportLevel: 'Administer', isOverdue: false,
     administration: medicationAdministrations[2],
     incidentId: medicationAdministrations[2].incidentId,
@@ -647,7 +647,7 @@ const shiftCompletions = [
     varianceMinutesStart: 32, varianceMinutesEnd: -10, isOutlierVariance: true, varianceReviewMinutes: 15,
     shiftReturnCount: 0,
     incidents: [
-      { id: 'inc-0002', title: 'Missed evening medication dose', severity: 'Medium', status: 'UnderReview', incidentDateTime: '2026-07-11T20:15:00Z' },
+      { id: 'inc-0002', title: 'Missed evening medication dose', severity: 'Medium', status: 'UnderReview', incidentDateTime: '2026-07-11T20:15:00' },
     ],
   },
 ]

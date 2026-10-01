@@ -352,7 +352,8 @@ describe('DashboardPage — 44px touch targets', () => {
     renderWithLists()
 
     const viewAll = screen.getAllByRole('link', { name: 'View All' })
-    expect(viewAll.map(a => a.getAttribute('href'))).toEqual(['/trips', '/tasks', '/participants'])
+    // The Overdue Tasks panel opens the Tasks list on its Overdue filter, the same rule the figure counts (L3-03).
+    expect(viewAll.map(a => a.getAttribute('href'))).toEqual(['/trips', '/tasks?status=Overdue', '/participants'])
     for (const link of viewAll) {
       expect(link).toHaveClass('pointer-coarse:inline-flex', ...FLOOR, 'pointer-coarse:items-center', 'font-bold', 'hover:underline')
     }
@@ -809,7 +810,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
 })
 
 describe('DashboardPage — needs-attention band: links and accessible names', () => {
-  it('links Qualification Issues, Critical Participant Alerts and Pending Leave, and only those, to the routes they always had', () => {
+  it('links Qualification Issues, Critical Participant Alerts, Overdue and Pending Leave, and only those', () => {
     asRole('Coordinator')
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     mockUsePendingLeaveCount.mockReturnValue(3)
@@ -819,15 +820,16 @@ describe('DashboardPage — needs-attention band: links and accessible names', (
     expect(links.map((a) => [labelOf(a), a.getAttribute('href')])).toEqual([
       ['Qualification Issues', '/qualifications'],
       ['Critical Participant Alerts', '/participants'],
+      ['Overdue', '/tasks?status=Overdue'],
       ['Pending Leave', '/rostering/leave'],
     ])
   })
 
-  it('links only Qualification Issues for a role without alerts or leave', () => {
+  it('links only Qualification Issues and Overdue for a role without alerts or leave', () => {
     asRole('SupportWorker')
     renderPage()
 
-    expect(within(band()).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/qualifications'])
+    expect(within(band()).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/qualifications', '/tasks?status=Overdue'])
   })
 
   it('gives every item an accessible name that includes its number and its label', () => {
@@ -839,16 +841,17 @@ describe('DashboardPage — needs-attention band: links and accessible names', (
     renderPage()
 
     const inBand = within(band())
-    expect(inBand.getByRole('link', { name: 'Qualification Issues 1' })).toHaveAttribute('href', '/qualifications')
+    // The caption says how many staff the issues belong to, so 12 reads against the Qualifications page's "All Issues (4)".
+    expect(inBand.getByRole('link', { name: 'Qualification Issues 1 1 staff member' })).toHaveAttribute('href', '/qualifications')
     expect(inBand.getByRole('link', { name: 'Critical Participant Alerts 0 All clear' })).toHaveAttribute('href', '/participants')
-    expect(inBand.getByRole('group', { name: 'Overdue 2' })).toBeInTheDocument()
+    expect(inBand.getByRole('link', { name: 'Overdue 2' })).toHaveAttribute('href', '/tasks?status=Overdue')
     expect(inBand.getByRole('group', { name: 'Missing Accommodation 0' })).toBeInTheDocument()
     expect(inBand.getByRole('group', { name: 'Missing Staff 4' })).toBeInTheDocument()
     expect(inBand.getByRole('group', { name: 'QSC Overdue 0' })).toBeInTheDocument()
     expect(inBand.getByRole('link', { name: 'Pending Leave 3' })).toHaveAttribute('href', '/rostering/leave')
     // Every item is either a link or a named group: nothing is left unnamed, and nothing relies on colour alone.
-    expect(inBand.getAllByRole('group')).toHaveLength(6)
-    expect(inBand.getAllByRole('link')).toHaveLength(3)
+    expect(inBand.getAllByRole('group')).toHaveLength(5)
+    expect(inBand.getAllByRole('link')).toHaveLength(4)
   })
 
   it('floors every linked item at --tap-min so it keeps a 44px hit area on touch', () => {

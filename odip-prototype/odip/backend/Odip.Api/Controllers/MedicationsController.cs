@@ -63,7 +63,8 @@ public class MedicationsController : ControllerBase
             query = query.Where(m => m.Status != MedicationStatus.Ceased);
 
         var items = await query.OrderBy(m => m.Name).ToListAsync(ct);
-        var result = items.Select(m => ToListDto(m, FullName(m.Participant))).ToList();
+        var providerToday = await ProviderTodayAsync(ct);
+        var result = items.Select(m => ToListDto(m, FullName(m.Participant), providerToday)).ToList();
         return Ok(ApiResponse<List<MedicationListDto>>.Ok(result));
     }
 
@@ -127,7 +128,7 @@ public class MedicationsController : ControllerBase
         _db.ParticipantMedications.Add(med);
         await _db.SaveChangesAsync(ct);
 
-        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(participant), 0)));
+        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(participant), 0, await ProviderTodayAsync(ct))));
     }
 
     // ── Single medication ──────────────────────────────────────────
@@ -139,7 +140,7 @@ public class MedicationsController : ControllerBase
         if (med == null) return NotFound(ApiResponse<MedicationDetailDto>.Fail("Medication not found"));
 
         var prnCount = await GetPrnDosesInLast24hAsync(med.Id, ct);
-        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(med.Participant), prnCount)));
+        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(med.Participant), prnCount, await ProviderTodayAsync(ct))));
     }
 
     [HttpPut("medications/{id:guid}")]
@@ -196,7 +197,7 @@ public class MedicationsController : ControllerBase
         await _db.SaveChangesAsync(ct);
 
         var prnCount = await GetPrnDosesInLast24hAsync(med.Id, ct);
-        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(med.Participant), prnCount)));
+        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(med.Participant), prnCount, await ProviderTodayAsync(ct))));
     }
 
     // ── Register (across participants) ─────────────────────────────
@@ -232,10 +233,11 @@ public class MedicationsController : ControllerBase
 
         var totalCount = await ordered.CountAsync(ct);
         var pageItems = await ordered.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        var providerToday = await ProviderTodayAsync(ct);
 
         var result = new PagedResult<MedicationListDto>
         {
-            Items = pageItems.Select(m => ToListDto(m, FullName(m.Participant))).ToList(),
+            Items = pageItems.Select(m => ToListDto(m, FullName(m.Participant), providerToday)).ToList(),
             TotalCount = totalCount,
             Page = page,
             PageSize = pageSize,
@@ -571,13 +573,23 @@ public class MedicationsController : ControllerBase
 
     private static string FullName(Participant? p) => MedicationMapping.ParticipantName(p);
 
-    private static MedicationListDto ToListDto(ParticipantMedication m, string participantName)
+    /// <summary>
+    /// The provider's calendar date now, the MAR's own "today": a review is overdue from the day AFTER its due day, judged on the
+    /// provider's calendar, not the UTC date (which is still yesterday until 10:00 or 11:00 in Sydney).
+    /// </summary>
+    private async Task<DateOnly> ProviderTodayAsync(CancellationToken ct)
     {
-        var today = DateTime.UtcNow.Date;
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
+        return ProviderLocalTime.TodayIn(_slots.UtcNow, provider.Zone);
+    }
+
+    private static MedicationListDto ToListDto(ParticipantMedication m, string participantName, DateOnly providerToday)
+    {
         var flags = new List<string>();
         if (m.IsChemicalRestraint && (!m.BspInPlace || string.IsNullOrEmpty(m.RestrictivePracticeAuthorisationRef)))
             flags.Add("ChemicalRestraintUnauthorised");
-        if (m.NextReviewDue.HasValue && m.NextReviewDue.Value < today && m.Status == MedicationStatus.Active)
+        // NextReviewDue is a DateTime? that holds a DATE (a due day, midnight), so it is compared by calendar day.
+        if (m.NextReviewDue.HasValue && DateOnly.FromDateTime(m.NextReviewDue.Value) < providerToday && m.Status == MedicationStatus.Active)
             flags.Add("ReviewOverdue");
         if (!m.ConsentObtained && m.Status == MedicationStatus.Active)
             flags.Add("ConsentMissing");
@@ -612,9 +624,9 @@ public class MedicationsController : ControllerBase
         };
     }
 
-    private static MedicationDetailDto ToDetailDto(ParticipantMedication m, string participantName, int prnDosesInLast24h)
+    private static MedicationDetailDto ToDetailDto(ParticipantMedication m, string participantName, int prnDosesInLast24h, DateOnly providerToday)
     {
-        var list = ToListDto(m, participantName);
+        var list = ToListDto(m, participantName, providerToday);
         return new MedicationDetailDto
         {
             Id = list.Id,

@@ -239,6 +239,7 @@ export interface PortalWitnessRequestDto {
   recordedByName: string
   administeredAt: string | null
   administeredAtTimeZone: string | null
+  /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   incidentDateTime: string | null
   witnessStatus: WitnessStatus
   witnessRespondedAt: string | null

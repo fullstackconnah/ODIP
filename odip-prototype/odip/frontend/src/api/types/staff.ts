@@ -65,7 +65,9 @@ export type UpdateStaffDto = CreateStaffDto
 export interface StaffAvailabilityDto {
   id: string
   staffId: string
+  /** A calendar DATE held in a DateTime ("2026-10-03T00:00:00"): read the day with lib/dateOnly, never as an instant. */
   startDateTime: string
+  /** A calendar DATE held in a DateTime ("2026-10-03T00:00:00"): read the day with lib/dateOnly, never as an instant. */
   endDateTime: string
   availabilityType: AvailabilityType
   isRecurring: boolean
@@ -75,7 +77,9 @@ export interface StaffAvailabilityDto {
 
 export interface CreateStaffAvailabilityDto {
   staffId: string
+  /** A calendar DATE held in a DateTime ("2026-10-03T00:00:00"): read the day with lib/dateOnly, never as an instant. */
   startDateTime: string
+  /** A calendar DATE held in a DateTime ("2026-10-03T00:00:00"): read the day with lib/dateOnly, never as an instant. */
   endDateTime: string
   availabilityType: AvailabilityType
   isRecurring: boolean

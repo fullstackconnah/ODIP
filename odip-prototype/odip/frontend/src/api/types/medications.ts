@@ -145,8 +145,11 @@ export interface MedicationListDto {
   drugSchedule: DrugSchedule
   supportLevel: MedicationSupportLevel
   packaging: PackagingType
+  /** A calendar DATE held in a DateTime ("2026-10-03T00:00:00"): read the day with lib/dateOnly, never as an instant. */
   startDate: string | null
+  /** A calendar DATE held in a DateTime ("2026-10-03T00:00:00"): read the day with lib/dateOnly, never as an instant. */
   endDate: string | null
+  /** A calendar DATE held in a DateTime ("2026-10-03T00:00:00"): read the day with lib/dateOnly, never as an instant. */
   nextReviewDue: string | null
   complianceFlags: MedicationComplianceFlag[]
 }
@@ -166,6 +169,7 @@ export interface MedicationDetailDto extends MedicationListDto {
   pharmacyPhone: string | null
   consentObtained: boolean
   consentGivenBy: string | null
+  /** A calendar DATE held in a DateTime ("2026-10-03T00:00:00"): read the day with lib/dateOnly, never as an instant. */
   consentDate: string | null
   storageRequirements: string | null
   notes: string | null
@@ -205,10 +209,14 @@ export interface CreateMedicationDto {
   pharmacyPhone?: string
   consentObtained: boolean
   consentGivenBy?: string
+  /** A calendar DATE held in a DateTime ("2026-10-03T00:00:00"): read the day with lib/dateOnly, never as an instant. */
   consentDate?: string
   storageRequirements?: string
+  /** A calendar DATE held in a DateTime ("2026-10-03T00:00:00"): read the day with lib/dateOnly, never as an instant. */
   startDate?: string
+  /** A calendar DATE held in a DateTime ("2026-10-03T00:00:00"): read the day with lib/dateOnly, never as an instant. */
   endDate?: string
+  /** A calendar DATE held in a DateTime ("2026-10-03T00:00:00"): read the day with lib/dateOnly, never as an instant. */
   nextReviewDue?: string
   notes?: string
 }
@@ -225,6 +233,7 @@ export interface AdministrationDto {
   medicationName: string
   doseDescription: string | null
   tripInstanceId: string | null
+  /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   scheduledAt: string | null
   administeredAt: string | null
   /** The IANA time zone (e.g. "Australia/Sydney") the client was in when it captured
@@ -261,6 +270,7 @@ export interface AdministrationDto {
 }
 
 export interface CreateAdministrationDto {
+  /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   scheduledAt?: string
   administeredAt?: string
   /** IANA time zone the client's clock was set to when it captured administeredAt — omitted for
@@ -315,6 +325,7 @@ export interface MarEntryDto {
   pharmacyName: string | null
   pharmacyPhone: string | null
   scheduledTime: string
+  /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   scheduledAt: string
   isHighRisk: boolean
   supportLevel: MedicationSupportLevel

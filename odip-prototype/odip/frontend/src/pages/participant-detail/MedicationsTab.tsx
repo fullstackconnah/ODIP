@@ -14,6 +14,8 @@ import type { MedicationListDto, AdministrationDto } from '@/api/types/medicatio
 import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/incidentPrefill'
 import type { Tone } from '@/lib/tone'
 import { plural } from '@/lib/format'
+import { isPastDue } from '@/lib/deadline'
+import { localIsoDate } from '@/lib/dateOnly'
 
 const MED_STATUS_COLOR_MAP: Record<string, Tone> = {
   active: 'success',
@@ -28,13 +30,15 @@ const ADMIN_STATUS_COLOR_MAP: Record<string, Tone> = {
   missed: 'danger',
 }
 
+/** The local calendar date `days` ago ("YYYY-MM-DD"). The UTC date (toISOString) is still yesterday before 10:00 in Sydney. */
 function isoDaysAgo(days: number): string {
   const d = new Date()
   d.setDate(d.getDate() - days)
-  return d.toISOString().split('T')[0]
+  return localIsoDate(d)
 }
 
-const isReviewOverdue = (dateStr: string | null) => !!dateStr && new Date(dateStr).getTime() < Date.now()
+// NextReviewDue is a date held in a DateTime: overdue from the day AFTER (see lib/deadline isPastDue).
+const isReviewOverdue = (dateStr: string | null) => isPastDue(dateStr)
 
 /** Connection map: same helper as MarTab's — link to an already-filed incident, or an action to
  * file one now, for a Refused/Withheld/Missed/WrongMedication administration-history row. */

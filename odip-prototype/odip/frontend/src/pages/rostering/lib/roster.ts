@@ -1,5 +1,5 @@
 import { addDays, addWeeks, format, parseISO, startOfWeek } from 'date-fns'
-import { formatShiftTime } from '@/lib/utils'
+import { formatShiftTime, parseApiDate } from '@/lib/utils'
 import { formatRatio } from '@/lib/format'
 
 // Re-exported so existing `from '../lib/roster'` imports across the rostering feature keep
@@ -124,7 +124,7 @@ export function formatVarianceMinutes(minutes: number): string {
  * reads as "just now" rather than a nonsensical negative duration).
  */
 export function formatElapsedSince(actualStartIso: string, now: Date = new Date()): string {
-  const startMs = new Date(actualStartIso).getTime()
+  const startMs = parseApiDate(actualStartIso).getTime()
   const totalMinutes = Math.max(0, Math.floor((now.getTime() - startMs) / 60_000))
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60

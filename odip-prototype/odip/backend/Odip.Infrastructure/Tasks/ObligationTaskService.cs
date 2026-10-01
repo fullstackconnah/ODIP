@@ -3,6 +3,7 @@ using Odip.Application.Interfaces;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Infrastructure.Tasks;
 
@@ -10,10 +11,12 @@ namespace Odip.Infrastructure.Tasks;
 public sealed class ObligationTaskService : IObligationTaskService
 {
     private readonly OdipDbContext _db;
+    private readonly TimeProvider _clock;
 
-    public ObligationTaskService(OdipDbContext db)
+    public ObligationTaskService(OdipDbContext db, TimeProvider? clock = null)
     {
         _db = db;
+        _clock = clock ?? TimeProvider.System;
     }
 
     public async Task EnsureAsync(ObligationTaskSpec spec, CancellationToken ct = default)
@@ -67,8 +70,10 @@ public sealed class ObligationTaskService : IObligationTaskService
 
         if (matches.Count == 0) return;
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var now = DateTime.UtcNow;
+        // CompletedDate is a calendar date people read ("completed on Sat 3 Oct"): the provider's date, not the UTC date, which is still
+        // yesterday until 10:00 or 11:00 in Sydney. AutoCompletedAt / UpdatedAt are instants.
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        var now = _clock.GetUtcNow().UtcDateTime;
         foreach (var task in matches)
         {
             task.Status = TaskItemStatus.Completed;

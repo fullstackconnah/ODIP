@@ -23,11 +23,11 @@ export function maskNdisNumber(ndis: string | null | undefined): string {
 }
 
 /**
- * Parses an API-supplied ISO timestamp. The backend serializes some DateTime values
- * (e.g. DateTime.UtcNow) without a timezone suffix even though they are UTC — `new Date(iso)`
- * would then parse them as local time, throwing off elapsed-time math. If the string has no
- * trailing `Z` or `+HH:MM`/`-HH:MM` offset, treat it as UTC by appending `Z`; otherwise parse
- * as-is (it already carries explicit timezone info, e.g. from a DateTimeOffset).
+ * Parses an API-supplied INSTANT (created, logged in, dose given). The API sends every instant as UTC with a trailing `Z` (DESIGN.md, "Time
+ * on the wire"), so `new Date(iso)` is already exact; this also reads one that arrives without a zone (an older response, a hand-built
+ * fixture) as UTC rather than as the browser's local time, which is 10-11 hours wrong in Sydney. If the string has no trailing `Z` or
+ * `+HH:MM`/`-HH:MM` offset it appends `Z`; otherwise it parses as-is. Do NOT use it for a provider-local wall-clock value (an incident time
+ * somebody typed, a dose slot): that has no zone on purpose and its digits are the answer, so it goes through lib/wallClock.ts.
  */
 export function parseApiDate(iso: string): Date {
   const hasTimezone = /(Z|[+-]\d{2}:\d{2})$/.test(iso)

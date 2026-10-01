@@ -13,6 +13,7 @@ import { Button } from '@/components/Button'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
+import { plural } from '@/lib/format'
 
 export default function AccommodationPage() {
   const { canWrite } = usePermissions()
@@ -40,7 +41,7 @@ export default function AccommodationPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Accommodation"
-        subtitle={`${filtered.length} properties`}
+        subtitle={plural(filtered.length, 'property', 'properties')}
         action={!showArchived && canWrite && (
           <Button to="/accommodation/new" size="md">
             <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New Accommodation</span><span className="sm:hidden">New</span>

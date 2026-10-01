@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Odip.Application.Serialization;
 using Odip.Domain.Enums;
 
 namespace Odip.Application.DTOs;
@@ -30,8 +31,11 @@ public record MedicationListDto
     public DrugSchedule DrugSchedule { get; init; }
     public MedicationSupportLevel SupportLevel { get; init; }
     public PackagingType Packaging { get; init; }
+    [WallClock]
     public DateTime StartDate { get; init; }
+    [WallClock]
     public DateTime? EndDate { get; init; }
+    [WallClock]
     public DateTime? NextReviewDue { get; init; }
     public List<string> ComplianceFlags { get; init; } = new();
 }
@@ -52,6 +56,7 @@ public record MedicationDetailDto : MedicationListDto
     public string? PharmacyPhone { get; init; }
     public bool ConsentObtained { get; init; }
     public string? ConsentGivenBy { get; init; }
+    [WallClock]
     public DateTime? ConsentDate { get; init; }
     public string? StorageRequirements { get; init; }
     public string? Notes { get; init; }
@@ -121,14 +126,18 @@ public record CreateMedicationDto
     public string? PharmacyPhone { get; init; }
     public PackagingType Packaging { get; init; } = PackagingType.OriginalPackaging;
 
+    [WallClock]
     public DateTime StartDate { get; init; }
+    [WallClock]
     public DateTime? EndDate { get; init; }
+    [WallClock]
     public DateTime? NextReviewDue { get; init; }
 
     public bool ConsentObtained { get; init; }
 
     [StringLength(200)]
     public string? ConsentGivenBy { get; init; }
+    [WallClock]
     public DateTime? ConsentDate { get; init; }
 
     [StringLength(500)]
@@ -152,6 +161,7 @@ public record AdministrationDto
     public string MedicationName { get; init; } = string.Empty;
     public string DoseDescription { get; init; } = string.Empty;
     public Guid? TripInstanceId { get; init; }
+    [WallClock]
     public DateTime? ScheduledAt { get; init; }
     public DateTime? AdministeredAt { get; init; }
 
@@ -192,6 +202,7 @@ public record AdministrationDto
 
 public record CreateAdministrationDto
 {
+    [WallClock]
     public DateTime? ScheduledAt { get; init; }
     public DateTime? AdministeredAt { get; init; }
 
@@ -291,6 +302,7 @@ public record MarEntryDto
 
     /// <summary>"08:00" — the time-of-day slot this entry expands.</summary>
     public string ScheduledTime { get; init; } = string.Empty;
+    [WallClock]
     public DateTime ScheduledAt { get; init; }
     public bool IsHighRisk { get; init; }
     public MedicationSupportLevel SupportLevel { get; init; }

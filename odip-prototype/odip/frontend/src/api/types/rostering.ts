@@ -135,6 +135,7 @@ export interface ShiftCompletionDto {
     title: string
     severity: IncidentSeverity
     status: IncidentStatus
+    /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
     incidentDateTime: string
   }[]
   // ── Shift package ──

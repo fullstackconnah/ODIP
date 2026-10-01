@@ -8,7 +8,7 @@
 // "Sept" in others (the rule dateRange.ts follows). The two date-time formatters at the bottom are the exception and stay Intl-backed, so
 // they print exactly what they always printed. Nothing reads the clock unless you leave `now` out.
 import { calendarDaysUntil, isDateOnly } from './dateOnly'
-import { formatWithTimeZone } from './utils'
+import { formatWithTimeZone, parseApiDate } from './utils'
 
 /**
  * The count and the noun that agrees with it: "1 day", "2 days", "0 days". Only exactly 1 is singular. Pass the plural for an
@@ -66,7 +66,9 @@ function words(n: number, unit: Unit, past: boolean, long: boolean): string {
  *
  * `null`, `undefined` and '' read "Never" / "never" (no moment was recorded); an unparseable value reads "—". A date-only string
  * ("2026-09-30", a due date) is a calendar day, not an instant, so it counts calendar days against the local day of `now` and reads
- * "Today" / "today" on the day. Pass a Date when you have already parsed the value (parseApiDate, for a UTC timestamp sent without a zone).
+ * "Today" / "today" on the day. A timestamp string is an INSTANT and is read with parseApiDate: with a Z or an offset it is exact, and one sent
+ * without a zone (an older response, a hand-built fixture) is UTC, never the viewer's local time, which in Sydney is 10-11 hours wrong.
+ * (A provider-local wall-clock value is not an instant: lib/wallClock.ts.)
  */
 export function formatRelative(value: string | Date | null | undefined, { style, now = new Date() }: RelativeOptions): string {
   const long = style === 'long'
@@ -81,7 +83,7 @@ export function formatRelative(value: string | Date | null | undefined, { style,
     return words(n, unit, ahead < 0, long)
   }
 
-  const then = typeof value === 'string' ? new Date(value).getTime() : value.getTime()
+  const then = typeof value === 'string' ? parseApiDate(value).getTime() : value.getTime()
   if (Number.isNaN(then) || Number.isNaN(nowMs)) return '—'
   const past = nowMs >= then
   const gap = Math.abs(nowMs - then)
@@ -99,7 +101,7 @@ export function formatRelative(value: string | Date | null | undefined, { style,
  */
 export function formatAge(value: string | Date | null | undefined, { now = new Date() }: { now?: Date | number } = {}): string {
   if (value === null || value === undefined || value === '') return '—'
-  const then = typeof value === 'string' ? new Date(value).getTime() : value.getTime()
+  const then = typeof value === 'string' ? parseApiDate(value).getTime() : value.getTime()
   const nowMs = typeof now === 'number' ? now : now.getTime()
   if (Number.isNaN(then) || Number.isNaN(nowMs)) return '—'
   const hours = Math.floor((nowMs - then) / HOUR)
@@ -109,12 +111,13 @@ export function formatAge(value: string | Date | null | undefined, { now = new D
 }
 
 /**
- * "27/03/2026, 01:45 pm": a date and time in the viewer's zone, en-AU; '—' for nothing. Intl-backed, so the space before "pm" follows the
- * ICU build, exactly as it did when this lived in the claim-batch pages.
+ * "27/03/2026, 01:45 pm": an INSTANT as a date and time in the viewer's zone, en-AU; '—' for nothing. Intl-backed, so the space before "pm" follows the
+ * ICU build, exactly as it did when this lived in the claim-batch pages. Read with parseApiDate, so a zone-less instant is UTC (a claim batch
+ * created at 3 pm in Sydney printed "05:00 am" when it was read as local time).
  */
 export function formatDateTimeAu(value: string | null | undefined): string {
   if (!value) return '—'
-  return new Date(value).toLocaleString('en-AU', {
+  return parseApiDate(value).toLocaleString('en-AU', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   })
 }

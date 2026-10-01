@@ -631,6 +631,37 @@ Qualifications table (each row a wrapping card on a phone) is compact. Which cre
 Qualifications list, a staff member's Credentials tab and the Dashboard's Qualification Issues figure all read it, so the figure is the sum of the list's
 issue counts.
 
+### Time on the wire
+
+Every date and time that crosses the API is exactly ONE of three kinds, and the screen reads each with the helper for its kind. A new field is an instant
+unless a person typed it as a clock reading or it is a calendar date.
+
+| Kind | On the wire | Examples | Read it with |
+|---|---|---|---|
+| **Instant** (a moment that happened) | UTC with a trailing Z: `2026-10-03T05:00:00Z` | created, updated, last login, dose given (`administeredAt`), submitted, claim-batch times, a shift's actual start | `parseApiDate`, then `formatWithTimeZone`, `formatRelative`, `formatAge`, `formatDateTimeAu` |
+| **Wall clock** (provider-local digits) | NO zone: `2026-10-03T08:00:00` | a dose slot (`scheduledAt`, `occursAt`), the incident time and the notified-at times typed into a `datetime-local` input, a medication's start, end and review dates, a staff availability day | `formatWallClock`, `toDatetimeInputValue`, `datetimeInputNow` (`src/lib/wallClock.ts`); never converted |
+| **Date** (a calendar day) | `DateOnly`: `2026-10-05` | trip dates, plan dates, due and expiry dates | `src/lib/dateOnly.ts`: `parseDateOnly`, `calendarDaysUntil`, `eachDay`, `localIsoDate`; due-day rules through `deadlineState` / `isPastDue` |
+
+**Why.** 136 of the 138 timestamp columns are `timestamp without time zone` and the API runs Npgsql's legacy timestamp switch, so a UTC instant read back from
+the database has Kind Unspecified, and System.Text.Json used to write it with no suffix. A browser reads a zone-less ISO string as LOCAL time, so in Sydney (UTC+10,
+UTC+11 from Sun 4 Oct 2026) every instant read 10-11 hours wrong ("Last dose 10 hrs ago" for a dose given 10 minutes earlier). Marking each instant where it is built
+would be a hundred edits, so it is done once, at the boundary.
+
+**On the server.** `UtcInstantDateTimeConverter` is registered in `ApiJsonOptions.Configure`: every DateTime is UTC with Z. A member that is a wall-clock value or a
+calendar date held in a DateTime carries `[WallClock]` (`WallClockDateTimeConverter`: no zone, never shifted, read back as exactly the digits sent). `DateOnly`, `TimeOnly`
+and `DateTimeOffset` are untouched. `DateTimeWireInventoryTests` walks every DateTime reachable from a controller and fails unless it is an instant with Z or one of the listed
+wall-clock fields, each with its reason: adding a wall-clock field means adding it to that list.
+
+**Rules.**
+- A wall-clock value is never turned into an instant: no `parseApiDate`, no `formatWithTimeZone`, no `new Date(x)` then `toLocaleString`. Read as UTC it moved by the offset
+  (an incident typed as 08:00 showed "6:00 pm" in Sydney and "4:00 am" in New York).
+- "Today" for a calendar rule is the PROVIDER's date. On the server that is `ProviderTimeZoneResolver.TodayAsync` (never `DateTime.UtcNow`, which is still yesterday until
+  10:00 or 11:00 in Sydney); in the browser it is the viewer's local date (`localIsoDate`, `deadlineState`), never `new Date().toISOString().split('T')[0]` (the UTC date).
+- A due day is overdue from the day AFTER it, never on it (`deadlineState`, `isPastDue`), and a count of days or nights is whole calendar days (`calendarDaysUntil`,
+  `eachDay`), never milliseconds divided by 86 400 000 (a day is 23 hours long when the clocks go forward).
+- A wall-clock value is compared with "now" only after the provider's zone is applied (`ProviderLocalTime.LocalToUtc`), the way the MAR decides a dose is overdue.
+- Three traps: `new Date("2026-10-03T08:00:00")` is LOCAL, `new Date("2026-10-03")` is UTC midnight (10:00 in Sydney), and `toISOString()` is always the UTC date.
+
 ### Modals
 
 `--radius-lg`, 16px padding, 90vh max height with internal scroll.
@@ -663,6 +694,7 @@ not. Never hand-roll a `fixed right-0` panel: use `SlideOver`.
 - **Do** early-return a record that is loading, failed or missing through `PageState`, give a detail page one `BackButton` that names its destination, and keep its active tab in the URL with `useTabParam`
 - **Do** put what needs action in the attention band and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on
 - **Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed ("Couldn't load"), and never an "All clear" without data
+- **Do** read every date and time by its kind (instant, wall clock, date: "Time on the wire"), take "today" from the provider (server) or the viewer's local date (browser), and call a due day overdue only from the day after it (`deadlineState`, `isPastDue`)
 - **Do** use `Button` for every action; it owns height, radius and focus
 - **Do** keep compliance state, alerts and countdowns visually equal to ordinary data
 - **Do** express depth with warm tonal surfaces; reserve shadow for the primary button, floating panels,
@@ -679,6 +711,7 @@ not. Never hand-roll a `fixed right-0` panel: use `SlideOver`.
 - **Don't** use pure `#ffffff` as a page background or pure `#000000` as text
 - **Don't** invent a colour outside the semantic list to express a new state
 - **Don't** give a category (a plan type, a witness type) the warning or danger tone, or use `--color-warning` for text or an icon: warning text is `TONE.warning.ink`
+- **Don't** parse a wall-clock value as an instant, or compare a due date with `Date.now()`, or save `new Date().toISOString().split('T')[0]` as "today" (the UTC date), or do day maths in milliseconds
 - **Don't** add a second page heading
 - **Don't** use the display step (`text-display`) anywhere but a detail page's title, the dashboard's title and the figures of a glance strip or the attention band, or add a second display size
 - **Don't** tint a glance segment its own badge calls fine, or fill one with anything but the warning-container or error-container

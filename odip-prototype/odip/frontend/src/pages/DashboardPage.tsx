@@ -49,9 +49,16 @@ export default function DashboardPage() {
   // early returns below, not after them.
   // The same rule as the Qualifications list (lib/credentials.ts), so this figure is the sum of that page's issue counts: a credential
   // needs action when it has no date, is expired, is due today or is due within the warning window.
-  const qualIssueCount = useMemo(() => {
+  const { qualIssueCount, qualIssueStaffCount } = useMemo(() => {
     const today = new Date()
-    return allStaff.reduce((count, s) => count + credentialIssueCount(staffCredentials(s, { warnDays: warningDays, today })), 0)
+    let issues = 0
+    let staffWithIssues = 0
+    for (const s of allStaff) {
+      const n = credentialIssueCount(staffCredentials(s, { warnDays: warningDays, today }))
+      issues += n
+      if (n > 0) staffWithIssues += 1
+    }
+    return { qualIssueCount: issues, qualIssueStaffCount: staffWithIssues }
   }, [allStaff, warningDays])
 
   if (isLoading) {
@@ -84,6 +91,8 @@ export default function DashboardPage() {
         .filter((a) => a.severity === 'Critical')
         .map((a) => ({ participantId: p.participantId, participantName: p.participantName, alert: a }))
     )
+  // How many participants those alerts belong to: one flagged row each on the Participants table.
+  const criticalParticipantCount = new Set(criticalAlertItems.map((i) => i.participantId)).size
 
   // The needs-attention band: a fixed order, so a position always means the same item. An item is dropped only by the two
   // conditions the dashboard always had (the alerts item needs canViewAlerts, Pending Leave needs canApproveLeave and a
@@ -103,7 +112,8 @@ export default function DashboardPage() {
       tone: tinted(qualIssueCount, 'danger'),
       loading: staffLoading,
       error: staffError,
-      caption: !staffLoading && !staffError && qualIssueCount === 0 ? 'All clear' : undefined,
+      // The tile counts credential issues; the Qualifications page's tabs count staff ("All Issues (4)"). Say both, so 12 reads against 4.
+      caption: staffLoading || staffError ? undefined : qualIssueCount === 0 ? 'All clear' : plural(qualIssueStaffCount, 'staff member'),
     },
     ...(canViewAlerts
       ? [
@@ -114,11 +124,13 @@ export default function DashboardPage() {
             tone: tinted(criticalAlertItems.length, 'danger'),
             loading: alertsLoading,
             error: alertsError,
-            caption: !alertsLoading && !alertsError && criticalAlertItems.length === 0 ? 'All clear' : undefined,
+            // The tile counts alerts; the Participants table shows one flagged row per participant. Say both, so 3 reads against 2 rows.
+            caption: alertsLoading || alertsError ? undefined : criticalAlertItems.length === 0 ? 'All clear' : plural(criticalParticipantCount, 'participant'),
           },
         ]
       : []),
-    { label: 'Overdue', value: d.overdueTaskCount, tone: tinted(d.overdueTaskCount, 'danger') },
+    // Links to the Tasks list on its Overdue filter: the same rule the figure counts (TaskOverdue on the server), so the rows match the number.
+    { label: 'Overdue', value: d.overdueTaskCount, to: '/tasks?status=Overdue', tone: tinted(d.overdueTaskCount, 'danger') },
     { label: 'Missing Accommodation', value: d.tripsMissingAccommodation, tone: tinted(d.tripsMissingAccommodation, 'warning') },
     { label: 'Missing Vehicles', value: d.tripsMissingVehicles, tone: tinted(d.tripsMissingVehicles, 'warning') },
     { label: 'Missing Staff', value: d.tripsMissingStaff, tone: tinted(d.tripsMissingStaff, 'warning') },
@@ -218,7 +230,7 @@ export default function DashboardPage() {
         <Card className="@container">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Overdue Tasks</h3>
-            <Link to="/tasks" className={`${TAP_FLOOR} text-xs font-bold text-[var(--color-primary)] hover:underline`}>
+            <Link to="/tasks?status=Overdue" className={`${TAP_FLOOR} text-xs font-bold text-[var(--color-primary)] hover:underline`}>
               View All
             </Link>
           </div>
