@@ -4,6 +4,7 @@ import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { useIsBelowLg } from '@/hooks/useIsBelowLg'
 import { LogOut, Menu, X, ChevronDown } from 'lucide-react'
 import { useState, useRef } from 'react'
+import ErrorBoundary from '@/components/ErrorBoundary'
 import { TAP_AREA } from '@/components/tapArea'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
@@ -423,7 +424,11 @@ export default function AppLayout() {
               page-header back control (e.g. the intake/profile wizards) can navigate to
               where the user actually came from instead of a hardcoded fallback. */}
           <BackPathTracker />
-          <Outlet />
+          {/* A page that throws takes the page area down, not the shell: the nav stays on screen so the user can leave the broken
+              page. The error clears when the pathname changes (App.tsx keeps its own boundary around the shell for a crash in the shell). */}
+          <ErrorBoundary inline resetKey={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
 

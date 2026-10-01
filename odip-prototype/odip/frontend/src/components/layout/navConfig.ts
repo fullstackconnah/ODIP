@@ -76,7 +76,9 @@ const participantsHubActive: NavMatch = pathname =>
   pathname === '/participants' || pathname.startsWith('/participants/') || pathname.startsWith('/onboarding/')
 
 export const navItems: NavEntry[] = [
-  { to: '/', label: 'Dashboard', msIcon: 'dashboard', page: 'dashboard', bar: { order: 1, audience: 'office' } },
+  // A SupportWorker starts from My Shifts: the Dashboard is KPIs they cannot act on. They keep 'dashboard' on their allow-list (so a link
+  // to it still resolves), but `/` sends them to /portal (App.tsx HomeRoute) and the menu does not offer it.
+  { to: '/', label: 'Dashboard', msIcon: 'dashboard', page: 'dashboard', hideForRoles: ['SupportWorker'], bar: { order: 1, audience: 'office' } },
   {
     to: '/portal',
     label: 'My Shifts',
@@ -109,8 +111,9 @@ export const navItems: NavEntry[] = [
     children: [
       { to: '/participants', label: 'Participants', msIcon: 'group', page: 'participants', matchActive: participantsHubActive },
       { to: '/medications', label: 'Medications', msIcon: 'pill', page: 'medications' },
-      // cg04: the review pages sit behind `requiresWrite` in App.tsx, so a SupportWorker who could see this link would be bounced.
-      { to: '/caregiver-submissions', label: 'Caregiver forms', msIcon: 'checklist_rtl', page: 'participants', requiresWrite: true },
+      // cg04: the review pages are behind `requiresWrite` in App.tsx (so a SupportWorker would be bounced), and the API behind them admits
+      // only the three management roles (so ReadOnly would get a 403): its own page key keeps both out of the menu and the route.
+      { to: '/caregiver-submissions', label: 'Caregiver forms', msIcon: 'checklist_rtl', page: 'caregiver-submissions', requiresWrite: true },
     ],
   },
   {

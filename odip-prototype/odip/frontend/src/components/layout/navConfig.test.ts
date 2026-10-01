@@ -107,10 +107,29 @@ describe('navConfig — who sees what', () => {
     expect(isLeafVisible(caregiverForms, { ...everything, canWrite: false })).toBe(false)
   })
 
-  it('drops a group that has no visible child, and keeps one with several', () => {
+  it('gives a SupportWorker only their pages, no Dashboard, and no group that has lost every child', () => {
     expect(shape(resolveNav(navItems, accessFor('SupportWorker')))).toEqual([
-      'Dashboard', 'My Shifts', 'Trips: All Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents',
+      'My Shifts', 'Trips: All Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents',
     ])
+  })
+
+  it('gives ReadOnly what its API lets it read: no Rostering pages but Staff and Qualifications, no Finance, no Caregiver forms, no Settings', () => {
+    expect(shape(resolveNav(navItems, accessFor('ReadOnly')))).toEqual([
+      'Dashboard',
+      'My Shifts',
+      'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
+      'Participants: Participants | Medications',
+      'Staff & roster: Staff | Qualifications',
+      'Incidents',
+    ])
+  })
+
+  it('keeps the Dashboard for every role but a SupportWorker (hideForRoles), whatever the page access', () => {
+    const dashboard = navLeaves.find(candidate => candidate.to === '/')!
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator', 'ReadOnly']) expect(isLeafVisible(dashboard, accessFor(role)), role).toBe(true)
+    // 'dashboard' stays on a SupportWorker's allow-list (a link to `/` must still resolve): it is the menu that leaves it out.
+    expect(accessFor('SupportWorker').canAccessPage('dashboard')).toBe(true)
+    expect(isLeafVisible(dashboard, accessFor('SupportWorker'))).toBe(false)
   })
 
   it('shows a role with no restriction everything, in config order', () => {
@@ -199,7 +218,7 @@ describe('navConfig — the bottom bar', () => {
 
   it('keeps an entry out of a bar its audience excludes, even when the role could see it', () => {
     expect(labels('Admin', 'field')).toEqual(['My Shifts', 'Trips', 'Participants', 'Incidents'])
-    expect(labels('SupportWorker', 'office')).toEqual(['Dashboard', 'Trips', 'Participants'])
+    expect(labels('SupportWorker', 'office')).toEqual(['Trips', 'Participants'])
   })
 
   it('cuts a bar that would be longer than BAR_LINK_LIMIT, by order', () => {
@@ -216,6 +235,12 @@ describe('navConfig — the bottom bar', () => {
     const [, trips, roster] = bar('Coordinator', 'office').map(entry => toBarItem(entry, '/rostering/leave', NO_COUNTS))
     expect(trips).toMatchObject({ to: '/trips', active: false, current: undefined })
     expect(roster).toMatchObject({ to: '/rostering', label: 'Roster', active: true, current: 'true' })
+  })
+
+  it('sends ReadOnly, which cannot open the Board, to Staff from the Roster cell', () => {
+    const items = bar('ReadOnly', 'office').map(entry => toBarItem(entry, '/', NO_COUNTS))
+    expect(items.map(item => item.label)).toEqual(['Dashboard', 'Trips', 'Roster', 'Participants'])
+    expect(items[2].to).toBe('/staff')
   })
 
   it('sends a role that cannot open the Board to the first page it can open', () => {

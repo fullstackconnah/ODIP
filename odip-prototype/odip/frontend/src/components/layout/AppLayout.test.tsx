@@ -509,8 +509,8 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
     ['SuperAdmin', OFFICE_BOTTOM_NAV],
     ['Admin', OFFICE_BOTTOM_NAV],
     ['Coordinator', OFFICE_BOTTOM_NAV],
-    // ReadOnly had the "+" too: canWrite is true for it (the backend is what blocks the save).
-    ['ReadOnly', OFFICE_BOTTOM_NAV],
+    // ReadOnly cannot open the Board (its API refuses the whole Rostering area), so its Roster cell opens Staff, the first page it can.
+    ['ReadOnly', ['/', '/trips', '/staff', '/participants']],
     ['SupportWorker', ['/portal', '/trips', '/participants', '/incidents']],
   ])('has only the page links the role may open in the bottom nav for %s, none of them a create shortcut', (role, expected) => {
     signIn(role)
@@ -540,9 +540,10 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
     signIn('SupportWorker')
     renderAt('/trips')
 
-    // Caregiver forms used to be listed here: the link is shown to a role the route then bounces (it needs write access).
+    // Caregiver forms used to be listed here (the link was shown to a role the route then bounces), and so did the Dashboard (a SupportWorker's
+    // home is My Shifts).
     expect(hrefs(mainNav())).toEqual([
-      '/', '/portal',
+      '/portal',
       '/trips', '/schedule', '/tasks',
       '/participants', '/medications',
       '/incidents',
@@ -590,18 +591,40 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     'Incidents',
     'Settings',
   ]
-  const SUPPORT_WORKER_MENU = ['Dashboard', 'My Shifts', 'Trips: All Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents']
+  // A SupportWorker starts from My Shifts, so the Dashboard is not in their menu; they never see the pages their allow-list leaves out.
+  const SUPPORT_WORKER_MENU = ['My Shifts', 'Trips: All Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents']
+  // ReadOnly reads most of the app but its API refuses Rostering (all five pages), Billing and Claim batches, Caregiver forms and
+  // Settings, so the menu does not offer them: Finance and Settings disappear, Staff & roster is down to Staff and Qualifications.
+  const READ_ONLY_MENU = [
+    'Dashboard',
+    'My Shifts',
+    'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
+    'Participants: Participants | Medications',
+    'Staff & roster: Staff | Qualifications',
+    'Incidents',
+  ]
 
-  it.each(['SuperAdmin', 'Admin', 'Coordinator', 'ReadOnly'])('gives %s the full menu: Rostering, Staff and Qualifications are one Staff & roster group', role => {
+  it.each(['SuperAdmin', 'Admin', 'Coordinator'])('gives %s the full menu: Rostering, Staff and Qualifications are one Staff & roster group', role => {
     signIn(role)
     renderAt('/')
     expect(navShape()).toEqual(FULL_MENU)
   })
 
-  it('gives a SupportWorker only the pages their role may open', () => {
+  it('gives a SupportWorker only the pages their role may open, and no Dashboard (their home is My Shifts)', () => {
     signIn('SupportWorker')
     renderAt('/')
     expect(navShape()).toEqual(SUPPORT_WORKER_MENU)
+    expect(screen.queryByRole('link', { name: /Dashboard$/ })).not.toBeInTheDocument()
+  })
+
+  it('gives ReadOnly a menu without the pages the server refuses it', () => {
+    signIn('ReadOnly')
+    renderAt('/')
+    expect(navShape()).toEqual(READ_ONLY_MENU)
+    for (const name of [/Board$/, /Patterns$/, /Compatibility$/, /Leave$/, /Completions$/, /Billing$/, /Claim batches$/, /Caregiver forms$/, /Settings$/]) {
+      expect(screen.queryByRole('link', { name }), String(name)).not.toBeInTheDocument()
+    }
+    expect(screen.queryByRole('button', { name: /Finance$/ })).not.toBeInTheDocument()
   })
 
   it('shows Caregiver forms only to a role whose route would not bounce it (the route needs write access)', () => {
@@ -838,6 +861,13 @@ describe('AppLayout — the bottom bar is generated from the same config (U6)', 
     expect(barLabels()).toEqual(['calendar_todayMy Shifts', 'mapTrips', 'groupParticipants', 'emergencyIncidents', 'menuMore'])
   })
 
+  it('gives ReadOnly a Roster cell that opens Staff (the Board is refused it), still lit on its pages', () => {
+    signIn('ReadOnly')
+    renderAt('/qualifications')
+    expect(within(mobileNav()).getByRole('link', { name: 'Roster' })).toHaveAttribute('href', '/staff')
+    expect(lit()).toEqual(['calendar_view_weekRoster'])
+  })
+
   it('names each cell by its label alone and links it to the first page of its section', () => {
     signIn('Coordinator')
     renderAt('/')
@@ -1021,5 +1051,51 @@ describe('AppLayout — the drawer is a dialog while it is a drawer (below lg)',
     viewport.resize(false)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'false')
+  })
+})
+
+
+// A page that throws takes the page area down, not the shell: the nav is how the user leaves it.
+describe('AppLayout — a page that throws leaves the shell standing', () => {
+  function Boom(): never {
+    throw new Error('page exploded')
+  }
+  function renderRoutes(initialPath: string) {
+    const router = createMemoryRouter(
+      [{ element: <AppLayout />, children: [{ path: '/boom', element: <Boom /> }, { path: '*', element: <div>A working page</div> }] }],
+      { initialEntries: [initialPath] },
+    )
+    render(<RouterProvider router={router} />)
+    return router
+  }
+
+  beforeEach(() => {
+    signIn('Coordinator')
+    // React and the boundary both log the caught error.
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    localStorage.clear()
+  })
+
+  it('shows the error in the page area with the sidebar, the header and the bottom bar still there', () => {
+    renderRoutes('/boom')
+    const main = document.getElementById('main') as HTMLElement
+    expect(within(main).getByText('Something went wrong')).toBeInTheDocument()
+    expect(within(main).getByText('page exploded')).toBeInTheDocument()
+    expect(mainNav()).toBeInTheDocument()
+    expect(mobileNav()).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open menu' })).toBeInTheDocument()
+    // The error fills the page area, not the viewport: the shell around it is not pushed off screen.
+    expect(main.querySelector('.min-h-screen')).toBeNull()
+  })
+
+  it('recovers when the user follows a nav link away from the broken page', () => {
+    renderRoutes('/boom')
+    expect(screen.getByText('Something went wrong')).toBeInTheDocument()
+    fireEvent.click(within(mainNav()).getByRole('link', { name: 'Dashboard' }))
+    expect(screen.getByText('A working page')).toBeInTheDocument()
+    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument()
   })
 })
