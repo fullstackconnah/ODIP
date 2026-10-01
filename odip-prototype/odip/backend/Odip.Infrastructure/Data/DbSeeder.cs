@@ -2398,6 +2398,7 @@ public static class DbSeeder
         // throw an FK violation on any DB that already has rows in either table (seed-expansion
         // task fix — these two were previously missing from the delete list).
         context.RestrictivePractices.RemoveRange(context.RestrictivePractices);
+        context.ShiftRoutineChecks.RemoveRange(context.ShiftRoutineChecks);   // ShiftRoutineCheck → ParticipantRoutine is Restrict
         context.ParticipantRoutines.RemoveRange(context.ParticipantRoutines);
         context.ScheduledActivities.RemoveRange(context.ScheduledActivities);
         context.TripDays.RemoveRange(context.TripDays);

@@ -367,7 +367,11 @@ public record PortalShiftRoutineDto(
     /// <summary>When it was ticked (UTC); explicit null when it is not.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? CheckedAt,
     /// <summary>Who ticked it; explicit null when it is not.</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? CheckedByName);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? CheckedByName,
+    /// <summary>True only on the coordinator's review: this is a tick whose routine no longer matches the shift (edited out of its window, retired or
+    /// deleted since), listed from what was recorded when it was ticked - the title and occurrence time as they were. Always false on the worker's shift
+    /// detail and for a routine that still applies.</summary>
+    bool FromTickSnapshot = false);
 
 /// <summary>
 /// The latest handover for a participant, as the next worker sees it. <see cref="Text"/> is null when the author wrote

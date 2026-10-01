@@ -1,11 +1,16 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Audit;
+using Odip.Infrastructure.Rostering;
+using Odip.Infrastructure.Services;
 using Xunit;
 using static Odip.Tests.Portal.ShiftPackageFixture;
 
@@ -249,6 +254,160 @@ public class PortalRoutineChecksTests
         Assert.Contains(AuditAction.Created, actions);
         Assert.Contains(AuditAction.Deleted, actions);
         Assert.Contains(typeof(ShiftRoutineCheck), AuditedEntities.Types);
+    }
+
+    // ── a tick is found by routine whatever is edited afterwards, and its snapshot outlives the routine (review 3 finding m3) ──
+
+    private static async Task<ShiftCompletionReviewDto> ReviewOf(ShiftPackageFixture f)
+    {
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())], "Test");
+        var rostering = new RosteringController(f.Db, new StaffCompatibilityLinkService(f.Db), new StaffUnavailabilityQuery(f.Db))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } },
+        };
+        var result = await rostering.GetShiftCompletionReview(f.Shift.Id, default);
+        return Assert.IsType<ApiResponse<ShiftCompletionReviewDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+    }
+
+    [Fact]
+    public async Task TheTick_StoresASnapshot_TheRoutinesTitleAndTheOccurrenceItMatched()
+    {
+        var f = Create();
+        var lunch = AddRoutine(f, "Lunch", "12:00", "13:00");
+
+        await f.Controller.CheckRoutine(f.Shift.Id, lunch.Id, default);
+
+        var row = await f.Db.ShiftRoutineChecks.SingleAsync();
+        Assert.Equal("Lunch", row.RoutineTitle);
+        Assert.Equal(LunchAt, row.ScheduledAt);
+    }
+
+    [Fact]
+    public async Task EditingTheRoutinesTime_AfterItWasTicked_DoesNotHideTheTick_AndTickingAgainMakesNoSecondRow()
+    {
+        var f = Create();
+        var lunch = AddRoutine(f, "Lunch", "12:00", "13:00");
+        await f.Controller.CheckRoutine(f.Shift.Id, lunch.Id, default);
+        var firstCheckedAt = (await f.Db.ShiftRoutineChecks.SingleAsync()).CheckedAt;
+        f.Advance(TimeSpan.FromMinutes(20));
+
+        // A coordinator moves lunch to 12:30 (still inside the shift) while the shift is running. The stored occurrence (12:00) no longer equals the
+        // recomputed one (12:30): the tick used to read as NOT done, and ticking again created a second row.
+        lunch.StartTime = new TimeOnly(12, 30);
+        lunch.EndTime = new TimeOnly(13, 30);
+        f.Db.SaveChanges();
+
+        var detail = Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default));
+        var review = await ReviewOf(f);
+        var again = Detail(await f.Controller.CheckRoutine(f.Shift.Id, lunch.Id, default));
+
+        var routine = Assert.Single(detail.ShiftRoutines);
+        Assert.True(routine.IsChecked);
+        Assert.Equal(new DateTime(2026, 7, 14, 12, 30, 0), routine.OccursAt);   // the live definition, as before
+        var reviewed = Assert.Single(review.Routines);
+        Assert.True(reviewed.IsChecked);
+        Assert.False(reviewed.FromTickSnapshot);   // it still applies in the window, so it is a normal row
+        Assert.True(Assert.Single(again.ShiftRoutines).IsChecked);
+        var row = Assert.Single(await f.Db.ShiftRoutineChecks.ToListAsync());   // still ONE row, with the first who and when
+        Assert.Equal(firstCheckedAt, row.CheckedAt);
+        Assert.Equal(LunchAt, row.ScheduledAt);
+    }
+
+    [Fact]
+    public async Task UntickingAfterTheRoutinesTimeWasEdited_StillRemovesTheTick()
+    {
+        var f = Create();
+        var lunch = AddRoutine(f, "Lunch", "12:00", "13:00");
+        await f.Controller.CheckRoutine(f.Shift.Id, lunch.Id, default);
+        lunch.StartTime = new TimeOnly(12, 30);
+        lunch.EndTime = new TimeOnly(13, 30);
+        f.Db.SaveChanges();
+
+        var unticked = Detail(await f.Controller.UncheckRoutine(f.Shift.Id, lunch.Id, default));
+
+        Assert.False(Assert.Single(unticked.ShiftRoutines).IsChecked);
+        Assert.Empty(await f.Db.ShiftRoutineChecks.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ARoutineEditedOutOfTheWindow_AfterItWasTicked_IsStillOnTheReview_FromItsSnapshot_AndNotOnTheWorkersList()
+    {
+        var f = Create();
+        var lunch = AddRoutine(f, "Lunch", "12:00", "13:00", critical: true);
+        await f.Controller.CheckRoutine(f.Shift.Id, lunch.Id, default);
+        // Moved to 20:00 (after the shift ends) and renamed.
+        lunch.StartTime = new TimeOnly(20, 0);
+        lunch.EndTime = new TimeOnly(21, 0);
+        lunch.Title = "Evening snack";
+        f.Db.SaveChanges();
+
+        var detail = Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default));
+        var review = await ReviewOf(f);
+
+        Assert.Empty(detail.ShiftRoutines);   // the worker's list is the live definitions only
+        var row = Assert.Single(review.Routines);
+        Assert.True(row.FromTickSnapshot);
+        Assert.True(row.IsChecked);
+        Assert.Equal("Lunch", row.Title);   // as it was when ticked, not "Evening snack"
+        Assert.Equal(LunchAt, row.OccursAt);
+        Assert.Equal("Ben Turner", row.CheckedByName);
+        Assert.True(row.IsCritical);   // the critical flag and the category come from the routine row, which still exists
+        Assert.Equal(lunch.Id, row.Id);
+    }
+
+    [Fact]
+    public async Task ADeletedRoutine_IsRetired_SoItsTicksSurviveOnTheCompletion_AndTheReviewStillListsThem()
+    {
+        var f = Create();
+        var lunch = AddRoutine(f, "Lunch", "12:00", "13:00");
+        await f.Controller.CheckRoutine(f.Shift.Id, lunch.Id, default);
+
+        var delete = await new ParticipantRoutinesController(f.Db).Delete(lunch.Id, default);
+
+        Assert.IsType<OkObjectResult>(delete.Result);
+        Assert.False((await f.Db.ParticipantRoutines.SingleAsync(r => r.Id == lunch.Id)).IsActive);   // retired, not removed
+        Assert.Single(await f.Db.ShiftRoutineChecks.ToListAsync());                                    // the tick survived
+        Assert.Empty(Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default)).ShiftRoutines);    // a retired routine is in no shift window
+        var row = Assert.Single((await ReviewOf(f)).Routines);
+        Assert.True(row.FromTickSnapshot);
+        Assert.Equal("Lunch", row.Title);
+        Assert.True(row.IsChecked);
+    }
+
+    [Fact]
+    public async Task ATickRecordedWithNoSnapshotTitle_FallsBackToTheRoutinesCurrentTitle_OnTheReview()
+    {
+        var f = Create();
+        var retired = AddRoutine(f, "Old title", "12:00", "13:00", active: false);
+        f.Db.ShiftRoutineChecks.Add(new ShiftRoutineCheck
+        {
+            Id = Guid.NewGuid(), TenantId = f.Worker.TenantId, ShiftCompletionId = f.Completion!.Id, ParticipantRoutineId = retired.Id, ScheduledAt = LunchAt,
+            CheckedByUserId = f.Worker.Id, CheckedAt = f.Clock.GetUtcNow().UtcDateTime, RoutineTitle = null,
+        });
+        f.Db.SaveChanges();
+
+        var row = Assert.Single((await ReviewOf(f)).Routines);
+
+        Assert.True(row.FromTickSnapshot);
+        Assert.Equal("Old title", row.Title);
+    }
+
+    [Fact]
+    public async Task TheReviewListsTheLiveRoutinesFirst_ThenTheTicksFromSnapshots_AndAnUntickedLiveRoutineStaysNotDone()
+    {
+        var f = Create();
+        var lunch = AddRoutine(f, "Lunch", "12:00", "13:00");
+        var walk = AddRoutine(f, "Afternoon walk", "14:00", "15:00");
+        var breakfast = AddRoutine(f, "Breakfast", "09:30", "10:00");
+        await f.Controller.CheckRoutine(f.Shift.Id, lunch.Id, default);
+        await f.Controller.CheckRoutine(f.Shift.Id, breakfast.Id, default);
+        await new ParticipantRoutinesController(f.Db).Delete(breakfast.Id, default);   // retired after it was ticked
+
+        var routines = (await ReviewOf(f)).Routines;
+
+        Assert.Equal(["Lunch", "Afternoon walk", "Breakfast"], routines.Select(r => r.Title));
+        Assert.Equal([false, false, true], routines.Select(r => r.FromTickSnapshot));
+        Assert.Equal([true, false, true], routines.Select(r => r.IsChecked));   // the coordinator still sees what was NOT ticked
     }
 
     [Fact]

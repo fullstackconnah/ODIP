@@ -11,9 +11,10 @@ namespace Odip.Api.Controllers;
 
 /// <summary>
 /// Per-day routines and shift-critical specifics for a participant — the things a support
-/// worker must know/do on shift (e.g. a morning routine, a mealtime requirement). Unlike
-/// <see cref="ParticipantNotesController"/> this is not a compliance record, so a DELETE
-/// endpoint hard-removes rather than archiving.
+/// worker must know/do on shift (e.g. a morning routine, a mealtime requirement). DELETE RETIRES a routine (IsActive = false) rather than removing the
+/// row: a routine that has been ticked on a shift is part of that shift's record (ShiftRoutineCheck), and a hard delete would take its ticks with it
+/// or fail on them. A retired routine drops out of the default list (includeInactive shows it) and out of every shift window, and can be reactivated
+/// with PUT.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -96,15 +97,21 @@ public class ParticipantRoutinesController : ControllerBase
         return Ok(ApiResponse<ParticipantRoutineDto>.Ok(ToDto(routine)));
     }
 
+    /// <summary>Retires a routine (a soft delete: IsActive = false), so the ticks already recorded against it on past shifts survive. Idempotent.
+    /// Admin and Coordinator only: a support worker can add and edit routines but cannot remove one.</summary>
     [HttpDelete("participants/routines/{id:guid}")]
-    [Authorize(Roles = "Admin,Coordinator,SupportWorker,SuperAdmin")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
         var routine = await _db.ParticipantRoutines.FirstOrDefaultAsync(r => r.Id == id, ct);
         if (routine == null) return NotFound(ApiResponse<bool>.Fail("Routine not found"));
 
-        _db.ParticipantRoutines.Remove(routine);
-        await _db.SaveChangesAsync(ct);
+        if (routine.IsActive)
+        {
+            routine.IsActive = false;
+            routine.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+        }
 
         return Ok(ApiResponse<bool>.Ok(true));
     }

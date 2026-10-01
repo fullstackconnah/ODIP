@@ -1,3 +1,5 @@
+using System.Reflection;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -341,11 +343,12 @@ public class ParticipantRoutinesControllerTests
     }
 
     [Fact]
-    public async Task Delete_Valid_RemovesRowFromDatabase()
+    public async Task Delete_Valid_RetiresTheRoutine_TheRowStaysWithIsActiveFalse()
     {
+        // A routine that has been ticked on a shift is part of that shift's record, so DELETE retires it (IsActive = false) rather than removing the row.
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
-        var routine = new ParticipantRoutine { Id = Guid.NewGuid(), ParticipantId = participant.Id, Title = "To delete", Description = "d" };
+        var routine = new ParticipantRoutine { Id = Guid.NewGuid(), ParticipantId = participant.Id, Title = "To delete", Description = "d", UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) };
         db.ParticipantRoutines.Add(routine);
         db.SaveChanges();
 
@@ -357,7 +360,82 @@ public class ParticipantRoutinesControllerTests
         Assert.True(body.Success);
         Assert.True(body.Data);
 
-        Assert.False(await db.ParticipantRoutines.AnyAsync(r => r.Id == routine.Id));
+        var stored = await db.ParticipantRoutines.SingleAsync(r => r.Id == routine.Id);   // the row is still there
+        Assert.False(stored.IsActive);
+        Assert.True(stored.UpdatedAt > new DateTime(2026, 1, 1));
+    }
+
+    [Fact]
+    public async Task ARetiredRoutine_DropsOutOfTheDefaultList_ButIncludeInactiveStillShowsIt()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var routine = new ParticipantRoutine { Id = Guid.NewGuid(), ParticipantId = participant.Id, Title = "To delete", Description = "d" };
+        db.ParticipantRoutines.Add(routine);
+        db.SaveChanges();
+        var controller = new ParticipantRoutinesController(db);
+        await controller.Delete(routine.Id, CancellationToken.None);
+
+        var defaultList = await controller.GetForParticipant(participant.Id, includeInactive: false, CancellationToken.None);
+        var fullList = await controller.GetForParticipant(participant.Id, includeInactive: true, CancellationToken.None);
+
+        Assert.Empty(Assert.IsType<ApiResponse<List<ParticipantRoutineDto>>>(Assert.IsType<OkObjectResult>(defaultList.Result).Value).Data!);
+        var retired = Assert.Single(Assert.IsType<ApiResponse<List<ParticipantRoutineDto>>>(Assert.IsType<OkObjectResult>(fullList.Result).Value).Data!);
+        Assert.False(retired.IsActive);
+    }
+
+    [Fact]
+    public async Task Delete_AnAlreadyRetiredRoutine_IsAnIdempotentOk_AndIsNotTouchedAgain()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var retiredAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var routine = new ParticipantRoutine { Id = Guid.NewGuid(), ParticipantId = participant.Id, Title = "Old", Description = "d", IsActive = false, UpdatedAt = retiredAt };
+        db.ParticipantRoutines.Add(routine);
+        db.SaveChanges();
+
+        var result = await new ParticipantRoutinesController(db).Delete(routine.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(retiredAt, (await db.ParticipantRoutines.SingleAsync()).UpdatedAt);
+    }
+
+    [Fact]
+    public void Delete_IsForAdminsAndCoordinatorsOnly_ASupportWorkerCanAddAndEditARoutineButNotRemoveOne()
+    {
+        string RolesOf(string action) =>
+            typeof(ParticipantRoutinesController).GetMethod(action)!.GetCustomAttribute<AuthorizeAttribute>()!.Roles!;
+
+        Assert.Equal("Admin,Coordinator,SuperAdmin", RolesOf(nameof(ParticipantRoutinesController.Delete)));
+        Assert.DoesNotContain("SupportWorker", RolesOf(nameof(ParticipantRoutinesController.Delete)));
+        Assert.Contains("SupportWorker", RolesOf(nameof(ParticipantRoutinesController.Create)));   // unchanged
+        Assert.Contains("SupportWorker", RolesOf(nameof(ParticipantRoutinesController.Update)));
+    }
+
+    [Fact]
+    public async Task Delete_AnotherTenantsRoutine_Is404_AndIsNotRetired()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var (tenantA, tenantB) = (Guid.NewGuid(), Guid.NewGuid());
+        Guid routineId;
+        using (var seedDb = CreateDb(dbName))
+        {
+            var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantB, FirstName = "Sophie", LastName = "Brown", IsActive = true };
+            var routine = new ParticipantRoutine { Id = Guid.NewGuid(), TenantId = tenantB, ParticipantId = participant.Id, Title = "Tenant B routine", Description = "d", IsActive = true };
+            seedDb.Participants.Add(participant);
+            seedDb.ParticipantRoutines.Add(routine);
+            seedDb.SaveChanges();
+            routineId = routine.Id;
+        }
+
+        using (var scopedDb = CreateTenantScopedDb(dbName, tenantA))
+        {
+            var result = await new ParticipantRoutinesController(scopedDb).Delete(routineId, CancellationToken.None);
+            Assert.IsType<NotFoundObjectResult>(result.Result);
+        }
+
+        using var verify = CreateDb(dbName);
+        Assert.True((await verify.ParticipantRoutines.IgnoreQueryFilters().SingleAsync()).IsActive);
     }
 
     // ── Tenant scoping ───────────────────────────────────────────────────

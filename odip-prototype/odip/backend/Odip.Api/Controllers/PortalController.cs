@@ -774,7 +774,7 @@ public class PortalController : ControllerBase
         var occurrence = await FindRoutineOccurrenceAsync(shift!, routineId, ct);
         if (occurrence is null) return RoutineNotInShift();
 
-        await _routineChecks.CheckAsync(completion!, routineId, occurrence.OccursAtLocal, shift!.UserId!.Value, ct);
+        await _routineChecks.CheckAsync(completion!, occurrence, shift!.UserId!.Value, ct);
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
     }
 
@@ -788,7 +788,7 @@ public class PortalController : ControllerBase
         var occurrence = await FindRoutineOccurrenceAsync(shift!, routineId, ct);
         if (occurrence is null) return RoutineNotInShift();
 
-        await _routineChecks.UncheckAsync(completion!.Id, routineId, occurrence.OccursAtLocal, ct);
+        await _routineChecks.UncheckAsync(completion!.Id, routineId, ct);
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift!, ct)));
     }
 

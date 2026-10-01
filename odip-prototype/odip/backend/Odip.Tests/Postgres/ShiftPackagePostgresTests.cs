@@ -1073,7 +1073,7 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         var done = await RaceAsync(tenantId, 8, async (db, _) =>
         {
             var completion = await db.ShiftCompletions.SingleAsync(c => c.Id == completionId);
-            await new ShiftRoutineCheckService(db).CheckAsync(completion, routine.Id, at, userId, default);
+            await new ShiftRoutineCheckService(db).CheckAsync(completion, new RoutineOccurrence(routine, at, false), userId, default);
             return true;
         });
 
@@ -1083,10 +1083,12 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
-    public async Task DeletingARoutine_RemovesItsTicks_SoTheExistingRoutineDeleteKeepsWorking_OnRealPostgres()
+    public async Task ARoutineWithTicks_CannotBeHardDeleted_AndTheDeleteEndpointRetiresItInstead_OnRealPostgres()
     {
+        // The foreign key from a tick to its routine is Restrict: a tick is history. The database refuses a hard delete of a ticked routine
+        // (SQLSTATE 23503); the DELETE endpoint retires the routine (IsActive = false) and every tick survives.
         RequirePostgres();
-        var (db, _) = await _pg.NewTenantContextAsync();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
         await using var _db = db;
         var (participantId, userId, _, completionId) = await SeedCompletionAsync(db);
         var routine = NewRoutine(participantId, "Lunch", "12:00", "13:00");
@@ -1095,10 +1097,88 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         db.ShiftRoutineChecks.Add(NewTick(completionId, routine.Id, new DateTime(2026, 7, 14, 12, 0, 0), userId));
         await db.SaveChangesAsync();
 
-        db.ParticipantRoutines.Remove(routine);
-        await db.SaveChangesAsync();   // would throw an FK violation if the ticks were Restrict
+        await using (var hard = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object))
+        {
+            hard.ParticipantRoutines.Remove(await hard.ParticipantRoutines.SingleAsync(r => r.Id == routine.Id));
+            var refused = await Assert.ThrowsAsync<DbUpdateException>(() => hard.SaveChangesAsync());
+            Assert.Equal("23503", Assert.IsType<PostgresException>(refused.InnerException).SqlState);
+        }
 
-        Assert.Empty(await db.ShiftRoutineChecks.Where(c => c.ShiftCompletionId == completionId).ToListAsync());
+        await using (var request = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object))
+            Assert.IsType<OkObjectResult>((await new ParticipantRoutinesController(request).Delete(routine.Id, default)).Result);
+
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.False((await verify.ParticipantRoutines.SingleAsync(r => r.Id == routine.Id)).IsActive);
+        Assert.Equal(1, await verify.ShiftRoutineChecks.CountAsync(c => c.ParticipantRoutineId == routine.Id));
+    }
+
+    [SkippableFact]
+    public async Task TheSnapshotMigration_OnRealPostgres_AddsANullableTitleColumn_AndMakesTheRoutineForeignKeyRestrict()
+    {
+        RequirePostgres();
+        await using var conn = new NpgsqlConnection(_pg.ConnectionString);
+        await conn.OpenAsync();
+
+        await using (var column = new NpgsqlCommand(
+                   "SELECT is_nullable, character_maximum_length, column_default FROM information_schema.columns " +
+                   "WHERE table_schema = 'public' AND table_name = 'ShiftRoutineChecks' AND column_name = 'RoutineTitle'", conn))
+        {
+            await using var reader = await column.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal("YES", reader.GetString(0));   // nullable: adding it cannot fail on existing rows
+            Assert.Equal(200, reader.GetInt32(1));
+            Assert.True(reader.IsDBNull(2));            // no default, so no table rewrite
+        }
+        await using var fk = new NpgsqlCommand(
+            "SELECT confdeltype FROM pg_constraint WHERE conname = 'FK_ShiftRoutineChecks_ParticipantRoutines_ParticipantRoutineId'", conn);
+        Assert.Equal('r', (char)(await fk.ExecuteScalarAsync())!);   // r = RESTRICT (c would be CASCADE)
+    }
+
+    [SkippableFact]
+    public async Task TheSnapshotMigration_AppliesOverAnExistingTick_KeepsTheRow_AndLeavesItsTitleNull()
+    {
+        RequirePostgres();
+        var connectionString = await _pg.CreateDatabaseAsync();
+        await using var db = PostgresFixture.NewContext(connectionString);
+        var migrator = db.GetService<IMigrator>();
+
+        // 1. The schema as the previous migration left it: the tick table exists, with the routine foreign key still CASCADE.
+        await migrator.MigrateAsync("20261001031635_AddShiftRoutineChecks");
+        var (tenantId, participantId, routineId, userId, shiftId, completionId, tickId) =
+            (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        await using (var conn = new NpgsqlConnection(connectionString))
+        {
+            await conn.OpenAsync();
+            await InsertMinimalRowAsync(conn, "Tenants", new() { ["Id"] = tenantId, ["Name"] = "Test Provider", ["EmailDomain"] = $"{tenantId:N}.example.com" });
+            await InsertMinimalRowAsync(conn, "Participants", new() { ["Id"] = participantId, ["TenantId"] = tenantId, ["FirstName"] = "Amy", ["LastName"] = "Ng" });
+            await InsertMinimalRowAsync(conn, "ParticipantRoutines", new() { ["Id"] = routineId, ["TenantId"] = tenantId, ["ParticipantId"] = participantId, ["Title"] = "Lunch" });
+            await InsertMinimalRowAsync(conn, "Users", new() { ["Id"] = userId, ["TenantId"] = tenantId, ["Email"] = $"{userId:N}@example.com", ["Username"] = userId.ToString("N") });
+            await InsertMinimalRowAsync(conn, "Shifts", new() { ["Id"] = shiftId, ["TenantId"] = tenantId, ["ParticipantId"] = participantId, ["UserId"] = userId });
+            await InsertMinimalRowAsync(conn, "ShiftCompletions", new() { ["Id"] = completionId, ["TenantId"] = tenantId, ["ShiftId"] = shiftId, ["SubmittedByUserId"] = userId });
+            await InsertMinimalRowAsync(conn, "ShiftRoutineChecks", new()
+            {
+                ["Id"] = tickId, ["TenantId"] = tenantId, ["ShiftCompletionId"] = completionId, ["ParticipantRoutineId"] = routineId, ["CheckedByUserId"] = userId,
+                ["ScheduledAt"] = new DateTime(2026, 7, 14, 12, 0, 0, DateTimeKind.Unspecified),
+            });
+        }
+
+        // 2. The snapshot migration applies over it without error...
+        await migrator.MigrateAsync();
+
+        // ...and keeps the tick, with the new title column NULL, and the routine foreign key now RESTRICT.
+        await using var after = new NpgsqlConnection(connectionString);
+        await after.OpenAsync();
+        await using (var tick = new NpgsqlCommand("SELECT \"RoutineTitle\", \"ScheduledAt\" FROM \"ShiftRoutineChecks\" WHERE \"Id\" = @id", after))
+        {
+            tick.Parameters.AddWithValue("id", tickId);
+            await using var reader = await tick.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.True(reader.IsDBNull(0));
+            Assert.Equal(new DateTime(2026, 7, 14, 12, 0, 0), reader.GetDateTime(1));
+        }
+        await using var fk = new NpgsqlCommand(
+            "SELECT confdeltype FROM pg_constraint WHERE conname = 'FK_ShiftRoutineChecks_ParticipantRoutines_ParticipantRoutineId'", after);
+        Assert.Equal('r', (char)(await fk.ExecuteScalarAsync())!);
     }
 
     [SkippableFact]

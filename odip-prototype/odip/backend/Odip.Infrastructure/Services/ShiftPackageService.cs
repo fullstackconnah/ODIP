@@ -159,7 +159,8 @@ public sealed class ShiftPackageService
 
     /// <summary>
     /// The routines relevant to the shift's rostered window, matched on the server (overnight-safe), each carrying the worker's tick
-    /// state from <paramref name="checks"/> (the ticks on the shift's completion; none when null).
+    /// state from <paramref name="checks"/> (the ticks on the shift's completion; none when null). A routine has one occurrence in a window, so its tick
+    /// is found by routine alone (the earliest, if an older edit left two): editing the routine's time after it was ticked must not hide the tick.
     /// </summary>
     public static List<PortalShiftRoutineDto> MatchRoutines(
         Shift shift, IEnumerable<ParticipantRoutine> activeRoutines, IReadOnlyCollection<RoutineCheckInfo>? checks = null)
@@ -168,11 +169,43 @@ public sealed class ShiftPackageService
         return RoutineWindowMatcher.Match(activeRoutines, windowStart, windowEnd)
             .Select(o =>
             {
-                var check = checks?.FirstOrDefault(c => c.RoutineId == o.Routine.Id && c.ScheduledAt == o.OccursAtLocal);
+                var check = checks?.Where(c => c.RoutineId == o.Routine.Id).OrderBy(c => c.CheckedAt).FirstOrDefault();
                 return new PortalShiftRoutineDto(
                     o.Routine.Id, o.Routine.Title, o.Routine.Description, o.Routine.Category, o.Routine.IsCritical,
                     o.Routine.StartTime, o.Routine.EndTime, o.OccursAtLocal, o.AfterMidnight,
                     IsChecked: check is not null, CheckedAt: ProviderLocalTime.AsUtc(check?.CheckedAt), CheckedByName: check?.CheckedByName);
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// The ticks that match NO routine currently in the shift window - their routine was edited out of the window, retired or deleted after the worker
+    /// ticked it - as review rows built from the snapshot stored on the tick (the title and occurrence time as they were; the category, critical flag
+    /// and times from the routine row when it still exists, which a retired routine does). Marked <see cref="PortalShiftRoutineDto.FromTickSnapshot"/>.
+    /// </summary>
+    public async Task<List<PortalShiftRoutineDto>> OrphanTickRoutinesAsync(
+        Shift shift, IReadOnlyCollection<PortalShiftRoutineDto> matched, IReadOnlyCollection<RoutineCheckInfo> checks, CancellationToken ct)
+    {
+        var matchedIds = matched.Select(r => r.Id).ToHashSet();
+        var orphans = checks
+            .Where(c => !matchedIds.Contains(c.RoutineId))
+            .GroupBy(c => c.RoutineId)
+            .Select(g => g.OrderBy(c => c.CheckedAt).First())
+            .ToList();
+        if (orphans.Count == 0) return new List<PortalShiftRoutineDto>();
+
+        var ids = orphans.Select(o => o.RoutineId).ToList();
+        var rows = await _db.ParticipantRoutines.Where(r => ids.Contains(r.Id)).ToDictionaryAsync(r => r.Id, ct);   // retired routines included
+        var (windowStart, _) = ProviderLocalTime.RosteredWindowLocal(shift);
+        return orphans
+            .OrderBy(o => o.ScheduledAt is null ? 1 : 0).ThenBy(o => o.ScheduledAt).ThenBy(o => o.RoutineTitle, StringComparer.Ordinal)
+            .Select(o =>
+            {
+                rows.TryGetValue(o.RoutineId, out var routine);
+                return new PortalShiftRoutineDto(
+                    o.RoutineId, o.RoutineTitle ?? routine?.Title ?? string.Empty, routine?.Description ?? string.Empty, routine?.Category ?? default,
+                    routine?.IsCritical ?? false, routine?.StartTime, routine?.EndTime, o.ScheduledAt, o.ScheduledAt is { } at && at.Date > windowStart.Date,
+                    IsChecked: true, CheckedAt: ProviderLocalTime.AsUtc(o.CheckedAt), CheckedByName: o.CheckedByName, FromTickSnapshot: true);
             })
             .ToList();
     }
@@ -276,7 +309,10 @@ public sealed class ShiftPackageService
 
         // The routines the worker was asked to do in this window, with what they ticked.
         var activeRoutines = await _db.ParticipantRoutines.Where(r => r.ParticipantId == shift.ParticipantId && r.IsActive).ToListAsync(ct);
-        var routines = MatchRoutines(shift, activeRoutines, await _routineChecks.GetChecksAsync(completion.Id, ct));
+        var routineChecks = await _routineChecks.GetChecksAsync(completion.Id, ct);
+        var routines = MatchRoutines(shift, activeRoutines, routineChecks);
+        // Ticks whose routine has since been edited out of the window, retired or deleted are still part of what happened on the shift.
+        routines.AddRange(await OrphanTickRoutinesAsync(shift, routines, routineChecks, ct));
 
         var participantName = shift.Participant?.FullName
             ?? await _db.Participants.Where(p => p.Id == shift.ParticipantId).Select(p => p.FirstName + " " + p.LastName).FirstOrDefaultAsync(ct)

@@ -1304,8 +1304,10 @@ public class OdipDbContext : DbContext
             // Restrict: a completion's tick history must not be cascade-deleted out from under it (same idiom as ShiftBreak); the worker too.
             entity.HasOne(e => e.ShiftCompletion).WithMany().HasForeignKey(e => e.ShiftCompletionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.CheckedByUser).WithMany().HasForeignKey(e => e.CheckedByUserId).OnDelete(DeleteBehavior.Restrict);
-            // Cascade: the routine endpoints hard-delete a routine, and that must keep working once it has been ticked on a shift.
-            entity.HasOne(e => e.ParticipantRoutine).WithMany().HasForeignKey(e => e.ParticipantRoutineId).OnDelete(DeleteBehavior.Cascade);
+            // Restrict: a tick is history. The routine endpoints retire a routine (IsActive = false) rather than delete it, so a routine that has been
+            // ticked on a shift can never be removed out from under its ticks (a hard delete now fails instead of erasing the record).
+            entity.HasOne(e => e.ParticipantRoutine).WithMany().HasForeignKey(e => e.ParticipantRoutineId).OnDelete(DeleteBehavior.Restrict);
+            entity.Property(e => e.RoutineTitle).HasMaxLength(200);
 
             entity.HasIndex(e => new { e.TenantId, e.ShiftCompletionId });
 
