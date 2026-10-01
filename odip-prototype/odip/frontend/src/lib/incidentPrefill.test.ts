@@ -81,7 +81,7 @@ describe('buildMarIncidentPrefill', () => {
       status: 'Missed', doseGiven: null, recordedByName: 'Alex Rivera', recordedByUserId: 'staff-1',
       witnessName: null, witnessStaffId: null, witnessStatus: 'NotRequired', witnessRequestedAt: null, witnessRespondedAt: null,
       reason: 'Participant was asleep at the scheduled time.', prnReason: null, prnOutcome: null, prnOutcomeAt: null,
-      limitBreachAcknowledged: false, notes: null, createdAt: '2026-09-01T22:15:00Z', incidentId: null,
+      limitBreachAcknowledged: false, notes: null, createdAt: '2026-09-01T22:15:00Z', recordedWithoutCompetency: false, incidentId: null,
       ...overrides,
     }
   }

@@ -711,9 +711,12 @@ function portalParticipantSummary(participantId) {
 //   409 SHIFT_BREAK_ALREADY_RUNNING / SHIFT_NOT_IN_PROGRESS / ADMINISTRATION_ALREADY_RECORDED,
 //   400 SHIFT_BREAK_* and validation, 403 MEDICATION_COMPETENCY_*, 404, 422 SHIFT_FINISH_BLOCKED /
 //   DOSE_SLOT_NOT_DUE.
-// MOCK_COMPETENCY=expired|missing makes the signed-in worker lack a current Medication Competency
-// (canRecordDoses false + reason; recording a dose 403s; and NO dose blocks Finish - a worker who
-// cannot record a dose is never asked to clear one). Default: current.
+// MOCK_COMPETENCY=expired|missing makes the signed-in worker lack a current Medication Competency.
+// The provider mode decides what that means (MOCK_COMPETENCY_MODE=warn|enforce, default warn, like
+// production): WARN - canRecordDoses stays true with the warning reason, a recorded dose is accepted
+// and FLAGGED (recordedWithoutCompetency), and due doses block Finish as for anyone; ENFORCE -
+// canRecordDoses false + reason, recording a dose 403s, and NO dose blocks Finish (a worker who
+// cannot record a dose is never asked to clear one). Default worker: current.
 //
 // The Finish checklist follows the real server: a running break blocks; a dose blocks only once its
 // time has ARRIVED (a slot flagged `upcoming` in the fixtures does not - it is handed over) and only
@@ -730,24 +733,28 @@ function portalParticipantSummary(participantId) {
 
 const PACKAGE_TZ = 'Australia/Brisbane'
 const MOCK_COMPETENCY = (process.env.MOCK_COMPETENCY || 'current').toLowerCase()
+const MOCK_COMPETENCY_MODE = (process.env.MOCK_COMPETENCY_MODE || 'warn').toLowerCase()
 const MOCK_WORKER_NAME = "Jack O'Sullivan"
+const COMPETENCY_WARNING = 'Medication Competency not current — this record will be flagged'
+
+/** True when the signed-in mock worker holds a current Medication Competency. */
+const competencyIsCurrent = () => MOCK_COMPETENCY !== 'expired' && MOCK_COMPETENCY !== 'missing'
 
 const competencyView = () => {
-  if (MOCK_COMPETENCY === 'expired') {
-    return {
-      canRecordDoses: false,
-      canRecordDosesReason: 'Your Medication Competency expired on 12 Sep 2026. Ask your coordinator to update your qualifications before you record medication doses.',
-      canRecordDosesReasonCode: 'MEDICATION_COMPETENCY_EXPIRED',
-    }
+  if (competencyIsCurrent()) return { canRecordDoses: true, canRecordDosesReason: null, canRecordDosesReasonCode: null }
+  const expired = MOCK_COMPETENCY === 'expired'
+  const code = expired ? 'MEDICATION_COMPETENCY_EXPIRED' : 'MEDICATION_COMPETENCY_MISSING'
+  if (MOCK_COMPETENCY_MODE !== 'enforce') {
+    // Warn (the default): may record, and the record is flagged. The code still says why the credential is not current.
+    return { canRecordDoses: true, canRecordDosesReason: COMPETENCY_WARNING, canRecordDosesReasonCode: code }
   }
-  if (MOCK_COMPETENCY === 'missing') {
-    return {
-      canRecordDoses: false,
-      canRecordDosesReason: 'You need a current Medication Competency credential to record medication doses. Ask your coordinator to add it to your qualifications.',
-      canRecordDosesReasonCode: 'MEDICATION_COMPETENCY_MISSING',
-    }
+  return {
+    canRecordDoses: false,
+    canRecordDosesReason: expired
+      ? 'Your Medication Competency expired on 12 Sep 2026. Ask your coordinator to update your qualifications before you record medication doses.'
+      : 'You need a current Medication Competency credential to record medication doses. Ask your coordinator to add it to your qualifications.',
+    canRecordDosesReasonCode: code,
   }
-  return { canRecordDoses: true, canRecordDosesReason: null, canRecordDosesReasonCode: null }
 }
 
 const emptyAtAGlance = () => ({
@@ -954,7 +961,7 @@ function doseSlotDto(shiftId, def) {
     outcome: rec ? {
       administrationId: rec.id, status: rec.status, recordedByName: rec.recordedByName, administeredAt: rec.administeredAt ?? null,
       administeredAtTimeZone: rec.administeredAtTimeZone ?? null, recordedAt: rec.createdAt, reason: rec.reason ?? null,
-      doseGiven: rec.doseGiven ?? null, notes: rec.notes ?? null,
+      doseGiven: rec.doseGiven ?? null, notes: rec.notes ?? null, recordedWithoutCompetency: !!rec.recordedWithoutCompetency,
     } : null,
     witness: {
       required: def.isHighRisk, status: rec ? rec.witnessStatus : null, witnessName: rec ? rec.witnessName : null,
@@ -975,7 +982,7 @@ function prefilledAdministration(shiftId, def) {
     status: r.status, doseGiven: r.doseGiven ?? null, recordedByName: r.recordedByName, recordedByUserId: null,
     witnessName: null, witnessStaffId: null, witnessStatus: 'NotRequired', witnessRequestedAt: null, witnessRespondedAt: null,
     reason: r.reason ?? null, prnReason: null, prnOutcome: null, prnOutcomeAt: null, limitBreachAcknowledged: false, notes: null,
-    createdAt: localToUtcIso(def.at), incidentId: null,
+    createdAt: localToUtcIso(def.at), recordedWithoutCompetency: false, incidentId: null,
   }
 }
 
@@ -1076,7 +1083,8 @@ function administrationFromBody(shiftId, med, body, slotAt) {
     witnessName: body.witnessName ?? (body.witnessStaffId ? 'Mei Zhang' : null), witnessStaffId: body.witnessStaffId ?? null,
     witnessStatus: witnessed && body.witnessStaffId ? 'Pending' : 'NotRequired', witnessRequestedAt: witnessed && body.witnessStaffId ? now : null,
     witnessRespondedAt: null, reason: body.reason ?? null, prnReason: body.prnReason ?? null, prnOutcome: null, prnOutcomeAt: null,
-    limitBreachAcknowledged: !!body.acknowledgeLimitBreach, notes: body.notes ?? null, createdAt: now, incidentId: null,
+    limitBreachAcknowledged: !!body.acknowledgeLimitBreach, notes: body.notes ?? null, createdAt: now,
+    recordedWithoutCompetency: !competencyIsCurrent(), incidentId: null,
   }
 }
 
@@ -1227,7 +1235,7 @@ function buildCompletionReview(shiftId) {
     timeZoneId: PACKAGE_TZ, doses: doses.slots.map((def) => doseSlotDto(base.id, def)),
     prnDoses: pkgState(base.id).prnGiven.map((g) => ({
       medicationId: g.participantMedicationId, medicationName: g.medicationName, strength: null, doseDescription: g.doseDescription,
-      outcome: { administrationId: g.id, status: g.status, recordedByName: g.recordedByName, administeredAt: g.administeredAt, administeredAtTimeZone: g.administeredAtTimeZone, recordedAt: g.createdAt, reason: g.reason, doseGiven: g.doseGiven, notes: g.notes },
+      outcome: { administrationId: g.id, status: g.status, recordedByName: g.recordedByName, administeredAt: g.administeredAt, administeredAtTimeZone: g.administeredAtTimeZone, recordedAt: g.createdAt, reason: g.reason, doseGiven: g.doseGiven, notes: g.notes, recordedWithoutCompetency: !!g.recordedWithoutCompetency },
     })),
     notes: shiftNotesByShiftId[base.id] || [],
   }

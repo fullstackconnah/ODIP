@@ -18,6 +18,7 @@ function makeProviderSettings(overrides: Partial<ProviderSettingsDto> = {}): Pro
     bankAccountName: null, bsb: null, accountNumber: null, invoiceFooterNotes: null,
     managerName: 'Priya Sharma', managerPhone: '0412 345 007',
     participantReadinessMode: 'Warn',
+    medicationCompetencyMode: 'Warn',
     ...overrides,
   }
 }

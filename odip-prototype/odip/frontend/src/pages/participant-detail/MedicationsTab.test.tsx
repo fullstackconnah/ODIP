@@ -34,7 +34,7 @@ function administration(overrides: Partial<AdministrationDto> = {}): Administrat
     status: 'Missed', doseGiven: null, recordedByName: 'Alex Rivera', recordedByUserId: 'staff-1',
     witnessName: null, witnessStaffId: null, witnessStatus: 'NotRequired', witnessRequestedAt: null, witnessRespondedAt: null,
     reason: 'Participant was asleep.', prnReason: null, prnOutcome: null, prnOutcomeAt: null,
-    limitBreachAcknowledged: false, notes: null, createdAt: '2026-09-12T08:10:00Z', incidentId: null,
+    limitBreachAcknowledged: false, notes: null, createdAt: '2026-09-12T08:10:00Z', recordedWithoutCompetency: false, incidentId: null,
     ...overrides,
   }
 }

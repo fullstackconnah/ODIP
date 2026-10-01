@@ -138,6 +138,8 @@ export interface PortalDoseOutcomeDto {
   reason: string | null
   doseGiven: string | null
   notes: string | null
+  /** True when the recorder did not hold a current Medication Competency (provider Warn mode): accepted, and flagged for the coordinator. */
+  recordedWithoutCompetency: boolean
 }
 
 export interface PortalDoseWitnessDto {

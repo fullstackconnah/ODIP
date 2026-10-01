@@ -164,11 +164,15 @@ export interface PortalShiftDetailDto {
   /** Routines relevant to the shift window, matched on the server (overnight shifts handled), critical first then time order.
    * `routines` still carries every active routine. */
   shiftRoutines: PortalShiftRoutineDto[]
-  /** The caller holds a current Medication Competency, so may record doses. The server enforces it on every administration. */
+  /**
+   * Whether the caller may record doses, per the provider's Medication Competency mode. With a current credential: true. Without one:
+   * in ENFORCE mode false (every administration answers 403); in WARN mode (the default) still TRUE - the dose is recorded and FLAGGED
+   * (`recordedWithoutCompetency`), and `canRecordDosesReason` is the warning to show.
+   */
   canRecordDoses: boolean
-  /** Plain-language reason when `canRecordDoses` is false. */
+  /** Null with a current credential; else the refusal reason (`canRecordDoses` false) or the warning "Medication Competency not current — this record will be flagged" (true). */
   canRecordDosesReason: string | null
-  /** MEDICATION_COMPETENCY_MISSING | MEDICATION_COMPETENCY_EXPIRED | MEDICATION_COMPETENCY_UNVERIFIABLE when `canRecordDoses` is false. */
+  /** MEDICATION_COMPETENCY_MISSING | MEDICATION_COMPETENCY_EXPIRED | MEDICATION_COMPETENCY_UNVERIFIABLE whenever the credential is not current (in both modes); null with a current one. */
   canRecordDosesReasonCode: string | null
 }
 

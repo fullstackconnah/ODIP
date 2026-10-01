@@ -14,7 +14,7 @@ import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import TemplateFormPanel from '@/components/TemplateFormPanel'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
-import type { EventTemplateDto, ActivityDto, ProviderSettingsDto, ParticipantReadinessMode, UpsertProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
+import type { MedicationCompetencyMode, EventTemplateDto, ActivityDto, ProviderSettingsDto, ParticipantReadinessMode, UpsertProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
 import type { AxiosError } from 'axios'
 import TenantsTab from '@/pages/settings/TenantsTab'
 import TenantFormPanel from '@/pages/settings/TenantFormPanel'
@@ -414,6 +414,25 @@ function ProviderSettingsTab() {
           onChange={v => { setModePick({ value: v as ParticipantReadinessMode, base: serverMode }); setDirty(true) }}
           disabled={!canEditProviderSettings || isLoading}
         />
+      </div>
+      <div>
+        <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Medication Competency</h2>
+        <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
+          What happens when a staff member without a current Medication Competency records a dose. Warn only lets them record it and flags the record for review; Enforce refuses it.
+        </p>
+        <div className="max-w-xs">
+          <label id="medication-competency-mode-label" className={labelClass}>Medication competency check</label>
+          <Dropdown
+            variant="form"
+            id="medication-competency-mode"
+            aria-labelledby="medication-competency-mode-label"
+            value={form.medicationCompetencyMode ?? 'Warn'}
+            onChange={v => { setForm((p) => ({ ...p, medicationCompetencyMode: v as MedicationCompetencyMode })); setDirty(true) }}
+            items={[{ value: 'Warn', label: 'Warn only' }, { value: 'Enforce', label: 'Enforce' }]}
+            label="Medication competency check"
+            disabled={!canEditProviderSettings}
+          />
+        </div>
       </div>
       <div>
         <h2 className="font-semibold text-[var(--color-foreground)] mb-2">Invoice Footer Notes</h2>

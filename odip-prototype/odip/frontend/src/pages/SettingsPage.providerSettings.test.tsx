@@ -48,6 +48,7 @@ function makeSettings(overrides: Partial<ProviderSettingsDto> = {}): ProviderSet
     managerName: 'Priya Sharma',
     managerPhone: '0412 345 007',
     participantReadinessMode: 'Warn',
+    medicationCompetencyMode: 'Warn',
     ...overrides,
   }
 }

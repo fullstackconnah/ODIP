@@ -247,6 +247,9 @@ export interface AdministrationDto {
   limitBreachAcknowledged: boolean
   notes: string | null
   createdAt: string
+  /** True when the recording user did not hold a current Medication Competency (the provider is in Warn mode): the record was accepted and
+   * flagged for review. Always false in Enforce mode and for records that predate the flag. */
+  recordedWithoutCompetency: boolean
   /** Connection map: the incident this administration was filed into, if any (set once the
    * coordinator/support worker submits the drop-into-draft incident form — see
    * lib/incidentPrefill.ts's buildMarIncidentPrefill). Null until then. */

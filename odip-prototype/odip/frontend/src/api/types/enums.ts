@@ -329,6 +329,14 @@ export type MedicationSupportLevel = typeof MEDICATION_SUPPORT_LEVELS[number]
 export const MEDICATION_STATUSES = ['Active', 'OnHold', 'Ceased'] as const
 export type MedicationStatus = typeof MEDICATION_STATUSES[number]
 
+// ── Medication Competency mode (provider setting) ────────
+/**
+ * How a provider applies the Medication Competency credential when a dose is recorded. Warn (the default): anyone may record and a record
+ * by someone without a current credential is flagged (`recordedWithoutCompetency`). Enforce: such a record is refused (403).
+ */
+export const MEDICATION_COMPETENCY_MODES = ['Warn', 'Enforce'] as const
+export type MedicationCompetencyMode = typeof MEDICATION_COMPETENCY_MODES[number]
+
 // ── Medication Administration Status ─────────────────────
 // MED-03: WrongMedication appended last (backend enum is a plain int column) — alongside
 // Refused/Withheld/Missed it's one of the outcomes INC-03's MAR flow offers to drop into a

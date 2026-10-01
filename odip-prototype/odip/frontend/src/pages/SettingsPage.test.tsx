@@ -6,8 +6,11 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SettingsPage from './SettingsPage'
 
-const { mockUsePermissions, mockUseEventTemplates, settingsData } = vi.hoisted(() => ({
+const { mockUsePermissions, mockUseEventTemplates, settingsData, providerSettings, mockUpsertMutate } = vi.hoisted(() => ({
   mockUsePermissions: vi.fn(),
+  // The Provider Settings tab: what useProviderSettings returns (a stable reference, like a cached query) and the captured save mutation.
+  providerSettings: { current: {} as Record<string, unknown> },
+  mockUpsertMutate: vi.fn(),
   // Event Templates tab data; defaults to "no templates" (see beforeEach).
   mockUseEventTemplates: vi.fn((): { data: unknown[] | undefined; isLoading?: boolean } => ({ data: [] })),
   // A stable object reference, matching what TanStack Query actually hands a real useSettings()
@@ -48,8 +51,8 @@ vi.mock('@/api/hooks', () => ({
   useActivities: () => ({ data: [] }),
   useSettings: () => ({ data: settingsData }),
   useUpdateSettings: () => ({ mutate: vi.fn((_vars, opts) => opts?.onSuccess?.()), isPending: false }),
-  useProviderSettings: () => ({ data: {} }),
-  useUpsertProviderSettings: () => ({ mutate: vi.fn(), isPending: false }),
+  useProviderSettings: () => ({ data: providerSettings.current }),
+  useUpsertProviderSettings: () => ({ mutate: mockUpsertMutate, isPending: false }),
   useSupportCatalogue: () => ({ data: [] }),
   usePublicHolidays: () => ({ data: [] }),
   useCreatePublicHoliday: () => ({ mutate: vi.fn(), isPending: false }),
@@ -87,6 +90,8 @@ vi.mock('@/lib/permissions', () => ({
 beforeEach(() => {
   mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
   mockUseEventTemplates.mockReturnValue({ data: [] })
+  providerSettings.current = {}
+  mockUpsertMutate.mockReset()
 })
 
 describe('SettingsPage — Event Templates tab', () => {
@@ -249,6 +254,77 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
     expect(notes.className).not.toMatch(/(^|\s)h-\[var\(--control-h\)\]/)
     expect(notes).toHaveClass('h-auto', 'min-h-[var(--control-h)]', 'resize-y')
     expect(notes).not.toHaveClass('resize-none')
+  })
+})
+
+describe('SettingsPage — Provider Settings: medication competency check', () => {
+  const saved = {
+    id: 'ps-1', registrationNumber: 'REG1', abn: '12345678901', organisationName: 'Test Org', address: '1 Test St', state: 'NSW',
+    gstRegistered: false, isPaceProvider: false, bankAccountName: null, bsb: null, accountNumber: null, invoiceFooterNotes: null,
+    managerName: null, managerPhone: null, medicationCompetencyMode: 'Warn',
+  }
+
+  async function openProviderSettings() {
+    const user = userEvent.setup()
+    renderSettingsPage()
+    await user.click(screen.getByRole('tab', { name: /provider settings/i }))
+    return user
+  }
+
+  it('shows the saved mode, and saves a change to Enforce together with the rest of the form', async () => {
+    providerSettings.current = saved
+    const user = await openProviderSettings()
+
+    const control = screen.getByRole('button', { name: /medication competency check/i })
+    expect(control).toHaveTextContent('Warn only')
+    await user.click(control)
+    await user.click(screen.getByRole('option', { name: 'Enforce' }))
+    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+
+    expect(mockUpsertMutate).toHaveBeenCalledTimes(1)
+    expect(mockUpsertMutate.mock.calls[0][0]).toEqual(expect.objectContaining({
+      registrationNumber: 'REG1', abn: '12345678901', organisationName: 'Test Org', address: '1 Test St', state: 'NSW', medicationCompetencyMode: 'Enforce',
+    }))
+  })
+
+  it('shows an Enforce setting as Enforce', async () => {
+    providerSettings.current = { ...saved, medicationCompetencyMode: 'Enforce' }
+    await openProviderSettings()
+
+    expect(screen.getByRole('button', { name: /medication competency check/i })).toHaveTextContent('Enforce')
+  })
+
+  it('reads as Warn only when the server does not send the setting, and then does not send one back', async () => {
+    const { medicationCompetencyMode: _omitted, ...older } = saved
+    providerSettings.current = older
+    const user = await openProviderSettings()
+
+    expect(screen.getByRole('button', { name: /medication competency check/i })).toHaveTextContent('Warn only')
+    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+
+    expect(mockUpsertMutate.mock.calls[0][0]).not.toHaveProperty('medicationCompetencyMode')
+  })
+
+  it('is read-only for a role that cannot edit provider settings', async () => {
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false })
+    providerSettings.current = saved
+    await openProviderSettings()
+
+    expect(screen.getByRole('button', { name: /medication competency check/i })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Save Settings' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the chosen mode and shows the error when the save is rejected', async () => {
+    providerSettings.current = saved
+    mockUpsertMutate.mockImplementation((_body, opts) => opts?.onError?.({ response: { status: 403, data: {} } }))
+    const user = await openProviderSettings()
+
+    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
+    await user.click(screen.getByRole('option', { name: 'Enforce' }))
+    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+
+    expect(await screen.findByText(/admin role is required/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /medication competency check/i })).toHaveTextContent('Enforce')
   })
 })
 
