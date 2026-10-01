@@ -72,6 +72,20 @@ describe('DataTable — the column rule: nothing is removed, the box scrolls, th
     expect(headerOf('C')).toHaveClass('md:sticky', 'md:right-0')
   })
 
+  it('pins the first LABELLED column: an unlabelled control column (a tick button, an avatar) scrolls away and the name stays', () => {
+    const withTick: Column<Item>[] = [
+      { key: 'tick', header: '', render: () => <button type="button">tick</button> },
+      { key: 'a', header: 'A' },
+      { key: 'b', header: 'B' },
+    ]
+    render(<DataTable data={items} columns={withTick} keyField="id" />)
+
+    const tick = screen.getByRole('button', { name: 'tick' }).closest('td')!
+    expect(tick.className).not.toMatch(/sticky/)
+    expect(headerOf('A')).toHaveClass('md:sticky', 'md:left-0')
+    expect(headerOf('B').className).not.toMatch(/sticky/)
+  })
+
   it('keeps the select-all checkbox column out of the pinning (it scrolls away; the name stays)', () => {
     render(<DataTable data={items} columns={columns} keyField="id" selectable selectedRows={new Set()} onSelectionChange={vi.fn()} />)
 

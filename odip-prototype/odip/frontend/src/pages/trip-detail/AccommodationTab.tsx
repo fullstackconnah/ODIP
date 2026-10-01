@@ -216,7 +216,8 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
   // Column budget (density §4): the Property cell (name, address, badges, comments) is the one column that holds free text of any
   // length, and unwrapped it made the table 1275px wide with a one-line address and ~2000px with a two-sentence comment, pushing Ref and
   // the row actions off-screen. It wraps (`wrap`, capped at 26rem) so it absorbs whatever room the other columns leave, with the address
-  // on one truncated line; Nights and Ref give way below 2xl (1536). Rows are taller than --row-h here, as they always were (stacked lines).
+  // on one truncated line. Nights and Ref stay (they were deleted below 1536, L3-04): the table scrolls in its box with the property and the
+  // actions pinned. Rows are taller than --row-h here, as they always were (stacked lines).
   const columns: Column<ReservationDto>[] = [
     {
       key: 'propertyName',
@@ -252,7 +253,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
     { key: 'reservationStatus', header: 'Status', render: (r) => <StatusBadge status={r.reservationStatus} /> },
     { key: 'checkInDate', header: 'Check-in', type: 'date' },
     { key: 'checkOutDate', header: 'Check-out', type: 'date' },
-    { key: 'nights', header: 'Nights', priority: 'low', render: (r) => nightsOf(r) ?? '—' },
+    { key: 'nights', header: 'Nights', render: (r) => nightsOf(r) ?? '—' },
     {
       key: 'cost',
       header: 'Cost',
@@ -268,7 +269,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
       // Reserved of the property's total ("2 of 4 / 4 of 8 (max 10)"), never the property's own counts standing in for what was reserved.
       render: (r) => reservationCountsLabel(r, property(r)),
     },
-    { key: 'confirmationReference', header: 'Ref', priority: 'low', maxWidth: '8rem', render: (r) => r.confirmationReference || '—' },
+    { key: 'confirmationReference', header: 'Ref', maxWidth: '8rem', render: (r) => r.confirmationReference || '—' },
     {
       key: 'actions',
       header: '',

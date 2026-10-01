@@ -146,8 +146,8 @@ export default function ClaimBatchDetailPage() {
             sortable
             className="overflow-x-auto"
             // Column budget (density §4): uncapped, the participant link and the reference alone made this table need ~1500px against a
-            // ~1006px box at 1280, pushing Status off-screen. Both are capped (ellipsis, full text in the tooltip) and Day Type gives way
-            // below 2xl (1536).
+            // ~1006px box at 1280, pushing Status off-screen. Both are capped (ellipsis, full text in the tooltip); Day Type stays, and the table scrolls in its box
+            // with the first column pinned (DataTable's column rule).
             columns={[
               {
                 key: 'participantName',
@@ -166,7 +166,7 @@ export default function ClaimBatchDetailPage() {
                 sortable: true,
                 className: 'font-mono text-sm tabular-nums text-[var(--color-muted-foreground)]',
               },
-              { key: 'dayType', header: 'Day Type', sortable: true, priority: 'low' },
+              { key: 'dayType', header: 'Day Type', sortable: true },
               {
                 key: 'supportsDeliveredFrom',
                 header: 'Dates',

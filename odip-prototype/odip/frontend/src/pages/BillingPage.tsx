@@ -164,8 +164,8 @@ function FundingSourcesTab() {
   const { data: fundingSources = [], isLoading } = useFundingSources(queryParams)
 
   // Column budget (density §4): uncapped this table needs ~1400px and the box at 1280 is ~1006, which pushed Status and the edit action
-  // off-screen. Text columns are capped (ellipsis, full text in the tooltip); Budget Category gives way below 2xl (1536) and Payer
-  // below 1792. What is left at 1280 is ~960px.
+  // off-screen. Text columns are capped (ellipsis, full text in the tooltip); every column stays, and what does not fit scrolls in
+  // the box with the first column and the actions pinned (DataTable's column rule, L3-04: Budget Category and Payer used to be deleted).
   const columns: Column<FundingSourceDto>[] = [
     { key: 'participantName', header: 'Participant', sortable: true, className: 'font-medium', maxWidth: '12rem' },
     {
@@ -174,7 +174,7 @@ function FundingSourcesTab() {
       sortable: true,
       render: fs => <span className={`text-xs px-2 py-0.5 rounded-full ${FUNDING_ROUTE_TYPE_COLORS[fs.routeType]}`}>{FUNDING_ROUTE_TYPE_LABELS[fs.routeType]}</span>,
     },
-    { key: 'budgetCategory', header: 'Budget Category', priority: 'low', maxWidth: '12rem', render: fs => fs.budgetCategory || '—' },
+    { key: 'budgetCategory', header: 'Budget Category', maxWidth: '12rem', render: fs => fs.budgetCategory || '—' },
     { key: 'ndisPlanNumber', header: 'NDIS Plan Number', className: 'font-mono text-xs', render: fs => fs.ndisPlanNumber || '—' },
     {
       key: 'planEndDate',
@@ -182,7 +182,7 @@ function FundingSourcesTab() {
       render: fs => (fs.planStartDate || fs.planEndDate) ? `${formatDateAu(fs.planStartDate)} – ${formatDateAu(fs.planEndDate)}` : '—',
     },
     { key: 'budget', header: 'Budget', align: 'right', type: 'currency' },
-    { key: 'payerName', header: 'Payer', priority: 'lowest', maxWidth: '9rem', render: fs => fs.payerName || '—' },
+    { key: 'payerName', header: 'Payer', maxWidth: '9rem', render: fs => fs.payerName || '—' },
     {
       key: 'isActive',
       header: 'Status',
@@ -324,15 +324,15 @@ function ServiceBookingsTab() {
 
   const { data: serviceBookings = [], isLoading } = useServiceBookings(queryParams)
 
-  // Column budget (density §4): seven columns need ~1060px at worst, the box at 1280 is ~1006. The two text columns are capped and
-  // Claimed (Allocated minus Remaining, so derivable) gives way below 2xl (1536).
+  // Column budget (density §4): seven columns need ~1060px at worst, the box at 1280 is ~1006. The two text columns are capped and the
+  // table scrolls in its box with the first column and the actions pinned (DataTable's column rule: Claimed used to be deleted below 1536).
   const columns: Column<ServiceBookingListDto>[] = [
     { key: 'prodaBookingReference', header: 'PRODA Reference', sortable: true, className: 'font-mono text-xs', maxWidth: '9rem' },
     { key: 'participantName', header: 'Participant', sortable: true, className: 'font-medium', maxWidth: '10rem' },
     { key: 'endDate', header: 'Period', render: sb => `${formatDateAu(sb.startDate)} – ${formatDateAu(sb.endDate)}` },
     { key: 'claimDeadline', header: 'Claim Deadline', type: 'date', sortable: true },
     { key: 'totalAllocated', header: 'Allocated', align: 'right', type: 'currency' },
-    { key: 'totalClaimed', header: 'Claimed', align: 'right', type: 'currency', priority: 'low' },
+    { key: 'totalClaimed', header: 'Claimed', align: 'right', type: 'currency' },
     {
       key: 'totalRemaining',
       header: 'Remaining Balance',
@@ -450,19 +450,18 @@ function BillableEventsTab() {
 
   // Column budget (density §4): uncapped (a rejected row's reason line alone is as wide as its text) this table needs ~1300px+ and the
   // box at 1280 is ~1006, which pushed Status and the edit action off-screen. The participant and the rejection reason are capped
-  // (ellipsis, full text in the tooltip); Stream gives way below 2xl (1536) and Day Type below 1792.
+  // (ellipsis, full text in the tooltip); Stream and Day Type stay, and the table scrolls in its box with the first column and the actions pinned.
   const columns: Column<BillableEventDto>[] = [
     { key: 'participantName', header: 'Participant', sortable: true, className: 'font-medium', maxWidth: '10rem' },
     {
       key: 'stream',
       header: 'Stream',
       sortable: true,
-      priority: 'low',
       render: ev => <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-accent)] text-[var(--color-accent-foreground)]">{INCOME_STREAM_LABELS[ev.stream] ?? ev.stream}</span>,
     },
     { key: 'supportItemNumber', header: 'Support Item', className: 'font-mono text-xs' },
     { key: 'supportsDeliveredTo', header: 'Delivered', sortable: true, render: ev => `${formatDateAu(ev.supportsDeliveredFrom)} – ${formatDateAu(ev.supportsDeliveredTo)}` },
-    { key: 'dayType', header: 'Day Type', priority: 'lowest' },
+    { key: 'dayType', header: 'Day Type' },
     { key: 'unitPrice', header: 'Qty / Hours', align: 'right', render: ev => ev.quantity != null ? String(ev.quantity) : ev.hours != null ? formatHours(ev.hours) : '—' },
     { key: 'totalAmount', header: 'Total', align: 'right', className: 'font-semibold', type: 'currency', sortable: true },
     {

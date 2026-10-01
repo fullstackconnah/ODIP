@@ -251,12 +251,11 @@ export default function IncidentsPage() {
       className: 'font-medium',
       render: (i) => <CellText className="md:max-w-[15rem] 2xl:max-w-[18rem]">{i.title ?? '—'}</CellText>,
     },
-    { key: 'incidentType', header: 'Type', sortable: true, priority: 'low', maxWidth: '9rem' },
+    { key: 'incidentType', header: 'Type', sortable: true, maxWidth: '9rem' },
     {
       key: 'tripName',
       header: 'Trip',
       sortable: true,
-      priority: 'lowest',
       render: (i) => i.tripInstanceId && i.tripName ? (
         <Link
           to={`/trips/${i.tripInstanceId}`}
@@ -270,7 +269,6 @@ export default function IncidentsPage() {
     {
       key: 'involvedParticipantName',
       header: 'Participant',
-      priority: 'medium',
       render: (i) => i.involvedParticipantId && i.involvedParticipantName ? (
         <Link
           to={`/participants/${i.involvedParticipantId}`}
@@ -283,7 +281,7 @@ export default function IncidentsPage() {
     },
     { key: 'severity', header: 'Severity', sortable: true, render: (i) => <StatusBadge status={i.severity} /> },
     { key: 'status', header: 'Status', sortable: true, render: (i) => <StatusBadge status={i.status} /> },
-    { key: 'reportedByName', header: 'Reported By', priority: 'lowest', maxWidth: '9rem' },
+    { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem' },
     { key: 'incidentDateTime', header: 'Date', type: 'date', sortable: true },
     {
       key: 'qscReportingStatus',

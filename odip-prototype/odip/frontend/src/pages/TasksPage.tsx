@@ -69,14 +69,13 @@ export default function TasksPage() {
       ) : null,
     },
     // Column budget (density §4): at 1280 the box is ~1006px and the fixed columns (tick, due, priority, status, Open, actions)
-    // take ~500 of it, so the text columns are capped (an ellipsis, full text in the tooltip) and the two least useful ones
-    // give way: Trip below 2xl (1536), Type below 1792. Uncapped, this table needed 1436px and pushed Status off-screen.
+    // take ~500 of it, so the text columns are capped (an ellipsis, full text in the tooltip). Every column stays (Trip and Type were
+    // deleted below 1536 and 1792, L3-04): what does not fit scrolls in the box with the task and the actions pinned.
     { key: 'title', header: 'Task', sortable: true, className: 'font-medium', maxWidth: '16rem' },
     {
       key: 'tripName',
       header: 'Trip',
       sortable: true,
-      priority: 'low',
       maxWidth: '11rem',
       render: (t) => t.tripInstanceId && t.tripName ? (
         // Truncation on the link itself (not a wrapper): a wrapper's overflow: hidden would clip the link's focus ring.
@@ -85,7 +84,7 @@ export default function TasksPage() {
         </Link>
       ) : (t.tripName ?? '—'),
     },
-    { key: 'taskType', header: 'Type', sortable: true, priority: 'lowest', maxWidth: '10rem', render: (t) => TASK_TYPE_LABELS[t.taskType as keyof typeof TASK_TYPE_LABELS] ?? t.taskType },
+    { key: 'taskType', header: 'Type', sortable: true, maxWidth: '10rem', render: (t) => TASK_TYPE_LABELS[t.taskType as keyof typeof TASK_TYPE_LABELS] ?? t.taskType },
     { key: 'ownerName', header: 'Owner', sortable: true, maxWidth: '8rem' },
     { key: 'dueDate', header: 'Due', type: 'date', sortable: true },
     {

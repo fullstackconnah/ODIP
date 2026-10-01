@@ -93,15 +93,15 @@ export default function StaffPage() {
       ),
     },
     // Column budget (density §4): eleven columns need ~1140px, the box at 1280 is ~1006. The text columns are capped (ellipsis, full
-    // text in the tooltip) and the two least-asked qualification flags give way below 2xl (1536), so Status and the row actions
-    // stay on screen at 1280-1535 whatever the names and regions are.
+    // text in the tooltip); every column stays (Manual and Overnight were deleted below 1536, L3-04), and what does not fit scrolls in the
+    // box with the name and the row actions pinned, so the actions stay on screen whatever the names and regions are.
     { key: 'position', header: 'Position', sortable: true, maxWidth: '7rem' },
     { key: 'region', header: 'Region', sortable: true, maxWidth: '7rem' },
     { key: 'isDriverEligible', header: 'Driver', type: 'boolean', align: 'center' },
     { key: 'isFirstAidQualified', header: 'First Aid', type: 'boolean', align: 'center' },
     { key: 'isMedicationCompetent', header: 'Meds', type: 'boolean', align: 'center' },
-    { key: 'isManualHandlingCompetent', header: 'Manual', type: 'boolean', align: 'center', priority: 'low' },
-    { key: 'isOvernightEligible', header: 'Overnight', type: 'boolean', align: 'center', priority: 'low' },
+    { key: 'isManualHandlingCompetent', header: 'Manual', type: 'boolean', align: 'center' },
+    { key: 'isOvernightEligible', header: 'Overnight', type: 'boolean', align: 'center' },
     {
       key: 'workerScreening',
       header: 'Worker Screening',
