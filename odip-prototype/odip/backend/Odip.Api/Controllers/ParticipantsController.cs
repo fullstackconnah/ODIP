@@ -807,14 +807,16 @@ public class ParticipantsController : ControllerBase
             newRoles.Add(roleDto);
         }
 
-        var existingRisks = await _db.ParticipantRiskEntries.Where(r => r.ParticipantId == p.Id).Select(r => new { r.AtRiskParty, r.Description }).ToListAsync(ct);
-        var riskKeys = existingRisks.Select(r => (r.AtRiskParty, r.Description.Trim().ToLowerInvariant())).ToHashSet();
+        // A risk is "already recorded" only by a match in the same state (active or inactive): an inactive entry says nothing about a
+        // current one (review F-2).
+        var existingRisks = await _db.ParticipantRiskEntries.Where(r => r.ParticipantId == p.Id).Select(r => new { r.AtRiskParty, r.Description, r.IsActive }).ToListAsync(ct);
+        var riskKeys = existingRisks.Select(r => (r.AtRiskParty, r.Description.Trim().ToLowerInvariant(), r.IsActive)).ToHashSet();
         var newRisks = new List<CreateParticipantRiskEntryDto>();
         foreach (var entry in dto.RiskEntries)
         {
             var description = entry.Description?.Trim() ?? "";
             if (description.Length == 0) continue; // an abandoned row
-            if (riskKeys.Add((entry.AtRiskParty, description.ToLowerInvariant()))) newRisks.Add(entry);
+            if (riskKeys.Add((entry.AtRiskParty, description.ToLowerInvariant(), entry.IsActive))) newRisks.Add(entry);
         }
 
         // ── Write ──
@@ -908,19 +910,21 @@ public class ParticipantsController : ControllerBase
     }
 
     /// <summary>
-    /// True when <paramref name="existing"/> already records this contact: the same role for the same person (by id, or by name
-    /// for a person typed in). A resumed save that repeats a contact the participant already has creates nothing.
+    /// True when <paramref name="existing"/> already records this contact: the same role, in the same status, for the same person
+    /// (by id, or by name for a person typed in). A resumed save that repeats a contact the participant already has creates nothing.
+    /// The status matters: an Expired or Superseded row says nothing about a CURRENT contact, so adding Pat Parent as a current next of
+    /// kin beside an expired Pat Parent must create the new row, not be answered 200 and silently dropped (review F-2).
     /// </summary>
     private static bool IsSameContact(ParticipantContactRole existing, CreateParticipantContactRoleDto incoming)
     {
-        if (existing.RoleType != incoming.RoleType) return false;
+        if (existing.RoleType != incoming.RoleType || existing.Status != incoming.Status) return false;
         if (incoming.PersonId.HasValue) return existing.PersonId == incoming.PersonId.Value;
         return existing.Person != null && SameName(existing.Person.FirstName, incoming.NewPersonFirstName) && SameName(existing.Person.LastName, incoming.NewPersonLastName);
     }
 
     private static bool IsSameContact(CreateParticipantContactRoleDto first, CreateParticipantContactRoleDto second)
     {
-        if (first.RoleType != second.RoleType) return false;
+        if (first.RoleType != second.RoleType || first.Status != second.Status) return false;
         if (first.PersonId.HasValue || second.PersonId.HasValue) return first.PersonId == second.PersonId;
         return SameName(first.NewPersonFirstName, second.NewPersonFirstName) && SameName(first.NewPersonLastName, second.NewPersonLastName);
     }
