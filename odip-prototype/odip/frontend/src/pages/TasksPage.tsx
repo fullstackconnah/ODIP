@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { Filter, CheckCircle, Plus, ListChecks } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
+import { plural } from '@/lib/format'
 
 const TASK_STATUS_ITEMS = [
   { value: 'NotStarted', label: 'Not Started' },
@@ -139,7 +140,7 @@ export default function TasksPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Tasks"
-        subtitle={`${tasks.length} task${tasks.length !== 1 ? 's' : ''}`}
+        subtitle={plural(tasks.length, 'task')}
         action={!showArchived && canWrite && (
           <Button to="/tasks/new" size="md">
             <Plus className="w-4 h-4" /> New Task

@@ -316,9 +316,9 @@
             "effect": "returns { badge, attention } from one tone so the chip and the tint cannot disagree"
           },
           {
-            "component": "glanceRatio(numerator, denominator)",
+            "component": "formatRatio(numerator, denominator)",
             "prop": "numerator, denominator",
-            "effect": "the ONE spelling of an \"x / y\" figure: a space each side of the slash. Every ratio in a glance strip is built with it so two figures cannot drift (\"12 / 10\" beside \"12/14\")"
+            "effect": "the ONE spelling of an \"x / y\" figure (src/lib/format.ts; glanceRatio is its earlier name): a space each side of the slash. Every ratio in a glance strip is built with it so two figures cannot drift (\"12 / 10\" beside \"12/14\")"
           }
         ]
       },
@@ -493,6 +493,116 @@
         "guards": [
           "src/test/toneContrast.test.ts: every solid pair and every soft wash with its ink is WCAG AA (4.5:1), read from index.css",
           "the same file ratchets down text in --color-warning (R2-12)"
+        ]
+      },
+      {
+        "name": "Deadline state",
+        "status": "shared; one state and one set of words for a dated deadline (src/lib/deadline.ts)",
+        "shipsOn": [
+          "Qualifications list status",
+          "Staff detail Credentials tab",
+          "Staff list worker-screening badge",
+          "Dashboard Qualification Issues figure"
+        ],
+        "states": [
+          {
+            "state": "overdue",
+            "long": "Expired",
+            "compact": "Expired",
+            "tone": "danger"
+          },
+          {
+            "state": "today",
+            "long": "Expires today",
+            "compact": "Expires today",
+            "tone": "warning"
+          },
+          {
+            "state": "soon",
+            "long": "Expires in 12 days",
+            "compact": "12 days",
+            "tone": "warning"
+          },
+          {
+            "state": "ok",
+            "long": "Current",
+            "compact": "Current",
+            "tone": "success"
+          },
+          {
+            "state": "none",
+            "long": "No date set",
+            "compact": "No date set",
+            "tone": "neutral"
+          }
+        ],
+        "api": [
+          {
+            "component": "lib/deadline",
+            "prop": "deadlineState(iso, { warnDays, today })",
+            "effect": "returns { status: overdue | today | soon | ok | none, days } by calendar day, so the count cannot shift with the time zone or a daylight-saving change"
+          },
+          {
+            "component": "lib/deadline",
+            "prop": "deadlineLabel(state, style)",
+            "values": [
+              "long",
+              "compact"
+            ],
+            "effect": "the words; the long form unless the cell has no room for \"Expires in\" (the staff Credentials tab is long, the Qualifications table compact)"
+          },
+          {
+            "component": "lib/deadline",
+            "prop": "DEADLINE_TONE",
+            "effect": "the tone of each state (lib/tone.ts)"
+          },
+          {
+            "component": "lib/credentials",
+            "prop": "staffCredentials(staff, { warnDays })",
+            "effect": "the one rule for which credentials apply (worker screening only once it has an expiry date) and each one's state; the Dashboard figure is the sum of the list's issue counts"
+          }
+        ],
+        "guards": [
+          "src/lib/deadline.test.ts and dateOnly.test.ts: table tests incl. the daylight-saving days of Sydney, Lord Howe, Auckland, New York and London (the zone is set inside the test)",
+          "src/pages/QualificationsPage.test.tsx: the list, its filters, and the Dashboard figure equal to the sum of the list"
+        ]
+      },
+      {
+        "name": "Format helpers",
+        "status": "shared; how a count, a ratio and a relative time are spelled (src/lib/format.ts)",
+        "api": [
+          {
+            "component": "lib/format",
+            "prop": "plural(n, singular, plural?)",
+            "effect": "the count and the noun that agrees with it: \"1 day\", \"2 days\", \"2 people\""
+          },
+          {
+            "component": "lib/format",
+            "prop": "formatRatio(a, b)",
+            "effect": "\"a / b\", a space each side of the slash (glanceRatio is the earlier name)"
+          },
+          {
+            "component": "lib/format",
+            "prop": "formatRelative(iso, { style, now })",
+            "values": [
+              "compact",
+              "long"
+            ],
+            "effect": "compact: Just now, 5m ago, 3h ago, 62d ago, in 2d (a cell or chip); long: just now, 5 min ago, 3 hrs ago, 2 months ago (running text); a date-only value counts calendar days; a timestamp up to 5 minutes ahead of the clock reads Just now (clock skew)"
+          },
+          {
+            "component": "lib/format",
+            "prop": "formatAge(iso)",
+            "effect": "a bare, coarse age for an \"Age\" column: <1h, 5h, 2d (the header says \"ago\", a phone card has no room for it)"
+          },
+          {
+            "component": "lib/format",
+            "prop": "formatDateTimeAu(iso), formatNoteTimestamp(iso)",
+            "effect": "the en-AU date and time, and the medium date with short time of a shift note (Intl-backed, as before)"
+          }
+        ],
+        "guards": [
+          "src/lib/format.test.ts: table tests for every helper with an injectable now, in several zones"
         ]
       }
     ]
@@ -683,6 +793,7 @@
       "**Do** give a record's own page the detail header pattern by opting in (`variant=\"detail\"`, `variant=\"glance\"`), never by restyling the default header or bar",
       "**Do** derive a glance segment's chip and tint from one tone with `glanceState`",
       "**Do** colour a status by its tone: add the word to `STATUS_TONE` (or pass a `colorMap` of tones for a domain whose word means something else), never a class string of its own",
+      "**Do** make nouns agree with counts through `plural()`, spell ratios through `formatRatio()` (\"x / y\") and relative times through `formatRelative()` (`src/lib/format.ts`), and state a dated deadline through `deadlineState()` and `deadlineLabel()` (`src/lib/deadline.ts`), never by hand",
       "**Do** put what needs action in the attention band and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on",
       "**Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed (\"Couldn't load\"), and never an \"All clear\" without data",
       "**Do** use `Button` for every action; it owns height, radius and focus",

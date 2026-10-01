@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { formatShiftTimeRange } from '@/pages/rostering/lib/roster'
 import type { ParticipantRosteringShiftDto, ParticipantRosteringStaffDto } from '@/api/types/participants'
+import { plural } from '@/lib/format'
 
 /** Maps CompatibilityLevel onto StatusBadge's existing colour vocabulary rather than adding a new
  * one — Preferred reads as a positive ("active" green), Excluded as a negative ("expired" red),
@@ -56,7 +57,7 @@ export default function RosteringTab({ participantId }: { participantId: string 
                     {s.staffName}
                   </Link>
                   <p className="text-xs text-[var(--color-muted-foreground)]">
-                    {s.shiftCount} shift{s.shiftCount === 1 ? '' : 's'}
+                    {plural(s.shiftCount, 'shift')}
                   </p>
                 </div>
                 <StatusBadge status={COMPATIBILITY_BADGE_STATUS[s.compatibility] ?? 'draft'} label={s.compatibility} />

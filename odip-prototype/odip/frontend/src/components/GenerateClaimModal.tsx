@@ -4,6 +4,7 @@ import { Modal } from '@/components/Modal'
 import { DataTable } from '@/components/DataTable'
 import type { TripDetailDto, ClaimPreviewResponseDto, ClaimPreviewLineItemDto } from '@/api/types'
 import type { AxiosError } from 'axios'
+import { plural } from '@/lib/format'
 
 interface GenerateClaimModalProps {
   tripId: string
@@ -137,7 +138,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
             <div className="mb-[var(--section-gap)]">
               <p className="font-medium text-[var(--color-foreground)]">{trip.tripName}</p>
               <p className="text-sm text-[var(--color-muted-foreground)]">
-                {startDate} &ndash; {endDate} ({durationDays} day{durationDays !== 1 ? 's' : ''})
+                {startDate} &ndash; {endDate} ({plural(durationDays, 'day')})
               </p>
             </div>
 

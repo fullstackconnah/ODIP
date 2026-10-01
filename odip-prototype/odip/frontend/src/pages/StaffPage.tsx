@@ -12,13 +12,12 @@ import { Link } from 'react-router-dom'
 import { Plus, UserCog, Check, CalendarOff } from 'lucide-react'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
+import { deadlineState } from '@/lib/deadline'
 import type { StaffListDto, UpdateStaffDto } from '@/api/types/staff'
+import { plural } from '@/lib/format'
 
-function isExpired(date: string): boolean {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return new Date(date + 'T00:00:00').getTime() < today.getTime()
-}
+// A worker screening is expired once its expiry day has passed (expiring today is not yet expired): lib/deadline.ts, a calendar-day compare.
+const isExpired = (date: string) => deadlineState(date, { warnDays: 0 }).status === 'overdue'
 
 const ACTIVE_STATUS_ITEMS = [
   { value: 'Active', label: 'Active' },
@@ -164,7 +163,7 @@ export default function StaffPage() {
       <div>
         <PageHeader
           title="Staff"
-          subtitle={`${staff.length} staff member${staff.length !== 1 ? 's' : ''}`}
+          subtitle={plural(staff.length, 'staff member')}
           action={!showArchived && canWrite && (
             <Button to="/staff/new" size="md">
               <Plus className="w-4 h-4" /> New Staff

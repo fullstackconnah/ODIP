@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveCount } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
+import { formatRatio, formatRelative, plural } from '@/lib/format'
+import { credentialIssueCount, staffCredentials } from '@/lib/credentials'
 import { usePermissions } from '@/lib/permissions'
 import { ALERT_SEVERITY_STYLES, ALERT_TYPE_LABELS } from '@/components/alertSeverityStyles'
 import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
@@ -15,19 +17,8 @@ import {
 
 // ── Helpers ──
 
-function dueAgo(dueDate: string): string {
-  const diffMs = Date.now() - new Date(dueDate).getTime()
-  if (diffMs < 0) return 'upcoming'
-  const diffH = Math.floor(diffMs / 3600000)
-  if (diffH < 24) return `${diffH}h ago`
-  return `${Math.floor(diffH / 24)}d ago`
-}
-
 // Tint an attention tile only when its count is actionable (> 0); at zero it is quiet.
 const tinted = (count: number, tone: 'danger' | 'warning') => (count > 0 ? tone : undefined)
-
-// The noun agrees with the count: 1 is singular, and 0 and everything else plural ("0 upcoming trips").
-const counted = (n: number, singular: string, plural: string) => `${n} ${n === 1 ? singular : plural}`
 
 // The attention band's shape by item count (7 without alerts, 8 with them, 9 with a pending-leave item too). Below md it is two
 // columns (an odd last item takes the whole row, like the trip glance strip on a phone). From md it is two balanced rows
@@ -56,26 +47,11 @@ export default function DashboardPage() {
 
   // Hooks must run unconditionally on every render — this has to sit above the isLoading/isError
   // early returns below, not after them.
+  // The same rule as the Qualifications list (lib/credentials.ts), so this figure is the sum of that page's issue counts: a credential
+  // needs action when it has no date, is expired, is due today or is due within the warning window.
   const qualIssueCount = useMemo(() => {
     const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    return (allStaff as any[]).reduce((count: number, s: any) => {
-      const checks = [
-        { flag: s.isFirstAidQualified, expiry: s.firstAidExpiryDate },
-        { flag: s.isDriverEligible, expiry: s.driverLicenceExpiryDate },
-        { flag: s.isManualHandlingCompetent, expiry: s.manualHandlingExpiryDate },
-        { flag: s.isMedicationCompetent, expiry: s.medicationCompetencyExpiryDate },
-        // Worker screening has no boolean qualification flag — it only "applies" (and can be
-        // an issue) once an expiry date has actually been entered.
-        { flag: !!s.workerScreeningExpiryDate, expiry: s.workerScreeningExpiryDate },
-      ]
-      return count + checks.filter(({ flag, expiry }) => {
-        if (!flag) return false
-        if (!expiry) return true  // no date set counts as an issue
-        const diff = Math.floor((new Date(expiry + 'T00:00:00').getTime() - today.getTime()) / 86400000)
-        return diff <= warningDays
-      }).length
-    }, 0)
+    return allStaff.reduce((count, s) => count + credentialIssueCount(staffCredentials(s, { warnDays: warningDays, today })), 0)
   }, [allStaff, warningDays])
 
   if (isLoading) {
@@ -164,9 +140,9 @@ export default function DashboardPage() {
         title="Management Dashboard"
         subtitle={
           <PageHeaderMeta>
-            <span className="tabular-nums">{counted(d.upcomingTripCount, 'upcoming trip', 'upcoming trips')}</span>
-            <span className="tabular-nums">{counted(d.activeParticipantCount, 'active participant', 'active participants')}</span>
-            <span className="tabular-nums">{counted(d.outstandingTaskCount, 'outstanding task', 'outstanding tasks')}</span>
+            <span className="tabular-nums">{plural(d.upcomingTripCount, 'upcoming trip')}</span>
+            <span className="tabular-nums">{plural(d.activeParticipantCount, 'active participant')}</span>
+            <span className="tabular-nums">{plural(d.outstandingTaskCount, 'outstanding task')}</span>
           </PageHeaderMeta>
         }
       />
@@ -226,7 +202,7 @@ export default function DashboardPage() {
                       {t.destination || 'TBD'}
                     </span>
                     <span className="hidden shrink-0 tabular-nums text-xs text-[var(--color-muted-foreground)] @lg:inline">
-                      {t.currentParticipantCount}/{t.maxParticipants || '—'} pax
+                      {formatRatio(t.currentParticipantCount, t.maxParticipants || '—')} pax
                     </span>
                     {/* The trip status is coloured by StatusBadge's own tones (lib/tone.ts), the same as the trip header, the schedule and the trips list. */}
                     <StatusBadge status={t.status} label={t.status.replace(/([A-Z])/g, ' $1').trim()} className="shrink-0 font-bold" />
@@ -268,7 +244,7 @@ export default function DashboardPage() {
                       {t.tripName}
                     </span>
                     <span className="hidden shrink-0 text-xs text-[var(--color-muted-foreground)] @2xl:inline">
-                      Due {dueAgo(t.dueDate)}
+                      Due {formatRelative(t.dueDate, { style: 'compact' })}
                     </span>
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-fixed)] text-xs font-bold text-[var(--color-on-primary-fixed)]">
                       {initials}

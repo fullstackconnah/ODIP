@@ -16,6 +16,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Users, ChevronRight, Pill } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
+import { plural } from '@/lib/format'
 
 const ACTIVE_STATUS_COLORS: Record<string, string> = {
   Active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
@@ -32,7 +33,7 @@ export default function ParticipantsPage() {
       <div>
         <PageHeader
           title="Participants"
-          subtitle={`${screen.participantsCount} participant${screen.participantsCount !== 1 ? 's' : ''}`}
+          subtitle={plural(screen.participantsCount, 'participant')}
           action={!screen.showArchived && screen.canWrite && (
             <Button to="/participants/new" size="md">
               <Plus className="w-4 h-4" /> New Participant

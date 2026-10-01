@@ -11,7 +11,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
   useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, useCompatibility, useRosterShiftNotes, getRosterFindings,
 } from '@/api/hooks'
-import { formatWithTimeZone } from '@/lib/utils'
+import { formatNoteTimestamp } from '@/lib/format'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { RosterGateFields } from './RosterGateFields'
 import { Button } from '@/components/Button'
@@ -20,11 +20,6 @@ import { useSlideOverA11y } from '../lib/useSlideOverA11y'
 import { getRosterGate } from '../lib/rosterGate'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange } from '../lib/roster'
 import { getRelevantRoutines } from '../lib/routines'
-
-/** "medium date, short time" in the viewer's own zone — matches PortalWitnessApprovalsPage's convention. */
-function formatNoteTimestamp(iso: string): string {
-  return formatWithTimeZone(iso, undefined, { dateStyle: 'medium', timeStyle: 'short' })
-}
 
 export type ShiftSlideOverTarget =
   | {

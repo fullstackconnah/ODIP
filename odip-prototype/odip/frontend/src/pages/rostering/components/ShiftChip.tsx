@@ -4,6 +4,7 @@ import { AlertOctagon, AlertTriangle, CalendarOff, GripVertical, MoreVertical, S
 import type { RosterFindingDto, ShiftDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { formatShiftTimeRange, RATIO_LABELS } from '../lib/roster'
+import { plural } from '@/lib/format'
 
 /**
  * Accessible name for the severity marker — states the severity(s) present and their counts, so
@@ -14,8 +15,8 @@ function findingsSeverityLabel(findings: RosterFindingDto[]): string {
   const blockingCount = findings.filter(f => f.severity === 'Blocking').length
   const warningCount = findings.filter(f => f.severity === 'Warning').length
   const parts: string[] = []
-  if (blockingCount > 0) parts.push(`${blockingCount} blocking ${blockingCount === 1 ? 'issue' : 'issues'}`)
-  if (warningCount > 0) parts.push(`${warningCount} ${warningCount === 1 ? 'warning' : 'warnings'}`)
+  if (blockingCount > 0) parts.push(plural(blockingCount, 'blocking issue'))
+  if (warningCount > 0) parts.push(plural(warningCount, 'warning'))
   return parts.join(', ')
 }
 

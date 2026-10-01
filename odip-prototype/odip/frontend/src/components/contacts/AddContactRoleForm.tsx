@@ -12,6 +12,7 @@ import {
 } from '@/api/types/contacts'
 import type { ParticipantContactRoleDto, CreateParticipantContactRoleDto, UpdateParticipantContactRoleDto, PersonDto } from '@/api/types/contacts'
 import { extractErrorMessage } from '@/lib/utils'
+import { plural } from '@/lib/format'
 
 /** Splits a typed "First Last" (or "First Middle Last") query into first/last name parts for the
  * "create new" fallback's pre-fill — PF-6's "pre-filled from whatever was typed". */
@@ -551,7 +552,7 @@ export default function AddContactRoleForm({ participantId, mode, role, onSaved,
                     <p className="text-sm font-medium text-[var(--color-foreground)]">{person.fullName}</p>
                     <p className="text-xs text-[var(--color-muted-foreground)]">
                       {[person.phone || person.mobile, person.dateOfBirth, person.organisation].filter(Boolean).join(' · ') || '—'}
-                      {person.activeRoleCount > 0 && ` · already a contact for ${person.activeRoleCount} other participant${person.activeRoleCount === 1 ? '' : 's'}`}
+                      {person.activeRoleCount > 0 && ` · already a contact for ${plural(person.activeRoleCount, 'other participant')}`}
                     </p>
                   </button>
                 </li>

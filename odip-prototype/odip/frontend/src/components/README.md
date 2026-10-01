@@ -26,6 +26,8 @@ copying it.
 - [SearchInput](#searchinput)
 - [StatusBadge](#statusbadge)
 - [Tone system](#tone-system) (`lib/tone.ts`: `TONE`, `STATUS_TONE`, how a status gets its colour)
+- [Deadline state](#deadline-state) (`lib/deadline.ts`, `lib/dateOnly.ts`, `lib/credentials.ts`: how close a dated deadline is, and its words)
+- [Format helpers](#format-helpers) (`lib/format.ts`: `plural`, `formatRatio`, `formatRelative`, the date-time formatters)
 - [Card](#card) / [StatCard](#statcard)
 - [PageHeader](#pageheader) (and the opt-in detail variant, `PageHeaderMeta`)
 - [FactBar](#factbar) (the default strip and the opt-in glance variant)
@@ -523,6 +525,62 @@ text still written in `--color-warning`. `lib/tone.test.ts` pins the class strin
 
 ---
 
+## Deadline state
+
+A dated deadline (a credential's expiry, a review due date) is one state with one set of words. Three JSX-free modules in `lib/`:
+
+- `lib/dateOnly.ts`: date-only math. A `DateOnly` from the API ("2026-08-14") names a calendar day, so a day is a whole number (`parseDateOnly`,
+  `calendarDaysUntil(target, today)`), never a gap between two local midnights in milliseconds. That gap is 9.96 days where a day is 23 hours long (Sydney,
+  4 Oct 2026), which is how "10 days from now" used to floor to 9. `today` is a `Date` (its local calendar day) or a "YYYY-MM-DD" string, and defaults to now.
+- `lib/deadline.ts`: `deadlineState(iso, { warnDays, today })` returns `{ status: 'overdue' | 'today' | 'soon' | 'ok' | 'none', days }`;
+  `deadlineLabel(state, 'long' | 'compact')` the words; `DEADLINE_TONE[status]` the tone (overdue `danger`, today and soon `warning`, ok `success`, none `neutral`);
+  `isDeadlineIssue(state)` is true for everything but `ok`.
+- `lib/credentials.ts`: which staff credentials apply and what state each is in (`staffCredentials(staff, { warnDays })`, `credentialIssueCount`). One rule for
+  the Qualifications list, the staff Credentials tab and the Dashboard's Qualification Issues count: a flagged credential applies with or without a date, worker
+  screening (no flag) applies only once it has an expiry date.
+
+```tsx
+const state = deadlineState(row.expiryDate, { warnDays })           // { status: 'soon', days: 10 }
+<StatusBadge tone={DEADLINE_TONE[state.status]} label={deadlineLabel(state)} />   // Expires in 10 days
+```
+
+| State | `long` | `compact` | Tone |
+|---|---|---|---|
+| `overdue` | Expired | Expired | `danger` |
+| `today` | Expires today | Expires today | `warning` |
+| `soon` | Expires in 12 days | 12 days | `warning` |
+| `ok` | Current | Current | `success` |
+| `none` | No date set | No date set | `neutral` |
+
+Use `long` unless the cell has no room for "Expires in": the staff Credentials tab is `long`, the Qualifications table (a wrapping card per row on a phone) is `compact`. Tests inject `today` and set the zone they need (`src/test/timeZone.ts`), including the daylight-saving
+days of Sydney, Lord Howe, Auckland, New York and London.
+
+---
+
+## Format helpers
+
+`lib/format.ts` (JSX-free) is how the app spells a count, a ratio and a relative time. Nothing it builds for a test to pin uses `Intl` (en-AU prints September as
+"Sep" or "Sept" depending on the ICU build, the rule `lib/dateRange.ts` follows), and nothing reads the clock unless you leave `now` out.
+
+| Need | Use | Result |
+|---|---|---|
+| A count and its noun | `plural(n, 'day')`, `plural(n, 'person', 'people')` | "1 day", "2 days", "0 days", "1 person", "2 people" |
+| An "x / y" figure | `formatRatio(a, b)` (`glanceRatio` is the earlier name) | "12 / 14" |
+| How long ago, in a cell or chip | `formatRelative(iso, { style: 'compact' })` | Just now, 5m ago, 3h ago, 62d ago, in 2d |
+| How long ago, in running text | `formatRelative(iso, { style: 'long' })` | just now, 5 min ago, 3 hrs ago, 2 months ago |
+| A bare coarse age in an "Age" column | `formatAge(iso)` | "<1h", "5h", "2d" |
+| A date and time, en-AU | `formatDateTimeAu(iso)` | "27/03/2026, 01:45 pm" |
+| A shift note's timestamp | `formatNoteTimestamp(iso)` | "8 Sept 2026, 7:30 pm" |
+
+`formatRelative` rounds down to one unit. `null`, `undefined` and '' read "Never" (compact) or "never" (long), an unparseable value reads "—", and a date-only string
+("2026-09-30", a due date) counts calendar days against today (it reads "Today" on the day). Pass a `Date` you have already parsed (`parseApiDate`, for a UTC
+timestamp the server sent without a zone). A timestamp up to 5 minutes ahead of the viewer's clock reads "Just now" (clock skew), not "in 2m". Compact shows days at any size ("62d ago": an overdue figure wants the exact count); long switches to months from 30 days.
+
+Do not write `` `${n} day${n === 1 ? '' : 's'}` `` or `` `${a}/${b}` `` by hand: the first drifts at 0 and in nouns with an irregular plural, the second against the
+design rule that a ratio has a space each side of the slash.
+
+---
+
 ## Card / StatCard
 
 `Card.tsx` is the generic bordered/padded content container (`title`, `action`,
@@ -610,16 +668,17 @@ The trip detail page opts in with a status-led meta row, and the dashboard opts 
 
 ```tsx
 import { FactBar, type FactBarSegment } from '@/components/FactBar'
-import { glanceRatio, glanceState } from '@/components/glanceState'
+import { glanceState } from '@/components/glanceState'
+import { formatRatio } from '@/lib/format'
 
 const segments: FactBarSegment[] = [
   { label: 'Outstanding Tasks', value: 2, icon, ...glanceState('negative', 'Action Needed') },  // tinted (error-container)
-  { label: 'Insurance', value: glanceRatio(5, 5), icon, ...glanceState('positive', 'Covered') }, // quiet, "5 / 5"
+  { label: 'Insurance', value: formatRatio(5, 5), icon, ...glanceState('positive', 'Covered') }, // quiet, "5 / 5"
 ]
 <FactBar variant="glance" segments={segments} />
 ```
 
-**Spell every ratio with `glanceRatio(x, y)`**, which returns `"x / y"` (a space each side of the slash). At display size a hand-written `` `${a}/${b}` ``
+**Spell every ratio with `formatRatio(x, y)`** (`lib/format.ts`; `glanceRatio` is its earlier name), which returns `"x / y"` (a space each side of the slash). At display size a hand-written `` `${a}/${b}` ``
 beside `"12 / 10"` is obvious, and one shared formatter is what stops two figures in a strip, or on two pages, drifting apart.
 
 `glanceState(tone, label)` returns `{ badge, attention }` from ONE tone (`'positive' | 'warning' | 'negative' | 'neutral'`, or the tone words `'success'` and

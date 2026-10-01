@@ -4,6 +4,7 @@ import type { RosterParticipantRowDto, ShiftDto } from '@/api/types'
 import { RosterDayCell } from './RosterDayCell'
 import { TripBar } from './TripBar'
 import { barOverlapsWeek, formatDayAccessibleName, RATIO_LABELS, rosterDayColumnsTemplate } from '../lib/roster'
+import { plural } from '@/lib/format'
 
 export type ParticipantRowProps = {
   row: RosterParticipantRowDto
@@ -28,7 +29,7 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
   const visibleTripBars = row.tripBars.filter(t => barOverlapsWeek(t.startDate, t.endDate, days))
   const covered = row.daysWithoutCover === 0
   const ratioLabel = RATIO_LABELS[row.supportRatio] ?? row.supportRatio
-  const uncoveredLabel = `${row.daysWithoutCover} day${row.daysWithoutCover === 1 ? '' : 's'} uncovered`
+  const uncoveredLabel = `${plural(row.daysWithoutCover, 'day')} uncovered`
 
   return (
     <>

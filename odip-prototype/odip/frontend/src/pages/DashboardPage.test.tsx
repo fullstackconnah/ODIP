@@ -982,3 +982,46 @@ describe('DashboardPage — trip status and task priority chips use the shared t
     expect(screen.getByText('Medium')).toHaveClass(...TONE.warning.solid.split(' '))
   })
 })
+
+describe('DashboardPage — due dates and participant ratios', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  // A task's due date is a calendar day (DateOnly): it counts calendar days, not hours from UTC midnight, which read "17h ago" for yesterday.
+  it('reads a due date as calendar days ago, in the compact form', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 1, 3, 40)) // 1 Oct 2026 on the wall clock, whatever the zone
+    asRole('Coordinator')
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUseDashboard.mockReturnValue(summaryData({
+      overdueTaskCount: 3,
+      overdueTasks: [
+        { id: 'k1', title: 'Yesterday task', priority: 'High', dueDate: '2026-09-30', ownerName: 'Sam Owner' },
+        { id: 'k2', title: 'Last week task', priority: 'High', dueDate: '2026-09-24', ownerName: 'Sam Owner' },
+        { id: 'k3', title: 'Last month task', priority: 'High', dueDate: '2026-08-31', ownerName: 'Sam Owner' },
+      ],
+    }))
+    renderPage()
+
+    expect(screen.getByText('Due 1d ago')).toBeInTheDocument()
+    expect(screen.getByText('Due 7d ago')).toBeInTheDocument()
+    expect(screen.getByText('Due 31d ago')).toBeInTheDocument()
+  })
+
+  it('spells the participant ratio of a trip "x / y", with an en dash when there is no maximum', () => {
+    asRole('Coordinator')
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUseDashboard.mockReturnValue(summaryData({
+      upcomingTripCount: 2,
+      upcomingTrips: [
+        { id: 't-a', tripName: 'Beach Trip', destination: 'Caloundra QLD', startDate: '2026-08-28', status: 'Confirmed', currentParticipantCount: 5, maxParticipants: 6 },
+        { id: 't-b', tripName: 'Open Trip', destination: 'Byron Bay', startDate: '2026-09-28', status: 'Confirmed', currentParticipantCount: 3, maxParticipants: 0 },
+      ],
+    }))
+    renderPage()
+
+    expect(screen.getByText('5 / 6 pax')).toBeInTheDocument()
+    expect(screen.getByText('3 / — pax')).toBeInTheDocument()
+  })
+})

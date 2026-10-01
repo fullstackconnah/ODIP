@@ -28,6 +28,7 @@ import type {
 import { formatEffectiveRange, formatShiftTimeRange } from './lib/roster'
 import { extractErrorMessage, formatDateAu } from '@/lib/utils'
 import type { Tone } from '@/lib/tone'
+import { plural } from '@/lib/format'
 
 type LegacyRecord = StaffAvailabilityDto & { userFullName: string }
 
@@ -665,7 +666,7 @@ export default function LeaveApprovalsPage() {
         message={
           editOverlaps && editOverlaps.length > 0 ? (
             <div className="space-y-2">
-              <p>{`Saved — this overlaps ${editOverlaps.length} rostered shift/trip${editOverlaps.length === 1 ? '' : 's'}.`}</p>
+              <p>{`Saved — this overlaps ${plural(editOverlaps.length, 'rostered shift/trip')}.`}</p>
               <FindingsList findings={editOverlaps} />
               <OverlapShiftsList
                 shifts={editOverlapShifts}
@@ -720,7 +721,7 @@ export default function LeaveApprovalsPage() {
         message={
           approveOverlaps && approveOverlaps.length > 0 ? (
             <div className="space-y-2">
-              <p>{`Approved — this overlaps ${approveOverlaps.length} rostered shift/trip${approveOverlaps.length === 1 ? '' : 's'}.`}</p>
+              <p>{`Approved — this overlaps ${plural(approveOverlaps.length, 'rostered shift/trip')}.`}</p>
               <FindingsList findings={approveOverlaps} />
               <OverlapShiftsList
                 shifts={approveOverlapShifts}

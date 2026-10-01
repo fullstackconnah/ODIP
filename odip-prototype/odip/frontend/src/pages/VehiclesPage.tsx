@@ -12,6 +12,7 @@ import { StatCard } from '@/components/StatCard'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { TONE } from '@/lib/tone'
+import { plural } from '@/lib/format'
 
 type VehicleTypeKey = 'Car' | 'Van' | 'Bus' | 'MiniBus' | 'AccessibleVan' | 'Other'
 
@@ -82,7 +83,7 @@ export default function VehiclesPage() {
       {/* Page header */}
       <PageHeader
         title="Vehicles"
-        subtitle={`${vehicles.length} ${showArchived ? 'archived' : 'active'} vehicle${vehicles.length !== 1 ? 's' : ''}`}
+        subtitle={plural(vehicles.length, `${showArchived ? 'archived' : 'active'} vehicle`)}
         action={!showArchived && canWrite && (
           <Button to="/vehicles/new" size="md">
             <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Vehicle</span><span className="sm:hidden">Add</span>

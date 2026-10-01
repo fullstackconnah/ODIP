@@ -10,6 +10,8 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
+import { staffCredentials, type StaffCredential } from '@/lib/credentials'
+import { DEADLINE_TONE, deadlineLabel } from '@/lib/deadline'
 import { formatShiftTimeRange, formatVarianceMinutes } from '@/pages/rostering/lib/roster'
 import AvailabilityList from '@/pages/schedule/AvailabilityList'
 import {
@@ -27,58 +29,10 @@ const TAB_KEYS: Tab[] = ['availability', 'credentials', 'upcoming', 'incidents',
  * 44px floor under a coarse pointer (fits the 48px coarse row). */
 const ROW_LINK = 'inline-flex min-h-[var(--tap-min)] items-center font-medium hover:text-[var(--color-primary)]'
 
-type CredentialStatus = 'expired' | 'expiring' | 'ok' | 'no-date'
-
-interface CredentialRow {
-  key: string
-  label: string
-  expiryDate: string | null
-  status: CredentialStatus
-  daysUntilExpiry: number | null
-}
-
-/** Mirrors QualificationsPage's buildGroups row logic (same day-threshold source,
- * settings.qualificationWarningDays), narrowed to a single staff member. */
-function buildCredentialRows(staff: {
-  isFirstAidQualified: boolean; firstAidExpiryDate: string | null
-  isDriverEligible: boolean; driverLicenceExpiryDate: string | null
-  isManualHandlingCompetent: boolean; manualHandlingExpiryDate: string | null
-  isMedicationCompetent: boolean; medicationCompetencyExpiryDate: string | null
-  workerScreeningNumber: string | null; workerScreeningExpiryDate: string | null
-}, warningDays: number): CredentialRow[] {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const candidates: { key: string; label: string; applies: boolean; expiryDate: string | null }[] = [
-    { key: 'firstAid', label: 'First Aid', applies: staff.isFirstAidQualified, expiryDate: staff.firstAidExpiryDate },
-    { key: 'driver', label: 'Driver Licence', applies: staff.isDriverEligible, expiryDate: staff.driverLicenceExpiryDate },
-    { key: 'manualHandling', label: 'Manual Handling', applies: staff.isManualHandlingCompetent, expiryDate: staff.manualHandlingExpiryDate },
-    { key: 'medication', label: 'Medication Competency', applies: staff.isMedicationCompetent, expiryDate: staff.medicationCompetencyExpiryDate },
-    // Worker screening has no boolean qualification flag — it only "applies" once a number or
-    // expiry date has actually been entered, same as QualificationsPage's own worker-screening row.
-    { key: 'workerScreening', label: 'Worker Screening', applies: !!staff.workerScreeningNumber || !!staff.workerScreeningExpiryDate, expiryDate: staff.workerScreeningExpiryDate },
-  ]
-
-  return candidates
-    .filter((c) => c.applies)
-    .map((c) => {
-      if (!c.expiryDate) {
-        return { key: c.key, label: c.label, expiryDate: null, status: 'no-date' as const, daysUntilExpiry: null }
-      }
-      const expiry = new Date(c.expiryDate + 'T00:00:00')
-      expiry.setHours(0, 0, 0, 0)
-      const diff = Math.floor((expiry.getTime() - today.getTime()) / 86400000)
-      const status: CredentialStatus = diff < 0 ? 'expired' : diff <= warningDays ? 'expiring' : 'ok'
-      return { key: c.key, label: c.label, expiryDate: c.expiryDate, status, daysUntilExpiry: diff }
-    })
-}
-
-function credentialBadge(row: CredentialRow) {
-  if (row.status === 'expired') return <StatusBadge status="expired" label="Expired" />
-  if (row.status === 'no-date') return <StatusBadge status="draft" label="No date set" />
-  if (row.status === 'ok') return <StatusBadge status="active" label="Current" />
-  const days = row.daysUntilExpiry!
-  return <StatusBadge status="pending" label={days === 0 ? 'Expires today' : `Expires in ${days} day${days === 1 ? '' : 's'}`} />
+// Which credentials apply and what state each is in is lib/credentials.ts (one rule for this tab, the Qualifications list and the Dashboard
+// count); the day threshold is the same settings.qualificationWarningDays.
+function credentialBadge(row: StaffCredential) {
+  return <StatusBadge tone={DEADLINE_TONE[row.state.status]} label={deadlineLabel(row.state, 'long')} />
 }
 
 export default function StaffDetailPage() {
@@ -97,7 +51,7 @@ export default function StaffDetailPage() {
   const warningDays = settings?.qualificationWarningDays ?? 30
 
   const credentialRows = useMemo(
-    () => (overview ? buildCredentialRows(overview.staff, warningDays) : []),
+    () => (overview ? staffCredentials(overview.staff, { warnDays: warningDays }) : []),
     [overview, warningDays]
   )
 

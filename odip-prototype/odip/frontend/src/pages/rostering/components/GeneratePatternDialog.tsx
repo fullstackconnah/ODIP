@@ -5,6 +5,7 @@ import { FormField } from '@/components/FormField'
 import { useGeneratePattern } from '@/api/hooks'
 import type { ShiftPatternDto, GeneratePatternResultDto } from '@/api/types'
 import { countPatternOccurrences } from '../lib/roster'
+import { plural } from '@/lib/format'
 
 export type GeneratePatternDialogProps = {
   /** Null closes the dialog. Give it a `key` from the caller so state resets between targets. */
@@ -87,7 +88,7 @@ export function GeneratePatternDialog({ pattern, onClose }: GeneratePatternDialo
             <p className="text-xs text-muted-foreground">
               {previewCount === 0
                 ? "No matching dates in this range — nothing will be generated."
-                : `Up to ${previewCount} shift${previewCount === 1 ? '' : 's'} — fewer if some are already on the roster.`}
+                : `Up to ${plural(previewCount ?? 0, 'shift')} — fewer if some are already on the roster.`}
             </p>
           )}
         </>

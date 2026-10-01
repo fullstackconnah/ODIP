@@ -75,7 +75,9 @@ export function formatWithTimeZone(
 
 export function formatDateAu(date: string | null | undefined): string {
   if (!date) return '—'
-  const d = new Date(date)
+  // A date-only value ("2026-08-14") is a calendar day: read it as that day, not as UTC midnight, which is the previous day in any zone west of UTC.
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  const d = parts ? new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3])) : new Date(date)
   return d.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 

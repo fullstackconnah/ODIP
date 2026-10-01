@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTrips, usePatchTrip, useTrip } from '@/api/hooks'
 import type { TripStatus, TripListDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
+import { formatRatio, plural } from '@/lib/format'
 import { TONE, statusClass } from '@/lib/tone'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Pencil, MapPin, AlertTriangle } from 'lucide-react'
@@ -237,7 +238,7 @@ export default function TripsPage() {
       align: 'center',
       render: (t) => (
         <span className="inline-flex items-center gap-1.5 tabular-nums">
-          {t.currentParticipantCount}/{t.maxParticipants || '—'}
+          {formatRatio(t.currentParticipantCount, t.maxParticipants || '—')}
           {t.waitlistCount > 0 && (
             <span className={`${TONE.warning.solid} rounded-full px-1.5 py-0.5 text-xs`}>{t.waitlistCount} wait</span>
           )}
@@ -282,7 +283,7 @@ export default function TripsPage() {
       <div>
         <PageHeader
           title="Trips"
-          subtitle={`${trips.length} trip${trips.length !== 1 ? 's' : ''}`}
+          subtitle={plural(trips.length, 'trip')}
           action={
             <div className="flex items-center gap-2">
               <ToggleGroup

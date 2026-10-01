@@ -19,6 +19,7 @@ import { formatDateAu } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { plural } from '@/lib/format'
 
 // Which medication forms make clinical sense for a given administration route. Used only to
 // surface a soft warning when the two fields disagree — the currently selected form is never
@@ -499,7 +500,7 @@ export default function MedicationFormPage() {
                 </div>
                 {intervalDaysValue && Number(intervalDaysValue) > 0 && anchorDateValue && (
                   <p className="text-xs text-[var(--color-muted-foreground)] md:col-span-2 xl:col-span-12">
-                    Due every {intervalDaysValue} day{Number(intervalDaysValue) === 1 ? '' : 's'}, starting {formatDateAu(anchorDateValue)}.
+                    Due every {plural(Number(intervalDaysValue), 'day')}, starting {formatDateAu(anchorDateValue)}.
                   </p>
                 )}
               </div>

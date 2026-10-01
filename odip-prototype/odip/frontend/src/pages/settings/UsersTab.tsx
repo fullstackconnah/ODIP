@@ -4,6 +4,7 @@ import { useAdminUsers, useAdminTenantsSummary } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { DataTable } from '@/components/DataTable'
+import { formatRelative } from '@/lib/format'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -40,22 +41,14 @@ const PAGE_SIZE = 20
 // Helpers
 // ---------------------------------------------------------------------------
 
+const MONTH_MS = 30 * 86_400_000
+
+/** "Never", "Just now", "5m ago", "3d ago", then the date itself once the login is a month old or more. */
 function formatRelativeTime(dateStr: string | null): string {
   if (!dateStr) return 'Never'
   const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffSec = Math.floor(diffMs / 1000)
-  const diffMin = Math.floor(diffSec / 60)
-  const diffHr = Math.floor(diffMin / 60)
-  const diffDay = Math.floor(diffHr / 24)
-
-  if (diffSec < 60) return 'Just now'
-  if (diffMin < 60) return `${diffMin}m ago`
-  if (diffHr < 24) return `${diffHr}h ago`
-  if (diffDay < 7) return `${diffDay}d ago`
-  if (diffDay < 30) return `${Math.floor(diffDay / 7)}w ago`
-  return date.toLocaleDateString()
+  if (Date.now() - date.getTime() >= MONTH_MS) return date.toLocaleDateString()
+  return formatRelative(date, { style: 'compact' })
 }
 
 // ---------------------------------------------------------------------------

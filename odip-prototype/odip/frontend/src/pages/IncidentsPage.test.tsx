@@ -660,3 +660,28 @@ describe('IncidentsPage — 44px touch targets for its links', () => {
     expect(link).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'shrink-0', 'whitespace-nowrap', 'underline')
   })
 })
+
+describe('IncidentsPage — flagged notes Age column', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  // A bare, coarse duration (formatAge): the header says "Age", a phone card has no room for "ago", and minutes are noise in a triage queue.
+  it('reads the age of each note as <1h, whole hours, whole days', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-09-30T12:00:00Z'))
+    mockUseFlaggedShiftNotes.mockReturnValue({
+      data: [
+        baseFlaggedNote({ shiftNoteId: 'n1', createdAt: '2026-09-30T11:59:40Z' }),
+        baseFlaggedNote({ shiftNoteId: 'n2', createdAt: '2026-09-30T11:30:00Z' }),
+        baseFlaggedNote({ shiftNoteId: 'n3', createdAt: '2026-09-30T07:00:00Z' }),
+        baseFlaggedNote({ shiftNoteId: 'n4', createdAt: '2026-09-27T12:00:00Z' }),
+      ],
+      isLoading: false,
+    })
+    renderPage('/incidents?view=flagged-notes')
+
+    expect(screen.getAllByText('<1h')).toHaveLength(2)
+    for (const age of ['5h', '3d']) expect(screen.getByText(age)).toBeInTheDocument()
+  })
+})

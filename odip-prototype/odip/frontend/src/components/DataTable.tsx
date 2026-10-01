@@ -5,6 +5,7 @@ import { ChevronUp, ChevronDown, ChevronsUpDown, Check } from 'lucide-react'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { TAP_AREA_LINKS } from './tapArea'
+import { plural } from '@/lib/format'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -412,7 +413,7 @@ export function DataTable<T>({
                         <Dropdown
                           variant="pill"
                           items={col.bulkEditable.items}
-                          label={`${selectedRows.size} row${selectedRows.size === 1 ? '' : 's'}`}
+                          label={plural(selectedRows.size, 'row')}
                           colorClass="bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
                           onChange={value => col.bulkEditable!.onBulkChange(Array.from(selectedRows), value)}
                         />

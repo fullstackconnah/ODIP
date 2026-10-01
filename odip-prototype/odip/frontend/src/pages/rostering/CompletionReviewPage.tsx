@@ -14,6 +14,7 @@ import {
 import type { CompletionQueueItemDto, ShiftStatus, ShiftCompletionDto, ApproveBatchResultDto } from '@/api/types'
 import { formatDateAu, formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { formatVarianceMinutes } from './lib/roster'
+import { plural } from '@/lib/format'
 
 const PAGE_SIZE = 50
 
@@ -63,7 +64,7 @@ function IncidentIndicator({ shiftId }: { shiftId: string }) {
   if (count === 0) return null
   return (
     <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-on-error-container)]">
-      <AlertTriangle className="w-3.5 h-3.5" /> {count} incident{count === 1 ? '' : 's'}
+      <AlertTriangle className="w-3.5 h-3.5" /> {plural(count, 'incident')}
     </span>
   )
 }
@@ -296,7 +297,7 @@ export default function CompletionReviewPage() {
           />
           {data && data.totalCount > 0 && (
             <div className="flex items-center justify-between text-sm text-[var(--color-muted-foreground)]">
-              <span>{data.totalCount} shift{data.totalCount === 1 ? '' : 's'} · page {data.page} of {data.totalPages}</span>
+              <span>{plural(data.totalCount, 'shift')} · page {data.page} of {data.totalPages}</span>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -372,7 +373,7 @@ export default function CompletionReviewPage() {
         loading={approveBatch.isPending}
         message={
           <div className="space-y-2">
-            <p>{`Approve ${selectedRows.size} selected shift${selectedRows.size === 1 ? '' : 's'}?`}</p>
+            <p>{`Approve ${plural(selectedRows.size, 'selected shift')}?`}</p>
             {actionError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{actionError}</p>}
           </div>
         }

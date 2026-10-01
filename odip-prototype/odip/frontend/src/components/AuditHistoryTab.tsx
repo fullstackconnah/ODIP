@@ -1,5 +1,6 @@
 import { useAuditHistory, type AuditEntry, type AuditChange } from '../api/hooks';
 import { parseApiDate } from '@/lib/utils';
+import { plural } from '@/lib/format'
 
 interface Props {
   entityType: string;
@@ -157,7 +158,7 @@ export default function AuditHistoryTab({ entityType, entityId }: Props) {
   return (
     <div>
       <p className="text-xs text-[var(--color-muted-foreground)] mb-2 tabular-nums">
-        {data.total} event{data.total !== 1 ? 's' : ''} recorded
+        {plural(data.total, 'event')} recorded
       </p>
       <div>
         {data.entries.map((entry) => (

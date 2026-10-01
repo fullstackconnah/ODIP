@@ -15,20 +15,11 @@ import { useState } from 'react'
 import { Filter, Plus, AlertTriangle, ShieldAlert, FileWarning } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
+import { formatAge, plural } from '@/lib/format'
 import { SHIFT_NOTE_FLAG_LABELS } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 
 type IncidentsTab = 'incidents' | 'flagged-notes'
-
-/** "3h" / "2d" since createdAt — deliberately coarse (no minutes), this is a triage-queue
- * age indicator, not a precision timestamp. */
-function formatNoteAge(createdAt: string): string {
-  const ms = Date.now() - new Date(createdAt).getTime()
-  const hours = Math.floor(ms / (60 * 60 * 1000))
-  if (hours < 1) return '<1h'
-  if (hours < 24) return `${hours}h`
-  return `${Math.floor(hours / 24)}d`
-}
 
 /** Connection map item 4: mirrors ShiftNotesSection.goToIncident's field mapping so
  * IncidentCreatePage treats a queue-filed incident identically to a portal-filed one. Uses the
@@ -59,7 +50,7 @@ function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShi
   const { id: currentUserId } = usePermissions()
 
   const columns: Column<FlaggedShiftNoteDto>[] = [
-    { key: 'age', header: 'Age', className: 'tabular-nums', render: row => formatNoteAge(row.createdAt) },
+    { key: 'age', header: 'Age', className: 'tabular-nums', render: row => formatAge(row.createdAt) },
     { key: 'shiftDate', header: 'Shift date', render: row => formatDateAu(row.shiftDate) },
     {
       key: 'participantName',
@@ -335,7 +326,7 @@ export default function IncidentsPage() {
       <div className="[&>div:first-child]:flex-wrap [&>div:first-child]:gap-y-1">
         <PageHeader
           title="Incident Reports"
-          subtitle={showFlaggedNotes ? undefined : `${totalCount} incident${totalCount !== 1 ? 's' : ''}`}
+          subtitle={showFlaggedNotes ? undefined : plural(totalCount, 'incident')}
           action={(canViewFlaggedNotes || reportIncidentAction) && (
             <div className="flex flex-auto flex-wrap items-center gap-x-4 gap-y-1">
               {canViewFlaggedNotes && (

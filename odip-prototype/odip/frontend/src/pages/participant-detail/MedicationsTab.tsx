@@ -12,6 +12,7 @@ import { SUPPORT_LEVEL_LABELS, ROUTE_LABELS, FORM_LABELS } from '@/api/types/med
 import type { MedicationListDto, AdministrationDto } from '@/api/types/medications'
 import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/incidentPrefill'
 import type { Tone } from '@/lib/tone'
+import { plural } from '@/lib/format'
 
 const MED_STATUS_COLOR_MAP: Record<string, Tone> = {
   active: 'success',
@@ -130,7 +131,7 @@ export default function MedicationsTab({ participantId }: { participantId: strin
           <div className="flex items-start gap-3">
             <Info className="w-5 h-5 text-[var(--color-secondary)] shrink-0 mt-0.5" />
             <p className="text-sm text-[var(--color-foreground)]">
-              <strong className="font-medium">Polypharmacy:</strong> {activeCount} concurrent medication{activeCount === 1 ? '' : 's'} — NDIS guidance recommends a medication review every 3–6 months.
+              <strong className="font-medium">Polypharmacy:</strong> {plural(activeCount, 'concurrent medication')} — NDIS guidance recommends a medication review every 3–6 months.
             </p>
           </div>
         </Card>

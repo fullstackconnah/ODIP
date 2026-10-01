@@ -7,20 +7,8 @@ import { FormField } from '@/components/FormField'
 import { EmptyState } from '@/components/EmptyState'
 import { usePermissions } from '@/lib/permissions'
 import { parseApiDate, extractErrorMessage } from '@/lib/utils'
+import { formatRelative } from '@/lib/format'
 import type { ParticipantNoteDto } from '@/api/types/notes'
-
-function relativeTime(iso: string): string {
-  const diffMs = Date.now() - parseApiDate(iso).getTime()
-  const mins = Math.round(diffMs / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins} min ago`
-  const hours = Math.round(mins / 60)
-  if (hours < 24) return `${hours} hr${hours === 1 ? '' : 's'} ago`
-  const days = Math.round(hours / 24)
-  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`
-  const months = Math.round(days / 30)
-  return `${months} month${months === 1 ? '' : 's'} ago`
-}
 
 type NoteFormState = { title: string; description: string; isPinned: boolean }
 const EMPTY_FORM: NoteFormState = { title: '', description: '', isPinned: false }
@@ -120,7 +108,7 @@ function NoteCard({ note, canWrite, onEdit, onArchive, onRestore, onDismissDrift
         </div>
       )}
       <p className="text-xs text-[var(--color-muted-foreground)] mt-3">
-        {note.createdByName ?? 'Unknown'} · {relativeTime(note.createdAt)}
+        {note.createdByName ?? 'Unknown'} · {formatRelative(parseApiDate(note.createdAt), { style: 'long' })}
       </p>
     </div>
   )

@@ -381,3 +381,13 @@ describe('TripsPage — trip status pills use the shared tones', () => {
     expect(screen.getByText('2 waitlist')).toHaveClass('rounded-full', 'text-xs', ...TONE.warning.solid.split(' '))
   })
 })
+
+describe('TripsPage — Pax ratio', () => {
+  it('spells the participant ratio "x / y" with a space each side of the slash', () => {
+    mockUseTrips.mockReturnValue({ data: [trip(), trip({ id: 't2', tripName: 'No cap', currentParticipantCount: 3, maxParticipants: 0 })], isLoading: false })
+    renderPage()
+
+    expect(screen.getByText('6 / 8')).toBeInTheDocument()
+    expect(screen.getByText('3 / —')).toBeInTheDocument()
+  })
+})
