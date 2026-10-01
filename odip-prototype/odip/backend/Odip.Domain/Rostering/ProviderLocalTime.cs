@@ -49,11 +49,13 @@ public static class ProviderLocalTime
     }
 
     /// <summary>
-    /// Marks a UTC instant as UTC so it serialises with a trailing "Z". Instants read back from Postgres come out with
-    /// Kind Unspecified (the legacy timestamp behaviour persists Kind verbatim) and would otherwise serialise with NO zone
-    /// suffix, indistinguishable from a provider-local wall-clock value on the wire. The shift-package DTOs use this for
-    /// every instant they return (breaks, handover, dose outcomes, PRN); provider-local wall-clock fields (dose scheduledAt,
-    /// routine occursAt) are deliberately left Unspecified.
+    /// Marks a UTC instant as UTC (Kind Utc). Instants read back from Postgres come out with Kind Unspecified (the legacy
+    /// timestamp behaviour persists Kind verbatim). The wire no longer depends on this: every DateTime not marked
+    /// <c>[WallClock]</c> is written as UTC with a trailing "Z" by <c>UtcInstantDateTimeConverter</c> (registered in
+    /// <c>ApiJsonOptions</c>), so a mapper need not call it for the JSON to be right. It is still the way to compare an
+    /// instant with another (the PRN interval, a shift's rostered times), and the shift-package DTOs keep calling it.
+    /// Provider-local wall-clock fields (dose scheduledAt, routine occursAt) are marked <c>[WallClock]</c> and go out with
+    /// no zone; never pass one of those through here.
     /// </summary>
     public static DateTime AsUtc(DateTime value) => value.Kind switch
     {

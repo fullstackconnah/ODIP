@@ -143,6 +143,19 @@ public class WireTimeConventionTests
     }
 
     [Theory]
+    [InlineData("2026-10-03", 0, 0)]            // what an <input type="date"> posts: the medication form sends startDate / nextReviewDue / consentDate like this
+    [InlineData("2026-10-03T00:00:00", 0, 0)]   // what the availability form posts for the first day
+    [InlineData("2026-10-03T23:59:59", 23, 59)] // ... and for the last day
+    public void ACalendarDateHeldInADateTime_IsReadAsTheDayThatWasPosted(string sent, int hour, int minute)
+    {
+        var dto = JsonSerializer.Deserialize<CreateMedicationDto>($"{{\"startDate\":\"{sent}\",\"nextReviewDue\":\"{sent}\"}}", Api)!;
+
+        Assert.Equal(new DateTime(2026, 10, 3, hour, minute, hour == 23 ? 59 : 0), dto.StartDate);
+        Assert.Equal(DateTimeKind.Unspecified, dto.StartDate.Kind);
+        Assert.Equal(dto.StartDate, dto.NextReviewDue);
+    }
+
+    [Theory]
     [InlineData("2026-10-03T08:00:00Z")]
     [InlineData("2026-10-03T18:00:00+10:00")]
     [InlineData("2026-10-03T08:00:00")]
