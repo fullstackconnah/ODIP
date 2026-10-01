@@ -306,6 +306,78 @@ describe('SettingsPage — Provider Settings: medication competency check', () =
     expect(mockUpsertMutate.mock.calls[0][0]).not.toHaveProperty('medicationCompetencyMode')
   })
 
+  // ── the mode is sent only when the user changed it (review 3 finding M1) ──
+
+  it('does not send the mode when only Manager Phone was edited: an Enforce setting stays Enforce', async () => {
+    providerSettings.current = { ...saved, medicationCompetencyMode: 'Enforce' }
+    const user = await openProviderSettings()
+
+    await user.type(screen.getByText('Manager Phone').nextElementSibling as HTMLInputElement, '0412000111')
+    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+
+    expect(mockUpsertMutate).toHaveBeenCalledTimes(1)
+    const body = mockUpsertMutate.mock.calls[0][0]
+    expect(body).toEqual(expect.objectContaining({
+      registrationNumber: 'REG1', abn: '12345678901', organisationName: 'Test Org', address: '1 Test St', state: 'NSW', managerPhone: '0412000111',
+    }))
+    expect(body).not.toHaveProperty('medicationCompetencyMode')
+    expect(screen.getByRole('button', { name: /medication competency check/i })).toHaveTextContent('Enforce')
+  })
+
+  it('does not undo another admin: the form loaded Warn, the server has since become Enforce, and an unrelated edit leaves it alone', async () => {
+    providerSettings.current = saved   // this form loads Warn only
+    const user = await openProviderSettings()
+    providerSettings.current = { ...saved, medicationCompetencyMode: 'Enforce' }   // another admin sets Enforce; the query refetches, the open form does not reset
+
+    await user.type(screen.getByText('Manager Phone').nextElementSibling as HTMLInputElement, '0412000111')
+    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+
+    expect(mockUpsertMutate.mock.calls[0][0]).not.toHaveProperty('medicationCompetencyMode')
+  })
+
+  it('does not send the mode when it was changed and changed back to the value that loaded', async () => {
+    providerSettings.current = saved
+    const user = await openProviderSettings()
+
+    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
+    await user.click(screen.getByRole('option', { name: 'Enforce' }))
+    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
+    await user.click(screen.getByRole('option', { name: 'Warn only' }))
+    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+
+    expect(mockUpsertMutate.mock.calls[0][0]).not.toHaveProperty('medicationCompetencyMode')
+  })
+
+  it('sends a change once: after it saved, a later save of something else does not send the mode again', async () => {
+    providerSettings.current = saved
+    mockUpsertMutate.mockImplementation((_body, opts) => opts?.onSuccess?.())
+    const user = await openProviderSettings()
+
+    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
+    await user.click(screen.getByRole('option', { name: 'Enforce' }))
+    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+    await user.type(screen.getByText('Manager Phone').nextElementSibling as HTMLInputElement, '0412000111')
+    await user.click(screen.getByRole('button', { name: /^save/i }))   // the label reads Saved! for two seconds after a save
+
+    expect(mockUpsertMutate).toHaveBeenCalledTimes(2)
+    expect(mockUpsertMutate.mock.calls[0][0]).toHaveProperty('medicationCompetencyMode', 'Enforce')
+    expect(mockUpsertMutate.mock.calls[1][0]).not.toHaveProperty('medicationCompetencyMode')
+  })
+
+  it('still sends the change after a rejected save, so a retry is not silently dropped', async () => {
+    providerSettings.current = saved
+    mockUpsertMutate.mockImplementationOnce((_body, opts) => opts?.onError?.({ response: { status: 500, data: {} } }))
+    const user = await openProviderSettings()
+
+    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
+    await user.click(screen.getByRole('option', { name: 'Enforce' }))
+    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+
+    expect(mockUpsertMutate).toHaveBeenCalledTimes(2)
+    expect(mockUpsertMutate.mock.calls[1][0]).toHaveProperty('medicationCompetencyMode', 'Enforce')
+  })
+
   it('is read-only for a role that cannot edit provider settings', async () => {
     mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false })
     providerSettings.current = saved

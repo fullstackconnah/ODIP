@@ -48,6 +48,9 @@ export interface UpsertProviderSettingsDto {
    * field is present, so echoing the loaded value back from a stale tab would silently revert another admin's change.
    */
   participantReadinessMode?: ParticipantReadinessMode
-  /** Omit to leave the setting as it is: saving the other fields from a client that does not know it must not reset Enforce to Warn. */
+  /** Omit to leave the setting as it is: saving the other fields from a client that does not know it must not reset Enforce to Warn. Send it ONLY
+   * when the user changed it from the value the form loaded: it is last-write-wins and a form is not refreshed while it is open, so a stale value
+   * would silently undo another admin's change. Only Warn and Enforce are accepted (400 otherwise). A request that changes the stored mode writes one
+   * audit row (who, old, new). */
   medicationCompetencyMode?: MedicationCompetencyMode
 }

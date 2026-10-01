@@ -89,10 +89,11 @@ function putBody(nth = 0): Record<string, unknown> {
   return call[1] as Record<string, unknown>
 }
 
-/** The loaded row as the form PUTs it back: every field, minus the readiness check. */
+/** The loaded row as the form PUTs it back: every field, minus the two mode checks (each is sent only when the user changed it). */
 function loadedBodyWithoutMode(overrides: Partial<ProviderSettingsDto> = {}) {
   const row: Partial<ProviderSettingsDto> = { ...makeSettings(), ...overrides }
   delete row.participantReadinessMode
+  delete row.medicationCompetencyMode
   return row
 }
 

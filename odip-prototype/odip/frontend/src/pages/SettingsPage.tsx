@@ -301,6 +301,10 @@ function ProviderSettingsTab() {
   const { data: settings, isLoading } = useProviderSettings()
   const upsert = useUpsertProviderSettings()
   const [form, setForm] = useState<Partial<ProviderSettingsDto>>({})
+  // The medication competency mode this form LOADED (and, after a save, last saved). The mode is last-write-wins on the server and nothing refreshes
+  // this form while it is open, so it is sent only when the user changed it from this value: re-sending a stale one would silently undo another
+  // admin's change (and, being a medication-safety control, nothing would say so).
+  const [loadedMode, setLoadedMode] = useState<MedicationCompetencyMode>('Warn')
   const [init, setInit] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -317,7 +321,7 @@ function ProviderSettingsTab() {
   const shownMode = pickedMode ?? serverMode
   const modeChanged = pickedMode !== null && pickedMode !== serverMode
 
-  if (settings && !init) { setForm(settings); setInit(true) }
+  if (settings && !init) { setForm(settings); setLoadedMode(settings.medicationCompetencyMode ?? 'Warn'); setInit(true) }
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(dirty)
 
@@ -335,15 +339,17 @@ function ProviderSettingsTab() {
 
   function handleSave() {
     setError(null)
-    // `form` is the whole GET response, so it carries `participantReadinessMode` as it was when this tab loaded. That must never go back up
-    // as it is: the server changes the mode whenever the field is present, so a stale tab saving an unrelated field (a manager name) would
-    // silently revert a mode another admin has since set. Strip it, then add it back only for a deliberate change.
+    // `form` is the whole GET response, so it carries BOTH modes as they were when this tab loaded. Neither may go back up as it is: the server
+    // changes a mode whenever its field is present, so a stale tab saving an unrelated field (a manager name) would silently revert a mode
+    // another admin has since set. Strip both, then add each back only for a deliberate change.
     const body: Partial<ProviderSettingsDto> = { ...form }
     delete body.participantReadinessMode
+    const chosenMode = form.medicationCompetencyMode ?? 'Warn'
+    if (chosenMode === loadedMode) delete body.medicationCompetencyMode   // untouched: leave the server value alone
     const payload = body as UpsertProviderSettingsDto
     if (modeChanged) payload.participantReadinessMode = shownMode
     upsert.mutate(payload, {
-      onSuccess: () => { setDirty(false); setSaved(true); setTimeout(() => setSaved(false), 2000) },
+      onSuccess: () => { setLoadedMode(chosenMode); setDirty(false); setSaved(true); setTimeout(() => setSaved(false), 2000) },
       onError: (err: unknown) => {
         const status = (err as AxiosError)?.response?.status
         if (status === 403) setError('Admin role is required to update provider settings. Ask an Admin to make this change.')
