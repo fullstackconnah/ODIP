@@ -85,7 +85,8 @@ public sealed record RecordAdministrationRequest(
 ///    against a true race.
 /// 3. <b>Temporal validation (422).</b> An Administered dose is refused when the slot is more than <see cref="EarlyAdministrationMinutes"/>
 ///    minutes away (ADMINISTRATION_TOO_EARLY), and a supplied <c>administeredAt</c> must lie between the earliest the dose could have been given
-///    (the shift's actual start on the portal path, the start of the slot's provider-local day on the MAR path) and now plus
+///    (the shift's actual start on the portal path; on the MAR path the start of the slot's provider-local day, or an hour before the slot when that
+///    is earlier, so a slot just after midnight can be charted in the hour before it) and now plus
 ///    <see cref="ClockSkewMinutes"/> (ADMINISTRATION_TIME_OUT_OF_RANGE). All comparisons are on UTC instants; times in messages are provider-local.
 /// 4. <b>One ACTIVE record per scheduled dose slot.</b> For a scheduled dose (ScheduledAt set), an active record that already
 ///    exists for (medication, ScheduledAt) blocks a second one: <see cref="RecordAdministrationOutcome.AlreadyRecorded"/>
@@ -516,8 +517,9 @@ public sealed class MedicationAdministrationRecorder
     /// <summary>
     /// The temporal rules. (1) An Administered scheduled dose is refused when its slot is more than <see cref="EarlyAdministrationMinutes"/> minutes
     /// ahead of now (exactly 60 is allowed). (2) A supplied <c>administeredAt</c> (any status) must be no later than now + <see cref="ClockSkewMinutes"/>
-    /// and no earlier than the lower bound: the caller's (the shift's actual start), else the start of the slot's provider-local day, else none (PRN on
-    /// the MAR path has no slot to anchor to). Slots are provider-local wall clock and compared as UTC instants; messages show provider-local time.
+    /// and no earlier than the lower bound: the caller's (the shift's actual start), else the start of the slot's provider-local day or an hour before
+    /// the slot when that is earlier (a slot in the first hour after midnight), else none (PRN on the MAR path has no slot to anchor to). Slots are
+    /// provider-local wall clock and compared as UTC instants; messages show provider-local time.
     /// </summary>
     private static RecordAdministrationResult? ValidateTimes(
         CreateAdministrationDto dto, DateTime? callerLowerBoundUtc, DateTime nowUtc, TimeZoneInfo zone)
@@ -552,8 +554,22 @@ public sealed class MedicationAdministrationRecorder
             }
             else if (dto.ScheduledAt is { } scheduled)
             {
-                lowerUtc = ProviderLocalTime.LocalToUtc(scheduled.Date, zone);
-                lowerWhat = $"the start of {scheduled.Date.ToString("d MMM", System.Globalization.CultureInfo.InvariantCulture)}, the day this dose was scheduled for";
+                // The start of the slot's calendar day - or an hour before the slot when that is EARLIER: the early rule above lets a dose be given up to
+                // EarlyAdministrationMinutes before its slot, and for a slot in the first hour after midnight that is the previous day. Without this a
+                // 00:30 dose given and charted at 23:55 passed the early rule and was then refused for being before the start of its day.
+                var dayStartUtc = ProviderLocalTime.LocalToUtc(scheduled.Date, zone);
+                var earliestAllowed = scheduled.AddMinutes(-EarlyAdministrationMinutes);
+                var earlyWindowUtc = ProviderLocalTime.LocalToUtc(earliestAllowed, zone);
+                if (earlyWindowUtc < dayStartUtc)
+                {
+                    lowerUtc = earlyWindowUtc;
+                    lowerWhat = $"{FormatLocal(earliestAllowed, nowLocal)}, an hour before this dose was due";
+                }
+                else
+                {
+                    lowerUtc = dayStartUtc;
+                    lowerWhat = $"the start of {scheduled.Date.ToString("d MMM", System.Globalization.CultureInfo.InvariantCulture)}, the day this dose was scheduled for";
+                }
             }
             if (lowerUtc is { } lower && givenUtc < lower)
             {

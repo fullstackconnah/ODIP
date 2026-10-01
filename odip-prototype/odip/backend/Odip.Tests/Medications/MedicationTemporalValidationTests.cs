@@ -238,6 +238,68 @@ public class MedicationTemporalValidationTests
         Assert.Equal(200, Status(onTheMinute));
     }
 
+    // ── a slot in the first hour after midnight: the early window reaches into the previous day (review 3 finding m1) ──
+
+    /// <summary>A fixture whose clock is the given Sydney wall-clock time (AEST = UTC+10), by default on the evening of Mon 13 July.</summary>
+    private static ShiftPackageFixture CreateAtLocal(int hour, int minute, int day = 13) =>
+        Create(now: new DateTimeOffset(2026, 7, day, hour, minute, 0, TimeSpan.FromHours(10)));
+
+    [Fact]
+    public async Task OnTheMar_AMidnightSlot_ChartedAt2345TheDayBefore_Is200_AndAt2259Is422TooEarly()
+    {
+        // The slot is 00:30 on Tue 14 July. 23:45 on the 13th is 45 minutes early: inside the 60-minute window, and the time it was given
+        // (23:45, the previous day) must not then be refused for being before the start of the slot's day.
+        var fine = CreateAtLocal(23, 45);
+        var med = AddMed(fine, "00:30");
+        var tooEarly = CreateAtLocal(22, 59);   // 91 minutes before the slot
+        var earlyMed = AddMed(tooEarly, "00:30");
+
+        var charted = await Mar(fine).RecordAdministration(med.Id, Dose(Local(0, 30), administeredAt: NowUtc(fine)), default);
+        var refused = await Mar(tooEarly).RecordAdministration(earlyMed.Id, Dose(Local(0, 30), administeredAt: NowUtc(tooEarly)), default);
+
+        Assert.Equal(200, Status(charted));
+        Assert.Equal(NowUtc(fine), Body(charted).Data!.AdministeredAt);   // charted at 23:45, not "00:01"
+        Assert.Equal(422, Status(refused));
+        Assert.Equal(MedicationErrorCodes.AdministrationTooEarly, Body(refused).Code);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 23, 0)]    // a 00:00 slot: the window opens at 23:00 the day before
+    [InlineData(0, 30, 23, 30)]
+    [InlineData(0, 59, 23, 59)]
+    public async Task OnTheMar_TheWindowOpensAnHourBeforeAMidnightSlot_AndNotBefore(int slotHour, int slotMinute, int boundHour, int boundMinute)
+    {
+        var f = CreateAtLocal(boundHour, boundMinute);   // the clock is exactly at the earliest allowed time
+        var med = AddMed(f, $"{slotHour:00}:{slotMinute:00}");
+
+        // on the line: allowed (the early rule allows exactly 60 minutes, and so does the lower bound)
+        var onTheLine = await Mar(f).RecordAdministration(med.Id, Dose(Local(slotHour, slotMinute), administeredAt: NowUtc(f)), default);
+        // a minute before the window: the clock a minute earlier is outside the early window, and a supplied time a minute before the bound is out of range
+        var beforeTheWindow = await Mar(f).RecordAdministration(
+            med.Id, Dose(Local(slotHour, slotMinute), MedicationAdministrationStatus.Refused, administeredAt: NowUtc(f).AddMinutes(-1)), default);
+
+        Assert.Equal(200, Status(onTheLine));
+        Assert.Equal(422, Status(beforeTheWindow));
+        Assert.Equal(MedicationErrorCodes.AdministrationTimeOutOfRange, Body(beforeTheWindow).Code);
+        Assert.Contains($"{boundHour:00}:{boundMinute:00}", Assert.Single(Body(beforeTheWindow).Errors!));   // names the bound, provider-local
+    }
+
+    [Fact]
+    public async Task OnTheMar_ASlotFurtherIntoTheDay_StillHasTheStartOfItsDayAsTheBound()
+    {
+        // A 01:30 slot: an hour before it is 00:30, which is not before the start of the day, so the day start (00:00) stays the bound.
+        var f = CreateAtLocal(1, 0, day: 14);   // 01:00 on the 14th, half an hour before the slot
+        var med = AddMed(f, "01:30");
+        var dayStart = new DateTime(2026, 7, 13, 14, 0, 0, DateTimeKind.Utc);   // 14 Jul 00:00 Sydney
+
+        var beforeDayStart = await Mar(f).RecordAdministration(med.Id, Dose(Local(1, 30), MedicationAdministrationStatus.Missed, administeredAt: dayStart.AddMinutes(-1)), default);
+        var onDayStart = await Mar(f).RecordAdministration(med.Id, Dose(Local(1, 30), MedicationAdministrationStatus.Refused, administeredAt: dayStart), default);
+
+        Assert.Equal(422, Status(beforeDayStart));
+        Assert.Contains("start of 14 Jul", Assert.Single(Body(beforeDayStart).Errors!));
+        Assert.Equal(200, Status(onDayStart));
+    }
+
     [Fact]
     public async Task OnTheMar_APrnDoseHasNoSlotToAnchorTo_SoOnlyTheFutureBoundApplies()
     {
