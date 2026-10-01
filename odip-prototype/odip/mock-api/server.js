@@ -722,6 +722,8 @@ function portalParticipantSummary(participantId) {
 // time has ARRIVED (a slot flagged `upcoming` in the fixtures does not - it is handed over) and only
 // for a worker who can record doses. A slot takes one record; an idempotencyKey may only be reused for
 // the SAME dose (medication, slot, outcome) - anything else is 400 ADMINISTRATION_IDEMPOTENCY_KEY_REUSED.
+// The one exception to a slot taking one record: an Administered record supersedes an active Refused or Missed one (the earlier record is
+// kept as history in `superseded`, the slot reads the new one).
 // Null members are written as explicit nulls (the real API marks every nullable shift-package member
 // [JsonIgnore(Never)]); an error envelope omits the members it does not use, like the real ApiResponse.
 //
@@ -904,7 +906,7 @@ const shiftPackageState = {}
 function pkgState(shiftId) {
   if (!shiftPackageState[shiftId]) {
     shiftPackageState[shiftId] = {
-      status: null, completion: null, breaks: null, administrations: {}, keys: {}, prnGiven: [], handoverReadAt: null, n: 0,
+      status: null, completion: null, breaks: null, administrations: {}, keys: {}, prnGiven: [], superseded: [], handoverReadAt: null, n: 0,
     }
   }
   return shiftPackageState[shiftId]
@@ -1175,11 +1177,14 @@ const packageRoutesPost = [
 
     const key = `${medicationId}|${slotDef.at}`
     const existing = st.administrations[key] || (slotDef.recorded ? prefilledAdministration(shiftId, slotDef) : null)
-    if (existing) return respond(409, failEnvelope(existing, ['This dose has already been recorded.'], 'ADMINISTRATION_ALREADY_RECORDED'))
+    // One ACTIVE record per slot. The one exception: an Administered record supersedes an active Refused or Missed one (kept as history).
+    const supersedes = !!existing && body.status === 'Administered' && (existing.status === 'Refused' || existing.status === 'Missed')
+    if (existing && !supersedes) return respond(409, failEnvelope(existing, ['This dose has already been recorded.'], 'ADMINISTRATION_ALREADY_RECORDED'))
     if (slotDef.isHighRisk && body.status === 'Administered' && !body.witnessStaffId && !body.witnessName) {
       return respond(400, failEnvelope(null, ['A witness is required for high-risk medication administration.'], null))
     }
     const record = administrationFromBody(shiftId, slotDef, body, slotDef.at)
+    if (supersedes) st.superseded.push({ ...existing, supersededByAdministrationId: record.id })
     st.administrations[key] = record
     if (body.idempotencyKey) st.keys[body.idempotencyKey] = record
     return record

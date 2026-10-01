@@ -300,7 +300,8 @@ export const SHIFT_PACKAGE_ERROR_CODES = {
   competencyMissing: 'MEDICATION_COMPETENCY_MISSING',
   competencyExpired: 'MEDICATION_COMPETENCY_EXPIRED',
   competencyUnverifiable: 'MEDICATION_COMPETENCY_UNVERIFIABLE',
-  /** 409 on recording a dose — the slot already has a record; `data` is that record (an AdministrationDto). */
+  /** 409 on recording a dose — the slot already has an ACTIVE record this request cannot supersede (only an Administered record supersedes a
+   * Refused or Missed one); `data` is that record (an AdministrationDto). */
   administrationAlreadyRecorded: 'ADMINISTRATION_ALREADY_RECORDED',
   /** 400 — the idempotency key was used for a different medication. */
   idempotencyKeyReused: 'ADMINISTRATION_IDEMPOTENCY_KEY_REUSED',
