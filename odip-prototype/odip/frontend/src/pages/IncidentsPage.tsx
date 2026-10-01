@@ -1,6 +1,7 @@
 import { useIncidents, useUpdateIncident, useDeleteIncident, useOverdueQscIncidents, useFlaggedShiftNotes } from '@/api/hooks'
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import type { IncidentListDto, FlaggedShiftNoteDto } from '@/api/types'
+import { INCIDENT_STATUS_LABELS } from '@/api/types/enums'
 import { CellText, DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -280,7 +281,7 @@ export default function IncidentsPage() {
       ) : (i.involvedParticipantName ?? '—'),
     },
     { key: 'severity', header: 'Severity', sortable: true, render: (i) => <StatusBadge status={i.severity} /> },
-    { key: 'status', header: 'Status', sortable: true, render: (i) => <StatusBadge status={i.status} /> },
+    { key: 'status', header: 'Status', sortable: true, render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status] ?? i.status} /> },
     { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem' },
     { key: 'incidentDateTime', header: 'Date', type: 'date', sortable: true },
     {
