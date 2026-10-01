@@ -265,7 +265,9 @@ a.sign--mini:hover { transform: translateY(-2px); }
 .phone { width: min(280px, 100%); margin-inline: auto; padding: 10px; border-radius: 36px; background: #1b1c1a; box-shadow: 0 24px 40px -22px rgba(31, 45, 10, 0.7); }
 .phone img { display: block; width: 100%; height: auto; border-radius: 27px; }
 .screen--phone figcaption { justify-content: center; text-align: center; }
-.screen__hint { display: none; font-size: 0.875rem; color: var(--muted); }
+.screen__view { position: relative; }
+.screen__view[data-fade]::after { content: ""; position: absolute; top: 1px; right: 1px; bottom: 1px; width: 48px; border-radius: 0 9px 9px 0; background: linear-gradient(to right, rgba(255, 255, 255, 0), #fff 90%); pointer-events: none; }
+.screen__hint { display: none; margin-bottom: 8px; font-size: 0.875rem; color: var(--muted); }
 .screen__frame:focus-visible { outline-offset: 2px; }
 
 /* ---------- The fork: the category contrast, no product names ---------- */

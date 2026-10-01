@@ -193,3 +193,11 @@ describe('structure, actions and accessibility', () => {
     expect(indexHtml).toMatch(/<!-- TODO\(release\): name the collector/)
   })
 })
+
+describe('finish-review corrections', () => {
+  it('names the header call to action at every width (the short label is not hidden from assistive tech)', () => {
+    const cta = doc.querySelector('.site-header a[href="#early-access"]')!
+    expect(cta.getAttribute('aria-label')).toBe('Request early access')
+    expect(cta.querySelector('.cta-short')!.hasAttribute('aria-hidden')).toBe(false)
+  })
+})
