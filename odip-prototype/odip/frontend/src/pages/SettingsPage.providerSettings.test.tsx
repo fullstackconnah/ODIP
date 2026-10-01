@@ -372,3 +372,127 @@ describe('Provider Settings — a refused save', () => {
     expect(await screen.findByText(/validation failed — check registration number, abn, organisation name and address are filled in/i)).toBeInTheDocument()
   })
 })
+
+describe('Provider Settings — the two mode controls together (participant readiness and medication competency)', () => {
+  const competencyControl = () => screen.getByRole('button', { name: /medication competency check/i })
+
+  async function pickCompetency(user: ReturnType<typeof userEvent.setup>, label: 'Warn only' | 'Enforce') {
+    await user.click(competencyControl())
+    await user.click(screen.getByRole('option', { name: label }))
+  }
+
+  it('shows both controls, each reading its own stored value', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Warn' })
+    renderProviderSettings()
+    await openProviderSettings(user)
+
+    expect(screen.getByRole('heading', { name: 'Participant readiness check' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Medication Competency' })).toBeInTheDocument()
+    expect(modeRadio('Enforce')).toHaveAttribute('aria-checked', 'true')
+    expect(competencyControl()).toHaveTextContent('Warn only')
+  })
+
+  it('editing only the manager name sends neither mode, whatever either is set to on the server', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+    renderProviderSettings()
+    await openProviderSettings(user)
+
+    await user.clear(managerNameInput())
+    await user.type(managerNameInput(), 'Alex Morgan')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).not.toHaveProperty('participantReadinessMode')
+    expect(putBody()).not.toHaveProperty('medicationCompetencyMode')
+    expect(putBody()).toEqual(loadedBodyWithoutMode({ managerName: 'Alex Morgan' }))
+    expect(server?.participantReadinessMode).toBe('Enforce')
+    expect(server?.medicationCompetencyMode).toBe('Enforce')
+  })
+
+  it('changing only the competency check sends only that mode, and leaves the readiness check on the server alone', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ participantReadinessMode: 'Enforce' })
+    renderProviderSettings()
+    await openProviderSettings(user)
+
+    await pickCompetency(user, 'Enforce')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual({ ...loadedBodyWithoutMode(), medicationCompetencyMode: 'Enforce' })
+    expect(server?.medicationCompetencyMode).toBe('Enforce')
+    expect(server?.participantReadinessMode).toBe('Enforce')
+  })
+
+  it('changing only the readiness check sends only that mode, and leaves the competency check on the server alone', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ medicationCompetencyMode: 'Enforce' })
+    renderProviderSettings()
+    await openProviderSettings(user)
+
+    await user.click(modeRadio('Enforce'))
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual({ ...loadedBodyWithoutMode(), participantReadinessMode: 'Enforce' })
+    expect(server?.participantReadinessMode).toBe('Enforce')
+    expect(server?.medicationCompetencyMode).toBe('Enforce')
+  })
+
+  it('changing both sends both together with every other field', async () => {
+    const user = userEvent.setup()
+    renderProviderSettings()
+    await openProviderSettings(user)
+
+    await user.click(modeRadio('Enforce'))
+    await pickCompetency(user, 'Enforce')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual({ ...loadedBodyWithoutMode(), participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+    expect(server?.participantReadinessMode).toBe('Enforce')
+    expect(server?.medicationCompetencyMode).toBe('Enforce')
+    await screen.findByText('Saved!')
+  })
+
+  it('a tab that went stale cannot revert either mode another admin set: an unrelated save sends neither', async () => {
+    const user = userEvent.setup()
+    renderProviderSettings()
+    await openProviderSettings(user)
+
+    // Another admin switches both checks to Enforce while this tab sits there still showing what it loaded (Warn and Warn).
+    server = makeSettings({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+    await user.clear(managerNameInput())
+    await user.type(managerNameInput(), 'Alex Morgan')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).not.toHaveProperty('participantReadinessMode')
+    expect(putBody()).not.toHaveProperty('medicationCompetencyMode')
+    expect(server?.participantReadinessMode).toBe('Enforce')
+    expect(server?.medicationCompetencyMode).toBe('Enforce')
+  })
+
+  it('after a rejected save both choices survive, and the retry sends both', async () => {
+    const user = userEvent.setup()
+    mockApiPut.mockRejectedValueOnce({ response: { status: 500, data: {} } })
+    renderProviderSettings()
+    await openProviderSettings(user)
+
+    await user.click(modeRadio('Enforce'))
+    await pickCompetency(user, 'Enforce')
+    await user.click(saveButton())
+    expect(await screen.findByText(/failed to save/i)).toBeInTheDocument()
+    expect(modeRadio('Enforce')).toHaveAttribute('aria-checked', 'true')
+    expect(competencyControl()).toHaveTextContent('Enforce')
+
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(putBody(1)).toEqual({ ...loadedBodyWithoutMode(), participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+    expect(server?.participantReadinessMode).toBe('Enforce')
+    expect(server?.medicationCompetencyMode).toBe('Enforce')
+  })
+})
