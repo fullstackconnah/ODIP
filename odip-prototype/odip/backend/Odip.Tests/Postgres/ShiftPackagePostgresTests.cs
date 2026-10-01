@@ -221,6 +221,9 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         }
         await using (var flagged = new NpgsqlCommand("SELECT count(*) FROM \"MedicationAdministrations\" WHERE \"RecordedWithoutCompetency\"", after))
             Assert.Equal(0L, await flagged.ExecuteScalarAsync());
+        // The routine-tick table is new and empty: nothing existing can violate its indexes.
+        await using (var ticks = new NpgsqlCommand("SELECT count(*) FROM \"ShiftRoutineChecks\"", after))
+            Assert.Equal(0L, await ticks.ExecuteScalarAsync());
         // And no existing record reads as superseded: the new link column starts NULL (every existing record is an active record).
         await using (var superseded = new NpgsqlCommand("SELECT count(*) FROM \"MedicationAdministrations\" WHERE \"SupersededByAdministrationId\" IS NOT NULL", after))
             Assert.Equal(0L, await superseded.ExecuteScalarAsync());
@@ -613,6 +616,128 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         Assert.All(outcomes, o => Assert.Equal(HandoverAckOutcome.Ok, o));
         await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
         Assert.Equal(1, await verify.HandoverAcknowledgements.CountAsync(a => a.SourceCompletionId == previousCompletion.Id && a.UserId == userId));
+    }
+
+    // ══════════════════════ routine ticks ══════════════════════
+
+    private static ParticipantRoutine NewRoutine(Guid participantId, string title, string? start, string? end) => new()
+    {
+        Id = Guid.NewGuid(), ParticipantId = participantId, Title = title, Description = "Details", IsActive = true, Days = ParticipantRoutineDays.All,
+        StartTime = start is null ? null : TimeOnly.Parse(start), EndTime = end is null ? null : TimeOnly.Parse(end),
+    };
+
+    private static ShiftRoutineCheck NewTick(Guid completionId, Guid routineId, DateTime? at, Guid userId) => new()
+    {
+        Id = Guid.NewGuid(), ShiftCompletionId = completionId, ParticipantRoutineId = routineId, ScheduledAt = at, CheckedByUserId = userId, CheckedAt = DateTime.UtcNow,
+    };
+
+    [SkippableFact]
+    public async Task RoutineTicks_AreUniquePerOccurrence_TimedAndUntimed_AndTheyCoexist_OnRealPostgres()
+    {
+        // The reason for TWO partial unique indexes: a plain unique index treats NULL ScheduledAt (an untimed routine) as distinct.
+        RequirePostgres();
+        var (db, _) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var (participantId, userId, _, completionId) = await SeedCompletionAsync(db);
+        var timed = NewRoutine(participantId, "Lunch", "12:00", "13:00");
+        var untimed = NewRoutine(participantId, "Allergy check", null, null);
+        db.ParticipantRoutines.AddRange(timed, untimed);
+        await db.SaveChangesAsync();
+        var noon = new DateTime(2026, 7, 14, 12, 0, 0);
+
+        db.ShiftRoutineChecks.AddRange(
+            NewTick(completionId, timed.Id, noon, userId), NewTick(completionId, timed.Id, noon.AddHours(1), userId),   // two occurrences of one routine: fine
+            NewTick(completionId, untimed.Id, null, userId));                                                           // an untimed routine, ticked once
+        await db.SaveChangesAsync();
+
+        db.ShiftRoutineChecks.Add(NewTick(completionId, timed.Id, noon, userId));
+        var dupTimed = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        Assert.Equal(ShiftRoutineCheck.UniqueTimedIndexName, Assert.IsType<PostgresException>(dupTimed.InnerException).ConstraintName);
+        db.ChangeTracker.Clear();
+
+        db.ShiftRoutineChecks.Add(NewTick(completionId, untimed.Id, null, userId));
+        var dupUntimed = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        Assert.Equal(ShiftRoutineCheck.UniqueUntimedIndexName, Assert.IsType<PostgresException>(dupUntimed.InnerException).ConstraintName);
+    }
+
+    [SkippableTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ConcurrentTicks_OnRealPostgres_LeaveOneRow_AndEveryCallSucceeds(bool timed)
+    {
+        // Eight double-taps at once: the unique-violation branch of ShiftRoutineCheckService.CheckAsync counts the tick as already there.
+        RequirePostgres();
+        var (setup, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _setup = setup;
+        var (participantId, userId, _, completionId) = await SeedCompletionAsync(setup);
+        var routine = timed ? NewRoutine(participantId, "Lunch", "12:00", "13:00") : NewRoutine(participantId, "Allergy check", null, null);
+        setup.ParticipantRoutines.Add(routine);
+        await setup.SaveChangesAsync();
+        DateTime? at = timed ? new DateTime(2026, 7, 14, 12, 0, 0) : null;
+
+        var done = await RaceAsync(tenantId, 8, async (db, _) =>
+        {
+            var completion = await db.ShiftCompletions.SingleAsync(c => c.Id == completionId);
+            await new ShiftRoutineCheckService(db).CheckAsync(completion, routine.Id, at, userId, default);
+            return true;
+        });
+
+        Assert.All(done, Assert.True);
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.Equal(1, await verify.ShiftRoutineChecks.CountAsync(c => c.ShiftCompletionId == completionId && c.ParticipantRoutineId == routine.Id));
+    }
+
+    [SkippableFact]
+    public async Task DeletingARoutine_RemovesItsTicks_SoTheExistingRoutineDeleteKeepsWorking_OnRealPostgres()
+    {
+        RequirePostgres();
+        var (db, _) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var (participantId, userId, _, completionId) = await SeedCompletionAsync(db);
+        var routine = NewRoutine(participantId, "Lunch", "12:00", "13:00");
+        db.ParticipantRoutines.Add(routine);
+        await db.SaveChangesAsync();
+        db.ShiftRoutineChecks.Add(NewTick(completionId, routine.Id, new DateTime(2026, 7, 14, 12, 0, 0), userId));
+        await db.SaveChangesAsync();
+
+        db.ParticipantRoutines.Remove(routine);
+        await db.SaveChangesAsync();   // would throw an FK violation if the ticks were Restrict
+
+        Assert.Empty(await db.ShiftRoutineChecks.Where(c => c.ShiftCompletionId == completionId).ToListAsync());
+    }
+
+    [SkippableFact]
+    public async Task TheRoutineTickEndpoints_RunOnNpgsql_IncludingTheNullOccurrenceComparison()
+    {
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), State = "NSW" });
+        var (participantId, userId, shiftId, _) = await SeedCompletionAsync(db);
+        var lunch = NewRoutine(participantId, "Lunch", "12:00", "13:00");
+        var allergy = NewRoutine(participantId, "Allergy check", null, null);
+        allergy.IsCritical = true;
+        db.ParticipantRoutines.AddRange(lunch, allergy);
+        await db.SaveChangesAsync();
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())], "Test");
+        var portal = new PortalController(db, TenantMock(tenantId).Object, clock: FakeClock.AtUtc(2026, 7, 14, 1, 0))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } },
+        };
+        PortalShiftDetailDto Of(ActionResult<ApiResponse<PortalShiftDetailDto>> r) =>
+            Assert.IsType<ApiResponse<PortalShiftDetailDto>>(Assert.IsType<OkObjectResult>(r.Result).Value).Data!;
+
+        var ticked = Of(await portal.CheckRoutine(shiftId, lunch.Id, default));
+        Of(await portal.CheckRoutine(shiftId, allergy.Id, default));
+        var twice = Of(await portal.CheckRoutine(shiftId, allergy.Id, default));   // the untimed one: NULL occurrence, idempotent
+
+        Assert.True(ticked.ShiftRoutines.Single(r => r.Title == "Lunch").IsChecked);
+        Assert.All(twice.ShiftRoutines, r => Assert.True(r.IsChecked));
+        Assert.Equal(2, await db.ShiftRoutineChecks.CountAsync());
+        var unticked = Of(await portal.UncheckRoutine(shiftId, allergy.Id, default));
+        Assert.False(unticked.ShiftRoutines.Single(r => r.Title == "Allergy check").IsChecked);
+        Assert.True(unticked.ShiftRoutines.Single(r => r.Title == "Lunch").IsChecked);
+        Assert.Equal(1, await db.ShiftRoutineChecks.CountAsync());
     }
 
     [SkippableFact]

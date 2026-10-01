@@ -58,6 +58,7 @@ public class PortalController : ControllerBase
     private readonly ShiftHandoverService _handover;
     private readonly ShiftPackageService _package;
     private readonly MedicationAdministrationRecorder _recorder;
+    private readonly ShiftRoutineCheckService _routineChecks;
 
     public PortalController(
         OdipDbContext db, ICurrentTenant currentTenant, IConfiguration? config = null,
@@ -67,7 +68,8 @@ public class PortalController : ControllerBase
         ShiftBreakService? breaks = null,
         ShiftHandoverService? handover = null,
         ShiftPackageService? package = null,
-        MedicationAdministrationRecorder? recorder = null)
+        MedicationAdministrationRecorder? recorder = null,
+        ShiftRoutineCheckService? routineChecks = null)
     {
         _db = db;
         _currentTenant = currentTenant;
@@ -79,6 +81,7 @@ public class PortalController : ControllerBase
         _handover = handover ?? new ShiftHandoverService(db, _clock);
         _package = package ?? new ShiftPackageService(db, new MedicationSlotService(db, _clock));
         _recorder = recorder ?? new MedicationAdministrationRecorder(db, _notificationRaiser, _obligationTasks, _clock);
+        _routineChecks = routineChecks ?? new ShiftRoutineCheckService(db, _clock);
     }
 
     private DateTime NowUtc => _clock.GetUtcNow().UtcDateTime;
@@ -200,7 +203,7 @@ public class PortalController : ControllerBase
         var providerToday = DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(NowUtc, provider.Zone));
         var contacts = showSensitive ? await _package.GetEmergencyContactsAsync(participant.Id, providerToday, ct) : null;
         var doses = await _package.GetDosesAsync(shift, provider, includePrn: true, ct);
-        var shiftRoutines = ShiftPackageService.MatchRoutines(shift, routines);
+        var shiftRoutines = ShiftPackageService.MatchRoutines(shift, routines, await _package.GetRoutineChecksAsync(activeCompletion?.Id, ct));
 
         // The End checklist: what would stop Finish right now (only meaningful while the shift is in progress). Derived from the dose
         // slots already fetched above, so the detail never queries them twice. In ENFORCE mode a worker without a current Medication
@@ -735,6 +738,54 @@ public class PortalController : ControllerBase
 
         return await ToBreakResponseAsync(shift!, await _breaks.DeleteAsync(completion!, breakId, ct), ct);
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // ROUTINE TICKS (persisted: a tick used to live only in the browser)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Ticks a routine done for the caller's OWN shift (InProgress only). The routine must be one of the routines matched to the shift's
+    /// rostered window (the <c>shiftRoutines</c> list), else 404 SHIFT_ROUTINE_NOT_FOUND. Idempotent: ticking again keeps the first who and when.
+    /// Returns the refreshed shift detail like every package write.
+    /// </summary>
+    [HttpPost("shifts/{id:guid}/routines/{routineId:guid}/check")]
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> CheckRoutine(Guid id, Guid routineId, CancellationToken ct)
+    {
+        var (shift, completion, error) = await ResolveInProgressShiftAsync(id, ct);
+        if (error is not null) return error;
+
+        var occurrence = await FindRoutineOccurrenceAsync(shift!, routineId, ct);
+        if (occurrence is null) return RoutineNotInShift();
+
+        await _routineChecks.CheckAsync(completion!, routineId, occurrence.OccursAtLocal, shift!.UserId!.Value, ct);
+        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+    }
+
+    /// <summary>Unticks a routine for the caller's OWN shift (InProgress only). Idempotent. The removal is audited.</summary>
+    [HttpDelete("shifts/{id:guid}/routines/{routineId:guid}/check")]
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> UncheckRoutine(Guid id, Guid routineId, CancellationToken ct)
+    {
+        var (shift, completion, error) = await ResolveInProgressShiftAsync(id, ct);
+        if (error is not null) return error;
+
+        var occurrence = await FindRoutineOccurrenceAsync(shift!, routineId, ct);
+        if (occurrence is null) return RoutineNotInShift();
+
+        await _routineChecks.UncheckAsync(completion!.Id, routineId, occurrence.OccursAtLocal, ct);
+        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift!, ct)));
+    }
+
+    /// <summary>The matched occurrence of one of the participant's ACTIVE routines in the shift's rostered window, or null when it is not in the window.</summary>
+    private async Task<Odip.Domain.Rostering.RoutineOccurrence?> FindRoutineOccurrenceAsync(Shift shift, Guid routineId, CancellationToken ct)
+    {
+        var routine = await _db.ParticipantRoutines.FirstOrDefaultAsync(r => r.Id == routineId && r.ParticipantId == shift.ParticipantId && r.IsActive, ct);
+        if (routine is null) return null;
+        var (windowStart, windowEnd) = ProviderLocalTime.RosteredWindowLocal(shift);
+        return Odip.Domain.Rostering.RoutineWindowMatcher.Match(new[] { routine }, windowStart, windowEnd).FirstOrDefault();
+    }
+
+    private ActionResult<ApiResponse<PortalShiftDetailDto>> RoutineNotInShift() =>
+        NotFound(ApiResponse<PortalShiftDetailDto>.Fail("This routine isn't part of this shift.", ShiftErrorCodes.ShiftRoutineNotFound));
 
     /// <summary>
     /// The caller's own shift, required to be InProgress with an active completion (the state every package write

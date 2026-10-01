@@ -356,7 +356,13 @@ public record PortalShiftRoutineDto(
     /// earlier) - the time to group it under. Null for an untimed critical routine ("Anytime").</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? OccursAt,
     /// <summary>The occurrence falls on the day AFTER the shift's service date (an overnight shift's early hours).</summary>
-    bool AfterMidnight);
+    bool AfterMidnight,
+    /// <summary>The worker ticked this routine done (persisted on the shift's completion: <c>POST portal/shifts/{id}/routines/{routineId}/check</c>).</summary>
+    bool IsChecked,
+    /// <summary>When it was ticked (UTC); explicit null when it is not.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? CheckedAt,
+    /// <summary>Who ticked it; explicit null when it is not.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? CheckedByName);
 
 /// <summary>
 /// The latest handover for a participant, as the next worker sees it. <see cref="Text"/> is null when the author wrote

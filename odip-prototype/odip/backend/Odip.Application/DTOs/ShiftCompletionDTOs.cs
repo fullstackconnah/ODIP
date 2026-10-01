@@ -133,7 +133,10 @@ public record ShiftCompletionReviewDto(
     IReadOnlyList<PortalDoseSlotDto> Doses,
     /// <summary>"As needed" (PRN) doses the submitting worker administered between the actual start and end.</summary>
     IReadOnlyList<ReviewPrnDoseDto> PrnDoses,
-    IReadOnlyList<ShiftNoteDto> Notes);
+    IReadOnlyList<ShiftNoteDto> Notes,
+    /// <summary>The routines matched to the rostered window, with the worker's tick state on this completion (<c>isChecked</c>, <c>checkedAt</c>,
+    /// <c>checkedByName</c>): critical first, then in time order. An unticked routine is one the worker did not tick off.</summary>
+    IReadOnlyList<PortalShiftRoutineDto> Routines);
 
 public record ReviewPrnDoseDto(
     Guid MedicationId,

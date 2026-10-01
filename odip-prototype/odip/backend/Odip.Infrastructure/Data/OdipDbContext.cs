@@ -114,6 +114,9 @@ public class OdipDbContext : DbContext
 
     /// <summary>The next worker marking a handover as read - see <see cref="Rostering.HandoverAcknowledgement"/>.</summary>
     public DbSet<HandoverAcknowledgement> HandoverAcknowledgements => Set<HandoverAcknowledgement>();
+
+    /// <summary>Routines a worker ticked off during a shift, hung off the active completion - see <see cref="Rostering.ShiftRoutineCheck"/>.</summary>
+    public DbSet<ShiftRoutineCheck> ShiftRoutineChecks => Set<ShiftRoutineCheck>();
     /// <summary>Staff leave + recurring unavailability: see <see cref="Entities.User"/>-scoped <see cref="LeaveRequest"/>.</summary>
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<RecurringUnavailability> RecurringUnavailabilities => Set<RecurringUnavailability>();
@@ -1293,6 +1296,31 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.TenantId, e.ShiftId });
         });
 
+        // ── ShiftRoutineCheck (shift package) ────────────────────────
+        modelBuilder.Entity<ShiftRoutineCheck>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            // Restrict: a completion's tick history must not be cascade-deleted out from under it (same idiom as ShiftBreak); the worker too.
+            entity.HasOne(e => e.ShiftCompletion).WithMany().HasForeignKey(e => e.ShiftCompletionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.CheckedByUser).WithMany().HasForeignKey(e => e.CheckedByUserId).OnDelete(DeleteBehavior.Restrict);
+            // Cascade: the routine endpoints hard-delete a routine, and that must keep working once it has been ticked on a shift.
+            entity.HasOne(e => e.ParticipantRoutine).WithMany().HasForeignKey(e => e.ParticipantRoutineId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.TenantId, e.ShiftCompletionId });
+
+            // One tick per (completion, routine, occurrence). A plain unique index treats NULL ScheduledAt (an untimed routine) as distinct, so
+            // there are two partial unique indexes: timed occurrences, and untimed routines.
+            entity.HasIndex(e => new { e.ShiftCompletionId, e.ParticipantRoutineId, e.ScheduledAt })
+                .IsUnique()
+                .HasDatabaseName(ShiftRoutineCheck.UniqueTimedIndexName)
+                .HasFilter("\"ScheduledAt\" IS NOT NULL");
+            entity.HasIndex(e => new { e.ShiftCompletionId, e.ParticipantRoutineId })
+                .IsUnique()
+                .HasDatabaseName(ShiftRoutineCheck.UniqueUntimedIndexName)
+                .HasFilter("\"ScheduledAt\" IS NULL");
+        });
+
         // ── LeaveRequest ─────────────────────────────────────────
         modelBuilder.Entity<LeaveRequest>(entity =>
         {
@@ -1879,6 +1907,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<HandoverAcknowledgement>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<HandoverAcknowledgement>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ShiftRoutineCheck>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ShiftRoutineCheck>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<LeaveRequest>()

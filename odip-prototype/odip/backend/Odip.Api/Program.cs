@@ -183,6 +183,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.MedicationSlotService>()
 builder.Services.AddScoped<Odip.Infrastructure.Services.MedicationAdministrationRecorder>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftBreakService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftHandoverService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftRoutineCheckService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftPackageService>();
 
 // ── Public Holiday Sync ───────────────────────────────────────

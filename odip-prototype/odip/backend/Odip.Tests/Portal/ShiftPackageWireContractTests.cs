@@ -113,7 +113,8 @@ public class ShiftPackageWireContractTests
         AssertExplicitNulls(data.GetProperty("prn")[0], "prn[0]",
             "strength", "directions", "indication", "maxDosesPer24h", "minIntervalMinutes", "lastDoseAt", "nextAvailableAt", "outcomePendingAdministrationId");
 
-        AssertExplicitNulls(data.GetProperty("shiftRoutines")[0], "shiftRoutines[0]", "startTime", "endTime", "occursAt");
+        AssertExplicitNulls(data.GetProperty("shiftRoutines")[0], "shiftRoutines[0]", "startTime", "endTime", "occursAt", "checkedAt", "checkedByName");
+        Assert.False(data.GetProperty("shiftRoutines")[0].GetProperty("isChecked").GetBoolean());
 
         AssertExplicitNulls(data.GetProperty("breaks")[0], "breaks[0]", "endedAt", "editedAt");
 

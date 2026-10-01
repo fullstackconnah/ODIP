@@ -39,4 +39,7 @@ public static class ShiftErrorCodes
     public const string ShiftHandoverNotFound = "SHIFT_HANDOVER_NOT_FOUND";
     public const string ShiftHandoverChanged = "SHIFT_HANDOVER_CHANGED";
     public const string ShiftHandoverConflict = "SHIFT_HANDOVER_CONFLICT";
+
+    /// <summary>404 on ticking or unticking a routine that is not one of the routines matched to this shift's window.</summary>
+    public const string ShiftRoutineNotFound = "SHIFT_ROUTINE_NOT_FOUND";
 }

@@ -76,6 +76,9 @@ public static class AuditedEntities
         // Handover acknowledgement (shift package): who marked a handover as read, and when - a compliance-adjacent
         // "did the next worker actually see this?" record, audited like the shift notes it comes from.
         typeof(HandoverAcknowledgement),
+        // A routine tick is the worker's record that a routine was done on a shift (and the untick, a removal of it): who and when is
+        // recoverable, like the breaks.
+        typeof(ShiftRoutineCheck),
 
         // Compliance-coverage report (item 11): these six were flagged as audited-entity gaps.
         // Restrictive practices, claims/line items, participant consent decisions, shift notes

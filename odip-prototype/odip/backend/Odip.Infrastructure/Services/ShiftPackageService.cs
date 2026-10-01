@@ -34,11 +34,13 @@ public sealed class ShiftPackageService
 {
     private readonly OdipDbContext _db;
     private readonly MedicationSlotService _slots;
+    private readonly ShiftRoutineCheckService _routineChecks;
 
-    public ShiftPackageService(OdipDbContext db, MedicationSlotService? slots = null)
+    public ShiftPackageService(OdipDbContext db, MedicationSlotService? slots = null, ShiftRoutineCheckService? routineChecks = null)
     {
         _db = db;
         _slots = slots ?? new MedicationSlotService(db);
+        _routineChecks = routineChecks ?? new ShiftRoutineCheckService(db);
     }
 
     // ═════════════════════════ End checklist ═════════════════════════
@@ -154,16 +156,29 @@ public sealed class ShiftPackageService
 
     // ═════════════════════════ Routines ═════════════════════════
 
-    /// <summary>The routines relevant to the shift's rostered window, matched on the server (overnight-safe).</summary>
-    public static List<PortalShiftRoutineDto> MatchRoutines(Shift shift, IEnumerable<ParticipantRoutine> activeRoutines)
+    /// <summary>
+    /// The routines relevant to the shift's rostered window, matched on the server (overnight-safe), each carrying the worker's tick
+    /// state from <paramref name="checks"/> (the ticks on the shift's completion; none when null).
+    /// </summary>
+    public static List<PortalShiftRoutineDto> MatchRoutines(
+        Shift shift, IEnumerable<ParticipantRoutine> activeRoutines, IReadOnlyCollection<RoutineCheckInfo>? checks = null)
     {
         var (windowStart, windowEnd) = ProviderLocalTime.RosteredWindowLocal(shift);
         return RoutineWindowMatcher.Match(activeRoutines, windowStart, windowEnd)
-            .Select(o => new PortalShiftRoutineDto(
-                o.Routine.Id, o.Routine.Title, o.Routine.Description, o.Routine.Category, o.Routine.IsCritical,
-                o.Routine.StartTime, o.Routine.EndTime, o.OccursAtLocal, o.AfterMidnight))
+            .Select(o =>
+            {
+                var check = checks?.FirstOrDefault(c => c.RoutineId == o.Routine.Id && c.ScheduledAt == o.OccursAtLocal);
+                return new PortalShiftRoutineDto(
+                    o.Routine.Id, o.Routine.Title, o.Routine.Description, o.Routine.Category, o.Routine.IsCritical,
+                    o.Routine.StartTime, o.Routine.EndTime, o.OccursAtLocal, o.AfterMidnight,
+                    IsChecked: check is not null, CheckedAt: ProviderLocalTime.AsUtc(check?.CheckedAt), CheckedByName: check?.CheckedByName);
+            })
             .ToList();
     }
+
+    /// <summary>The ticks on a completion (empty when there is no completion yet).</summary>
+    public Task<IReadOnlyList<RoutineCheckInfo>> GetRoutineChecksAsync(Guid? completionId, CancellationToken ct) =>
+        completionId is { } id ? _routineChecks.GetChecksAsync(id, ct) : Task.FromResult<IReadOnlyList<RoutineCheckInfo>>(Array.Empty<RoutineCheckInfo>());
 
     // ═════════════════════════ Need-to-know: at a glance and contacts ═════════════════════════
 
@@ -252,6 +267,10 @@ public sealed class ShiftPackageService
                 .GroupBy(r => r.NoteId)
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.CreatedAt).First().Id);
 
+        // The routines the worker was asked to do in this window, with what they ticked.
+        var activeRoutines = await _db.ParticipantRoutines.Where(r => r.ParticipantId == shift.ParticipantId && r.IsActive).ToListAsync(ct);
+        var routines = MatchRoutines(shift, activeRoutines, await _routineChecks.GetChecksAsync(completion.Id, ct));
+
         var participantName = shift.Participant?.FullName
             ?? await _db.Participants.Where(p => p.Id == shift.ParticipantId).Select(p => p.FirstName + " " + p.LastName).FirstOrDefaultAsync(ct)
             ?? string.Empty;
@@ -267,7 +286,8 @@ public sealed class ShiftPackageService
             notes.Select(n => new ShiftNoteDto(
                 n.Id, n.ShiftId, n.AuthorUserId, n.AuthorName, n.Body, n.CreatedAt, n.UpdatedAt,
                 ShiftNoteKeywordVocabulary.ToCategoryNames(n.FlaggedCategories), n.FlagsAcknowledgedAt,
-                incidentByNote.TryGetValue(n.Id, out var incidentId) ? incidentId : null)).ToList());
+                incidentByNote.TryGetValue(n.Id, out var incidentId) ? incidentId : null)).ToList(),
+            routines);
     }
 
     /// <summary>Blank or whitespace-only text is "not recorded": null, never an empty string.</summary>

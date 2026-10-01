@@ -155,6 +155,39 @@ public class ShiftCompletionReviewDtoTests
     }
 
     [Fact]
+    public async Task TheReviewListsTheRoutinesOfTheWindow_WithWhatTheWorkerTickedAndWhatTheyDidNot()
+    {
+        var a = Arrange();   // 09:00-17:00 on Tuesday 14 July
+        var tenant = a.Participant.TenantId;
+        var lunch = new ParticipantRoutine
+        {
+            Id = Guid.NewGuid(), TenantId = tenant, ParticipantId = a.Participant.Id, Title = "Lunch", Description = "Set up the plate.", Days = ParticipantRoutineDays.All,
+            StartTime = new TimeOnly(12, 0), EndTime = new TimeOnly(13, 0), IsActive = true,
+        };
+        var walk = new ParticipantRoutine
+        {
+            Id = Guid.NewGuid(), TenantId = tenant, ParticipantId = a.Participant.Id, Title = "Afternoon walk", Description = "Short walk.", Days = ParticipantRoutineDays.All,
+            StartTime = new TimeOnly(13, 30), EndTime = new TimeOnly(14, 30), IsActive = true,
+        };
+        a.Db.ParticipantRoutines.AddRange(lunch, walk);
+        a.Db.ShiftRoutineChecks.Add(new ShiftRoutineCheck
+        {
+            Id = Guid.NewGuid(), TenantId = tenant, ShiftCompletionId = a.Completion.Id, ParticipantRoutineId = lunch.Id, ScheduledAt = new DateTime(2026, 7, 14, 12, 0, 0),
+            CheckedByUserId = a.Worker.Id, CheckedAt = ActualStart.AddHours(3),
+        });
+        a.Db.SaveChanges();
+
+        var routines = Review(await a.Controller.GetShiftCompletionReview(a.Shift.Id, default)).Routines;
+
+        Assert.Equal(["Lunch", "Afternoon walk"], routines.Select(r => r.Title));
+        Assert.True(routines[0].IsChecked);
+        Assert.Equal("Ben Turner", routines[0].CheckedByName);
+        Assert.Equal(ActualStart.AddHours(3), routines[0].CheckedAt);
+        Assert.False(routines[1].IsChecked);   // the coordinator can see what the worker did NOT tick off
+        Assert.Null(routines[1].CheckedAt);
+    }
+
+    [Fact]
     public async Task EveryScheduledDoseInTheRosteredWindow_IsListedWithItsOutcome_AndUnrecordedOnesHaveNone()
     {
         var a = Arrange();
