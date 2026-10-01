@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { AlertTriangle, Check, ShieldAlert } from 'lucide-react'
 import type { RosterParticipantRowDto, ShiftDto } from '@/api/types'
+import { ReadinessNote } from '@/components/ReadinessNote'
 import { RosterDayCell } from './RosterDayCell'
 import { TripBar } from './TripBar'
 import { barOverlapsWeek, formatDayAccessibleName, RATIO_LABELS, rosterDayColumnsTemplate } from '../lib/roster'
@@ -53,6 +54,12 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
         (a longer one truncates, with its title). Below 1500px the 195px column keeps the same badge and gives
         the name ~96px, as it always did. There is no visually-hidden (sr-only) text: those 1px clip boxes are
         what a "clipped without an ellipsis" audit reports, and role="img" + aria-label announces the same thing.
+
+        A participant who is not fully ready also carries a readiness chip in the name group, after the name and the
+        marker. It is a quiet warning, never a block, and it must not cost the row its one line or its name: it is
+        `flex-1 min-w-6 max-w-max`, so it takes only the room the name leaves (up to its own text width, never stretched
+        past it), shrinks down to just its icon, and truncates with the whole text in its title. A row with nothing
+        missing renders no chip at all, so it is exactly the row above.
       */}
       <div className="sticky left-0 z-10 flex min-h-[var(--row-h)] items-center gap-2 border-b border-r border-border bg-card px-2">
         <div className="flex min-w-0 items-center gap-1">
@@ -68,6 +75,7 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
               <ShieldAlert className="h-3 w-3" aria-hidden="true" />
             </span>
           )}
+          <ReadinessNote issues={row.readinessIssues} variant="chip" className="h-5 min-w-6 max-w-max flex-1 rounded-sm px-1.5" />
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">

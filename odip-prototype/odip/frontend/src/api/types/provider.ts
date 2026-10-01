@@ -1,3 +1,10 @@
+/**
+ * How strictly the organisation gates participants that are not fully ready (intake, onboarding, signed agreement).
+ * `Warn` (the default): staff can roster, book and activate them and the gaps show as warnings.
+ * `Enforce`: the server refuses until they are ready.
+ */
+export type ParticipantReadinessMode = 'Warn' | 'Enforce'
+
 export interface ProviderSettingsDto {
   id: string
   registrationNumber: string
@@ -14,6 +21,8 @@ export interface ProviderSettingsDto {
   /** MED-02: primary manager contact — shown first by the (future) MED-01 missed-medication guidance. */
   managerName: string | null
   managerPhone: string | null
+  /** The org's participant-readiness check. The query can still resolve to `null` for an org with no row yet: treat that as `Warn`. */
+  participantReadinessMode: ParticipantReadinessMode
 }
 
 export interface UpsertProviderSettingsDto {
@@ -30,4 +39,9 @@ export interface UpsertProviderSettingsDto {
   invoiceFooterNotes?: string
   managerName?: string
   managerPhone?: string
+  /**
+   * Send this ONLY when the user deliberately changed the readiness check. The server changes the mode only when the
+   * field is present, so echoing the loaded value back from a stale tab would silently revert another admin's change.
+   */
+  participantReadinessMode?: ParticipantReadinessMode
 }

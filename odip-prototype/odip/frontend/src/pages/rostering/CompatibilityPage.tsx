@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Pencil, Users } from 'lucide-react'
+import { AlertTriangle, Pencil, Users, X } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { usePermissions } from '@/lib/permissions'
+import { extractErrorMessage } from '@/lib/utils'
 import { useParticipants, useStaff, useUpsertCompatibility } from '@/api/hooks'
 import type { CompatibilityLevel, CompatibilityRowDto } from '@/api/types'
 import { useCompatibilityMatrix } from './lib/useCompatibilityMatrix'
@@ -108,6 +111,9 @@ export default function CompatibilityPage() {
   // (or roll back — removed here, tracked in failedKeys — on failure).
   const [overrides, setOverrides] = useState<Map<string, CompatibilityRowDto>>(new Map())
   const [failedKeys, setFailedKeys] = useState<Set<string>>(new Set())
+  // Why the last edit was refused, in the server's words (e.g. Enforce mode's 400 "Participant is not ready for booking or rostering.").
+  // The rolled-back cell's icon only lasts 4s and says nothing, so this stays until dismissed or the next edit.
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [excludeDraft, setExcludeDraft] = useState<ExcludeDraft | null>(null)
 
   const isLoading = participantsLoading || staffLoading || matrix.isLoading
@@ -137,6 +143,7 @@ export default function CompatibilityPage() {
       next.delete(key)
       return next
     })
+    setSaveError(null)
 
     upsertCompatibility.mutate(
       { staffId: staffRef.id, participantId: participantRef.id, level, reason },
@@ -148,13 +155,14 @@ export default function CompatibilityPage() {
             return next
           })
         },
-        onError: () => {
+        onError: (err: unknown) => {
           // Roll back to whatever the server last confirmed for this cell.
           setOverrides(prev => {
             const next = new Map(prev)
             next.delete(key)
             return next
           })
+          setSaveError(extractErrorMessage(err, "Couldn't save that change. Please try again."))
           setFailedKeys(prev => new Set(prev).add(key))
           setTimeout(() => {
             setFailedKeys(prev => {
@@ -192,6 +200,19 @@ export default function CompatibilityPage() {
         title="Staff–participant compatibility"
         subtitle="Preferred and excluded pairings the roster board and conflict checks use when suggesting or warning about a match."
       />
+
+      {saveError && (
+        <Callout
+          tone="error"
+          actions={
+            <Button variant="ghost" size="sm" iconOnly onClick={() => setSaveError(null)} aria-label="Dismiss error">
+              <X className="h-4 w-4" />
+            </Button>
+          }
+        >
+          {saveError}
+        </Callout>
+      )}
 
       {isLoading && <CompatibilityMatrixSkeleton />}
 

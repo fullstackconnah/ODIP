@@ -6,10 +6,12 @@ import {
 } from '@dnd-kit/core'
 import { CalendarClock, X } from 'lucide-react'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { usePermissions } from '@/lib/permissions'
+import { extractErrorMessage } from '@/lib/utils'
 import { useRosterBoard, useAssignShift, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
 import type { ShiftDto, RosterFindingDto, RosterBoardDto } from '@/api/types'
 import {
@@ -45,6 +47,9 @@ export default function RosterBoardPage() {
   const [pendingAssign, setPendingAssign] = useState<PendingAssign | null>(null)
   const [pendingBlocked, setPendingBlocked] = useState<PendingBlocked | null>(null)
   const [overrideReasonDraft, setOverrideReasonDraft] = useState('')
+  // The server's refusal of an assign / unassign that is NOT the 422 findings protocol (e.g. Enforce mode's 400 "Participant is not ready
+  // for booking or rostering."). It used to be swallowed, leaving a drag that silently snapped back.
+  const [assignError, setAssignError] = useState<string | null>(null)
   const [hintDismissed, setHintDismissed] = useState(() => {
     try {
       return sessionStorage.getItem(HINT_DISMISSED_KEY) === '1'
@@ -65,6 +70,12 @@ export default function RosterBoardPage() {
 
   const participantOptions = useMemo(
     () => participants.map(p => ({ value: p.id, label: p.fullName })),
+    [participants],
+  )
+  // What is still missing per participant, for the slide-over's quiet warning line. Every listed participant gets an entry (an empty
+  // list is "ready"), so a fresh list wins over a shift's older snapshot of the same participant.
+  const participantReadiness = useMemo(
+    () => Object.fromEntries(participants.map(p => [p.id, p.readinessIssues ?? []])) as Record<string, string[]>,
     [participants],
   )
   const staffOptions = useMemo(() => staff.map(s => ({ value: s.id, label: s.fullName })), [staff])
@@ -110,13 +121,21 @@ export default function RosterBoardPage() {
   )
 
   async function performAssign(shift: ShiftDto, staffId: string | null, overrideReason: string | null = null, acknowledgedFindingCodes: string[] = []) {
+    setAssignError(null)
     try {
       await assignShift.mutateAsync({ id: shift.id, data: { staffId, overrideReason, acknowledgedFindingCodes } })
       setPendingAssign(null)
       setOverrideReasonDraft('')
     } catch (err: unknown) {
       const findings = getRosterFindings(err)
-      if (!findings) return
+      if (!findings) {
+        // Say what the server said. The "Assign anyway" dialog (the other way in here) closes first: its modal overlay would
+        // otherwise cover the banner, and a retry from it cannot fix a refusal that is not about findings.
+        setPendingAssign(null)
+        setOverrideReasonDraft('')
+        setAssignError(extractErrorMessage(err, 'Something went wrong assigning this shift. Please try again.'))
+        return
+      }
       const blocking = findings.filter(f => f.severity === 'Blocking')
       if (blocking.length > 0) {
         setPendingBlocked({ shift, findings })
@@ -204,6 +223,19 @@ export default function RosterBoardPage() {
         />
       </div>
 
+      {assignError && (
+        <Callout
+          tone="error"
+          actions={
+            <Button variant="ghost" size="sm" iconOnly onClick={() => setAssignError(null)} aria-label="Dismiss error">
+              <X className="h-4 w-4" />
+            </Button>
+          }
+        >
+          {assignError}
+        </Callout>
+      )}
+
       {isLoading && <RosterGridSkeleton days={days} />}
 
       {isError && (
@@ -276,6 +308,7 @@ export default function RosterBoardPage() {
         participantOptions={participantOptions}
         staffOptions={staffOptions}
         groupBy={groupBy}
+        participantReadiness={participantReadiness}
       />
 
       <ExceptionsDrawer

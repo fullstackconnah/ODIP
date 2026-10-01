@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
-import { CalendarClock, Pencil, Plus, Power, Repeat } from 'lucide-react'
+import { CalendarClock, Pencil, Plus, Power, Repeat, X } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DataTable, type Column } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { usePermissions } from '@/lib/permissions'
+import { extractErrorMessage } from '@/lib/utils'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { usePatterns, useUpdatePattern, useParticipants, useStaff } from '@/api/hooks'
 import type { ShiftPatternDto, CreateShiftPatternDto } from '@/api/types'
@@ -116,21 +118,34 @@ export default function PatternsPage() {
   const [slideOverTarget, setSlideOverTarget] = useState<PatternSlideOverTarget | null>(null)
   const [generateTarget, setGenerateTarget] = useState<ShiftPatternDto | null>(null)
   const [deactivateTarget, setDeactivateTarget] = useState<ShiftPatternDto | null>(null)
+  // The server's refusal of an activate / deactivate (e.g. Enforce mode's 400 "Participant is not ready for booking or rostering.").
+  // Both used to fail silently: the activate had no error handler and the deactivate was an unhandled rejection.
+  const [toggleError, setToggleError] = useState<string | null>(null)
 
   const participantOptions = useMemo(() => participants.map(p => ({ value: p.id, label: p.fullName })), [participants])
   const staffOptions = useMemo(() => staff.map(s => ({ value: s.id, label: s.fullName })), [staff])
 
   function handleToggleActive(pattern: ShiftPatternDto) {
+    setToggleError(null)
     if (pattern.isActive) {
       setDeactivateTarget(pattern)
     } else {
-      updatePattern.mutate({ id: pattern.id, data: { ...toPayload(pattern), isActive: true } })
+      updatePattern.mutate(
+        { id: pattern.id, data: { ...toPayload(pattern), isActive: true } },
+        { onError: (err: unknown) => setToggleError(extractErrorMessage(err, 'Something went wrong activating this pattern. Please try again.')) },
+      )
     }
   }
 
   async function handleConfirmDeactivate() {
     if (!deactivateTarget) return
-    await updatePattern.mutateAsync({ id: deactivateTarget.id, data: { ...toPayload(deactivateTarget), isActive: false } })
+    setToggleError(null)
+    try {
+      await updatePattern.mutateAsync({ id: deactivateTarget.id, data: { ...toPayload(deactivateTarget), isActive: false } })
+    } catch (err: unknown) {
+      setToggleError(extractErrorMessage(err, 'Something went wrong deactivating this pattern. Please try again.'))
+    }
+    // Closed either way: on a failure the banner is what the user needs to see, and the dialog's overlay would cover it.
     setDeactivateTarget(null)
   }
 
@@ -176,6 +191,19 @@ export default function PatternsPage() {
           </Button>
         )}
       />
+
+      {toggleError && (
+        <Callout
+          tone="error"
+          actions={
+            <Button variant="ghost" size="sm" iconOnly onClick={() => setToggleError(null)} aria-label="Dismiss error">
+              <X className="h-4 w-4" />
+            </Button>
+          }
+        >
+          {toggleError}
+        </Callout>
+      )}
 
       {isLoading && <PatternsSkeleton />}
 

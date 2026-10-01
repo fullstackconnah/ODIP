@@ -27,6 +27,7 @@ copying it.
 - [SearchInput](#searchinput)
 - [StatusBadge](#statusbadge)
 - [Tone system](#tone-system) (`lib/tone.ts`: `TONE`, `STATUS_TONE`, how a status gets its colour)
+- [ReadinessNote](#readinessnote) (a quiet, never-blocking "Not ready: …" warning, as a chip or a line)
 - [Deadline state](#deadline-state) (`lib/deadline.ts`, `lib/dateOnly.ts`, `lib/credentials.ts`: how close a dated deadline is, and its words)
 - [Format helpers](#format-helpers) (`lib/format.ts`: `plural`, `formatRatio`, `formatRelative`, the date-time formatters)
 - [Card](#card) / [StatCard](#statcard)
@@ -345,10 +346,14 @@ trigger-then-pick model is one interaction step simpler for a dozen items.
 medication administration status picker (Administered/Refused/Withheld/Missed).
 
 **Props**: `options: { key: string; label: string }[]`, `value: string`,
-`onChange: (key: string) => void`, `className`, `ariaLabel?: string`.
+`onChange: (key: string) => void`, `className`, `ariaLabel?: string`, `disabled?: boolean`.
 
-**States**: each option is selected/unselected; no disabled-per-option support today (add
-it if a consumer needs it rather than working around its absence).
+**States**: each option is selected/unselected. `disabled` locks the whole group, for a
+setting the user may read but not change (Provider Settings' "Participant readiness check"
+for a user who cannot edit provider settings): every radio is `disabled` (not focusable, not
+clickable), the group is `aria-disabled`, and the selected option still reads as selected.
+There is no per-option disabled today (add it if a consumer needs it rather than working
+around its absence).
 
 **Accessibility**: this is a *radio group*, not independent toggle buttons — every caller
 tracks one selected value from a fixed set, which is exactly `role="radiogroup"` +
@@ -558,6 +563,39 @@ or `danger`.** `--color-warning` is a fill, border and ring colour, never text o
 
 `src/test/toneContrast.test.ts` reads `src/index.css` and holds every solid pair and every soft wash with its ink to WCAG AA (4.5:1); it also ratchets down
 text still written in `--color-warning`. `lib/tone.test.ts` pins the class strings and the mappings (a trip status, a task priority and a plan type each have one).
+
+---
+
+## ReadinessNote
+
+`ReadinessNote.tsx`: a quiet note that a participant is not fully ready yet: **"Not ready: Intake not complete · No signed service agreement"**. An
+organisation chooses how strictly it gates such participants (Provider Settings, "Participant readiness check"). In **Warn** (the default) the server lets
+staff roster, book and activate a participant who is not fully ready and reports what is missing as `readinessIssues` (a `string[]`, omitted when nothing is
+missing); in **Enforce** it refuses with a 400 instead. This is how the Warn-mode gaps show.
+
+**Props**: `issues?: readonly string[] | null` (the server's words, shown verbatim), `variant?: 'chip' | 'line'` (default `'line'`), `className?`.
+
+| Variant | Looks like | Where it goes |
+|---|---|---|
+| `chip` | `TONE.warning.solid` pill (StatusBadge's 12px shape), one 20px line, `min-w-0 max-w-full`; the text `truncate`s with an ellipsis, and is all-or-nothing: with under about 3rem of room it wraps out of the clipped pill and the icon alone is centred (never a fragment of a letter) | A table row's name block (the roster board's participant row), a detail header's meta row beside the status badge (participant detail) |
+| `line` | `TONE.warning.ink` text on the card, no wash, wraps to at most three lines (`line-clamp-3`), `role="status"` (announced politely when it appears) | Under a field in a form: the shift panel's Participant field, the Add Booking modal's participant picker |
+
+Both carry the whole text in `title`, so a truncated chip can still be read, and an `AlertTriangle` that is `aria-hidden` (the words are the message; colour is
+never the only cue).
+
+**Informational, never blocks.** It renders nothing when `issues` is empty, `null` or `undefined`, so a ready participant looks exactly as before. It is not an
+alert (no `role="alert"`), it never disables or hides a control, and nothing reads the issues to gate a Save: the server decides whether a write is allowed.
+It uses the warning tone only: no new colour, and warning text is `TONE.warning.ink`, never `--color-warning`. `className` wins over the base classes (they go
+through `cn`), which is how the board row squares the chip up to its neighbours and has it take only the room the name leaves:
+`h-5 min-w-6 max-w-max flex-1 rounded-sm px-1.5`.
+
+```tsx
+<ReadinessNote issues={participant.readinessIssues} />                          {/* a line under a picker */}
+<ReadinessNote issues={participant.readinessIssues} variant="chip" />          {/* a chip beside a status badge */}
+```
+
+**When not to use**: a state that must stop the user or needs action now. That is an error `Callout` (an Enforce-mode refusal shows the server's own message,
+not a ReadinessNote). A dated deadline is `StatusBadge` with `deadlineLabel`, not this.
 
 ---
 

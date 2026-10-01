@@ -5,8 +5,9 @@ import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { ReadinessNote } from '@/components/ReadinessNote'
 import { TAP_ICON_SQUARE } from '@/components/tapArea'
-import { getStatusColor } from '@/lib/utils'
+import { getStatusColor, extractErrorMessage } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
 import { INSURANCE_STATUSES, type BookingStatus, type InsuranceStatus, type PaymentStatus, type SupportRatio } from '@/api/types/enums'
 import { Plus, X, AlertTriangle, Pencil, ExternalLink, Trash2, Download, Loader2 } from 'lucide-react'
@@ -115,6 +116,8 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
   // Filter out participants already booked on this trip
   const bookedParticipantIds = new Set(bookings.map((b: BookingListDto) => b.participantId))
   const availableParticipants = participants.filter((p: ParticipantListDto) => !bookedParticipantIds.has(p.id) && p.isActive)
+  // What is still missing for the picked participant: shown as a quiet line, never read by the Add Booking button.
+  const selectedParticipantIssues = participants.find((p: ParticipantListDto) => p.id === selectedParticipantId)?.readinessIssues
 
   // Auto-populate support fields when participant changes
   useEffect(() => {
@@ -275,6 +278,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                 {availableParticipants.length === 0 && (
                   <p className="text-xs text-[var(--color-muted-foreground)] mt-1">All active participants are already booked on this trip.</p>
                 )}
+                <ReadinessNote issues={selectedParticipantIssues} className="mt-1.5" />
               </div>
 
               {/* Booking Status */}
@@ -386,7 +390,11 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
 
               {/* Error */}
               {createBooking.isError && (
-                <p className="text-sm text-[var(--color-destructive)]">Failed to create booking. Please try again.</p>
+                // The server's own words when it sent any (e.g. Enforce mode's "Participant is not ready for booking or rostering."),
+                // the generic line only when it did not. The form above stays as the user left it.
+                <p role="alert" className="text-sm text-[var(--color-destructive)]">
+                  {extractErrorMessage(createBooking.error, 'Failed to create booking. Please try again.')}
+                </p>
               )}
 
               {/* Actions */}

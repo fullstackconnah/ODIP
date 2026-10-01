@@ -34,6 +34,9 @@ export interface BookingDetailDto extends BookingListDto {
   insuranceCoverageStart: string | null
   insuranceCoverageEnd: string | null
   isInsuranceValid: boolean
+  /** What is still missing for the booked participant, shown verbatim as a quiet warning. Present on the create
+   * response in Warn mode (the booking goes through); omitted by the server when nothing is missing. */
+  readinessIssues?: string[]
 }
 
 export interface CreateBookingDto {

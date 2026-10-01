@@ -21,6 +21,11 @@ export type ToggleGroupProps = {
    * this), so that shape must pass `ariaLabel` explicitly to get a real name at all.
    */
   ariaLabel?: string
+  /**
+   * Locks the whole group: every radio is `disabled` (not focusable, not clickable) and the group is `aria-disabled`, for a setting
+   * the user may read but not change. The selected option still reads as selected. There is no per-option disabled.
+   */
+  disabled?: boolean
 }
 
 // Every ToggleGroup caller passes a single tracked `value` and picks exactly one option — that's
@@ -28,7 +33,7 @@ export type ToggleGroupProps = {
 // what aria-pressed communicates). role="radiogroup"/"radio" + aria-checked matches what this
 // actually is, and gets a roving tabindex with arrow-key movement per the ARIA APG radio pattern
 // (Tab enters/exits the group once; Left/Right/Up/Down move — and select — within it).
-export function ToggleGroup({ options, value, onChange, className, ariaLabel }: ToggleGroupProps) {
+export function ToggleGroup({ options, value, onChange, className, ariaLabel, disabled }: ToggleGroupProps) {
   const selectedIndex = options.findIndex(opt => opt.key === value)
 
   function handleKeyDown(e: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -53,7 +58,7 @@ export function ToggleGroup({ options, value, onChange, className, ariaLabel }: 
   }
 
   return (
-    <div role="radiogroup" aria-label={ariaLabel} className={`flex gap-2 ${className ?? ''}`}>
+    <div role="radiogroup" aria-label={ariaLabel} aria-disabled={disabled || undefined} className={`flex gap-2 ${className ?? ''}`}>
       {options.map((opt, index) => {
         const checked = value === opt.key
         // Roving tabindex: only the checked option (or the first, if none matches) is a Tab stop;
@@ -66,13 +71,14 @@ export function ToggleGroup({ options, value, onChange, className, ariaLabel }: 
             role="radio"
             aria-checked={checked}
             tabIndex={isTabStop ? 0 : -1}
+            disabled={disabled}
             onClick={() => onChange(opt.key)}
             onKeyDown={e => handleKeyDown(e, index)}
             className={`h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${
               checked
                 ? 'bg-[var(--color-primary)] text-white'
-                : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]'
-            }`}
+                : `text-[var(--color-muted-foreground)] ${disabled ? '' : 'hover:bg-[var(--color-accent)]'}`
+            }${disabled ? ' cursor-not-allowed opacity-60' : ''}`}
           >
             {opt.label}
           </button>

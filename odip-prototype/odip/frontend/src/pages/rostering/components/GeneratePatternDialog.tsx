@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
 import { useGeneratePattern } from '@/api/hooks'
 import type { ShiftPatternDto, GeneratePatternResultDto } from '@/api/types'
 import { countPatternOccurrences } from '../lib/roster'
 import { plural } from '@/lib/format'
+import { extractErrorMessage } from '@/lib/utils'
 
 export type GeneratePatternDialogProps = {
   /** Null closes the dialog. Give it a `key` from the caller so state resets between targets. */
@@ -21,6 +23,7 @@ export function GeneratePatternDialog({ pattern, onClose }: GeneratePatternDialo
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [result, setResult] = useState<GeneratePatternResultDto | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const generatePattern = useGeneratePattern()
 
   if (!pattern) return null
@@ -35,8 +38,15 @@ export function GeneratePatternDialog({ pattern, onClose }: GeneratePatternDialo
 
   async function handleGenerate() {
     if (!pattern || !rangeValid) return
-    const counts = await generatePattern.mutateAsync({ id: pattern.id, from, to })
-    setResult(counts)
+    setError(null)
+    try {
+      const counts = await generatePattern.mutateAsync({ id: pattern.id, from, to })
+      setResult(counts)
+    } catch (err: unknown) {
+      // The server's own words when it sent any (e.g. Enforce mode's "Participant is not ready for booking or rostering."), the generic
+      // line only when it did not. This used to be an unhandled rejection: the dialog just sat there. The range the user picked stays.
+      setError(extractErrorMessage(err, 'Something went wrong generating these shifts. Please try again.'))
+    }
   }
 
   if (result) {
@@ -91,6 +101,7 @@ export function GeneratePatternDialog({ pattern, onClose }: GeneratePatternDialo
                 : `Up to ${plural(previewCount ?? 0, 'shift')} — fewer if some are already on the roster.`}
             </p>
           )}
+          {error && <Callout tone="error">{error}</Callout>}
         </>
       }
       footer={

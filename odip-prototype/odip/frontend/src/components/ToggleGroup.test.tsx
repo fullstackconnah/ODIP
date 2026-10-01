@@ -66,3 +66,43 @@ describe('ToggleGroup semantics', () => {
     expect(onChange).toHaveBeenCalledWith('a')
   })
 })
+
+describe('ToggleGroup disabled', () => {
+  it('locks every radio and marks the group aria-disabled, while the selected option still reads as selected', () => {
+    render(<ToggleGroup options={options} value="b" onChange={vi.fn()} disabled ariaLabel="Mode" />)
+
+    expect(screen.getByRole('radiogroup', { name: 'Mode' })).toHaveAttribute('aria-disabled', 'true')
+    for (const radio of screen.getAllByRole('radio')) expect(radio).toBeDisabled()
+    expect(screen.getByRole('radio', { name: 'Option B' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: 'Option A' })).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('never calls onChange for a click or an arrow key', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<ToggleGroup options={options} value="a" onChange={onChange} disabled />)
+
+    await user.click(screen.getByRole('radio', { name: 'Option C' }))
+    screen.getByRole('radio', { name: 'Option A' }).focus()
+    await user.keyboard('{ArrowRight}')
+
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('shows it: a not-allowed cursor and a dimmed group, with no hover fill on the unselected options', () => {
+    render(<ToggleGroup options={options} value="a" onChange={vi.fn()} disabled />)
+
+    const unselected = screen.getByRole('radio', { name: 'Option B' })
+    expect(unselected).toHaveClass('cursor-not-allowed', 'opacity-60')
+    expect(unselected.className).not.toMatch(/hover:bg-/)
+  })
+
+  it('is untouched when not disabled: enabled radios, no aria-disabled, the usual hover fill', () => {
+    render(<ToggleGroup options={options} value="a" onChange={vi.fn()} />)
+
+    expect(screen.getByRole('radiogroup')).not.toHaveAttribute('aria-disabled')
+    for (const radio of screen.getAllByRole('radio')) expect(radio).toBeEnabled()
+    expect(screen.getByRole('radio', { name: 'Option B' })).toHaveClass('hover:bg-[var(--color-accent)]')
+    expect(screen.getByRole('radio', { name: 'Option B' }).className).not.toMatch(/cursor-not-allowed|opacity-60/)
+  })
+})

@@ -591,6 +591,9 @@ on-container text), a soft wash (a tile or a row, paired with the ink) and an in
   `success` and `negative` is `danger`.
 - **Contrast.** Every pair above is held to WCAG AA (4.5:1) by `src/test/toneContrast.test.ts`, which reads the palette from `src/index.css`; the closest is the info
   solid at 5.0:1. `--color-warning` (amber) is for fills, borders and rings, never text or an icon (2.15:1 on the card): warning text is `TONE.warning.ink`.
+- **Readiness note.** A participant who is not fully ready shows a quiet, never-blocking warning-tone note (`ReadinessNote`): a chip in a row or beside a
+  detail header's status badge, or a line under a field, reading "Not ready: Intake not complete · No signed service agreement" in the server's own words,
+  truncated with the whole text in a `title`. It is informational (never an alert, never disables a control) and a ready participant draws nothing.
 
 **Deadline wording** (`deadlineState`, `deadlineLabel` and `DEADLINE_TONE` in `src/lib/deadline.ts`). A dated deadline (a credential's expiry, a review
 due date) has one state and one set of words, never a string of its own. The date is a calendar day, so the count cannot shift with the time zone or a

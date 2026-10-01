@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -7,8 +7,9 @@ import RosterBoardPage from './RosterBoardPage'
 import { makeParticipantBoard, makeParticipantRow, makeShift } from './test-fixtures'
 import type { RosterBoardDto } from '@/api/types'
 
-const { mockUseRosterBoard, mockAssignMutateAsync, mockDeleteMutateAsync } = vi.hoisted(() => ({
+const { mockUseRosterBoard, mockUseParticipants, mockAssignMutateAsync, mockDeleteMutateAsync } = vi.hoisted(() => ({
   mockUseRosterBoard: vi.fn(),
+  mockUseParticipants: vi.fn(),
   mockAssignMutateAsync: vi.fn(),
   mockDeleteMutateAsync: vi.fn(),
 }))
@@ -20,8 +21,13 @@ vi.mock('@/api/hooks', async () => {
     useRosterBoard: mockUseRosterBoard,
     useAssignShift: () => ({ mutateAsync: mockAssignMutateAsync, isPending: false }),
     useDeleteShift: () => ({ mutateAsync: mockDeleteMutateAsync, isPending: false }),
-    useParticipants: () => ({ data: [] }),
+    useParticipants: mockUseParticipants,
     useStaff: () => ({ data: [] }),
+    // The shift panel (mounted by the page) reads these for the picked participant; stubbed so a test that opens it makes no real request.
+    useParticipantRoutines: () => ({ data: [] }),
+    useCompatibility: () => ({ data: [] }),
+    useRosterShiftNotes: () => ({ data: [] }),
+    useCheckShift: () => ({ mutate: vi.fn(), isPending: false }),
   }
 })
 
@@ -71,6 +77,8 @@ function makeBoardWithLeaveException(): RosterBoardDto {
 
 beforeEach(() => {
   mockUseRosterBoard.mockReset()
+  mockUseParticipants.mockReset()
+  mockUseParticipants.mockReturnValue({ data: [] })
   mockAssignMutateAsync.mockReset()
   mockDeleteMutateAsync.mockReset()
   localStorage.clear()
@@ -121,5 +129,260 @@ describe('RosterBoardPage — load error', () => {
 
     await user.click(retry)
     expect(refetch).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ── The server's refusal of an assign / unassign (readiness Enforce mode) ────────────────────────────────────────────
+// Anything that is not the 422 findings protocol used to be swallowed (`if (!findings) return`): a drag, an "Unassign" or an
+// "Assign anyway" that the server refused simply did nothing. In Enforce mode the API answers 400
+// "Participant is not ready for booking or rostering."; the board has to say so.
+const NOT_READY_MESSAGE = 'Participant is not ready for booking or rostering.'
+const GENERIC_ASSIGN_ERROR = 'Something went wrong assigning this shift. Please try again.'
+
+/** What axios rejects with for a 400 carrying the API's ApiResponse envelope. */
+function badRequest(...errors: string[]) {
+  return { response: { status: 400, data: { success: false, errors } } }
+}
+
+/** What axios rejects with for the 422 findings protocol (a Warning finding that needs a reason to proceed). */
+function warningFindings() {
+  return {
+    response: {
+      status: 422,
+      data: {
+        success: false,
+        data: [{ code: 'RATIO_SHORTFALL', severity: 'Warning', message: 'Ratio not met for this window.', requiresReason: true }],
+      },
+    },
+  }
+}
+
+/** A board with one covered shift for Mia Chen, whose chip menu offers Unassign. */
+function makeBoardWithFilledShift(): RosterBoardDto {
+  return makeParticipantBoard({
+    participantRows: [
+      makeParticipantRow({
+        participantId: 'participant-1',
+        fullName: 'Mia Chen',
+        daysWithoutCover: 6,
+        shifts: [makeShift({ id: 'shift-1', participantId: 'participant-1', participantName: 'Mia Chen', staffId: 'staff-1', staffName: 'Alex Rivera', serviceDate: '2026-08-18' })],
+      }),
+    ],
+  })
+}
+
+async function unassignMiasShift(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: "Actions for Mia Chen's shift" }))
+  await user.click(screen.getByRole('option', { name: 'Unassign' }))
+}
+
+describe('RosterBoardPage — an assign the server refuses is no longer swallowed', () => {
+  it('shows the server\'s own message in a dismissible alert, not a generic line, and sent the full body', async () => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({ data: makeBoardWithFilledShift(), isLoading: false, isError: false, refetch: vi.fn() })
+    mockAssignMutateAsync.mockRejectedValueOnce(badRequest(NOT_READY_MESSAGE))
+    renderPage()
+
+    await unassignMiasShift(user)
+
+    expect(mockAssignMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockAssignMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { staffId: null, overrideReason: null, acknowledgedFindingCodes: [] } })
+    const message = await screen.findByText(NOT_READY_MESSAGE)
+    expect(message.closest('[role="alert"]')).not.toBeNull()
+    expect(screen.queryByText(GENERIC_ASSIGN_ERROR)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss error' }))
+    expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
+  })
+
+  it('sits above the grid, and the grid is still there', async () => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({ data: makeBoardWithFilledShift(), isLoading: false, isError: false, refetch: vi.fn() })
+    mockAssignMutateAsync.mockRejectedValueOnce(badRequest(NOT_READY_MESSAGE))
+    renderPage()
+
+    await unassignMiasShift(user)
+
+    const alert = (await screen.findByText(NOT_READY_MESSAGE)).closest('[role="alert"]') as HTMLElement
+    const grid = screen.getByRole('link', { name: 'Mia Chen' })
+    expect(Boolean(alert.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+  })
+
+  it.each([
+    ['a network failure with no response', new Error('Network Error')],
+    ['a 500 with an empty body', { response: { status: 500, data: {} } }],
+  ])('falls back to the generic line for %s', async (_label, failure) => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({ data: makeBoardWithFilledShift(), isLoading: false, isError: false, refetch: vi.fn() })
+    mockAssignMutateAsync.mockRejectedValueOnce(failure)
+    renderPage()
+
+    await unassignMiasShift(user)
+
+    expect(await screen.findByText(GENERIC_ASSIGN_ERROR)).toBeInTheDocument()
+    expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
+  })
+
+  it('is cleared when the next attempt starts, even before it finishes', async () => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({ data: makeBoardWithFilledShift(), isLoading: false, isError: false, refetch: vi.fn() })
+    mockAssignMutateAsync
+      .mockRejectedValueOnce(badRequest(NOT_READY_MESSAGE))
+      .mockReturnValueOnce(new Promise(() => {})) // the retry is still in flight
+    renderPage()
+
+    await unassignMiasShift(user)
+    expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
+
+    await unassignMiasShift(user)
+
+    expect(mockAssignMutateAsync).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
+  })
+
+  it('"Assign anyway": a 400 on the retry closes the dialog and shows the message on the page, with the full override body sent', async () => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({ data: makeBoardWithFilledShift(), isLoading: false, isError: false, refetch: vi.fn() })
+    mockAssignMutateAsync
+      .mockRejectedValueOnce(warningFindings())
+      .mockRejectedValueOnce(badRequest(NOT_READY_MESSAGE))
+    renderPage()
+
+    await unassignMiasShift(user)
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText('Ratio not met for this window.')).toBeInTheDocument()
+    await user.type(within(dialog).getByPlaceholderText('Reason for overriding these warnings'), 'Approved by the coordinator')
+    await user.click(within(dialog).getByRole('button', { name: 'Assign anyway' }))
+
+    expect(mockAssignMutateAsync).toHaveBeenCalledTimes(2)
+    expect(mockAssignMutateAsync).toHaveBeenLastCalledWith({
+      id: 'shift-1',
+      data: { staffId: null, overrideReason: 'Approved by the coordinator', acknowledgedFindingCodes: ['RATIO_SHORTFALL'] },
+    })
+    expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
+    // The overlay would have hidden the message from sight and from assistive tech, so the dialog is gone.
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.queryByText(GENERIC_ASSIGN_ERROR)).not.toBeInTheDocument()
+  })
+
+  it('leaves the 422 findings protocol alone: Warnings still open the Assign-with-warnings dialog and no error banner', async () => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({ data: makeBoardWithFilledShift(), isLoading: false, isError: false, refetch: vi.fn() })
+    mockAssignMutateAsync.mockRejectedValueOnce(warningFindings())
+    renderPage()
+
+    await unassignMiasShift(user)
+
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Dismiss error' })).not.toBeInTheDocument()
+    expect(screen.queryByText(GENERIC_ASSIGN_ERROR)).not.toBeInTheDocument()
+  })
+
+  it('shows no banner when the assign succeeds', async () => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({ data: makeBoardWithFilledShift(), isLoading: false, isError: false, refetch: vi.fn() })
+    mockAssignMutateAsync.mockResolvedValueOnce(makeShift({ staffId: null, staffName: null }))
+    renderPage()
+
+    await unassignMiasShift(user)
+
+    expect(mockAssignMutateAsync).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: 'Dismiss error' })).not.toBeInTheDocument()
+  })
+})
+
+// ── Participant readiness (WARN mode) on the board ───────────────────────────────────────────────────────────────────
+describe('RosterBoardPage — readiness warnings (never in the way)', () => {
+  const ISSUES = ['Intake not complete', 'No signed service agreement']
+  const WARNING = 'Not ready: Intake not complete · No signed service agreement'
+
+  it('shows a chip on a participant row whose server data lists issues, and none on a row without', () => {
+    mockUseRosterBoard.mockReturnValue({
+      data: makeParticipantBoard({
+        participantRows: [
+          makeParticipantRow({ participantId: 'participant-1', fullName: 'Mia Chen', readinessIssues: ISSUES }),
+          makeParticipantRow({ participantId: 'participant-2', fullName: 'Noah Reid' }),
+        ],
+      }),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    })
+    renderPage()
+
+    const chip = screen.getByText(WARNING)
+    expect(chip.closest('[title]')).toHaveAttribute('title', WARNING)
+    // On Mia's row header, not Noah's.
+    const miaHeader = screen.getByRole('link', { name: 'Mia Chen' }).closest('.sticky') as HTMLElement
+    const noahHeader = screen.getByRole('link', { name: 'Noah Reid' }).closest('.sticky') as HTMLElement
+    expect(miaHeader).toContainElement(chip)
+    expect(noahHeader.textContent).not.toMatch(/not ready/i)
+    expect(screen.getAllByText(/not ready/i)).toHaveLength(1)
+  })
+
+  it('hands the new-shift panel the readiness issues of the participants list, so the picked participant\'s warning shows and Save stays available', async () => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({
+      data: makeParticipantBoard({ participantRows: [makeParticipantRow({ participantId: 'participant-1', fullName: 'Mia Chen' })] }),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    })
+    mockUseParticipants.mockReturnValue({
+      data: [
+        { id: 'participant-1', fullName: 'Mia Chen', readinessIssues: ISSUES },
+        { id: 'participant-2', fullName: 'Noah Reid' },
+      ],
+    })
+    renderPage()
+
+    await user.click(screen.getAllByRole('button', { name: /^Add a shift for Mia Chen on/ })[0])
+
+    const panel = await screen.findByRole('dialog', { name: 'New shift' })
+    expect(within(panel).getByText(WARNING)).toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: /^save$/i })).toBeEnabled()
+  })
+
+  it('shows no warning in the panel for a participant the list says is ready', async () => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({
+      data: makeParticipantBoard({ participantRows: [makeParticipantRow({ participantId: 'participant-2', fullName: 'Noah Reid' })] }),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    })
+    mockUseParticipants.mockReturnValue({
+      data: [
+        { id: 'participant-1', fullName: 'Mia Chen', readinessIssues: ISSUES },
+        { id: 'participant-2', fullName: 'Noah Reid' },
+      ],
+    })
+    renderPage()
+
+    await user.click(screen.getAllByRole('button', { name: /^Add a shift for Noah Reid on/ })[0])
+
+    const panel = await screen.findByRole('dialog', { name: 'New shift' })
+    expect(within(panel).queryByText(/not ready/i)).not.toBeInTheDocument()
+  })
+
+  it('an open shift whose participant is not in the list falls back to the shift\'s own readinessIssues', async () => {
+    const user = userEvent.setup()
+    const board = makeParticipantBoard({
+      participantRows: [
+        makeParticipantRow({
+          participantId: 'participant-1',
+          fullName: 'Mia Chen',
+          shifts: [makeShift({ id: 'shift-1', participantId: 'participant-1', participantName: 'Mia Chen', serviceDate: '2026-08-18', readinessIssues: ['Intake not complete'] })],
+        }),
+      ],
+    })
+    mockUseRosterBoard.mockReturnValue({ data: board, isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: "Actions for Mia Chen's shift" }))
+    await user.click(screen.getByRole('option', { name: 'Edit' }))
+
+    const panel = await screen.findByRole('dialog', { name: 'Shift details' })
+    expect(within(panel).getByText('Not ready: Intake not complete')).toBeInTheDocument()
   })
 })
