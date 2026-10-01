@@ -215,10 +215,7 @@ public class ParticipantsController : ControllerBase
             // (unchanged). In Warn mode (the default) activation proceeds without signed-agreement
             // evidence, so an activated participant is on the register like any other.
             // Older non-draft records have no onboarding row, so retain their historic visibility.
-            query = query.Where(p => !p.IsDraft &&
-                (!_db.ParticipantOnboardings.Any(o => o.ParticipantId == p.Id && o.TenantId == p.TenantId)
-                 || (p.IsActive && !ParticipantReadiness.EnforcingTenantIds(_db).Contains(p.TenantId))
-                 || ParticipantReadinessGate.ActiveReadyParticipants(_db).Any(ready => ready.Id == p.Id)));
+            query = ParticipantReadiness.OperationalRegister(_db, query);
         }
 
         var projectedQuery = query.OrderBy(p => p.LastName).ThenBy(p => p.FirstName)

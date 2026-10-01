@@ -77,6 +77,22 @@ public static class ParticipantReadiness
             .Where(s => s.ParticipantReadinessMode == ParticipantReadinessMode.Enforce)
             .Select(s => s.TenantId);
 
+    /// <summary>
+    /// The operational participant register: non-draft participants, where a record introduced
+    /// through the onboarding workflow (it has an onboarding row) stays in the onboarding stage
+    /// until it has been ACTIVATED. For an organisation that enforces readiness, activated means the
+    /// strict gate accepts it (unchanged); in Warn mode activation proceeds without signed-agreement
+    /// evidence, so an activated participant is on the register like any other. Older non-draft
+    /// records have no onboarding row, so they keep their historic visibility.
+    /// A query-shaped predicate (it composes into the register's SQL), so it has its own
+    /// translation test: the EF InMemory provider would not notice if it stopped translating.
+    /// </summary>
+    public static IQueryable<Participant> OperationalRegister(OdipDbContext db, IQueryable<Participant> participants) =>
+        participants.Where(p => !p.IsDraft &&
+            (!db.ParticipantOnboardings.Any(o => o.ParticipantId == p.Id && o.TenantId == p.TenantId)
+             || (p.IsActive && !EnforcingTenantIds(db).Contains(p.TenantId))
+             || ParticipantReadinessGate.ActiveReadyParticipants(db).Any(ready => ready.Id == p.Id)));
+
     // ── Checks ──────────────────────────────────────────────────────────────
 
     /// <summary>
