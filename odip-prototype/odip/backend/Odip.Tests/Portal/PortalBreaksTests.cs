@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Rostering;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 using Xunit;
 using static Odip.Tests.Portal.ShiftPackageFixture;
 
@@ -354,6 +356,79 @@ public class PortalBreaksTests
             Assert.Equal(code, Failure(result, http).Code);
         }
         Assert.Empty(await f.Db.ShiftBreaks.ToListAsync());
+    }
+
+    // ── a Start Break that loses a race to Finish writes nothing (review 2 finding n3) ──
+
+    [Theory]
+    [InlineData("finished")]
+    [InlineData("cancelled")]
+    [InlineData("returned")]
+    public async Task AStartBreakThatArrivesAfterTheShiftLeftInProgress_IsRefused_AndLeavesNoBreak(string whatHappened)
+    {
+        // The controller resolved the shift as InProgress and loaded the completion; then another device's Finish, a cancellation or a coordinator
+        // Return committed before the break was written. A running break on a PendingReview completion is one nobody can end, so the write
+        // re-checks from the database - the stale completion object it was handed does not matter.
+        var f = Create();
+        var stale = await f.Db.ShiftCompletions.AsNoTracking().SingleAsync(c => c.Id == f.Completion!.Id);
+        switch (whatHappened)
+        {
+            case "finished":
+                f.Shift.Status = ShiftStatus.PendingReview;
+                f.Completion!.SubmittedAt = NowUtc;
+                f.Completion.ActualEnd = NowUtc;
+                break;
+            case "cancelled":
+                f.Shift.Status = ShiftStatus.Cancelled;
+                break;
+            default:   // a Return archives the completion and reopens the shift
+                f.Shift.Status = ShiftStatus.Published;
+                f.Completion!.IsActive = false;
+                break;
+        }
+        await f.Db.SaveChangesAsync();
+        Assert.Null(stale.SubmittedAt);   // what the caller holds still says open
+
+        var result = await new ShiftBreakService(f.Db, f.Clock).StartAsync(stale, f.Worker.Id, default);
+
+        Assert.Equal(ShiftBreakOutcome.ShiftNotInProgress, result.Outcome);
+        Assert.Null(result.Break);
+        Assert.Empty(await f.Db.ShiftBreaks.ToListAsync());
+    }
+
+    [Fact]
+    public void ABreakLeftRunningOnASubmittedCompletion_StopsGrowingAtTheActualEnd_InTheBreakDto()
+    {
+        var running = new ShiftBreak { Id = Guid.NewGuid(), StartedAt = NowUtc.AddMinutes(-60) };
+        var actualEnd = NowUtc.AddMinutes(-30);
+
+        Assert.Equal(60, ShiftCompletionMapper.ToBreakDto(running, NowUtc).Minutes);                            // in progress: the time so far
+        Assert.Equal(30, ShiftCompletionMapper.ToBreakDto(running, NowUtc, actualEnd).Minutes);                 // submitted: it stops at the actual end
+        Assert.Equal(30, ShiftCompletionMapper.ToBreakDto(running, NowUtc.AddHours(5), actualEnd).Minutes);     // and does not keep growing
+        Assert.Equal(0, ShiftCompletionMapper.ToBreakDto(new ShiftBreak { StartedAt = NowUtc.AddMinutes(-10) }, NowUtc, actualEnd).Minutes);   // started after the end
+        var ended = new ShiftBreak { StartedAt = NowUtc.AddMinutes(-60), EndedAt = NowUtc.AddMinutes(-20) };
+        Assert.Equal(40, ShiftCompletionMapper.ToBreakDto(ended, NowUtc, actualEnd).Minutes);                  // an ended break is its own times
+    }
+
+    [Fact]
+    public async Task ARunningBreakLeftOnASubmittedCompletion_DoesNotKeepGrowingInTheShiftDetail_AndAgreesWithTheTotals()
+    {
+        var f = Create(ShiftStatus.PendingReview);
+        f.Completion!.ActualEnd = NowUtc.AddMinutes(-30);     // finished at 10:30 local
+        f.Completion.SubmittedAt = NowUtc.AddMinutes(-30);
+        f.Db.ShiftBreaks.Add(new ShiftBreak
+        {
+            Id = Guid.NewGuid(), ShiftCompletionId = f.Completion.Id, StartedAt = NowUtc.AddMinutes(-60), CreatedByUserId = f.Worker.Id,   // running since 10:00
+        });
+        await f.Db.SaveChangesAsync();
+
+        var first = Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default));
+        f.Advance(TimeSpan.FromHours(3));
+        var later = Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default));
+
+        Assert.Equal(30, first.Breaks.Single().Minutes);
+        Assert.Equal(30, later.Breaks.Single().Minutes);
+        Assert.Equal(30, later.Completion!.BreakMinutes);   // the totals already clamped; the per-break figure now agrees
     }
 
     // ── roster scoping: the caller's OWN shift only ──

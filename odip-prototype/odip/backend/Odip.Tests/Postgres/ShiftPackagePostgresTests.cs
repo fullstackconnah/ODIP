@@ -780,6 +780,69 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task AStartBreakBlockedBehindAFinishInFlight_IsRefusedOnceFinishCommits_AndLeavesNoRunningBreak_OnRealPostgres()
+    {
+        // Finish's flip is in flight (the shift and completion rows updated, not yet committed) when a Start Break arrives that has ALREADY resolved the
+        // shift as InProgress. Without the shift-row lock the insert would commit and leave a running break on a PendingReview completion, which nobody can
+        // end. With it the Start Break waits for the flip, its re-check then sees the new state, and it answers like any request that arrives a moment later.
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var (_, userId, shiftId, completionId) = await SeedCompletionAsync(db);
+
+        await using var finishInFlight = new NpgsqlConnection(_pg.ConnectionString);
+        await finishInFlight.OpenAsync();
+        await using var flip = await finishInFlight.BeginTransactionAsync();
+        await using (var update = new NpgsqlCommand(
+            "UPDATE \"Shifts\" SET \"Status\" = @status WHERE \"Id\" = @shift; " +
+            "UPDATE \"ShiftCompletions\" SET \"SubmittedAt\" = now(), \"ActualEnd\" = now() WHERE \"Id\" = @completion", finishInFlight, flip))
+        {
+            update.Parameters.AddWithValue("status", (int)ShiftStatus.PendingReview);
+            update.Parameters.AddWithValue("shift", shiftId);
+            update.Parameters.AddWithValue("completion", completionId);
+            await update.ExecuteNonQueryAsync();
+        }
+
+        await using var request = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())], "Test");
+        var portal = new PortalController(request, TenantMock(tenantId).Object, clock: FakeClock.AtUtc(2026, 7, 14, 7, 0))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } },
+        };
+
+        var startBreak = portal.StartBreak(shiftId, default);   // sees InProgress, then waits for the row Finish is updating
+        await Task.Delay(700);
+        Assert.False(startBreak.IsCompleted, "Start Break must wait for the Finish that is already flipping the shift");
+        await flip.CommitAsync();
+        var result = await startBreak;
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(conflict.Value);
+        Assert.Equal(ShiftErrorCodes.ShiftAlreadyFinished, body.Code);   // the shift is PendingReview now: the same answer a later request gets
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.Empty(await verify.ShiftBreaks.Where(b => b.ShiftCompletionId == completionId).ToListAsync());
+        Assert.Null(request.Database.CurrentTransaction);
+    }
+
+    [SkippableFact]
+    public async Task AStartBreakOnAnOpenShift_OnRealPostgres_CommitsTheBreak_AndLeavesNoTransactionOpen()
+    {
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var (_, userId, shiftId, completionId) = await SeedCompletionAsync(db);
+        await using var request = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var completion = await request.ShiftCompletions.SingleAsync(c => c.Id == completionId);
+
+        var result = await new ShiftBreakService(request, FakeClock.AtUtc(2026, 7, 14, 7, 0)).StartAsync(completion, userId, default);
+
+        Assert.Equal(ShiftBreakOutcome.Ok, result.Outcome);
+        Assert.Null(request.Database.CurrentTransaction);
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.True(Assert.Single(await verify.ShiftBreaks.Where(b => b.ShiftCompletionId == completionId).ToListAsync()).IsRunning);
+    }
+
+    [SkippableFact]
     public async Task DifferentSlotsOfOneMedication_AreNotSerialisedIntoConflicts_EachGetsItsOwnRecord()
     {
         // The lock is per (medication, slot): recording the 08:00 and the 12:30 dose at the same moment must both succeed.

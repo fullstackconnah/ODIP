@@ -184,14 +184,18 @@ public static class ShiftCompletionMapper
             c.VarianceMinutesStart, c.VarianceMinutesEnd,
             IsOutlierVariance(c.VarianceMinutesStart, c.VarianceMinutesEnd, varianceReviewMinutes),
             varianceReviewMinutes, shiftReturnCount, incidents,
-            breaks.Select(b => ToBreakDto(b, now)).ToList(), breakMinutes, netMinutes,
+            breaks.Select(b => ToBreakDto(b, now, c.ActualEnd)).ToList(), breakMinutes, netMinutes,
             c.HandoverText, c.NothingToHandOver, c.NothingToNoteConfirmed);
     }
 
-    /// <summary>Maps a break; a running break's minutes are the time so far (up to <paramref name="nowUtc"/>).</summary>
-    public static ShiftBreakDto ToBreakDto(ShiftBreak b, DateTime nowUtc)
+    /// <summary>
+    /// Maps a break; a running break's minutes are the time so far (up to <paramref name="nowUtc"/>). Once the completion is submitted
+    /// (<paramref name="actualEndUtc"/> is its actual end) the time so far stops at that end, so a break left running on a submitted completion
+    /// does not keep growing - the same clamp <see cref="ShiftBreakRules.NetWorked"/> applies to the totals.
+    /// </summary>
+    public static ShiftBreakDto ToBreakDto(ShiftBreak b, DateTime nowUtc, DateTime? actualEndUtc = null)
     {
-        var end = b.EndedAt ?? nowUtc;
+        var end = b.EndedAt ?? (actualEndUtc is { } submittedEnd && submittedEnd < nowUtc ? submittedEnd : nowUtc);
         var minutes = end > b.StartedAt ? ShiftBreakRules.WholeMinutes(end - b.StartedAt) : 0;
         return new ShiftBreakDto(
             b.Id, ProviderLocalTime.AsUtc(b.StartedAt), ProviderLocalTime.AsUtc(b.EndedAt), b.IsRunning, minutes,

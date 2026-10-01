@@ -798,21 +798,7 @@ public class PortalController : ControllerBase
         var (shift, error) = await ResolveOwnedShiftAsync(id, ct);
         if (error is not null) return (null, null, error);
 
-        // ActionResult (a class), NOT ActionResult<T> (a struct): null must stay null, not be converted into a wrapped null.
-        ActionResult? conflict = shift!.Status switch
-        {
-            ShiftStatus.InProgress => null,
-            ShiftStatus.Published => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress)),
-            ShiftStatus.PendingReview => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift has already been finished and is waiting for review.", ShiftErrorCodes.ShiftAlreadyFinished)),
-            ShiftStatus.Completed => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift has already been reviewed and completed.", ShiftErrorCodes.ShiftAlreadyCompleted)),
-            ShiftStatus.Cancelled => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift has been cancelled.", ShiftErrorCodes.ShiftCancelled)),
-            _ => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished)),
-        };
+        var conflict = NotInProgressConflict(shift!.Status);
         if (conflict is not null) return (null, null, conflict);
 
         var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
@@ -823,6 +809,25 @@ public class PortalController : ControllerBase
         return (shift, completion, null);
     }
 
+    /// <summary>
+    /// The 409 a package write answers when the shift is not InProgress, by what state it is in; null for InProgress. An ActionResult (a class),
+    /// NOT ActionResult&lt;T&gt; (a struct): null must stay null, not be converted into a wrapped null.
+    /// </summary>
+    private ActionResult? NotInProgressConflict(ShiftStatus status) => status switch
+    {
+        ShiftStatus.InProgress => null,
+        ShiftStatus.Published => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+            "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress)),
+        ShiftStatus.PendingReview => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+            "This shift has already been finished and is waiting for review.", ShiftErrorCodes.ShiftAlreadyFinished)),
+        ShiftStatus.Completed => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+            "This shift has already been reviewed and completed.", ShiftErrorCodes.ShiftAlreadyCompleted)),
+        ShiftStatus.Cancelled => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+            "This shift has been cancelled.", ShiftErrorCodes.ShiftCancelled)),
+        _ => Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+            "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished)),
+    };
+
     private async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> ToBreakResponseAsync(
         Shift shift, ShiftBreakResult result, CancellationToken ct)
     {
@@ -830,6 +835,15 @@ public class PortalController : ControllerBase
         {
             case ShiftBreakOutcome.Ok:
                 return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+
+            case ShiftBreakOutcome.ShiftNotInProgress:
+            {
+                // The shift changed state between this request resolving it and the break being written (a Finish on another device won the
+                // race). Answer exactly as a request arriving a moment later would: by the state the shift is in now.
+                await _db.Entry(shift).ReloadAsync(ct);
+                return NotInProgressConflict(shift.Status) ?? Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "This shift is no longer in progress.", ShiftErrorCodes.ShiftNotInProgress));
+            }
 
             case ShiftBreakOutcome.NotFound:
                 return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Break not found.", ShiftErrorCodes.ShiftBreakNotFound));

@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
+using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 
@@ -17,6 +19,12 @@ public enum ShiftBreakOutcome
 
     /// <summary>The times break a rule - see <see cref="ShiftBreakResult.Violation"/>.</summary>
     Invalid,
+
+    /// <summary>
+    /// The shift is no longer InProgress, or its completion is no longer the active, unsubmitted one: a Finish (or a Return, or a cancellation)
+    /// got there between the caller resolving the shift and the break being written. Nothing was written.
+    /// </summary>
+    ShiftNotInProgress,
 }
 
 public sealed record ShiftBreakResult(
@@ -45,8 +53,64 @@ public sealed class ShiftBreakService
     private Task<List<ShiftBreak>> LoadAsync(Guid completionId, CancellationToken ct) =>
         _db.ShiftBreaks.Where(b => b.ShiftCompletionId == completionId).OrderBy(b => b.StartedAt).ToListAsync(ct);
 
+    /// <summary>
+    /// Starts a break now. The caller resolved the shift as InProgress a moment ago, but a Finish on another device can commit in between, and a
+    /// running break on a PendingReview completion is one nobody can end (every break endpoint needs InProgress) - so the write re-checks. On
+    /// PostgreSQL the check and the insert run in one transaction that holds the shift row (<c>SELECT ... FOR UPDATE</c>): a Finish that has
+    /// already flipped the shift but not yet committed makes this wait, and the re-check then sees the new state; a Finish that commits later
+    /// cannot slip in between the check and the insert. With the in-memory test provider only the re-check remains. If the context is already
+    /// inside a transaction the lock joins it and the owner commits. Returns <see cref="ShiftBreakOutcome.ShiftNotInProgress"/>, having written
+    /// nothing, when the shift or its completion is no longer open.
+    /// </summary>
     public async Task<ShiftBreakResult> StartAsync(ShiftCompletion completion, Guid userId, CancellationToken ct)
     {
+        var ownedTransaction = await LockShiftRowAsync(completion.ShiftId, ct);
+        try
+        {
+            var result = await StartCoreAsync(completion, userId, ct);
+            if (result.Outcome == ShiftBreakOutcome.Ok && ownedTransaction is not null) await ownedTransaction.CommitAsync(ct);
+            return result;
+        }
+        finally
+        {
+            if (ownedTransaction is not null) await ownedTransaction.DisposeAsync();   // rolls back anything not committed
+        }
+    }
+
+    /// <summary>
+    /// PostgreSQL only: begins a transaction (unless the context is already in one) and locks the shift row until it ends. Returns the transaction
+    /// this call began, or null when there is nothing to commit (another provider, or a transaction the caller owns). If the lock statement fails
+    /// the transaction is rolled back before the exception leaves, so the context is never left inside an aborted transaction.
+    /// </summary>
+    private async Task<IDbContextTransaction?> LockShiftRowAsync(Guid shiftId, CancellationToken ct)
+    {
+        if (!_db.Database.IsNpgsql()) return null;
+
+        var owned = _db.Database.CurrentTransaction is null ? await _db.Database.BeginTransactionAsync(ct) : null;
+        try
+        {
+            await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT \"Id\" FROM \"Shifts\" WHERE \"Id\" = {shiftId} FOR UPDATE", ct);
+            return owned;
+        }
+        catch
+        {
+            if (owned is not null)
+            {
+                try { await owned.DisposeAsync(); } catch { /* the failure being reported is the one that matters */ }
+            }
+            throw;
+        }
+    }
+
+    /// <summary>Whether the shift is still InProgress and the completion is still the active, unsubmitted one - read fresh from the database.</summary>
+    private async Task<bool> IsStillOpenAsync(ShiftCompletion completion, CancellationToken ct) =>
+        await _db.Shifts.AsNoTracking().AnyAsync(s => s.Id == completion.ShiftId && s.Status == ShiftStatus.InProgress, ct)
+        && await _db.ShiftCompletions.AsNoTracking().AnyAsync(c => c.Id == completion.Id && c.IsActive && c.SubmittedAt == null, ct);
+
+    private async Task<ShiftBreakResult> StartCoreAsync(ShiftCompletion completion, Guid userId, CancellationToken ct)
+    {
+        if (!await IsStillOpenAsync(completion, ct)) return new ShiftBreakResult(ShiftBreakOutcome.ShiftNotInProgress);
+
         var breaks = await LoadAsync(completion.Id, ct);
         if (breaks.Any(b => b.IsRunning)) return new ShiftBreakResult(ShiftBreakOutcome.AlreadyRunning);
 
