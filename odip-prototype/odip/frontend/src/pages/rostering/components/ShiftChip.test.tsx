@@ -246,11 +246,60 @@ describe('ShiftChip one-line label', () => {
     expect(screen.queryAllByRole('link')).toHaveLength(0)
   })
 
-  it('is one line at row-h minus 6px, so it grows with the density token under a coarse pointer', () => {
+  it('is at least row-h minus 6px tall, so it grows with the density token under a coarse pointer', () => {
     const shift = makeShift()
     const { container } = renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
-    expect(container.firstElementChild).toHaveClass('h-[calc(var(--row-h)_-_6px)]')
+    expect(container.firstElementChild).toHaveClass('min-h-[calc(var(--row-h)_-_6px)]')
+    // A fixed height would clip the name stacked under the time (below).
+    expect(container.firstElementChild).not.toHaveClass('h-[calc(var(--row-h)_-_6px)]')
+  })
+})
+
+// Landing-spotted: at the board's native width a day column is 123-130px, and the time, the separator, the drag handle and the actions
+// trigger left the name 0-5px: a one-letter link. Below 14rem the name now sits UNDER the time on its own line (the chip grows to two
+// lines); from 14rem it is the one line "time · name" it was.
+describe('ShiftChip keeps the name readable in a narrow day column', () => {
+  const NAME_UNDER_TIME = ['flex-col', '@[14rem]:flex-row']
+
+  function contentOf(shift: ReturnType<typeof makeShift>) {
+    return screen.getByText(formatShiftTimeRange(shift.startTime, shift.endTime)).parentElement as HTMLElement
+  }
+
+  it('stacks the name under the time below 14rem and puts them on one line from 14rem', () => {
+    const shift = makeShift({ participantName: "Jack O'Sullivan" })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(contentOf(shift)).toHaveClass('flex', 'min-w-0', 'flex-1', 'overflow-hidden', ...NAME_UNDER_TIME)
+    expect(contentOf(shift)).toHaveClass('@[14rem]:items-center')
+  })
+
+  it('hides the "·" separator while the name is under the time (a dot ending a line reads as a typo), and keeps it for the one-line layout', () => {
+    const shift = makeShift({ participantName: 'Grace Palmer' })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const separator = contentOf(shift).querySelector('[aria-hidden="true"]') as HTMLElement
+    expect(separator).toHaveTextContent('·')
+    expect(separator).toHaveClass('hidden', '@[14rem]:inline')
+  })
+
+  it('keeps the name, the override mark and the on-leave marker on one row of their own, so the markers never become a third line', () => {
+    const shift = makeShift({ participantName: 'Grace Palmer', staffId: 'staff-9', staffName: 'Alex Rivera', overrideReason: 'Only cover available', assigneeOnApprovedLeave: true })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const nameRow = screen.getByRole('link', { name: 'Grace Palmer' }).parentElement as HTMLElement
+    expect(nameRow).toHaveClass('flex', 'min-w-0', 'items-center', '@[14rem]:flex-1')
+    expect(nameRow).toContainElement(screen.getByRole('img', { name: /Assigned with an override/ }))
+    expect(nameRow).toContainElement(screen.getByText('On leave'))
+  })
+
+  it('lets the name link shrink and truncate with its full name in the title, whichever row hosts the chip', () => {
+    const shift = makeShift({ participantName: 'Grace Palmer-Hughes' })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const link = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
+    expect(link).toHaveClass('min-w-0', 'truncate')
+    expect(link).toHaveAttribute('title', 'Grace Palmer-Hughes')
   })
 })
 
