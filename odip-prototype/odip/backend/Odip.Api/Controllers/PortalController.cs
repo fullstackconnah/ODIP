@@ -182,16 +182,23 @@ public class PortalController : ControllerBase
         var completionDto = activeCompletion is null ? null : await ToShiftCompletionDtoAsync(activeCompletion, shift.ReturnCount, ct);
         var breakDtos = completionDto?.Breaks ?? Array.Empty<ShiftBreakDto>();
 
+        // NEED-TO-KNOW BY SHIFT STATUS: the handover, the emergency contacts and the address are for a worker who still has to do the shift
+        // (Published or InProgress). A worker whose shift is PendingReview, Completed, Cancelled or Draft keeps seeing the shift itself but
+        // not the participant's phone numbers, address or the latest handover through it. Withheld = explicit null, with the reason.
+        var showSensitive = shift.Status is ShiftStatus.Published or ShiftStatus.InProgress;
+
         // Handover baton pass (D4): the latest handover from a PREVIOUS shift for this participant, with the caller's
         // own read state, and the last 3 holders. The caller is the shift's own worker (ownership was established).
-        var handoverView = await _handover.GetAsync(shift, shift.UserId!.Value, ct);
+        var handoverView = showSensitive
+            ? await _handover.GetAsync(shift, shift.UserId!.Value, ct)
+            : new HandoverView(null, Array.Empty<PortalHandoverTrailEntryDto>());
 
         // Need-to-know package data: the provider's zone, the critical care facts, emergency contacts, doses due in the
         // rostered window (overdue in provider-local time), routines matched to the window, and whether the caller may
         // record doses (Medication Competency).
         var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
         var providerToday = DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(NowUtc, provider.Zone));
-        var contacts = await _package.GetEmergencyContactsAsync(participant.Id, providerToday, ct);
+        var contacts = showSensitive ? await _package.GetEmergencyContactsAsync(participant.Id, providerToday, ct) : null;
         var doses = await _package.GetDosesAsync(shift, provider, includePrn: true, ct);
         var shiftRoutines = ShiftPackageService.MatchRoutines(shift, routines);
 
@@ -229,14 +236,28 @@ public class PortalController : ControllerBase
             handoverView.Trail,
             finishBlockers,
             provider.Id,
-            ShiftPackageService.BuildAtAGlance(participant),
+            showSensitive ? ShiftPackageService.BuildAtAGlance(participant) : ShiftPackageService.BuildAtAGlance(participant) with { Address = null },
             contacts,
             doses.Slots,
             doses.Prn,
             shiftRoutines,
             access.CanRecord,
             access.Reason,
-            access.Code);
+            access.Code,
+            showSensitive ? null : SensitiveInfoWithheldMessage(shift.Status));
+    }
+
+    /// <summary>Why the participant's handover, emergency contacts and address are not shown for this shift's status (plain language).</summary>
+    private static string SensitiveInfoWithheldMessage(ShiftStatus status)
+    {
+        var state = status switch
+        {
+            ShiftStatus.PendingReview => "waiting for review",
+            ShiftStatus.Completed => "completed",
+            ShiftStatus.Cancelled => "cancelled",
+            _ => "not published",
+        };
+        return $"The participant's emergency contacts, address and handover are only shown for a shift that is published or in progress. This shift is {state}.";
     }
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and RosteringController's

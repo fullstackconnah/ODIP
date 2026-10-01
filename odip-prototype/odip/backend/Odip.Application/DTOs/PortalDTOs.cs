@@ -146,7 +146,8 @@ public record PortalShiftDetailDto(
     IReadOnlyList<ShiftBreakDto> Breaks,
     /// <summary>The latest handover for this participant: the submitted-or-approved completion of the most recent shift that
     /// STARTED BEFORE this one (shift chronology, not submission time), or null when there has never been one. The next worker
-    /// marks it read (<c>POST portal/shifts/{id}/handover/ack</c>).</summary>
+    /// marks it read (<c>POST portal/shifts/{id}/handover/ack</c>). Also null when the shift's status withholds sensitive information
+    /// (see <see cref="SensitiveInfoWithheldReason"/>).</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] PortalHandoverDto? Handover,
     /// <summary>The last 3 holders of this participant (most recent first, INCLUDING the handover's author): name and
     /// shift date only - a custody trail, never the text.</summary>
@@ -162,8 +163,9 @@ public record PortalShiftDetailDto(
     string TimeZoneId,
     /// <summary>The critical care facts, in fixed groups, with explicit nulls for anything not recorded.</summary>
     PortalAtAGlanceDto AtAGlance,
-    /// <summary>Active emergency contacts, first call first (priority, then primary).</summary>
-    IReadOnlyList<PortalEmergencyContactDto> EmergencyContacts,
+    /// <summary>Active emergency contacts, first call first (priority, then primary). Explicit null when the shift's status withholds sensitive
+    /// information (anything but Published or InProgress): see <see cref="SensitiveInfoWithheldReason"/>.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] IReadOnlyList<PortalEmergencyContactDto>? EmergencyContacts,
     /// <summary>Scheduled doses due in the shift's ROSTERED window (one calendar date, or two for an overnight shift), in
     /// time order, each with its state (Due / Overdue / Recorded), outcome and witness status. Overdue is judged in the
     /// provider's local time. Active medications only.</summary>
@@ -184,7 +186,13 @@ public record PortalShiftDetailDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? CanRecordDosesReason,
     /// <summary>MEDICATION_COMPETENCY_MISSING | MEDICATION_COMPETENCY_EXPIRED | MEDICATION_COMPETENCY_UNVERIFIABLE whenever the credential is
     /// not current (in both modes: <see cref="CanRecordDoses"/> says whether it blocks); null with a current credential.</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? CanRecordDosesReasonCode);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? CanRecordDosesReasonCode,
+    /// <summary>NEED-TO-KNOW BY SHIFT STATUS. The participant's handover, emergency contacts and address are returned ONLY for a shift that is
+    /// Published or InProgress - the shifts a worker still has to do. For any other status (PendingReview, Completed, Cancelled, Draft)
+    /// <c>handover</c>, <c>emergencyContacts</c> and <c>atAGlance.address</c> are explicit null (and <c>handoverTrail</c> is empty), and this
+    /// says why in plain language so the UI can explain instead of showing an unexplained gap. Null when nothing is withheld. The other
+    /// at-a-glance care facts (allergies, diet, communication, behaviour, HIDPA) are unaffected.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? SensitiveInfoWithheldReason);
 
 // ── At a glance (need-to-know critical facts) ─────────────────────────────
 
@@ -198,7 +206,9 @@ public record PortalAtAGlanceDto(
     PortalCommunicationDto Communication,
     PortalBehaviourDto Behaviour,
     PortalHidpaDto Hidpa,
-    PortalAddressDto Address);
+    /// <summary>The participant's address. Explicit null when the shift's status withholds sensitive information (see
+    /// <see cref="PortalShiftDetailDto.SensitiveInfoWithheldReason"/>); its fields are individually null when not recorded.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] PortalAddressDto? Address);
 
 public record PortalAllergiesDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Detail,

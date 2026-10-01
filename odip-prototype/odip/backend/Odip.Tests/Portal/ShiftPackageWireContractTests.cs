@@ -170,6 +170,32 @@ public class ShiftPackageWireContractTests
     }
 
     [Fact]
+    public async Task AWithheldShift_WritesTheWithheldMembersAsExplicitNulls_AndTheReasonAsText()
+    {
+        var f = Create(ShiftStatus.Completed);
+
+        var data = ToWire(ApiResponse<PortalShiftDetailDto>.Ok(Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default)))).GetProperty("data");
+
+        AssertExplicitNulls(data, "the withheld shift detail", "handover", "emergencyContacts");
+        AssertExplicitNull(data.GetProperty("atAGlance"), "address", "atAGlance");
+        Assert.Equal(JsonValueKind.Array, data.GetProperty("handoverTrail").ValueKind);
+        Assert.Equal(0, data.GetProperty("handoverTrail").GetArrayLength());
+        Assert.Contains("This shift is completed", data.GetProperty("sensitiveInfoWithheldReason").GetString());
+    }
+
+    [Fact]
+    public async Task AShiftThatShowsEverything_WritesTheReasonAsAnExplicitNull()
+    {
+        var f = Create(ShiftStatus.Published);
+
+        var data = ToWire(ApiResponse<PortalShiftDetailDto>.Ok(Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default)))).GetProperty("data");
+
+        AssertExplicitNull(data, "sensitiveInfoWithheldReason", "the shift detail");
+        Assert.Equal(JsonValueKind.Array, data.GetProperty("emergencyContacts").ValueKind);   // an empty list, NOT null: there simply are none
+        Assert.Equal(JsonValueKind.Object, data.GetProperty("atAGlance").GetProperty("address").ValueKind);
+    }
+
+    [Fact]
     public async Task TheFinishBlocked422_CarriesTheSameExplicitNulls_InsideItsEnvelope()
     {
         var f = await BareShiftWithEverythingNotRecordedAsync();
@@ -199,7 +225,7 @@ public class ShiftPackageWireContractTests
     /// <summary>Members added to records that existed before the shift package (whose other nullable members keep their old behaviour).</summary>
     private static readonly Dictionary<Type, string[]> NewMembersOfOlderRecords = new()
     {
-        [typeof(PortalShiftDetailDto)] = ["Handover", "CanRecordDosesReason", "CanRecordDosesReasonCode"],
+        [typeof(PortalShiftDetailDto)] = ["Handover", "CanRecordDosesReason", "CanRecordDosesReasonCode", "EmergencyContacts", "SensitiveInfoWithheldReason"],
         [typeof(ShiftCompletionDto)] = ["HandoverText"],
     };
 

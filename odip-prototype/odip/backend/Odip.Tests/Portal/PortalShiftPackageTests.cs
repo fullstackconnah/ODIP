@@ -589,6 +589,89 @@ public class PortalShiftPackageTests
         Assert.Contains("13 Jul 2026", detail.CanRecordDosesReason);
     }
 
+    // ══════════════ Need-to-know by shift status ══════════════
+
+    /// <summary>Gives the participant an address, an emergency contact and a previous worker's submitted handover - the three things withheld.</summary>
+    private static void SeedSensitiveInfo(ShiftPackageFixture f)
+    {
+        f.Participant.AddressStreet = "14 Banksia Court";
+        f.Participant.AddressSuburb = "Robina";
+        f.Participant.AllergiesDetail = "Peanuts";
+        AddContact(f, "Priya", "Whitfield", priority: 1, primary: true);
+        var previous = f.AddWorker("Tom", "Beattie");
+        var earlier = new Shift
+        {
+            Id = Guid.NewGuid(), TenantId = f.Worker.TenantId, ParticipantId = f.Participant.Id, UserId = previous.Id, ServiceDate = ServiceDate.AddDays(-1),
+            StartTime = new TimeOnly(7, 0), EndTime = new TimeOnly(15, 0), Status = ShiftStatus.PendingReview,
+        };
+        f.Db.Shifts.Add(earlier);
+        f.Db.ShiftCompletions.Add(new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), TenantId = f.Worker.TenantId, ShiftId = earlier.Id, ActualStart = ActualStartUtc.AddDays(-1), ActualEnd = ActualStartUtc.AddDays(-1).AddHours(8),
+            TimeZoneId = "Australia/Sydney", SubmittedByUserId = previous.Id, StartedAt = ActualStartUtc.AddDays(-1), SubmittedAt = ActualStartUtc.AddDays(-1).AddHours(8),
+            IsActive = true, HandoverText = "Check the left heel.",
+        });
+        f.Db.SaveChanges();
+    }
+
+    [Theory]
+    [InlineData(ShiftStatus.Published)]
+    [InlineData(ShiftStatus.InProgress)]
+    public void ForAShiftTheWorkerStillHasToDo_TheHandoverContactsAndAddressAreShown(ShiftStatus status)
+    {
+        var f = Create(status);
+        SeedSensitiveInfo(f);
+
+        var detail = Get(f);
+
+        Assert.Null(detail.SensitiveInfoWithheldReason);
+        Assert.Equal("Check the left heel.", detail.Handover!.Text);
+        Assert.Single(detail.HandoverTrail);
+        Assert.Equal("Priya Whitfield", Assert.Single(detail.EmergencyContacts!).Name);
+        Assert.Equal("14 Banksia Court", detail.AtAGlance.Address!.Street);
+    }
+
+    [Theory]
+    [InlineData(ShiftStatus.PendingReview, "waiting for review")]
+    [InlineData(ShiftStatus.Completed, "completed")]
+    [InlineData(ShiftStatus.Cancelled, "cancelled")]
+    [InlineData(ShiftStatus.Draft, "not published")]
+    public void ForAnyOtherShiftStatus_TheyAreExplicitNull_WithThePlainReason_AndTheOtherCareFactsStay(ShiftStatus status, string stateInWords)
+    {
+        var f = Create(status);
+        SeedSensitiveInfo(f);
+
+        var detail = Get(f);
+
+        Assert.Null(detail.Handover);
+        Assert.Empty(detail.HandoverTrail);   // the custody trail goes with the handover it belongs to
+        Assert.Null(detail.EmergencyContacts);
+        Assert.Null(detail.AtAGlance.Address);
+        Assert.Contains($"This shift is {stateInWords}", detail.SensitiveInfoWithheldReason);
+        Assert.Contains("emergency contacts, address and handover", detail.SensitiveInfoWithheldReason);
+        // Not sensitive information in this sense: the critical care facts are still there.
+        Assert.Equal("Peanuts", detail.AtAGlance.Allergies.Detail);
+        Assert.Equal(status, detail.Status);   // and the shift itself is still readable
+    }
+
+    [Fact]
+    public async Task OnceTheWorkerFinishes_TheReturnedDetailNoLongerCarriesThem()
+    {
+        var f = Create();
+        SeedSensitiveInfo(f);
+        f.Db.ShiftNotes.Add(new ShiftNote { Id = Guid.NewGuid(), TenantId = f.Worker.TenantId, ShiftId = f.Shift.Id, AuthorUserId = f.Worker.Id, AuthorName = "Ben", Body = "ok" });
+        f.Db.SaveChanges();
+        Assert.NotNull(Get(f).EmergencyContacts);
+
+        var finished = Detail(await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto(), default));
+
+        Assert.Equal(ShiftStatus.PendingReview, finished.Status);
+        Assert.Null(finished.EmergencyContacts);
+        Assert.Null(finished.Handover);
+        Assert.Null(finished.AtAGlance.Address);
+        Assert.NotNull(finished.SensitiveInfoWithheldReason);
+    }
+
     [Fact]
     public void Warn_CanRecordDoses_IsTrue_WithTheWarning_AndTheSpecificCode_WhenTheCredentialIsMissing()
     {
