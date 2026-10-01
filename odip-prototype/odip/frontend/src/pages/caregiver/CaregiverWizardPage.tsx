@@ -179,6 +179,7 @@ export default function CaregiverWizardPage() {
         visitedSteps={wizard.visitedSteps}
         currentKey={wizard.isReviewStep ? REVIEW_STEP_KEY : wizard.currentStep.key}
         onSelect={wizard.goToStep}
+        ariaLabel="Caregiver form steps"
       />
 
       <form onSubmit={(e) => { e.preventDefault(); void onSubmit() }} noValidate>
