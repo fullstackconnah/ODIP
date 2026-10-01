@@ -274,6 +274,33 @@ public class PortalHandoverTests
     }
 
     [Fact]
+    public async Task Ack_ForAPublishedShiftBeforeTheNeedToKnowWindowOpens_Is404_AndRecordsNothing()
+    {
+        // The handover is not shown more than 48 hours before the rostered start (09:00 local on Tuesday 14 July), so there is nothing the worker has seen to
+        // mark as read; an acknowledge with no completionId would otherwise record the latest handover as read, unseen.
+        var f = Create(ShiftStatus.Published, now: new DateTimeOffset(2026, 7, 11, 22, 59, 0, TimeSpan.Zero));
+        AddSubmitted(f, "Previous", new DateOnly(2026, 7, 10), T.AddDays(-3), "Watch the left heel.");
+
+        var body = Failure(await f.Controller.AcknowledgeHandover(f.Shift.Id, null, default), 404);
+
+        Assert.Equal(ShiftErrorCodes.ShiftHandoverNotFound, body.Code);
+        Assert.Contains("from 09:00 on Sunday 12 July", Assert.Single(body.Errors!));
+        Assert.Empty(await f.Db.HandoverAcknowledgements.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Ack_ForAPublishedShiftOnceTheWindowIsOpen_Works()
+    {
+        var f = Create(ShiftStatus.Published, now: new DateTimeOffset(2026, 7, 11, 23, 0, 0, TimeSpan.Zero));
+        AddSubmitted(f, "Previous", new DateOnly(2026, 7, 10), T.AddDays(-3), "Watch the left heel.");
+
+        var detail = Detail(await f.Controller.AcknowledgeHandover(f.Shift.Id, null, default));
+
+        Assert.True(detail.Handover!.IsRead);
+        Assert.Single(await f.Db.HandoverAcknowledgements.ToListAsync());
+    }
+
+    [Fact]
     public async Task ReadState_IsPerReader_AnotherWorkersAckDoesNotMarkItReadForMe()
     {
         var f = Create(ShiftStatus.Published);

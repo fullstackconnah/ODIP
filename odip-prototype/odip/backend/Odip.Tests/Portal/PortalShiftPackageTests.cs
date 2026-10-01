@@ -741,6 +741,104 @@ public class PortalShiftPackageTests
         Assert.Equal(status, detail.Status);   // and the shift itself is still readable
     }
 
+    // ── the 48-hour window for a PUBLISHED shift (the product decision after review 3) ──
+    // The fixture shift is rostered 09:00 Tuesday 14 July, Sydney (AEST, UTC+10) = 23:00 UTC on Monday 13 July, so the window opens 48 hours earlier, at
+    // 09:00 local on Sunday 12 July = 23:00 UTC on Saturday 11 July.
+
+    private static readonly DateTimeOffset WindowOpens = new(2026, 7, 11, 23, 0, 0, TimeSpan.Zero);
+    private const string OpensSunday = "The participant's emergency contacts, address and handover are shown from 48 hours before the shift starts, from 09:00 on Sunday 12 July.";
+
+    [Fact]
+    public void APublishedShift_MoreThan48HoursBeforeItsRosteredStart_WithholdsTheHandoverContactsAndAddress_AndSaysWhenTheyWillShow()
+    {
+        var f = Create(ShiftStatus.Published, now: WindowOpens.AddMinutes(-1));
+        SeedSensitiveInfo(f);
+
+        var detail = Get(f);
+
+        Assert.Null(detail.Handover);
+        Assert.Empty(detail.HandoverTrail);
+        Assert.Null(detail.EmergencyContacts);
+        Assert.Null(detail.AtAGlance.Address);
+        Assert.Equal(OpensSunday, detail.SensitiveInfoWithheldReason);
+        Assert.Equal("Peanuts", detail.AtAGlance.Allergies.Detail);   // the other care facts are not sensitive in this sense
+        Assert.Equal(ShiftStatus.Published, detail.Status);           // and the shift itself is still readable
+    }
+
+    [Fact]
+    public void APublishedShift_ExactlyAtTheStartOfTheWindow_ShowsThem_TheBoundaryIsInclusive()
+    {
+        var f = Create(ShiftStatus.Published, now: WindowOpens);
+        SeedSensitiveInfo(f);
+
+        var detail = Get(f);
+
+        Assert.Null(detail.SensitiveInfoWithheldReason);
+        Assert.Equal("Check the left heel.", detail.Handover!.Text);
+        Assert.Equal("Priya Whitfield", Assert.Single(detail.EmergencyContacts!).Name);
+        Assert.Equal("14 Banksia Court", detail.AtAGlance.Address!.Street);
+    }
+
+    [Fact]
+    public void APublishedShift_AfterItsRosteredStart_StillShowsThem_ThePrivilegeIsNotLostByNotStartingYet()
+    {
+        var f = Create(ShiftStatus.Published, now: new DateTimeOffset(2026, 7, 14, 3, 0, 0, TimeSpan.Zero));   // 13:00 local, four hours late
+        SeedSensitiveInfo(f);
+
+        var detail = Get(f);
+
+        Assert.Null(detail.SensitiveInfoWithheldReason);
+        Assert.NotNull(detail.EmergencyContacts);
+    }
+
+    [Fact]
+    public void AnInProgressShift_IsNotSubjectToTheWindow()
+    {
+        var f = Create(ShiftStatus.InProgress, now: WindowOpens.AddDays(-30));   // a clock far before the shift: the status alone decides
+        SeedSensitiveInfo(f);
+
+        var detail = Get(f);
+
+        Assert.Null(detail.SensitiveInfoWithheldReason);
+        Assert.NotNull(detail.Handover);
+        Assert.NotNull(detail.EmergencyContacts);
+    }
+
+    [Fact]
+    public void TheReason_IsFormattedWithTheInvariantCulture_WhateverTheCurrentCultureIs()
+    {
+        // The deploy image runs with invariant globalization and a developer machine is en-AU: a current-culture rendering ("juil.", "Sept") would differ.
+        var original = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("fr-FR");
+            var f = Create(ShiftStatus.Published, now: WindowOpens.AddHours(-1));
+
+            Assert.Equal(OpensSunday, Get(f).SensitiveInfoWithheldReason);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = original;
+        }
+    }
+
+    [Fact]
+    public void TheWindowIsJudgedInTheProvidersZone_ADaylightSavingShiftOpensAtItsOwnLocalTime()
+    {
+        // Rostered 09:00 on Monday 5 October 2026, the day after Sydney moves to AEDT (UTC+11): 22:00 UTC on Sunday 4 October. The window is 48 ELAPSED hours, so it
+        // opens at 22:00 UTC on Friday 2 October, which is 08:00 on Saturday 3 October in AEST (UTC+10) - not 09:00: the local wall-clock time moves by the hour.
+        var rosteredStartUtc = new DateTime(2026, 10, 4, 22, 0, 0, DateTimeKind.Utc);
+        var zone = ProviderLocalTime.ResolveZone("Australia/Sydney");
+
+        var before = Odip.Infrastructure.Services.ShiftPackageService.SensitiveInfoWithheldReason(
+            ShiftStatus.Published, rosteredStartUtc, rosteredStartUtc.AddHours(-48).AddMinutes(-1), zone);
+        var at = Odip.Infrastructure.Services.ShiftPackageService.SensitiveInfoWithheldReason(
+            ShiftStatus.Published, rosteredStartUtc, rosteredStartUtc.AddHours(-48), zone);
+
+        Assert.Equal("The participant's emergency contacts, address and handover are shown from 48 hours before the shift starts, from 08:00 on Saturday 3 October.", before);
+        Assert.Null(at);
+    }
+
     [Fact]
     public async Task OnceTheWorkerFinishes_TheReturnedDetailNoLongerCarriesThem()
     {

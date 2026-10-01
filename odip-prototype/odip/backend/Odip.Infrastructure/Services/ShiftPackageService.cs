@@ -216,6 +216,42 @@ public sealed class ShiftPackageService
 
     // ═════════════════════════ Need-to-know: at a glance and contacts ═════════════════════════
 
+    /// <summary>How long before its rostered start a PUBLISHED shift starts showing the participant's handover, emergency contacts and address.</summary>
+    public static readonly TimeSpan SensitiveInfoLeadTime = TimeSpan.FromHours(48);
+
+    /// <summary>
+    /// NEED-TO-KNOW by shift status AND time: why the participant's handover, emergency contacts and address are withheld for this shift right now, or
+    /// null when they are shown. They are for a worker who is about to do the shift or is doing it: an InProgress shift always, and a Published shift from
+    /// 48 hours before its rostered start (<see cref="SensitiveInfoLeadTime"/>, boundary inclusive) - a worker rostered for next month has no need of the
+    /// participant's phone numbers and address in their pocket now. Any other status (PendingReview, Completed, Cancelled, Draft) withholds them. The reason is
+    /// plain language for the shift detail; times are provider-local and formatted with the invariant culture (the deploy image runs with a different culture).
+    /// </summary>
+    public static string? SensitiveInfoWithheldReason(ShiftStatus status, DateTime rosteredStartUtc, DateTime nowUtc, TimeZoneInfo zone)
+    {
+        switch (status)
+        {
+            case ShiftStatus.InProgress:
+                return null;
+
+            case ShiftStatus.Published:
+                var opensUtc = rosteredStartUtc - SensitiveInfoLeadTime;
+                if (nowUtc >= opensUtc) return null;
+                var opens = ProviderLocalTime.UtcToLocal(opensUtc, zone);
+                return "The participant's emergency contacts, address and handover are shown from 48 hours before the shift starts, from " +
+                       $"{opens.ToString("HH:mm", CultureInfo.InvariantCulture)} on {opens.ToString("dddd d MMMM", CultureInfo.InvariantCulture)}.";
+
+            default:
+                var state = status switch
+                {
+                    ShiftStatus.PendingReview => "waiting for review",
+                    ShiftStatus.Completed => "completed",
+                    ShiftStatus.Cancelled => "cancelled",
+                    _ => "not published",
+                };
+                return $"The participant's emergency contacts, address and handover are only shown for a shift that is published or in progress. This shift is {state}.";
+        }
+    }
+
     /// <summary>
     /// The critical care facts for the worker. Excludes the NDIS number, plan, funding and full diagnoses by construction:
     /// this method is the allow-list, and nothing outside it is ever mapped. Blank text becomes null so absence is explicit.

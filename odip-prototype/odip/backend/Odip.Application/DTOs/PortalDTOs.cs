@@ -163,8 +163,8 @@ public record PortalShiftDetailDto(
     string TimeZoneId,
     /// <summary>The critical care facts, in fixed groups, with explicit nulls for anything not recorded.</summary>
     PortalAtAGlanceDto AtAGlance,
-    /// <summary>Active emergency contacts, first call first (priority, then primary). Explicit null when the shift's status withholds sensitive
-    /// information (anything but Published or InProgress): see <see cref="SensitiveInfoWithheldReason"/>.</summary>
+    /// <summary>Active emergency contacts, first call first (priority, then primary). Explicit null when the shift withholds sensitive information
+    /// (anything but InProgress, or Published within 48 hours of its rostered start): see <see cref="SensitiveInfoWithheldReason"/>.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] IReadOnlyList<PortalEmergencyContactDto>? EmergencyContacts,
     /// <summary>Scheduled doses due in the shift's ROSTERED window (one calendar date, or two for an overnight shift), in
     /// time order, each with its state (Due / Overdue / Recorded), outcome and witness status. Overdue is judged in the
@@ -187,11 +187,12 @@ public record PortalShiftDetailDto(
     /// <summary>MEDICATION_COMPETENCY_MISSING | MEDICATION_COMPETENCY_EXPIRED | MEDICATION_COMPETENCY_UNVERIFIABLE whenever the credential is
     /// not current (in both modes: <see cref="CanRecordDoses"/> says whether it blocks); null with a current credential.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? CanRecordDosesReasonCode,
-    /// <summary>NEED-TO-KNOW BY SHIFT STATUS. The participant's handover, emergency contacts and address are returned ONLY for a shift that is
-    /// Published or InProgress - the shifts a worker still has to do. For any other status (PendingReview, Completed, Cancelled, Draft)
-    /// <c>handover</c>, <c>emergencyContacts</c> and <c>atAGlance.address</c> are explicit null (and <c>handoverTrail</c> is empty), and this
-    /// says why in plain language so the UI can explain instead of showing an unexplained gap. Null when nothing is withheld. The other
-    /// at-a-glance care facts (allergies, diet, communication, behaviour, HIDPA) are unaffected.</summary>
+    /// <summary>NEED-TO-KNOW BY SHIFT STATUS AND TIME. The participant's handover, emergency contacts and address are returned ONLY for a shift the
+    /// worker is doing (InProgress) or is about to do: a Published shift shows them from 48 hours before its rostered start. For any other status
+    /// (PendingReview, Completed, Cancelled, Draft), and for a Published shift further out than that, <c>handover</c>, <c>emergencyContacts</c> and
+    /// <c>atAGlance.address</c> are explicit null (and <c>handoverTrail</c> is empty), and this says why in plain language - for a Published shift, from
+    /// when they will show - so the UI can explain instead of showing an unexplained gap. Null when nothing is withheld. The other at-a-glance care
+    /// facts (allergies, diet, communication, behaviour, HIDPA) are unaffected.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? SensitiveInfoWithheldReason);
 
 // ── At a glance (need-to-know critical facts) ─────────────────────────────

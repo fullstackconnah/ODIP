@@ -185,10 +185,13 @@ public class PortalController : ControllerBase
         var completionDto = activeCompletion is null ? null : await ToShiftCompletionDtoAsync(activeCompletion, shift.ReturnCount, ct);
         var breakDtos = completionDto?.Breaks ?? Array.Empty<ShiftBreakDto>();
 
-        // NEED-TO-KNOW BY SHIFT STATUS: the handover, the emergency contacts and the address are for a worker who still has to do the shift
-        // (Published or InProgress). A worker whose shift is PendingReview, Completed, Cancelled or Draft keeps seeing the shift itself but
-        // not the participant's phone numbers, address or the latest handover through it. Withheld = explicit null, with the reason.
-        var showSensitive = shift.Status is ShiftStatus.Published or ShiftStatus.InProgress;
+        // NEED-TO-KNOW BY SHIFT STATUS AND TIME: the handover, the emergency contacts and the address are for a worker who is doing the shift (InProgress) or
+        // is about to (Published, from 48 hours before its rostered start). A worker whose shift is PendingReview, Completed, Cancelled or Draft - or a
+        // Published shift further out than that - keeps seeing the shift itself but not the participant's phone numbers, address or the latest handover
+        // through it. Withheld = explicit null, with the reason.
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
+        var sensitiveWithheldReason = SensitiveInfoWithheld(shift, provider);
+        var showSensitive = sensitiveWithheldReason is null;
 
         // Handover baton pass (D4): the latest handover from a PREVIOUS shift for this participant, with the caller's
         // own read state, and the last 3 holders. The caller is the shift's own worker (ownership was established).
@@ -199,7 +202,6 @@ public class PortalController : ControllerBase
         // Need-to-know package data: the provider's zone, the critical care facts, emergency contacts, doses due in the
         // rostered window (overdue in provider-local time), routines matched to the window, and whether the caller may
         // record doses (Medication Competency).
-        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
         var providerToday = DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(NowUtc, provider.Zone));
         var contacts = showSensitive ? await _package.GetEmergencyContactsAsync(participant.Id, providerToday, ct) : null;
         var doses = await _package.GetDosesAsync(shift, provider, includePrn: true, ct);
@@ -247,20 +249,15 @@ public class PortalController : ControllerBase
             access.CanRecord,
             access.Reason,
             access.Code,
-            showSensitive ? null : SensitiveInfoWithheldMessage(shift.Status));
+            sensitiveWithheldReason);
     }
 
-    /// <summary>Why the participant's handover, emergency contacts and address are not shown for this shift's status (plain language).</summary>
-    private static string SensitiveInfoWithheldMessage(ShiftStatus status)
+    /// <summary>Why the participant's handover, emergency contacts and address are not shown for this shift right now (plain language), or null when they are:
+    /// the shift's status and, for a Published shift, how far off its rostered start is (<see cref="ShiftPackageService.SensitiveInfoWithheldReason"/>).</summary>
+    private string? SensitiveInfoWithheld(Shift shift, ProviderTimeZone provider)
     {
-        var state = status switch
-        {
-            ShiftStatus.PendingReview => "waiting for review",
-            ShiftStatus.Completed => "completed",
-            ShiftStatus.Cancelled => "cancelled",
-            _ => "not published",
-        };
-        return $"The participant's emergency contacts, address and handover are only shown for a shift that is published or in progress. This shift is {state}.";
+        var (rosteredStartUtc, _) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, provider.Id);
+        return ShiftPackageService.SensitiveInfoWithheldReason(shift.Status, rosteredStartUtc, NowUtc, provider.Zone);
     }
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and RosteringController's
@@ -674,7 +671,8 @@ public class PortalController : ControllerBase
 
     /// <summary>
     /// The next worker marks the participant's latest handover as READ - who and when are recorded and audited. Only
-    /// for the caller's OWN shift, before it is finished (Published or InProgress). Idempotent. The optional
+    /// for the caller's OWN shift, before it is finished (InProgress, or Published once the handover is shown: from 48 hours before the rostered
+    /// start; earlier it is 404 SHIFT_HANDOVER_NOT_FOUND, there is nothing visible to read). Idempotent. The optional
     /// `completionId` names the handover the worker saw: if a newer one has arrived, 409 SHIFT_HANDOVER_CHANGED (with
     /// the refreshed shift as data) and nothing is recorded. 404 SHIFT_HANDOVER_NOT_FOUND when there is nothing to read.
     /// </summary>
@@ -698,6 +696,12 @@ public class PortalController : ControllerBase
                 "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished)),
         };
         if (stateConflict is not null) return stateConflict;
+
+        // A Published shift whose need-to-know window has not opened does not show the handover, so there is nothing the worker has seen to mark as read
+        // (an acknowledge without a completionId would otherwise record the latest handover as read, unseen).
+        var withheld = SensitiveInfoWithheld(shift, await ProviderTimeZoneResolver.ResolveAsync(_db, ct));
+        if (withheld is not null)
+            return NotFound(ApiResponse<PortalShiftDetailDto>.Fail(withheld, ShiftErrorCodes.ShiftHandoverNotFound));
 
         var outcome = await _handover.AcknowledgeAsync(shift, shift.UserId!.Value, dto?.CompletionId, ct);
         switch (outcome)
