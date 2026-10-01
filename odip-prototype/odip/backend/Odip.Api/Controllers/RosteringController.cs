@@ -588,7 +588,15 @@ public class RosteringController : ControllerBase
         return Ok(ApiResponse<ShiftDto>.Ok(await ToShiftDtoAsync(shift, findings, ct)));
     }
 
-    /// <summary>Delete a shift outright. Not roster-checked — removing a shift can never itself create a conflict.</summary>
+    /// <summary>
+    /// Delete a shift outright. Not roster-checked — removing a shift can never itself create a conflict. The shift's OWN handover
+    /// acknowledgements (a worker marking the previous handover as read, recorded against the shift they read it from) go with it: they only
+    /// say that a reader saw a handover from that shift, they mean nothing without it, and they are restricted by a foreign key, so without
+    /// this a Published shift whose worker had opened the handover could not be deleted (500, a foreign-key violation) - the everyday case
+    /// of a sick call or a re-roster by delete. They are removed in the same save (one transaction) and the removal is audited. The
+    /// acknowledgements OTHER shifts made of THIS shift's handover are not touched: the shift has none while it has no completion, and a
+    /// shift with a completion is still refused by the completion's own foreign key, as before.
+    /// </summary>
     [HttpDelete("shifts/{id:guid}")]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteShift(Guid id, CancellationToken ct)
     {
@@ -598,6 +606,7 @@ public class RosteringController : ControllerBase
         // Item 9: deleting the shift removes whatever coverage gap it represented.
         await _obligationTasks.CompleteByShiftAsync(shift.Id, TaskType.LeaveCoverage, ct);
 
+        _db.HandoverAcknowledgements.RemoveRange(await _db.HandoverAcknowledgements.Where(a => a.ShiftId == shift.Id).ToListAsync(ct));
         _db.Shifts.Remove(shift);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));

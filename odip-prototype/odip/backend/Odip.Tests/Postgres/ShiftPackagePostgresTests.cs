@@ -575,6 +575,62 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(1, await verify.MedicationAdministrations.CountAsync(a => a.ParticipantMedicationId == med.Id));
     }
 
+    [SkippableFact]
+    public async Task DeletingAPublishedShiftThatHasAnAcknowledgement_OnRealPostgres_Works_TheReviewsProbeP3()
+    {
+        // The acknowledgement's foreign key to the shift is Restrict, so a plain delete of the shift is a foreign-key violation (SQLSTATE 23503,
+        // a 500 from the endpoint). DELETE rostering/shifts/{id} removes the shift's own acknowledgements first, in the same save.
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var (participantId, userId, _, _) = await SeedCompletionAsync(db);
+        var previous = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, UserId = userId, ServiceDate = new DateOnly(2026, 7, 13),
+            StartTime = new TimeOnly(7, 0), EndTime = new TimeOnly(15, 0), Status = ShiftStatus.PendingReview,
+        };
+        var published = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, UserId = userId, ServiceDate = new DateOnly(2026, 7, 20),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Status = ShiftStatus.Published,
+        };
+        var source = new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = previous.Id, ActualStart = new DateTime(2026, 7, 12, 21, 0, 0, DateTimeKind.Utc),
+            ActualEnd = new DateTime(2026, 7, 13, 5, 0, 0, DateTimeKind.Utc), TimeZoneId = "Australia/Sydney", SubmittedByUserId = userId,
+            StartedAt = new DateTime(2026, 7, 12, 21, 0, 0, DateTimeKind.Utc), SubmittedAt = new DateTime(2026, 7, 13, 5, 0, 0, DateTimeKind.Utc),
+            IsActive = true, HandoverText = "Quiet day.",
+        };
+        db.AddRange(previous, published, source);
+        await db.SaveChangesAsync();
+        var acknowledgement = new HandoverAcknowledgement
+        {
+            Id = Guid.NewGuid(), SourceCompletionId = source.Id, ShiftId = published.Id, UserId = userId, AcknowledgedAt = DateTime.UtcNow,
+        };
+        db.HandoverAcknowledgements.Add(acknowledgement);
+        await db.SaveChangesAsync();
+
+        // The control: the foreign key really does refuse a plain delete.
+        await using (var plain = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object))
+        {
+            plain.Shifts.Remove(await plain.Shifts.SingleAsync(s => s.Id == published.Id));
+            var refused = await Assert.ThrowsAsync<DbUpdateException>(() => plain.SaveChangesAsync());
+            Assert.Equal("23503", Assert.IsType<PostgresException>(refused.InnerException).SqlState);
+        }
+
+        await using (var request = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object))
+        {
+            var controller = new RosteringController(request, new StaffCompatibilityLinkService(request), new StaffUnavailabilityQuery(request));
+            var result = await controller.DeleteShift(published.Id, default);
+            Assert.IsType<OkObjectResult>(result.Result);
+        }
+
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        Assert.False(await verify.Shifts.AnyAsync(s => s.Id == published.Id));
+        Assert.False(await verify.HandoverAcknowledgements.AnyAsync(a => a.Id == acknowledgement.Id));
+        Assert.True(await verify.ShiftCompletions.AnyAsync(c => c.Id == source.Id));   // the handover that was read is untouched
+    }
+
     // ── the slot lock under failure (review 2 findings m2, n2 and n5) ──
 
     /// <summary>Holds the advisory lock a request for this slot would take, on its own connection, until released or disposed.</summary>
