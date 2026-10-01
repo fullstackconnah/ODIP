@@ -405,6 +405,19 @@ describe('ParticipantDetailPage — header meta row', () => {
     expect(meta.lastElementChild).toHaveTextContent(/Support Ratio:/)
   })
 
+  // Landing-spotted: the header printed the raw enums "PlanManaged" and "TwoToOne".
+  it('prints the plan type and support ratio as labels, never as raw enums', () => {
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({ region: 'Gold Coast', planType: 'PlanManaged', supportRatio: 'TwoToOne' }),
+      isLoading: false,
+    })
+    renderAt('participant-1')
+
+    const meta = screen.getByText(/Support Ratio:/)
+    expect(meta).toHaveTextContent('Gold Coast · Plan Managed · Support Ratio: 2:1')
+    expect(screen.queryByText(/PlanManaged|TwoToOne/)).not.toBeInTheDocument()
+  })
+
   it('still shows a chip per service stream at the end of the meta row', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: 'STA,InHomeSupport' }), isLoading: false })
     renderAt('participant-1')

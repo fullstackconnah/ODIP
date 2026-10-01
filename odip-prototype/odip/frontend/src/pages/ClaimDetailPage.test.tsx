@@ -132,6 +132,21 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+// Landing-spotted: the page mapped 'NdiaManaged', a value the API never sends, so every line item printed the raw enum "AgencyManaged".
+describe('ClaimDetailPage — plan type label', () => {
+  it.each([
+    ['AgencyManaged', 'Agency Managed'],
+    ['PlanManaged', 'Plan Managed'],
+    ['SelfManaged', 'Self Managed'],
+  ] as const)('prints %s as "%s", never the raw enum the API sends', (planType, label) => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem({ planType })]), isLoading: false })
+    renderPage()
+
+    expect(screen.getByText(label)).toBeInTheDocument()
+    expect(screen.queryByText(planType)).not.toBeInTheDocument()
+  })
+})
+
 describe('ClaimDetailPage — line item participant link', () => {
   it('links the participant cell to the participant detail page when participantId is set', () => {
     mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem({ participantId: 'p-9', participantName: 'Priya Nair' })]), isLoading: false })

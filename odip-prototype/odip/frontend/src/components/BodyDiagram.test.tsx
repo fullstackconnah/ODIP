@@ -75,6 +75,30 @@ describe('BodyDiagram accessibility — the button list is the primary control',
   })
 })
 
+// Landing-spotted: the selected region pill and the Add injury button used --color-on-primary, which index.css never defines, so their
+// text fell back to the inherited dark ink on the dark green primary. --color-primary-foreground is the defined white.
+describe('BodyDiagram — legible on the primary fill', () => {
+  it('sets the selected region pill and the Add injury button in the defined on-primary colour', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+
+    await user.click(screen.getByRole('button', { name: 'Chest' }))
+    const pill = screen.getByRole('button', { name: 'Chest' })
+    expect(pill).toHaveAttribute('aria-pressed', 'true')
+    expect(pill).toHaveClass('bg-[var(--color-primary)]', 'text-[var(--color-primary-foreground)]')
+    expect(screen.getByRole('button', { name: 'Add injury' })).toHaveClass('bg-[var(--color-primary)]', 'text-[var(--color-primary-foreground)]')
+    expect(pill.className).not.toContain('--color-on-primary)')
+  })
+
+  it('marks a region that already has an injury in the light success pair, not dark ink on the dark green container', async () => {
+    render(<Harness initial={[{ region: 'Head', injuryType: 'Bruise', description: 'Bumped head.' } as BodyDiagramInjury]} />)
+
+    const marked = screen.getByRole('button', { name: 'Head' })
+    expect(marked).toHaveClass('bg-[var(--color-primary-fixed)]', 'text-[var(--color-on-primary-fixed)]')
+    expect(marked.className).not.toContain('--color-primary-container')
+  })
+})
+
 describe('BodyDiagram — recording injuries', () => {
   it('selecting a region via the button list, then adding, records it', async () => {
     const user = userEvent.setup()
