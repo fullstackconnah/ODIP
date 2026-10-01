@@ -76,6 +76,17 @@ export function initCrossings(doc: Document = document, win: Window = window): {
     return handler
   })
 
+  // Keyboard focus never lands on a record still hidden by its reveal: focusing into it lands the crossing at once.
+  const records = items.map((item) => item.el.querySelector<HTMLElement>('.crossing__record'))
+  const onFocusRecord = (item: Crossing) => () => {
+    if (item.state.phase !== 'arrived') send(item, { type: 'reduce' })
+  }
+  const focusers = items.map((item, i) => {
+    const handler = onFocusRecord(item)
+    records[i]?.addEventListener('focusin', handler)
+    return handler
+  })
+
   // Drag: a mouse or pen on a wide screen pulls the moment across the seam; release lets it land.
   let drag: { item: Crossing; x: number; from: number; span: number; id: number } | null = null
   const onDown = (item: Crossing) => (e: PointerEvent) => {
@@ -143,6 +154,7 @@ export function initCrossings(doc: Document = document, win: Window = window): {
       reduce.removeEventListener('change', onPreference)
       items.forEach((item, i) => {
         item.replay?.removeEventListener('click', replays[i])
+        records[i]?.removeEventListener('focusin', focusers[i])
         item.gate?.removeEventListener('pointerdown', downs[i])
         item.gate?.removeEventListener('pointermove', onMove)
         item.gate?.removeEventListener('pointerup', onUp)
