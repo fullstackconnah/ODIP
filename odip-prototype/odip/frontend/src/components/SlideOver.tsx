@@ -50,8 +50,11 @@ const SIZE = {
  * on close, a Tab trap, Escape to close, and page scroll locked: all of it from `useDialogBehavior`, so a ConfirmDialog opened
  * from inside the panel closes alone and leaves the panel (and its focus) where it was.
  *
- * Layers: scrim z-40, panel z-50 (a Modal opened over it is also z-50 and later in the DOM, so it paints above). The panel
- * slides in from the edge; under `prefers-reduced-motion` it just appears (index.css).
+ * Layers: scrim z-40, panel z-50 (a Modal opened over it is also z-50 and later in the DOM, so it paints above). Below lg the
+ * fixed bottom nav (AppLayout, z-50, `--mobile-nav-h` tall) is also z-50 and later in the DOM than the page, so a full-height
+ * panel had its footer (Cancel, Save) underneath it: the panel stops above the nav there, as the wizard footer does
+ * (`h-[calc(100%-var(--mobile-nav-h))]`, full height from lg). The panel slides in from the edge; under
+ * `prefers-reduced-motion` it just appears (index.css).
  */
 export function SlideOver({
   open,
@@ -115,7 +118,7 @@ export function SlideOver({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
-        className={`slide-over-panel fixed right-0 top-0 z-50 flex h-full w-full ${SIZE[size]} flex-col overflow-hidden border-l border-border bg-card shadow-xl focus:outline-none`}
+        className={`slide-over-panel fixed right-0 top-0 z-50 flex h-[calc(100%-var(--mobile-nav-h))] lg:h-full w-full ${SIZE[size]} flex-col overflow-hidden border-l border-border bg-card shadow-xl focus:outline-none`}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border p-[var(--card-pad)]">
           {description ? (

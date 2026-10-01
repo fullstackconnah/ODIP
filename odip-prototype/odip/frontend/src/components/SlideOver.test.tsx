@@ -43,10 +43,11 @@ describe('SlideOver semantics', () => {
     expect(document.body.style.overflow).toBe('')
   })
 
-  it('keeps the geometry of the panels it replaced: right edge, full height, max-w-md or max-w-lg, z-50 over a z-40 scrim', () => {
+  it('keeps the geometry of the panels it replaced: right edge, full height from lg, max-w-md or max-w-lg, z-50 over a z-40 scrim', () => {
     const { rerender, container } = render(<Panel />)
     const panel = screen.getByRole('dialog')
-    expect(panel).toHaveClass('fixed', 'right-0', 'top-0', 'z-50', 'h-full', 'w-full', 'max-w-md', 'flex', 'flex-col', 'overflow-hidden', 'border-l', 'shadow-xl')
+    // h-full from lg; below it the panel stops above the fixed bottom nav (see the layers note in SlideOver.tsx)
+    expect(panel).toHaveClass('fixed', 'right-0', 'top-0', 'z-50', 'lg:h-full', 'h-[calc(100%-var(--mobile-nav-h))]', 'w-full', 'max-w-md', 'flex', 'flex-col', 'overflow-hidden', 'border-l', 'shadow-xl')
     const scrim = panel.previousElementSibling as HTMLElement
     expect(scrim).toHaveClass('fixed', 'inset-0', 'z-40', 'bg-black/40')
     expect(container.firstElementChild).toBe(scrim)
