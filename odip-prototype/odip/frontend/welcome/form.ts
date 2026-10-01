@@ -152,6 +152,8 @@ export function initEarlyAccessForm(form: HTMLFormElement, options: FormOptions 
   const submitLabel = form.querySelector<HTMLElement>('[data-submit-label]')
   const success = container.querySelector<HTMLElement>('[data-success]')
   const reset = container.querySelector<HTMLElement>('[data-reset]')
+  const successEmail = container.querySelector<HTMLElement>('[data-success-email]')
+  const emailFallback = successEmail?.textContent ?? 'your address'
   const hideOnSuccess = Array.from(container.querySelectorAll<HTMLElement>('[data-hide-on-success]'))
   const idleLabel = submitLabel?.textContent?.trim() || 'Request early access'
 
@@ -241,6 +243,7 @@ export function initEarlyAccessForm(form: HTMLFormElement, options: FormOptions 
       setState('success')
       form.hidden = true
       hideOnSuccess.forEach((el) => (el.hidden = true))
+      if (successEmail) successEmail.textContent = current.email.trim()
       if (success) {
         success.hidden = false
         success.focus()
@@ -273,6 +276,7 @@ export function initEarlyAccessForm(form: HTMLFormElement, options: FormOptions 
     form.hidden = false
     hideOnSuccess.forEach((el) => (el.hidden = false))
     if (success) success.hidden = true
+    if (successEmail) successEmail.textContent = emailFallback
     inputs.name?.focus()
   }
 

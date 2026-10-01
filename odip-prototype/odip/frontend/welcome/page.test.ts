@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import indexHtml from './index.html?raw'
+import manifestRaw from './assets/screens/manifest.json?raw'
 
 // Guards for the landing page's contract: the CSP it must satisfy, the claims it must never make,
 // and the numbers it may state. The claims come from the confirmed brief's safe list.
 const doc = new DOMParser().parseFromString(indexHtml, 'text/html')
+const manifest = JSON.parse(manifestRaw) as Array<{ name: string; file1x: string; width1x: number; height1x: number }>
 const visibleText = (() => {
   const clone = doc.body.cloneNode(true) as HTMLElement
   clone.querySelectorAll('script, noscript, svg, .sr-only').forEach((n) => n.remove())
@@ -137,12 +139,12 @@ describe('structure, actions and accessibility', () => {
 
   it('every stop link and stage sign points at a fold that exists, in order', () => {
     const ids = Array.from(doc.querySelectorAll('[data-fold]')).map((f) => f.id)
-    expect(ids).toEqual(['stage-plan', 'stage-stay', 'stage-crew', 'stage-care', 'stage-fund', 'stage-compliant'])
+    expect(ids).toEqual(['stage-plan', 'stage-stay', 'stage-crew', 'stage-care', 'stage-fund', 'stage-report'])
     for (const sel of ['[data-stop]', '.stage-signs a']) {
       expect(Array.from(doc.querySelectorAll(sel)).map((a) => a.getAttribute('href')!.slice(1))).toEqual(ids)
     }
     expect(Array.from(doc.querySelectorAll('.fold .sign__label')).map((h) => h.textContent)).toEqual([
-      'Plan', 'Stay', 'Crew', 'Care', 'Fund and claim', 'Stay compliant',
+      'Plan', 'Stay', 'Crew', 'Care', 'Fund and claim', 'Report on time',
     ])
   })
 
@@ -153,7 +155,7 @@ describe('structure, actions and accessibility', () => {
 
   it('every real screen is a lazy WebP at 1x and 2x with real alt text, dimensions and a "Sample data" label', () => {
     const figures = Array.from(doc.querySelectorAll('.fold figure.screen'))
-    expect(figures.length).toBeGreaterThanOrEqual(6)
+    expect(figures.length).toBeGreaterThanOrEqual(12)
     for (const fig of figures) {
       const img = fig.querySelector('img')!
       expect(img.getAttribute('src')).toMatch(/\.webp$/)
@@ -195,15 +197,125 @@ describe('structure, actions and accessibility', () => {
 })
 
 describe('finish-review corrections', () => {
+  it('says what Odip is above the fold: software, for NDIS providers, trips', () => {
+    expect(doc.title).toBe('Odip: NDIS trip management for supported holidays')
+    expect(doc.querySelector('meta[name="description"]')!.getAttribute('content')).toMatch(/^Trip management software for NDIS providers that run supported holidays/)
+    const sub = doc.querySelector('.hero__sub')!.textContent!.replace(/\s+/g, ' ').trim()
+    expect(sub).toBe(
+      'Trip management software for NDIS providers that run supported holidays. One record for travellers, accommodation, staff, vehicles and funding, then the claims.',
+    )
+    expect(doc.querySelector('.band__lead')!.textContent).toBe('Built around the trip, not the roster: six stops, from the first plan to the final claim.')
+  })
+
   it('names the header call to action at every width (the short label is not hidden from assistive tech)', () => {
     const cta = doc.querySelector('.site-header a[href="#early-access"]')!
     expect(cta.getAttribute('aria-label')).toBe('Request early access')
     expect(cta.querySelector('.cta-short')!.hasAttribute('aria-hidden')).toBe(false)
   })
 
+  it('uses "Report on time" and the reviewed incident sentence, and never promises a compliance outcome', () => {
+    const fold = doc.getElementById('stage-report')!
+    expect(fold.querySelector('.fold__sentence')!.textContent).toBe(
+      'Staff log incidents in a guided form with a body map. Odip flags any reportable incident still unreported 24 hours after it was logged, and keeps an audit history of changes.',
+    )
+    expect(`${visibleText} ${altText}`).not.toMatch(/stay compliant/i)
+  })
+
+  it('says accommodation, never rooms (the product reserves bed and bedroom counts)', () => {
+    expect(`${visibleText} ${altText}`).not.toMatch(/\brooms?\b/i)
+  })
+
+  it('defines QSC once, as the NDIS Commission, in a caption', () => {
+    expect(visibleText.split('QSC is the NDIS Commission').length - 1).toBe(1)
+  })
+
+  it('puts the dashboard, the roster checks, the claim checks and the audit history on screen, not only in words', () => {
+    const names = Array.from(doc.querySelectorAll('.fold img')).map((i) => i.getAttribute('src')!.split('/').pop()!.replace('.webp', ''))
+    for (const n of ['plan-dashboard-missing', 'crew-roster-warning', 'crew-credentials', 'fund-claim-preview', 'fund-claim-batch', 'care-shift-detail-phone', 'care-shift-notes-phone']) {
+      expect(names).toContain(n)
+    }
+  })
+
+  it('serves art-directed crops below 1024px: every source is 1x/2x WebP with its own size', () => {
+    const sources = Array.from(doc.querySelectorAll('.fold picture source'))
+    expect(sources.length).toBeGreaterThanOrEqual(8)
+    for (const s of sources) {
+      expect(s.getAttribute('media')).toBe('(max-width: 1023px)')
+      expect(s.getAttribute('srcset')).toMatch(/-m\.webp 1x, .*-m@2x\.webp 2x$/)
+      expect(Number(s.getAttribute('width'))).toBeGreaterThan(0)
+      expect(Number(s.getAttribute('height'))).toBeGreaterThan(0)
+    }
+  })
+
+  it('renders the no-JavaScript note by default (no noscript wrapper); the script hides it', () => {
+    expect(doc.querySelector('form noscript')).toBeNull()
+    const note = doc.querySelector('#early-access-form .form__nojs')!
+    expect(note.textContent).toContain('needs JavaScript')
+    expect(note.hasAttribute('hidden')).toBe(false)
+  })
+
+  it('the success message echoes the address, and the release items for the form copy are TODOs', () => {
+    expect(doc.querySelector('[data-success] [data-success-email]')).not.toBeNull()
+    expect(indexHtml).toMatch(/<!-- TODO\(release\): say what early access is/)
+  })
+
+  it('tells readers some on-screen notes were written for the sample', () => {
+    expect(visibleText).toContain('some on-screen notes were written for the sample')
+  })
+
   it('has a quiet landscape behind the tour, hidden from assistive tech', () => {
     const country = doc.querySelector('.tour__country')!
     expect(country.getAttribute('aria-hidden')).toBe('true')
     expect(country.querySelectorAll('use').length).toBeGreaterThanOrEqual(5)
+  })
+
+  it('states the roster checks as the code does: two hard stops, the others warn, and only some ask for a reason', () => {
+    // RosterConflictService.cs: 18 codes; WscExpired and VehicleDoubleBooked are Blocking, the 16 others are warnings,
+    // and only four of those (approved leave, recurring unavailability, over seats, over wheelchair positions) require a reason.
+    expect(doc.querySelector('#stage-crew .fold__sentence')!.textContent).toBe(
+      'Drag a shift onto a support worker and 18 checks run. Two block the shift; the others warn, and some ask for a reason.',
+    )
+    expect(doc.querySelector('.plate__desc')!.textContent).toBe(
+      'run when you assign a shift. Expired worker screening and a double-booked vehicle are hard stops; the others are warnings, and some ask for a reason.',
+    )
+    expect(visibleText).not.toMatch(/the rest (ask|need)/i)
+  })
+
+  it('orders each stage the way the proof is argued', () => {
+    const order = (id: string) =>
+      Array.from(doc.querySelectorAll(`#${id} img`)).map((i) => i.getAttribute('src')!.split('/').pop()!.replace('.webp', ''))
+    expect(order('stage-plan')).toEqual(['plan-trip-glance', 'plan-dashboard-missing'])
+    expect(order('stage-crew')).toEqual(['crew-roster-board', 'crew-roster-warning', 'crew-credentials'])
+    expect(order('stage-care')).toEqual(['care-risk-alerts', 'care-shift-detail-phone', 'care-shift-notes-phone'])
+    expect(order('stage-fund')).toEqual(['fund-claim-preview', 'fund-claim-funding-split', 'fund-claim-batch'])
+    expect(order('stage-report')).toEqual(['compliant-overdue', 'compliant-body-map-m', 'compliant-history'])
+  })
+
+  it('names the bulk file as the PRODA bulk file, says Odip exports and the provider uploads, and checks claims before upload', () => {
+    expect(doc.querySelector('#stage-fund .fold__sentence')!.textContent).toBe(
+      "Preview each traveller's claim by day type and state price limit. Then export the PRODA bulk file for NDIA-managed travellers and an invoice PDF for the rest.",
+    )
+    expect(visibleText).toContain('Odip exports the files; you upload them.')
+    expect(visibleText).toContain("Each claim in a batch is checked against its service booking's balance and claim window before you upload")
+  })
+
+  it('shows the body map from the crop at every width (the full shot shows the app\'s low-contrast selected pill)', () => {
+    const fig = Array.from(doc.querySelectorAll('#stage-report figure')).find((f) => f.querySelector('figcaption')!.textContent!.includes('body map'))!
+    expect(fig.querySelector('img')!.getAttribute('src')).toBe('./assets/screens/compliant-body-map-m.webp')
+    expect(fig.querySelector('source')).toBeNull()
+  })
+
+  it('every image and source carries the pixel size of the file it points at, so nothing shifts while it loads', () => {
+    const files = new Map(manifest.map((e) => [e.file1x, e]))
+    const named = (url: string) => files.get(url.split('/').pop()!)
+    const sized = [...Array.from(doc.querySelectorAll('.fold img')), ...Array.from(doc.querySelectorAll('.fold picture source'))]
+    expect(sized.length).toBeGreaterThanOrEqual(20)
+    for (const el of sized) {
+      const first = (el.getAttribute(el.tagName === 'IMG' ? 'src' : 'srcset') ?? '').split(' ')[0]
+      const entry = named(first)
+      expect(entry, `${first} is in the manifest`).toBeDefined()
+      expect(Number(el.getAttribute('width')), `${first} width`).toBe(entry!.width1x)
+      expect(Number(el.getAttribute('height')), `${first} height`).toBe(entry!.height1x)
+    }
   })
 })

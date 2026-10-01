@@ -11,8 +11,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Odip: supported holidays, planned end to end</title>
-    <meta name="description" content="Odip plans a supported holiday end to end, then turns it into NDIS claims. Request early access." />
+    <title>Odip: NDIS trip management for supported holidays</title>
+    <meta name="description" content="Trip management software for NDIS providers that run supported holidays: one record for travellers, accommodation, staff, vehicles and funding, then the claims. Request early access." />
     <meta name="theme-color" content="#d5e3fc" />
     <!-- Same-origin scripts only, no inline script; images from self/data/blob; fonts from Google Fonts; fetch to self.
          Matches the nginx CSP in nginx/default.conf (which additionally allows the Firebase hosts the app needs). -->
@@ -20,6 +20,10 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234d7c0f'/%3E%3Cpath d='M9 22V10l14 6z' fill='%23bbf37c'/%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Preload the Latin subsets of the two faces the first viewport uses, so the sign lettering swaps in before first paint
+         and the hero does not shift. These point at the current files; if Google re-versions them the hints just stop helping. -->
+    <link rel="preload" as="font" type="font/woff2" href="https://fonts.gstatic.com/s/overpass/v19/qFdH35WCmI96Ajtm81GlU9s.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="https://fonts.gstatic.com/s/manrope/v20/xn7gYHE41ni1AdIRggexSg.woff2" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400..700&amp;family=Overpass:wght@600..800&amp;display=swap" />
     <link rel="stylesheet" href="./welcome.css" />
     <script type="module" src="./main.ts"></script>
@@ -33,7 +37,6 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 <symbol id="i-groups" viewBox="0 -960 960 960"><path d="M-16-224v-79q0-51 49-82t127-31h17q-17 25-25 52.86T144-305v81H-16Zm240 0v-81q0-35 18-65t53-52q35-22 82-33t102.96-11q57.04 0 103.54 11 46.5 11 81.5 33t53 52q18 30 18 65v81H224Zm592 0v-81q0-31.37-8-59.12-8-27.75-24-51.88h16q79.2 0 127.6 30.87Q976-354.26 976-303v79H816ZM160.09-452Q123-452 96.5-478.39 70-504.77 70-541.82 70-580 96.39-606q26.38-26 63.43-26Q198-632 224-606.15q26 25.85 26 64.06 0 37.09-25.85 63.59T160.09-452Zm640 0q-37.09 0-63.59-26.39-26.5-26.38-26.5-63.43Q710-580 736.39-606q26.38-26 63.43-26Q838-632 864-606.15q26 25.85 26 64.06 0 37.09-25.85 63.59T800.09-452ZM480-495q-56.67 0-96.33-39.67Q344-574.33 344-631q0-57 39.67-96.5Q423.33-767 480-767q57 0 96.5 39.5T616-631q0 56.67-39.5 96.33Q537-495 480-495Z"/></symbol>
 <symbol id="i-health-and-safety" viewBox="0 -960 960 960"><path d="M420-340h120v-100h100v-120H540v-100H420v100H320v120h100v100Zm60 295Q326.23-82.81 226.12-217.3 126-351.8 126-516v-267.46L480-915l354 131.54V-516q0 164.2-100.12 298.7Q633.77-82.81 480-45Z"/></symbol>
 <symbol id="i-receipt-long" viewBox="0 -960 960 960"><path d="M245-19q-69.17 0-117.58-48.42Q79-115.83 79-185v-153h135v-565l69 66 66.2-66 66.2 66 66.2-66 66.2 66 66.2-66 66 66 66-66 66 66 69-66v718q0 69.17-48.42 117.58Q784.17-19 715-19H245Zm470-126q17 0 28.5-11.5T755-185v-547H340v394h335v153q0 17 11.5 28.5T715-145ZM380-564v-80h215v80H380Zm0 120v-80h215v80H380Zm295-120q-17 0-28.5-11.5T635-604q0-17 11.5-28.5T675-644q17 0 28.5 11.5T715-604q0 17-11.5 28.5T675-564Zm0 120q-17 0-28.5-11.5T635-484q0-17 11.5-28.5T675-524q17 0 28.5 11.5T715-484q0 17-11.5 28.5T675-444Z"/></symbol>
-<symbol id="i-verified-user" viewBox="0 -960 960 960"><path d="m438-327 237-237-68-68-169 169-85-84-67 67 152 153Zm42 282Q326.23-82.81 226.12-217.3 126-351.8 126-516v-267.46L480-915l354 131.54V-516q0 164.2-100.12 298.7Q633.77-82.81 480-45Z"/></symbol>
 <symbol id="i-arrow-outward" viewBox="0 -960 960 960"><path d="m266-207-89-89 361-361H227v-126h526v526H627v-311L266-207Z"/></symbol>
 <symbol id="i-arrow-forward" viewBox="0 -960 960 960"><path d="M592-417H126v-126h466L390-745l90-89 354 354-354 354-90-89 202-202Z"/></symbol>
 <symbol id="i-arrow-upward" viewBox="0 -960 960 960"><path d="M417-126v-466L215-390l-89-90 354-354 354 354-89 90-202-202v466H417Z"/></symbol>
@@ -43,11 +46,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 <symbol id="i-login" viewBox="0 -960 960 960"><path d="M472-86v-126h276v-536H472v-126h276q53 0 89.5 36.5T874-748v536q0 53-36.5 89.5T748-86H472ZM361-232l-88-89 96-96H86v-126h283l-96-96 88-89 247 248-247 248Z"/></symbol>
 <symbol id="i-alt-route" viewBox="0 -960 960 960"><path d="M417-46v-168q0-49-11.5-81.5T360-357l89-89q8 8 16 16.5t15 16.5q12-14 23.5-27t29.5-26q54-38 83-87t30-120l-62 62-89-88 216-215 215 215-88 88-63-62q-8 117-46 180.5T616-370q-44 35-58.5 65.5T543-214v168H417ZM196-587q-5-19-8-43t-3-44l-63 63-89-88 216-215 215 215-89 88-62-62q0 13 1.5 28t4.5 27l-123 31Zm107 181q-26-23-47.5-51.5T220-515l128-32q8 14 18.5 26.5T391-495l-88 89Z"/></symbol>
 <symbol id="i-check-circle" viewBox="0 -960 960 960"><path d="m421-276 297-297-83-84-214 214-102-102-83 84 185 185Zm59 230q-91 0-169.99-34.08-78.98-34.09-137.41-92.52-58.43-58.43-92.52-137.41Q46-389 46-480q0-91 34.08-169.99 34.09-78.98 92.52-137.41 58.43-58.43 137.41-92.52Q389-914 480-914q91 0 169.99 34.08 78.98 34.09 137.41 92.52 58.43 58.43 92.52 137.41Q914-571 914-480q0 91-34.08 169.99-34.09 78.98-92.52 137.41-58.43 58.43-137.41 92.52Q571-46 480-46Z"/></symbol>
-<symbol id="i-error" viewBox="0 -960 960 960"><path d="M529-265.77q20-19.77 20-49t-19.77-49.73q-19.77-20.5-49-20.5T431-364.5q-20 20.5-20 49.73 0 29.23 19.77 49t49 19.77Q509-246 529-265.77ZM417-438h126v-263H417v263Zm63 392q-91 0-169.99-34.08-78.98-34.09-137.41-92.52-58.43-58.43-92.52-137.41Q46-389 46-480q0-91 34.08-169.99 34.09-78.98 92.52-137.41 58.43-58.43 137.41-92.52Q389-914 480-914q91 0 169.99 34.08 78.98 34.09 137.41 92.52 58.43 58.43 92.52 137.41Q914-571 914-480q0 91-34.08 169.99-34.09 78.98-92.52 137.41-58.43 58.43-137.41 92.52Q571-46 480-46Z"/></symbol>
 <symbol id="i-schedule" viewBox="0 -960 960 960"><path d="m597-286 79-77-141-141v-171H425v216.56L597-286ZM480-46q-91 0-169.99-34.08-78.98-34.09-137.41-92.52-58.43-58.43-92.52-137.41Q46-389 46-480q0-91 34.08-169.99 34.09-78.98 92.52-137.41 58.43-58.43 137.41-92.52Q389-914 480-914q91 0 169.99 34.08 78.98 34.09 137.41 92.52 58.43 58.43 92.52 137.41Q914-571 914-480q0 91-34.08 169.99-34.09 78.98-92.52 137.41-58.43 58.43-137.41 92.52Q571-46 480-46Z"/></symbol>
 <symbol id="i-holiday-village" viewBox="0 -960 960 960"><path d="M34-136v-439l255-255 256 255v439H345v-231H234v231H34Zm200-280h111v-111H234v111Zm391 280v-472L381-851h157l197 197v518H625Zm190 0v-551L651-851h156l119 118v597H815Z"/></symbol>
-<symbol id="i-info" viewBox="0 -960 960 960"><path d="M425-265h110v-255H425v255Zm97.5-332.25Q540-614.5 540-640t-17.25-42.75Q505.5-700 480-700t-42.75 17.25Q420-665.5 420-640t17.5 42.75Q455-580 480-580t42.5-17.25ZM480-46q-91 0-169.99-34.08-78.98-34.09-137.41-92.52-58.43-58.43-92.52-137.41Q46-389 46-480q0-91 34.08-169.99 34.09-78.98 92.52-137.41 58.43-58.43 137.41-92.52Q389-914 480-914q91 0 169.99 34.08 78.98 34.09 137.41 92.52 58.43 58.43 92.52 137.41Q914-571 914-480q0 91-34.08 169.99-34.09 78.98-92.52 137.41-58.43 58.43-137.41 92.52Q571-46 480-46Z"/></symbol>
-<symbol id="i-close" viewBox="0 -960 960 960"><path d="m256-168-88-88 224-224-224-224 88-88 224 224 224-224 88 88-224 224 224 224-88 88-224-224-224 224Z"/></symbol>
 </defs></svg>
     <!-- Authored landscape layers (generated once from seed 9680af9b, then hand-editable), referenced by the hero and the destination. -->
     <svg class="defs" width="0" height="0" aria-hidden="true" focusable="false"><defs>
@@ -110,7 +110,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                 <span class="sr-only">: </span>
                 <span class="hero__tag">Supported holidays, planned end to end</span>
               </h1>
-              <p class="hero__sub">One record for travellers, rooms, staff, vehicles and funding, then the NDIS claims.</p>
+              <p class="hero__sub"><span class="hero__line">Trip management software for NDIS providers that run supported holidays.</span> <span class="hero__line">One record for travellers, accommodation, staff, vehicles and funding, then the claims.</span></p>
               <a class="exit" href="#early-access">
                 <span class="exit__label">Request early access</span>
                 <span class="exit__arrow" aria-hidden="true"><svg class="pic" focusable="false"><use href="#i-arrow-outward" /></svg></span>
@@ -120,14 +120,14 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         </div>
         <div class="hero__band">
           <div class="wrap band__inner">
-            <p class="band__lead">Six stops, from the first plan to the final claim.</p>
+            <p class="band__lead">Built around the trip, not the roster: six stops, from the first plan to the final claim.</p>
             <ul class="stage-signs">
               <li><a class="sign sign--brown sign--mini" href="#stage-plan"><svg class="pic" aria-hidden="true" focusable="false"><use href="#i-map" /></svg><span>Plan</span></a></li>
               <li><a class="sign sign--brown sign--mini" href="#stage-stay"><svg class="pic" aria-hidden="true" focusable="false"><use href="#i-bed" /></svg><span>Stay</span></a></li>
               <li><a class="sign sign--brown sign--mini" href="#stage-crew"><svg class="pic" aria-hidden="true" focusable="false"><use href="#i-groups" /></svg><span>Crew</span></a></li>
               <li><a class="sign sign--brown sign--mini" href="#stage-care"><svg class="pic" aria-hidden="true" focusable="false"><use href="#i-health-and-safety" /></svg><span>Care</span></a></li>
               <li><a class="sign sign--brown sign--mini" href="#stage-fund"><svg class="pic" aria-hidden="true" focusable="false"><use href="#i-receipt-long" /></svg><span>Fund and claim</span></a></li>
-              <li><a class="sign sign--brown sign--mini" href="#stage-compliant"><svg class="pic" aria-hidden="true" focusable="false"><use href="#i-verified-user" /></svg><span>Stay compliant</span></a></li>
+              <li><a class="sign sign--brown sign--mini" href="#stage-report"><svg class="pic" aria-hidden="true" focusable="false"><use href="#i-schedule" /></svg><span>Report on time</span></a></li>
             </ul>
           </div>
         </div>
@@ -167,7 +167,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
               <li><a href="#stage-crew" data-stop><span class="stops__n" aria-hidden="true">3</span>Crew</a></li>
               <li><a href="#stage-care" data-stop><span class="stops__n" aria-hidden="true">4</span>Care</a></li>
               <li><a href="#stage-fund" data-stop><span class="stops__n" aria-hidden="true">5</span>Fund and claim</a></li>
-              <li><a href="#stage-compliant" data-stop><span class="stops__n" aria-hidden="true">6</span>Stay compliant</a></li>
+              <li><a href="#stage-report" data-stop><span class="stops__n" aria-hidden="true">6</span>Report on time</a></li>
             </ol>
             <p class="stops__odo" aria-hidden="true"><span class="stops__odo-label">Early access</span> <span class="stops__odo-km"><span data-odo>60</span> km</span></p>
             <p class="sr-only" role="status" aria-live="polite" data-stops-status></p>
@@ -188,9 +188,15 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                     <p class="fold__sentence">Each trip is one record of its travellers, accommodation, staff and vehicles, and the dashboard counts what is still missing.</p>
                   </div>
                   <div class="fold__screens">
-                    <figure class="screen screen--wide" style="--w:1008px">
-                      <div class="screen__frame"><img src="./assets/screens/plan-trip-glance.webp" width="1008" height="257" srcset="./assets/screens/plan-trip-glance.webp 1x, ./assets/screens/plan-trip-glance@2x.webp 2x" alt="Trip record for Sunshine Coast Beach Escape (SCB-2608, Caloundra, 14 to 17 August 2026) with status Confirmed. A row of four figures shows participants and staff, outstanding tasks needing action, high-support and overnight travellers, and insurance still outstanding, above the trip's tabs." loading="lazy" decoding="async" /></div>
-                      <figcaption><span class="tag">Sample data</span> A trip record at a glance <span class="screen__hint">Swipe sideways to read the whole screen.</span></figcaption>
+                    <figure class="screen screen--wide" style="--w:1024px;--wm:616px">
+                      <span class="screen__hint">Swipe sideways to read the whole screen.</span>
+                      <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/plan-trip-glance-m.webp 1x, ./assets/screens/plan-trip-glance-m@2x.webp 2x" width="616" height="348" /><img src="./assets/screens/plan-trip-glance.webp" width="1024" height="273" srcset="./assets/screens/plan-trip-glance.webp 1x, ./assets/screens/plan-trip-glance@2x.webp 2x" alt="Trip record for Sunshine Coast Beach Escape (SCB-2608, Caloundra, 14 to 17 August 2026) with status Confirmed. A row of four figures shows participants and staff, outstanding tasks needing action, high-support and overnight travellers, and insurance still outstanding, above the trip's tabs." loading="lazy" decoding="async" /></picture></div></div>
+                      <figcaption><span class="tag">Sample data</span> A trip record at a glance</figcaption>
+                    </figure>
+                    <figure class="screen screen--wide" style="--w:1024px;--wm:616px">
+                      <span class="screen__hint">Swipe sideways to read the whole screen.</span>
+                      <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/plan-dashboard-missing-m.webp 1x, ./assets/screens/plan-dashboard-missing-m@2x.webp 2x" width="616" height="438" /><img src="./assets/screens/plan-dashboard-missing.webp" width="1024" height="180" srcset="./assets/screens/plan-dashboard-missing.webp 1x, ./assets/screens/plan-dashboard-missing@2x.webp 2x" alt="Dashboard count tiles: qualification issues, critical participant alerts, overdue, missing accommodation, missing vehicles, missing staff, open incidents, QSC overdue and pending leave. One trip is missing accommodation, one is missing vehicles and two are missing staff." loading="lazy" decoding="async" /></picture></div></div>
+                      <figcaption><span class="tag">Sample data</span> The dashboard counts upcoming trips still missing accommodation, vehicles or staff. QSC is the NDIS Commission.</figcaption>
                     </figure>
                   </div>
                 </div>
@@ -211,9 +217,10 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                     <p class="fold__sentence">Reserve accommodation against the beds and bedrooms the trip needs, and get a flag when a property is double-booked.</p>
                   </div>
                   <div class="fold__screens">
-                    <figure class="screen screen--wide" style="--w:1024px">
-                      <div class="screen__frame"><img src="./assets/screens/stay-accommodation.webp" width="1024" height="496" srcset="./assets/screens/stay-accommodation.webp 1x, ./assets/screens/stay-accommodation@2x.webp 2x" alt="Accommodation for a trip: a stay timeline for 14 to 17 August with two bars for Seabreeze Accessible House, then a table of two reservations. The confirmed stay shows bedrooms and beds reserved against what the trip needs; the second, a requested extension that overlaps it, carries a red Conflict flag." loading="lazy" decoding="async" /></div>
-                      <figcaption><span class="tag">Sample data</span> Accommodation reserved for a trip <span class="screen__hint">Swipe sideways to read the whole screen.</span></figcaption>
+                    <figure class="screen screen--wide" style="--w:1024px;--wm:616px">
+                      <span class="screen__hint">Swipe sideways to read the whole screen.</span>
+                      <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/stay-accommodation-m.webp 1x, ./assets/screens/stay-accommodation-m@2x.webp 2x" width="616" height="695" /><img src="./assets/screens/stay-accommodation.webp" width="1024" height="496" srcset="./assets/screens/stay-accommodation.webp 1x, ./assets/screens/stay-accommodation@2x.webp 2x" alt="Accommodation for a trip: a stay timeline for 14 to 17 August with two bars for Seabreeze Accessible House, then a table of two reservations. The confirmed stay shows bedrooms and beds reserved against what the trip needs; the second, a requested extension that overlaps it, carries a red Conflict flag." loading="lazy" decoding="async" /></picture></div></div>
+                      <figcaption><span class="tag">Sample data</span> Accommodation reserved for a trip</figcaption>
                     </figure>
                   </div>
                 </div>
@@ -231,13 +238,25 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                       <h3 class="sign__label" id="stage-crew-title">Crew</h3>
                       <span class="sign__km" aria-hidden="true">40 km</span>
                     </div>
-                    <p class="fold__sentence">Drag a shift onto a support worker and 18 automatic checks run: an expired worker screening or a double-booked vehicle stops it, and every other warning needs a reason.</p>
+                    <p class="fold__sentence">Drag a shift onto a support worker and 18 checks run. Two block the shift; the others warn, and some ask for a reason.</p>
                   </div>
                   <div class="fold__screens">
-                    <figure class="screen screen--wide" style="--w:1118px">
-                      <div class="screen__frame"><img src="./assets/screens/crew-roster-board.webp" width="1118" height="448" srcset="./assets/screens/crew-roster-board.webp 1x, ./assets/screens/crew-roster-board@2x.webp 2x" alt="Weekly roster board for 10 to 16 August in the By staff view: an Unfilled lane with three shifts above rows for five staff, each with shift chips, hours against a 38-hour week and trip bars. One exception is flagged, and one worker shows a First aid expired note." loading="lazy" decoding="async" /></div>
-                      <figcaption><span class="tag">Sample data</span> The weekly roster board <span class="screen__hint">Swipe sideways to read the whole screen.</span></figcaption>
+                    <figure class="screen screen--wide" style="--w:1118px;--wm:674px">
+                      <span class="screen__hint">Swipe sideways to read the whole screen.</span>
+                      <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/crew-roster-board-m.webp 1x, ./assets/screens/crew-roster-board-m@2x.webp 2x" width="674" height="408" /><img src="./assets/screens/crew-roster-board.webp" width="1118" height="448" srcset="./assets/screens/crew-roster-board.webp 1x, ./assets/screens/crew-roster-board@2x.webp 2x" alt="Weekly roster board for 10 to 16 August in the By staff view: an Unfilled lane with three shifts above rows for five staff, each with shift chips, hours against a 38-hour week and trip bars. One exception is flagged, and one worker shows a First aid expired note." loading="lazy" decoding="async" /></picture></div></div>
+                      <figcaption><span class="tag">Sample data</span> The weekly roster board</figcaption>
                     </figure>
+                    <div class="fold__screens fold__screens--duo">
+                      <figure class="screen screen--fit" style="--w:382px">
+                        <div class="screen__view"><div class="screen__frame"><img src="./assets/screens/crew-roster-warning.webp" width="382" height="482" srcset="./assets/screens/crew-roster-warning.webp 1x, ./assets/screens/crew-roster-warning@2x.webp 2x" alt="The Assign with warnings dialog for a shift dropped onto a worker: three plain findings (approved leave, not overnight-eligible, first aid certificate expired), a box for the reason, and an Assign anyway button that stays disabled until a reason is given." loading="lazy" decoding="async" /></div></div>
+                        <figcaption><span class="tag">Sample data</span> Checks run when a shift is dropped on a worker; this one needs a reason to go ahead</figcaption>
+                      </figure>
+                      <figure class="screen screen--wide" style="--w:736px;--wm:616px">
+                        <span class="screen__hint">Swipe sideways to read the whole screen.</span>
+                        <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/crew-credentials-m.webp 1x, ./assets/screens/crew-credentials-m@2x.webp 2x" width="616" height="764" /><img src="./assets/screens/crew-credentials.webp" width="736" height="525" srcset="./assets/screens/crew-credentials.webp 1x, ./assets/screens/crew-credentials@2x.webp 2x" alt="Staff credentials dashboard: workers with their First Aid, driver licence, manual handling, medication competency and worker screening dates, with expired and expiring chips and tabs for all issues, expired and expiring soon." loading="lazy" decoding="async" /></picture></div></div>
+                        <figcaption><span class="tag">Sample data</span> Credential expiry for each worker</figcaption>
+                      </figure>
+                  </div>
                   </div>
                 </div>
               </div>
@@ -256,15 +275,22 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                     </div>
                     <p class="fold__sentence">Participant risk alerts are worked out live from each record, and support workers start, finish and note their shifts from a phone.</p>
                   </div>
-                  <div class="fold__screens fold__screens--pair">
-                    <figure class="screen" style="--w:1024px">
-                      <div class="screen__frame"><img src="./assets/screens/care-risk-alerts.webp" width="1024" height="522" srcset="./assets/screens/care-risk-alerts.webp 1x, ./assets/screens/care-risk-alerts@2x.webp 2x" alt="Participant record for Grace Palmer-Hughes with a stack of risk alerts under her name: a red Critical alert that a report to the NDIS Commission is overdue, then two amber Warnings and a note of one more alert, above the record's tabs and identity details." loading="lazy" decoding="async" /></div>
-                      <figcaption><span class="tag">Sample data</span> Risk alerts on a participant record <span class="screen__hint">Swipe sideways to read the whole screen.</span></figcaption>
+                  <div class="fold__screens">
+                    <figure class="screen screen--wide" style="--w:1024px;--wm:548px">
+                      <span class="screen__hint">Swipe sideways to read the whole screen.</span>
+                      <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/care-risk-alerts-m.webp 1x, ./assets/screens/care-risk-alerts-m@2x.webp 2x" width="548" height="432" /><img src="./assets/screens/care-risk-alerts.webp" width="1024" height="414" srcset="./assets/screens/care-risk-alerts.webp 1x, ./assets/screens/care-risk-alerts@2x.webp 2x" alt="Risk alerts on a participant record: a red Critical alert that a report to the NDIS Commission is overdue and two amber Warnings, with one more alert noted, above the record's tabs and the start of her identity details." loading="lazy" decoding="async" /></picture></div></div>
+                      <figcaption><span class="tag">Sample data</span> Risk alerts on a participant record</figcaption>
                     </figure>
-                    <figure class="screen screen--phone">
-                      <div class="phone"><img src="./assets/screens/care-my-shifts-phone.webp" width="390" height="720" srcset="./assets/screens/care-my-shifts-phone.webp 1x, ./assets/screens/care-my-shifts-phone@2x.webp 2x" alt="My Shifts on a phone for the week of 7 to 13 September: the worker's own shifts grouped by day as cards with participant, time and status, an overnight shift marked plus one day, and My leave and Witness approvals buttons at the top." loading="lazy" decoding="async" /></div>
-                      <figcaption><span class="tag">Sample data</span> My Shifts, on a phone</figcaption>
-                    </figure>
+                    <div class="fold__screens fold__screens--phones">
+                      <figure class="screen screen--phone screen--fit">
+                        <div class="phone"><img src="./assets/screens/care-shift-detail-phone.webp" width="390" height="778" srcset="./assets/screens/care-shift-detail-phone.webp 1x, ./assets/screens/care-shift-detail-phone@2x.webp 2x" alt="A shift on a phone with a Start shift button and what the participant needs for the shift." loading="lazy" decoding="async" /></div>
+                        <figcaption><span class="tag">Sample data</span> A shift on a phone: start, finish and what the participant needs</figcaption>
+                      </figure>
+                      <figure class="screen screen--phone screen--fit">
+                        <div class="phone"><img src="./assets/screens/care-shift-notes-phone.webp" width="390" height="512" srcset="./assets/screens/care-shift-notes-phone.webp 1x, ./assets/screens/care-shift-notes-phone@2x.webp 2x" alt="Shift notes on a phone: a note about a bumped arm is flagged with the message that it mentions injury and to consider filing an incident report, with Dismiss and File incident report buttons above a box to add a note." loading="lazy" decoding="async" /></div>
+                        <figcaption><span class="tag">Sample data</span> Shift notes flag an injury and prompt an incident report</figcaption>
+                      </figure>
+                  </div>
                   </div>
                 </div>
               </div>
@@ -281,39 +307,57 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                       <h3 class="sign__label" id="stage-fund-title">Fund and claim</h3>
                       <span class="sign__km" aria-hidden="true">20 km</span>
                     </div>
-                    <p class="fold__sentence">Generate claims from confirmed bookings and preview them, then export the NDIS bulk payment file for NDIA-managed travellers and an invoice PDF for plan- and self-managed ones.</p>
+                    <p class="fold__sentence">Preview each traveller's claim by day type and state price limit. Then export the PRODA bulk file for NDIA-managed travellers and an invoice PDF for the rest.</p>
                   </div>
                   <div class="fold__screens">
-                    <figure class="screen screen--wide" style="--w:1024px">
-                      <div class="screen__frame"><img src="./assets/screens/fund-claim-funding-split.webp" width="1024" height="811" srcset="./assets/screens/fund-claim-funding-split.webp 1x, ./assets/screens/fund-claim-funding-split@2x.webp 2x" alt="A draft trip claim for Byron Bay Winter Weekender with BPR CSV and Mark as Submitted buttons. Line items for three travellers across weekday and weekend support are each tagged with a funding type, and only the plan-managed and self-managed lines carry an Invoice link." loading="lazy" decoding="async" /></div>
-                      <figcaption><span class="tag">Sample data</span> One trip claim, three funding types. Odip exports the files; you upload them. <span class="screen__hint">Swipe sideways to read the whole screen.</span></figcaption>
+                    <figure class="screen screen--wide" style="--w:670px;--wm:670px">
+                      <span class="screen__hint">Swipe sideways to read the whole screen.</span>
+                      <div class="screen__view"><div class="screen__frame"><img src="./assets/screens/fund-claim-preview.webp" width="670" height="494" srcset="./assets/screens/fund-claim-preview.webp 1x, ./assets/screens/fund-claim-preview@2x.webp 2x" alt="Claim Preview dialog: an estimated total, the trip's departure and return times and hours per day, then six line items by traveller with day type, dates, hours and amount, and Back, Cancel and Confirm and Generate buttons." loading="lazy" decoding="async" /></div></div>
+                      <figcaption><span class="tag">Sample data</span> Preview before you generate: each traveller's lines by day type</figcaption>
+                    </figure>
+                    <figure class="screen screen--wide" style="--w:1024px;--wm:616px">
+                      <span class="screen__hint">Swipe sideways to read the whole screen.</span>
+                      <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/fund-claim-funding-split-m.webp 1x, ./assets/screens/fund-claim-funding-split-m@2x.webp 2x" width="616" height="612" /><img src="./assets/screens/fund-claim-funding-split.webp" width="1024" height="465" srcset="./assets/screens/fund-claim-funding-split.webp 1x, ./assets/screens/fund-claim-funding-split@2x.webp 2x" alt="Line items of a draft trip claim for three travellers across weekday and weekend support, each tagged with a funding type: Plan Managed, NDIA Managed or Self Managed. Only the plan-managed and self-managed lines carry an Invoice link." loading="lazy" decoding="async" /></picture></div></div>
+                      <figcaption><span class="tag">Sample data</span> One trip claim, three funding types. Odip exports the files; you upload them.</figcaption>
+                    </figure>
+                    <figure class="screen screen--wide" style="--w:1104px;--wm:616px">
+                      <span class="screen__hint">Swipe sideways to read the whole screen.</span>
+                      <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/fund-claim-batch-m.webp 1x, ./assets/screens/fund-claim-batch-m@2x.webp 2x" width="616" height="974" /><img src="./assets/screens/fund-claim-batch.webp" width="1104" height="386" srcset="./assets/screens/fund-claim-batch.webp 1x, ./assets/screens/fund-claim-batch@2x.webp 2x" alt="Claim batch validation: error and warning chips such as already claimed, exceeds service booking balance and claim window closed, shown beside the events they apply to." loading="lazy" decoding="async" /></picture></div></div>
+                      <figcaption><span class="tag">Sample data</span> Each claim in a batch is checked against its service booking's balance and claim window before you upload</figcaption>
                     </figure>
                   </div>
                 </div>
               </div>
             </li>
 
-            <!-- 6 STAY COMPLIANT -->
-            <li class="fold" id="stage-compliant" data-fold aria-labelledby="stage-compliant-title">
+            <!-- 6 REPORT ON TIME -->
+            <li class="fold" id="stage-report" data-fold aria-labelledby="stage-report-title">
               <div class="fold__sheet">
                 <div class="fold__rail" aria-hidden="true"><span class="rail-road"></span><span class="rail-shield">6</span></div>
                 <div class="fold__body">
                   <div class="fold__lead">
                     <div class="sign sign--brown sign--exit">
-                      <span class="sign__pic"><svg class="pic" aria-hidden="true" focusable="false"><use href="#i-verified-user" /></svg></span>
-                      <h3 class="sign__label" id="stage-compliant-title">Stay compliant</h3>
+                      <span class="sign__pic"><svg class="pic" aria-hidden="true" focusable="false"><use href="#i-schedule" /></svg></span>
+                      <h3 class="sign__label" id="stage-report-title">Report on time</h3>
                       <span class="sign__km" aria-hidden="true">10 km</span>
                     </div>
-                    <p class="fold__sentence">A guided incident form with a body map flags any reportable incident not reported within 24 hours, and every change is kept in audit history.</p>
+                    <p class="fold__sentence">Staff log incidents in a guided form with a body map. Odip flags any reportable incident still unreported 24 hours after it was logged, and keeps an audit history of changes.</p>
                   </div>
                   <div class="fold__screens">
-                    <figure class="screen screen--wide" style="--w:968px">
-                      <div class="screen__frame"><img src="./assets/screens/compliant-body-map.webp" width="968" height="605" srcset="./assets/screens/compliant-body-map.webp 1x, ./assets/screens/compliant-body-map@2x.webp 2x" alt="Injuries section of the incident form: region buttons grouped as head and torso, arms and legs, a front and back body figure with the left forearm highlighted, and below it an injury type of Abrasion with a short description." loading="lazy" decoding="async" /></div>
-                      <figcaption><span class="tag">Sample data</span> The incident form, with its body map <span class="screen__hint">Swipe sideways to read the whole screen.</span></figcaption>
+                    <figure class="screen screen--wide" style="--w:1024px;--wm:616px">
+                      <span class="screen__hint">Swipe sideways to read the whole screen.</span>
+                      <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/compliant-overdue-m.webp 1x, ./assets/screens/compliant-overdue-m@2x.webp 2x" width="616" height="624" /><img src="./assets/screens/compliant-overdue.webp" width="1024" height="242" srcset="./assets/screens/compliant-overdue.webp 1x, ./assets/screens/compliant-overdue@2x.webp 2x" alt="Incident Reports list with a red banner saying one incident requires reporting to the NDIS Commission and its 24-hour deadline has been exceeded. In the table below, the escalation incident carries a solid red OVERDUE badge in the QSC column." loading="lazy" decoding="async" /></picture></div></div>
+                      <figcaption><span class="tag">Sample data</span> An incident still unreported 24 hours after it was logged is flagged overdue</figcaption>
                     </figure>
-                    <figure class="screen screen--wide" style="--w:1024px">
-                      <div class="screen__frame"><img src="./assets/screens/compliant-overdue.webp" width="1024" height="242" srcset="./assets/screens/compliant-overdue.webp 1x, ./assets/screens/compliant-overdue@2x.webp 2x" alt="Incident Reports list with a red banner saying one incident requires reporting to the NDIS Commission and its 24-hour deadline has been exceeded. In the table below, the escalation incident carries a solid red OVERDUE badge in the QSC column." loading="lazy" decoding="async" /></div>
-                      <figcaption><span class="tag">Sample data</span> An overdue incident is flagged, not left to memory <span class="screen__hint">Swipe sideways to read the whole screen.</span></figcaption>
+                    <figure class="screen screen--wide" style="--w:608px;--wm:608px">
+                      <span class="screen__hint">Swipe sideways to read the whole screen.</span>
+                      <div class="screen__view"><div class="screen__frame"><img src="./assets/screens/compliant-body-map-m.webp" width="608" height="400" srcset="./assets/screens/compliant-body-map-m.webp 1x, ./assets/screens/compliant-body-map-m@2x.webp 2x" alt="Injuries section of the incident form: a front and back body figure with the left forearm highlighted, the line Selected region: Left forearm, an injury type of Abrasion and an injury description reading Small graze, cleaned and dressed on site." loading="lazy" decoding="async" /></div></div>
+                      <figcaption><span class="tag">Sample data</span> The incident form's body map</figcaption>
+                    </figure>
+                    <figure class="screen screen--wide" style="--w:1024px;--wm:616px">
+                      <span class="screen__hint">Swipe sideways to read the whole screen.</span>
+                      <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/compliant-history-m.webp 1x, ./assets/screens/compliant-history-m@2x.webp 2x" width="616" height="325" /><img src="./assets/screens/compliant-history.webp" width="1024" height="309" srcset="./assets/screens/compliant-history.webp 1x, ./assets/screens/compliant-history@2x.webp 2x" alt="Audit history for a record: each change listed with who made it, when, and what changed." loading="lazy" decoding="async" /></picture></div></div>
+                      <figcaption><span class="tag">Sample data</span> Audit history: who changed what, and when</figcaption>
                     </figure>
                   </div>
                 </div>
@@ -338,7 +382,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
               <div class="way way--trip">
                 <span class="way__arrow" aria-hidden="true"><svg class="pic" focusable="false"><use href="#i-north-east" /></svg></span>
                 <p class="way__name">Odip: built around the trip</p>
-                <p class="way__desc">Starts from the trip, with travellers, rooms, staff, vehicles and each person's funding on one record.</p>
+                <p class="way__desc">Starts from the trip, with travellers, accommodation, staff, vehicles and each person's funding on one record.</p>
               </div>
             </div>
             <svg class="fork__road" viewBox="0 0 720 230" preserveAspectRatio="xMidYMin meet" aria-hidden="true" focusable="false">
@@ -373,7 +417,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
             <li class="plate">
               <span class="plate__shield" aria-hidden="true"><span class="plate__n">18</span></span>
               <p class="plate__label">roster checks</p>
-              <p class="plate__desc">run when you assign a shift. Expired worker screening and a double-booked vehicle are hard stops; the rest ask for a reason.</p>
+              <p class="plate__desc">run when you assign a shift. Expired worker screening and a double-booked vehicle are hard stops; the others are warnings, and some ask for a reason.</p>
             </li>
             <li class="plate">
               <span class="plate__shield" aria-hidden="true"><span class="plate__n">11</span></span>
@@ -419,6 +463,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
             <p class="km-plate" aria-hidden="true"><span>Early access</span> <strong>0 km</strong></p>
             <h2 id="dest-title">Request early access</h2>
             <p class="form__intro" data-hide-on-success>Tell us who you are. We will reply by email about early access to Odip.</p>
+            <!-- TODO(release): say what early access is (who it is for, any cost or commitment), who will write and when. State a timeframe only if it will be honoured. -->
 
             <form id="early-access-form" class="form" novalidate aria-describedby="form-notice">
               <div class="field">
@@ -442,6 +487,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                 <input id="ea-website" name="website" type="text" tabindex="-1" autocomplete="off" data-field="website" />
               </div>
 
+              <p class="form__nojs">This form needs JavaScript. Turn it on and reload to request early access.</p>
               <p class="form__status" role="alert" tabindex="-1" data-status hidden></p>
               <button class="submit" type="submit" data-submit disabled>
                 <span data-submit-label>Request early access</span>
@@ -450,13 +496,12 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
               <p class="form__notice" id="form-notice">We will only use these details to reply about early access to Odip.
                 <!-- TODO(release): collection notice. Add who is collecting these details (collector identity) and a contact for privacy questions before this goes public. -->
               </p>
-              <noscript><p class="form__noscript">This form needs JavaScript. Turn it on and reload to request early access.</p></noscript>
             </form>
 
             <div class="success" data-success tabindex="-1" hidden>
               <span class="success__icon" aria-hidden="true"><svg class="pic" focusable="false"><use href="#i-check-circle" /></svg></span>
               <h3>Request received</h3>
-              <p>Thank you. We will email you about early access to Odip.</p>
+              <p>Thank you. We will email <strong data-success-email>your address</strong> about early access.</p>
               <p>That is all for now. You do not need to do anything else.</p>
               <button class="link-btn" type="button" data-reset>Send another request</button>
             </div>
@@ -491,7 +536,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
           <p>We will only use these details to reply about early access to Odip.</p>
           <!-- TODO(release): name the collector (legal entity) and give a privacy contact here, matching the notice under the form. -->
           <h2>Sample data</h2>
-          <p>The screens on this page show sample data. The people, trips and organisations in them are fictional.</p>
+          <p>The screens on this page show sample data. The people, trips and organisations in them are fictional, and some on-screen notes were written for the sample.</p>
         </div>
       </div>
     </footer>
