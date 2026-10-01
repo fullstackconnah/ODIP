@@ -2,12 +2,13 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { usePermissions } from '@/lib/permissions'
 import { useTrip, useTripBookings, useTripAccommodation, useTripVehicles, useTripStaff, useTripTasks, useTripSchedule, useTripClaims, useTripIncidents, useParticipants } from '@/api/hooks'
 import { formatDateRange } from '@/lib/dateRange'
-import { ArrowLeft, Users, Building2, Truck, UserCog, ListChecks, Calendar, Pencil, ClipboardList, ClockIcon, FileText, ShieldAlert } from 'lucide-react'
+import { Users, Building2, Truck, UserCog, ListChecks, Calendar, Pencil, ClipboardList, ClockIcon, FileText, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { Tabs, type TabItem } from '@/components/Tabs'
 import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TRIP_STATUS_LABELS } from '@/lib/tone'
 import { FactBar, type FactBarSegment } from '@/components/FactBar'
@@ -131,10 +132,7 @@ export default function TripDetailPage() {
         }
         action={
           <div className="flex gap-2 shrink-0">
-            <Button to="/trips" variant="secondary" size="md">
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </Button>
+            <BackButton to="/trips" label="trips" history={false} />
             {canWrite && (
               <Button variant="primary" size="md" onClick={() => setShowEditTrip(true)}>
                 <Pencil className="w-4 h-4" />

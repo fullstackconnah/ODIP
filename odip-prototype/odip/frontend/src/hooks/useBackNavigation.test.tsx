@@ -229,3 +229,42 @@ describe('useBackNavigation — query-string preservation', () => {
     expect(screen.getByTestId('at')).toHaveTextContent('/participants?tab=onboarding')
   })
 })
+
+describe('useBackNavigation — a query change on the same screen is not a predecessor', () => {
+  it('switching tabs on a detail page (written with replace) leaves the screen it came from as the Back target', () => {
+    __testHooks.recordCurrentPath('/')
+    __testHooks.recordCurrentPath('/trips/t-1')
+    __testHooks.recordCurrentPath('/trips/t-1?tab=bookings')
+    __testHooks.recordCurrentPath('/trips/t-1?tab=staff')
+    expect(__testHooks.getPrevSnapshot()).toBe('/')
+  })
+
+  it('leaving after a tab switch records the screen as it was left, tab included', () => {
+    __testHooks.recordCurrentPath('/participants?tab=onboarding')
+    __testHooks.recordCurrentPath('/participants?tab=enquiries')
+    __testHooks.recordCurrentPath('/inquiries/5')
+    expect(__testHooks.getPrevSnapshot()).toBe('/participants?tab=enquiries')
+  })
+
+  it('a different pathname is still a new screen', () => {
+    __testHooks.recordCurrentPath('/trips/t-1')
+    __testHooks.recordCurrentPath('/trips/t-2')
+    expect(__testHooks.getPrevSnapshot()).toBe('/trips/t-1')
+  })
+
+  it('does not offer Back to the same page on its default tab after a tab switch', () => {
+    __testHooks.recordCurrentPath('/schedule')
+    __testHooks.recordCurrentPath('/staff/s-1')
+    __testHooks.recordCurrentPath('/staff/s-1?tab=credentials')
+    function Probe() {
+      const { to } = useBackTarget('/staff')
+      return <span data-testid="to">{to}</span>
+    }
+    render(
+      <MemoryRouter initialEntries={['/staff/s-1?tab=credentials']}>
+        <Probe />
+      </MemoryRouter>,
+    )
+    expect(screen.getByTestId('to').textContent).toBe('/schedule')
+  })
+})

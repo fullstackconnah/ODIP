@@ -36,14 +36,13 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useFieldArray, useWatch } from 'react-hook-form'
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft } from 'lucide-react'
 import { useParticipant, usePatchParticipant, useUpdateParticipant, useStaff, useUpsertCommunityAccessRiskItem } from '@/api/hooks'
 import {
   useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, WizardStepHeading, WizardShell,
   REVIEW_STEP_KEY,
   type WizardStepDef, type WizardValidate, type ReviewGroup, type ReviewRow,
 } from '@/components/wizard'
-import { useBackTarget } from '@/hooks/useBackNavigation'
+import { BackButton } from '@/components/BackButton'
 import {
   type ParticipantFormData, PROFILE_EDITABLE_STEP_SCHEMAS_BY_KEY, PROFILE_STEP_SHARED_FIELDS, PROFILE_CONDITIONAL_SECTIONS,
   PROFILE_STEP_KEY_IDENTIFIERS_FIELDS, PROFILE_STEP_CULTURAL_DEPTH_FIELDS, PROFILE_STEP_MEDICAL_FIELDS,
@@ -418,7 +417,6 @@ export default function ProfileWizardPage() {
     })
 
   const fallbackBack = `/participants/${id}`
-  const back = useBackTarget(fallbackBack)
 
   if (isLoading || !participant) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
 
@@ -426,15 +424,7 @@ export default function ProfileWizardPage() {
     <div className="w-full min-w-0 max-w-full flex flex-col gap-[var(--section-gap)]">
       {unsavedChangesDialog}
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={back.onBack}
-          data-testid="profile-header-back"
-          aria-label={back.ariaLabel}
-          className="p-2 rounded-[var(--radius-sm)] hover:bg-[var(--color-accent)] transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+        <BackButton to={fallbackBack} label="participant" variant="icon" data-testid="profile-header-back" />
         <h1 className="text-xl font-bold">Profile — {participant.firstName} {participant.lastName}</h1>
       </div>
 

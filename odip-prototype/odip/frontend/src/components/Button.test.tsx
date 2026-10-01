@@ -77,6 +77,17 @@ describe('Button', () => {
     expect(screen.queryByRole('button', { name: 'New enquiry' })).not.toBeInTheDocument()
   })
 
+  it('passes data-* attributes through to the Link, so a button that became a link keeps its test id', () => {
+    render(
+      <MemoryRouter>
+        <Button to="/participants" data-testid="header-back" data-analytics="back">Back</Button>
+      </MemoryRouter>,
+    )
+    const link = screen.getByTestId('header-back')
+    expect(link).toHaveAttribute('href', '/participants')
+    expect(link).toHaveAttribute('data-analytics', 'back')
+  })
+
   it('renders iconOnly as a fixed --control-h-sm square (24px fine, 36px coarse) with no padding', () => {
     render(<Button iconOnly aria-label="Back to inbox">{'<-'}</Button>)
     const btn = screen.getByRole('button', { name: 'Back to inbox' })

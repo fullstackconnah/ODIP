@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Download, FileText, Loader2, Plus, Trash2 } from 'lucide-react'
+import { Download, FileText, Loader2, Plus, Trash2 } from 'lucide-react'
 import { useCreateServiceAgreementDraft, useDemoJourneySimulation, useDownloadServiceAgreementDraftPdf, useParticipant, useServiceAgreementDrafts } from '@/api/hooks'
 import type { AgreementState, CreateServiceAgreementDraftDto } from '@/api/types'
 import { Callout } from '@/components/Callout'
+import { BackButton } from '@/components/BackButton'
 import { FormField } from '@/components/FormField'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -91,9 +92,7 @@ export default function ServiceAgreementDraftPage() {
 
   return <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-6xl">
     <div className="flex items-start gap-4">
-      <Link to={`/participants/${participantId}`} className="mt-1 p-2 rounded-[var(--radius-md)] hover:bg-[var(--color-accent)] transition-colors">
-        <ArrowLeft className="w-5 h-5" />
-      </Link>
+      <BackButton to={`/participants/${participantId}`} label="participant" variant="icon" history={false} className="mt-1" />
       <div className="flex-1">
         <PageHeader title="Service agreement draft" subtitle={participant.data.fullName} />
       </div>

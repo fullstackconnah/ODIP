@@ -219,7 +219,7 @@ describe('TripDetailPage — detail header (the bolder header pattern)', () => {
   it('keeps the Back link and the Edit Trip action', () => {
     renderPage()
 
-    expect(screen.getByRole('link', { name: /back/i })).toHaveAttribute('href', '/trips')
+    expect(screen.getByRole('link', { name: 'Back to trips' })).toHaveAttribute('href', '/trips')
     expect(screen.getByRole('button', { name: /edit trip/i })).toBeInTheDocument()
   })
 

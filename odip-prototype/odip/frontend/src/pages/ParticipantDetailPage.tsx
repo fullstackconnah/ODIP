@@ -12,7 +12,8 @@ import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
 import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
-import { ArrowLeft, Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, FileText, CalendarRange } from 'lucide-react'
+import { BackButton } from '@/components/BackButton'
+import { Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, FileText, CalendarRange } from 'lucide-react'
 import { useState, useSyncExternalStore } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
@@ -100,11 +101,9 @@ export default function ParticipantDetailPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <div className="flex items-start gap-2">
-        {/* iconOnly is a --control-h-sm square (36px on a coarse pointer); the --tap-min floor lifts it to
+        {/* The icon variant is a --control-h-sm square (36px on a coarse pointer); its --tap-min floor lifts it to
             44 there and is 0 — no change — on a mouse. */}
-        <Button to="/participants" variant="ghost" size="md" iconOnly aria-label="Back to participants" className="mt-1 min-h-[var(--tap-min)] min-w-[var(--tap-min)] shrink-0">
-          <ArrowLeft className="w-4 h-4" />
-        </Button>
+        <BackButton to="/participants" label="participants" variant="icon" history={false} className="mt-1" />
         <div className="flex-1 min-w-0">
           <PageHeader
             title={p.fullName}

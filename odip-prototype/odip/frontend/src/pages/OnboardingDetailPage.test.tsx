@@ -143,8 +143,10 @@ describe('OnboardingDetailPage', () => {
     )
     render(<RouterProvider router={router} />)
 
-    const back = screen.getByRole('button', { name: /Back to/i })
-    expect(back).toHaveAccessibleName('Back to Onboarding')
+    // A real link now (it was a button that called navigate), so it has a destination to open or copy.
+    const back = screen.getByRole('link', { name: /Back to/i })
+    expect(back).toHaveAccessibleName('Back to onboarding')
+    expect(back).toHaveAttribute('href', '/participants?tab=onboarding')
 
     await userEvent.setup().click(back)
     expect(router.state.location.pathname).toBe('/participants')

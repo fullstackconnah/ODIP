@@ -49,6 +49,8 @@ function getServerSnapshot(): string | null {
   return null
 }
 
+const pathnameOf = (path: string): string => path.split('?')[0]
+
 /** Records a new current pathname and rolls the previous one forward. Module-state mutation
  *  only — no React state — so the react-hooks/set-state-in-effect rule doesn't apply. */
 function recordCurrentPath(nextPath: string): void {
@@ -57,6 +59,11 @@ function recordCurrentPath(nextPath: string): void {
   // first thing we observe becomes curPath with prevPath still null. After that, the path we
   // were just on becomes prevPath.
   if (curPath === '') {
+    curPath = nextPath
+  } else if (pathnameOf(nextPath) === pathnameOf(curPath)) {
+    // Same screen, new query: a tab (`?tab=`) or a filter written with `replace`. It is not somewhere the
+    // user came FROM, so it must not become the Back target: without this, a detail page whose tab lives in
+    // the URL would, after one tab switch, offer "Back" to itself on its default tab.
     curPath = nextPath
   } else {
     prevPath = curPath

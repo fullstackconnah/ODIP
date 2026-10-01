@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
 import { TextField } from '@/components/TextField'
 import { SelectField } from '@/components/SelectField'
 import { PageHeader } from '@/components/PageHeader'
@@ -29,14 +29,7 @@ export default function InquiryFormPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       <div className="flex items-start gap-4">
-        <Button
-          variant="ghost"
-          iconOnly
-          to="/participants?tab=enquiries"
-          aria-label="Back to enquiries"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
+        <BackButton to="/participants?tab=enquiries" label="enquiries" variant="icon" history={false} />
         <div className="flex-1">
           <PageHeader
             title={editId ? 'Edit enquiry' : 'New enquiry'}

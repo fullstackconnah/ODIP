@@ -95,3 +95,16 @@ describe('AccommodationDetailPage — long unbreakable values', () => {
     }
   })
 })
+
+describe('AccommodationDetailPage — Back', () => {
+  it('is a real link to the accommodation list: the text says "Back", the accessible name says where it goes', () => {
+    mockUseAccommodationDetail.mockReturnValue({
+      data: { id: 'acc-1', propertyName: 'Sunrise House', isActive: true, location: 'Gold Coast', maxCapacity: 4 },
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    renderPage()
+    const back = screen.getByRole('link', { name: 'Back to accommodation' })
+    expect(back).toHaveAttribute('href', '/accommodation')
+    expect(back).toHaveTextContent(/^Back$/)
+  })
+})

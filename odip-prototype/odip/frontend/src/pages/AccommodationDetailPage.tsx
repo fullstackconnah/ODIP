@@ -1,8 +1,9 @@
 import { useParams } from 'react-router-dom'
 import { useAccommodationDetail } from '@/api/hooks'
-import { ArrowLeft, Pencil } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Card } from '@/components/Card'
 import { FactList } from '@/components/FactList'
@@ -45,9 +46,7 @@ export default function AccommodationDetailPage() {
         }
         action={
           <div className="flex gap-2 shrink-0">
-            <Button to="/accommodation" variant="secondary" size="md">
-              <ArrowLeft className="w-4 h-4" /> Back
-            </Button>
+            <BackButton to="/accommodation" label="accommodation" history={false} />
             <Button to={`/accommodation/${id}/edit`} variant="primary" size="md">
               <Pencil className="w-4 h-4" /> Edit
             </Button>

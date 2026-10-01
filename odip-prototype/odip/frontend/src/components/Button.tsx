@@ -81,8 +81,10 @@ export function Button({
       tabIndex?: number
       onClick?: React.MouseEventHandler<HTMLAnchorElement>
     }
+    // `data-*` (a test id) passes through too, so a Button that became a link keeps the hooks tests and tooling find it by.
+    const dataAttributes = Object.fromEntries(Object.entries(rest).filter(([name]) => name.startsWith('data-')))
     return (
-      <Link to={to} className={cls} aria-label={ariaLabel} title={title} tabIndex={tabIndex} onClick={linkOnClick}>
+      <Link to={to} className={cls} aria-label={ariaLabel} title={title} tabIndex={tabIndex} onClick={linkOnClick} {...dataAttributes}>
         {children}
       </Link>
     )

@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
 import { useCaregiverSubmission, useAcceptCaregiverSubmission, useRejectCaregiverSubmission } from '@/api/hooks/caregiver'
 import { computeCaregiverDiff, type DiffRow } from '@/lib/caregiverDiff'
 import { usePermissions } from '@/lib/permissions'
@@ -8,6 +7,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Modal } from '@/components/Modal'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
 import { formatDateAu } from '@/lib/utils'
 
 /**
@@ -44,16 +44,7 @@ export default function CaregiverSubmissionReviewPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <div className="flex items-start gap-3">
-        <Button
-          to="/caregiver-submissions"
-          variant="ghost"
-          size="sm"
-          iconOnly
-          className="mt-0.5"
-          aria-label="Back to caregiver submissions"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </Button>
+        <BackButton to="/caregiver-submissions" label="caregiver submissions" variant="icon" history={false} className="mt-0.5" />
         <div className="flex-1">
           <PageHeader
             title={s.participantName}

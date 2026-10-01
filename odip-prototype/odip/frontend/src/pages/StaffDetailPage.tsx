@@ -5,6 +5,7 @@ import { Tabs } from '@/components/Tabs'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
 import { DataTable } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
@@ -15,7 +16,7 @@ import { DEADLINE_TONE, deadlineLabel } from '@/lib/deadline'
 import { formatShiftTimeRange, formatVarianceMinutes } from '@/pages/rostering/lib/roster'
 import AvailabilityList from '@/pages/schedule/AvailabilityList'
 import {
-  ArrowLeft, Pencil, CalendarOff, CalendarClock, ShieldCheck, ClipboardList, AlertTriangle, ClipboardCheck,
+  Pencil, CalendarOff, CalendarClock, ShieldCheck, ClipboardList, AlertTriangle, ClipboardCheck,
 } from 'lucide-react'
 import type { StaffOverviewUpcomingShiftDto, StaffOverviewTripAssignmentDto } from '@/api/types/staff'
 import type { IncidentListDto } from '@/api/types/incidents'
@@ -75,9 +76,7 @@ export default function StaffDetailPage() {
         }
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <Button to="/staff" variant="secondary" size="md" aria-label="Back to staff">
-              <ArrowLeft className="w-4 h-4" /> Back
-            </Button>
+            <BackButton to="/staff" label="staff" history={false} />
             {canAccessLeaveApprovals && (
               <Button to={`/rostering/leave?userId=${id}`} variant="secondary" size="md">
                 <CalendarOff className="w-4 h-4" /> Leave & availability

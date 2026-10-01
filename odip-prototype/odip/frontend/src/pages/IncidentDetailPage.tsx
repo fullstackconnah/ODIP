@@ -1,9 +1,10 @@
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Pill, CalendarClock, FileText } from 'lucide-react'
+import { Pill, CalendarClock, FileText } from 'lucide-react'
 import { useIncident } from '@/api/hooks'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
 import { FactList } from '@/components/FactList'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
@@ -52,10 +53,7 @@ export default function IncidentDetailPage() {
         }
         action={
           <div className="flex shrink-0 items-center gap-2">
-            <Button to="/incidents" variant="secondary" size="md">
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </Button>
+            <BackButton to="/incidents" label="incidents" history={false} />
             <Button to={`/incidents/${incident.id}/edit`} variant="secondary" size="md">
               Edit
             </Button>

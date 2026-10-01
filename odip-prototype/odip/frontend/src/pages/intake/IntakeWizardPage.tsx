@@ -37,7 +37,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useFieldArray, useWatch } from 'react-hook-form'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft } from 'lucide-react'
 import {
   useCreateParticipant, useUpdateParticipant, useParticipant, usePersons,
   useParticipantContactRoles, useParticipantRiskEntries,
@@ -47,7 +46,7 @@ import {
   REVIEW_STEP_KEY,
   type WizardStepDef, type WizardValidate, type WizardSecondaryAction, type ReviewGroup, type ReviewRow,
 } from '@/components/wizard'
-import { useBackTarget } from '@/hooks/useBackNavigation'
+import { BackButton } from '@/components/BackButton'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import {
@@ -417,7 +416,6 @@ export default function IntakeWizardPage() {
   // ProfileWizardPage.tsx uses — resetting a still-loading `undefined` participant would flash the
   // blank create-mode defaults, then jump once the fetch resolves.
   const fallbackBack = isEditMode ? `/participants/${id}` : '/participants'
-  const back = useBackTarget(fallbackBack)
 
   if (isEditMode && (participantLoading || !participant)) {
     return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
@@ -427,15 +425,7 @@ export default function IntakeWizardPage() {
     <div className="w-full min-w-0 max-w-full flex flex-col gap-[var(--section-gap)]">
       {unsavedChangesDialog}
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={back.onBack}
-          data-testid="intake-header-back"
-          aria-label={back.ariaLabel}
-          className="p-2 rounded-[var(--radius-sm)] hover:bg-[var(--color-accent)] transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+        <BackButton to={fallbackBack} label={isEditMode ? 'participant' : 'participants'} variant="icon" data-testid="intake-header-back" />
         <h1 className="text-xl font-bold">{isEditMode ? 'Resume Intake' : 'Intake'}</h1>
       </div>
 

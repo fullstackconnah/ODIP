@@ -150,3 +150,13 @@ describe('IncidentDetailPage — Context panel', () => {
     expect(screen.getByText('"Note text."')).toBeInTheDocument()
   })
 })
+
+describe('IncidentDetailPage — Back', () => {
+  it('is a real link to the incident list: the text says "Back", the accessible name says where it goes', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
+    renderPage()
+    const back = screen.getByRole('link', { name: 'Back to incidents' })
+    expect(back).toHaveAttribute('href', '/incidents')
+    expect(back).toHaveTextContent(/^Back$/)
+  })
+})
