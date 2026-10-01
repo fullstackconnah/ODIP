@@ -26,7 +26,12 @@ public class BillingController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly BillingValidator _validator = new();
 
-    public BillingController(OdipDbContext db) => _db = db;
+    private readonly TimeProvider _clock;
+    public BillingController(OdipDbContext db, TimeProvider? clock = null)
+    {
+        _db = db;
+        _clock = clock ?? TimeProvider.System;
+    }
 
     // ══════════════════════════════════════════════════════════════
     // FUNDING SOURCES

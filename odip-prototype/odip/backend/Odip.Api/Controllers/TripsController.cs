@@ -17,12 +17,15 @@ namespace Odip.Api.Controllers;
 [Route("api/v1/trips")]
 public class TripsController : ControllerBase
 {
+    // The request's clock: a test fixes it. Every calendar rule uses the PROVIDER's date from it (ProviderTimeZoneResolver.TodayAsync), never the UTC date.
     private readonly OdipDbContext _db;
     private readonly ILogger<TripsController> _logger;
-    public TripsController(OdipDbContext db, ILogger<TripsController> logger)
+    private readonly TimeProvider _clock;
+    public TripsController(OdipDbContext db, ILogger<TripsController> logger, TimeProvider? clock = null)
     {
         _db = db;
         _logger = logger;
+        _clock = clock ?? TimeProvider.System;
     }
 
     /// <summary>

@@ -143,7 +143,12 @@ public class VehicleAssignmentsController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly RosterConflictService _conflictService = new();
-    public VehicleAssignmentsController(OdipDbContext db) => _db = db;
+    private readonly TimeProvider _clock;
+    public VehicleAssignmentsController(OdipDbContext db, TimeProvider? clock = null)
+    {
+        _db = db;
+        _clock = clock ?? TimeProvider.System;
+    }
 
     /// <summary>
     /// §4.4 same-tenant validation for the driver picker: null is always fine (no driver
@@ -332,12 +337,15 @@ public class StaffController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly IStaffAvailabilityItemsQuery _availabilityItemsQuery;
     private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
+    // The request's clock: a test fixes it. Every calendar rule uses the PROVIDER's date from it (ProviderTimeZoneResolver.TodayAsync), never the UTC date.
+    private readonly TimeProvider _clock;
 
     public StaffController(
         OdipDbContext db, IStaffAvailabilityItemsQuery? availabilityItemsQuery = null,
-        Microsoft.Extensions.Configuration.IConfiguration? config = null)
+        Microsoft.Extensions.Configuration.IConfiguration? config = null, TimeProvider? clock = null)
     {
         _db = db;
+        _clock = clock ?? TimeProvider.System;
         _availabilityItemsQuery = availabilityItemsQuery ?? new StaffAvailabilityItemsQuery(db);
         _config = config;
     }

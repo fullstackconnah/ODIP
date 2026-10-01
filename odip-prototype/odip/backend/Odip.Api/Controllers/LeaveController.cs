@@ -31,13 +31,16 @@ public class LeaveController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
     private readonly IObligationTaskService _obligationTasks;
+    // The request's clock: a test fixes it. Every calendar rule uses the PROVIDER's date from it (ProviderTimeZoneResolver.TodayAsync), never the UTC date.
+    private readonly TimeProvider _clock;
 
     public LeaveController(
         OdipDbContext db,
         Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
-        IObligationTaskService? obligationTasks = null)
+        IObligationTaskService? obligationTasks = null, TimeProvider? clock = null)
     {
         _db = db;
+        _clock = clock ?? TimeProvider.System;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
     }

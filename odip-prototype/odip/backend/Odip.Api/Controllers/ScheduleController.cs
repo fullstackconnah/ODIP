@@ -19,11 +19,14 @@ public class ScheduleController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly IStaffUnavailabilityQuery _unavailabilityQuery;
     private readonly IStaffAvailabilityItemsQuery _availabilityItemsQuery;
+    // The request's clock: a test fixes it. Every calendar rule uses the PROVIDER's date from it (ProviderTimeZoneResolver.TodayAsync), never the UTC date.
+    private readonly TimeProvider _clock;
 
     public ScheduleController(
-        OdipDbContext db, IStaffUnavailabilityQuery unavailabilityQuery, IStaffAvailabilityItemsQuery availabilityItemsQuery)
+        OdipDbContext db, IStaffUnavailabilityQuery unavailabilityQuery, IStaffAvailabilityItemsQuery availabilityItemsQuery, TimeProvider? clock = null)
     {
         _db = db;
+        _clock = clock ?? TimeProvider.System;
         _unavailabilityQuery = unavailabilityQuery;
         _availabilityItemsQuery = availabilityItemsQuery;
     }

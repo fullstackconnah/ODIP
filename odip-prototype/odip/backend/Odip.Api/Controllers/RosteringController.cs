@@ -47,14 +47,17 @@ public class RosteringController : ControllerBase
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
     private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
     private readonly ShiftPackageService _package;
+    // The request's clock: a test fixes it. Every calendar rule uses the PROVIDER's date from it (ProviderTimeZoneResolver.TodayAsync), never the UTC date.
+    private readonly TimeProvider _clock;
 
     public RosteringController(
         OdipDbContext db, StaffCompatibilityLinkService compatLink, IStaffUnavailabilityQuery unavailabilityQuery,
         IConfiguration? config = null, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
         Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null,
-        ShiftPackageService? package = null)
+        ShiftPackageService? package = null, TimeProvider? clock = null)
     {
         _db = db;
+        _clock = clock ?? TimeProvider.System;
         _compatLink = compatLink;
         _unavailabilityQuery = unavailabilityQuery;
         _config = config;

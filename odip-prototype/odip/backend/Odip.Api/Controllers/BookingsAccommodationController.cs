@@ -16,8 +16,14 @@ namespace Odip.Api.Controllers;
 [Route("api/v1/bookings")]
 public class BookingsController : ControllerBase
 {
+    // The request's clock: a test fixes it. Every calendar rule uses the PROVIDER's date from it (ProviderTimeZoneResolver.TodayAsync), never the UTC date.
     private readonly OdipDbContext _db;
-    public BookingsController(OdipDbContext db) => _db = db;
+    private readonly TimeProvider _clock;
+    public BookingsController(OdipDbContext db, TimeProvider? clock = null)
+    {
+        _db = db;
+        _clock = clock ?? TimeProvider.System;
+    }
 
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<BookingListDto>>>> GetAll(
