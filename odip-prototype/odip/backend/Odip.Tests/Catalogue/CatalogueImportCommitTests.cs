@@ -545,6 +545,9 @@ public class CatalogueImportCommitTests
         CultureInfo thai;
         try { thai = new CultureInfo("th-TH"); }
         catch (CultureNotFoundException) { return; }   // invariant globalization: there is only one culture to render with
+        // The edited workbooks are built before the culture changes: only what the importer renders is under test.
+        await using var republished = Workbook(CatalogueFixtures.File2026_27, wb => SetEndDate(wb, "01_058_0115_1_1", 20280630));   // legacy STA: 30 Jun 2027 -> 30 Jun 2028
+        await using var truncated = Workbook(CatalogueFixtures.File2026_27, wb => DeleteRows(wb, "04_105_0125_6_1"));
         var original = CultureInfo.CurrentCulture;
         CultureInfo.CurrentCulture = thai;
         try
@@ -558,6 +561,18 @@ public class CatalogueImportCommitTests
 
             Assert.Contains(preview.Warnings, w => w.Contains("04_212_0125_6_1") && w.Contains("end-dated 2026-06-30."));
             Assert.Contains(preview.Warnings, w => w.Contains("starts on 2026-07-01, after today (2026-06-01)"));
+
+            // The warning for a file that ends a stored row later than the database keeps it names both dates; so does the one for a row brought back.
+            await using var imported = CreateDb();
+            await ImportAsync(imported, CatalogueFixtures.File2026_27);
+            var held = await PreviewAsync(imported, republished, "republished.xlsx");
+            Assert.Contains(held.Warnings, w => w.Contains("01_058_0115_1_1") && w.Contains("ends this row on 2028-06-30, later than the stored 2027-06-30"));
+            Assert.Contains(held.Warnings, w => w.Contains("so 2027-06-30 was kept."));
+
+            var cut = await PreviewAsync(imported, truncated, "truncated.xlsx");
+            await NewImporter(imported).CommitImportAsync(new ConfirmCatalogueImportDto { CatalogueVersion = cut.DetectedVersion, Rows = cut.Rows });
+            var back = await PreviewAsync(imported, CatalogueFixtures.File2026_27);
+            Assert.Contains(back.Warnings, w => w.Contains("04_105_0125_6_1") && w.Contains("is reopened from 2026-07-01."));
         }
         finally { CultureInfo.CurrentCulture = original; }
     }

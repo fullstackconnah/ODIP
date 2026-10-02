@@ -53,8 +53,13 @@ public class CatalogueImportService
         // A file that ends a stored row LATER than the database holds it: the stored date is kept (an import never lengthens a row), so say so.
         var held = plan.HeldEnds.OrderBy(h => h.ItemNumber, StringComparer.Ordinal).ToList();
         foreach (var h in held.Take(MaxWarningLines))
+        {
+            // The file's end date is formatted in its own FormattableString.Invariant: a nested interpolation inside another one's hole is rendered with the
+            // current culture, so a Buddhist-calendar culture would print 2028 as 2571.
+            var fileEnd = h.FileEnd is { } e ? FormattableString.Invariant($"ends this row on {e:yyyy-MM-dd}") : "leaves this row open-ended";
             warnings.Add(FormattableString.Invariant(
-                $"{h.ItemNumber}: the file {(h.FileEnd is { } e ? $"ends this row on {e:yyyy-MM-dd}" : "leaves this row open-ended")}, later than the stored {h.StoredEnd:yyyy-MM-dd}; an import never lengthens a row, so {h.StoredEnd:yyyy-MM-dd} was kept."));
+                $"{h.ItemNumber}: the file {fileEnd}, later than the stored {h.StoredEnd:yyyy-MM-dd}; an import never lengthens a row, so {h.StoredEnd:yyyy-MM-dd} was kept."));
+        }
         if (held.Count > MaxWarningLines)
             warnings.Add(FormattableString.Invariant($"...and {held.Count - MaxWarningLines} more rows keep an earlier stored end date than the file gives."));
         // A row an earlier import emptied (its code was left out of a republished file) that this file lists again: it comes back. Say so row by row, so the
