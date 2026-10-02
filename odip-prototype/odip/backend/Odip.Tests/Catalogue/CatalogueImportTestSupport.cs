@@ -72,6 +72,22 @@ internal static class CatalogueImportTestSupport
             sheet.Row(number).Delete();
     }
 
+    /// <summary>
+    /// Makes the file list one code in two versions: the code's Current-sheet row ends on <paramref name="firstEnd"/>, and a copy of it, open-ended, starts on
+    /// <paramref name="secondStart"/> (a gap between the two when the dates are not consecutive).
+    /// </summary>
+    public static void ListCodeTwice(XLWorkbook workbook, string code, int firstEnd, int secondStart)
+    {
+        var sheet = workbook.Worksheet("Current Support Items");
+        var original = sheet.RowsUsed().Skip(1).Single(r => r.Cell(1).GetString().Trim() == code);
+        original.Cell(12).Value = firstEnd;
+        var copy = sheet.Row(sheet.LastRowUsed()!.RowNumber() + 1);
+        for (var column = 1; column <= sheet.LastColumnUsed()!.ColumnNumber(); column++)
+            copy.Cell(column).Value = original.Cell(column).Value;
+        copy.Cell(11).Value = secondStart;
+        copy.Cell(12).Value = 99991231;
+    }
+
     public static Task<CatalogueImportPreviewDto> PreviewAsync(OdipDbContext db, Stream workbook, string fileName, TimeProvider? clock = null) =>
         NewImporter(db, clock).PreviewImportAsync(workbook, fileName);
 

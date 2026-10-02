@@ -433,6 +433,36 @@ public class CatalogueImportCommitTests
     }
 
     [Fact]
+    public async Task A_code_listed_twice_with_a_gap_ends_its_first_version_where_the_file_says_on_the_first_import()
+    {
+        // The stored 1 July row is open-ended. The file lists the code from 1 July to 27 Oct and again from 1 Dec. The row is updated to end on 27 Oct, and the
+        // second version's own plan also ends every earlier row that reaches 1 Dec on 30 Nov: the commit used to apply that end date last, so the row ended on
+        // 30 Nov (later than the file says) and only the next import brought it to 27 Oct. A row keeps the earlier of the two dates.
+        const string code = "04_104_0125_6_1";
+        await using var db = CreateDb();
+        await SeedCommunityAccessGroupAsync(db);
+        await ImportAsync(db, CatalogueFixtures.File2026_27);
+        await using var twice = Workbook(CatalogueFixtures.File2026_27, wb => ListCodeTwice(wb, code, 20261027, 20261201));
+
+        var preview = await PreviewAsync(db, twice, "twice.xlsx");
+        var result = await NewImporter(db).CommitImportAsync(new ConfirmCatalogueImportDto { CatalogueVersion = preview.DetectedVersion, Rows = preview.Rows });
+
+        Assert.Equal((1, 1), (result.Added, result.Updated));
+        var rows = (await RowsAsync(db)).Where(r => r.ItemNumber == code).OrderBy(r => r.EffectiveFrom).ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.Equal((new DateOnly(2026, 7, 1), (DateOnly?)new DateOnly(2026, 10, 27), false), (rows[0].EffectiveFrom, rows[0].EffectiveTo, rows[0].IsActive));
+        Assert.Equal((new DateOnly(2026, 12, 1), (DateOnly?)null, true), (rows[1].EffectiveFrom, rows[1].EffectiveTo, rows[1].IsActive));
+        Assert.Equal(73.58m, (await db.FindCatalogueItemAsync(code, new DateOnly(2026, 10, 27), PriceZone.National)).Price);
+        Assert.Equal(CatalogueLookupFailure.NotFound, (await db.FindCatalogueItemAsync(code, new DateOnly(2026, 10, 28), PriceZone.National)).Failure);   // the gap the file leaves
+        Assert.Equal(CatalogueLookupFailure.NotFound, (await db.FindCatalogueItemAsync(code, new DateOnly(2026, 11, 30), PriceZone.National)).Failure);
+        Assert.Equal(73.58m, (await db.FindCatalogueItemAsync(code, new DateOnly(2026, 12, 1), PriceZone.National)).Price);
+
+        await using var again = Workbook(CatalogueFixtures.File2026_27, wb => ListCodeTwice(wb, code, 20261027, 20261201));
+        var second = await PreviewAsync(db, again, "twice.xlsx");
+        Assert.Equal((0, 1018), (second.ItemsToAdd, second.ItemsUnchanged));   // the one import already reached what the file says
+    }
+
+    [Fact]
     public async Task A_republished_file_that_extends_an_end_date_is_flagged_because_an_import_never_lengthens_a_row()
     {
         await using var db = CreateDb();
