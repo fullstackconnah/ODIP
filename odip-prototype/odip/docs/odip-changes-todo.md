@@ -272,3 +272,22 @@ owner decision (collected under Open Flags at the end).
   - Not exploitable while Firebase is unconfigured. That is what makes now the cheap
     time to fix it, and why it gates the Firebase rollout rather than sitting in the
     general backlog.
+  - Accounts the app creates itself are created with `emailVerified: true`
+    (`FirebaseUserService.BuildCreateUserArgs`): an admin creating a user, a tenant's
+    first user, and the "Send set-password email" action for a user or staff member who
+    has no Firebase account yet. Nothing ever sends them a verification link, so without
+    it they could never pass the check above. It does not reopen the window described
+    above: the account exists before anyone else can sign up with that address, and one
+    made without a password is unusable until its owner follows the emailed set-password
+    link, which proves they control the mailbox. An account that already existed is never
+    marked verified by the app.
+  - Staff added through the staff form have a user row and no Firebase account, so they
+    get one on demand: `POST api/v1/staff/{id}/sign-in-account` (Admin, Coordinator,
+    SuperAdmin) and `POST api/v1/admin/users/{id}/sign-in-account` (SuperAdmin, for the
+    Users tab). The browser then asks Firebase to email the set-password link. An address
+    on `Auth:SuperAdminDomain` signs in as SuperAdmin whatever the user's role, so the
+    staff routes (create, an edit that changes the address, and this one) refuse such an
+    address unless the caller is a SuperAdmin.
+  - The SSO plan above retires this whole flow. With the email/password provider disabled
+    there is no password to set, so the set-password emails, the two sign-in-account
+    routes, the temporary-password option and the verified-at-creation rule go with it.

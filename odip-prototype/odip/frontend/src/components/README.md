@@ -1059,7 +1059,7 @@ until they dismiss it. The notices are ordinary content, so they add no layer to
 ```tsx
 const { notices, notify, dismiss } = useNotices()
 <NoticesRegion notices={notices} onDismiss={dismiss} className="empty:mb-0" />   // above the table
-notify('error', person.fullName, message)                                      // the title is who it is about
+notify('danger', person.fullName, message)                                     // the title is who it is about; tone is 'success' | 'danger'
 ```
 
 - **One persistent live region.** It is `role="status"` (polite), mounted before the first message and empty while idle; what is put into it is announced. A live region created already holding its text
@@ -1067,6 +1067,10 @@ notify('error', person.fullName, message)                                      /
 - **Rules.** At most 3 are held (`MAX_NOTICES`), newest first. An error stays until it is dismissed, and a success never removes an error: over the cap the oldest *success* goes (with only errors held, a new error
   replaces the oldest, and a new success is not let in). Each notice names the person, its text breaks (`break-words`), and Dismiss is a `Button iconOnly` named for them.
 - Collapse the empty region with an `empty:` class that cancels the gap around it (`empty:mb-0` in a `space-y` stack, `empty:-mt-[var(--section-gap)]` in a flex column with a `gap`).
+- **The control that raises a notice** is a `RowActions` cluster of `Button variant="ghost" size="sm" iconOnly` (a detail page uses a plain `Button`), named for the person it acts on ("Send set-password email to Ann One"). While its action is under way
+  it is `aria-disabled` with a guard in the handler, never `disabled`: disabling the button that was just activated can drop keyboard focus in some browsers. `Button` dims only on `disabled`, so add `aria-disabled:opacity-50 aria-disabled:cursor-not-allowed`.
+- **What it reports today** is only the set-password email (`lib/signInEmail.ts` words it). That flow exists only while people sign in with an email and a password: the SSO plan (`docs/odip-changes-todo.md`, "Harden the token exchange") disables
+  that provider and retires the emails, the two sign-in-account routes and the temporary-password option with it. The region and the hook are generic and stay.
 - **When not to use**: the result of a CREATE belongs in the panel's own done state (a `SignInEmailOutcome` Callout and a Done button, as in `UserFormPanel`), which stays open until the person closes it; a failure
   next to a field is an inline error. (A first version of this was a floating toast; it was dropped because it could cover the next panel's Create button and replaced an unread error with a later success.)
 ---

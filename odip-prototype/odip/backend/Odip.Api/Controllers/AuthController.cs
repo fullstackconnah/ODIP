@@ -109,6 +109,13 @@ public class AuthController : ControllerBase
         // could sign up in Firebase with that address and exchange the resulting
         // unverified token for a fully authenticated ODIP session — a window that
         // stays open for as long as the real owner hasn't claimed the account.
+        //
+        // Accounts the app creates itself (an admin creating a user, a tenant's first user, "Send set-password email" for a user or staff
+        // member who has none yet) are created VERIFIED (FirebaseUserService.BuildCreateUserArgs): nothing ever sends them a verification
+        // link, so without that they could never pass this check. It does not reopen the window above. Firebase allows one email/password
+        // account per address, so once the app has made the account nobody else can sign up with that address, and one made without a
+        // password cannot be signed into until its owner follows the emailed set-password link, which proves they control the mailbox. An
+        // account that already existed is never marked verified by the app: EnsureSignInAccountAsync and UpdateUserByEmailAsync leave it as it is.
         if (!IsEmailVerified(claims))
             return Rejected("Exchange failed — email not verified: {Email}", email);
 
