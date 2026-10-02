@@ -31,7 +31,7 @@ public enum DemoTickStatus
     Failed,
 }
 
-/// <param name="Conflict">True when the database refused the write because someone else got there first (a duplicate key, a concurrent update): expected, retried next tick.</param>
+/// <param name="Conflict">True when the database refused the write because someone else got there first (a serialization failure or a deadlock): expected, retried next tick. A duplicate key is NOT one: it is reported as a failure that names its constraint.</param>
 public sealed record DemoPackFailure(string Pack, string Message, bool Conflict);
 
 /// <summary>What a tick did: the row counts the log line is built from, and the evidence the tests read.</summary>
@@ -53,13 +53,16 @@ public sealed class DemoTickResult
 /// (apart from honouring cancellation), never deletes, and writes only through a tenant-scoped context guarded by
 /// <see cref="DemoTenantGuard"/>.
 ///
-/// The flag is checked first and nothing else is touched when it is Off. The maintainer holds one piece of state: the provider-local
-/// date of the last tick, for "between 00:00 and 05:00 only the first tick of the day runs". A restart resets it, which is the intended
-/// "startup run".
+/// The flag is checked first and nothing else is touched when it is Off. The maintainer holds two pieces of state: the provider-local
+/// date of the last tick, for "between 00:00 and 05:00 only the first tick of the day runs" (a restart resets it, which is the intended
+/// "startup run"), and per pack how many ticks in a row it has conflicted, so a conflict that never goes away becomes an Error.
 /// </summary>
 public sealed class DemoDataMaintainer
 {
     private const int QuietHoursEndLocal = 5;
+
+    /// <summary>A pack that conflicts on this many ticks in a row stops being "a race, try again" and is logged at Error.</summary>
+    private const int ConflictEscalationTicks = 3;
 
     private readonly DemoDataOptions _options;
     private readonly TimeProvider _clock;
@@ -67,6 +70,8 @@ public sealed class DemoDataMaintainer
     private readonly IReadOnlyList<IDemoPack> _packs;
     private readonly IDemoTickLock _tickLock;
     private DateOnly? _lastRunLocalDate;
+    private readonly Dictionary<string, int> _conflictStreak = new();
+    private readonly object _streakLock = new();
 
     public DemoDataMaintainer(DemoDataOptions options, TimeProvider clock, ILogger<DemoDataMaintainer> logger,
         IEnumerable<IDemoPack>? packs = null, IDemoTickLock? tickLock = null)
@@ -180,6 +185,7 @@ public sealed class DemoDataMaintainer
             await pack.RunAsync(run, ct);
 
             if (transaction is not null) await transaction.CommitAsync(ct);
+            EndStreak(pack.Name);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -187,12 +193,7 @@ public sealed class DemoDataMaintainer
         }
         catch (Exception ex)
         {
-            var conflict = IsConflict(ex);
-            failures.Add(new DemoPackFailure(pack.Name, ex is DemoGuardViolationException ? ex.Message : $"{ex.GetType().Name}: {ex.Message}", conflict));
-            if (conflict)
-                _logger.LogInformation("Demo data: pack {Pack} lost a race with another writer and was rolled back; it will retry next tick", pack.Name);
-            else
-                _logger.LogError(ex, "Demo data: pack {Pack} failed and was rolled back; the other packs continue", pack.Name);
+            ReportFailure(pack.Name, ex, failures);
         }
         finally
         {
@@ -201,15 +202,83 @@ public sealed class DemoDataMaintainer
         }
     }
 
-    /// <summary>A duplicate key, a serialization failure or a deadlock: somebody else wrote first. Expected, not a bug.</summary>
-    private static bool IsConflict(Exception ex)
+    private enum ConflictKind
+    {
+        /// <summary>An ordinary failure: a bug or an outage, always an Error.</summary>
+        None,
+
+        /// <summary>A serialization failure or a deadlock: somebody else wrote first. Expected, and retried next tick.</summary>
+        Race,
+
+        /// <summary>A unique violation. Not expected: demo ids are deterministic and every pack looks its rows up first, so this is a row
+        /// (or an index added later) that collides with ours, and it will collide again.</summary>
+        Duplicate,
+    }
+
+    private static (ConflictKind Kind, string? Constraint) Classify(Exception ex)
     {
         for (Exception? e = ex; e is not null; e = e.InnerException)
         {
-            if (e is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected })
-                return true;
+            if (e is not PostgresException pg) continue;
+            switch (pg.SqlState)
+            {
+                case PostgresErrorCodes.SerializationFailure:
+                case PostgresErrorCodes.DeadlockDetected:
+                    return (ConflictKind.Race, null);
+                case PostgresErrorCodes.UniqueViolation:
+                    return (ConflictKind.Duplicate, pg.ConstraintName);
+            }
         }
-        return false;
+        return (ConflictKind.None, null);
+    }
+
+    /// <summary>
+    /// Records a failed pack and logs it at the level it deserves: Information for a race, Warning (with the constraint) for a duplicate
+    /// key, Error for anything else, and Error for any conflict once the same pack has conflicted on <see cref="ConflictEscalationTicks"/>
+    /// ticks in a row, because a conflict that does not go away is not a race.
+    /// </summary>
+    private void ReportFailure(string pack, Exception ex, List<DemoPackFailure> failures)
+    {
+        var (kind, constraint) = Classify(ex);
+        var constraintName = constraint ?? "(unknown)";
+        var message = ex is DemoGuardViolationException ? ex.Message
+            : kind == ConflictKind.Duplicate ? $"UniqueViolation on constraint {constraintName}: {ex.Message}"
+            : $"{ex.GetType().Name}: {ex.Message}";
+        failures.Add(new DemoPackFailure(pack, message, kind == ConflictKind.Race));
+
+        if (kind == ConflictKind.None)
+        {
+            EndStreak(pack);
+            _logger.LogError(ex, "Demo data: pack {Pack} failed and was rolled back; the other packs continue", pack);
+            return;
+        }
+
+        var ticks = ExtendStreak(pack);
+        if (ticks >= ConflictEscalationTicks)
+        {
+            var what = kind == ConflictKind.Duplicate ? $"duplicate key on constraint {constraintName}" : "serialization failure or deadlock";
+            _logger.LogError(ex, "Demo data: pack {Pack} has conflicted on {Ticks} consecutive ticks and is not recovering by itself ({What}); it was rolled back and the other packs continue",
+                pack, ticks, what);
+        }
+        else if (kind == ConflictKind.Duplicate)
+        {
+            _logger.LogWarning("Demo data: pack {Pack} hit a duplicate key on constraint {Constraint} and was rolled back; it will retry next tick (conflict {Ticks} in a row)",
+                pack, constraintName, ticks);
+        }
+        else
+        {
+            _logger.LogInformation("Demo data: pack {Pack} lost a race with another writer and was rolled back; it will retry next tick", pack);
+        }
+    }
+
+    private int ExtendStreak(string pack)
+    {
+        lock (_streakLock) return _conflictStreak[pack] = _conflictStreak.GetValueOrDefault(pack) + 1;
+    }
+
+    private void EndStreak(string pack)
+    {
+        lock (_streakLock) _conflictStreak.Remove(pack);
     }
 
     private void LogSummary(DemoTickResult result)
