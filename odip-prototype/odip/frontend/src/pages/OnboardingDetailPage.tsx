@@ -62,7 +62,7 @@ export default function OnboardingDetailPage() {
   const recommended = !d.intakeComplete
     ? {
         label: 'Complete intake',
-        reason: 'Complete the saved draft intake. Completing intake does not activate the participant.',
+        reason: 'Complete the saved draft intake. Completing intake puts the participant in onboarding; completing their profile activates them.',
         action: <Button to={`/participants/${id}/intake`}>Complete intake</Button>,
       }
     : !d.profileComplete
@@ -137,7 +137,7 @@ export default function OnboardingDetailPage() {
           </div>
         </section>
       </div>
-      <p className="text-sm text-[var(--color-muted-foreground)]">Completing these steps doesn't activate the participant or allow bookings, rostering, invoicing or claims.</p>
+      <p className="text-sm text-[var(--color-muted-foreground)]">Completing the participant's profile finishes onboarding: they move to Active participants once your organisation's readiness rule allows it. What is still missing is listed below.</p>
     </div>
 
     {profile.error || services.error ? (

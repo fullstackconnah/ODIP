@@ -55,6 +55,7 @@ import { CONSENT_TYPES, HEALTH_CONDITION_TYPES, ADL_TYPES, CHECKLIST_ITEM_TYPES,
 import { useDeriveFieldValues, type FieldDerivationDef } from '@/lib/conditionalFields'
 import { boolToTriState, focusField, extractErrorMessage } from '../intake/intakeFormat'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import { ACTIVE_TABLE_PATH, participantActivatedState } from './participantActivated'
 import { KeyIdentifiersStep } from './steps/KeyIdentifiersStep'
 import { CulturalDepthConsentsStep } from './steps/CulturalDepthConsentsStep'
 import { MedicalDetailStep } from './steps/MedicalDetailStep'
@@ -408,13 +409,22 @@ export default function ProfileWizardPage() {
       const changedSteps = WIZARD_STEPS.filter((step) =>
         snapshotOf(step, current) !== (savedSnapshots.current[step.key] ?? snapshotOf(step, baselineValues.current ?? {})))
       for (const step of changedSteps) await saveStep(step.key)
+      // Read before the call: only a participant still in onboarding (a draft) has an onboarding to finish.
+      const wasInOnboarding = participant.isDraft
       const res = await completeProfile.mutateAsync({ id })
       if (res.success) {
         // Clear the dirty flag synchronously first (the documented useUnsavedChangesWarning idiom, as the Intake
         // wizard does): the per-step saves never reset the form, so without this a finished wizard that had any
         // edit in it asks "Leave without saving?" on its way out.
         flushSync(() => reset(getValues()))
-        navigate(`/participants/${id}`)
+        // Completing the profile ends the onboarding of a participant who was in it: when the organisation's readiness rule let that activate them
+        // (Warn does) they are an active participant and have left the Onboarding tab, so show them on the Active participants tab. Anyone else (an
+        // edit to a participant who was already finalised, or one readiness did not activate yet: Enforce) goes back to their own record.
+        if (wasInOnboarding && res.data?.isActive) {
+          navigate(ACTIVE_TABLE_PATH, { state: participantActivatedState(id, res.data.fullName || participant.fullName) })
+        } else {
+          navigate(`/participants/${id}`)
+        }
       }
     } catch (err) {
       setSaveError(extractErrorMessage(err, 'Failed to complete the profile. Please try again.'))

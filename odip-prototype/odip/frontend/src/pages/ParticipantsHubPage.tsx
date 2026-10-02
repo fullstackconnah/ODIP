@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
@@ -10,7 +11,11 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useTabParam } from '@/hooks/useTabParam'
 import { usePermissions } from '@/lib/permissions'
 
-/** Canonical order for the lifecycle-stage tabs. */
+/**
+ * Canonical order for the lifecycle-stage tabs. A participant is on exactly one: an open enquiry or an intake in progress (Enquiries), intake
+ * complete but not yet active (Onboarding), or finalised (Active participants, with its Archived view). Completing the intake moves them from the
+ * first to the second, and completing the profile (which activates them, readiness allowing) to the third.
+ */
 type TabId = 'enquiries' | 'onboarding' | 'active'
 
 const TABS: { id: TabId; label: string; title: string; description: string }[] = [
@@ -18,13 +23,13 @@ const TABS: { id: TabId; label: string; title: string; description: string }[] =
     id: 'enquiries',
     label: 'Enquiries',
     title: 'Enquiries',
-    description: 'Lightweight capture of new prospects before intake.',
+    description: 'Open enquiries and intakes in progress — start or resume an intake.',
   },
   {
     id: 'onboarding',
     label: 'Onboarding',
     title: 'Onboarding',
-    description: 'Worklist of participants mid-onboarding — gate progress and blockers.',
+    description: 'Intake complete, not yet active — gate progress and what is still missing.',
   },
   {
     id: 'active',
@@ -53,7 +58,21 @@ export default function ParticipantsHubPage() {
   const { canManageParticipantLifecycle } = usePermissions()
   // The stage is `?tab=` (shareable and bookmarkable; the default drops the param) and the URL is its only source, read from the ROUTER's
   // location so the page is correct under MemoryRouter in tests and BrowserRouter in the app.
-  const [activeId, selectTab] = useTabParam(TAB_KEYS, DEFAULT_TAB)
+  const [tabFromUrl, selectTab] = useTabParam(TAB_KEYS, DEFAULT_TAB)
+  // The register's Drafts view is retired: a draft is an Enquiries row (intake open) or an Onboarding row (intake complete). An old `?view=drafts` link
+  // therefore opens the Enquiries tab, and the retired param is dropped from the URL.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const retiredDraftsLink = searchParams.get('view') === 'drafts'
+  const activeId: TabId = retiredDraftsLink ? 'enquiries' : tabFromUrl
+  useEffect(() => {
+    if (!retiredDraftsLink) return
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      next.delete('view')
+      next.set('tab', 'enquiries')
+      return next
+    }, { replace: true })
+  }, [retiredDraftsLink, setSearchParams])
   const activeMeta = TABS.find(t => t.id === activeId) ?? TABS[2]
 
   // Each body export renders its own PageHeader via its standalone page wrapper
