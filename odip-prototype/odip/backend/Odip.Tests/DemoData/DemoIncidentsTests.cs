@@ -83,6 +83,12 @@ public class DemoIncidentsTests
         Assert.False(QscReporting.IsOverdue(abuse, now));
         Assert.Equal(IncidentSeverity.Critical, abuse.Severity);
 
+        // The same through the translatable predicate the overdue list, the dashboard tile and the participant alert share: the list holds Ryan's, not William's.
+        await using (var query = env.AdminDb())
+        {
+            Assert.Equal(new[] { IncidentCatalog.IdOf("I-03") }, await query.IncidentReports.Where(QscReporting.IsOverdueExpr(now)).Select(i => i.Id).ToListAsync());
+        }
+
         // The participant alerts say so too.
         await using var db = env.AdminDb();
         var alerts = (await new ParticipantAlertsService(db, env.Clock).GetAlertsAsync(null, activeOnly: true)).ToDictionary(a => a.ParticipantId, a => a.Alerts.Select(x => x.Type).ToList());
@@ -101,7 +107,7 @@ public class DemoIncidentsTests
 
         var owed = all.Where(i => i.QscReportingStatus == QscReportingStatus.Required && i.QscReportedAt is null).ToList();
         Assert.Equal(2, owed.Count);
-        Assert.Equal(owed.Count, tasks.Count);
+        Assert.Equal(owed.Select(i => i.Id).OrderBy(x => x), tasks.Where(t => t.Status != TaskItemStatus.Completed).Select(t => t.IncidentReportId!.Value).OrderBy(x => x));
         foreach (var incident in owed)
         {
             var task = tasks.Single(t => t.SourceKey == $"incident-qsc:{incident.Id}");
@@ -111,6 +117,50 @@ public class DemoIncidentsTests
             Assert.Equal(incident.Id, task.IncidentReportId);
             Assert.Equal(DateOnly.FromDateTime(incident.CreatedAt.AddHours(QscReporting.OverdueHours)), task.DueDate);                // the form's own rule
             Assert.Equal($"Report incident to the NDIS Commission: {incident.Title}", task.Title);
+        }
+
+        // The form raised one for every incident it filed as Required, so the three whose report has been made have theirs, completed (next test).
+        Assert.Equal(new[] { "I-03", "I-04", "I-05", "I-06", "I-10" }.Select(IncidentCatalog.IdOf).OrderBy(x => x), tasks.Select(t => t.IncidentReportId!.Value).OrderBy(x => x));
+    }
+
+    [Fact]
+    public async Task AReportMadeToTheCommission_CompletesTheTaskTheFormRaised_AtTheMomentItIsMade_AndTheHistoryShowsBoth()
+    {
+        var env = await TickAsync(FirstRun);
+        var all = await IncidentsAsync(env);
+        await using var db = env.AdminDb();
+        var people = (await db.Users.ToListAsync()).ToDictionary(u => u.Id, u => u.FullName);
+
+        // The three the plan has reported: I-05 two and a half hours after filing, I-10 six hours after, I-06 thirty hours after (late). Local times, literal.
+        (string Key, DateTime FiledAt, DateTime ReportedAt, QscReportingStatus Label, string Reference)[] reports =
+        {
+            ("I-05", At(Friday.AddDays(-6), 13, 30), At(Friday.AddDays(-6), 16, 0), QscReportingStatus.ReportedWithin24h, "QSC-DEMO-0001"),
+            ("I-10", At(Friday.AddDays(-3), 10, 15), At(Friday.AddDays(-3), 16, 15), QscReportingStatus.ReportedWithin24h, "QSC-DEMO-0004"),
+            ("I-06", At(Friday.AddDays(-12), 15, 20), At(Friday.AddDays(-11), 21, 20), QscReportingStatus.ReportedLate, "QSC-DEMO-0003"),
+        };
+        foreach (var (key, filedAt, reportedAt, label, reference) in reports)
+        {
+            var incident = Story(all, key);
+            var reportedUtc = ProviderLocalTime.LocalToUtc(reportedAt, Zone());
+            Assert.Equal(filedAt, Local(incident.CreatedAt));
+            Assert.Equal(label, incident.QscReportingStatus);
+            Assert.Equal(reportedAt, incident.QscReportedAt);                                       // typed as the wall clock of the moment, never the UTC reading
+            Assert.Equal(DateTimeKind.Unspecified, incident.QscReportedAt!.Value.Kind);
+            Assert.Equal(reference, incident.QscReferenceNumber);
+
+            var task = await db.BookingTasks.SingleAsync(t => t.SourceKey == $"incident-qsc:{incident.Id}");
+            Assert.Equal(TaskItemStatus.Completed, task.Status);
+            Assert.Equal(reportedUtc, task.AutoCompletedAt);
+            Assert.Equal(DateOnly.FromDateTime(reportedAt), task.CompletedDate);
+            Assert.Equal(DateOnly.FromDateTime(incident.CreatedAt.AddHours(QscReporting.OverdueHours)), task.DueDate);
+
+            // The form raised the task when the incident was filed, the coordinator's save completed it.
+            var history = (await db.AuditLogs.Where(a => a.EntityId == task.Id).ToListAsync()).OrderBy(a => a.ChangedAt).ToList();
+            Assert.Equal(new[] { AuditAction.Created, AuditAction.Updated }, history.Select(a => a.Action));
+            Assert.Equal(new DateTimeOffset(incident.CreatedAt, TimeSpan.Zero), history[0].ChangedAt);
+            Assert.Equal(people[incident.ReportedByUserId], history[0].ChangedByName);
+            Assert.Equal(new DateTimeOffset(reportedUtc, TimeSpan.Zero), history[1].ChangedAt);
+            Assert.Equal("Sarah Mitchell", history[1].ChangedByName);
         }
     }
 
@@ -127,7 +177,8 @@ public class DemoIncidentsTests
 
         var reported = Story(await IncidentsAsync(env), "I-04");
         Assert.Equal(QscReportingStatus.ReportedWithin24h, reported.QscReportingStatus);
-        Assert.Equal(created.AddHours(20), reported.QscReportedAt);
+        Assert.Equal(Local(created.AddHours(20)), reported.QscReportedAt);                    // typed as the wall clock of the moment on the provider's clock, not the UTC reading
+        Assert.Equal(DateTimeKind.Unspecified, reported.QscReportedAt!.Value.Kind);
         Assert.Equal("QSC-DEMO-0002", reported.QscReferenceNumber);
         Assert.Equal(IncidentStatus.Escalated, reported.Status);
         await using var db = env.AdminDb();
@@ -182,20 +233,32 @@ public class DemoIncidentsTests
     }
 
     [Theory]
-    [InlineData("2026-10-01T23:20:00Z", false)]       // Fri 09:20 AEST: I-01 was filed at 09:10, but its review (75 minutes later) has not happened yet
-    [InlineData("2026-10-02T00:26:59Z", false)]       // 10:26:59: the review is at 10:25, and a row is written two minutes after its last time
-    [InlineData("2026-10-02T00:27:00Z", true)]
-    public async Task AnIncidentWhoseReviewIsStillToCome_IsNotWrittenYet_AndThenItsReviewIsAtAFixedTimeAfterFiling(string utc, bool written)
+    [InlineData("2026-10-01T23:11:59Z", false, false)]     // Fri 09:11:59 AEST: I-01 is filed at 09:10 and appears two minutes after
+    [InlineData("2026-10-01T23:12:00Z", true, false)]      // 09:12:00: it is there, Submitted
+    [InlineData("2026-10-02T00:26:59Z", true, false)]      // 10:26:59: its review is at 10:25 (75 minutes after filing), made two minutes after its time
+    [InlineData("2026-10-02T00:27:00Z", true, true)]
+    public async Task AnIncidentIsFiledSubmitted_AndItsReviewComesAtAFixedTimeAfterFiling_ASeparateChangeFromTheFiling(string utc, bool filed, bool reviewed)
     {
         var env = await TickAsync(DateTimeOffset.Parse(utc, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal));
 
         var all = await IncidentsAsync(env);
 
-        Assert.Equal(written, all.Any(i => i.Id == IncidentCatalog.IdOf("I-01")));
-        if (!written) return;
+        Assert.Equal(filed, all.Any(i => i.Id == IncidentCatalog.IdOf("I-01")));
+        if (!filed) return;
         var beach = Story(all, "I-01");
         Assert.Equal(At(Friday, 9, 10), Local(beach.CreatedAt));
+        if (!reviewed)
+        {
+            Assert.Equal(IncidentStatus.Submitted, beach.Status);
+            Assert.Null(beach.ReviewedAt);
+            Assert.Null(beach.ReviewedByUserId);
+            Assert.Equal(beach.CreatedAt, beach.UpdatedAt);
+            return;
+        }
+        Assert.Equal(IncidentStatus.UnderReview, beach.Status);
         Assert.Equal(beach.CreatedAt.AddMinutes(75), beach.ReviewedAt);                   // the same whenever the first tick was
+        Assert.Equal(At(Friday, 10, 25), Local(beach.ReviewedAt));
+        Assert.Equal(beach.ReviewedAt, beach.UpdatedAt);
         Assert.Equal(DemoFixture.StaffId("sarah"), beach.ReviewedByUserId);
     }
 

@@ -175,6 +175,10 @@ public class DemoShiftPackageGuardTests
     [InlineData(nameof(IncidentReport.ResolvedAt))]
     [InlineData(nameof(IncidentReport.QscReportedAt))]
     [InlineData(nameof(IncidentReport.QscReportingStatus))]
+    [InlineData(nameof(IncidentReport.FamilyNotified))]
+    [InlineData(nameof(IncidentReport.FamilyNotifiedAt))]
+    [InlineData(nameof(IncidentReport.SupportCoordinatorNotified))]
+    [InlineData(nameof(IncidentReport.SupportCoordinatorNotifiedAt))]
     [InlineData(nameof(IncidentReport.UpdatedAt))]
     public async Task AnIncident_MayBeReviewedResolvedAndReported(string property)
     {
@@ -189,6 +193,10 @@ public class DemoShiftPackageGuardTests
             case nameof(IncidentReport.ResolvedAt): tracked.ResolvedAt = DateTime.UtcNow; break;
             case nameof(IncidentReport.QscReportedAt): tracked.QscReportedAt = DateTime.UtcNow; break;
             case nameof(IncidentReport.QscReportingStatus): tracked.QscReportingStatus = QscReportingStatus.ReportedWithin24h; break;
+            case nameof(IncidentReport.FamilyNotified): tracked.FamilyNotified = true; break;
+            case nameof(IncidentReport.FamilyNotifiedAt): tracked.FamilyNotifiedAt = DateTime.UtcNow; break;
+            case nameof(IncidentReport.SupportCoordinatorNotified): tracked.SupportCoordinatorNotified = true; break;
+            case nameof(IncidentReport.SupportCoordinatorNotifiedAt): tracked.SupportCoordinatorNotifiedAt = DateTime.UtcNow; break;
             default: tracked.UpdatedAt = DateTime.UtcNow; break;
         }
 

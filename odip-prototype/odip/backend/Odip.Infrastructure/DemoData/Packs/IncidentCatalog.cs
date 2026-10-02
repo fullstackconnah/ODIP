@@ -3,10 +3,11 @@ using Odip.Domain.Enums;
 namespace Odip.Infrastructure.DemoData.Packs;
 
 /// <summary>
-/// One of the twelve incidents the demo starts with (plan 2.5): who it is about and who reported it, what kind and how serious, where it stands,
-/// and when it was reported, counted back from the day of the first run (<see cref="DaysBefore"/>, at <see cref="ReportedAt"/> on the provider's
-/// clock) or, for the two the plan dates by the hour, from the moment of the first tick (<see cref="HoursBefore"/>). The id is a function of
-/// <see cref="Key"/> alone, so each is made once, whatever it has become.
+/// One of the twelve incidents the demo starts with (plan 2.5): who it is about and who reported it, what kind and how serious, where it stands
+/// at the first run (<see cref="Status"/> and <see cref="Qsc"/> are the end of its script, <see cref="IncidentTimeline"/>: it is filed Submitted,
+/// or Draft, and the changes that take it there are made one at a time), and when it was reported, counted back from the day of the first run
+/// (<see cref="DaysBefore"/>, at <see cref="ReportedAt"/> on the provider's clock) or, for the two the plan dates by the hour, from the moment of
+/// the first tick (<see cref="HoursBefore"/>). The id is a function of <see cref="Key"/> alone, so each is made once, whatever it has become.
 /// </summary>
 public sealed record IncidentStory(
     string Key, string? Participant, string Reporter, IncidentType Type, IncidentSeverity Severity, IncidentStatus Status, QscReportingStatus Qsc,
@@ -90,10 +91,51 @@ public static class IncidentCatalog
             "Harrison's bathroom", 2, T(20, 40), Service: ServiceStreams.InHomeSupport),
     };
 
-    /// <summary>What happens to an incident that has not been resolved (plan 5.2): reviewed the next morning, resolved on the fifth day, closed on the tenth.</summary>
+    private static readonly IReadOnlyDictionary<Guid, IncidentStory> StoriesById = Static.ToDictionary(s => IdOf(s.Key));
+
+    /// <summary>The story of one of the twelve (the slip is built beside its shift, so it has none), or null for any other incident.</summary>
+    public static IncidentStory? StoryOf(Guid incidentId) => StoriesById.GetValueOrDefault(incidentId);
+
+    /// <summary>
+    /// The report to the Commission an incident has after it is filed (plan 2.5): how long after, and the reference the Commission gave. An incident
+    /// with one is filed with its reporting Required, as the incident form files these types, so the form's obligation task is raised then and the
+    /// report completes it. Whether the report is within the day or late is how long after (24 hours, <c>QscReporting.OverdueHours</c>). William's
+    /// (I-04) is the one that is still to come at the first run: made inside its day, eleven hours after the demo starts.
+    /// </summary>
+    public sealed record QscReport(TimeSpan After, string Reference);
+
+    public static readonly IReadOnlyDictionary<string, QscReport> QscReports = new Dictionary<string, QscReport>
+    {
+        ["I-05"] = new(TimeSpan.FromMinutes(150), "QSC-DEMO-0001"),
+        ["I-04"] = new(TimeSpan.FromHours(20), "QSC-DEMO-0002"),
+        ["I-06"] = new(TimeSpan.FromHours(30), "QSC-DEMO-0003"),
+        ["I-10"] = new(TimeSpan.FromHours(6), "QSC-DEMO-0004"),
+    };
+
+    /// <summary>
+    /// Who had been told, and how long after the incident was filed (wall-clock times on the incident, as typed into the compliance step). The review
+    /// records them, so each is earlier than the review of its incident (a test holds that).
+    /// </summary>
+    public sealed record Told(int? FamilyMinutes = null, int? CoordinatorMinutes = null);
+
+    public static readonly IReadOnlyDictionary<string, Told> ToldAfter = new Dictionary<string, Told>
+    {
+        ["I-05"] = new(FamilyMinutes: 35, CoordinatorMinutes: 50),
+        ["I-10"] = new(CoordinatorMinutes: 60),
+        ["I-12"] = new(FamilyMinutes: 60),
+    };
+
+    /// <summary>What happens to a rolling incident (plan 5.2): reviewed the next morning, resolved on the fifth day, closed on the tenth.</summary>
     public static readonly (int Days, TimeOnly At) ReviewAfter = (1, T(9, 30));
     public static readonly (int Days, TimeOnly At) ResolveAfter = (5, T(15, 0));
     public static readonly (int Days, TimeOnly At) CloseAfter = (10, T(11, 0));
+
+    /// <summary>
+    /// The same for the twelve, which are at their stated status by the first run (the oldest, I-06, was filed twelve days before it): resolved on the
+    /// fourth day after filing and closed on the sixth.
+    /// </summary>
+    public static readonly (int Days, TimeOnly At) StaticResolveAfter = (4, T(15, 0));
+    public static readonly (int Days, TimeOnly At) StaticCloseAfter = (6, T(11, 0));
 
     /// <summary>A minor incident that follows on a day that has one: the day decides, by its date, which kind, about whom and who reported it.</summary>
     public sealed record RollingStory(

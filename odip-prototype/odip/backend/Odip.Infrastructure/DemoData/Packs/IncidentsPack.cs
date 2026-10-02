@@ -8,24 +8,29 @@ namespace Odip.Infrastructure.DemoData.Packs;
 
 /// <summary>
 /// The incidents (plan 2.5, 1b row 27, 3a): twelve the demo starts with, the shift notes two of them hang from, and a few minor ones a week after
-/// that, each aged by the clock.
+/// that, each moved along its script by the clock.
 ///
-///  - The twelve (<see cref="IncidentCatalog.Static"/> and the slip below) are made once, dated back from the day of the first run (two by the hour
-///    from the first tick), with the injuries, the witnesses (three waiting, two approved, one declined, two who need no approval) and the
-///    obligation task a report to the Commission needs, built the way the incident form builds them. Eight are open, all six statuses, all five
-///    reporting states, ten of the eleven types and all four severities are there. One has waited more than a day for its report (Ryan's restraint,
-///    which stays overdue for the demo); one is still inside its day (William's, reported at 20 hours, its task closed then).
+///  - The twelve (<see cref="IncidentCatalog.Static"/> and the slip below) are filed once, dated back from the day of the first run (two by the hour
+///    from the first tick), as the incident form files them: Submitted (the draft stays a draft), its reporting Required where the form's rule says
+///    so, with the injuries, the witnesses (three waiting, two approved, one declined, two who need no approval) and the obligation task a report to
+///    the Commission needs. Everything after filing is a change on the incident's script (<see cref="IncidentTimeline"/>), each its own save and so
+///    its own audit entry, by the coordinator, at its own time: the review (which records who had been told), the escalation, the report to the
+///    Commission (which completes the task), the resolution and the closing. By the first run eight are open; all six statuses, all five reporting
+///    states, ten of the eleven types and all four severities are there. One has waited more than a day for its report (Ryan's restraint, which stays
+///    overdue for the demo); one is still inside its day (William's, whose report is made at 20 hours and its task completed then).
 ///  - The slip (I-09): the first day's note on Sophie's live shift at 09:41, which the scanner flags as Falls and Injury, raises the follow-up task;
 ///    at 10:30 the incident is filed from it with the shift and the note, and the task is closed as filing closes it. And one flagged note nobody has
 ///    filed anything from, on yesterday's evening shift, whose task stays open in the queue.
 ///  - Rolling: on about three days in ten a minor incident (a graze, a raised voice, a broken cup, a stomach upset, a late dose, a lost hearing
-///    aid) is reported at a scripted time, never one that needs the Commission, so the tiles stay credible.
-///  - Every incident not yet closed ages: reviewed the next morning (9:30), resolved on the fifth day (15:00), closed on the tenth (11:00), each
-///    step its own change with its own time and reviewer.
+///    aid) is filed at a scripted time, never one that needs the Commission, so the tiles stay credible, and goes along its script: reviewed the
+///    next morning (9:30), resolved on the fifth day (15:00), closed on the tenth (11:00).
+///  - Whose change it is: a step is made only while the incident stands exactly as the script left it before that step (compare-and-set, plan 4.3), so
+///    an incident somebody reviews, resolves or reopens by hand is left as they left it. An unrelated edit does not stop the script.
 ///
 /// An incident has no tenant column, so it is the Demo tenant's by its reporter, and the guard checks that; its injuries and witnesses hang off it.
-/// Nothing is sent: the notification the form would raise is not written (plan D8). Time (plan 2.0): when it happened and when family were told are
-/// provider-local wall-clock values; every other instant is the one conversion of a local time.
+/// Nothing is sent: the notification the form would raise is not written (plan D8). Time (plan 2.0): when it happened, when the Commission was
+/// reported to and when family were told are provider-local wall-clock values typed into the form (the wire inventory lists them as such); every
+/// other instant is the one conversion of a local time.
 /// </summary>
 public sealed class IncidentsPack : IDemoPack
 {
@@ -87,9 +92,7 @@ public sealed class IncidentsPack : IDemoPack
             var createdUtc = story.HoursBefore is { } hours ? WholeMinute(c.A.NowUtc.AddHours(-hours)) : c.Utc(PackageRows.Local(c.FirstDay.AddDays(-story.DaysBefore), story.ReportedAt));
             if (!c.Due(createdUtc)) continue;                                              // reported later today: wait for it
 
-            var plan = Build(c, story, reporter, participant, createdUtc, story.Key == "I-02" && doseThere ? doseId : null);
-            if (!c.Due(ReadyAt(plan.Incident))) continue;                                  // its review, say, is still to come: written when it has happened
-            Insert(c, plan);
+            Insert(c, Build(c, story, reporter, participant, createdUtc, story.Key == "I-02" && doseThere ? doseId : null));
             added++;
         }
         if (added > 0)
@@ -104,6 +107,11 @@ public sealed class IncidentsPack : IDemoPack
     /// <summary>An incident with the rows that go with it.</summary>
     private sealed record Plan(IncidentReport Incident, User Reporter, List<IncidentInjury> Injuries, List<IncidentWitness> Witnesses, BookingTask? QscTask);
 
+    /// <summary>
+    /// An incident as it is filed: Submitted (or the Draft it stays), its reporting Required when the story has a report to the Commission to come
+    /// (the form's rule, which these types meet) or the state the story gives it, and none of what happens later. Its review, escalation, report,
+    /// resolution and closing are on its script (<see cref="IncidentTimeline"/>), so the row says only what was true when it was filed.
+    /// </summary>
     private static Plan Build(Ctx c, IncidentStory story, User reporter, DemoParticipant? participant, DateTime createdUtc, Guid? administration)
     {
         var id = IncidentCatalog.IdOf(story.Key);
@@ -117,13 +125,13 @@ public sealed class IncidentsPack : IDemoPack
             IncidentType = story.Type,
             OtherTypeSpecify = story.Type == IncidentType.Other ? "Equipment failure" : null,
             Severity = story.Severity,
-            Status = story.Status,
+            Status = story.Status == IncidentStatus.Draft ? IncidentStatus.Draft : IncidentStatus.Submitted,
             Title = story.Title,
             Description = story.Description,
             IncidentDateTime = createdLocal.AddMinutes(-(8 + DemoIds.Pick(id, "since", 0, 25))),
             Location = story.Location,
             ImmediateActionsTaken = ImmediateActions(story.Type),
-            QscReportingStatus = story.Qsc,
+            QscReportingStatus = IncidentCatalog.QscReports.ContainsKey(story.Key) ? QscReportingStatus.Required : story.Qsc,
             MedicationAdministrationId = administration,
             IsActive = true,
             CreatedAt = createdUtc,
@@ -172,34 +180,14 @@ public sealed class IncidentsPack : IDemoPack
                 Witness("rachel", WitnessStatus.Pending);
                 break;
             case "I-05":
-                incident.QscReportedAt = createdUtc.AddMinutes(150);
-                incident.QscReferenceNumber = "QSC-DEMO-0001";
-                incident.FamilyNotified = true;
-                incident.FamilyNotifiedAt = createdLocal.AddMinutes(35);
-                incident.SupportCoordinatorNotified = true;
-                incident.SupportCoordinatorNotifiedAt = createdLocal.AddMinutes(50);
                 Witness("daniel", WitnessStatus.Approved, "I met Chloe and the worker at the bus stop after security found her. She was safe and in good spirits.");
                 Witness("Centre security officer", WitnessStatus.NotRequired);
-                break;
-            case "I-06":
-                incident.QscReportedAt = createdUtc.AddHours(30);
-                incident.QscReferenceNumber = "QSC-DEMO-0003";
-                break;
-            case "I-10":
-                incident.QscReportedAt = createdUtc.AddHours(6);
-                incident.QscReferenceNumber = "QSC-DEMO-0004";
-                incident.SupportCoordinatorNotified = true;
-                incident.SupportCoordinatorNotifiedAt = createdLocal.AddHours(3);
                 break;
             case "I-12":
                 Injury(BodyRegion.RightHip, InjuryType.Bruise, "A bruise forming over the right hip. Painful to press, walking and standing normal. No ambulance called.");
                 Witness("brendan", WitnessStatus.Declined, "I was not in the bathroom when it happened and cannot say more than what the note says.");
-                incident.FamilyNotified = true;
-                incident.FamilyNotifiedAt = createdLocal.AddHours(1);
                 break;
         }
-
-        Age(c, incident, reporter);
 
         // A report to the Commission that has not been made yet is a task (SourceKey incident-qsc:{id}, due a day after the incident was filed, as the form raises it).
         BookingTask? task = null;
@@ -214,41 +202,6 @@ public sealed class IncidentsPack : IDemoPack
         }
         return new Plan(incident, reporter, injuries, witnesses, task);
     }
-
-    /// <summary>
-    /// The review, resolution and closing an incident has had by the time it is written, put into the new row at its final state. Every time is a
-    /// function of the incident's own time, never of the clock (an escalated one is reviewed an hour after it was filed; one filed in the day is
-    /// reviewed a little over an hour later, one filed in the evening the next morning), and the row is written only once the last of them is past.
-    /// </summary>
-    private static void Age(Ctx c, IncidentReport incident, User reporter)
-    {
-        var reviewer = c.Reviewer ?? reporter;
-        var created = c.Local(incident.CreatedAt);
-        DateTime At(int days, TimeOnly time) => c.Utc(PackageRows.Local(DateOnly.FromDateTime(created).AddDays(days), time));
-        var reviewedAt = incident.Status == IncidentStatus.Escalated ? incident.CreatedAt.AddHours(1)
-            : created.Hour < 17 ? incident.CreatedAt.AddMinutes(75) : At(IncidentCatalog.ReviewAfter.Days, IncidentCatalog.ReviewAfter.At);
-
-        switch (incident.Status)
-        {
-            case IncidentStatus.UnderReview or IncidentStatus.Escalated:
-                incident.ReviewedByUserId = reviewer.Id;
-                incident.ReviewedAt = reviewedAt;
-                incident.UpdatedAt = reviewedAt;
-                break;
-            case IncidentStatus.Resolved or IncidentStatus.Closed:
-                incident.ReviewedByUserId = reviewer.Id;
-                incident.ReviewedAt = reviewedAt;
-                incident.ReviewNotes = IncidentCatalog.ReviewNotes[DemoIds.Pick(incident.Id, "review-notes", 0, IncidentCatalog.ReviewNotes.Length - 1)];
-                incident.CorrectiveActions = IncidentCatalog.CorrectiveActions[DemoIds.Pick(incident.Id, "corrective", 0, IncidentCatalog.CorrectiveActions.Length - 1)];
-                incident.ResolvedAt = At(incident.Status == IncidentStatus.Closed ? 6 : 4, IncidentCatalog.ResolveAfter.At);
-                incident.UpdatedAt = incident.ResolvedAt.Value;
-                break;
-        }
-    }
-
-    /// <summary>The last moment any column of a new row refers to: it is not written before that has passed.</summary>
-    private static DateTime ReadyAt(IncidentReport incident) =>
-        new[] { incident.CreatedAt, incident.ReviewedAt ?? default, incident.ResolvedAt ?? default, incident.QscReportedAt ?? default, incident.UpdatedAt }.Max();
 
     private static void Insert(Ctx c, Plan plan)
     {
@@ -410,80 +363,96 @@ public sealed class IncidentsPack : IDemoPack
         }
     }
 
-    // ── ageing ──
+    // ── the script ──
 
     private static async Task AgeAsync(Ctx c, CancellationToken ct)
     {
         var run = c.Run;
-        var reviewer = c.Reviewer;
-        if (reviewer is null) return;
-
-        var rolling = Enumerable.Range(0, AgingLookbackDays + 1).Select(i => DemoIds.For("incident", "rolling", c.A.D0.AddDays(-i))).ToHashSet();
-        var qscId = IncidentCatalog.IdOf("I-04");
-        var moving = (await DemoQueries.AgingIncidents(run.Db, c.Staff.Values.Select(u => u.Id).ToList(), c.A.NowUtc.AddDays(-AgingLookbackDays)).ToListAsync(ct))
-            .Where(i => rolling.Contains(i.Id) || i.Id == qscId).OrderBy(i => i.CreatedAt).ToList();
-
-        foreach (var incident in moving)
+        if (c.Reviewer is not { } reviewer)
         {
-            // One step at a time, each its own save, so each is its own audit entry with its own time.
-            for (var step = 0; step < 4; step++)
+            run.Skipped("incident script", "the coordinator (sarah) is missing, so no incident is reviewed, escalated, reported, resolved or closed");
+            return;
+        }
+
+        // The twelve and the rolling ones move along their scripts; nothing else in the tenant (an incident somebody files by hand) is ever touched.
+        var rolling = Enumerable.Range(0, AgingLookbackDays + 1).Select(i => DemoIds.For("incident", "rolling", c.A.D0.AddDays(-i))).ToHashSet();
+        var moving = (await DemoQueries.AgingIncidents(run.Db, c.Staff.Values.Select(u => u.Id).ToList(), c.A.NowUtc.AddDays(-AgingLookbackDays)).ToListAsync(ct))
+            .Select(i => (Incident: i, Story: IncidentCatalog.StoryOf(i.Id)))
+            .Where(x => x.Story is not null || rolling.Contains(x.Incident.Id))
+            .OrderBy(x => x.Incident.CreatedAt).ToList();
+
+        foreach (var (incident, story) in moving)
+        {
+            var script = IncidentTimeline.For(story, incident.CreatedAt, c.A.Zone);
+            foreach (var step in script)
             {
-                if (!await StepAsync(c, incident, reviewer, ct)) break;
+                if (!IncidentTimeline.IsPending(incident, step, script)) continue;                      // made already, or somebody else has taken the incident on
+                if (!c.Due(step.WhenUtc)) break;                                       // still to come, and so is everything after it
+                await ApplyAsync(c, incident, story, step, reviewer, ct);               // one step, one save: its own audit entry, at its own time
             }
         }
     }
 
-    private static async Task<bool> StepAsync(Ctx c, IncidentReport incident, User reviewer, CancellationToken ct)
+    /// <summary>
+    /// One change on the script, made as the coordinator would make it (the incident's own fields, and the obligation task when the report is made),
+    /// saved by itself so the audit entry the interceptor writes is this change alone, stamped with the step's time and the coordinator.
+    /// </summary>
+    private static async Task ApplyAsync(Ctx c, IncidentReport incident, IncidentStory? story, IncidentStep step, User coordinator, CancellationToken ct)
     {
         var run = c.Run;
-        var created = c.Local(incident.CreatedAt);
-        DateTime At((int Days, TimeOnly At) when) => c.Utc(PackageRows.Local(DateOnly.FromDateTime(created).AddDays(when.Days), when.At));
-
-        // William's report to the Commission, made inside its day.
-        if (incident.Id == IncidentCatalog.IdOf("I-04") && incident.QscReportingStatus == QscReportingStatus.Required && incident.QscReportedAt is null)
+        var when = step.WhenUtc;
+        switch (step.Kind)
         {
-            var at = incident.CreatedAt.AddHours(20);
-            if (!c.Due(at)) return false;
-            incident.QscReportingStatus = QscReportingStatus.ReportedWithin24h;
-            incident.QscReportedAt = at;
-            incident.QscReferenceNumber = "QSC-DEMO-0002";
-            incident.UpdatedAt = at;
-            run.StampAudit(incident.Id, at, c.Staff.GetValueOrDefault(IncidentCatalog.Static.Single(s => s.Key == "I-04").Reporter) ?? reviewer);
-            foreach (var task in await DemoQueries.OpenTasksByKeys(run.Db, new List<string> { $"incident-qsc:{incident.Id}" }).ToListAsync(ct))
-            {
-                PackageRows.CloseTask(run, task, at);
-                run.StampAudit(task.Id, at, reviewer);
-            }
-            await run.SaveAsync(ct);
-            run.Changed("incidents reported");
-            return true;
+            case IncidentStepKind.Review:
+                incident.Status = IncidentStatus.UnderReview;
+                incident.ReviewedByUserId = coordinator.Id;
+                incident.ReviewedAt = when;
+                RecordTold(c, incident, story);
+                break;
+            case IncidentStepKind.Escalate:
+                incident.Status = IncidentStatus.Escalated;
+                break;
+            case IncidentStepKind.Report:
+                // Within 24 hours of filing the report is on time, after it late (the labels the app's own rule reads), and its time is typed as the wall clock of the moment.
+                incident.QscReportingStatus = when - incident.CreatedAt <= TimeSpan.FromHours(QscReporting.OverdueHours) ? QscReportingStatus.ReportedWithin24h : QscReportingStatus.ReportedLate;
+                incident.QscReportedAt = c.Local(when);
+                incident.QscReferenceNumber = story is not null && IncidentCatalog.QscReports.TryGetValue(story.Key, out var report) ? report.Reference : null;
+                foreach (var task in await DemoQueries.OpenTasksByKeys(run.Db, new List<string> { $"incident-qsc:{incident.Id}" }).ToListAsync(ct))
+                {
+                    PackageRows.CloseTask(run, task, when);
+                    run.StampAudit(task.Id, when, coordinator);
+                }
+                break;
+            case IncidentStepKind.Resolve:
+                incident.Status = IncidentStatus.Resolved;
+                incident.ReviewNotes = IncidentCatalog.ReviewNotes[DemoIds.Pick(incident.Id, "review-notes", 0, IncidentCatalog.ReviewNotes.Length - 1)];
+                incident.CorrectiveActions = IncidentCatalog.CorrectiveActions[DemoIds.Pick(incident.Id, "corrective", 0, IncidentCatalog.CorrectiveActions.Length - 1)];
+                incident.ResolvedAt = when;
+                break;
+            case IncidentStepKind.Close:
+                incident.Status = IncidentStatus.Closed;
+                break;
         }
-
-        var (next, when) = incident.Status switch
-        {
-            IncidentStatus.Submitted => (IncidentStatus.UnderReview, At(IncidentCatalog.ReviewAfter)),
-            IncidentStatus.UnderReview => (IncidentStatus.Resolved, At(IncidentCatalog.ResolveAfter)),
-            IncidentStatus.Resolved => (IncidentStatus.Closed, At(IncidentCatalog.CloseAfter)),
-            _ => ((IncidentStatus?)null, default(DateTime)),
-        };
-        if (next is null || !c.Due(when)) return false;
-
-        incident.Status = next.Value;
-        incident.UpdatedAt = when;
-        if (next == IncidentStatus.UnderReview)
-        {
-            incident.ReviewedByUserId = reviewer.Id;
-            incident.ReviewedAt = when;
-        }
-        else if (next == IncidentStatus.Resolved)
-        {
-            incident.ReviewNotes = IncidentCatalog.ReviewNotes[DemoIds.Pick(incident.Id, "review-notes", 0, IncidentCatalog.ReviewNotes.Length - 1)];
-            incident.CorrectiveActions = IncidentCatalog.CorrectiveActions[DemoIds.Pick(incident.Id, "corrective", 0, IncidentCatalog.CorrectiveActions.Length - 1)];
-            incident.ResolvedAt = when;
-        }
-        run.StampAudit(incident.Id, when, reviewer);
+        if (incident.UpdatedAt < when) incident.UpdatedAt = when;                          // forward only: a later edit by somebody else keeps its own stamp
+        run.StampAudit(incident.Id, when, coordinator);
         await run.SaveAsync(ct);
-        run.Changed("incidents aged");
-        return true;
+        run.Changed(step.Kind == IncidentStepKind.Report ? "incidents reported" : "incidents aged");
+    }
+
+    /// <summary>Who had been told by the time of the review, as the coordinator records it: wall-clock times, typed into the compliance step.</summary>
+    private static void RecordTold(Ctx c, IncidentReport incident, IncidentStory? story)
+    {
+        if (story is null || !IncidentCatalog.ToldAfter.TryGetValue(story.Key, out var told)) return;
+        var created = c.Local(incident.CreatedAt);
+        if (told.FamilyMinutes is { } family)
+        {
+            incident.FamilyNotified = true;
+            incident.FamilyNotifiedAt = created.AddMinutes(family);
+        }
+        if (told.CoordinatorMinutes is { } coordinator)
+        {
+            incident.SupportCoordinatorNotified = true;
+            incident.SupportCoordinatorNotifiedAt = created.AddMinutes(coordinator);
+        }
     }
 }

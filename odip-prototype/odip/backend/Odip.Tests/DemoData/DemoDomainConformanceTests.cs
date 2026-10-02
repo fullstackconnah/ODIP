@@ -188,12 +188,17 @@ public class DemoDomainConformanceTests
         var users = await db.Users.Where(u => u.TenantId == DemoTestEnv.DemoTenantId).Select(u => u.Id).ToListAsync();
         var incidents = await db.IncidentReports.Where(i => users.Contains(i.ReportedByUserId)).ToListAsync();
         var required = new[] { IncidentType.Abuse, IncidentType.Neglect, IncidentType.Death, IncidentType.RestrictivePracticeUse, IncidentType.MissingPerson };
+        var zone = Zone(state);
+        // The wall-clock time the Commission was reported to is typed into the form (the wire inventory lists it as a wall-clock value), so it is read back
+        // as the instant it denotes before it is compared with an instant (the day the clocks go back has an hour that occurs twice: an hour of slack).
+        double HoursAfterFiling(IncidentReport i) => (ProviderLocalTime.LocalToUtc(i.QscReportedAt!.Value, zone) - i.CreatedAt).TotalHours;
 
         Assert.True(incidents.Count >= 12, $"only {incidents.Count} incidents");
         foreach (var i in incidents)
         {
             var mustReport = i.Severity == IncidentSeverity.Critical || required.Contains(i.IncidentType) || i.IsRestrictivePracticeAuthorised == false;
             var where = $"{i.Title} ({i.QscReportingStatus})";
+            if (i.QscReportedAt is { } typed) Assert.True(typed.Kind == DateTimeKind.Unspecified && typed <= ProviderLocalTime.UtcToLocal(now, zone), where + ": the report's time is a wall-clock value that has happened");
             switch (i.QscReportingStatus)
             {
                 case QscReportingStatus.NotRequired:
@@ -207,12 +212,12 @@ public class DemoDomainConformanceTests
                     break;
                 case QscReportingStatus.ReportedWithin24h:
                     Assert.NotNull(i.QscReportedAt);
-                    Assert.InRange((i.QscReportedAt!.Value - i.CreatedAt).TotalHours, 0, 24);
+                    Assert.InRange(HoursAfterFiling(i), 0, 24);
                     Assert.False(string.IsNullOrWhiteSpace(i.QscReferenceNumber));
                     break;
                 case QscReportingStatus.ReportedLate:
                     Assert.NotNull(i.QscReportedAt);
-                    Assert.True((i.QscReportedAt!.Value - i.CreatedAt).TotalHours > 24, where + " was not late");
+                    Assert.True(HoursAfterFiling(i) > 24, where + " was not late");
                     Assert.False(string.IsNullOrWhiteSpace(i.QscReferenceNumber));
                     break;
                 case QscReportingStatus.Pending:

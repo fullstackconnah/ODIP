@@ -121,13 +121,15 @@ public sealed class DemoTenantGuard
                 nameof(MedicationAdministration.PrnOutcome), nameof(MedicationAdministration.PrnOutcomeAt), nameof(MedicationAdministration.WitnessStatus),
                 nameof(MedicationAdministration.WitnessRespondedAt), nameof(MedicationAdministration.UpdatedAt),
             },
-            // An incident ages: it is reviewed, resolved and closed, and its report to the Commission is made (never what happened, who was
-            // involved, how serious it was or what was found).
+            // An incident moves along its script: it is reviewed (and who had been told is recorded), escalated, resolved and closed, and its report to
+            // the Commission is made (never what happened, who was involved, how serious it was or what was found).
             [typeof(IncidentReport)] = new HashSet<string>
             {
                 nameof(IncidentReport.Status), nameof(IncidentReport.ReviewedByUserId), nameof(IncidentReport.ReviewedAt), nameof(IncidentReport.ReviewNotes),
                 nameof(IncidentReport.CorrectiveActions), nameof(IncidentReport.ResolvedAt), nameof(IncidentReport.QscReportingStatus),
-                nameof(IncidentReport.QscReportedAt), nameof(IncidentReport.QscReferenceNumber), nameof(IncidentReport.UpdatedAt),
+                nameof(IncidentReport.QscReportedAt), nameof(IncidentReport.QscReferenceNumber),
+                nameof(IncidentReport.FamilyNotified), nameof(IncidentReport.FamilyNotifiedAt),
+                nameof(IncidentReport.SupportCoordinatorNotified), nameof(IncidentReport.SupportCoordinatorNotifiedAt), nameof(IncidentReport.UpdatedAt),
             },
             [typeof(LeaveRequest)] = new HashSet<string>
             {
