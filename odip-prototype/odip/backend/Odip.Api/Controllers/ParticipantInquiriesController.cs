@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -22,6 +23,10 @@ public class ParticipantInquiriesController : ControllerBase
     public ParticipantInquiriesController(OdipDbContext db, ICurrentTenant tenant) { _db = db; _tenant = tenant; }
     private string Actor() => User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.FindFirstValue("sub") ?? "unknown";
 
+    /// <summary>
+    /// The Enquiries tab's feed: every enquiry, plus every intake in progress that no enquiry started (see
+    /// <see cref="ParticipantInquiryDto.IsDirectIntake"/>). The tab itself shows only the open ones.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<ParticipantInquiryDto>>>> GetAll(CancellationToken ct)
     {
@@ -33,25 +38,48 @@ public class ParticipantInquiriesController : ControllerBase
             ? new Dictionary<Guid, (bool IsDraft, bool IsActive, DateTime? IntakeCompletedAt)>()
             : (await _db.Participants.Where(p => participantIds.Contains(p.Id)).Select(p => new { p.Id, p.IsDraft, p.IsActive, p.IntakeCompletedAt }).ToListAsync(ct))
                 .ToDictionary(p => p.Id, p => (p.IsDraft, p.IsActive, p.IntakeCompletedAt));
-        return Ok(ApiResponse<List<ParticipantInquiryDto>>.Ok(inquiries.Select(x =>
+        var rows = inquiries.Select(x =>
             x.ParticipantId is Guid participantId && states.TryGetValue(participantId, out var state)
                 ? ToDto(x) with { ParticipantIsDraft = state.IsDraft, ParticipantIsActive = state.IsActive, ParticipantIntakeCompletedAt = state.IntakeCompletedAt }
-                : ToDto(x)).ToList()));
+                : ToDto(x)).ToList();
+
+        // A draft intake started in the Intake wizard (/participants/new) has no enquiry. It used to be reachable only through the register's
+        // Drafts view; with that view gone it rides here so it is not lost. A draft an enquiry already links is that enquiry's row, never a second one.
+        var direct = await ParticipantStages.DirectIntakes(_db, _db.Participants.Where(p => _tenant.TenantId == null || p.TenantId == _tenant.TenantId))
+            .Select(p => new { p.Id, p.FirstName, p.LastName, p.Phone, p.Email, p.IsActive, p.CreatedAt })
+            .ToListAsync(ct);
+        rows.AddRange(direct.Select(p => new ParticipantInquiryDto
+        {
+            Id = p.Id, ParticipantId = p.Id, FirstName = p.FirstName, LastName = p.LastName, Phone = p.Phone, Email = p.Email, CreatedAt = p.CreatedAt,
+            ParticipantIsDraft = true, ParticipantIsActive = p.IsActive, ParticipantIntakeCompletedAt = null, IsDirectIntake = true,
+        }));
+        return Ok(ApiResponse<List<ParticipantInquiryDto>>.Ok(rows.OrderByDescending(x => x.CreatedAt).ToList()));
     }
 
+    /// <summary>
+    /// The Onboarding tab: every participant of the tenant who is in onboarding, whether or not an enquiry started them and whether or not
+    /// a <see cref="ParticipantOnboarding"/> row exists. It used to list the rows (an inner join), so a participant whose intake was
+    /// completed before completion created one never appeared, while active and archived participants and intakes still open, which
+    /// all have rows, did. A participant with no row is listed with a blank checklist.
+    /// </summary>
     [HttpGet("onboarding-worklist")]
     public async Task<ActionResult<ApiResponse<List<ParticipantOnboardingWorklistDto>>>> GetOnboardingWorklist(CancellationToken ct)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<List<ParticipantOnboardingWorklistDto>>.Fail("A tenant context is required."));
-        var rows = await (from p in _db.Participants join o in _db.ParticipantOnboardings on p.Id equals o.ParticipantId where p.TenantId == tenantId && o.TenantId == tenantId orderby p.UpdatedAt descending select new { p, o }).ToListAsync(ct);
+        var participants = await ParticipantStages.InOnboarding(_db.Participants.Where(p => p.TenantId == tenantId)).OrderByDescending(p => p.UpdatedAt).ToListAsync(ct);
+        var ids = participants.Select(p => p.Id).ToList();
+        var stored = ids.Count == 0
+            ? new List<ParticipantOnboarding>()
+            : await _db.ParticipantOnboardings.Where(o => o.TenantId == tenantId && ids.Contains(o.ParticipantId)).ToListAsync(ct);
+        var rowsByParticipant = stored.GroupBy(o => o.ParticipantId).ToDictionary(g => g.Key, g => g.First());
         var result = new List<ParticipantOnboardingWorklistDto>();
-        foreach (var row in rows)
+        foreach (var p in participants)
         {
-            var detail = await BuildDetail(row.p, row.o, ct);
+            var detail = await BuildDetail(p, rowsByParticipant.GetValueOrDefault(p.Id) ?? BlankOnboarding(p), ct);
             if (detail.IsReady) continue;
             var completed = (detail.IntakeComplete ? 1 : 0) + (detail.ProfileComplete ? 1 : 0) + (detail.ServiceTypeConfirmed ? 1 : 0) + (detail.ServiceAgreementSigned ? 1 : 0);
             var action = !detail.IntakeComplete ? "Complete intake" : !detail.ProfileComplete ? "Validate profile essentials" : !detail.ServiceTypeConfirmed ? "Confirm service needs" : "Review agreement evidence";
-            result.Add(new ParticipantOnboardingWorklistDto { ParticipantId = row.p.Id, FullName = row.p.FullName, Stage = !detail.IntakeComplete ? "Intake incomplete" : "Onboarding incomplete", NextAction = action, CompletedSteps = completed, Reasons = detail.Reasons });
+            result.Add(new ParticipantOnboardingWorklistDto { ParticipantId = p.Id, FullName = p.FullName, Stage = !detail.IntakeComplete ? "Intake incomplete" : "Onboarding incomplete", NextAction = action, CompletedSteps = completed, Reasons = detail.Reasons });
         }
         return Ok(ApiResponse<List<ParticipantOnboardingWorklistDto>>.Ok(result));
     }
@@ -99,7 +127,7 @@ public class ParticipantInquiriesController : ControllerBase
     [HttpGet("{id:guid}/onboarding")]
     public async Task<ActionResult<ApiResponse<ParticipantOnboardingDto>>> GetOnboarding(Guid id, CancellationToken ct)
     {
-        var (participant, onboarding) = await FindOwnedAsync(id, ct);
+        var (participant, onboarding) = await FindOwnedAsync(id, storeMissingRow: false, ct);
         if (onboarding == null || participant == null) return NotFound(ApiResponse<ParticipantOnboardingDto>.Fail("Onboarding not found"));
         return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetail(participant, onboarding, ct)));
     }
@@ -109,7 +137,7 @@ public class ParticipantInquiriesController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantOnboardingDto>>> ValidateProfile(Guid id, CancellationToken ct)
     {
-        var (participant, onboarding) = await FindOwnedAsync(id, ct);
+        var (participant, onboarding) = await FindOwnedAsync(id, storeMissingRow: true, ct);
         if (participant == null || onboarding == null) return NotFound(ApiResponse<ParticipantOnboardingDto>.Fail("Onboarding not found"));
         var missing = ProfileMissing(participant);
         if (missing.Count > 0) return BadRequest(ApiResponse<ParticipantOnboardingDto>.Fail(string.Join(" ", missing)));
@@ -123,7 +151,7 @@ public class ParticipantInquiriesController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantOnboardingDto>>> ConfirmServiceNeeds(Guid id, CancellationToken ct)
     {
-        var (participant, onboarding) = await FindOwnedAsync(id, ct);
+        var (participant, onboarding) = await FindOwnedAsync(id, storeMissingRow: true, ct);
         if (participant == null || onboarding == null) return NotFound(ApiResponse<ParticipantOnboardingDto>.Fail("Onboarding not found"));
         var currentDraft = await CurrentValidDraftAsync(participant, ct);
         if (currentDraft == null) return BadRequest(ApiResponse<ParticipantOnboardingDto>.Fail("Create a current dated provisional service-agreement draft with valid catalogue-priced support lines first."));
@@ -132,13 +160,29 @@ public class ParticipantInquiriesController : ControllerBase
         return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetail(participant, onboarding, ct)));
     }
 
-    private async Task<(Participant? participant, ParticipantOnboarding? onboarding)> FindOwnedAsync(Guid id, CancellationToken ct)
+    /// <summary>
+    /// The participant and their onboarding record, in the caller's tenant. A participant who is in onboarding (see
+    /// <see cref="InOnboardingStage"/>) always has a checklist: when no row was ever stored (the worklist lists them anyway) a blank one is
+    /// returned, and <paramref name="storeMissingRow"/> adds it to the context so the caller's own save persists it. Any other participant
+    /// without a row (a legacy participant who never onboarded here) has no onboarding record: null.
+    /// </summary>
+    private async Task<(Participant? participant, ParticipantOnboarding? onboarding)> FindOwnedAsync(Guid id, bool storeMissingRow, CancellationToken ct)
     {
         if (_tenant.TenantId is not Guid tenantId) return (null, null);
         var participant = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
         if (participant == null) return (null, null);
-        return (participant, await _db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == id && x.TenantId == tenantId, ct));
+        var onboarding = await _db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == id && x.TenantId == tenantId, ct);
+        if (onboarding == null && ParticipantStages.IsInOnboarding(participant))
+        {
+            onboarding = BlankOnboarding(participant);
+            if (storeMissingRow) _db.ParticipantOnboardings.Add(onboarding);
+        }
+        return (participant, onboarding);
     }
+
+    /// <summary>A blank checklist for <paramref name="participant"/>, in the participant's own tenant. Not tracked until a caller adds it.</summary>
+    private static ParticipantOnboarding BlankOnboarding(Participant participant) =>
+        new() { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id };
 
     private async Task<ParticipantOnboardingDto> BuildDetail(Participant participant, ParticipantOnboarding onboarding, CancellationToken ct)
     {
