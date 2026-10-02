@@ -32,8 +32,9 @@ type FakeInquiry = { id: string; firstName: string; lastName: string; phone: str
 const INTAKE_DONE_AT = '2026-10-02T03:00:00Z'
 /**
  * The hand-off confirmations ("Intake complete — X is now in onboarding.", "X is now an active participant.") appear after a wizard's mutation, a navigation
- * and a page mount, and the activation one after a further timer tick. testing-library's 1000 ms default is too tight for that chain on a loaded machine
- * (the Docker image build's test gate failed on it once), and the repo sets no global asyncUtilTimeout, so these waits ask for 5 s.
+ * and a page mount, and the activation one after a further timer tick. testing-library's 1000 ms default was too tight for that chain on a loaded machine
+ * (the Docker image build's test gate failed on it once). src/test/setup.ts now raises the default to 3 s; this is the longest chain in the suite, so
+ * these waits keep an explicit 5 s.
  */
 const ARRIVAL = { timeout: 5000 }
 const EVIDENCE_REQUIRED = 'This participant cannot be activated until their signed service agreement evidence is recorded.'

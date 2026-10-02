@@ -493,7 +493,7 @@ describe('ParticipantsTable: arriving from a completed onboarding', () => {
     return router
   }
 
-  /** The notice is deferred by a timer, so a loaded machine (the Docker image build's test gate) can take far longer than the 1000 ms default to show it. */
+  /** The notice is deferred by a timer, so a loaded machine (the Docker image build's test gate) can take longer than the suite's 3 s default (src/test/setup.ts) to show it. */
   const SLOW = { timeout: 5000 }
 
   /** One macrotask: long enough for anything the page schedules for "a tick after load" to have run. */
