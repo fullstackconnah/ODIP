@@ -78,11 +78,7 @@ public sealed class DemoRun
         var found = new HashSet<Guid>();
         foreach (var chunk in ids.Distinct().Chunk(LookupChunk))
         {
-            var present = await Db.Set<T>().IgnoreQueryFilters()
-                .Where(e => chunk.Contains(EF.Property<Guid>(e, "Id")))
-                .Select(e => EF.Property<Guid>(e, "Id"))
-                .ToListAsync(ct);
-            found.UnionWith(present);
+            found.UnionWith(await DemoQueries.ExistingIds<T>(Db, chunk).ToListAsync(ct));
         }
         return found;
     }

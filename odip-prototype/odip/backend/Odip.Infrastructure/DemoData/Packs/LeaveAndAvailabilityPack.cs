@@ -228,13 +228,9 @@ public sealed class LeaveAndAvailabilityPack : IDemoPack
 
         // The database returns the few requests still Pending whose start date has gone; the id sets (one pair per week since the top-up began)
         // are matched in memory, so a host that was switched off for months still catches up.
-        var lapsedLeave = (await run.Db.LeaveRequests
-                .Where(l => l.Status == LeaveStatus.Pending && l.StartDate < anchors.D0)
-                .ToListAsync(ct))
+        var lapsedLeave = (await DemoQueries.LapsedLeave(run.Db, anchors.D0).ToListAsync(ct))
             .Where(l => leaveIds.Contains(l.Id)).ToList();
-        var lapsedRules = (await run.Db.RecurringUnavailabilities
-                .Where(r => r.Status == LeaveStatus.Pending && r.EffectiveFrom < anchors.D0)
-                .ToListAsync(ct))
+        var lapsedRules = (await DemoQueries.LapsedRules(run.Db, anchors.D0).ToListAsync(ct))
             .Where(r => ruleIds.Contains(r.Id)).ToList();
         if (lapsedLeave.Count + lapsedRules.Count == 0) return;
 

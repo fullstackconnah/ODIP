@@ -102,7 +102,7 @@ public sealed class DemoDataMaintainer
     {
         // 1. The one tenant we may write to. The lookup context has no tenant of its own, so it can only see the (unfiltered) Tenants table.
         await using var lookup = new OdipDbContext(dbOptions, new ScopedTenantOverride());
-        var candidates = await lookup.Tenants.AsNoTracking().Where(t => t.Name == DemoPeople.TenantName).ToListAsync(ct);
+        var candidates = await DemoQueries.DemoTenantCandidates(lookup).ToListAsync(ct);
         var demo = candidates
             .Where(t => t.IsActive && string.Equals(t.EmailDomain, DemoPeople.TenantEmailDomain, StringComparison.OrdinalIgnoreCase))
             .ToList();
@@ -123,7 +123,7 @@ public sealed class DemoDataMaintainer
         await using var db = new OdipDbContext(guarded, new ScopedTenantOverride { TenantId = tenantId, IsSuperAdmin = false });
 
         // 3. The provider clock (the same lookup the app's own date rules use) and the day-roll cadence.
-        var state = await db.ProviderSettings.AsNoTracking().Select(p => p.State).FirstOrDefaultAsync(ct);
+        var state = await DemoQueries.ProviderState(db).FirstOrDefaultAsync(ct);
         var anchors = DemoAnchors.Create(_clock.GetUtcNow().UtcDateTime, state);
         if (anchors.NowLocal.Hour < QuietHoursEndLocal && _lastRunLocalDate == anchors.D0)
         {

@@ -93,10 +93,7 @@ public sealed class EmergencyContactsPack : IDemoPack
         var existingPeople = await run.ExistingIdsAsync<Person>(people.Select(p => p.Id), ct);
 
         // A participant with an active Emergency Contact that is not one of ours already has somebody to call: leave them alone.
-        var foreign = (await run.Db.ParticipantContactRoles
-                .Where(r => r.RoleType == ContactRoleType.EmergencyContact && r.Status == ContactRoleStatus.Active && participantIds.Contains(r.ParticipantId))
-                .Select(r => new { r.Id, r.ParticipantId })
-                .ToListAsync(ct))
+        var foreign = (await DemoQueries.ActiveEmergencyContacts(run.Db, participantIds).ToListAsync(ct))
             .Where(r => !ourRoleIds.Contains(r.Id))
             .Select(r => r.ParticipantId)
             .ToHashSet();

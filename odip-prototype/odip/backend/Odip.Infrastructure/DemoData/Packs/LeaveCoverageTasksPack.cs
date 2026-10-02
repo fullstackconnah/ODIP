@@ -30,9 +30,7 @@ public sealed class LeaveCoverageTasksPack : IDemoPack
 
         // Leave still ahead (a handful: the database filters on the date) is what needs tasks raised; the ids of every week since the top-up
         // began are matched in memory.
-        var current = (await run.Db.LeaveRequests.AsNoTracking()
-                .Where(l => l.Status == LeaveStatus.Approved && l.EndDate >= anchors.D0)
-                .ToListAsync(ct))
+        var current = (await DemoQueries.ApprovedLeaveNotYetOver(run.Db, anchors.D0).ToListAsync(ct))
             .Where(l => leaveIds.Contains(l.Id)).ToList();
 
         var service = new ObligationTaskService(run.Db, run.Clock);
@@ -51,9 +49,7 @@ public sealed class LeaveCoverageTasksPack : IDemoPack
 
         var userIds = leaves.Select(l => l.UserId).Distinct().ToList();
         var firstDay = leaves.Min(l => l.StartDate);
-        var shifts = await run.Db.Shifts.Include(s => s.Participant)
-            .Where(s => s.Status == ShiftStatus.Published && s.UserId != null && userIds.Contains(s.UserId.Value) && s.ServiceDate >= firstDay)
-            .ToListAsync(ct);
+        var shifts = await DemoQueries.PublishedShiftsOf(run.Db, userIds, firstDay).ToListAsync(ct);
 
         var wanted = new List<(Shift Shift, LeaveRequest Leave, string Key)>();
         foreach (var leave in leaves)
@@ -64,7 +60,7 @@ public sealed class LeaveCoverageTasksPack : IDemoPack
         if (wanted.Count == 0) return 0;
 
         var keys = wanted.Select(w => w.Key).ToList();
-        var existing = (await run.Db.BookingTasks.Where(t => t.SourceKey != null && keys.Contains(t.SourceKey)).Select(t => t.SourceKey!).ToListAsync(ct)).ToHashSet();
+        var existing = (await DemoQueries.ExistingTaskKeys(run.Db, keys).ToListAsync(ct)).ToHashSet();
 
         var count = 0;
         foreach (var (shift, leave, key) in wanted.Where(w => !existing.Contains(w.Key)))
@@ -89,17 +85,12 @@ public sealed class LeaveCoverageTasksPack : IDemoPack
 
     private static async Task<int> CompleteWorkedAsync(DemoRun run, IObligationTaskService service, HashSet<Guid> leaveIds, CancellationToken ct)
     {
-        var openTasks = await run.Db.BookingTasks.AsNoTracking()
-            .Where(t => t.TaskType == TaskType.LeaveCoverage && t.LeaveRequestId != null && t.ShiftId != null && t.SourceKey != null
-                        && (t.Status == TaskItemStatus.NotStarted || t.Status == TaskItemStatus.InProgress))
-            .Select(t => new { t.SourceKey, t.ShiftId, t.LeaveRequestId })
-            .ToListAsync(ct);
+        var openTasks = await DemoQueries.OpenCoverageTasks(run.Db).ToListAsync(ct);
         var open = openTasks.Where(t => leaveIds.Contains(t.LeaveRequestId!.Value)).ToList();
         if (open.Count == 0) return 0;
 
         var shiftIds = open.Select(t => t.ShiftId!.Value).Distinct().ToList();
-        var worked = (await run.Db.Shifts.Where(s => shiftIds.Contains(s.Id) && (s.Status == ShiftStatus.PendingReview || s.Status == ShiftStatus.Completed))
-            .Select(s => s.Id).ToListAsync(ct)).ToHashSet();
+        var worked = (await DemoQueries.WorkedShiftIds(run.Db, shiftIds).ToListAsync(ct)).ToHashSet();
 
         var count = 0;
         foreach (var task in open.Where(t => worked.Contains(t.ShiftId!.Value)))

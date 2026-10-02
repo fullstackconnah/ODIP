@@ -63,11 +63,7 @@ public sealed class CompatibilityPack : IDemoPack
 
         // Missing by id AND by the unique natural key (user, participant): the owner's cell for a pair wins.
         var userIds = expected.Select(e => e.UserId).Distinct().ToList();
-        var taken = (await run.Db.StaffParticipantCompatibilities
-                .Where(c => userIds.Contains(c.UserId))
-                .Select(c => new { c.Id, c.UserId, c.ParticipantId })
-                .ToListAsync(ct))
-            .ToList();
+        var taken = await DemoQueries.CompatibilityCellsOf(run.Db, userIds).ToListAsync(ct);
         var takenIds = taken.Select(t => t.Id).ToHashSet();
         var takenPairs = taken.Select(t => (t.UserId, t.ParticipantId)).ToHashSet();
 

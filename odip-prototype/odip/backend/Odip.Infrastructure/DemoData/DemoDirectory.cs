@@ -62,9 +62,7 @@ public sealed class DemoDirectory
             if (match is not null) staff[key] = match;
         }
 
-        var rows = await db.Participants
-            .Select(p => new { p.Id, p.NdisNumber, p.FirstName, p.LastName, p.IsActive, p.IsDraft })
-            .ToListAsync(ct);
+        var rows = await DemoQueries.Participants(db).ToListAsync(ct);
         var everyone = rows
             .Select(p => new DemoParticipant(p.Id, KeyFor(p.NdisNumber), $"{p.FirstName} {p.LastName}".Trim(), p.IsActive, p.IsDraft))
             .ToList();

@@ -38,7 +38,7 @@ public sealed class StaffCredentialsPack : IDemoPack
     public async Task RunAsync(DemoRun run, CancellationToken ct)
     {
         var emails = Allocation.Select(p => DemoPeople.StaffEmails[p.Key]).ToList();
-        var users = (await run.Db.Users.Where(u => emails.Contains(u.Email)).ToListAsync(ct))
+        var users = (await DemoQueries.UsersByEmail(run.Db, emails).ToListAsync(ct))
             .ToDictionary(u => u.Email, StringComparer.OrdinalIgnoreCase);
 
         var filled = 0;

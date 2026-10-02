@@ -58,7 +58,7 @@ public sealed class RosterWeeksPack : IDemoPack
         // Pattern shifts, from the demo patterns as the owner left them. Not published by a coordinator in the app's own generator (it makes
         // Drafts), but the demo roster is a published one.
         var patternIds = RosterCatalog.Patterns.Select(p => RosterCatalog.PatternId(p.Key)).ToList();
-        var patterns = await run.Db.ShiftPatterns.AsNoTracking().Where(p => patternIds.Contains(p.Id)).ToListAsync(ct);
+        var patterns = await DemoQueries.PatternsByIds(run.Db, patternIds).ToListAsync(ct);
         var expander = new ShiftPatternExpander();
         foreach (var pattern in patterns)
         {
@@ -163,16 +163,12 @@ public sealed class RosterWeeksPack : IDemoPack
         // Ask the database only for the few shifts that could still need moving (past, and Published, Draft or PendingReview): those of this
         // top-up's patterns, and the ones with no pattern, which are then matched against the ids of every pack week in memory. The id set grows
         // with the weeks, so it is never sent to the database.
-        var open = await run.Db.Shifts
-            .Where(s => s.ServiceDate <= anchors.D0
-                        && (s.Status == ShiftStatus.Published || s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.PendingReview))
-            .Where(s => s.ShiftPatternId == null || patternIds.Contains(s.ShiftPatternId.Value))
-            .ToListAsync(ct);
+        var open = await DemoQueries.OpenShifts(run.Db, anchors.D0, patternIds).ToListAsync(ct);
         var candidates = open.Where(s => s.ShiftPatternId != null || storyIds.Contains(s.Id)).ToList();
         if (candidates.Count == 0) return;
 
         var candidateIds = candidates.Select(s => s.Id).ToList();
-        var completions = (await run.Db.ShiftCompletions.Where(c => candidateIds.Contains(c.ShiftId)).ToListAsync(ct))
+        var completions = (await DemoQueries.CompletionsOf(run.Db, candidateIds).ToListAsync(ct))
             .GroupBy(c => c.ShiftId).ToDictionary(g => g.Key, g => g.ToList());
 
         var moved = 0;
