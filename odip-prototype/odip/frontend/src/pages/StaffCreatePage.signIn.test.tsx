@@ -213,7 +213,8 @@ describe('StaffCreatePage: the sign-in email after a create', () => {
       // The SAME node (a live region created already holding its text is announced unreliably), now holding the whole sentence.
       expect(screen.getByRole('status')).toBe(region)
       expect(region).toHaveTextContent(`Sam Staff was created. ${SENT}`)
-      expect(line).toHaveFocus()
+      // Focus moves in an effect once the view has swapped, so wait for it instead of racing it.
+      await waitFor(() => expect(line).toHaveFocus())
     })
 
     it('announces a failure through that same region, once: the visible warning does not announce itself as well', async () => {
@@ -249,8 +250,8 @@ describe('StaffCreatePage: the sign-in email after a create', () => {
 
       expect(await screen.findByText(SENT)).toBeInTheDocument()
       expect(mockEnsure).toHaveBeenCalledTimes(2)
-      // Send again went with the warning, so focus is on the done message rather than the top of the page.
-      expect(screen.getByText('Sam Staff was created.', { selector: 'p' })).toHaveFocus()
+      // Send again went with the warning, so focus is on the done message rather than the top of the page (moved by an effect: wait for it).
+      await waitFor(() => expect(screen.getByText('Sam Staff was created.', { selector: 'p' })).toHaveFocus())
     })
   })
 

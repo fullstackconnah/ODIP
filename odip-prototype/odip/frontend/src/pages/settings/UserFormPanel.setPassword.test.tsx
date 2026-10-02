@@ -184,7 +184,9 @@ describe('UserFormPanel create: the emailed set-password link', () => {
 
       await u.click(createButton())
 
-      expect(await screen.findByText('New Person was created.', { selector: 'p' })).toHaveFocus()
+      const line = await screen.findByText('New Person was created.', { selector: 'p' })
+      // Focus moves in an effect once the view has swapped, so wait for it instead of racing it.
+      await waitFor(() => expect(line).toHaveFocus())
     })
 
     it('moves focus there again when Send again works and its own button goes, but keeps it on Send again while that is still needed', async () => {
@@ -202,8 +204,8 @@ describe('UserFormPanel create: the emailed set-password link', () => {
       await u.click(screen.getByRole('button', { name: 'Send again' }))
       expect(await screen.findByText(SENT_SET)).toBeInTheDocument()
 
-      // It worked, so the button is gone, and focus is on the done message rather than the page.
-      expect(screen.getByText('New Person was created.', { selector: 'p' })).toHaveFocus()
+      // It worked, so the button is gone, and focus is on the done message rather than the page (moved by an effect: wait for it).
+      await waitFor(() => expect(screen.getByText('New Person was created.', { selector: 'p' })).toHaveFocus())
     })
 
     it('switches Send again off with aria-disabled, not `disabled`, while it sends, and a second click sends nothing more', async () => {

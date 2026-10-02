@@ -238,7 +238,8 @@ describe('TenantFormPanel create: what became of the first user\'s sign-in accou
       // The SAME node (a live region created already holding its text is announced unreliably), now holding the whole sentence.
       expect(screen.getByRole('status')).toBe(region)
       expect(region).toHaveTextContent(`Brightside Care was created. We've sent ${EMAIL} a link to set their password. It can take a few minutes, so ask them to check spam.`)
-      expect(heading).toHaveFocus()
+      // Focus moves in an effect once the view has swapped, so wait for it instead of racing it.
+      await waitFor(() => expect(heading).toHaveFocus())
     })
 
     it('announces a failure through that same region, once: the visible warning does not announce itself as well', async () => {
@@ -276,8 +277,8 @@ describe('TenantFormPanel create: what became of the first user\'s sign-in accou
 
       expect(await screen.findByText(`We've sent ${EMAIL} a link to set their password. It can take a few minutes, so ask them to check spam.`)).toBeInTheDocument()
       expect(mockEnsure).toHaveBeenCalledTimes(1)
-      // The button that had focus went with the warning, so focus is on the done message rather than the top of the page.
-      expect(screen.getByText('Brightside Care was created.', { selector: 'p' })).toHaveFocus()
+      // The button that had focus went with the warning, so focus is on the done message rather than the top of the page (moved by an effect: wait for it).
+      await waitFor(() => expect(screen.getByText('Brightside Care was created.', { selector: 'p' })).toHaveFocus())
     })
   })
 
