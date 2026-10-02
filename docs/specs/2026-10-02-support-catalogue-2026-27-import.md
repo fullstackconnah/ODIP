@@ -44,6 +44,12 @@ weekday, hourly item of that group.
   end-dated the same way. Nothing is deleted and no group is deactivated as a whole.
 - Importing a file again changes nothing. An import only ever shortens a row it holds, so an older file cannot bring back what a newer
   catalogue replaced or dropped (the preview says when a file would end a row later than it is stored).
+- An older catalogue imported after a newer one is history. When the stored rows begin in a later NDIA financial year (1 July to 30 June)
+  than everything the file starts, a code of the file that the newer catalogue does not hold (no later version of it in the file or the
+  database) is end-dated the day before the newer catalogue starts and is not current; the preview names each one. So the codes the 2026-27
+  catalogue dropped end on 30 June 2026 whether the 2025-26 file was imported before or after it, and importing the older file again
+  shortens rows an earlier import left open. A republication of the same year (a December price set) does not make the July file older,
+  so importing it again ends nothing.
 - One exception, so a wrong workbook can be repaired: a code that a republished file left out is end-dated with an empty window (the row
   ends the day before it starts). Importing a file that lists the code again reopens that row (the preview names each one, "is
   reopened"), unless another row of the code covers its start. Rows a newer catalogue superseded or dropped keep their real window and
