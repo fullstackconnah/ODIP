@@ -1,9 +1,11 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Odip.Api.Controllers;
+using Odip.Api.Serialization;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -314,6 +316,61 @@ public class ParticipantHubFlowTests
 
         Assert.Equal(own.Id, row.ParticipantId);
         Assert.True(row.IsDirectIntake);
+    }
+
+    // ── The JSON the screens read ────────────────────────────────────────────────────────────────────────
+
+    /// <summary>MVC's web defaults (camelCase) plus the API's own policy: the options the response formatter really uses (see <see cref="ApiJsonOptions"/>).</summary>
+    private static readonly JsonSerializerOptions Wire = ProductionOptions();
+
+    private static JsonSerializerOptions ProductionOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        ApiJsonOptions.Configure(options);
+        return options;
+    }
+
+    [Fact]
+    public async Task Enquiries_OnTheWire_CarryTheCamelCaseKeysTheScreensRead_AndAnEmptySourceForADirectIntake()
+    {
+        // Every other test here reads the DTOs; the screens read this JSON. InquiriesPage and InquiryFormPage rely on exactly these keys (and on a null being
+        // omitted, which they read as "not complete" / "no participant"), so a renamed property or a changed policy must fail here, not in the browser.
+        var tenantId = Guid.NewGuid();
+        using var caller = NewCaller(tenantId);
+        var direct = await SeedAsync(caller.Db, tenantId, "Dana", "Direct", draft: true, intakeDone: false);
+        await CaptureEnquiryAsync(caller, "Nina", "Newcomer");
+        var finished = await CaptureEnquiryAsync(caller, "Ira", "Intake");
+        var finishedParticipantId = Ok(await caller.Inquiries.Convert(finished.Id, new ConvertParticipantInquiryDto(), CancellationToken.None)).ParticipantId!.Value;
+        Ok(await caller.Participants.SaveIntake(finishedParticipantId, IntakeBody("Ira", "Intake", complete: true), CancellationToken.None));
+
+        var result = await caller.Inquiries.GetAll(CancellationToken.None);
+        var body = JsonSerializer.SerializeToElement(Assert.IsType<OkObjectResult>(result.Result).Value, Wire);
+        var rows = body.GetProperty("data").EnumerateArray().ToDictionary(row => row.GetProperty("lastName").GetString()!);
+
+        // A draft intake started in the wizard: flagged, id = the participant's, no source, draft and not complete (a null is omitted, not written).
+        var directRow = rows["Direct"];
+        Assert.True(directRow.GetProperty("isDirectIntake").GetBoolean());
+        Assert.Equal(direct.Id, directRow.GetProperty("id").GetGuid());
+        Assert.Equal(direct.Id, directRow.GetProperty("participantId").GetGuid());
+        Assert.Equal(JsonValueKind.String, directRow.GetProperty("source").ValueKind);
+        Assert.Equal(string.Empty, directRow.GetProperty("source").GetString());
+        Assert.True(directRow.GetProperty("participantIsDraft").GetBoolean());
+        Assert.False(directRow.GetProperty("participantIsActive").GetBoolean());
+        Assert.False(directRow.TryGetProperty("participantIntakeCompletedAt", out _));
+
+        // An enquiry with no participant: not a direct intake, a real source, and none of the participant keys.
+        var newRow = rows["Newcomer"];
+        Assert.False(newRow.GetProperty("isDirectIntake").GetBoolean());
+        Assert.Equal("Phone", newRow.GetProperty("source").GetString());
+        Assert.False(newRow.TryGetProperty("participantId", out _));
+        Assert.False(newRow.TryGetProperty("participantIsDraft", out _));
+
+        // An enquiry whose intake is complete: the participant's state is there, and the completion time is a UTC instant the screens treat as "done".
+        var doneRow = rows["Intake"];
+        Assert.False(doneRow.GetProperty("isDirectIntake").GetBoolean());
+        Assert.Equal(finishedParticipantId, doneRow.GetProperty("participantId").GetGuid());
+        Assert.True(doneRow.GetProperty("participantIsDraft").GetBoolean());
+        Assert.EndsWith("Z", doneRow.GetProperty("participantIntakeCompletedAt").GetString());
     }
 
     // ── Every participant is on exactly one tab, whatever IsActive says about a draft ────────────────────
