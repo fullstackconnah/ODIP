@@ -67,6 +67,8 @@ public enum PlanFailureReason
     AccommodationNotAvailable = 12,
     /// <summary>The support item does not allow provider travel.</summary>
     TravelNotClaimable = 13,
+    /// <summary>The clocks change inside an overnight window, so it is shorter or longer in elapsed hours than on the clock and whether it is a sleepover depends on how the 8 hours are counted (the engine counts elapsed hours).</summary>
+    SleepoverClockChange = 14,
 }
 
 /// <summary>Why a line is priced the way it is: the rules applied, the catalogue row and the dates it was priced from, and the group arithmetic.</summary>
@@ -231,6 +233,7 @@ public static class OwnerQuestions
         new OwnerQuestion(10, "Self-managed and private participants: may an agreed price exceed the limit?"),
         new OwnerQuestion(11, "The price update expected after 1 December 2026, differentiated pricing from 1 January 2027, and the provider's registered status."),
         new OwnerQuestion(12, "Plan wording, and the provider's GST status."),
+        new OwnerQuestion(13, "Overnight supports on the nights the clocks change: the builder counts elapsed hours for the 8 hour sleepover test, so a window of 8 hours on the clock is 7 hours the night the clocks go forward and is priced hourly (and a 7 hour window is a sleepover the night they go back). The schedule gives no example: which reading does NDIA apply?"),
     };
 
     public static OwnerQuestion Get(int number) => All.Single(q => q.Number == number);

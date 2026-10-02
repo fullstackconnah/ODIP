@@ -218,7 +218,7 @@ public class PlanPricingSleepoverTests
     // ── The night the clocks change (NDIS-CODES 11.1: hours are elapsed hours) ────
 
     [SkippableFact]
-    public void On_the_night_the_clocks_go_forward_a_22_00_to_06_00_support_is_seven_hours_and_not_a_sleepover()
+    public void On_the_night_the_clocks_go_forward_a_22_00_to_06_00_support_is_seven_hours_priced_hourly_and_every_line_says_the_reading_is_the_builders_own()
     {
         Skip.IfNot(ProviderLocalTime.TzDataAvailable, "needs the Australia/Sydney time zone");
         var saturday = new DateOnly(2026, 10, 3);   // clocks go forward at 02:00 on Sunday 4 October 2026
@@ -226,11 +226,44 @@ public class PlanPricingSleepoverTests
 
         var quote = QuoteOne(block, saturday);
 
-        // 2 h on the Saturday and 5 h (not 6) on the Sunday morning: 7 elapsed hours, so no sleepover and nothing to review.
+        // 2 h on the Saturday and 5 h (not 6) on the Sunday morning: 7 elapsed hours, so the arithmetic is hourly (874.58, not the Each item 311.79) ...
         Assert.Equal(new[] { ("01_013_0107_1_1", 2m, 103.54m, 207.08m), ("01_014_0107_1_1", 5m, 133.50m, 667.50m) }, quote.Lines.Select(Row));
         Assert.Contains("clock-change:elapsed-hours", quote.Lines[1].Trace.Rules);
-        Assert.Empty(quote.Issues);
-        Assert.False(quote.NeedsReview);
+        // ... but counting elapsed hours is the engine's own reading (the schedule gives no example), so a person is asked: every line of the occurrence is
+        // Provisional and Review, there is a typed issue, and the question is in the quote.
+        Assert.All(quote.Lines, l => { Assert.True(l.Provisional && l.Review); Assert.Contains(13, l.Trace.OpenQuestions); });
+        var issue = Assert.Single(quote.Issues);
+        Assert.Equal((PlanFailureReason.SleepoverClockChange, "sleep"), (issue.Reason, issue.BlockId));
+        Assert.DoesNotContain("2026", issue.Message);
+        Assert.True(quote.NeedsReview);
+        Assert.Contains(quote.OpenQuestions, q => q.Number == 13 && q.Text.Contains("clocks"));
+    }
+
+    [SkippableFact]
+    public void On_the_night_the_clocks_go_back_a_window_that_is_seven_hours_on_the_clock_is_eight_elapsed_hours_so_it_is_a_sleepover_the_builder_asks_about()
+    {
+        Skip.IfNot(ProviderLocalTime.TzDataAvailable, "needs the Australia/Sydney time zone");
+        var block = Overnight(PlanSupportType.PersonalCare, DayOfWeek.Saturday, T(22), T(5));   // 22:00 to 05:00 is 7 hours on the clock, 8 on 3 to 4 April 2027
+
+        var quote = QuoteOne(block, new DateOnly(2027, 4, 3));
+        var ordinary = QuoteOne(block, new DateOnly(2027, 4, 10));
+
+        var line = Assert.Single(quote.Lines);
+        Assert.Equal((PlannedLineKind.Sleepover, true, true), (line.Kind, line.Provisional, line.Review));
+        Assert.Equal(PlanFailureReason.SleepoverClockChange, Assert.Single(quote.Issues).Reason);
+        // A week later the same 7 hour window is not a sleepover and the usual issue applies.
+        Assert.Equal(PlanFailureReason.SleepoverNotQualifying, Assert.Single(ordinary.Issues).Reason);
+    }
+
+    [SkippableFact]
+    public void A_night_where_the_clock_and_the_elapsed_hours_agree_carries_no_clock_change_flag_even_on_a_changeover_night()
+    {
+        Skip.IfNot(ProviderLocalTime.TzDataAvailable, "needs the Australia/Sydney time zone");
+        var back = QuoteOne(Overnight(PlanSupportType.PersonalCare, DayOfWeek.Saturday, T(22), T(6)), new DateOnly(2027, 4, 3));   // 8 on the clock, 9 elapsed
+
+        var line = Assert.Single(back.Lines);
+        Assert.Equal((PlannedLineKind.Sleepover, PlannedLineFlags.None), (line.Kind, line.Flags));
+        Assert.Empty(back.Issues);
     }
 
     [SkippableFact]

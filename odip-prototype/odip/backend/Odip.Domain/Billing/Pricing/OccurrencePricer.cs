@@ -93,6 +93,8 @@ internal sealed class OccurrencePricer
         public OccurrenceResult Result { get; } = new();
         /// <summary>Every line of the occurrence needs a person (a worker who may sleep in a window that is not a sleepover).</summary>
         public bool ReviewAll { get; set; }
+        /// <summary>The clocks change inside the overnight window and that decides whether it is a sleepover: every line is Provisional and for review, and says question 13.</summary>
+        public bool ClockChange { get; set; }
         /// <summary>The priced hourly support lines with their catalogue rows, which the companion lines are priced against.</summary>
         public List<(PlannedLine Line, ItemChoice Choice)> Support { get; } = new();
         public PriceZone PriceZone => Block.Location.Zone;
@@ -150,9 +152,19 @@ internal sealed class OccurrencePricer
         AddActivityTransport(occ);
         AddAccommodation(occ);
 
-        if (occ.ReviewAll)
+        if (occ.ReviewAll || occ.ClockChange)
             for (var i = 0; i < occ.Result.Lines.Count; i++)
-                occ.Result.Lines[i] = occ.Result.Lines[i] with { Flags = occ.Result.Lines[i].Flags | PlannedLineFlags.Review };
+            {
+                var line = occ.Result.Lines[i];
+                occ.Result.Lines[i] = occ.ClockChange
+                    ? line with
+                    {
+                        Flags = line.Flags | PlannedLineFlags.Review | PlannedLineFlags.Provisional,
+                        Trace = line.Trace with { Rules = line.Trace.Rules.Append("clock-change:sleepover-reading").ToList(), OpenQuestions = line.Trace.OpenQuestions.Append(13).Distinct().OrderBy(q => q).ToList() },
+                    }
+                    : line with { Flags = line.Flags | PlannedLineFlags.Review };
+            }
+
         return occ.Result;
     }
 
@@ -222,16 +234,25 @@ internal sealed class OccurrencePricer
         var to = block.SleepoverWindow is { } window2 ? NextAfter(from, window2.To) : occ.End;
         var midnight = from.Date.AddDays(1);
         var crosses = from < midnight && to > midnight;
-        var real = RealMinutes(from, to, occ.Zone);
+        var qualifiesOnTheClock = crosses && (to - from).TotalMinutes >= SleepoverMinutes;
+        var qualifiesElapsed = crosses && RealMinutes(from, to, occ.Zone) >= SleepoverMinutes;
 
-        if (crosses && real >= SleepoverMinutes) return (from, to);
-        if (crosses && (to - from).TotalMinutes >= SleepoverMinutes)
-            return null;   // 8 hours on the clock but fewer elapsed: the night the clocks change. Priced hourly, and not worth a person's time.
+        if (qualifiesOnTheClock != qualifiesElapsed)
+        {
+            // The clocks change inside the window, so the two ways of counting the 8 hours disagree. The schedule gives no example: elapsed hours decide (the
+            // arithmetic keeps them), and the occurrence is Provisional and for review instead of the choice being silent.
+            occ.Result.Issues.Add((PlanFailureReason.SleepoverClockChange,
+                $"Block '{block.Id}': the clocks change during the overnight window, so it is not the same length in elapsed hours as on the clock. The builder counts elapsed hours for the 8 hour sleepover test; the schedule gives no example, so confirm the reading."));
+            occ.ClockChange = true;
+        }
+        else if (!qualifiesElapsed)
+        {
+            occ.Result.Issues.Add((PlanFailureReason.SleepoverNotQualifying,
+                $"Block '{block.Id}': the worker may sleep, but the window is not 8 hours or more across midnight, so it is priced hourly."));
+            occ.ReviewAll = true;
+        }
 
-        occ.Result.Issues.Add((PlanFailureReason.SleepoverNotQualifying,
-            $"Block '{block.Id}': the worker may sleep, but the window is not 8 hours or more across midnight, so it is priced hourly."));
-        occ.ReviewAll = true;
-        return null;
+        return qualifiesElapsed ? (from, to) : null;
     }
 
     private void PriceSleepover(Occurrence occ, Piece piece)
