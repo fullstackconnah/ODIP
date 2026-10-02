@@ -109,33 +109,56 @@ public class PlanPricingController : ControllerBase
         if (dto.GroupOutings is { } outings && !Enum.IsDefined(outings))
             return BadRequest(ApiResponse<PlanPricingSettingsDto>.Fail("Unknown group outing family. Use GroupActivities or CommunityAccess."));
 
+        // Each setting the request carries, applied to the row (kept apart so a lost first-PUT race can apply the same request to the row that won).
+        void Apply(PlanPricingSettings row)
+        {
+            if (groups is not null)
+            {
+                row.RegistrationGroupsHeld = string.Join(",", groups);
+                row.RegistrationGroupsConfirmed = dto.RegistrationGroupsConfirmed ?? true;
+            }
+            else if (dto.RegistrationGroupsConfirmed is { } confirmed)
+            {
+                row.RegistrationGroupsConfirmed = confirmed;
+            }
+
+            if (dto.CrossingPolicy is { } policy) row.CrossingPolicy = policy;
+            if (dto.ClaimProviderTravel is { } travel) row.ClaimProviderTravel = travel;
+            if (dto.TravelKmRateStandard is { } standard) row.TravelKmRateStandard = Math.Round(standard, 2, MidpointRounding.AwayFromZero);
+            if (dto.TravelKmRateAccessible is { } accessible) row.TravelKmRateAccessible = Math.Round(accessible, 2, MidpointRounding.AwayFromZero);
+            if (dto.TravelRatesProvisional is { } provisional) row.TravelRatesProvisional = provisional;
+            if (dto.GroupOutings is { } family) row.GroupOutings = family;
+            if (dto.StaUsesHourlyAndAccommodation is { } sta) row.StaUsesHourlyAndAccommodation = sta;
+            if (roles is not null) row.ApproverRoles = string.Join(",", roles);
+        }
+
         var settings = await _db.PlanPricingSettings.FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
+        var inserting = settings is null;
         if (settings is null)
         {
             settings = new PlanPricingSettings { Id = Guid.NewGuid(), TenantId = tenantId };
             _db.PlanPricingSettings.Add(settings);
         }
 
-        if (groups is not null)
+        Apply(settings);
+
+        try
         {
-            settings.RegistrationGroupsHeld = string.Join(",", groups);
-            settings.RegistrationGroupsConfirmed = dto.RegistrationGroupsConfirmed ?? true;
+            await _db.SaveChangesAsync(ct);
         }
-        else if (dto.RegistrationGroupsConfirmed is { } confirmed)
+        catch (DbUpdateException) when (inserting)
         {
-            settings.RegistrationGroupsConfirmed = confirmed;
+            // Two first PUTs for one tenant at once: the other one wrote the row and the unique index on TenantId refused ours (a 500 for the loser, who did nothing wrong).
+            // Forget everything this context tried to write, audit rows included, read the row that won and apply this request on top of it. With no such row the failure
+            // was something else and is thrown as it was.
+            _db.ChangeTracker.Clear();
+            settings = await _db.PlanPricingSettings.FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
+            if (settings is null) throw;
+
+            Apply(settings);
+            await _db.SaveChangesAsync(ct);
         }
 
-        if (dto.CrossingPolicy is { } policy) settings.CrossingPolicy = policy;
-        if (dto.ClaimProviderTravel is { } travel) settings.ClaimProviderTravel = travel;
-        if (dto.TravelKmRateStandard is { } standard) settings.TravelKmRateStandard = Math.Round(standard, 2, MidpointRounding.AwayFromZero);
-        if (dto.TravelKmRateAccessible is { } accessible) settings.TravelKmRateAccessible = Math.Round(accessible, 2, MidpointRounding.AwayFromZero);
-        if (dto.TravelRatesProvisional is { } provisional) settings.TravelRatesProvisional = provisional;
-        if (dto.GroupOutings is { } family) settings.GroupOutings = family;
-        if (dto.StaUsesHourlyAndAccommodation is { } sta) settings.StaUsesHourlyAndAccommodation = sta;
-        if (roles is not null) settings.ApproverRoles = string.Join(",", roles);
-
-        await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<PlanPricingSettingsDto>.Ok(ToDto(settings)));
     }
 

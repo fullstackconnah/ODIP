@@ -1,9 +1,11 @@
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using Odip.Api.Controllers;
 using Odip.Api.Serialization;
@@ -13,6 +15,7 @@ using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
+using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Catalogue;
@@ -379,6 +382,86 @@ public class PlanPricingApiTests
 
         Assert.Contains("$5", message);
         Assert.Equal((5m, 4.99m), (accepted.TravelKmRateStandard, accepted.TravelKmRateAccessible));
+    }
+
+    // ── Review L13: two first PUTs for one tenant at once ──
+
+    /// <summary>
+    /// Stands in for the unique index on TenantId, which the in-memory provider does not enforce: the first time a save adds a settings row, the save fails the way
+    /// Postgres fails it (a DbUpdateException), and, when asked to, another request's first PUT has just written its row from a separate context.
+    /// </summary>
+    private sealed class FirstPutRace : SaveChangesInterceptor
+    {
+        private readonly string _database;
+        private readonly ICurrentTenant _tenant;
+        private readonly PlanPricingSettings? _winner;
+
+        public FirstPutRace(string database, ICurrentTenant tenant, PlanPricingSettings? winner)
+        {
+            _database = database;
+            _tenant = tenant;
+            _winner = winner;
+        }
+
+        public bool Tripped { get; private set; }
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (!Tripped && eventData.Context!.ChangeTracker.Entries<PlanPricingSettings>().Any(e => e.State == EntityState.Added))
+            {
+                Tripped = true;
+                if (_winner is not null)
+                {
+                    await using var other = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(_database).Options, _tenant);
+                    other.PlanPricingSettings.Add(_winner);
+                    await other.SaveChangesAsync(cancellationToken);
+                }
+
+                throw new DbUpdateException("duplicate key value violates unique constraint \"IX_PlanPricingSettings_TenantId\"");
+            }
+
+            return await base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
+    }
+
+    private static (OdipDbContext Db, PlanPricingController Controller, FirstPutRace Race) SetUpRace(PlanPricingSettings? winner)
+    {
+        var database = Guid.NewGuid().ToString();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(TenantA);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        var race = new FirstPutRace(database, tenant.Object, winner);
+        // The audit interceptor is registered first, as in the app, so the failed save has already added its audit row when the race interceptor throws.
+        var options = new DbContextOptionsBuilder<OdipDbContext>()
+            .UseInMemoryDatabase(database)
+            .AddInterceptors(new AuditInterceptor(Mock.Of<IHttpContextAccessor>()), race)
+            .Options;
+        var db = new OdipDbContext(options, tenant.Object);
+        return (db, new PlanPricingController(db, tenant.Object, new PlanPricingService(db)), race);
+    }
+
+    [Fact]
+    public async Task Two_first_PUTs_for_one_tenant_both_succeed_and_the_second_is_applied_on_top_of_the_first()
+    {
+        var (db, controller, race) = SetUpRace(new PlanPricingSettings { Id = Guid.NewGuid(), TenantId = TenantA, CrossingPolicy = CrossingPolicy.HigherOf });
+        await using var _ = db;
+
+        var saved = Ok(await controller.PutSettings(new UpdatePlanPricingSettingsDto { TravelKmRateStandard = 1.20m }, CancellationToken.None));
+
+        Assert.True(race.Tripped);
+        Assert.Equal((CrossingPolicy.HigherOf, 1.20m, false), (saved.CrossingPolicy, saved.TravelKmRateStandard, saved.IsDefault));   // the winner's change and this one
+        Assert.Equal(1, await db.PlanPricingSettings.CountAsync());
+        // The failed insert must not leave its audit row behind: the one audit row is the update that landed.
+        Assert.Equal(AuditAction.Updated, Assert.Single(await db.AuditLogs.ToListAsync()).Action);
+    }
+
+    [Fact]
+    public async Task A_failed_first_save_that_was_not_a_race_is_not_swallowed()
+    {
+        var (db, controller, _) = SetUpRace(winner: null);   // nobody else wrote a row, so the failure is something else
+        await using var _ = db;
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => controller.PutSettings(new UpdatePlanPricingSettingsDto { TravelKmRateStandard = 1.20m }, CancellationToken.None));
     }
 
     [Fact]
