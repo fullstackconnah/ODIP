@@ -213,7 +213,7 @@ public class ClaimGenerationService
             ConfirmedParticipantCount = confirmedBookings.Count
         };
 
-        var dayGroups = GroupDaysByType(trip.TripDays.OrderBy(d => d.Date).ToList(), publicHolidays, date => PriceEpochOn(catalogueItems, date));
+        var dayGroups = GroupDaysByType(trip.TripDays.OrderBy(d => d.Date).ToList(), publicHolidays, (date, dayType) => PriceEpochOn(catalogueItems, dayType, date));
         var tripFirstDate = trip.StartDate;
         var tripLastDate = tripEnd;
         var eveningThreshold = new TimeOnly(20, 0);
@@ -347,17 +347,24 @@ public class ClaimGenerationService
 
     // ─── Helpers ────────────────────────────────────────────────────────
 
-    /// <summary>The row to price a stretch of days from: the one valid on its first day (every day of a group shares the same valid rows, see <see cref="PriceEpochOn"/>).</summary>
+    /// <summary>The row to price a stretch of days from: the one valid on its first day (every day of a group picks the same rows, see <see cref="PriceEpochOn"/>).</summary>
     private static SupportCatalogueItem? FindCatalogueItem(
         List<SupportCatalogueItem> items, ClaimDayType dayType, bool isIntensive, DateOnly serviceDate) =>
         EffectiveCatalogueResolver.FindForDay(items, dayType, isIntensive, serviceDate);
 
     /// <summary>
-    /// Which catalogue rows are valid on a date, as one string: two days with the same epoch are priced by the same rows. A stretch of consecutive
-    /// same-type days that crosses a price change would otherwise be one line at one price; it is split where the epoch changes instead.
+    /// The rows a stretch of days can be priced from on <paramref name="date"/>, as one string: what <see cref="FindCatalogueItem"/> returns for the day type, for a
+    /// standard and for an intensive participant (a trip can hold both), and for a weekday also the evening row (the first and last day's hours after 20:00 are
+    /// priced from it). Two consecutive same-type days with the same epoch are priced by the same rows and stay one line; a stretch that crosses a change in
+    /// one of those rows would otherwise be one line at one price, so it is split there. A change to a row none of its lines can read (the Saturday price,
+    /// for a weekday run) does not split it.
     /// </summary>
-    private static string PriceEpochOn(List<SupportCatalogueItem> items, DateOnly date) =>
-        string.Join(",", items.Where(i => EffectiveCatalogueResolver.IsValidOn(i, date)).Select(i => i.Id).Order());
+    private static string PriceEpochOn(List<SupportCatalogueItem> items, ClaimDayType dayType, DateOnly date)
+    {
+        var dayTypes = dayType == ClaimDayType.Weekday ? new[] { ClaimDayType.Weekday, ClaimDayType.WeekdayEvening } : new[] { dayType };
+        return string.Join(",", dayTypes.SelectMany(t => new[] { false, true },
+            (t, intensive) => FindCatalogueItem(items, t, intensive, date)?.Id.ToString("N") ?? "-"));
+    }
 
     private static string BuildClaimReference(TripInstance trip)
     {
@@ -367,7 +374,7 @@ public class ClaimGenerationService
         return raw.Length > 50 ? raw[..50] : raw;
     }
 
-    private static List<DayGroup> GroupDaysByType(List<TripDay> days, HashSet<DateOnly> publicHolidays, Func<DateOnly, string> priceEpochOf)
+    private static List<DayGroup> GroupDaysByType(List<TripDay> days, HashSet<DateOnly> publicHolidays, Func<DateOnly, ClaimDayType, string> priceEpochOf)
     {
         var result = new List<DayGroup>();
         DayGroup? current = null;
@@ -375,7 +382,7 @@ public class ClaimGenerationService
         foreach (var day in days)
         {
             var dayType = DayTypeResolver.Resolve(day.Date, day.IsPublicHoliday || publicHolidays.Contains(day.Date));
-            var epoch = priceEpochOf(day.Date);
+            var epoch = priceEpochOf(day.Date, dayType);
 
             if (current == null || current.DayType != dayType || current.To.AddDays(1) != day.Date || current.PriceEpoch != epoch)
             {
@@ -438,7 +445,7 @@ public class ClaimGenerationService
         public DateOnly From { get; set; }
         public DateOnly To { get; set; }
         public int DayCount { get; set; }
-        /// <summary>The catalogue rows valid on every day of the group (see <see cref="ClaimGenerationService.PriceEpochOn"/>).</summary>
+        /// <summary>The rows the group's lines can be priced from, the same on every day of the group (see <see cref="ClaimGenerationService.PriceEpochOn"/>).</summary>
         public string PriceEpoch { get; set; } = string.Empty;
     }
 }

@@ -27,11 +27,13 @@ import must never reprice a service that already happened.
 
 A row is **valid on a date** when the date is inside its own window and the row was not withdrawn by hand (inactive with no end date).
 `IsActive` is only the "in the current catalogue" flag of the Support Catalogue list: an import end-dates what it supersedes, and that row
-is still the right row for the dates inside its window. Shift claims, trip claims (a run of same-type days is split where the valid rows
-change) and agreement drafts all pick the row valid on the **service date** (`EffectiveCatalogueResolver.IsValidOn`), so importing a
-December price set does not reprice an unclaimed November service. `EffectiveCatalogueResolver.Find` / `FindCatalogueItemAsync` return
-the single valid row and its price for (code, date, National / Remote / VeryRemote) or a typed failure. Claims and drafts stay scoped to
-`GRP_COMMUNITY_ACCESS`; a draft line can only be a weekday, hourly item of that group.
+is still the right row for the dates inside its window. Shift claims, trip claims (a run of same-type days is split only where a row its
+lines can pick changes: the day type's row for a standard and an intensive participant, plus the evening row for a weekday run, so a new
+Saturday price does not split a weekday run) and agreement drafts all pick the row valid on the **service date**
+(`EffectiveCatalogueResolver.IsValidOn`), so importing a December price set does not reprice an unclaimed November service.
+`EffectiveCatalogueResolver.Find` / `FindCatalogueItemAsync` return the single valid row and its price for (code, date, National /
+Remote / VeryRemote) or a typed failure. Claims and drafts stay scoped to `GRP_COMMUNITY_ACCESS`; a draft line can only be a weekday,
+hourly item of that group.
 
 ## Import rules (history-safe)
 

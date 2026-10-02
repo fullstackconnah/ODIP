@@ -25,20 +25,22 @@ public class CatalogueServiceDateTests
     private const decimal WeekdayJuly = 73.58m, WeekdayDecember = 74.58m, SaturdayJuly = 103.54m;
 
     /// <summary>
-    /// The 2026-27 catalogue imported on 2 Oct 2026, then a December price set imported on 10 Dec 2026: a complete catalogue in which the ten community
-    /// access rows start on 1 Dec at one dollar more and every other row keeps its 1 July start (so it is Unchanged), as NDIA republishes.
+    /// The 2026-27 catalogue imported on 2 Oct 2026, then a December price set imported on 10 Dec 2026: a complete catalogue in which the changed rows start
+    /// on 1 Dec at one dollar more and every other row keeps its 1 July start (so it is Unchanged), as NDIA republishes. The changed rows are the ten
+    /// community access rows, or only the codes named.
     /// </summary>
-    private static async Task<OdipDbContext> WithDecemberPriceSetAsync()
+    private static async Task<OdipDbContext> WithDecemberPriceSetAsync(params string[] onlyThese)
     {
         var db = CreateDb();
         await SeedCommunityAccessGroupAsync(db);
         await ImportAsync(db, CatalogueFixtures.File2026_27);
 
         var rows = (await PreviewAsync(db, CatalogueFixtures.File2026_27)).Rows
-            .Select(r => r.GroupCode == "GRP_COMMUNITY_ACCESS" ? Raised(r) : r)
+            .Select(r => (onlyThese.Length == 0 ? r.GroupCode == "GRP_COMMUNITY_ACCESS" : onlyThese.Contains(r.ItemNumber)) ? Raised(r) : r)
             .ToList();
+        var changed = rows.Count(r => r.EffectiveFrom == December1);
         var result = await NewImporter(db, ClockOn(2026, 12, 10)).CommitImportAsync(new ConfirmCatalogueImportDto { CatalogueVersion = "2026-27 (2026-12-01)", Rows = rows });
-        Assert.Equal(new CatalogueImportResultDto(10, 0, 1007, 10), result);   // the setup itself: ten new rows, ten end-dated, the rest untouched
+        Assert.Equal(new CatalogueImportResultDto(changed, 0, 1017 - changed, changed), result);   // the setup itself: the changed rows new and their July rows end-dated, the rest untouched
         return db;
     }
 
@@ -229,6 +231,95 @@ public class CatalogueServiceDateTests
 
         var line = Assert.Single(preview.LineItems);
         Assert.Equal((WeekdayDecember, 16m), (line.UnitPrice, line.Hours));
+    }
+
+    // A run of same-type days is split only where a row its lines can pick changes: the weekday rows (daytime and evening) for a weekday run, in both
+    // intensities, because a trip can hold standard and intensive participants. An unrelated row changing on the same day does not split it.
+
+    [Fact]
+    public async Task A_December_change_to_the_Saturday_row_alone_does_not_split_a_weekday_run_into_two_lines()
+    {
+        await using var db = await WithDecemberPriceSetAsync("04_105_0125_6_1");   // only the Saturday row starts again on 1 Dec
+        AddProviderSettings(db);
+        var participant = AddParticipant(db);
+        var trip = AddCompletedTrip(db, participant, new DateOnly(2026, 11, 30), 2);   // Mon 30 Nov and Tue 1 Dec: weekdays, whose rows did not change
+        await db.SaveChangesAsync();
+
+        var preview = await new ClaimGenerationService(db).PreviewClaimAsync(trip.Id, null);
+
+        var line = Assert.Single(preview.LineItems);   // one line of 16 h, not 8 h + 8 h at the same price
+        Assert.Equal((new DateOnly(2026, 11, 30), December1, WeekdayJuly, 16m), (line.SupportsDeliveredFrom, line.SupportsDeliveredTo, line.UnitPrice, line.Hours));
+        Assert.Equal(16m * WeekdayJuly, preview.TotalAmount);
+    }
+
+    [Fact]
+    public async Task An_intensive_participants_weekday_run_is_still_split_where_the_intensive_weekday_row_changes()
+    {
+        await using var db = await WithDecemberPriceSetAsync("04_450_0125_1_1");   // the ICBS weekday row
+        AddProviderSettings(db);
+        var participant = AddParticipant(db, intensive: true);
+        var trip = AddCompletedTrip(db, participant, new DateOnly(2026, 11, 30), 2);
+        await db.SaveChangesAsync();
+
+        var preview = await new ClaimGenerationService(db).PreviewClaimAsync(trip.Id, null);
+
+        var lines = preview.LineItems.OrderBy(l => l.SupportsDeliveredFrom).Select(l => (l.SupportsDeliveredFrom, l.SupportItemCode, l.UnitPrice, l.Hours)).ToList();
+        Assert.Equal(new[]
+        {
+            (new DateOnly(2026, 11, 30), "04_450_0125_1_1", 79.60m, 8m),
+            (December1, "04_450_0125_1_1", 80.60m, 8m),
+        }, lines);
+    }
+
+    [Fact]
+    public async Task A_December_change_to_the_weekday_evening_row_alone_still_prices_the_last_days_evening_hours_at_the_new_price()
+    {
+        await using var db = await WithDecemberPriceSetAsync("04_103_0125_6_1");   // only the weekday evening row changes
+        AddProviderSettings(db);
+        var participant = AddParticipant(db);
+        var trip = AddCompletedTrip(db, participant, new DateOnly(2026, 11, 30), 2);
+        await db.SaveChangesAsync();
+        var evening = (await RowsAsync(db)).Where(r => r.ItemNumber == "04_103_0125_6_1").ToDictionary(r => r.EffectiveFrom, r => r.PriceNational!.Value);
+        var eveningJuly = evening[new DateOnly(2026, 7, 1)];
+        var eveningDecember = evening[December1];
+        Assert.Equal(eveningJuly + 1m, eveningDecember);
+
+        // Back at 21:00 on the last day: one hour past 20:00 is evening time. The evening row for 1 Dec is the December one, so the weekday run is
+        // split at 1 Dec even though the daytime row did not change.
+        var preview = await new ClaimGenerationService(db).PreviewClaimAsync(trip.Id, new ClaimPreviewRequestDto { ReturnTime = new TimeOnly(21, 0) });
+
+        var lines = preview.LineItems.OrderBy(l => l.SupportsDeliveredFrom).ThenBy(l => l.DayType).Select(l => (l.SupportsDeliveredFrom, l.DayType, l.UnitPrice, l.Hours)).ToList();
+        Assert.Equal(new[]
+        {
+            (new DateOnly(2026, 11, 30), ClaimDayType.Weekday, WeekdayJuly, 8m),
+            (December1, ClaimDayType.Weekday, WeekdayJuly, 7m),
+            (December1, ClaimDayType.WeekdayEvening, eveningDecember, 1m),
+        }, lines);
+    }
+
+    [Fact]
+    public async Task A_previous_importers_one_day_overlap_splits_the_run_once_where_the_new_row_starts()
+    {
+        // The previous importer end-dated the old row on the day it imported the new one and started the new row that same day, so both rows are valid on it
+        // (the newer wins). The run changes price once, at the new row's first day, and the day after it is not another change.
+        await using var db = CreateDb();
+        var group = await SeedCommunityAccessGroupAsync(db);
+        db.SupportCatalogueItems.AddRange(
+            LegacyRow(group.Id, "04_OLD", ClaimDayType.Weekday, 60m, new DateOnly(2025, 7, 1), active: false, to: new DateOnly(2026, 11, 11)),
+            LegacyRow(group.Id, "04_NEW", ClaimDayType.Weekday, 65m, new DateOnly(2026, 11, 11)));
+        AddProviderSettings(db);
+        var participant = AddParticipant(db);
+        var trip = AddCompletedTrip(db, participant, new DateOnly(2026, 11, 10), 3);   // Tue 10, Wed 11, Thu 12 November
+        await db.SaveChangesAsync();
+
+        var preview = await new ClaimGenerationService(db).PreviewClaimAsync(trip.Id, null);
+
+        var lines = preview.LineItems.OrderBy(l => l.SupportsDeliveredFrom).Select(l => (l.SupportsDeliveredFrom, l.SupportsDeliveredTo, l.SupportItemCode, l.UnitPrice, l.Hours)).ToList();
+        Assert.Equal(new[]
+        {
+            (new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 10), "04_OLD", 60m, 8m),
+            (new DateOnly(2026, 11, 11), new DateOnly(2026, 11, 12), "04_NEW", 65m, 16m),
+        }, lines);
     }
 
     [Fact]
