@@ -88,3 +88,6 @@ backward compatible: roll forward, or restore the database from before the impor
   out of a claim, not priced from a row that did not apply. When NO day of a trip, and none of the shifts in a range, has a row, the claim
   engines refuse with "No catalogue row covers this trip's dates (dd/MM/yyyy to dd/MM/yyyy). Import the catalogue for that period first."
   (shifts: "these shifts' dates") and save nothing; import the 2025-26 workbook for that period, then claim again.
+- Generating a trip claim never saves a claim with no lines. When nothing could be priced it refuses with the cause: the trip has no days
+  recorded, none of its confirmed participants has an NDIS number, the catalogue has no item for the trip's day types (for example
+  Saturday) on its dates, or nothing is left to price (no active hours). The claim preview still shows the empty list.

@@ -673,6 +673,91 @@ public class ClaimGenerationServiceTests
         Assert.Equal(0m, result.TotalAmount);
     }
 
+    // ── A claim with no lines is never saved: generating says why instead ──────────────────────
+    // The preview keeps returning an empty list (the test above pins it): it is a look at what the engine would do. Generating must not save a Draft claim with
+    // no lines and a total of 0, because the "an active claim already exists" check would then block the trip until someone rejected that claim.
+
+    private static async Task AssertGenerateRefusesAndSavesNothingAsync(OdipDbContext db, TripInstance trip, string expectedMessage)
+    {
+        var service = new ClaimGenerationService(db);
+
+        var first = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GenerateDraftClaimAsync(trip.Id));
+        var second = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GenerateDraftClaimAsync(trip.Id));
+
+        Assert.Equal(expectedMessage, first.Message);
+        Assert.Equal(expectedMessage, second.Message);   // not "An active claim already exists for this trip": there is no empty draft to block it
+        Assert.Empty(db.TripClaims);
+        Assert.Empty(db.ClaimLineItems);
+        Assert.All(db.ParticipantBookings, b => Assert.NotEqual(ClaimStatus.InClaim, b.ClaimStatus));
+    }
+
+    [Fact]
+    public async Task GenerateDraftClaimAsync_NoConfirmedParticipantHasAnNdisNumber_RefusesWithThatReasonAndSavesNothing()
+    {
+        using var db = CreateDb();
+        var group = SeedActivityGroup(db);
+        SeedProviderSettings(db);
+        SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false, vicPrice: 50m);
+        var participant = CreateParticipant();
+        participant.NdisNumber = null;
+        db.Participants.Add(participant);
+        var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 5), 1, participant, activityGroupId: group.Id);
+        await db.SaveChangesAsync();
+
+        await AssertGenerateRefusesAndSavesNothingAsync(db, trip,
+            "None of the trip's confirmed participants has an NDIS number, so no claim lines could be built. Add the NDIS number to each participant, then generate the claim again.");
+    }
+
+    [Fact]
+    public async Task GenerateDraftClaimAsync_TheCatalogueHasNoItemForTheTripsDayType_RefusesWithThatReasonAndSavesNothing()
+    {
+        using var db = CreateDb();
+        var group = SeedActivityGroup(db);
+        SeedProviderSettings(db);
+        SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false, vicPrice: 50m);   // rows are valid on the trip's date, but none is a Saturday item
+        var participant = CreateParticipant();
+        db.Participants.Add(participant);
+        var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 10), 1, participant, activityGroupId: group.Id);   // Saturday 10 January
+        await db.SaveChangesAsync();
+
+        await AssertGenerateRefusesAndSavesNothingAsync(db, trip,
+            "No catalogue item prices this trip's Saturday days (10/01/2026 to 10/01/2026), so no claim lines could be built. Import the catalogue for that period first.");
+    }
+
+    [Fact]
+    public async Task GenerateDraftClaimAsync_TripWithNoDays_RefusesWithThatReasonAndSavesNothing()
+    {
+        using var db = CreateDb();
+        var group = SeedActivityGroup(db);
+        SeedProviderSettings(db);
+        SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false, vicPrice: 50m);
+        var participant = CreateParticipant();
+        db.Participants.Add(participant);
+        var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 5), 3, participant, activityGroupId: group.Id);
+        db.TripDays.RemoveRange(db.TripDays.Local.ToList());   // a Completed trip whose day rows are missing
+        await db.SaveChangesAsync();
+
+        await AssertGenerateRefusesAndSavesNothingAsync(db, trip,
+            "This trip has no days recorded, so there is nothing to claim. Check the trip's dates, then generate the claim again.");
+    }
+
+    [Fact]
+    public async Task GenerateDraftClaimAsync_NothingLeftToPrice_RefusesInsteadOfSavingAnEmptyClaim()
+    {
+        // No active hours: every weekday group has 0 hours, so no line is built although the participant, the days and the catalogue are all fine.
+        using var db = CreateDb();
+        var group = SeedActivityGroup(db);
+        SeedProviderSettings(db);
+        SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false, vicPrice: 50m);
+        var participant = CreateParticipant();
+        db.Participants.Add(participant);
+        var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 5), 3, participant, activityGroupId: group.Id, activeHoursPerDay: 0m);
+        await db.SaveChangesAsync();
+
+        await AssertGenerateRefusesAndSavesNothingAsync(db, trip,
+            "No claim lines could be built for this trip. Check its active hours per day and its departure and return times, then generate the claim again.");
+    }
+
     [Fact]
     public async Task GenerateDraftClaimAsync_ClaimReferenceFormat_ContainsTripCodeAndDate()
     {
