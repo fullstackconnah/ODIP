@@ -82,6 +82,10 @@ export default function StaffCreatePage() {
   // After a create: what became of that email, kept ON SCREEN. Navigating away at once would take the answer with it.
   const [created, setCreated] = useState<{ id: string; name: string; email: string; outcome: EmailOutcome } | null>(null)
   const [retrying, setRetrying] = useState(false)
+  // True from the click until the whole submit has finished, including the account step and the email that follow the create. The create
+  // mutation settles before those do, so its isPending alone would let the button come back to life with the form still on screen, and a
+  // second submit would post the same staff member again.
+  const [submitting, setSubmitting] = useState(false)
 
   // The account-role dropdown always hides SuperAdmin (never grantable from this form), and
   // additionally hides Admin when the person filling out the form is a Coordinator — a
@@ -160,6 +164,7 @@ export default function StaffCreatePage() {
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
     }
+    setSubmitting(true)
     try {
       if (isEdit) {
         const res = await updateStaff.mutateAsync({ id, data: { ...payload, isActive: existing?.isActive ?? true } })
@@ -183,6 +188,8 @@ export default function StaffCreatePage() {
       }
     } catch {
       // error handled by mutation state
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -408,8 +415,12 @@ export default function StaffCreatePage() {
         {/* Submit */}
         <div className="flex justify-end gap-3">
           <Button variant="secondary" to="/staff">Cancel</Button>
-          <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Staff Member')}
+          <Button type="submit" disabled={mutation.isPending || submitting}>
+            {mutation.isPending
+              ? (isEdit ? 'Saving...' : 'Creating...')
+              : submitting && !isEdit && emailLinkAvailable
+                ? 'Sending link...'
+                : (isEdit ? 'Save Changes' : 'Create Staff Member')}
           </Button>
         </div>
       </form>

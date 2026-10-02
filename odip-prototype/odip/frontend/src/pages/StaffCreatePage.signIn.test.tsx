@@ -132,6 +132,44 @@ describe('StaffCreatePage: the sign-in email after a create', () => {
     await waitFor(() => expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1))
   })
 
+  it('keeps the form from being submitted again while the account step and the email run, and says what it is doing', async () => {
+    let finishEnsure!: (value: { firebaseAccount: 'created' | 'existing' }) => void
+    mockEnsure.mockReturnValue(new Promise(resolve => { finishEnsure = resolve }))
+    const { u } = renderCreatePage()
+
+    await fillAndCreate(u)
+
+    // The create has settled (the mutation is no longer pending) and the account step is still running: the form is still on screen.
+    await waitFor(() => expect(mockEnsure).toHaveBeenCalledTimes(1))
+    const busy = await screen.findByRole('button', { name: 'Sending link...' })
+    expect(busy).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Create Staff Member' })).not.toBeInTheDocument()
+
+    // Enter in a field submits the form the same way a click does, and must not post the staff member a second time.
+    await u.type(screen.getByLabelText(/first name/i), '{Enter}')
+    expect(mockCreate).toHaveBeenCalledTimes(1)
+
+    finishEnsure({ firebaseAccount: 'created' })
+
+    expect(await screen.findByText(/We've sent sam.staff@acme.example.com a link to set their password/)).toBeInTheDocument()
+    expect(mockCreate).toHaveBeenCalledTimes(1)
+  })
+
+  it('is live again after a create that was rejected, so the admin can correct it and try again', async () => {
+    mockCreate.mockRejectedValueOnce({ response: { data: { errors: ['A user with this email already exists.'] } } })
+    const { u } = renderCreatePage()
+
+    await fillAndCreate(u)
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Staff Member' })).toBeEnabled())
+
+    await u.click(screen.getByRole('button', { name: 'Create Staff Member' }))
+
+    expect(await screen.findByText(/We've sent sam.staff@acme.example.com a link/)).toBeInTheDocument()
+    expect(mockCreate).toHaveBeenCalledTimes(2)
+  })
+
   it('says "reset" when the server found an account that was already there', async () => {
     mockEnsure.mockResolvedValue({ firebaseAccount: 'existing' })
     const { u } = renderCreatePage()
