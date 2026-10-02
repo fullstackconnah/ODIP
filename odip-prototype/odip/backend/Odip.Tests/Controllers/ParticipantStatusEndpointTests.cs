@@ -451,6 +451,44 @@ public class ParticipantStatusEndpointTests
     }
 
     [Fact]
+    public async Task CompleteProfile_UnderEnforce_WithoutEvidence_Returns400WithTheEvidenceWording_AndLeavesTheDraftExactlyAsItWas()
+    {
+        // Finalising is also what activates a participant, and Enforce needs verified signed-agreement evidence. A participant finalised but not
+        // activated would sit in no stage (not Onboarding, not Active, and "Archived" is wrong for someone never activated), so the step is refused.
+        using var fx = Create();
+        fx.Db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantReadinessMode = ParticipantReadinessMode.Enforce });
+        var participant = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-3));
+        fx.Db.Participants.Add(participant);
+        await fx.Db.SaveChangesAsync();
+        var before = Scalars(participant);
+
+        var message = BadRequest(await fx.Controller.CompleteProfile(participant.Id, CancellationToken.None));
+
+        Assert.Equal("This participant cannot be activated until their signed service agreement evidence is recorded.", message);
+        var saved = await fx.Db.Participants.SingleAsync();
+        Assert.True(saved.IsDraft);
+        Assert.False(saved.IsActive);
+        Assert.Equal(before, Scalars(saved));
+        Assert.Empty(UpdatedAuditRows(fx.Db, participant.Id));
+    }
+
+    [Fact]
+    public async Task CompleteProfile_UnderEnforce_ForADraftThatIsAlreadyActive_StillFinalises_BecauseThereIsNothingToActivate()
+    {
+        // A draft marked active (an older draft: Participant.IsActive defaults to true) needs no activation, so the evidence rule has nothing to refuse.
+        using var fx = Create();
+        fx.Db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantReadinessMode = ParticipantReadinessMode.Enforce });
+        var participant = RichParticipant(isActive: true, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-3));
+        fx.Db.Participants.Add(participant);
+        await fx.Db.SaveChangesAsync();
+
+        var result = Ok(await fx.Controller.CompleteProfile(participant.Id, CancellationToken.None));
+
+        Assert.False(result.IsDraft);
+        Assert.True(result.IsActive);
+    }
+
+    [Fact]
     public async Task CompleteProfile_OnAnAlreadyFinalisedParticipant_ChangesNothing_AndNeverReactivatesAnArchivedOne()
     {
         using var fx = Create();

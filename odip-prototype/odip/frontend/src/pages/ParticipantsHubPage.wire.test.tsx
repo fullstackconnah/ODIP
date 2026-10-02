@@ -26,11 +26,11 @@ const apiError = (status: number) => Object.assign(new Error(`Request failed wit
 type Params = Record<string, string> | undefined
 const listCalls = () => mockApiGet.mock.calls.filter(([url]) => url === '/participants').map(([, params]) => params as Params)
 
-/** Serves each view its own rows: Active is isActive=true, Archived isActive=false, Drafts isDraft=true. */
-function serve({ active = [] as unknown[], archived = [] as unknown[], drafts = [] as unknown[], worklist = [] as unknown[], enquiries = [] as unknown[] } = {}) {
+/** Serves each view its own rows: Active is isActive=true, Archived isActive=false. Drafts are not a register view any more: they are on the Enquiries and Onboarding tabs. */
+function serve({ active = [] as unknown[], archived = [] as unknown[], worklist = [] as unknown[], enquiries = [] as unknown[] } = {}) {
   mockApiGet.mockImplementation(async (url: string, params?: Record<string, string>) => {
     if (url === '/participants/alerts') return []
-    if (url === '/participants') return paged(params?.isDraft === 'true' ? drafts : params?.isActive === 'false' ? archived : active)
+    if (url === '/participants') return paged(params?.isActive === 'false' ? archived : active)
     if (url === '/inquiries/onboarding-worklist') return worklist
     if (url === '/inquiries') return enquiries
     throw new Error(`unexpected GET ${url}`)
@@ -46,6 +46,7 @@ function renderHub(path = '/participants') {
           <Route path="/participants" element={<ParticipantsHubPage />} />
           <Route path="/participants/:id/intake" element={<p>Intake wizard destination</p>} />
           <Route path="/participants/:id/profile" element={<p>Profile wizard destination</p>} />
+          <Route path="/onboarding/:id" element={<p>Onboarding checklist destination</p>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -64,12 +65,12 @@ afterEach(() => {
 })
 
 describe('ParticipantsHubPage (wire) — the register has its controls back', () => {
-  it('shows the Active / Drafts / Archived views and a search box on the participants tab', async () => {
+  it('shows the Active / Archived views, no Drafts view, and a search box on the participants tab', async () => {
     renderHub()
 
     await screen.findByText('Jamie Smith')
     const views = screen.getByRole('radiogroup', { name: /participant list view/i })
-    expect(within(views).getAllByRole('radio').map(r => r.getAttribute('aria-label') ?? r.textContent)).toEqual(['Active', 'Drafts', 'Archived'])
+    expect(within(views).getAllByRole('radio').map(r => r.getAttribute('aria-label') ?? r.textContent)).toEqual(['Active', 'Archived'])
     expect(screen.getByRole('radio', { name: 'Active' })).toBeChecked()
     expect(screen.getByRole('textbox', { name: /search participants/i })).toBeInTheDocument()
   })
@@ -99,39 +100,56 @@ describe('ParticipantsHubPage (wire) — the register has its controls back', ()
     expect(listCalls().at(-1)).not.toHaveProperty('operationalOnly')
   })
 
-  it('lists drafts under Drafts, so a draft with no onboarding row appears in a tab', async () => {
-    serve({
-      active: [row()],
-      drafts: [
-        row({ id: 'd1', fullName: 'Dana Draft', isDraft: true, isActive: false, intakeCompletedAt: null }),
-        row({ id: 'd2', fullName: 'Ira Intake', isDraft: true, isActive: false, intakeCompletedAt: '2026-09-20T03:00:00' }),
-      ],
-    })
+  it('never asks the register for drafts: they are on the Enquiries and Onboarding tabs now', async () => {
     const user = userEvent.setup()
     renderHub()
     await screen.findByText('Jamie Smith')
+    await user.click(screen.getByRole('radio', { name: 'Archived' }))
+    await waitFor(() => expect(listCalls().at(-1)).toMatchObject({ isActive: 'false', isDraft: 'false' }))
 
-    await user.click(screen.getByRole('radio', { name: 'Drafts' }))
+    // Active and Archived both ask for finalised participants only. A draft is never listed here, so there is no draft row to resume from the register.
+    expect(listCalls().every(params => params?.isDraft === 'false')).toBe(true)
+  })
+
+  it('lists a draft intake started without an enquiry on the Enquiries tab, so dropping the Drafts view loses nobody', async () => {
+    serve({
+      enquiries: [{
+        id: 'd1', participantId: 'd1', firstName: 'Dana', lastName: 'Draft', phone: '0411 111 111', email: null, source: '', provenance: null, createdAt: '2026-09-02',
+        participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: null, isDirectIntake: true,
+      }],
+    })
+    const user = userEvent.setup()
+    renderHub('/participants?tab=enquiries')
 
     expect(await screen.findByText('Dana Draft')).toBeInTheDocument()
-    expect(listCalls().at(-1)).toMatchObject({ isDraft: 'true' })
-    expect(listCalls().at(-1)).not.toHaveProperty('operationalOnly')
-    // A draft is resumed, not archived or switched on: the next step depends on where its intake stands.
-    await user.click(screen.getByRole('button', { name: 'Resume intake for Dana Draft' }))
+    expect(screen.getByText('Draft intake')).toBeInTheDocument()
+    // A draft is resumed, not archived or switched on: the next step is the intake wizard.
+    await user.click(screen.getByRole('button', { name: 'Resume intake' }))
     expect(screen.getByText('Intake wizard destination')).toBeInTheDocument()
   })
 
-  it('points a draft whose intake is complete at its profile, and offers no status change or archive on a draft', async () => {
-    serve({ drafts: [row({ id: 'd2', fullName: 'Ira Intake', isDraft: true, isActive: false, intakeCompletedAt: '2026-09-20T03:00:00' })] })
+  it('lists a participant whose intake is complete on the Onboarding tab, with their checklist one click away', async () => {
+    serve({
+      worklist: [{ participantId: 'w2', fullName: 'Ira Intake', stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 5, reasons: ['Profile requires date of birth.'] }],
+      enquiries: [{ id: 'e2', participantId: 'w2', firstName: 'Ira', lastName: 'Intake', phone: null, email: null, source: 'Phone', provenance: null, createdAt: '2026-09-02', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: '2026-09-20T03:00:00' }],
+    })
     const user = userEvent.setup()
-    renderHub()
-    await user.click(await screen.findByRole('radio', { name: 'Drafts' }))
-    await screen.findByText('Ira Intake')
+    renderHub('/participants?tab=onboarding')
 
-    expect(screen.queryByRole('button', { name: /change status/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Continue profile for Ira Intake' }))
-    expect(screen.getByText('Profile wizard destination')).toBeInTheDocument()
+    expect(await screen.findByText('Ira Intake')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Open onboarding for Ira Intake' }))
+    expect(screen.getByText('Onboarding checklist destination')).toBeInTheDocument()
+  })
+
+  it('does not repeat that participant on the Enquiries tab: their enquiry has moved on to onboarding', async () => {
+    serve({
+      enquiries: [{ id: 'e2', participantId: 'w2', firstName: 'Ira', lastName: 'Intake', phone: null, email: null, source: 'Phone', provenance: null, createdAt: '2026-09-02', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: '2026-09-20T03:00:00' }],
+    })
+    renderHub('/participants?tab=enquiries')
+
+    expect(await screen.findByText('No open enquiries')).toBeInTheDocument()
+    expect(screen.queryByText('Ira Intake')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /open onboarding/i })).not.toBeInTheDocument()
   })
 
   it('says the register could not be loaded, with a retry, instead of "No participants yet" (L5-12)', async () => {
@@ -185,20 +203,20 @@ describe('ParticipantsHubPage (wire) — the other two tabs have their search an
     expect(screen.queryByText('No participants in onboarding')).not.toBeInTheDocument()
   })
 
-  it('shows loading, not "No enquiries captured yet", while the browser reports offline and the list has not loaded (review F-1, same class)', async () => {
+  it('shows loading, not "No open enquiries", while the browser reports offline and the list has not loaded (review F-1, same class)', async () => {
     onlineManager.setOnline(false)
     renderHub('/participants?tab=enquiries')
 
     expect(await screen.findByText('Loading...')).toBeInTheDocument()
-    expect(screen.queryByText('No enquiries captured yet')).not.toBeInTheDocument()
+    expect(screen.queryByText('No open enquiries')).not.toBeInTheDocument()
   })
 
-  it('shows the enquiries status filter and search', async () => {
+  it('shows the enquiries search, and no status filter: the tab already says which stage it is', async () => {
     serve({ enquiries: [{ id: 'e1', firstName: 'Eve', lastName: 'Enquiry', phone: '0400', email: null, source: 'Phone', provenance: null, participantId: null, createdAt: '2026-09-01' }] })
     renderHub('/participants?tab=enquiries')
 
     await screen.findByText('Eve Enquiry')
-    expect(screen.getByRole('radiogroup', { name: /filter enquiries by status/i })).toBeInTheDocument()
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: /search enquiries/i })).toBeInTheDocument()
   })
 })
