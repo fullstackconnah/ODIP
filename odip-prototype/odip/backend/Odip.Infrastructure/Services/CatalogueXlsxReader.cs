@@ -59,7 +59,15 @@ public static class CatalogueXlsxReader
                     continue;
                 }
                 format ??= layout.Format;
-                ReadSheet(sheet, layout, sheet.Name.Contains("Legacy", StringComparison.OrdinalIgnoreCase), rows, warnings);
+                try
+                {
+                    ReadSheet(sheet, layout, sheet.Name.Contains("Legacy", StringComparison.OrdinalIgnoreCase), rows, warnings);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException and not InvalidOperationException)
+                {
+                    // A damaged cell or a workbook feature the library cannot read: the upload is refused with a message, not a server error.
+                    throw new InvalidOperationException($"Sheet \"{sheet.Name}\" could not be read as a support catalogue ({ex.Message}).", ex);
+                }
             }
 
             if (rows.Count == 0)
@@ -115,7 +123,7 @@ public static class CatalogueXlsxReader
                     var header = Text(sheet.Cell(r, c));
                     if (header.Length > 0 && !columns.ContainsKey(header)) columns[header] = c;
                 }
-                if (!columns.ContainsKey("Start date")) return null;
+                if (!columns.ContainsKey("Start date") || (!columns.ContainsKey("Support Item Number") && !columns.ContainsKey("SupportItemNumber"))) return null;
                 if (columns.ContainsKey("National")) return new SheetLayout(r, CatalogueFileFormat.NationalRemote, columns);
                 if (States.All(columns.ContainsKey)) return new SheetLayout(r, CatalogueFileFormat.StateColumns, columns);
                 return null;

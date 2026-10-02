@@ -342,6 +342,42 @@ public class CatalogueImportReadTests
     }
 
     [Fact]
+    public async Task A_header_that_only_contains_the_item_number_heading_is_refused_not_crashed_on()
+    {
+        await using var db = CreateDb();
+        using var wb = new XLWorkbook();
+        var ws = wb.AddWorksheet("Current Support Items");
+        ws.Cell(1, 1).Value = "Support Item Number (code)";   // not the heading the importer maps
+        ws.Cell(1, 2).Value = "Start date";
+        ws.Cell(1, 3).Value = "National";
+        ws.Cell(2, 1).Value = "01_011_0107_1_1";
+        ws.Cell(2, 2).Value = 20260701;
+        using var stream = new MemoryStream();
+        wb.SaveAs(stream);
+        stream.Position = 0;
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => NewImporter(db).PreviewImportAsync(stream, "x.xlsx"));
+
+        Assert.Contains("Support Item Number", ex.Message);
+    }
+
+    [Fact]
+    public async Task A_cell_the_reader_cannot_make_sense_of_refuses_the_upload_with_a_message_instead_of_a_server_error()
+    {
+        await using var db = CreateDb();
+        using var wb = new XLWorkbook(CatalogueFixtures.PathOf(CatalogueFixtures.File2026_27));
+        wb.Worksheet("Current Support Items").Cell(2, 13).Value = 1e300;   // a National price no decimal can hold
+        using var stream = new MemoryStream();
+        wb.SaveAs(stream);
+        stream.Position = 0;
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => NewImporter(db).PreviewImportAsync(stream, "damaged.xlsx"));
+
+        Assert.Contains("Current Support Items", ex.Message);
+        Assert.Contains("could not be read", ex.Message);
+    }
+
+    [Fact]
     public async Task Bytes_that_are_not_a_workbook_are_refused_not_crashed_on()
     {
         await using var db = CreateDb();
