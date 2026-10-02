@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 
 const { mockApiGet, mockApiGetWithDefault, mockApiPost, mockApiPut } = vi.hoisted(() => ({
@@ -114,6 +114,10 @@ describe('leave hooks — coordinator', () => {
   })
 
   describe('usePendingLeaveQueue: the count and whether it can be trusted', () => {
+    afterEach(() => {
+      onlineManager.setOnline(true)
+    })
+
     it('is loading, with a count of 0, until both requests answer, then reports the sum and settles', async () => {
       mockApiGetWithDefault
         .mockResolvedValueOnce([{ id: '1' }, { id: '2' }])
@@ -133,6 +137,26 @@ describe('leave hooks — coordinator', () => {
 
       await waitFor(() => expect(result.current.error).toBe(true))
       expect(result.current).toEqual({ count: 0, loading: false, error: true })
+    })
+
+    // TanStack Query PAUSES a request while the browser reports offline: the query is pending with a fetchStatus of "paused", and isLoading is false, so a
+    // flag built on isLoading read the queue as an empty one (and the dashboard could say nothing needs anybody over data it never asked for).
+    it('is loading, not a settled zero, while the requests are paused offline, and settles once the browser is back online', async () => {
+      mockApiGetWithDefault
+        .mockResolvedValueOnce([{ id: '1' }])
+        .mockResolvedValueOnce([])
+      onlineManager.setOnline(false)
+      const qc = new QueryClient()
+      const { result } = renderHook(() => usePendingLeaveQueue(), { wrapper: wrapper(qc) })
+
+      expect(result.current).toEqual({ count: 0, loading: true, error: false })
+      expect(mockApiGetWithDefault).not.toHaveBeenCalled()
+
+      act(() => {
+        onlineManager.setOnline(true)
+      })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      expect(result.current).toEqual({ count: 1, loading: false, error: false })
     })
 
     it('asks for nothing and says nothing is loading when the caller is not enabled', () => {

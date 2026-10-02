@@ -45,7 +45,7 @@ afterEach(() => {
 })
 
 beforeEach(() => {
-  mockUseDashboard.mockReturnValue({ data: undefined, isLoading: false, isError: false })
+  mockUseDashboard.mockReturnValue(summaryData())
   mockUseSettings.mockReturnValue({ data: undefined })
   mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
   mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0))
@@ -291,7 +291,7 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
 
   it('does not claim "All clear" while the alerts request is still loading (a false negative would be worse than a blank tile)', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isLoading: true })
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isPending: true, isLoading: true })
     renderPage()
 
     expect(screen.getByText('Critical Participant Alerts')).toBeInTheDocument()
@@ -433,7 +433,7 @@ const summaryData = (overrides: Record<string, unknown> = {}) => ({
     qscOverdueCount: 0, upcomingTrips: [], overdueTasks: [],
     ...overrides,
   },
-  isLoading: false, isError: false,
+  isPending: false, isLoading: false, isError: false,
 })
 
 const asRole = (role: string, fullName?: string) => localStorage.setItem('odip_user', JSON.stringify(fullName ? { role, fullName } : { role }))
@@ -671,7 +671,7 @@ describe('DashboardPage — header (a greeting, the date and the summary line)',
 
 describe('DashboardPage — loading and error keep their behaviour', () => {
   it('shows only the spinner while the summary loads: no title, no band', () => {
-    mockUseDashboard.mockReturnValue({ data: undefined, isLoading: true, isError: false })
+    mockUseDashboard.mockReturnValue({ data: undefined, isPending: true, isLoading: true, isError: false })
     const { container } = renderPage()
 
     expect(container.querySelector('.animate-spin')).not.toBeNull()
@@ -685,6 +685,66 @@ describe('DashboardPage — loading and error keep their behaviour', () => {
 
     expect(screen.getByText('Failed to load dashboard. Please refresh the page.')).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Needs attention' })).not.toBeInTheDocument()
+  })
+})
+
+// TanStack Query PAUSES a request while the browser reports offline: the query is pending with a fetchStatus of "paused" and isLoading is false. The real hooks are
+// exercised in DashboardPage.offline.test.tsx; here the page is given exactly what they return in that state.
+describe('DashboardPage — a paused request is waiting, not a settled zero', () => {
+  const paused = { data: undefined, isPending: true, isLoading: false, isError: false, fetchStatus: 'paused' }
+  const disabled = { data: undefined, isPending: true, isLoading: false, isError: false, fetchStatus: 'idle' }
+
+  it('shows the spinner, and no band and no zeros, while the summary is paused', () => {
+    mockUseDashboard.mockReturnValue(paused)
+    const { container } = renderPage()
+
+    expect(container.querySelector('.animate-spin')).not.toBeNull()
+    expect(screen.queryByRole('region', { name: 'Needs attention' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/All clear/)).not.toBeInTheDocument()
+  })
+
+  it('shows the spinner, not a made-up summary of zeros, for a result that has no data and no reason', () => {
+    mockUseDashboard.mockReturnValue({ data: undefined, isPending: false, isLoading: false, isError: false })
+    const { container } = renderPage()
+
+    expect(container.querySelector('.animate-spin')).not.toBeNull()
+    expect(screen.queryByRole('region', { name: 'Needs attention' })).not.toBeInTheDocument()
+  })
+
+  it('shows an en dash, busy, on Qualification Issues and Critical Participant Alerts while their requests are paused, and never names them clear', () => {
+    asRole('Coordinator')
+    mockUseStaff.mockReturnValue(paused)
+    mockUseParticipantAlertsAggregate.mockReturnValue(paused)
+    renderPage()
+
+    for (const label of ['Qualification Issues', 'Critical Participant Alerts']) {
+      const tile = tileFor(label)
+      expect(tile, label).toHaveAttribute('aria-busy', 'true')
+      expect(tile, label).not.toHaveAttribute('data-attention')
+      expect(within(tile).getByText('–'), label).toBeInTheDocument()
+      expect(within(tile).getByText('Loading'), label).toHaveClass('sr-only')
+    }
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
+    expect(clearRow()).not.toHaveTextContent('Qualification Issues')
+    expect(clearRow()).not.toHaveTextContent('Critical Participant Alerts')
+  })
+
+  it('does not call a DISABLED query waiting: nobody asked it, so the role that cannot view alerts sees no placeholder', () => {
+    asRole('ReadOnly')
+    mockUseParticipantAlertsAggregate.mockReturnValue(disabled)
+    renderPage()
+
+    expect(screen.queryByText('–')).not.toBeInTheDocument()
+    expect(band().querySelector('[aria-busy]')).toBeNull()
+  })
+
+  it('keeps a failed request a failure, whatever else is true of it', () => {
+    asRole('Coordinator')
+    mockUseStaff.mockReturnValue({ data: undefined, isPending: false, isLoading: false, isError: true, fetchStatus: 'idle' })
+    renderPage()
+
+    expect(tileFor('Qualification Issues')).not.toHaveAttribute('aria-busy')
+    expect(within(tileFor('Qualification Issues')).getByText("Couldn't load")).toBeInTheDocument()
   })
 })
 
@@ -991,7 +1051,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
   const alerts = () => tileFor('Critical Participant Alerts')
   const leave = () => tileFor('Pending Leave')
   const completions = () => tileFor('Shift Completions')
-  const inFlight = { data: undefined, isLoading: true, isError: false }
+  const inFlight = { data: undefined, isPending: true, isLoading: true, isError: false }
   const failed = { data: undefined, isLoading: false, isError: true }
 
   // The shared contract of a placeholder: an en dash where the number would be, not tinted, no line, no action, no number.

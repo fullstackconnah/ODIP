@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 
 const { mockApiGet } = vi.hoisted(() => ({ mockApiGet: vi.fn() }))
@@ -25,6 +25,10 @@ beforeEach(() => {
   mockApiGet.mockReset()
 })
 
+afterEach(() => {
+  onlineManager.setOnline(true)
+})
+
 describe('usePendingCompletionQueue: the shifts awaiting review, and whether that count can be trusted', () => {
   it('is loading, with a count of 0, until the request answers, then reports the server total and settles', async () => {
     mockApiGet.mockResolvedValue(queue(4))
@@ -43,6 +47,23 @@ describe('usePendingCompletionQueue: the shifts awaiting review, and whether tha
 
     await waitFor(() => expect(result.current.error).toBe(true))
     expect(result.current).toEqual({ count: 0, loading: false, error: true })
+  })
+
+  // TanStack Query PAUSES a request while the browser reports offline: pending, fetchStatus "paused", isLoading false. That is not an empty queue.
+  it('is loading, not a settled zero, while the request is paused offline, and settles once the browser is back online', async () => {
+    mockApiGet.mockResolvedValue(queue(3))
+    onlineManager.setOnline(false)
+    const qc = new QueryClient()
+    const { result } = renderHook(() => usePendingCompletionQueue(), { wrapper: wrapper(qc) })
+
+    expect(result.current).toEqual({ count: 0, loading: true, error: false })
+    expect(mockApiGet).not.toHaveBeenCalled()
+
+    act(() => {
+      onlineManager.setOnline(true)
+    })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current).toEqual({ count: 3, loading: false, error: false })
   })
 
   it('asks for nothing and says nothing is loading when the caller is not enabled', () => {

@@ -3,6 +3,7 @@ import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, use
 import { formatDateAu } from '@/lib/utils'
 import { formatRatio, formatRelative, plural } from '@/lib/format'
 import { credentialIssueCount, staffCredentials } from '@/lib/credentials'
+import { awaitsData } from '@/lib/queryPhase'
 import { localIsoDate } from '@/lib/dateOnly'
 import { formatToday, greetingFor } from '@/lib/greeting'
 import { usePermissions } from '@/lib/permissions'
@@ -53,16 +54,22 @@ function DashboardHeader({ fullName, upcomingTrips, activeParticipants, outstand
 
 export default function DashboardPage() {
   const { canViewAlerts, canApproveLeave, canReviewCompletions, canAccessPage, fullName } = usePermissions()
-  const { data, isLoading, isError } = useDashboard()
+  const summary = useDashboard()
   const { data: settings } = useSettings()
-  const { data: allStaff = [], isLoading: staffLoading, isError: staffError } = useStaff({ isActive: 'true' })
-  const { data: alertsAggregate = [], isLoading: alertsLoading, isError: alertsError } = useParticipantAlertsAggregate(canViewAlerts)
+  const staff = useStaff({ isActive: 'true' })
+  const alerts = useParticipantAlertsAggregate(canViewAlerts)
+  // "Waiting" is not `isLoading`: a request PAUSED while the browser is offline is pending with isLoading false (lib/queryPhase.ts), and reading that as an answer
+  // is how a band says "All clear" over data that was never asked for. A disabled query (the alerts, for a role that cannot view them) is not waiting.
+  const { data: allStaff = [], isError: staffError } = staff
+  const { data: alertsAggregate = [], isError: alertsError } = alerts
+  const staffLoading = awaitsData(staff)
+  const alertsLoading = awaitsData(alerts)
   const pendingLeave = usePendingLeaveQueue(canApproveLeave)
   const pendingCompletions = usePendingCompletionQueue(canReviewCompletions)
 
   const warningDays = settings?.qualificationWarningDays ?? 30
 
-  // Hooks must run unconditionally on every render — this has to sit above the isLoading/isError
+  // Hooks must run unconditionally on every render — this has to sit above the loading/error
   // early returns below, not after them.
   // The same rule as the Qualifications list (lib/credentials.ts), so this figure is the sum of that page's issue counts: a credential
   // needs action when it has no date, is expired, is due today or is due within the warning window.
@@ -78,23 +85,18 @@ export default function DashboardPage() {
     return { qualIssueCount: issues, qualIssueStaffCount: staffWithIssues }
   }, [allStaff, warningDays])
 
-  if (isLoading) {
+  if (summary.isError) return (
+    <div className="p-[var(--card-pad)] text-center text-[var(--color-destructive)]">Failed to load dashboard. Please refresh the page.</div>
+  )
+
+  // No summary yet (in flight, or paused offline) is a spinner, never a summary of zeros: the band's "All clear" is only ever said over data that arrived.
+  const d = summary.data
+  if (!d) {
     return (
       <div className="flex h-64 items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent" />
       </div>
     )
-  }
-
-  if (isError) return (
-    <div className="p-[var(--card-pad)] text-center text-[var(--color-destructive)]">Failed to load dashboard. Please refresh the page.</div>
-  )
-
-  const d = data || {
-    upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 0,
-    overdueTaskCount: 0, conflictCount: 0, tripsMissingAccommodation: 0,
-    tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0,
-    qscOverdueCount: 0, upcomingTrips: [], overdueTasks: [],
   }
 
   // Defensive filter (fix round 1 — review finding): the aggregate endpoint already excludes

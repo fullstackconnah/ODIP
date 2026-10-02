@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPut, apiDelete } from '../client'
+import { awaitsData } from '@/lib/queryPhase'
 import type {
   RosterBoardDto,
   ShiftDto,
@@ -226,14 +227,14 @@ export function usePendingCompletionCount(enabled = true): number {
 }
 
 /**
- * The same queue with what its count rests on: `loading` while the request is in flight and `error` once it has failed, so a caller can tell
- * "nothing is waiting" from "we do not know yet" (a count is 0 in both of those states). The dashboard reads it so it never says nothing needs
+ * The same queue with what its count rests on: `loading` while the request is waiting (in flight, or paused while the browser is offline: `awaitsData`) and
+ * `error` once it has failed, so a caller can tell "nothing is waiting" from "we do not know yet" (a count is 0 in both of those states). The dashboard reads it so it never says nothing needs
  * anybody while shifts wait for review, which is what the Staff & roster badge counts. `usePendingCompletionCount` is this hook's count alone,
  * and both read the one cache entry.
  */
 export function usePendingCompletionQueue(enabled = true): { count: number; loading: boolean; error: boolean } {
   const queue = useCompletions({ status: 'PendingReview' }, 1, 1, { enabled })
-  return { count: queue.data?.totalCount ?? 0, loading: queue.isLoading, error: queue.isError }
+  return { count: queue.data?.totalCount ?? 0, loading: awaitsData(queue), error: queue.isError }
 }
 
 // ══════════════════════════════════════════════════════════════

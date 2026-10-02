@@ -14,7 +14,15 @@ vi.mock('@/api/hooks', () => ({
   useStaff: mockUseStaff,
   useSettings: mockUseSettings,
   useUpdateStaff: () => ({ mutate: vi.fn(), isPending: false }),
-  useDashboard: () => ({ data: undefined, isLoading: false, isError: false }),
+  // The dashboard's own request, answered with a real summary of zeros (the page no longer makes one up).
+  useDashboard: () => ({
+    data: {
+      upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 0, overdueTaskCount: 0, conflictCount: 0,
+      tripsMissingAccommodation: 0, tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0, qscOverdueCount: 0,
+      upcomingTrips: [], overdueTasks: [],
+    },
+    isPending: false, isLoading: false, isError: false,
+  }),
   useParticipantAlertsAggregate: () => ({ data: [], isLoading: false }),
   usePendingLeaveQueue: () => ({ count: 0, loading: false, error: false }),
   usePendingCompletionQueue: () => ({ count: 0, loading: false, error: false }),
