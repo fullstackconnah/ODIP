@@ -21,7 +21,8 @@ type FormState = { firstName: string; lastName: string; phone: string; email: st
 const blank = (): FormState => ({ firstName: '', lastName: '', phone: '', email: '', source: 'Phone', provenance: '' })
 
 const fromInquiry = (row: ParticipantInquiryDto): FormState => ({
-  firstName: row.firstName, lastName: row.lastName, phone: row.phone ?? '', email: row.email ?? '', source: row.source, provenance: row.provenance ?? '',
+  // A real enquiry always has a source; only a direct intake (never edited here) has none.
+  firstName: row.firstName, lastName: row.lastName, phone: row.phone ?? '', email: row.email ?? '', source: row.source || 'Phone', provenance: row.provenance ?? '',
 })
 
 const orNull = (value: string) => value.trim() || null
@@ -51,7 +52,8 @@ export default function InquiryFormPage() {
   const navigate = useNavigate()
   const inquiriesQuery = useParticipantInquiries()
   const inquiries = inquiriesQuery.data ?? []
-  const existing = editId ? inquiries.find(row => row.id === editId) : undefined
+  // A direct intake rides in the same list with the participant's id: there is no enquiry behind it to edit.
+  const existing = editId ? inquiries.find(row => row.id === editId && !row.isDirectIntake) : undefined
   // A paused request (the browser is offline and the load has not run) is loading, not "not found" (review F-1).
   const phase = queryPhase(inquiriesQuery)
 

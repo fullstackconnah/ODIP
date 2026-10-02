@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Pencil, Users, X } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
@@ -111,6 +111,15 @@ export default function CompatibilityPage() {
   // (or roll back — removed here, tracked in failedKeys — on failure).
   const [overrides, setOverrides] = useState<Map<string, CompatibilityRowDto>>(new Map())
   const [failedKeys, setFailedKeys] = useState<Set<string>>(new Set())
+  // Each refused cell's warning icon clears itself after four seconds. The timers are kept, one per cell, so a second refusal of the same cell can
+  // replace its own and leaving the page can cancel them all: left running they fire setFailedKeys into a tree that is gone.
+  const failedKeyTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  useEffect(() => {
+    const timers = failedKeyTimers.current
+    return () => {
+      for (const timer of timers.values()) clearTimeout(timer)
+    }
+  }, [])
   // Why the last edit was refused, in the server's words (e.g. Enforce mode's 400 "Participant is not ready for booking or rostering.").
   // The rolled-back cell's icon only lasts 4s and says nothing, so this stays until dismissed or the next edit.
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -164,14 +173,17 @@ export default function CompatibilityPage() {
           })
           setSaveError(extractErrorMessage(err, "Couldn't save that change. Please try again."))
           setFailedKeys(prev => new Set(prev).add(key))
-          setTimeout(() => {
+          const earlier = failedKeyTimers.current.get(key)
+          if (earlier) clearTimeout(earlier)
+          failedKeyTimers.current.set(key, setTimeout(() => {
+            failedKeyTimers.current.delete(key)
             setFailedKeys(prev => {
               if (!prev.has(key)) return prev
               const next = new Set(prev)
               next.delete(key)
               return next
             })
-          }, 4000)
+          }, 4000))
         },
       },
     )

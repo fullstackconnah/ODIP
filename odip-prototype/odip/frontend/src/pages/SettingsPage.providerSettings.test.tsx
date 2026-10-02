@@ -97,17 +97,7 @@ function loadedBodyWithoutMode(overrides: Partial<ProviderSettingsDto> = {}) {
   return row
 }
 
-// The tab shows 'Saved!' for 2s via a bare setTimeout it never clears. Track those timers so a test that ends on a successful save does
-// not leave one to fire after the test environment is torn down.
-const savedLabelTimers: number[] = []
-
 beforeEach(() => {
-  const realSetTimeout = globalThis.setTimeout
-  vi.spyOn(globalThis, 'setTimeout').mockImplementation(((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
-    const id = realSetTimeout(handler as () => void, timeout, ...args)
-    if (timeout === 2000) savedLabelTimers.push(id)
-    return id
-  }) as unknown as typeof setTimeout)
   server = makeSettings()
   mockApiGet.mockReset()
   mockApiPut.mockReset()
@@ -120,7 +110,6 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  for (const id of savedLabelTimers.splice(0)) clearTimeout(id)
   vi.restoreAllMocks()
 })
 

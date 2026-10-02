@@ -45,7 +45,7 @@ export default function OnboardingPage() {
     <div className="flex flex-col gap-[var(--section-gap)]">
       <PageHeader
         title="Onboarding"
-        subtitle={`${plural(screen.allRowsCount, 'participant')} in progress. Onboarding doesn't activate a participant or allow bookings, rostering, invoicing or claims.`}
+        subtitle={`${plural(screen.allRowsCount, 'participant')} in onboarding. Completing a participant's profile activates them, and moves them to Active participants, when your organisation's readiness rule allows it.`}
       >
         {screen.toolbar}
       </PageHeader>

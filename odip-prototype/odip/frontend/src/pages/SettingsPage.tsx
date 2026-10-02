@@ -1,5 +1,5 @@
 import { useEventTemplates, useActivities, useSettings, useUpdateSettings, useProviderSettings, useUpsertProviderSettings, useSupportCatalogue, usePublicHolidays, useCreatePublicHoliday, useDeletePublicHoliday, useSyncHolidays } from '@/api/hooks'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
 import { LayoutTemplate, Pencil, X } from 'lucide-react'
@@ -35,6 +35,14 @@ function QualificationSettingsTab() {
   const [warningDays, setWarningDays] = useState<number>(30)
   const [initialWarningDays, setInitialWarningDays] = useState<number | null>(null)
   const [saved, setSaved] = useState(false)
+  // "Saved!" puts the label back after two seconds. The timer is kept so a newer save can replace it and leaving the tab can cancel it: left
+  // running it fires setSaved into a tree that is gone.
+  const savedResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (settings) {
@@ -51,7 +59,8 @@ function QualificationSettingsTab() {
       onSuccess: () => {
         setInitialWarningDays(warningDays)
         setSaved(true)
-        setTimeout(() => setSaved(false), 2000)
+        if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
+        savedResetTimer.current = setTimeout(() => setSaved(false), 2000)
       },
     })
   }
@@ -309,6 +318,14 @@ function ProviderSettingsTab() {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
+  // "Saved!" puts the label back after two seconds. The timer is kept so a newer save can replace it and leaving the tab can cancel it: left
+  // running it fires setSaved into a tree that is gone.
+  const savedResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
+    }
+  }, [])
   // The readiness check is kept out of `form` on purpose. `serverMode` is the server's current value (an org with no settings row yet is
   // Warn); `modePick` is what the user chose on the control, with the server value they chose it against. Only a deliberate pick that
   // differs from the server is ever sent. A pick is good only while the server still holds the value it was made against: once that
@@ -349,7 +366,11 @@ function ProviderSettingsTab() {
     const payload = body as UpsertProviderSettingsDto
     if (modeChanged) payload.participantReadinessMode = shownMode
     upsert.mutate(payload, {
-      onSuccess: () => { setLoadedMode(chosenMode); setDirty(false); setSaved(true); setTimeout(() => setSaved(false), 2000) },
+      onSuccess: () => {
+        setLoadedMode(chosenMode); setDirty(false); setSaved(true)
+        if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
+        savedResetTimer.current = setTimeout(() => setSaved(false), 2000)
+      },
       onError: (err: unknown) => {
         const status = (err as AxiosError)?.response?.status
         if (status === 403) setError('Admin role is required to update provider settings. Ask an Admin to make this change.')
@@ -646,6 +667,14 @@ function PublicHolidaysTab() {
   const [syncFromYear, setSyncFromYear] = useState<number | undefined>(undefined)
   const [syncToYear, setSyncToYear] = useState<number | undefined>(undefined)
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null)
+  // A sync's result line goes away by itself after four seconds. The timer is kept so the next sync can cancel it (it would take the new line down
+  // early) and leaving the tab can cancel it: left running it fires setSyncMessage into a tree that is gone.
+  const syncMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (syncMessageTimer.current) clearTimeout(syncMessageTimer.current)
+    }
+  }, [])
 
   const inputClass = 'px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
@@ -656,6 +685,7 @@ function PublicHolidaysTab() {
   }
 
   function handleSync() {
+    if (syncMessageTimer.current) clearTimeout(syncMessageTimer.current)
     setSyncMessage(null)
     syncHolidays.mutate(
       { fromYear: syncFromYear, toYear: syncToYear },
@@ -663,7 +693,7 @@ function PublicHolidaysTab() {
         onSuccess: (result) => {
           const errSuffix = result.errors?.length > 0 ? ` (${plural(result.errors.length, 'error')} — check server logs)` : ''
           setSyncMessage({ type: result.errors?.length > 0 ? 'warning' : 'success', text: `Sync complete: ${result.holidaysAdded} added, ${result.holidaysUpdated} updated${errSuffix}` })
-          setTimeout(() => setSyncMessage(null), 4000)
+          syncMessageTimer.current = setTimeout(() => setSyncMessage(null), 4000)
         },
         onError: (error: Error) => {
           const err = error as AxiosError<{ message?: string }>

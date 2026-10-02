@@ -970,6 +970,7 @@ public class ParticipantsController : ControllerBase
     };
 
     private const string DraftCannotBeActivated = "A draft participant cannot be activated. Complete their intake and profile first.";
+    private const string ActivationEvidenceRequired = "This participant cannot be activated until their signed service agreement evidence is recorded.";
 
     /// <summary>
     /// The one way a screen changes whether a participant is active: the flag and an optional reason, nothing else (a partial
@@ -1008,7 +1009,7 @@ public class ParticipantsController : ControllerBase
         {
             if (p.IsDraft) return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail(DraftCannotBeActivated));
             if (!await ParticipantReadiness.MayActivateAsync(_db, p, ct))
-                return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail("This participant cannot be activated until their signed service agreement evidence is recorded."));
+                return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail(ActivationEvidenceRequired));
             // Warn mode activates, and what is still missing comes back as notes for the screen: never blocking.
             var issues = await ParticipantReadiness.IssuesAsync(_db, new[] { p.Id }, ct);
             if (issues.TryGetValue(p.Id, out var missing))
@@ -1064,6 +1065,10 @@ public class ParticipantsController : ControllerBase
     /// Finalises a participant whose intake is complete: the Profile wizard's "Complete Profile". It carries no profile field (each
     /// step is saved by its own PATCH), so it cannot wipe one. Idempotent; and it only ever finalises a DRAFT, so completing the
     /// profile of an archived participant does not bring them back (the full PUT it replaces did).
+    /// Finalising a draft is also what activates them, under the organisation's readiness rule (the status endpoint refuses a draft). Where that rule
+    /// does not let them be activated (Enforce, no verified signed-agreement evidence) the step is refused with the same message the status endpoint gives
+    /// and they stay a draft on the Onboarding tab, where the agreement-evidence gate says why: finalised but not activated would leave them in no stage.
+    /// A draft that is already marked active has nothing to activate and is finalised as before.
     /// </summary>
     [HttpPost("{id:guid}/complete-profile")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -1076,10 +1081,12 @@ public class ParticipantsController : ControllerBase
         {
             if (!p.IntakeCompletedAt.HasValue)
                 return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Complete the participant's intake before completing their profile."));
+            // The activation rule the full PUT applied to a record that has just been finalised: Warn (the default) activates, Enforce needs evidence.
+            if (!p.IsActive && !await ParticipantReadiness.MayActivateAsync(_db, p, ct))
+                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(ActivationEvidenceRequired));
             p.IsDraft = false;
             p.UpdatedAt = DateTime.UtcNow;
-            // The same activation rule the full PUT applied to a record that has just been finalised: Warn (the default) activates.
-            if (!p.IsActive) p.IsActive = await ParticipantReadiness.MayActivateAsync(_db, p, ct);
+            p.IsActive = true;
             await _db.SaveChangesAsync(ct);
         }
 

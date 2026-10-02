@@ -50,4 +50,5 @@ place of birth and country, which the Intake wizard does not own), and an allow-
 - L1-13: check-then-insert races (a concurrent identical create can pass the idempotency lookup; no unique index was added because a
   migration that fails on historic duplicate request ids would stop the API starting).
 - Participants archived after going through onboarding still show on the Onboarding tab as "Onboarding incomplete" (it never drops a row).
+  Resolved by `2026-10-02-participant-hub-flow.md`: the tab lists participants by stage, and the register's Drafts view is gone.
 - Enforce mode: a legacy participant (NULL `IntakeCompletedAt`) fails the strict gate; unchanged by this work.

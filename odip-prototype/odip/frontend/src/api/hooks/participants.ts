@@ -104,6 +104,8 @@ export function useCreateParticipant() {
       qc.invalidateQueries({ queryKey: ['participants'] })
       // Completing intake on create puts the participant on the onboarding worklist.
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      // A draft saved with its intake open is a direct-intake row in the enquiries feed.
+      qc.invalidateQueries({ queryKey: ['participant-inquiries'] })
     },
   })
 }
@@ -142,7 +144,10 @@ export function useCompleteParticipantProfile() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['participants'] })
       qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+      // Finalising (and, readiness allowing, activating) ends the onboarding: the participant leaves the Onboarding tab, and the enquiry they
+      // came from now points at a finalised participant.
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      qc.invalidateQueries({ queryKey: ['participant-inquiries'] })
     },
   })
 }

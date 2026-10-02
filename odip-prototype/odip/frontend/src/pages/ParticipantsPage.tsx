@@ -15,42 +15,41 @@ import { TAP_TRUNCATED_LINK } from '@/components/tapArea'
 import { ALERT_SEVERITY_STYLES } from '@/components/alertSeverityStyles'
 import type { ParticipantListDto } from '@/api/types'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Plus, Users, ChevronRight, Pill } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { plural } from '@/lib/format'
 import { queryPhase } from '@/lib/queryPhase'
+import { readParticipantActivatedNotice } from './profile/participantActivated'
 
 const ACTIVE_STATUS_COLORS: Record<string, string> = {
   Active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   Inactive: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-  Draft: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
 }
 
-/** The three views of the register. Every participant is in at least one of them (and drafts also appear under Onboarding once they have an onboarding record). */
-type View = 'active' | 'drafts' | 'archived'
+/** The two views of the register: finalised participants only. A draft is never listed here: it is an Enquiries row (intake open) or an Onboarding row (intake complete). */
+type View = 'active' | 'archived'
 const VIEW_OPTIONS: { key: View; label: string }[] = [
   { key: 'active', label: 'Active' },
-  { key: 'drafts', label: 'Drafts' },
   { key: 'archived', label: 'Archived' },
 ]
 
 /**
  * What each view asks the server for. Active is the operational register (the server owns the stage rule, so a browser filter cannot
  * bypass onboarding). Archived is every finalised participant who is not active, NOT narrowed by that rule: someone archived after
- * going through onboarding has an onboarding row and would otherwise be listed nowhere they could be restored from. Drafts is every
- * participant whose intake or profile is unfinished, including a draft saved from the Intake wizard that has no onboarding row.
+ * going through onboarding has an onboarding row and would otherwise be listed nowhere they could be restored from.
  */
 function listParams(view: View, search: string): Record<string, string> {
-  const params: Record<string, string> = view === 'drafts'
-    ? { isDraft: 'true' }
-    : view === 'archived'
-      ? { isActive: 'false', isDraft: 'false' }
-      : { isActive: 'true', isDraft: 'false', operationalOnly: 'true' }
+  const params: Record<string, string> = view === 'archived'
+    ? { isActive: 'false', isDraft: 'false' }
+    : { isActive: 'true', isDraft: 'false', operationalOnly: 'true' }
   if (search) params.search = search
   return params
 }
+
+/** The row of the participant the user has just activated: the same highlight the Onboarding table gives the participant who has just completed intake. */
+const ARRIVAL_ROW = 'bg-[var(--color-primary)]/10 outline outline-2 -outline-offset-2 outline-[var(--color-primary)]/40'
 
 export default function ParticipantsPage() {
   const screen = useParticipantsScreen()
@@ -94,11 +93,30 @@ export function ParticipantsTable() {
 }
 
 function useParticipantsScreen() {
-  const { canWrite, canViewAlerts, canManageParticipantLifecycle } = usePermissions()
+  const { canWrite, canViewAlerts } = usePermissions()
   const navigate = useNavigate()
+  const location = useLocation()
+  // A one-off confirmation from the Profile wizard ("{name} is now an active participant."), carried by navigation state when completing a participant's
+  // profile in onboarding activated them. Held in state so it survives the history-state clear below, and cleared from history so a reload or coming
+  // back to this URL later does not replay it.
+  const [arrival] = useState(() => readParticipantActivatedNotice(location.state))
   const [search, setSearch] = useState('')
   const [view, setView] = useState<View>('active')
   const [statusNotice, setStatusNotice] = useState<{ message: string; warnings: string[] } | null>(null)
+  useEffect(() => {
+    if (!arrival) return
+    // The confirmation is mounted one tick after the page, not with it: a status region that is already in the DOM on first paint is often not
+    // announced by a screen reader, while one that appears afterwards is. The highlighted row needs no announcing, so it is there from the start.
+    const timer = window.setTimeout(() => {
+      setStatusNotice({ message: `${arrival.name} is now an active participant.`, warnings: [] })
+      // Only now is the arrival taken out of history. If this screen unmounts before the tick the timer is cleared with it, and the state must still be
+      // there for the remount to read: clearing it up front lost the confirmation for good.
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+    }, 0)
+    return () => window.clearTimeout(timer)
+    // Only the arrival matters: run once for the notice this screen mounted with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const deleteParticipant = useDeleteParticipant()
   const restoreParticipant = useRestoreParticipant()
@@ -259,7 +277,7 @@ function useParticipantsScreen() {
       header: 'Status',
       sortable: true,
       render: (p) => {
-        const current = p.isDraft ? 'Draft' : p.isActive ? 'Active' : 'Inactive'
+        const current = p.isActive ? 'Active' : 'Inactive'
         return (
           <span
             aria-label={`Status: ${current}`}
@@ -312,54 +330,39 @@ function useParticipantsScreen() {
       className: 'relative',
       render: (p) => (
         <div className="flex items-center justify-end gap-1.5">
-          {p.isDraft ? (
-            // A draft is resumed, not archived or switched on: the next step depends on where its intake stands. Always visible,
-            // not a hover cluster: it is the reason the row is in this view.
-            canManageParticipantLifecycle && (
+          {/* Row actions (24px) appear on row hover / focus and are always shown on touch; the
+              chevron is the row's constant "opens the record" cue, so it stays outside. On a mouse
+              the cluster overlays the row's last cells instead of reserving ~200px of column, so
+              "Change status" can never spill out of (or squeeze) its cell. */}
+          <RowActions overlay>
+            {p.hasActiveMedications && (
               <Button
+                variant="ghost"
+                size="sm"
+                iconOnly
+                title="View medications"
+                aria-label={`View medications for ${p.fullName}`}
+                onClick={(e) => { e.stopPropagation(); navigate(`/participants/${p.id}?tab=medications`) }}
+              >
+                <Pill className="w-4 h-4" />
+              </Button>
+            )}
+            {canWrite && (
+              <Button
+                variant="secondary"
                 size="sm"
                 className="whitespace-nowrap"
-                aria-label={`${p.intakeCompletedAt ? 'Continue profile' : 'Resume intake'} for ${p.fullName}`}
-                onClick={(e) => { e.stopPropagation(); navigate(`/participants/${p.id}/${p.intakeCompletedAt ? 'profile' : 'intake'}`) }}
+                aria-label={`Change status for ${p.fullName}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openStatusDialog(p)
+                }}
               >
-                {p.intakeCompletedAt ? 'Continue profile' : 'Resume intake'}
+                Change status
               </Button>
-            )
-          ) : (
-            /* Row actions (24px) appear on row hover / focus and are always shown on touch; the
-               chevron is the row's constant "opens the record" cue, so it stays outside. On a mouse
-               the cluster overlays the row's last cells instead of reserving ~200px of column, so
-               "Change status" can never spill out of (or squeeze) its cell. */
-            <RowActions overlay>
-              {p.hasActiveMedications && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  iconOnly
-                  title="View medications"
-                  aria-label={`View medications for ${p.fullName}`}
-                  onClick={(e) => { e.stopPropagation(); navigate(`/participants/${p.id}?tab=medications`) }}
-                >
-                  <Pill className="w-4 h-4" />
-                </Button>
-              )}
-              {canWrite && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="whitespace-nowrap"
-                  aria-label={`Change status for ${p.fullName}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    openStatusDialog(p)
-                  }}
-                >
-                  Change status
-                </Button>
-              )}
-              {canWrite && actionButtons(p)}
-            </RowActions>
-          )}
+            )}
+            {canWrite && actionButtons(p)}
+          </RowActions>
           <ChevronRight className="w-4 h-4 text-[var(--color-muted-foreground)] group-hover/row:text-[var(--color-foreground)] transition-colors shrink-0" aria-hidden="true" />
         </div>
       ),
@@ -372,12 +375,6 @@ function useParticipantsScreen() {
       title="No participants match your filters"
       description="Try a different search term, or clear your search to see all participants."
       action={{ label: 'Clear search', onClick: () => setSearch('') }}
-    />
-  ) : view === 'drafts' ? (
-    <EmptyState
-      icon={Users}
-      title="No drafts"
-      description="An intake you save as a draft, and an enquiry you start an intake for, waits here until it is complete."
     />
   ) : view === 'archived' ? (
     <EmptyState
@@ -427,6 +424,7 @@ function useParticipantsScreen() {
           sortable
           loading={isLoading}
           emptyMessage="No participants found"
+          rowClassName={p => (arrival && p.id === arrival.participantId ? ARRIVAL_ROW : '')}
         />
       )}
       {confirmDialog}

@@ -1,6 +1,7 @@
 // Format helpers: how the app spells a count, a ratio and a relative time, in one place. Pure and JSX-free.
 //
 //   plural(2, 'day')            -> "2 days"            plural(1, 'person', 'people') -> "1 person"
+//   joinList(['A', 'B', 'C'])   -> "A, B and C"        (a list in a sentence, no serial comma)
 //   formatRatio(12, 14)         -> "12 / 14"           (DESIGN.md: a ratio is always "x / y")
 //   formatRelative(iso, { style: 'compact' })  -> "5m ago"     { style: 'long' } -> "5 min ago"
 //
@@ -16,6 +17,12 @@ import { formatWithTimeZone, parseApiDate } from './utils'
  */
 export function plural(n: number, singular: string, pluralForm: string = `${singular}s`): string {
   return `${n} ${n === 1 ? singular : pluralForm}`
+}
+
+/** A list inside a sentence: "A", "A and B", "A, B and C" (no serial comma, the Australian way). '' for an empty list. */
+export function joinList(items: readonly string[]): string {
+  if (items.length < 2) return items[0] ?? ''
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
 
 /**

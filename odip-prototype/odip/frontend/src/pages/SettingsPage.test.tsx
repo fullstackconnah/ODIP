@@ -1,16 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act } from 'react'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SettingsPage from './SettingsPage'
 
-const { mockUsePermissions, mockUseEventTemplates, settingsData, providerSettings, mockUpsertMutate } = vi.hoisted(() => ({
+const { mockUsePermissions, mockUseEventTemplates, settingsData, providerSettings, mockUpsertMutate, mockSyncMutate } = vi.hoisted(() => ({
   mockUsePermissions: vi.fn(),
   // The Provider Settings tab: what useProviderSettings returns (a stable reference, like a cached query) and the captured save mutation.
   providerSettings: { current: {} as Record<string, unknown> },
   mockUpsertMutate: vi.fn(),
+  // The Public Holidays tab's sync mutation.
+  mockSyncMutate: vi.fn(),
   // Event Templates tab data; defaults to "no templates" (see beforeEach).
   mockUseEventTemplates: vi.fn((): { data: unknown[] | undefined; isLoading?: boolean } => ({ data: [] })),
   // A stable object reference, matching what TanStack Query actually hands a real useSettings()
@@ -57,7 +59,7 @@ vi.mock('@/api/hooks', () => ({
   usePublicHolidays: () => ({ data: [] }),
   useCreatePublicHoliday: () => ({ mutate: vi.fn(), isPending: false }),
   useDeletePublicHoliday: () => ({ mutate: vi.fn(), isPending: false }),
-  useSyncHolidays: () => ({ mutate: vi.fn(), isPending: false }),
+  useSyncHolidays: () => ({ mutate: mockSyncMutate, isPending: false }),
   // TemplateFormPanel (mounted unconditionally on the default 'templates' tab) and
   // UserFormPanel (mounted unconditionally at the bottom of SettingsPage) pull these in too.
   useCreateEventTemplate: () => ({ mutate: vi.fn(), isPending: false }),
@@ -100,6 +102,7 @@ beforeEach(() => {
   mockUseEventTemplates.mockReturnValue({ data: [] })
   providerSettings.current = {}
   mockUpsertMutate.mockReset()
+  mockSyncMutate.mockReset()
 })
 
 describe('SettingsPage — Event Templates tab', () => {
@@ -543,5 +546,66 @@ describe('SettingsPage — catalogue import preview', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Nothing was imported. 04_104_0125_6_1: the row has no start date.')
     expect(screen.getByDisplayValue('v2')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Confirm Import' })).toBeEnabled()
+  })
+})
+
+// Three of these tabs flash a confirmation ("Saved!", or the holiday sync's result line) and set a timer to take it down again. That timer was a
+// bare setTimeout: left running past its tab it fired setState into a tree that was gone, and past the end of the test environment it threw
+// "window is not defined", which fails the whole run even though every test passed. Fake timers go in only for the last step, once the user-event
+// steps that need real timers are done. Each test acts twice inside the window: the second action has to cancel the first one's timer, not leave
+// it running beside its own, or that first timer would outlive the tab all the same.
+describe('SettingsPage — the timer that puts a confirmation away dies with its tab', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /** Acts twice 500 ms apart, then leaves the page; reports how many timers were pending after the second act and after leaving. */
+  function actTwiceThenLeave(target: () => HTMLElement, unmount: () => void) {
+    fireEvent.click(target())
+    act(() => { vi.advanceTimersByTime(500) })
+    fireEvent.click(target())
+    const afterSecond = vi.getTimerCount()
+    unmount()
+    return { afterSecond, afterUnmount: vi.getTimerCount() }
+  }
+
+  it('Qualification Warnings: the "Saved!" reset', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderSettingsPage()
+    await user.click(screen.getByRole('tab', { name: /qualification warnings/i }))
+    await user.click(screen.getByRole('button', { name: /30 days/i }))
+    await user.click(await screen.findByRole('option', { name: /60 days/i }))
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const pending = actTwiceThenLeave(() => screen.getByRole('button', { name: /^(Save Settings|Saved!)$/ }), unmount)
+
+    expect(pending).toEqual({ afterSecond: 1, afterUnmount: 0 })
+  })
+
+  it('Provider Settings: the "Saved!" reset', async () => {
+    mockUpsertMutate.mockImplementation((_body, opts) => opts?.onSuccess?.())
+    const user = userEvent.setup()
+    const { unmount } = renderSettingsPage()
+    await user.click(screen.getByRole('tab', { name: /provider settings/i }))
+    await user.type(screen.getByText('ABN').nextElementSibling as HTMLInputElement, '1')
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const pending = actTwiceThenLeave(() => screen.getByRole('button', { name: /^(Save Settings|Saved!)$/ }), unmount)
+
+    expect(pending).toEqual({ afterSecond: 1, afterUnmount: 0 })
+  })
+
+  it('Public Holidays: the sync result line', async () => {
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    mockSyncMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.({ holidaysAdded: 3, holidaysUpdated: 1, errors: [] }))
+    const user = userEvent.setup()
+    const { unmount } = renderSettingsPage()
+    await user.click(screen.getByRole('tab', { name: 'Public Holidays' }))
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const pending = actTwiceThenLeave(() => screen.getByRole('button', { name: 'Sync Holidays' }), unmount)
+
+    expect(mockSyncMutate).toHaveBeenCalledTimes(2)
+    expect(pending).toEqual({ afterSecond: 1, afterUnmount: 0 })
   })
 })

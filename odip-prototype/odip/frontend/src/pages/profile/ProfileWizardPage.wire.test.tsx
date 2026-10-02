@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import ProfileWizardPage from './ProfileWizardPage'
 
@@ -44,12 +44,24 @@ function serve(participant: unknown = null) {
   })
 }
 
+/** The '/participants' route: still "Participants list", and it reports the query string and router state the wizard navigated with. */
+function ParticipantsArrival() {
+  const { search, state } = useLocation()
+  return (
+    <div>
+      Participants list
+      <span data-testid="arrival-search">{search}</span>
+      <span data-testid="arrival-state">{JSON.stringify(state)}</span>
+    </div>
+  )
+}
+
 function renderWizard() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   const router = createMemoryRouter([
     { path: '/participants/:id/profile', element: <ProfileWizardPage /> },
     { path: '/participants/:id', element: <p>Participant detail</p> },
-    { path: '/participants', element: <p>Participants list</p> },
+    { path: '/participants', element: <ParticipantsArrival /> },
   ], { initialEntries: ['/participants/participant-1/profile'] })
   return render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>)
 }
@@ -90,6 +102,54 @@ describe('ProfileWizardPage (wire) — completing the profile', () => {
     expect(mockApiPostRaw).toHaveBeenCalledWith('/participants/participant-1/complete-profile', {})
     expect(mockApiPutRaw).not.toHaveBeenCalled()
     expect(await screen.findByText('Participant detail')).toBeInTheDocument()
+  })
+
+  // The end of onboarding: completing the profile finalises the participant, and the organisation's readiness mode decides whether that also
+  // activates them (Warn does; Enforce waits for signed-agreement evidence). An activated participant has left the Onboarding tab, so go and show
+  // them on the Active participants tab, carrying who it was for the tab's one-off confirmation.
+  it('goes to the Active participants tab, naming who is now active, when completing the profile of a participant in onboarding activates them', async () => {
+    mockApiPostRaw.mockResolvedValue({ success: true, data: { id: 'participant-1', fullName: 'Jamie Rivers', isDraft: false, isActive: true } })
+    const user = userEvent.setup()
+    renderWizard()
+    await walkToReview(user)
+
+    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+
+    expect(await screen.findByText('Participants list')).toBeInTheDocument()
+    expect(screen.getByTestId('arrival-search')).toHaveTextContent('?tab=active')
+    expect(JSON.parse(screen.getByTestId('arrival-state').textContent!)).toEqual({
+      participantActivated: { participantId: 'participant-1', name: 'Jamie Rivers' },
+    })
+    expect(screen.queryByText('Participant detail')).not.toBeInTheDocument()
+  })
+
+  it('shows the server\'s evidence reason and stays on the wizard when readiness will not activate the participant yet (Enforce): they stay in onboarding', async () => {
+    // The server refuses Complete Profile for a draft it cannot activate (ParticipantsController.CompleteProfile) and leaves them a draft on Onboarding.
+    mockApiPostRaw.mockRejectedValue(apiError(400, 'This participant cannot be activated until their signed service agreement evidence is recorded.'))
+    const user = userEvent.setup()
+    renderWizard()
+    await walkToReview(user)
+
+    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This participant cannot be activated until their signed service agreement evidence is recorded.')
+    expect(screen.queryByText('Participant detail')).not.toBeInTheDocument()
+    expect(screen.queryByText('Participants list')).not.toBeInTheDocument()
+    // Still usable: the button is back, so the coordinator can retry once the evidence is recorded.
+    expect(screen.getByRole('button', { name: /complete profile/i })).toBeEnabled()
+  })
+
+  it('returns to the record, not the Active tab, when the participant was already finalised: this edit did not finish an onboarding', async () => {
+    serve({ isDraft: false, isActive: true })
+    mockApiPostRaw.mockResolvedValue({ success: true, data: { id: 'participant-1', fullName: 'Jamie Rivers', isDraft: false, isActive: true } })
+    const user = userEvent.setup()
+    renderWizard()
+    await walkToReview(user)
+
+    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+
+    expect(await screen.findByText('Participant detail')).toBeInTheDocument()
+    expect(screen.queryByText('Participants list')).not.toBeInTheDocument()
   })
 
   it('shows the server\'s own reason when completing is refused, and stays on the wizard', async () => {

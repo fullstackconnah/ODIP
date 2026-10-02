@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { formatAge, formatDateTimeAu, formatNoteTimestamp, formatRatio, formatRelative, glanceRatio, plural } from './format'
+import { formatAge, formatDateTimeAu, formatNoteTimestamp, formatRatio, formatRelative, glanceRatio, joinList, plural } from './format'
 import { restoreZone, setZone } from '@/test/timeZone'
 
 afterEach(restoreZone)
@@ -23,6 +23,18 @@ describe('plural', () => {
     [2, 'upcoming trip', undefined, '2 upcoming trips'],
   ])('plural(%s, %j, %j) is "%s"', (n, singular, pluralForm, expected) => {
     expect(pluralForm === undefined ? plural(n, singular) : plural(n, singular, pluralForm)).toBe(expected)
+  })
+})
+
+describe('joinList', () => {
+  it.each<[string[], string]>([
+    [[], ''],
+    [['Overdue'], 'Overdue'],
+    [['Overdue', 'QSC Overdue'], 'Overdue and QSC Overdue'],
+    [['Missing Vehicles', 'Open Incidents', 'QSC Overdue'], 'Missing Vehicles, Open Incidents and QSC Overdue'],
+    [['a', 'b', 'c', 'd'], 'a, b, c and d'],
+  ])('joinList(%j) is "%s"', (items, expected) => {
+    expect(joinList(items)).toBe(expected)
   })
 })
 
