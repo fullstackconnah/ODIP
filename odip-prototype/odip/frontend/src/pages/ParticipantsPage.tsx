@@ -100,16 +100,19 @@ function useParticipantsScreen() {
   // profile in onboarding activated them. Held in state so it survives the history-state clear below, and cleared from history so a reload or coming
   // back to this URL later does not replay it.
   const [arrival] = useState(() => readParticipantActivatedNotice(location.state))
+  const [search, setSearch] = useState('')
+  const [view, setView] = useState<View>('active')
+  const [statusNotice, setStatusNotice] = useState<{ message: string; warnings: string[] } | null>(null)
   useEffect(() => {
-    if (arrival) navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+    if (!arrival) return
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+    // The confirmation is mounted one tick after the page, not with it: a status region that is already in the DOM on first paint is often not
+    // announced by a screen reader, while one that appears afterwards is. The highlighted row needs no announcing, so it is there from the start.
+    const timer = window.setTimeout(() => setStatusNotice({ message: `${arrival.name} is now an active participant.`, warnings: [] }), 0)
+    return () => window.clearTimeout(timer)
     // Only the arrival matters: run once for the notice this screen mounted with.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  const [search, setSearch] = useState('')
-  const [view, setView] = useState<View>('active')
-  const [statusNotice, setStatusNotice] = useState<{ message: string; warnings: string[] } | null>(
-    () => (arrival ? { message: `${arrival.name} is now an active participant.`, warnings: [] } : null),
-  )
 
   const deleteParticipant = useDeleteParticipant()
   const restoreParticipant = useRestoreParticipant()

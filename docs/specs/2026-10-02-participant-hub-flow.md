@@ -10,8 +10,8 @@ Onboarding tab listed whoever had a `ParticipantOnboarding` row, so it mixed sta
 
 ## The rule
 
-A participant is in exactly one stage, read from their own flags (`Odip.Api/Services/ParticipantStages.cs`), never from whether an enquiry or an
-onboarding row happens to exist:
+A participant's stage is read from their own flags (`Odip.Api/Services/ParticipantStages.cs`), never from whether an enquiry or an onboarding row
+happens to exist. Every participant is on exactly one of these, a test holds that over every combination of the flags, with one exception (Enforce, below):
 
 | Stage | Flags | Shown on |
 |---|---|---|
@@ -27,7 +27,7 @@ false (the seeded demo draft is one) kept it, so asking "not active" as well lef
 Completing the intake moves a participant from the first two to Onboarding. **Completing the profile** (`POST /participants/{id}/complete-profile`,
 the Profile wizard's Complete Profile) finalises them and, under the organisation's readiness mode, activates them: Warn does; Enforce
 needs verified signed-agreement evidence, which does not exist yet, so Complete Profile is refused (see Enforce below). The wizard then opens
-`/participants?tab=active` with a one-off confirmation. The status endpoint cannot be the step that ends onboarding: it refuses a draft ("Complete
+`/participants?tab=active` with a one-off confirmation (mounted one tick after the page, so a screen reader announces it, with that row highlighted). The status endpoint cannot be the step that ends onboarding: it refuses a draft ("Complete
 their intake and profile first"), and a participant in onboarding is a draft until their profile is complete.
 
 ## Endpoints

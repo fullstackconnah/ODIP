@@ -11,9 +11,9 @@ import { useTabParam } from '@/hooks/useTabParam'
 import { usePermissions } from '@/lib/permissions'
 
 /**
- * Canonical order for the lifecycle-stage tabs. A participant is on exactly one: an open enquiry or an intake in progress (Enquiries), intake
- * complete but not yet active (Onboarding), or finalised (Active participants, with its Archived view). Completing the intake moves them from the
- * first to the second, and completing the profile (which activates them, readiness allowing) to the third.
+ * Canonical order for the lifecycle-stage tabs. A participant is on one: an open enquiry or an intake in progress (Enquiries), a draft with the
+ * intake complete (Onboarding), or finalised (Active participants, with its Archived view). Completing the intake moves them from the first to the
+ * second, and completing the profile (which activates them, readiness allowing) to the third.
  */
 type TabId = 'enquiries' | 'onboarding' | 'active'
 

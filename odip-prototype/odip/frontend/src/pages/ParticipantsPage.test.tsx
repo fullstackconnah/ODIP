@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, RouterProvider, createMemoryRouter } from 'react-router-dom'
 import ParticipantsPage, { ParticipantsTable } from './ParticipantsPage'
@@ -492,12 +492,25 @@ describe('ParticipantsTable: arriving from a completed onboarding', () => {
     return router
   }
 
-  it('confirms who is now active in a polite status message, and highlights that one row only', () => {
+  /** One macrotask: long enough for anything the page schedules for "a tick after load" to have run. */
+  const aTick = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 5)) })
+
+  it('confirms who is now active in a polite status message, and highlights that one row only', async () => {
     renderArrival(participantActivatedState('p1', 'Jamie Smith'))
 
-    expect(screen.getByRole('status')).toHaveTextContent('Jamie Smith is now an active participant.')
+    expect(await screen.findByRole('status')).toHaveTextContent('Jamie Smith is now an active participant.')
     expect(screen.getByText('Jamie Smith').closest('tr')).toHaveClass(HIGHLIGHT)
     expect(screen.getByText('Avery Lee').closest('tr')).not.toHaveClass(HIGHLIGHT)
+  })
+
+  it('mounts the confirmation one tick after the page, not with it, so a screen reader announces it: a live region already in the DOM on first paint often is not', async () => {
+    renderArrival(participantActivatedState('p1', 'Jamie Smith'))
+
+    // The page and the highlighted row are there on first paint; the status region is not yet.
+    expect(screen.getByText('Jamie Smith').closest('tr')).toHaveClass(HIGHLIGHT)
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Jamie Smith is now an active participant.')
   })
 
   it('shows it once: the notice is cleared from history state, so a reload does not replay it, while it stays on screen', async () => {
@@ -505,11 +518,12 @@ describe('ParticipantsTable: arriving from a completed onboarding', () => {
 
     await waitFor(() => expect(router.state.location.state).toBeNull())
     expect(router.state.location.pathname + router.state.location.search).toBe('/participants?tab=active')
-    expect(screen.getByRole('status')).toHaveTextContent(/now an active participant/i)
+    expect(await screen.findByRole('status')).toHaveTextContent(/now an active participant/i)
   })
 
-  it('shows no confirmation and highlights nothing for an ordinary visit, or for unrecognised navigation state', () => {
+  it('shows no confirmation and highlights nothing for an ordinary visit, or for unrecognised navigation state', async () => {
     renderArrival({ participantActivated: { participantId: 42 } })
+    await aTick()
 
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
     for (const row of screen.getAllByRole('row').slice(1)) expect(row).not.toHaveClass(HIGHLIGHT)

@@ -186,7 +186,7 @@ public class ParticipantInquiriesController : ControllerBase
 
     /// <summary>
     /// The participant and their onboarding record, in the caller's tenant. A participant who is in onboarding (see
-    /// <see cref="InOnboardingStage"/>) always has a checklist: when no row was ever stored (the worklist lists them anyway) a blank one is
+    /// <see cref="ParticipantStages.IsInOnboarding"/>) always has a checklist: when no row was ever stored (the worklist lists them anyway) a blank one is
     /// returned, and <paramref name="storeMissingRow"/> adds it to the context so the caller's own save persists it. Any other participant
     /// without a row (a legacy participant who never onboarded here) has no onboarding record: null.
     /// </summary>
