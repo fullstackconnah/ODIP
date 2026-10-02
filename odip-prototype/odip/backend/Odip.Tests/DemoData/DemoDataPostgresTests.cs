@@ -86,6 +86,8 @@ public sealed class DemoDataPostgresFixture : IAsyncLifetime
         return ConnectionStringFor(name);
     }
 
+    // Unpooled, so no idle connection can keep a database from being copied as a template or dropped. The one test that measures speed
+    // (T8) asks for a pool, because production has one: an unpooled idle tick mostly times connection setup.
     private string ConnectionStringFor(string database) =>
         new NpgsqlConnectionStringBuilder(_configured) { Database = database, Pooling = false }.ConnectionString;
 
@@ -170,13 +172,14 @@ public class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixture>
         /// <summary>The same plus the command counter: what the maintainer under test is given.</summary>
         public DbContextOptions<OdipDbContext> CountedOptions { get; }
 
-        public PgEnv(string connectionString, DateTimeOffset now)
+        /// <param name="pooled">Turns connection pooling on, as in production. The fixture hands out unpooled strings.</param>
+        public PgEnv(string connectionString, DateTimeOffset now, bool pooled = false)
         {
-            ConnectionString = connectionString;
+            ConnectionString = pooled ? new NpgsqlConnectionStringBuilder(connectionString) { Pooling = true }.ConnectionString : connectionString;
             Clock = new FakeClock(now);
             var audit = new AuditInterceptor(new HttpContextAccessor());
-            AppOptions = new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(connectionString).AddInterceptors(audit).Options;
-            CountedOptions = new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(connectionString).AddInterceptors(audit, Counter).Options;
+            AppOptions = new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(ConnectionString).AddInterceptors(audit).Options;
+            CountedOptions = new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(ConnectionString).AddInterceptors(audit, Counter).Options;
         }
 
         public OdipDbContext AdminDb() => new(AppOptions, DemoDataPostgresFixture.SuperAdmin());
@@ -198,7 +201,18 @@ public class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixture>
         }
     }
 
-    private async Task<PgEnv> NewEnvAsync(DateTimeOffset now) => new(await _pg.NewDatabaseAsync(), now);
+    private async Task<PgEnv> NewEnvAsync(DateTimeOffset now, bool pooled = false) => new(await _pg.NewDatabaseAsync(), now, pooled);
+
+    // Review L5: T8 has to measure what production runs, and production pools its connections. The fixture's databases are unpooled so they can
+    // always be copied and dropped; the one test that measures speed asks for a pool. (Needs no server: nothing here opens a connection.)
+    [Fact]
+    public void TheEnvironmentIsUnpooledByDefault_AndPooledWhenATestThatMeasuresSpeedAsksForIt()
+    {
+        const string unpooled = "Host=localhost;Database=x;Username=u;Password=p;Pooling=false";
+
+        Assert.False(new NpgsqlConnectionStringBuilder(new PgEnv(unpooled, Friday).ConnectionString).Pooling);
+        Assert.True(new NpgsqlConnectionStringBuilder(new PgEnv(unpooled, Friday, pooled: true).ConnectionString).Pooling);
+    }
 
     /// <summary>A snapshot key ("Type|id") whose id is a <see cref="DemoIds"/> id: name-based, version nibble 8.</summary>
     private static bool IsDemoId(string key) => Guid.TryParse(key[(key.IndexOf('|') + 1)..], out var id) && id.ToString("D")[14] == '8';
@@ -278,7 +292,9 @@ public class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixture>
     public async Task Postgres_T8_TheFirstTickIsWithinFifteenSeconds_AndAnIdleTickIsUnder500msAndFortyQueries()
     {
         Require();
-        var env = await NewEnvAsync(Friday);
+        // Pooled, as production runs (review L5): unpooled, every one of an idle tick's dozen queries opens and authenticates a connection of
+        // its own, so the budget would mostly time connection setup and could fail on a busy shared runner while saying nothing about prod.
+        var env = await NewEnvAsync(Friday, pooled: true);
         await env.SeedOldSeedAsync();
 
         var started = Stopwatch.StartNew();
@@ -287,18 +303,26 @@ public class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixture>
         Assert.True(first.Failures.Count == 0, string.Join("; ", first.Failures.Select(f => $"{f.Pack}: {f.Message}")));
         Assert.True(started.Elapsed < TimeSpan.FromSeconds(15), $"the first tick took {started.Elapsed.TotalSeconds:0.0} s (budget 15 s)");
 
-        // A maintainer that has already ticked once, so JIT and connections are warm, and a tick with nothing to do.
+        // A maintainer that has already ticked once, so JIT and the pool are warm, and then ticks with nothing to do. The time budget is for
+        // the fastest of three: a pause on a shared runner (a GC, a noisy neighbour) can stall one tick but not all three, whereas a
+        // regression that makes every idle tick slow still fails. The command count is deterministic, so every tick must meet it.
         var maintainer = env.Maintainer();
         await maintainer.RunAsync(env.CountedOptions, CancellationToken.None);
-        env.Counter.Reset();
-        var idle = Stopwatch.StartNew();
-        var result = await maintainer.RunAsync(env.CountedOptions, CancellationToken.None);
-        idle.Stop();
+        var millis = new List<long>();
+        for (var i = 0; i < 3; i++)
+        {
+            env.Counter.Reset();
+            var idle = Stopwatch.StartNew();
+            var result = await maintainer.RunAsync(env.CountedOptions, CancellationToken.None);
+            idle.Stop();
 
-        Assert.Equal(DemoTickStatus.Ran, result.Status);
-        Assert.Equal(0, result.RowsAdded.Values.Sum() + result.RowsChanged.Values.Sum());
-        Assert.True(idle.ElapsedMilliseconds < 500, $"an idle tick took {idle.ElapsedMilliseconds} ms (budget 500 ms)");
-        Assert.True(env.Counter.Count <= 40, $"an idle tick sent {env.Counter.Count} commands (budget 40)");
+            Assert.Equal(DemoTickStatus.Ran, result.Status);
+            Assert.Equal(0, result.RowsAdded.Values.Sum() + result.RowsChanged.Values.Sum());
+            Assert.True(env.Counter.Count <= 40, $"idle tick {i + 1} sent {env.Counter.Count} commands (budget 40)");
+            millis.Add(idle.ElapsedMilliseconds);
+        }
+
+        Assert.True(millis.Min() < 500, $"the idle ticks took {string.Join(", ", millis)} ms (budget 500 ms for the fastest of three)");
     }
 
     // ── T9 ───────────────────────────────────────────────────────────────────
