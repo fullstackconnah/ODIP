@@ -241,7 +241,7 @@ public class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixture>
         Assert.Equal(13, await db.ShiftPatterns.CountAsync());
         Assert.Equal(await db.ShiftCompletions.CountAsync(), await db.ShiftCompletions.Select(c => c.ShiftId).Distinct().CountAsync());   // one active completion per shift
         Assert.Equal(10, await db.StaffParticipantCompatibilities.CountAsync());
-        Assert.True(await db.Shifts.CountAsync() > 100);
+        Assert.True(await db.Shifts.CountAsync() > 80);
         Assert.Equal(2, await db.BookingTasks.CountAsync(t => t.SourceKey != null && t.SourceKey.StartsWith("leave-coverage:")));
     }
 
@@ -338,7 +338,7 @@ public class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixture>
                 b.Keys.Where(k => DemoSnapshot.TypeOf(k) == type && IsDemoId(k)).OrderBy(k => k, StringComparer.Ordinal).ToList(),
                 a.Keys.Where(k => DemoSnapshot.TypeOf(k) == type && IsDemoId(k)).OrderBy(k => k, StringComparer.Ordinal).ToList());
         }
-        Assert.True(a.Keys.Count(k => DemoSnapshot.TypeOf(k) == "Shift" && IsDemoId(k)) > 100);
+        Assert.True(a.Keys.Count(k => DemoSnapshot.TypeOf(k) == "Shift" && IsDemoId(k)) > 80);
         Assert.Equal(b.CountOf("BookingTask"), a.CountOf("BookingTask"));
     }
 

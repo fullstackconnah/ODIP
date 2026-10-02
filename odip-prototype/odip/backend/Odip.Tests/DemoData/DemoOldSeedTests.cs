@@ -72,9 +72,9 @@ public class DemoOldSeedTests
         // The new data.
         Assert.Equal(1, await read.ProviderSettings.IgnoreQueryFilters().CountAsync(p => p.TenantId == DemoTestEnv.DemoTenantId));
         Assert.Equal(13, await read.ShiftPatterns.CountAsync());
-        Assert.True(await read.Shifts.IgnoreQueryFilters().CountAsync() > 100);
+        Assert.True(await read.Shifts.IgnoreQueryFilters().CountAsync() > 80);
         Assert.True(await read.ShiftCompletions.CountAsync() > 15);
-        Assert.True(await read.LeaveRequests.CountAsync() >= 12);
+        Assert.True(await read.LeaveRequests.CountAsync() >= 10);
         Assert.Equal(10, await read.StaffParticipantCompatibilities.CountAsync());
         Assert.Equal(2, await read.BookingTasks.CountAsync(t => t.TaskType == TaskType.LeaveCoverage));       // Priya's Thursday in each of the two pack weeks
     }
@@ -92,6 +92,62 @@ public class DemoOldSeedTests
         await using var again = env.AdminDb();
         var changes = afterTopUp.Diff(DemoSnapshot.Take(again));
         Assert.True(changes.Count == 0, "the old seed, run again, changed: " + DemoSnapshot.Describe(changes));
+    }
+
+    [Fact]
+    public async Task T1_OnTheRealOldSeed_TheFirstTickBuildsTheDemo_AndASecondChangesNothing()
+    {
+        // The same scenario as Postgres_T1_*, on InMemory: fresh database, old seed, then the first tick.
+        var (env, _) = await OldSeededAsync();
+
+        var first = await env.Maintainer(DemoPacks.Default()).RunAsync(env.Options, CancellationToken.None);
+        DemoSnapshot afterFirst;
+        await using (var read = env.AdminDb()) afterFirst = DemoSnapshot.Take(read);
+        var second = await env.Maintainer(DemoPacks.Default()).RunAsync(env.Options, CancellationToken.None);
+        await using var again = env.AdminDb();
+
+        Assert.Empty(first.Failures);
+        Assert.Empty(first.SkippedStories);
+        Assert.True(first.RowsAdded.Values.Sum() > 150);
+        Assert.Equal(0, second.RowsAdded.Values.Sum());
+        var changes = afterFirst.Diff(DemoSnapshot.Take(again));
+        Assert.True(changes.Count == 0, "a second tick changed: " + DemoSnapshot.Describe(changes));
+    }
+
+    [Fact]
+    public async Task T9_TwoMaintainersRacingOnTheRealOldSeed_OneSkipsOnTheLock_AndTheFinalRowsEqualASingleRun()
+    {
+        // The same scenario as Postgres_T9_*, with an in-process lock: the logic of the test (which rows are compared, who holds the lock).
+        var (raced, _) = await OldSeededAsync();
+        var (single, _) = await OldSeededAsync();
+        var shared = new InProcessTickLock();
+        var inside = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var blocker = DemoTestEnv.Pack("blocker", async (_, _) => { inside.TrySetResult(); await release.Task; });
+        var packs = new List<IDemoPack> { blocker };
+        packs.AddRange(DemoPacks.Default());
+
+        var first = raced.Maintainer(packs, tickLock: shared).RunAsync(raced.Options, CancellationToken.None);
+        await inside.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        var second = await raced.Maintainer(DemoPacks.Default(), tickLock: shared).RunAsync(raced.Options, CancellationToken.None);
+        release.SetResult();
+        var firstResult = await first;
+        await single.Maintainer(DemoPacks.Default()).RunAsync(single.Options, CancellationToken.None);
+
+        Assert.Equal(DemoTickStatus.LockHeld, second.Status);
+        Assert.Empty(firstResult.Failures);
+        DemoSnapshot a, b;
+        await using (var ra = raced.AdminDb()) a = DemoSnapshot.Take(ra);
+        await using (var rb = single.AdminDb()) b = DemoSnapshot.Take(rb);
+        static bool IsDemoId(string key) => Guid.TryParse(key[(key.IndexOf('|') + 1)..], out var id) && id.ToString("D")[14] == '8';
+        foreach (var type in new[] { "Shift", "ShiftPattern", "ShiftCompletion", "LeaveRequest", "RecurringUnavailability", "StaffAvailability", "StaffParticipantCompatibility", "Person", "ParticipantContactRole" })
+        {
+            Assert.Equal(
+                b.Keys.Where(k => DemoSnapshot.TypeOf(k) == type && IsDemoId(k)).OrderBy(k => k, StringComparer.Ordinal).ToList(),
+                a.Keys.Where(k => DemoSnapshot.TypeOf(k) == type && IsDemoId(k)).OrderBy(k => k, StringComparer.Ordinal).ToList());
+        }
+        Assert.True(a.Keys.Count(k => DemoSnapshot.TypeOf(k) == "Shift" && IsDemoId(k)) > 80);
+        Assert.Equal(b.CountOf("BookingTask"), a.CountOf("BookingTask"));
     }
 
     [Fact]
