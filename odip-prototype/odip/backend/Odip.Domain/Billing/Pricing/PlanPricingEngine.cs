@@ -71,9 +71,11 @@ public static class PlanPricingEngine
             var seen = new HashSet<string>(StringComparer.Ordinal);
             var states = new SortedSet<string>(StringComparer.Ordinal);
             var runsPastTheLastDay = false;
+            var windows = new List<OccurrenceWindow>();
 
-            foreach (var block in blocks)
+            for (var blockIndex = 0; blockIndex < blocks.Count; blockIndex++)
             {
+                var block = blocks[blockIndex];
                 if (block is null)
                 {
                     issues.Add(string.Empty, PlanFailureReason.InvalidInput, "A block in the list is missing.", null);
@@ -130,6 +132,8 @@ public static class PlanPricingEngine
 
                     occurrences++;
                     blockLines.AddRange(result.Lines);
+                    var windowStart = date.ToDateTime(block.Start);
+                    windows.Add(new OccurrenceWindow(blockIndex, id, date, windowStart, windowStart.AddMinutes(block.DurationMinutes)));
                 }
 
                 lines.AddRange(blockLines);
@@ -137,10 +141,47 @@ public static class PlanPricingEngine
                 blockTotals.Add(new BlockTotal(id, priced.Sum(l => l.Total), SupportHours(priced), occurrences, skipped));
             }
 
+            DetectOverlaps(windows, issues);
             AddHolidayNotices(notices, request, states, runsPastTheLastDay);
         }
 
         return Assemble(request, lines, issues.ToList(), notices, holidayOccurrences, blockTotals);
+    }
+
+    /// <summary>One priced occurrence of a block as the span of the clock it covers: what two blocks are compared on.</summary>
+    private readonly record struct OccurrenceWindow(int BlockIndex, string BlockId, DateOnly Date, DateTime Start, DateTime End);
+
+    /// <summary>
+    /// Blocks that are on at the same time on the same date are each priced in full, so the same participant's hour would be billed under two items. NDIS-CODES 6
+    /// lets a second worker's time be claimed only when both directly support the participant, which is one block with Workers = 2, so an overlap is a Review issue
+    /// naming both blocks, once per pair of blocks with a count of the occurrences affected and the date of the first (the named block's own occurrence).
+    /// Skipped occurrences and refused blocks are not in the list.
+    /// </summary>
+    private static void DetectOverlaps(List<OccurrenceWindow> windows, IssueLog issues)
+    {
+        windows.Sort((a, b) => a.Start != b.Start ? a.Start.CompareTo(b.Start) : a.BlockIndex.CompareTo(b.BlockIndex));
+        var active = new List<OccurrenceWindow>();
+        var pairs = new Dictionary<(int First, int Second), (string FirstId, string SecondId, int Count, DateOnly Date)>();
+        foreach (var window in windows)
+        {
+            active.RemoveAll(other => other.End <= window.Start);
+            foreach (var other in active)
+            {
+                if (other.BlockIndex == window.BlockIndex) continue;
+                // The earlier block of the pair in the request is the one the issue is about.
+                var (first, second) = other.BlockIndex < window.BlockIndex ? (other, window) : (window, other);
+                var key = (first.BlockIndex, second.BlockIndex);
+                pairs[key] = pairs.TryGetValue(key, out var seen) ? seen with { Count = seen.Count + 1 } : (first.BlockId, second.BlockId, 1, first.Date);
+            }
+
+            active.Add(window);
+        }
+
+        // One issue per pair of blocks, in request order, built once however many occurrences overlap.
+        foreach (var (_, pair) in pairs.OrderBy(entry => entry.Key.First).ThenBy(entry => entry.Key.Second))
+            issues.Add(pair.FirstId, PlanFailureReason.BlocksOverlap,
+                $"Blocks '{pair.FirstId}' and '{pair.SecondId}' are on at the same time on the same day, so the same participant's time would be priced twice. For two workers at once use Workers = 2 on one block; otherwise move one of them.",
+                pair.Date, pair.Count);
     }
 
     /// <summary>
@@ -272,7 +313,7 @@ public static class PlanPricingEngine
         private readonly Dictionary<(string, PlanFailureReason, string), Entry> _index = new();
         private readonly List<Entry> _entries = new();
 
-        public void Add(string blockId, PlanFailureReason reason, string message, DateOnly? date)
+        public void Add(string blockId, PlanFailureReason reason, string message, DateOnly? date, int times = 1)
         {
             var key = (blockId, reason, message);
             if (!_index.TryGetValue(key, out var entry))
@@ -281,7 +322,7 @@ public static class PlanPricingEngine
                 _index[key] = entry;
                 _entries.Add(entry);
             }
-            entry.Count++;
+            entry.Count += times;
         }
 
         public IReadOnlyList<PlanIssue> ToList() => _entries.Select(e => new PlanIssue(e.BlockId, e.Reason, e.Message, e.Count, e.First)).ToList();

@@ -481,6 +481,85 @@ public class PlanPricingRulesTests
         Assert.Contains(quote.Issues, i => i.BlockId == "good" && i.Message.Contains("same id"));
     }
 
+    // ── Review M5: blocks that overlap in time ────────────────────────────────────
+
+    private static PlanBlock At(string id, PlanSupportType type, DayOfWeek day, TimeOnly start, TimeOnly end) => Block(id, type, day, start, end);
+
+    [Fact]
+    public void Two_blocks_that_overlap_in_time_on_the_same_date_raise_one_review_issue_naming_both_and_still_price_both()
+    {
+        var a = At("a", PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(9), T(13));
+        var b = At("b", PlanSupportType.PersonalCare, DayOfWeek.Monday, T(12), T(14));
+
+        var quote = Quote(new[] { a, b }, Mon12Oct, Mon12Oct.AddDays(14));   // three Mondays
+
+        var issue = Assert.Single(quote.Issues);
+        Assert.Equal((PlanFailureReason.BlocksOverlap, "a", 3, Mon12Oct), (issue.Reason, issue.BlockId, issue.Count, issue.FirstDate));
+        Assert.Contains("'a'", issue.Message);
+        Assert.Contains("'b'", issue.Message);
+        Assert.Contains("Workers", issue.Message);                                 // the way to say two workers
+        Assert.DoesNotContain("2026", issue.Message);
+        Assert.True(quote.NeedsReview);
+        Assert.Equal(6, quote.Lines.Count);                                      // nothing is dropped: a person decides
+    }
+
+    [Fact]
+    public void Blocks_that_touch_or_sit_on_different_days_do_not_overlap_and_neither_does_one_block_with_two_workers()
+    {
+        var morning = At("morning", PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(9), T(13));
+        var afternoon = At("afternoon", PlanSupportType.PersonalCare, DayOfWeek.Monday, T(13), T(17));   // starts as the first ends
+        var tuesday = At("tuesday", PlanSupportType.CommunityAccess, DayOfWeek.Tuesday, T(9), T(13));
+        var twoWorkers = At("two", PlanSupportType.CommunityAccess, DayOfWeek.Wednesday, T(9), T(13)) with { Workers = 2 };
+
+        var quote = Quote(new[] { morning, afternoon, tuesday, twoWorkers }, Mon12Oct, Mon12Oct.AddDays(6));
+
+        Assert.DoesNotContain(quote.Issues, i => i.Reason == PlanFailureReason.BlocksOverlap);
+    }
+
+    [Fact]
+    public void A_support_that_runs_past_midnight_overlaps_a_block_on_the_next_day()
+    {
+        var late = At("late", PlanSupportType.PersonalCare, DayOfWeek.Monday, T(22), T(2));
+        var early = At("early", PlanSupportType.PersonalCare, DayOfWeek.Tuesday, T(1), T(3));
+        var after = At("after", PlanSupportType.PersonalCare, DayOfWeek.Tuesday, T(2), T(4));
+
+        var quote = Quote(new[] { late, early, after }, Mon12Oct, Mon12Oct.AddDays(1));
+
+        // 'late' (Monday 22:00 to Tuesday 02:00) and 'early' (Tuesday 01:00 to 03:00) overlap for an hour; 'after' starts as 'late' ends, but 'early' runs into it.
+        var issues = quote.Issues.Where(i => i.Reason == PlanFailureReason.BlocksOverlap).ToList();
+        Assert.Equal(new[] { "late", "early" }, issues.Select(i => i.BlockId));
+        Assert.Contains("'late'", issues[0].Message);
+        Assert.Contains("'early'", issues[0].Message);
+        Assert.Contains("'early'", issues[1].Message);
+        Assert.Contains("'after'", issues[1].Message);
+        Assert.Equal(new DateOnly[] { Mon12Oct, Mon12Oct.AddDays(1) }, issues.Select(i => i.FirstDate!.Value));
+    }
+
+    [Fact]
+    public void An_occurrence_that_is_skipped_for_a_holiday_or_a_block_that_is_refused_overlaps_nothing()
+    {
+        var a = At("a", PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(9), T(13)) with { OnPublicHoliday = HolidayDecision.Skip };
+        var b = At("b", PlanSupportType.PersonalCare, DayOfWeek.Monday, T(12), T(14)) with { OnPublicHoliday = HolidayDecision.Skip };
+        var refused = At("refused", PlanSupportType.PersonalCare, DayOfWeek.Tuesday, T(9), T(13));
+        var other = At("other", PlanSupportType.CommunityAccess, DayOfWeek.Tuesday, T(9), T(13));
+        var holiday = new HolidayEntry(Mon12Oct, "NSW", "A holiday", null, null, "test");
+
+        var quote = Quote(new[] { a, b, refused, other }, Mon12Oct, Mon12Oct.AddDays(1), Without("0107"), new[] { holiday });
+
+        Assert.DoesNotContain(quote.Issues, i => i.Reason == PlanFailureReason.BlocksOverlap);
+        Assert.Contains(quote.Issues, i => i.Reason == PlanFailureReason.RegistrationGroupNotHeld);
+    }
+
+    [Fact]
+    public void Three_blocks_on_top_of_each_other_are_three_pairs()
+    {
+        var blocks = new[] { "a", "b", "c" }.Select(id => At(id, PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(9), T(13))).ToList();
+
+        var quote = Quote(blocks, Mon12Oct, Mon12Oct);
+
+        Assert.Equal(new[] { "a", "a", "b" }, quote.Issues.Where(i => i.Reason == PlanFailureReason.BlocksOverlap).Select(i => i.BlockId));
+    }
+
     // ── Totals, order and the cancellation ceiling ────────────────────────────────
 
     [Fact]

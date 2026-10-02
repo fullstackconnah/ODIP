@@ -71,6 +71,8 @@ public enum PlanFailureReason
     SleepoverClockChange = 14,
     /// <summary>26 December or 25 April, which the pricing schedule names as public holidays, falls in the period and the holiday calendar has no row for the state on that date: priced as an ordinary day and left for a person (Charge prices it as a holiday, Skip drops it).</summary>
     NamedDateNotInCalendar = 15,
+    /// <summary>Two blocks of the quote are on at the same time on the same date, so the same participant's time would be priced twice. Two workers at once are one block with Workers = 2.</summary>
+    BlocksOverlap = 16,
 }
 
 /// <summary>Why a line is priced the way it is: the rules applied, the catalogue row and the dates it was priced from, and the group arithmetic.</summary>
