@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.DemoData;
+using Odip.Infrastructure.DemoData.Packs;
 
 namespace Odip.Tests.DemoData;
 
@@ -10,6 +11,9 @@ namespace Odip.Tests.DemoData;
 /// credential flags, and the seventeen participants the stories use with the NDIS numbers and the support-need flags the roster checks read
 /// (wheelchair, hoist, high support, overnight). Pack tests use this because it is fast and does not shift when somebody else edits the
 /// big seed. The tests that must hold against the REAL seed (the old-seed database, T3, and the board codes) run DbSeeder itself.
+///
+/// It also holds the six of the old seed's fifteen medications the stories use (fixed ids, schedules and flags as in DbSeeder.SeedMedicationsAsync),
+/// because the top-up writes no medication unless the old seed's register is already there (plan 4.5).
 /// </summary>
 internal static class DemoFixture
 {
@@ -58,8 +62,11 @@ internal static class DemoFixture
 
     public static Guid ParticipantId(string key) => Guid.Parse(Participants.Single(p => p.Key == key).Id);
 
-    /// <summary>Adds the Demo tenant (if it is not there yet), the eleven users and the seventeen participants.</summary>
-    public static async Task SeedPeopleAsync(DemoTestEnv env)
+    /// <summary>
+    /// Adds the Demo tenant (if it is not there yet), the eleven users and the seventeen participants, and (unless told not to) the six old-seed
+    /// medications the stories use. A database the old seed has not touched has none, which is what the "first row of a guarded table" tests need.
+    /// </summary>
+    public static async Task SeedPeopleAsync(DemoTestEnv env, bool oldSeedMedications = true)
     {
         await using var probe = env.AdminDb();
         if (!await probe.Tenants.AnyAsync(t => t.Id == DemoTestEnv.DemoTenantId)) await env.AddTenantAsync();
@@ -88,6 +95,29 @@ internal static class DemoFixture
                 IsActive = true, IsHighSupport = p.High, OvernightSupport = p.Overnight, MobilityAidWheelchair = p.Wheelchair, RequiresHoist = p.Hoist,
             });
         }
+        if (oldSeedMedications) foreach (var m in OldSeedMedications()) db.ParticipantMedications.Add(m);
         await db.SaveChangesAsync();
+    }
+
+    private static IEnumerable<ParticipantMedication> OldSeedMedications()
+    {
+        ParticipantMedication Med(Guid id, string participant, string name, string strength, string dose, MedicationType type, string? times,
+            MedicationForm form = MedicationForm.Tablet, MedicationRoute route = MedicationRoute.Oral, bool highRisk = false, int? prnMax = null,
+            int? prnInterval = null) => new()
+        {
+            Id = id, TenantId = DemoTestEnv.DemoTenantId, ParticipantId = ParticipantId(participant), Name = name, Strength = strength, Form = form, Route = route,
+            DoseDescription = dose, Type = type, TimesOfDay = times, PrnIndication = type == MedicationType.Prn ? "Mild-moderate pain or fever" : null,
+            PrnMaxDosesPer24h = prnMax, PrnMinIntervalMinutes = prnInterval, IsHighRisk = highRisk, IsHighIntensitySupport = highRisk,
+            SupportLevel = MedicationSupportLevel.Administer, StartDate = new DateTime(2026, 2, 1), Status = MedicationStatus.Active,
+        };
+
+        yield return Med(MedicationCatalog.Levetiracetam, "sophie", "Levetiracetam", "500mg", "1 tablet (500mg)", MedicationType.Regular, "08:00,20:00");
+        yield return Med(MedicationCatalog.Paracetamol, "sophie", "Paracetamol", "500mg", "2 tablets (1000mg)", MedicationType.Prn, null, prnMax: 4, prnInterval: 240);
+        yield return Med(MedicationCatalog.CharlotteSertraline, "charlotte", "Sertraline", "50mg", "1 tablet (50mg)", MedicationType.Regular, "08:00");
+        yield return Med(MedicationCatalog.InsulinGlargine, "harrison", "Insulin Glargine", "100units/mL", "18 units subcutaneously", MedicationType.Regular, "08:00",
+            MedicationForm.Injection, MedicationRoute.Subcutaneous, highRisk: true);
+        yield return Med(MedicationCatalog.Movicol, "olivia", "Movicol (Macrogol)", "13.7g/sachet", "1 sachet", MedicationType.Regular, "08:00",
+            MedicationForm.Powder, MedicationRoute.Enteral);
+        yield return Med(MedicationCatalog.MiaSertraline, "mia", "Sertraline", "50mg", "1 tablet (50mg)", MedicationType.Regular, "08:00");
     }
 }

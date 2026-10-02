@@ -66,6 +66,7 @@ public sealed class DemoTenantGuard
         typeof(BookingTask),
         typeof(Person),
         typeof(ParticipantContactRole),
+        typeof(ParticipantMedication),
     };
 
     /// <summary>Non-tenant tables the top-up may add rows to, and which parent each row must hang off.</summary>

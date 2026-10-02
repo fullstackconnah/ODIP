@@ -156,7 +156,7 @@ public class DemoOldSeedTests
         // The old seeds that open with "if (await ctx.X.AnyAsync()) return;" must still find X empty if the top-up ran first on a database the
         // old seed has not touched: here, a bare Demo tenant with only the people (as a half-restored database would be).
         var env = new DemoTestEnv(TwoMonthsOn);
-        await DemoFixture.SeedPeopleAsync(env);
+        await DemoFixture.SeedPeopleAsync(env, oldSeedMedications: false);
 
         await env.Maintainer(DemoPacks.Default()).RunAsync(env.Options, CancellationToken.None);
 

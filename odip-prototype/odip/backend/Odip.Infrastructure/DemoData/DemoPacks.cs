@@ -19,5 +19,6 @@ public static class DemoPacks
         new LeaveAndAvailabilityPack(),
         new RosterWeeksPack(),
         new LeaveCoverageTasksPack(),
+        new MedicationsPack(),
     };
 }

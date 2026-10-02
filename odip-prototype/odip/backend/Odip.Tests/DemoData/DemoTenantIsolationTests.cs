@@ -128,6 +128,7 @@ public class DemoTenantIsolationTests
         demoEntityIds.UnionWith(await db.BookingTasks.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
         demoEntityIds.UnionWith(await db.People.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
         demoEntityIds.UnionWith(await db.ParticipantContactRoles.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
+        demoEntityIds.UnionWith(await db.ParticipantMedications.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
         var newAudit = (await db.AuditLogs.ToListAsync()).Where(a => !auditBefore.Contains(a.Id)).ToList();
         Assert.True(newAudit.Count > 100, "the top-up's rows are audited like anyone's");
         Assert.All(newAudit, a => Assert.Contains(a.EntityId, demoEntityIds));
