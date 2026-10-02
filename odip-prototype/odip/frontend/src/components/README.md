@@ -39,6 +39,7 @@ copying it.
 - [Tabs](#tabs) and [useTabParam](#usetabparam) (the active tab in the URL)
 - [ActionButtons](#actionbuttons)
 - [Touch hit areas](#touch-hit-areas) (`TAP_AREA`, `TAP_FLOOR`, `TAP_AREA_LINKS`, `--tap-min`)
+- [useToast](#usetoast) (`hooks/useToast.tsx`: one transient message, a success that clears itself and an error that stays)
 - [ErrorBoundary](#errorboundary)
 - [Picking a picker](#picking-a-picker) (Dropdown vs SearchableSelect vs ToggleGroup)
 
@@ -1047,6 +1048,23 @@ Three more pieces of the same story (all in `tapArea.ts` or built on it):
 - **`ActionButtons`** carries `TAP_ICON_SQUARE` on each icon control: the `--control-h-sm` square (36px) under coarse
   wherever it sits (a DataTable row or a card), and it opens its gap from 4px to 8px there so the pads touch and never
   overlap.
+
+---
+
+## useToast
+
+`hooks/useToast.tsx` is one transient message, floating bottom-right (above the mobile nav below `lg`), for the outcome of something whose surface has already gone: a slide-over that closed on a
+successful create, or a row action that has no panel at all. A success is announced politely (`role="status"`) and clears itself after `TOAST_SUCCESS_MS` (10 seconds). An error is announced
+assertively (`role="alert"`) and stays until it is dismissed, because it asks the person to do something. It draws a `Callout`, so the tones and the ARIA roles are the Callout's.
+
+```tsx
+const { toast, notify } = useToast()        // in the page that owns the panels
+<UserFormPanel onNotify={notify} … />        // children call notify('success' | 'error', message)
+{toast}                                      // rendered once
+```
+
+A newer message replaces the one showing and restarts the clock. `notify` is stable, so it can be passed down as a prop (`Notify` is the exported type) without re-rendering the child. **When not to
+use**: a failure the person must see next to the field that caused it (an inline error, or a `Callout` in the form), or anything they must answer before going on (a `ConfirmDialog`).
 
 ---
 
