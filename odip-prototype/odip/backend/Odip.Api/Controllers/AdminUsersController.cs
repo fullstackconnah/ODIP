@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using FirebaseAdmin.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -430,8 +431,10 @@ public class AdminUsersController : ControllerBase
         try
         {
             var result = await _firebaseUserService.EnsureSignInAccountAsync(email, user.FullName, ct);
-            return Ok(ApiResponse<SignInAccountDto>.Ok(new SignInAccountDto(
-                result == SignInAccountResult.Created ? FirebaseAccountStatus.Created : FirebaseAccountStatus.Existing)));
+            var account = result == SignInAccountResult.Created ? FirebaseAccountStatus.Created : FirebaseAccountStatus.Existing;
+            // No audit record exists yet (the email itself goes from the browser to Firebase), so this line is the only trace of who asked for it.
+            _logger.LogInformation("Sign-in account for user {TargetUserId} was {Account}, as asked by {ActorUserId}", user.Id, account, User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown");
+            return Ok(ApiResponse<SignInAccountDto>.Ok(new SignInAccountDto(account)));
         }
         catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex))
         {

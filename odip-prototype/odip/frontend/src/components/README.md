@@ -40,6 +40,7 @@ copying it.
 - [ActionButtons](#actionbuttons)
 - [Touch hit areas](#touch-hit-areas) (`TAP_AREA`, `TAP_FLOOR`, `TAP_AREA_LINKS`, `--tap-min`)
 - [NoticesRegion](#noticesregion) (`hooks/useNotices.ts`: what became of a row or detail-page action, kept at the top until dismissed)
+- [AnnouncementRegion](#announcementregion) (`hooks/useRefocusWhenLost.ts`: a create's done view, audible and with focus kept)
 - [ErrorBoundary](#errorboundary)
 - [Picking a picker](#picking-a-picker) (Dropdown vs SearchableSelect vs ToggleGroup)
 
@@ -1074,8 +1075,25 @@ notify('danger', person.fullName, message, person.id)   // title: who it is abou
 - **What it reports today** is only the set-password email (`lib/signInEmail.ts` words it). That flow exists only while people sign in with an email and a password: the SSO plan (`docs/odip-changes-todo.md`, "Harden the token exchange") disables
   that provider and retires the emails, the two sign-in-account routes and the temporary-password option with it. The region and the hook are generic and stay.
 - **When not to use**: the result of a CREATE belongs in the panel's own done state (a `SignInEmailOutcome` Callout and a Done button, as in `UserFormPanel`), which stays open until the person closes it; a failure
-  next to a field is an inline error. (A first version of this was a floating toast; it was dropped because it could cover the next panel's Create button and replaced an unread error with a later success.)
+  next to a field is an inline error.
 ---
+
+## AnnouncementRegion
+
+`components/AnnouncementRegion.tsx` with `hooks/useRefocusWhenLost.ts` makes a create's DONE view usable without sight: a form swapped in place for its outcome (`UserFormPanel`, `TenantFormPanel`, `StaffCreatePage`).
+The focused Create button unmounts in that swap, so focus falls to the top of the page and a Callout that appears already holding its text is announced unreliably.
+
+```tsx
+const doneLine = useRef<HTMLParagraphElement>(null)
+useRefocusWhenLost(doneLine, done)                 // focus the done line after each change, but only if focus was lost
+<AnnouncementRegion message={announcement} />      // FIRST in the content, in the form view AND the done view, so React keeps the same node
+<p ref={doneLine} tabIndex={-1} className="... focus:outline-none">{name} was created.</p>
+<SignInEmailOutcome ... announce={false} />        // the visible Callout does not announce itself as well
+```
+
+- **One sentence, two places.** The announcement and the visible text come from the same function (`describeEmailOutcome`, `describeTypedPassword`, `TENANT_FIRST_USER_ACCOUNT_FAILED` in `lib/signInEmail.ts`), so they cannot drift apart.
+- **Focus only when lost.** `useRefocusWhenLost` moves focus after the swap, and again when a retry removes the button that had it, but leaves it alone when a control that still exists holds it (a Send again that failed and is still there).
+- **Sends in a done view are `aria-disabled` while they send**, with a guard in the handler, like the table's.
 
 ## ErrorBoundary
 

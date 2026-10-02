@@ -305,8 +305,9 @@ export default function TenantFormPanel({
   }
 
   // Unsaved edits: every field as it is now against what the open effect above put there (the tenant's own values in edit
-  // mode, blanks in create mode). The two arrays list the fields in the same order. Once the save has gone through (the
-  // "Tenant created" notice, up to the auto-close) there is nothing left to lose.
+  // mode, blanks in create mode). The two arrays list the fields in the same order. Once an EDIT has been saved (the
+  // "Tenant updated" notice, up to the auto-close) there is nothing left to lose. A create never gets here: it ends in the done
+  // view above, which passes dirty={false} itself.
   const current = JSON.stringify([
     name, emailDomain, isActive, registrationNumber, abn, orgName, address, state, gstRegistered, isPaceProvider,
     bankAccountName, bsb, accountNumber, invoiceFooterNotes, firstName, lastName, email, username, role, userPassword,

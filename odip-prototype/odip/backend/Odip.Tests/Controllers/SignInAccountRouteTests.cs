@@ -57,8 +57,29 @@ public class SignInAccountRouteTests
         return new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
     }
 
-    private static AdminUsersController AdminController(OdipDbContext db, Mock<IFirebaseUserService> firebase) =>
-        new(db, new Mock<ILogger<AdminUsersController>>().Object, firebase.Object);
+    private static AdminUsersController AdminController(OdipDbContext db, Mock<IFirebaseUserService> firebase, ILogger<AdminUsersController>? logger = null) =>
+        new(db, logger ?? new Mock<ILogger<AdminUsersController>>().Object, firebase.Object);
+
+    /// <summary>A caller with a role and an id: what the JWT's NameIdentifier and Role claims give a controller.</summary>
+    private static ControllerContext ActingAs(string role, Guid actorId) => new()
+    {
+        HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, role), new Claim(ClaimTypes.NameIdentifier, actorId.ToString())], "Test")),
+        },
+    };
+
+    /// <summary>One Information line that names every fragment (the people involved and what happened), and no other.</summary>
+    private static void VerifyOneInformationLine<T>(Mock<ILogger<T>> logger, params string[] fragments) =>
+        logger.Verify(l => l.Log(
+            LogLevel.Information, It.IsAny<EventId>(),
+            It.Is<It.IsAnyType>((state, _) => fragments.All(fragment => state.ToString()!.Contains(fragment))),
+            It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+
+    private static void VerifyNoInformationLine<T>(Mock<ILogger<T>> logger) =>
+        logger.Verify(l => l.Log(
+            LogLevel.Information, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Never);
 
     private static async Task<User> SeedAdminSideUser(OdipDbContext db, string email, bool isActive = true)
     {
@@ -198,6 +219,37 @@ public class SignInAccountRouteTests
         [new InvalidOperationException("simulated Firebase outage")],
     ];
 
+    // There is no audit record yet (the email itself goes from the browser to Firebase), and an account made here leaves no other trace of who asked
+    // for it: so the routes log, at Information, who asked, for whom, and whether the account was made or already there.
+    [Theory]
+    [InlineData(SignInAccountResult.Created, "created")]
+    [InlineData(SignInAccountResult.Existing, "existing")]
+    public async Task AdminUsers_route_logs_who_asked_for_whose_account_and_whether_it_was_made_or_already_there(SignInAccountResult result, string word)
+    {
+        using var db = AdminDb();
+        var user = await SeedAdminSideUser(db, "sam.staff@acme.example.com");
+        var actorId = Guid.NewGuid();
+        var logger = new Mock<ILogger<AdminUsersController>>();
+        var controller = AdminController(db, FirebaseReturning(result), logger.Object);
+        controller.ControllerContext = ActingAs("SuperAdmin", actorId);
+
+        await controller.EnsureSignInAccount(user.Id, CancellationToken.None);
+
+        VerifyOneInformationLine(logger, actorId.ToString(), user.Id.ToString(), word);
+    }
+
+    [Fact]
+    public async Task AdminUsers_route_logs_no_Information_line_when_it_refuses_because_no_account_was_made()
+    {
+        using var db = AdminDb();
+        var user = await SeedAdminSideUser(db, "sam.staff@placeholder.local");
+        var logger = new Mock<ILogger<AdminUsersController>>();
+
+        await AdminController(db, FirebaseReturning(SignInAccountResult.Created), logger.Object).EnsureSignInAccount(user.Id, CancellationToken.None);
+
+        VerifyNoInformationLine(logger);
+    }
+
     [Fact]
     public async Task AdminUsers_route_is_a_404_for_an_unknown_user()
     {
@@ -247,13 +299,12 @@ public class SignInAccountRouteTests
         return (db, tenantId);
     }
 
-    private static StaffController StaffControllerFor(OdipDbContext db, string actorRole, Mock<IFirebaseUserService> firebase)
+    private static StaffController StaffControllerFor(OdipDbContext db, string actorRole, Mock<IFirebaseUserService> firebase, ILogger<StaffController>? logger = null, Guid? actorId = null)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Auth:SuperAdminDomain"] = SuperAdminDomain }).Build();
-        var identity = new ClaimsIdentity([new Claim(ClaimTypes.Role, actorRole)], "Test");
-        return new StaffController(db, config: config, firebaseUserService: firebase.Object)
+        return new StaffController(db, config: config, firebaseUserService: firebase.Object, logger: logger)
         {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } },
+            ControllerContext = ActingAs(actorRole, actorId ?? Guid.NewGuid()),
         };
     }
 
@@ -383,6 +434,33 @@ public class SignInAccountRouteTests
         var message = Assert.IsType<ApiResponse<SignInAccountDto>>(status.Value).Errors!.Single();
         Assert.Equal($"Unable to set up the staff member's sign-in account. {NeutralFailureEnding}", message);
         Assert.DoesNotContain("try again", message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(SignInAccountResult.Created, "created")]
+    [InlineData(SignInAccountResult.Existing, "existing")]
+    public async Task Staff_route_logs_who_asked_for_whose_account_and_whether_it_was_made_or_already_there(SignInAccountResult result, string word)
+    {
+        var (db, tenantId) = StaffDb();
+        var staff = await SeedStaff(db, tenantId, "sam.staff@acme.example.com");
+        var actorId = Guid.NewGuid();
+        var logger = new Mock<ILogger<StaffController>>();
+
+        await StaffControllerFor(db, "Coordinator", FirebaseReturning(result), logger.Object, actorId).EnsureSignInAccount(staff.Id, CancellationToken.None);
+
+        VerifyOneInformationLine(logger, actorId.ToString(), staff.Id.ToString(), word);
+    }
+
+    [Fact]
+    public async Task Staff_route_logs_no_Information_line_when_it_refuses_because_no_account_was_made()
+    {
+        var (db, tenantId) = StaffDb();
+        var staff = await SeedStaff(db, tenantId, "sam.staff@placeholder.local");
+        var logger = new Mock<ILogger<StaffController>>();
+
+        await StaffControllerFor(db, "Admin", FirebaseReturning(SignInAccountResult.Created), logger.Object).EnsureSignInAccount(staff.Id, CancellationToken.None);
+
+        VerifyNoInformationLine(logger);
     }
 
     [Fact]

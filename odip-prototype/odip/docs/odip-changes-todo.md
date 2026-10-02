@@ -288,7 +288,11 @@ owner decision (collected under Open Flags at the end).
     Users tab). The browser then asks Firebase to email the set-password link. An address
     on `Auth:SuperAdminDomain` signs in as SuperAdmin whatever the user's role, so the
     staff routes (create, an edit that changes the address, and this one) refuse such an
-    address unless the caller is a SuperAdmin.
+    address unless the caller is a SuperAdmin. A staff edit also refuses, for anyone but a
+    SuperAdmin, to reactivate a row already on that domain or change its role. Both routes
+    refuse an address the app invented (`@placeholder.local`, from the staff/user unification
+    migration) and log at Information who asked, for whom, and whether the account was
+    created or already existed: there is no audit record yet.
   - Any address signs in. The exchange no longer maps the address's domain to a tenant: it
     finds the one active user with that address (compared lower-case) across tenants and
     uses that user's tenant. No match, an inactive tenant, and two active rows with the
