@@ -25,16 +25,16 @@ import {
 // so their lines say so, and a count of one reads in the singular.
 const tripsStart = (n: number) => (n === 1 ? 'Trip starts' : 'Trips start')
 
-// The title: a greeting by the hour with today's date after it, both read from the viewer's clock (lib/greeting.ts) and refreshed every minute (`useNow`), so a page
-// left open since the morning is not still saying "Good morning" at three, or yesterday's date at midnight. Its own component, so the tick re-renders the header and not
-// the whole page. The tab keeps naming the page, whatever the hour: the `h1` is the greeting, the document title stays "Management Dashboard".
-function DashboardHeader({ fullName, upcomingTrips, activeParticipants, outstandingTasks }: {
+// The title: a greeting by the hour with today's date after it, both read from the viewer's clock (lib/greeting.ts), which the page refreshes every minute (`useNow`), so a
+// page left open since the morning is not still saying "Good morning" at three, or yesterday's date at midnight. The tab keeps naming the page, whatever the hour: the `h1`
+// is the greeting, the document title stays "Management Dashboard".
+function DashboardHeader({ now, fullName, upcomingTrips, activeParticipants, outstandingTasks }: {
+  now: Date
   fullName: string | null
   upcomingTrips: number
   activeParticipants: number
   outstandingTasks: number
 }) {
-  const now = useNow()
   return (
     <PageHeader
       variant="detail"
@@ -54,6 +54,10 @@ function DashboardHeader({ fullName, upcomingTrips, activeParticipants, outstand
 
 export default function DashboardPage() {
   const { canViewAlerts, canApproveLeave, canReviewCompletions, canAccessPage, fullName } = usePermissions()
+  // The viewer's clock, ticking every minute. The title reads it, and so does the one figure that depends on the day (the qualification count below), so the page never
+  // advertises a new date beside a count that still belongs to yesterday.
+  const now = useNow()
+  const today = localIsoDate(now)
   const summary = useDashboard()
   const { data: settings } = useSettings()
   const staff = useStaff({ isActive: 'true' })
@@ -72,9 +76,9 @@ export default function DashboardPage() {
   // Hooks must run unconditionally on every render — this has to sit above the loading/error
   // early returns below, not after them.
   // The same rule as the Qualifications list (lib/credentials.ts), so this figure is the sum of that page's issue counts: a credential
-  // needs action when it has no date, is expired, is due today or is due within the warning window.
+  // needs action when it has no date, is expired, is due today or is due within the warning window. Counted against `today`, and recounted when the day turns over
+  // (a window that opens at midnight is counted at midnight, though react-query hands back the same staff array until something changes).
   const { qualIssueCount, qualIssueStaffCount } = useMemo(() => {
-    const today = new Date()
     let issues = 0
     let staffWithIssues = 0
     for (const s of allStaff) {
@@ -83,7 +87,7 @@ export default function DashboardPage() {
       if (n > 0) staffWithIssues += 1
     }
     return { qualIssueCount: issues, qualIssueStaffCount: staffWithIssues }
-  }, [allStaff, warningDays])
+  }, [allStaff, warningDays, today])
 
   if (summary.isError) return (
     <div className="p-[var(--card-pad)] text-center text-[var(--color-destructive)]">Failed to load dashboard. Please refresh the page.</div>
@@ -221,6 +225,7 @@ export default function DashboardPage() {
           something to act on), and under them the needs-attention band, which is as big as the day's trouble: a tall tile per item that needs somebody, or one
           Pale Sprout field when nothing does (DESIGN.md "Attention band"). Everything below is the ordinary dense page. */}
       <DashboardHeader
+        now={now}
         fullName={fullName}
         upcomingTrips={d.upcomingTripCount}
         activeParticipants={d.activeParticipantCount}

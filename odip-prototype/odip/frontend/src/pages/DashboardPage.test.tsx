@@ -669,6 +669,53 @@ describe('DashboardPage — header (a greeting, the date and the summary line)',
   })
 })
 
+// The page says what day it is (the title's date rolls at midnight), so its day-dependent figure must roll with it: a credential whose warning window opens today is
+// counted today, not whenever the staff list happens to change.
+describe('DashboardPage — the qualification count follows the day', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('recounts when the day turns over with no new staff data: a window that opens at midnight is counted at midnight', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 8, 30, 23, 59, 30)) // 30 Sep 2026, 23:59:30 on the wall clock, whatever the zone
+    asRole('Coordinator', 'Sarah Mitchell')
+    // First Aid expires on 31 Oct: 31 days away on 30 Sep (outside the 30-day window), 30 days away from 1 Oct (inside it, so an issue).
+    const staff = { data: [{ isFirstAidQualified: true, firstAidExpiryDate: '2026-10-31' }] }
+    mockUseStaff.mockReturnValue(staff) // the same object, so the same array, on every render: only the day can change the count
+    renderPage()
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Wednesday 30 September')
+    expect(screen.queryByRole('group', { name: /Qualification Issues/ })).not.toBeInTheDocument()
+    expect(screen.getByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
+
+    act(() => {
+      vi.advanceTimersByTime(60_000) // 00:00:30 on 1 Oct
+    })
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Thursday 1 October')
+    expect(screen.getByRole('group', { name: 'Qualification Issues 1' })).toBeInTheDocument()
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
+  })
+
+  it('does not recount on an ordinary minute: the staff list is walked once a day, not once a minute', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 8, 30, 10, 0, 30))
+    asRole('Coordinator', 'Sarah Mitchell')
+    const staff = { data: [{ isFirstAidQualified: true, firstAidExpiryDate: '2026-10-31' }] }
+    mockUseStaff.mockReturnValue(staff)
+    renderPage()
+    expect(screen.queryByRole('group', { name: /Qualification Issues/ })).not.toBeInTheDocument()
+
+    act(() => {
+      vi.advanceTimersByTime(5 * 60_000)
+    })
+
+    expect(screen.queryByRole('group', { name: /Qualification Issues/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Wednesday 30 September')
+  })
+})
+
 describe('DashboardPage — loading and error keep their behaviour', () => {
   it('shows only the spinner while the summary loads: no title, no band', () => {
     mockUseDashboard.mockReturnValue({ data: undefined, isPending: true, isLoading: true, isError: false })

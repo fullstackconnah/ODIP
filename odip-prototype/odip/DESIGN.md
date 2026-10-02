@@ -564,7 +564,8 @@ their own facts to tones. It stops at the header: the tab strip and every panel 
   in the same `h1`, in the muted ink at the same size (the date after the greeting; each part wraps as a unit, so a phone breaks between them and never inside the date), and
   `documentTitle` names the tab when the `h1` says something else (the greeting changes with the hour, the tab stays "Management Dashboard"). The greeting is
   "Good morning, Sarah" (before noon, then afternoon until 6 pm, then evening; the first word of the signed-in full name, none if there is none) and the date is "Friday 2 October",
-  both from the viewer's own clock and refreshed every minute (`lib/greeting.ts`, `hooks/useNow.ts`), so a page left open does not go stale.
+  both from the viewer's own clock and refreshed every minute (`lib/greeting.ts`, `hooks/useNow.ts`), so a page left open does not go stale; the one figure that depends on the day, Qualification
+  Issues (a credential's warning window opens on a day), is recounted when the day turns over, in step with the date beside it.
 - **Meta row.** `PageHeaderMeta` in the subtitle slot. The status leads as `StatusBadge size="md"` (13px semibold, 24px tall); the
   quiet facts follow in 13px muted, joined by middots: "Confirmed · Caloundra QLD · SCB-2608 · 14–17 Aug 2026 · 4 days". A missing
   fact is dropped before the separators are placed, so there is never a dangling dot; a separator belongs to the item before it, so a
