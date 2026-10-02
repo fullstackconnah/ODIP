@@ -15,8 +15,8 @@ namespace Odip.Domain.Billing.Pricing;
 /// </summary>
 public static class PlanPricingEngine
 {
-    /// <summary>The most blocks and days one quote prices, so a request cannot ask for an unbounded amount of work.</summary>
-    public const int MaxBlocks = 200, MaxPeriodDays = 800;
+    /// <summary>The most blocks, days and dated occurrences one quote prices, so a request cannot ask for an unbounded amount of work or answer (20,000 is 54 blocks every day for a year).</summary>
+    public const int MaxBlocks = 200, MaxPeriodDays = 800, MaxOccurrences = 20_000;
 
     private static readonly ShiftPatternExpander Expander = new();
 
@@ -50,6 +50,9 @@ public static class PlanPricingEngine
             issues.Add(string.Empty, PlanFailureReason.InvalidInput, string.Create(CultureInfo.InvariantCulture, $"The agreement period is longer than {MaxPeriodDays} days."), null);
         else if (blocks.Count > MaxBlocks)
             issues.Add(string.Empty, PlanFailureReason.InvalidInput, string.Create(CultureInfo.InvariantCulture, $"A quote prices at most {MaxBlocks} blocks."), null);
+        else if (CountOccurrences(blocks, request.PeriodFrom, request.PeriodTo) > MaxOccurrences)
+            issues.Add(string.Empty, PlanFailureReason.InvalidInput,
+                string.Create(CultureInfo.InvariantCulture, $"The blocks and period make more than {MaxOccurrences:N0} dated occurrences: shorten the period or price fewer blocks."), null);
         else
         {
             var pricer = new OccurrencePricer(policy, new PlanCatalogue(request.Catalogue ?? Array.Empty<SupportCatalogueItem>()), new HolidayCalendar(request.Holidays ?? Array.Empty<HolidayEntry>()));
@@ -57,6 +60,12 @@ public static class PlanPricingEngine
 
             foreach (var block in blocks)
             {
+                if (block is null)
+                {
+                    issues.Add(string.Empty, PlanFailureReason.InvalidInput, "A block in the list is missing.", null);
+                    continue;
+                }
+
                 if (!seen.Add(block.Id ?? string.Empty))
                 {
                     issues.Add(block.Id ?? string.Empty, PlanFailureReason.InvalidInput, $"Block '{block.Id}': another block has the same id; ids must be unique in a quote.", null);
@@ -141,6 +150,9 @@ public static class PlanPricingEngine
             .Distinct()
             .OrderBy(date => date)
             .ToList();
+
+    private static int CountOccurrences(IReadOnlyList<PlanBlock> blocks, DateOnly from, DateOnly to) =>
+        blocks.Where(block => block?.Days is not null).Sum(block => Dates(block, from, to).Count);
 
     // ── Totals ────────────────────────────────────────────────────────────────────
 

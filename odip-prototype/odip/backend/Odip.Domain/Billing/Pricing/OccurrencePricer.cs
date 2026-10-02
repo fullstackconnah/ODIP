@@ -699,8 +699,14 @@ internal sealed class OccurrencePricer
         PlanFailureReason.RegistrationGroupNotHeld => choice.Message!,
         PlanFailureReason.NoItem => $"The catalogue has no item for {need.Describe()}.",
         PlanFailureReason.CatalogueNotFound => $"No catalogue row for {need.Describe()} is valid for part of the period. Import the catalogue for that period.",
+        PlanFailureReason.ZoneNotEligible => $"{ItemOf(need, choice)} lists no price for the remote or very remote loading, so it is not eligible for it.",
+        PlanFailureReason.CatalogueNotPriced => $"{ItemOf(need, choice)} has no price limit (a quotable item, or a row with no National price).",
+        PlanFailureReason.CatalogueAmbiguous => $"The catalogue holds {ItemOf(need, choice)} more than once for the same date, or more than one item for it.",
         _ => choice.Message ?? "The catalogue could not price this line.",
     };
+
+    /// <summary>The code of the row the failure is about, or the need when no single row was found. Either is free of dates, so one gap in fifty weeks is one issue.</summary>
+    private static string ItemOf(ItemNeed need, ItemChoice choice) => choice.Row?.ItemNumber ?? need.Describe();
 
     private static int? PaceOf(SupportCatalogueItem row) => row.PaceSupportCategoryNumber ?? row.SupportCategoryNumber;
 

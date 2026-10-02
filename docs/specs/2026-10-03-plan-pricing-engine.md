@@ -47,7 +47,8 @@ flag and the reason `NoItem`.
 
 ## Output
 
-- **Flags:** `Review` (a person must decide: an unruled holiday, a band with no item, a sleepover that does not qualify, a catalogue gap),
+- **Flags:** `Review` (a person must decide: a public holiday nobody has ruled on, a band with no item, a sleepover that does not qualify, a catalogue
+  gap; a holiday stops asking once the block says Charge or Skip, and Move is a builder action: the coordinator edits the block),
   `HolidayExposure` (priced at a public holiday item), `Provisional` (a 2025-26 travel rate or cap, or a reading NDIA has not confirmed).
 - **Trace:** rule ids, a sentence of why, the catalogue version and the start of the row that priced it (the price basis date), the maximum before the
   group arithmetic, workers and participants, the crossing policy, the holiday, and the numbers of the open questions it depends on.
@@ -77,7 +78,7 @@ One migration, `AddPlanPricingSettingsAndHolidayOverrides`: two `CreateTable`s, 
 
 `POST api/v1/plan-pricing/quote` (SuperAdmin, Admin, Coordinator; **internal**, phase C's builder is the only caller): body `blocks`, `periodFrom`,
 `periodTo`, `includeLines`. The server reads the caller's tenant's settings, the catalogue rows that touch the period and the holidays; the client sends
-no price and no policy. At most 200 blocks and 800 days. `GET` and `PUT api/v1/plan-pricing/settings` (PUT: Admin and SuperAdmin; only the fields sent
+no price and no policy. At most 200 blocks, 800 days and 20,000 dated occurrences (a bigger plan is an issue in the answer; `includeLines: false` keeps the answer small). `GET` and `PUT api/v1/plan-pricing/settings` (PUT: Admin and SuperAdmin; only the fields sent
 change; sending the registration groups confirms them).
 
 ## Known limits

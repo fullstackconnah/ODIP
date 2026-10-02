@@ -301,7 +301,35 @@ public class PlanPricingRulesTests
         Assert.Equal(294.32m, Quote(new[] { Weekday(PlanSupportType.CommunityAccess) }, Mon12Oct, Mon12Oct, catalogue: rows).Totals.Amount);
     }
 
+    [Fact]
+    public void The_same_catalogue_gap_in_every_week_is_one_issue_with_a_count_whatever_the_reason()
+    {
+        var weekday = RealCatalogue.Single(r => r.ItemNumber == "04_104_0125_6_1");
+        var noRemote = RealCatalogue.Select(r => r.ItemNumber == "04_104_0125_6_1" ? Copy(r, x => x.PriceRemote = null) : r).ToList();
+        var quotable = RealCatalogue.Select(r => r.ItemNumber == "04_104_0125_6_1" ? Copy(r, x => x.PriceNational = null) : r).ToList();
+        var remote = Weekday(PlanSupportType.CommunityAccess) with { Location = new PlanLocation { State = "WA", Zone = PriceZone.Remote, Mm = 6 } };
+
+        var zone = Quote(new[] { remote }, Mon12Oct, Mon12Oct.AddDays(20), catalogue: noRemote);
+        var priced = Quote(new[] { Weekday(PlanSupportType.CommunityAccess) }, Mon12Oct, Mon12Oct.AddDays(20), catalogue: quotable);
+
+        Assert.Equal(3, zone.Lines.Count);
+        Assert.Equal((PlanFailureReason.ZoneNotEligible, 3), (Assert.Single(zone.Issues).Reason, zone.Issues[0].Count));
+        Assert.Equal((PlanFailureReason.CatalogueNotPriced, 3), (Assert.Single(priced.Issues).Reason, priced.Issues[0].Count));
+        Assert.Contains(weekday.ItemNumber, zone.Issues[0].Message);
+        Assert.DoesNotContain("2026", zone.Issues[0].Message);
+        Assert.DoesNotContain("2026", priced.Issues[0].Message);
+    }
+
     // ── The request ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void A_missing_block_in_the_list_is_an_issue_not_a_crash()
+    {
+        var quote = Quote(new PlanBlock?[] { Weekday(PlanSupportType.CommunityAccess), null }!, Mon12Oct, Mon12Oct);
+
+        Assert.Single(quote.Lines);
+        Assert.Equal(PlanFailureReason.InvalidInput, Assert.Single(quote.Issues).Reason);
+    }
 
     [Fact]
     public void A_null_request_is_a_programming_error_and_an_empty_one_is_an_empty_quote()
@@ -338,6 +366,21 @@ public class PlanPricingRulesTests
         Assert.Empty(quote.Lines);
         Assert.Contains("at most", Assert.Single(quote.Issues).Message);
         Assert.Equal(PlanPricingEngine.MaxBlocks, Quote(blocks.Take(PlanPricingEngine.MaxBlocks).ToList(), Mon12Oct, Mon12Oct).Totals.ByBlock.Count);
+    }
+
+    [Fact]
+    public void A_plan_with_more_occurrences_than_the_limit_is_refused_and_one_inside_it_is_priced()
+    {
+        var everyDay = Enum.GetValues<DayOfWeek>().ToArray();
+        PlanBlock Daily(int i) => Weekday(PlanSupportType.CommunityAccess, id: $"d{i}") with { Days = everyDay };
+
+        var tooMany = Quote(Enumerable.Range(0, 30).Select(Daily).ToList(), Mon12Oct, Mon12Oct.AddDays(PlanPricingEngine.MaxPeriodDays - 1));   // 30 x 800 = 24,000
+        var within = Quote(Enumerable.Range(0, 20).Select(Daily).ToList(), Mon12Oct, Mon12Oct.AddDays(364));                                      // 20 x 365 = 7,300
+
+        Assert.Empty(tooMany.Lines);
+        Assert.Contains(PlanPricingEngine.MaxOccurrences.ToString("N0", System.Globalization.CultureInfo.InvariantCulture), Assert.Single(tooMany.Issues).Message);
+        Assert.Equal(7300, within.Lines.Count);
+        Assert.Equal(PlanFailureReason.InvalidInput, tooMany.Issues[0].Reason);
     }
 
     [Fact]
