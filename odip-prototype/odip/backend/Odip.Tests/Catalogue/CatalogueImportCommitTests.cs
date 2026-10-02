@@ -344,6 +344,42 @@ public class CatalogueImportCommitTests
     }
 
     [Fact]
+    public async Task A_republished_file_that_extends_an_end_date_is_flagged_because_an_import_never_lengthens_a_row()
+    {
+        await using var db = CreateDb();
+        await ImportAsync(db, CatalogueFixtures.File2026_27);
+        await using var republished = Workbook(CatalogueFixtures.File2026_27, wb => SetEndDate(wb, "01_058_0115_1_1", 20280630));   // legacy STA: 30 Jun 2027 -> 30 Jun 2028
+
+        var preview = await PreviewAsync(db, republished, "republished.xlsx");
+        var result = await NewImporter(db).CommitImportAsync(new ConfirmCatalogueImportDto { CatalogueVersion = preview.DetectedVersion, Rows = preview.Rows });
+
+        var warning = Assert.Single(preview.Warnings);
+        Assert.Contains("01_058_0115_1_1", warning);
+        Assert.Contains("2028-06-30", warning);   // what the file says
+        Assert.Contains("2027-06-30", warning);   // what is stored and kept
+        Assert.Contains("never lengthens", warning);
+        Assert.Equal(new CatalogueImportResultDto(0, 0, 1017, 0), result);
+        Assert.Equal(new DateOnly(2027, 6, 30), (await db.SupportCatalogueItems.AsNoTracking().SingleAsync(i => i.ItemNumber == "01_058_0115_1_1")).EffectiveTo);
+    }
+
+    [Fact]
+    public async Task Importing_an_older_file_over_the_newer_one_flags_only_the_retired_codes_it_would_otherwise_bring_back()
+    {
+        await using var db = CreateDb();
+        await ImportAsync(db, CatalogueFixtures.File2025_26Trimmed);
+        await ImportAsync(db, CatalogueFixtures.File2026_27);
+
+        var preview = await PreviewAsync(db, CatalogueFixtures.File2025_26Trimmed);
+
+        // Codes the newer catalogue replaced are capped at the day before it starts, so the file and the store agree. The two open-ended 2025-26 codes the
+        // 2026-27 catalogue dropped are kept ended, and said so.
+        var flagged = preview.Warnings.Where(w => w.Contains("never lengthens")).ToList();
+        Assert.Equal(2, flagged.Count);
+        Assert.Contains(flagged, w => w.Contains("14_799_0127_8_3") && w.Contains("2026-06-30"));
+        Assert.Contains(flagged, w => w.Contains("15_222400911_0124_1_3") && w.Contains("2026-06-30"));
+    }
+
+    [Fact]
     public async Task Importing_the_older_file_again_after_both_are_in_changes_nothing_either()
     {
         await using var db = CreateDb();

@@ -55,6 +55,14 @@ internal static class CatalogueImportTestSupport
             if (which(row.Cell(1).GetString().Trim())) row.Cell(11).Value = yyyymmdd;
     }
 
+    /// <summary>Sets the End Date (column L of the 2026-27 layout) of the row with this item number, on whichever sheet holds it.</summary>
+    public static void SetEndDate(XLWorkbook workbook, string code, int yyyymmdd)
+    {
+        foreach (var sheet in workbook.Worksheets)
+            foreach (var row in sheet.RowsUsed().Skip(1).Where(r => r.Cell(1).GetString().Trim() == code))
+                row.Cell(12).Value = yyyymmdd;
+    }
+
     /// <summary>Deletes the Current-sheet rows with these item numbers: a republished file that no longer lists them.</summary>
     public static void DeleteRows(XLWorkbook workbook, params string[] codes)
     {

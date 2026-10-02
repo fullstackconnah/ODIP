@@ -50,6 +50,13 @@ public class CatalogueImportService
             warnings.Add(FormattableString.Invariant($"Existing item {e.Item.ItemNumber} ({e.Item.Description}) is not in the new catalogue and will be end-dated {e.EffectiveTo:yyyy-MM-dd}."));
         if (withdrawn.Count > MaxWarningLines)
             warnings.Add($"...and {withdrawn.Count - MaxWarningLines} more existing items that are not in the new catalogue will be end-dated.");
+        // A file that ends a stored row LATER than the database holds it: the stored date is kept (an import never lengthens a row), so say so.
+        var held = plan.HeldEnds.OrderBy(h => h.ItemNumber, StringComparer.Ordinal).ToList();
+        foreach (var h in held.Take(MaxWarningLines))
+            warnings.Add(FormattableString.Invariant(
+                $"{h.ItemNumber}: the file {(h.FileEnd is { } e ? $"ends this row on {e:yyyy-MM-dd}" : "leaves this row open-ended")}, later than the stored {h.StoredEnd:yyyy-MM-dd}; an import never lengthens a row, so {h.StoredEnd:yyyy-MM-dd} was kept."));
+        if (held.Count > MaxWarningLines)
+            warnings.Add(FormattableString.Invariant($"...and {held.Count - MaxWarningLines} more rows keep an earlier stored end date than the file gives."));
         // A row that starts after today prices services from its own start date: earlier services keep the row it replaces (claims and agreements read the
         // row valid on the service date). Say so row by row, so a republished file whose changed rows start later is not mistaken for a mistake.
         var later = rows.Where(r => r.EffectiveFrom > today).OrderBy(r => r.EffectiveFrom).ThenBy(r => r.ItemNumber, StringComparer.Ordinal).ToList();

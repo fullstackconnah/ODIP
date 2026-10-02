@@ -27,10 +27,14 @@ internal sealed class PlannedEndDate
     public required bool Withdrawn { get; init; }
 }
 
+/// <summary>A row the file would end LATER than the database holds it: the stored end date is kept (an import never lengthens a row), and the preview says so.</summary>
+internal sealed record HeldEnd(string ItemNumber, DateOnly EffectiveFrom, DateOnly? FileEnd, DateOnly StoredEnd);
+
 internal sealed class ImportPlan
 {
     public required IReadOnlyList<PlannedRow> Rows { get; init; }
     public required IReadOnlyList<PlannedEndDate> EndDates { get; init; }
+    public required IReadOnlyList<HeldEnd> HeldEnds { get; init; }
     /// <summary>The day the catalogue takes effect: the earliest start on the Current sheet (the Legacy sheet can reach back further).</summary>
     public required DateOnly FileStart { get; init; }
 }
@@ -68,6 +72,7 @@ internal static class CatalogueImportPlanner
         var existingByCode = existing.ToLookup(x => x.ItemNumber, StringComparer.Ordinal);
         var incomingCodes = incoming.Select(r => r.ItemNumber).ToHashSet(StringComparer.Ordinal);
         var ends = new Dictionary<Guid, PlannedEndDate>();
+        var heldEnds = new List<HeldEnd>();
         var planned = new List<PlannedRow>(incoming.Count);
 
         // Ends a row the day before `newStart`. A window can only shrink, and a row that starts on or after `newStart` is wholly shadowed:
@@ -105,7 +110,11 @@ internal static class CatalogueImportPlanner
                 // (A row from before catalogue dates, written by the previous importer, has an end date that is only that importer's "today": replaceable.)
                 var match = dbRows.FirstOrDefault(x => x.EffectiveFrom == row.EffectiveFrom);
                 var held = match is not null && HasCatalogueDates(match) ? match : null;
-                if (held?.EffectiveTo is { } heldTo && (effectiveTo is null || heldTo < effectiveTo)) effectiveTo = heldTo;
+                if (held?.EffectiveTo is { } heldTo && (effectiveTo is null || heldTo < effectiveTo))
+                {
+                    heldEnds.Add(new HeldEnd(row.ItemNumber, row.EffectiveFrom, effectiveTo, heldTo));
+                    effectiveTo = heldTo;
+                }
                 var isActive = nextStart is null && (effectiveTo is null || effectiveTo >= today) && (held?.IsActive ?? true);
 
                 var action = match is null ? ImportAction.Add : SameContent(match, row, effectiveTo, groupCodeById) ? ImportAction.Unchanged : ImportAction.Update;
@@ -137,7 +146,7 @@ internal static class CatalogueImportPlanner
             EndDate(x, fileStart, withdrawn: true);
         }
 
-        return new ImportPlan { Rows = planned, EndDates = ends.Values.ToList(), FileStart = fileStart };
+        return new ImportPlan { Rows = planned, EndDates = ends.Values.ToList(), HeldEnds = heldEnds, FileStart = fileStart };
     }
 
     /// <summary>A row the 2026-27 importer wrote: its dates are the catalogue's own. Older rows (and the demo seed) carry no source document.</summary>
