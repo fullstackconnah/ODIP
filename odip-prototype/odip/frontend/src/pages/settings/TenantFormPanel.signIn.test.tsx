@@ -165,6 +165,65 @@ describe('TenantFormPanel create: what became of the first user\'s sign-in accou
     expect(sendPasswordResetEmail).toHaveBeenCalledTimes(2)
   })
 
+  describe('when the first user\x27s sign-in account could not be set up (the tenant and the user exist)', () => {
+    beforeEach(() => {
+      mockCreate.mockResolvedValue(created({ firebaseAccount: 'failed' }))
+    })
+
+    it('says so, and where to go, and sends no email (there is no account to send to)', async () => {
+      await createTenant()
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        "Tenant created, but their sign-in account couldn't be set up. Use Send set-password email in the Users tab.",
+      )
+      expect(screen.getByText('Brightside Care was created.')).toBeInTheDocument()
+      expect(sendPasswordResetEmail).not.toHaveBeenCalled()
+      expect(screen.queryByText(/We've sent/)).not.toBeInTheDocument()
+    })
+
+    it('says the same when a password was typed, because it was not applied either', async () => {
+      await createTenant({ password: 'Winter-2026!' })
+
+      expect(await screen.findByRole('alert')).toHaveTextContent("their sign-in account couldn't be set up")
+      expect(screen.queryByText(/can sign in now/)).not.toBeInTheDocument()
+    })
+
+    it('offers the same action right there: the server makes the account, then Firebase sends', async () => {
+      mockEnsure.mockResolvedValue({ firebaseAccount: 'created' })
+      const { u } = await createTenant()
+
+      await u.click(await screen.findByRole('button', { name: 'Send set-password email' }))
+
+      expect(await screen.findByText(`We've sent ${EMAIL} a link to set their password. It can take a few minutes, so ask them to check spam.`)).toBeInTheDocument()
+      expect(mockEnsure).toHaveBeenCalledTimes(1)
+      expect(mockEnsure).toHaveBeenCalledWith('user-9')
+      expect(sendPasswordResetEmail).toHaveBeenCalledWith(authStub, EMAIL)
+    })
+
+    it('a failure there is a warning with Send again, and Send again redoes the account step through the server', async () => {
+      mockEnsure.mockRejectedValueOnce({ response: { data: { success: false, errors: ['Unable to set up the user\x27s sign-in account. Please try again later.'] } } })
+      const { u } = await createTenant()
+
+      await u.click(await screen.findByRole('button', { name: 'Send set-password email' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent(`No link was sent to ${EMAIL}. Unable to set up the user's sign-in account. Please try again later.`)
+      expect(sendPasswordResetEmail).not.toHaveBeenCalled()
+
+      mockEnsure.mockResolvedValueOnce({ firebaseAccount: 'created' })
+      await u.click(screen.getByRole('button', { name: 'Send again' }))
+
+      expect(await screen.findByText(/We've sent jane.smith@brightside.example.com a link to set their password/)).toBeInTheDocument()
+      expect(mockEnsure).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not offer to send where Firebase is not configured', async () => {
+      firebase.auth = null
+      await createTenant()
+
+      expect(await screen.findByRole('alert')).toHaveTextContent("their sign-in account couldn't be set up")
+      expect(screen.queryByRole('button', { name: 'Send set-password email' })).not.toBeInTheDocument()
+    })
+  })
+
   it('without Firebase (local dev auth) sends nothing and says nothing about an email', async () => {
     firebase.auth = null
     await createTenant()

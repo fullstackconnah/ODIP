@@ -18,13 +18,15 @@ public class TenantsController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly IFirebaseUserService _firebaseUserService;
+    private readonly ILogger<TenantsController>? _logger;
 
     // IFirebaseUserService is intentionally NOT registered in Program.cs — see AdminUsersController: ActivatorUtilities falls back to
     // the parameter's default, so production needs no DI change while a unit test injects a mock.
-    public TenantsController(OdipDbContext db, IFirebaseUserService? firebaseUserService = null)
+    public TenantsController(OdipDbContext db, IFirebaseUserService? firebaseUserService = null, ILogger<TenantsController>? logger = null)
     {
         _db = db;
         _firebaseUserService = firebaseUserService ?? new FirebaseUserService();
+        _logger = logger;
     }
 
     // GET api/v1/admin/tenants
@@ -162,6 +164,15 @@ public class TenantsController : ControllerBase
             {
                 // Already exists in Firebase: left exactly as it was, so a password typed here was not applied. The response says so.
                 firebaseAccount = FirebaseAccountStatus.Existing;
+            }
+            catch (Exception ex)
+            {
+                // The tenant and the user are already committed, so a 500 here would hide a tenant that exists (and the admin would try to
+                // create it again and be told its domain is taken). Deliberately broad, as in AdminUsersController.Create: an unusable service
+                // account is not a FirebaseAuthException, and neither is a missing Firebase app. The response says "failed" so the screen can
+                // point at Send set-password email, which makes the account (POST admin/users/{id}/sign-in-account).
+                _logger?.LogError(ex, "Tenant {TenantId} was created, but its first user's Firebase sign-in account could not be set up", tenant.Id);
+                firebaseAccount = FirebaseAccountStatus.Failed;
             }
         }
 

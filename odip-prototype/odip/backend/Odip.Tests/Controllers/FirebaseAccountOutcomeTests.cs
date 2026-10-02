@@ -18,6 +18,8 @@ namespace Odip.Tests.Controllers;
 /// A create answers with what became of the person's Firebase sign-in account: "created" (the app just made it) or "existing" (one was
 /// already there, and EmailAlreadyExists is swallowed so it is left exactly as it was). The screen needs the difference: a password the admin
 /// typed was applied to a created account and NOT to an existing one, and the set-password email is worded "set" or "reset" accordingly.
+/// A tenant's first user has a third answer, "failed": the tenant and the user are already committed when Firebase is asked, so a Firebase failure
+/// is reported (and logged) rather than turned into a 500 for a tenant that exists.
 /// </summary>
 public class FirebaseAccountOutcomeTests
 {
@@ -143,6 +145,29 @@ public class FirebaseAccountOutcomeTests
 
         Assert.Equal("existing", dto.FirebaseAccount);
         Assert.NotNull(dto.InitialUserId);
+    }
+
+    [Fact]
+    public async Task Tenant_create_says_failed_and_still_answers_201_when_Firebase_could_not_make_the_first_users_account()
+    {
+        // The tenant and the user are committed before Firebase is asked: a 500 here would hide a tenant that exists, and the admin would
+        // try to create it again and be told its domain is taken.
+        var firebase = new Mock<IFirebaseUserService>();
+        firebase.Setup(f => f.CreateUserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("simulated Firebase outage (e.g. TokenResponseException)"));
+        var logger = new Mock<ILogger<TenantsController>>();
+        using var db = SuperAdminDb(ignoreInMemoryTransactions: true);
+
+        var result = await new TenantsController(db, firebase.Object, logger.Object).CreateWithSetup(TenantDto(), CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result);
+        var dto = Assert.IsType<ApiResponse<TenantCreatedDto>>(created.Value).Data!;
+        Assert.Equal("failed", dto.FirebaseAccount);
+        Assert.Single(await db.Tenants.ToListAsync());
+        Assert.Equal((await db.Users.IgnoreQueryFilters().SingleAsync()).Id, dto.InitialUserId);
+        // Logged, so someone can find out why.
+        logger.Verify(l => l.Log(LogLevel.Error, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<InvalidOperationException>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
     }
 
     [Fact]

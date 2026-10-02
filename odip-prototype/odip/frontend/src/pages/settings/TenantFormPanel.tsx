@@ -21,8 +21,11 @@ type FirstUserDone = {
   userId: string
   name: string
   email: string
-  /** Whether the Firebase account was just made or already existed: a typed password only reached a made one, and "set" or "reset" follows. */
-  account: FirebaseAccountState
+  /**
+   * Whether the Firebase account was just made or already existed (a typed password only reached a made one, and "set" or "reset" follows),
+   * or "failed": the tenant and the user exist, but their sign-in account could not be set up, so there is nothing to send to yet.
+   */
+  account: FirebaseAccountState | 'failed'
   withPassword: boolean
   /** What became of the set-password email; null when none was sent (a temporary password was set, or there is no Firebase). */
   outcome: EmailOutcome | null
@@ -216,7 +219,7 @@ export default function TenantFormPanel({
           const withPassword = !!initialUser.password
           // A typed password is for them to use as it is. Otherwise Firebase emails the link, which goes straight out: the create already
           // made or found the account, so there is no ensure step. It is worded for a new account or an existing one.
-          const outcome = !withPassword && emailLinkAvailable ? await sendSetPasswordEmailFor(initialUser.email, account) : null
+          const outcome = !withPassword && emailLinkAvailable && account !== 'failed' ? await sendSetPasswordEmailFor(initialUser.email, account) : null
           firstUser = {
             userId: created.initialUserId, name: `${initialUser.firstName} ${initialUser.lastName}`, email: initialUser.email, account, withPassword, outcome,
           }
@@ -248,15 +251,16 @@ export default function TenantFormPanel({
     const first = done?.firstUser
     if (!done || !first) return
     setSubmitting(true)
-    const redoAccount = !!first.outcome && !first.outcome.ok && first.outcome.reason === 'account'
-    const outcome = redoAccount
-      ? await ensureAndSendSetPasswordEmail(first.email, () => ensureAccount.mutateAsync(first.userId))
-      : await sendSetPasswordEmailFor(first.email, first.account)
+    // With no account yet ("failed") or a failed account step, the retry goes through the server again; otherwise only Firebase is asked again.
+    const outcome =
+      first.account === 'failed' || (first.outcome && !first.outcome.ok && first.outcome.reason === 'account')
+        ? await ensureAndSendSetPasswordEmail(first.email, () => ensureAccount.mutateAsync(first.userId))
+        : await sendSetPasswordEmailFor(first.email, first.account)
     setDone({ ...done, firstUser: { ...first, outcome } })
     setSubmitting(false)
   }
 
-  /** The typed password did not reach an account that already existed, so the way in is the link: the server makes sure of the account, then Firebase sends. */
+  /** There is no usable sign-in yet (the account existed and the typed password did not reach it, or it could not be set up): the way in is the link. The server makes sure of the account, then Firebase sends. */
   async function sendLinkToExistingAccount() {
     const first = done?.firstUser
     if (!done || !first) return
@@ -321,6 +325,19 @@ export default function TenantFormPanel({
         {first &&
           (first.outcome ? (
             <SignInEmailOutcome outcome={first.outcome} retry="use Send again" onRetry={sendAgain} retrying={submitting} />
+          ) : first.account === 'failed' ? (
+            <Callout
+              tone="warning"
+              actions={
+                emailLinkAvailable ? (
+                  <Button variant="secondary" size="sm" onClick={sendLinkToExistingAccount} disabled={submitting}>
+                    {submitting ? 'Sending...' : 'Send set-password email'}
+                  </Button>
+                ) : undefined
+              }
+            >
+              <span className="break-words">Tenant created, but their sign-in account couldn't be set up. Use Send set-password email in the Users tab.</span>
+            </Callout>
           ) : first.withPassword && first.account === 'existing' ? (
             <Callout
               tone="warning"
@@ -672,7 +689,11 @@ export default function TenantFormPanel({
                 >
                   {passwordTooShort
                     ? `Use at least ${MIN_PASSWORD_LENGTH} characters.`
-                    : `${userPassword === '' ? 'Optional. ' : ''}At least ${MIN_PASSWORD_LENGTH} characters. Ask them to change it with Forgot password after they first sign in.`}
+                    : userPassword === ''
+                      ? emailLinkAvailable
+                        ? "Optional. Leave it blank and we'll email them a link to set their own."
+                        : 'Optional.'
+                      : `At least ${MIN_PASSWORD_LENGTH} characters. Ask them to change it with Forgot password after they first sign in.`}
                 </p>
               </div>
             </div>
