@@ -18,6 +18,8 @@ namespace Odip.Infrastructure.Services;
 public class CatalogueImportService
 {
     private const int MaxWarningLines = 10;
+    /// <summary>The real catalogues hold about 1,000 rows; a confirm request far beyond that is not a catalogue.</summary>
+    private const int MaxRows = 10_000;
 
     private readonly OdipDbContext _db;
     private readonly TimeProvider _clock;
@@ -188,6 +190,8 @@ public class CatalogueImportService
     {
         if (dto.Rows is null || dto.Rows.Count == 0)
             throw new InvalidOperationException("No rows to import.");
+        if (dto.Rows.Count > MaxRows)
+            throw new InvalidOperationException(FormattableString.Invariant($"A catalogue import is limited to {MaxRows:N0} rows; this one has {dto.Rows.Count:N0}."));
         var version = dto.CatalogueVersion?.Trim() ?? string.Empty;
         if (version.Length is 0 or > 20)
             throw new InvalidOperationException("The catalogue version must be 1 to 20 characters.");
