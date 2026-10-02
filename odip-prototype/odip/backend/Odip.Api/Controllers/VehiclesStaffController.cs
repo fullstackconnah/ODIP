@@ -355,7 +355,8 @@ public class StaffController : ControllerBase
     /// Global uniqueness of an address makes a squat permanent (the first tenant to type an address owns it, and an archived row keeps it), so a
     /// caller who is not a SuperAdmin may not give staff an address at ANOTHER tenant's own email domain: it would block that tenant from ever adding
     /// the person, and send the person into this tenant's workspace. Returns the refusal, or null. It is a refusal, not a question: it cannot be
-    /// confirmed away. The match is on the whole domain, so a subdomain is only unusual (AddressConfirmation), not another organisation's.
+    /// confirmed away. The match is on the whole domain, so a subdomain is only unusual (AddressConfirmation), not another organisation's. A shared
+    /// provider (gmail.com) is nobody's own, even if a tenant was given it as its domain, so it is never another organisation's either.
     /// </summary>
     private async Task<string?> OtherOrganisationAddressErrorAsync(string normalisedEmail, Guid? ownTenantId, CancellationToken ct)
     {
@@ -364,6 +365,7 @@ public class StaffController : ControllerBase
         if (at < 0) return null;
 
         var domain = normalisedEmail[(at + 1)..];
+        if (CommonEmailProviders.Covers(domain)) return null;
         var own = ownTenantId ?? Guid.Empty;
         var belongsToAnother = await _db.Tenants.AnyAsync(t => t.EmailDomain == domain && t.Id != own, ct);
         return belongsToAnother ? OtherOrganisationMessage : null;

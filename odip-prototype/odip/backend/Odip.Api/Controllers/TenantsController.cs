@@ -48,6 +48,9 @@ public class TenantsController : ControllerBase
     {
         var domain = dto.EmailDomain.ToLower();
 
+        if (CommonEmailProviders.Covers(domain))
+            return BadRequest(ApiResponse<object>.Fail(CommonEmailProviders.SharedDomainMessage(domain)));
+
         if (await _db.Tenants.AnyAsync(t => t.EmailDomain == domain))
             return Conflict("A tenant with this email domain already exists");
 
@@ -69,6 +72,9 @@ public class TenantsController : ControllerBase
     public async Task<IActionResult> CreateWithSetup([FromBody] CreateTenantWithSetupDto dto, CancellationToken ct = default)
     {
         var domain = dto.EmailDomain.ToLower();
+
+        if (CommonEmailProviders.Covers(domain))
+            return BadRequest(ApiResponse<object>.Fail(CommonEmailProviders.SharedDomainMessage(domain)));
 
         if (await _db.Tenants.AnyAsync(t => t.EmailDomain == domain))
             return Conflict("A tenant with this email domain already exists");
@@ -193,6 +199,11 @@ public class TenantsController : ControllerBase
         var tenant = await _db.Tenants.FindAsync(id);
         if (tenant is null)
             return NotFound();
+
+        // Only a CHANGE to a shared provider is refused: a row that already holds one stays editable (renamed, switched off), and the domain is
+        // simply nobody's own, so it blocks no other tenant's staff (see StaffController.OtherOrganisationAddressErrorAsync).
+        if (tenant.EmailDomain != dto.EmailDomain.ToLower() && CommonEmailProviders.Covers(dto.EmailDomain.ToLower()))
+            return BadRequest(ApiResponse<object>.Fail(CommonEmailProviders.SharedDomainMessage(dto.EmailDomain.ToLower())));
 
         if (tenant.EmailDomain != dto.EmailDomain.ToLower() &&
             await _db.Tenants.AnyAsync(t => t.EmailDomain == dto.EmailDomain.ToLower() && t.Id != id))

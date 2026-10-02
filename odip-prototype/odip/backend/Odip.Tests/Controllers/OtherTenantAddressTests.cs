@@ -37,10 +37,10 @@ public class OtherTenantAddressTests
         public void Dispose() => Db.Dispose();
     }
 
-    private static Setup TwoTenants(bool otherIsActive = true)
+    private static Setup TwoTenants(bool otherIsActive = true, string otherDomain = OtherDomain)
     {
         var own = new Tenant { Id = Guid.NewGuid(), Name = "Acme Support", EmailDomain = OwnDomain, IsActive = true, CreatedAt = DateTime.UtcNow };
-        var other = new Tenant { Id = Guid.NewGuid(), Name = "Tenant B", EmailDomain = OtherDomain, IsActive = otherIsActive, CreatedAt = DateTime.UtcNow };
+        var other = new Tenant { Id = Guid.NewGuid(), Name = "Tenant B", EmailDomain = otherDomain, IsActive = otherIsActive, CreatedAt = DateTime.UtcNow };
         var current = new Mock<ICurrentTenant>();
         current.Setup(t => t.TenantId).Returns(own.Id);
         current.Setup(t => t.IsSuperAdmin).Returns(false);
@@ -164,6 +164,36 @@ public class OtherTenantAddressTests
         var result = await StaffAs(setup, "SuperAdmin").Create(StaffAt("new.hire@tenantb.example.org", confirmed: true), CancellationToken.None);
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    // ── A shared provider is nobody's own domain ────────────────────────
+    // A tenant whose EmailDomain is a shared mail domain (a SuperAdmin onboarding an organisation whose staff all use Gmail can type gmail.com) must
+    // not turn every other tenant's staff at that provider into "another organisation's" addresses: no confirmation gets past that refusal, so only
+    // a SuperAdmin could add them. A common provider is exactly what AddressConfirmation already lets through.
+
+    [Theory]
+    [InlineData("gmail.com")]
+    [InlineData("outlook.com")]
+    [InlineData("yahoo.com.au")]
+    public async Task Staff_create_ignores_a_provider_domain_that_another_tenant_holds_as_its_own(string provider)
+    {
+        using var setup = TwoTenants(otherDomain: provider);
+
+        var result = await StaffAs(setup, "Coordinator").Create(StaffAt($"new.hire@{provider}"), CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Staff_update_ignores_a_provider_domain_that_another_tenant_holds_as_its_own()
+    {
+        using var setup = TwoTenants(otherDomain: "gmail.com");
+        var staff = await SeedStaff(setup, setup.Own.Id, "sam.staff@acme.example.com");
+
+        var result = await StaffAs(setup, "Admin").Update(staff.Id, UpdateAt("sam.staff@gmail.com"), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("sam.staff@gmail.com", (await setup.Db.Users.SingleAsync()).Email);
     }
 
     // ── Staff update ────────────────────────────────────────────────────

@@ -22,6 +22,13 @@ public static class CommonEmailProviders
 
     /// <summary>True when <paramref name="domain"/> (already lower-case) is one of the common providers.</summary>
     public static bool Covers(string domain) => Domains.Contains(domain, StringComparer.Ordinal);
+
+    /// <summary>
+    /// The refusal when a tenant's own email domain is a common provider (already lower-case). A shared domain is nobody's own: owning it would let one
+    /// tenant claim the address space every organisation's staff use.
+    /// </summary>
+    public static string SharedDomainMessage(string domain) =>
+        $"{domain} is a shared email provider, so it cannot be an organisation's email domain. Enter the organisation's own domain.";
 }
 
 /// <summary>
