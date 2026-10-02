@@ -21,6 +21,7 @@ import { HandoverSection, GlanceSection, ContactsSection } from './shift/BeforeS
 import { DuringSection } from './shift/DuringSection'
 import { EndSection } from './shift/EndSection'
 import { DoseSheet, type DoseTarget } from './shift/DoseSheet'
+import { useIsBelowLg } from '@/hooks/useIsBelowLg'
 import { loadEndDraft } from './shift/endDraft'
 import { requestGeolocation } from './shift/geolocation'
 import { useOnline } from './shift/useOnline'
@@ -110,6 +111,7 @@ export default function PortalShiftDetailPage() {
   const { data: shift, isLoading, isError, error, refetch } = usePortalShiftDetail(id)
   const { canCompleteOwnShifts } = usePermissions()
   const online = useOnline()
+  const belowLg = useIsBelowLg()
   const startShift = useStartShift()
   const startBreak = useStartBreak()
   const endBreak = useEndBreak()
@@ -168,6 +170,8 @@ export default function PortalShiftDetailPage() {
   const inProgress = shift.status === 'InProgress'
   const showBefore = shift.status === 'Published' || inProgress
   const running = shift.breaks.find(b => b.isRunning)
+  // Mid-shift on a phone the checklist comes first: the Before blocks fold to one line each.
+  const compact = inProgress && belowLg
 
   return (
     <div className="space-y-4 animate-fade-in pb-4">
@@ -194,17 +198,17 @@ export default function PortalShiftDetailPage() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
         {showBefore && (
           <div className="space-y-4 lg:col-start-1">
-            <HandoverSection shift={shift} canAct={canAct} online={online} />
+            <HandoverSection shift={shift} canAct={canAct} online={online} compact={compact} />
           </div>
         )}
         {showBefore && (
           <div className="lg:col-start-2 lg:row-start-1 lg:row-span-3 lg:sticky lg:top-4">
-            <GlanceSection shift={shift} />
+            <GlanceSection shift={shift} compact={compact} />
           </div>
         )}
         {showBefore && (
           <div className="space-y-4 lg:col-start-1">
-            <ContactsSection shift={shift} />
+            <ContactsSection shift={shift} compact={compact} />
             {shift.status === 'Published' && canAct && (
               <Section id="start" title="Ready to start?" icon={<Clock className="w-4 h-4" aria-hidden="true" />}>
                 {actionError && <p role="alert" className="text-sm text-[var(--color-destructive)]">{actionError}</p>}

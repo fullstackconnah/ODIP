@@ -419,6 +419,33 @@ describe('PortalShiftDetailPage: During', () => {
   })
 })
 
+describe('PortalShiftDetailPage: mid-shift on a phone', () => {
+  const mid = (over: Partial<PortalShiftDetailDto> = {}) => makeDetail({ status: 'InProgress', completion: makeCompletion(), ...over })
+  const read = { completionId: 'c', text: 'x', nothingToHandOver: false, authorUserId: 'a', authorName: 'Sam', shiftDate: '2026-08-16', submittedAt: '2026-08-16T23:00:00Z', requiresAcknowledgement: true, isRead: true, readAt: '2026-08-17T08:00:00Z' }
+
+  it('folds the read handover, At a glance and contacts, keeping the anaphylaxis chip and HIDPA flags on the line', () => {
+    const base = emptyShiftPackage()
+    show(mid({ handover: read, atAGlance: { ...base.atAGlance, allergies: { detail: 'Nuts', isAnaphylaxisRisk: true, managementNotes: null }, hidpa: { epilepsy: true, enteralFeeding: false, dysphagia: false } } }))
+    const folded = Array.from(document.querySelectorAll('details[data-collapsed-section]'))
+    expect(folded.map(d => d.id)).toEqual(['before-handover', 'before-glance', 'before-contacts'])
+    expect(folded.every(d => !(d as HTMLDetailsElement).open)).toBe(true)
+    expect(screen.getByText('Handover read')).toBeInTheDocument()
+    const glance = document.getElementById('before-glance')!
+    expect(within(glance).getAllByText('Anaphylaxis risk').length).toBeGreaterThan(0)
+    expect(within(glance).getByText('HIDPA: Epilepsy')).toBeInTheDocument()
+  })
+
+  it('keeps an unread handover open so it cannot be skipped', () => {
+    show(mid({ handover: { ...read, isRead: false, readAt: null } }))
+    expect(document.getElementById('before-handover')?.tagName).toBe('SECTION')
+  })
+
+  it('does not fold anything before the shift starts', () => {
+    show(makeDetail())
+    expect(document.querySelectorAll('details[data-collapsed-section]').length).toBe(0)
+  })
+})
+
 describe('PortalShiftDetailPage: End', () => {
   const inProgress = (over: Partial<PortalShiftDetailDto> = {}) => makeDetail({ status: 'InProgress', completion: makeCompletion(), ...over })
   const blocker = (message: string) => ({ code: 'DOSE_OUTCOME_MISSING', message, medicationId: 'med-1', medicationName: 'Paracetamol', scheduledAt: '2026-08-17T12:00:00' })

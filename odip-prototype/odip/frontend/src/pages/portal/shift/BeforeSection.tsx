@@ -168,10 +168,18 @@ function Contacts({ contacts }: { contacts: PortalEmergencyContactDto[] }) {
   )
 }
 
-export function HandoverSection({ shift, canAct, online }: { shift: PortalShiftDetailDto; canAct: boolean; online: boolean }) {
+export function HandoverSection({ shift, canAct, online, compact = false }: { shift: PortalShiftDetailDto; canAct: boolean; online: boolean; compact?: boolean }) {
   const withheld = shift.sensitiveInfoWithheldReason
+  const h = shift.handover
+  // Compact (mid-shift on a phone): once the handover is read, or there is nothing to read, it folds to one line.
+  const settled = !h || !h.requiresAcknowledgement || h.isRead
   return (
-    <Section id="before-handover" title="Handover" icon={<BookOpen className="w-4 h-4" aria-hidden="true" />}>
+    <Section
+      id="before-handover"
+      title="Handover"
+      icon={<BookOpen className="w-4 h-4" aria-hidden="true" />}
+      collapse={compact && settled ? { summary: h ? 'Handover read' : 'No handover' } : null}
+    >
       {withheld
         ? <Callout tone="info">{withheld}</Callout>
         : <Handover shift={shift} canAct={canAct} online={online} />}
@@ -179,17 +187,32 @@ export function HandoverSection({ shift, canAct, online }: { shift: PortalShiftD
   )
 }
 
-export function GlanceSection({ shift, className }: { shift: PortalShiftDetailDto; className?: string }) {
+export function GlanceSection({ shift, className, compact = false }: { shift: PortalShiftDetailDto; className?: string; compact?: boolean }) {
+  const g = shift.atAGlance
+  const hidpa = [g.hidpa.epilepsy && 'Epilepsy', g.hidpa.enteralFeeding && 'Enteral feeding', g.hidpa.dysphagia && 'Dysphagia'].filter(Boolean) as string[]
+  // Folded, the facts that must never be missed stay on the line: the anaphylaxis risk and the HIDPA flags.
+  const summary = (
+    <>
+      {g.allergies.isAnaphylaxisRisk === true && <Chip tone="danger">Anaphylaxis risk</Chip>}
+      <span>{hidpa.length ? `HIDPA: ${hidpa.join(', ')}` : 'No HIDPA flags'}</span>
+    </>
+  )
   return (
-    <Section id="before-glance" title="At a glance" icon={<HeartPulse className="w-4 h-4" aria-hidden="true" />} className={className}>
+    <Section id="before-glance" title="At a glance" icon={<HeartPulse className="w-4 h-4" aria-hidden="true" />} className={className} collapse={compact ? { summary } : null}>
       <AtAGlance shift={shift} />
     </Section>
   )
 }
 
-export function ContactsSection({ shift }: { shift: PortalShiftDetailDto }) {
+export function ContactsSection({ shift, compact = false }: { shift: PortalShiftDetailDto; compact?: boolean }) {
+  const list = shift.emergencyContacts
   return (
-    <Section id="before-contacts" title="Emergency contacts" icon={<Phone className="w-4 h-4" aria-hidden="true" />}>
+    <Section
+      id="before-contacts"
+      title="Emergency contacts"
+      icon={<Phone className="w-4 h-4" aria-hidden="true" />}
+      collapse={compact && list ? { summary: list.length ? `${list.length} to call` : 'None recorded' } : null}
+    >
       {shift.emergencyContacts === null
         ? <Callout tone="info">{shift.sensitiveInfoWithheldReason ?? 'Emergency contacts are not shown for this shift yet.'}</Callout>
         : <Contacts contacts={shift.emergencyContacts} />}
