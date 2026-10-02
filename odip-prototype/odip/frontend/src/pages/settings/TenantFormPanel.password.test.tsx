@@ -11,6 +11,7 @@ const { mockCreate } = vi.hoisted(() => ({ mockCreate: vi.fn() }))
 vi.mock('@/api/hooks/admin', () => ({
   useCreateTenantWithSetup: () => ({ mutateAsync: mockCreate, isPending: false }),
   useUpdateTenant: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useEnsureUserSignInAccount: () => ({ mutateAsync: vi.fn() }),
 }))
 
 beforeEach(() => {

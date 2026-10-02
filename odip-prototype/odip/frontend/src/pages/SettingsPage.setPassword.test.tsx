@@ -4,8 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import SettingsPage from './SettingsPage'
 
-// The seam between the Users tab, the user panel and the message that outlives them: a create closes the panel, and a row action has no
-// panel at all, so what became of the set-password email has to be said by the page. The tab, the panel and the toast have their own
+// The seam between the Users tab, the user panel and the message that outlives a row action: a create keeps its panel open to say what became
+// of the set-password email, and a row action has no panel at all, so the page says it. The tab, the panel and the toast have their own
 // tests; this one proves they are wired together.
 
 const { mockCreate, mockEnsure, sendPasswordResetEmail, settingsData, usersPage } = vi.hoisted(() => ({
@@ -57,6 +57,7 @@ vi.mock('@/api/hooks', () => ({
 vi.mock('@/api/hooks/admin', () => ({
   useCreateTenantWithSetup: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateTenant: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useEnsureUserSignInAccount: () => ({ mutateAsync: vi.fn() }),
 }))
 vi.mock('@/lib/permissions', () => ({
   usePermissions: () => ({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false }),
@@ -65,7 +66,9 @@ vi.mock('firebase/auth', () => ({ sendPasswordResetEmail }))
 vi.mock('@/lib/firebase', () => ({ auth: { name: 'auth-stub' } }))
 
 beforeEach(() => {
-  mockCreate.mockReset().mockResolvedValue(undefined)
+  mockCreate.mockReset().mockResolvedValue({
+    id: 'new-1', fullName: 'New Person', email: 'new.person@example.com', firebaseAccount: 'created',
+  })
   mockEnsure.mockReset().mockResolvedValue({ firebaseAccount: 'created' })
   sendPasswordResetEmail.mockReset().mockResolvedValue(undefined)
 })
@@ -79,7 +82,7 @@ async function openUsersTab() {
 }
 
 describe('SettingsPage Users tab: creating a user', () => {
-  it('closes the panel and then says, over the page, that the set-password email went', async () => {
+  it('stays open to say the set-password email went, and Done closes the panel', async () => {
     const u = await openUsersTab()
 
     await u.click(screen.getByRole('button', { name: '+ Add User' }))
@@ -94,14 +97,18 @@ describe('SettingsPage Users tab: creating a user', () => {
     await u.click(screen.getByRole('button', { name: 'Create User' }))
 
     expect(
-      await screen.findByText("User created. We've sent new.person@example.com a link to set their password. It can take a few minutes, so ask them to check spam."),
+      await screen.findByText("We've sent new.person@example.com a link to set their password. It can take a few minutes, so ask them to check spam."),
     ).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'User created' })).toBeInTheDocument()
     expect(mockCreate).toHaveBeenCalledWith({
       tenantId: 'tenant-1', firstName: 'New', lastName: 'Person', email: 'new.person@example.com', username: 'newperson', role: 'Coordinator',
       password: undefined,
     })
     expect(sendPasswordResetEmail).toHaveBeenCalledWith({ name: 'auth-stub' }, 'new.person@example.com')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New User' })).not.toBeInTheDocument())
+
+    await u.click(screen.getByRole('button', { name: 'Done' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 })
 
@@ -125,7 +132,7 @@ describe('SettingsPage Users tab: Send set-password email', () => {
     await u.click(screen.getByRole('button', { name: 'Send set-password email' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'No link was sent to ann@example.com. Use Send set-password email on their row to try again.',
+      'No link was sent to ann@example.com. To try again, use Send set-password email on their row.',
     )
   })
 })

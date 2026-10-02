@@ -2,14 +2,17 @@ import { useState, useEffect, useId } from 'react'
 import {
   useAdminTenantsSummary,
   useCreateAdminUser,
+  useEnsureUserSignInAccount,
   useUpdateAdminUser,
 } from '@/api/hooks'
-import type { AdminUserDto } from '@/api/types'
+import type { AdminUserDto, FirebaseAccountState } from '@/api/types'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { Dropdown } from '@/components/Dropdown'
+import { SignInEmailOutcome } from '@/components/SignInEmailOutcome'
 import { SlideOver } from '@/components/SlideOver'
-import type { Notify } from '@/hooks/useToast'
 import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
-import { describeEmailOutcome, sendSetPasswordEmailFor } from '@/lib/signInEmail'
+import { ensureAndSendSetPasswordEmail, sendSetPasswordEmailFor, type EmailOutcome } from '@/lib/signInEmail'
 import { MIN_PASSWORD_LENGTH, generateTemporaryPassword } from '@/lib/temporaryPassword'
 
 // ---------------------------------------------------------------------------
@@ -21,11 +24,19 @@ interface UserFormPanelProps {
   onClose: () => void
   user?: AdminUserDto
   defaultTenantId?: string
-  /**
-   * Where a create's outcome is announced once the panel has closed: whether the set-password email went, or that a temporary password
-   * was set. Without it nothing is announced.
-   */
-  onNotify?: Notify
+}
+
+// What a successful create leaves on screen. The panel does NOT close on a create: the answer (a password to share, a link on its way, a
+// link that did not go) decides what the admin does next, and closing would take it away.
+type Done = {
+  userId: string
+  name: string
+  email: string
+  /** Whether the Firebase account was just made or already existed: a typed password only reached a made one, and "set" or "reset" follows. */
+  account: FirebaseAccountState
+  withPassword: boolean
+  /** What became of the set-password email; null when none was sent (a temporary password was set, or there is no Firebase). */
+  outcome: EmailOutcome | null
 }
 
 // ---------------------------------------------------------------------------
@@ -48,7 +59,6 @@ export default function UserFormPanel({
   onClose,
   user,
   defaultTenantId,
-  onNotify,
 }: UserFormPanelProps) {
   const isEdit = !!user
 
@@ -62,6 +72,7 @@ export default function UserFormPanel({
   const { data: tenants = [] } = useAdminTenantsSummary()
   const createMutation = useCreateAdminUser()
   const updateMutation = useUpdateAdminUser()
+  const ensureAccount = useEnsureUserSignInAccount()
 
   const [tenantId, setTenantId] = useState('')
   const [firstName, setFirstName] = useState('')
@@ -75,12 +86,16 @@ export default function UserFormPanel({
   // temporary password the admin chooses, for demo or offline use. Closed, the field is empty, so what is sent is what is shown.
   const [tempPasswordOpen, setTempPasswordOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState<Done | null>(null)
+  // The create is answered but the email is still going out, or a Send under the done state is: no second submit, no second send.
+  const [submitting, setSubmitting] = useState(false)
 
   // Reset form state when the panel opens or the user prop changes
   useEffect(() => {
     if (!isOpen) return
     setError(null)
     setTempPasswordOpen(false)
+    setDone(null)
 
     if (user) {
       setTenantId(user.tenantId)
@@ -103,7 +118,7 @@ export default function UserFormPanel({
     }
   }, [isOpen, user, defaultTenantId])
 
-  const isBusy = createMutation.isPending || updateMutation.isPending
+  const isBusy = createMutation.isPending || updateMutation.isPending || submitting
 
   // Unsaved edits: every field as it is now against what the open effect above put there (the user's own values in edit mode,
   // blanks and the default tenant in create mode). The two arrays list the fields in the same order.
@@ -130,7 +145,9 @@ export default function UserFormPanel({
 
   async function handleSubmit() {
     setError(null)
+    setSubmitting(true)
 
+    let created: AdminUserDto | undefined
     try {
       if (isEdit && user) {
         await updateMutation.mutateAsync({
@@ -145,7 +162,7 @@ export default function UserFormPanel({
           },
         })
       } else {
-        await createMutation.mutateAsync({
+        created = await createMutation.mutateAsync({
           tenantId,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
@@ -163,29 +180,47 @@ export default function UserFormPanel({
           : axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message) ||
           'Failed to save user.',
       )
+      setSubmitting(false)
       return
     }
 
-    // The panel closes before the email goes: the user exists now, so there is nothing left to edit and nothing to submit twice.
-    onClose()
-    if (!isEdit) await announceCreated(email.trim(), password !== '')
+    if (isEdit || !created) {
+      setSubmitting(false)
+      onClose()
+      return
+    }
+
+    // The user exists now. Say what became of their sign-in, and stay to say it. A server that does not say whether the account was made
+    // is read as made, which is what a create always did before it started to say.
+    const account = created.firebaseAccount ?? 'created'
+    const address = created.email || email.trim()
+    const withPassword = password !== ''
+    // A typed password is for them to use as it is. Otherwise Firebase emails the link, which goes straight out: the create already made or
+    // found the account, so there is no ensure step. It is worded for a new account or an existing one.
+    const outcome = !withPassword && emailLinkAvailable ? await sendSetPasswordEmailFor(address, account) : null
+    setDone({ userId: created.id, name: created.fullName, email: address, account, withPassword, outcome })
+    setSubmitting(false)
   }
 
-  /**
-   * Says how a create went, and sends the set-password email when that is the plan. Never throws: the user exists by now, so a
-   * failed email must not read as a failed create (creating again would only be refused as a duplicate).
-   */
-  async function announceCreated(createdEmail: string, withPassword: boolean) {
-    if (withPassword) {
-      onNotify?.('success', 'User created with a temporary password.')
-    } else if (!emailLinkAvailable) {
-      onNotify?.('success', 'User created.')
-    } else {
-      // The account was just made by the create above, so the email goes straight out (no ensure step), worded for a new account.
-      const outcome = await sendSetPasswordEmailFor(createdEmail, 'created')
-      const { tone, message } = describeEmailOutcome(outcome, 'in the Users table')
-      onNotify?.(tone, `User created. ${message}`)
-    }
+  /** Sends again from the done state. A failed account step is redone through the server; anything else only needs Firebase asked again. */
+  async function sendAgain() {
+    if (!done) return
+    setSubmitting(true)
+    const redoAccount = !!done.outcome && !done.outcome.ok && done.outcome.reason === 'account'
+    const outcome = redoAccount
+      ? await ensureAndSendSetPasswordEmail(done.email, () => ensureAccount.mutateAsync(done.userId))
+      : await sendSetPasswordEmailFor(done.email, done.account)
+    setDone({ ...done, outcome })
+    setSubmitting(false)
+  }
+
+  /** The typed password did not reach an account that already existed, so the way in is the link: the server makes sure of the account, then Firebase sends. */
+  async function sendLinkToExistingAccount() {
+    if (!done) return
+    setSubmitting(true)
+    const outcome = await ensureAndSendSetPasswordEmail(done.email, () => ensureAccount.mutateAsync(done.userId))
+    setDone({ ...done, outcome })
+    setSubmitting(false)
   }
 
   function toggleTempPassword() {
@@ -208,6 +243,47 @@ export default function UserFormPanel({
     'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   if (!isOpen) return null
+
+  if (done) {
+    return (
+      <SlideOver
+        open
+        onClose={onClose}
+        title="User created"
+        dirty={false}
+        bodyClassName="px-6 py-5 space-y-4"
+        footerClassName="px-6 py-4"
+        footer={
+          <div className="flex justify-end">
+            <Button onClick={onClose}>Done</Button>
+          </div>
+        }
+      >
+        <p className="text-sm font-medium text-[var(--color-foreground)]">{done.name} was created.</p>
+        {done.outcome ? (
+          <SignInEmailOutcome outcome={done.outcome} retry="use Send again" onRetry={sendAgain} retrying={submitting} />
+        ) : done.withPassword && done.account === 'existing' ? (
+          <Callout
+            tone="warning"
+            actions={
+              emailLinkAvailable ? (
+                <Button variant="secondary" size="sm" onClick={sendLinkToExistingAccount} disabled={submitting}>
+                  {submitting ? 'Sending...' : 'Send set-password email'}
+                </Button>
+              ) : undefined
+            }
+          >
+            <span className="break-words">{done.email} already had a sign-in account, so the password you set wasn&apos;t applied.</span>
+          </Callout>
+        ) : done.withPassword ? (
+          <Callout tone="success">
+            {done.name} can sign in now with the temporary password you set. Share it with them securely, and ask them to change it with Forgot
+            password after they first sign in.
+          </Callout>
+        ) : null}
+      </SlideOver>
+    )
+  }
 
   return (
     <SlideOver

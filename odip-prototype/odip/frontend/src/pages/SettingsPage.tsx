@@ -290,7 +290,6 @@ export default function SettingsPage() {
         onClose={() => { setUserPanelOpen(false); setEditingUser(undefined); setDefaultTenantId(undefined) }}
         user={editingUser}
         defaultTenantId={defaultTenantId}
-        onNotify={notify}
       />
 
       {toast}

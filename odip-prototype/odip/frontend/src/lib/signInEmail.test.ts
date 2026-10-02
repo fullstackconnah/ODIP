@@ -114,39 +114,46 @@ describe('sendSetPasswordEmailFor', () => {
 })
 
 describe('describeEmailOutcome', () => {
-  const at = 'on their row'
+  // What the person should do to try again, as an imperative: where the screen offers the retry.
+  const retry = 'use Send set-password email on their row'
   const sent = (account: 'created' | 'existing'): EmailOutcome => ({ ok: true, email: EMAIL, account })
   const failed = (reason: 'account' | 'too-many-requests' | 'invalid-email' | 'network' | 'other', detail?: string): EmailOutcome =>
     ({ ok: false, email: EMAIL, reason, detail })
 
   it('says "set" for an account that was just made and names the address', () => {
-    expect(describeEmailOutcome(sent('created'), at)).toEqual({
+    expect(describeEmailOutcome(sent('created'), retry)).toEqual({
       tone: 'success',
       message: `We've sent ${EMAIL} a link to set their password. It can take a few minutes, so ask them to check spam.`,
     })
   })
 
   it('says "reset" for an account that was already there', () => {
-    expect(describeEmailOutcome(sent('existing'), at)).toEqual({
+    expect(describeEmailOutcome(sent('existing'), retry)).toEqual({
       tone: 'success',
       message: `We've sent ${EMAIL} a link to reset their password. It can take a few minutes, so ask them to check spam.`,
     })
   })
 
   it.each([
-    ['too-many-requests', undefined, `No link was sent to ${EMAIL}. Firebase is limiting emails for now. Wait a few minutes, then use Send set-password email on their row again.`],
+    ['too-many-requests', undefined, `No link was sent to ${EMAIL}. Firebase is limiting emails for now. Wait a few minutes, then use Send set-password email on their row.`],
     ['invalid-email', undefined, `No link was sent to ${EMAIL}. That doesn't look like a valid email address. Correct it, then use Send set-password email on their row.`],
-    ['network', undefined, `No link was sent to ${EMAIL}. We couldn't reach Firebase. Check your connection, then use Send set-password email on their row again.`],
-    ['other', undefined, `No link was sent to ${EMAIL}. Use Send set-password email on their row to try again.`],
+    ['network', undefined, `No link was sent to ${EMAIL}. We couldn't reach Firebase. Check your connection, then use Send set-password email on their row.`],
+    ['other', undefined, `No link was sent to ${EMAIL}. To try again, use Send set-password email on their row.`],
     ['account', 'This staff member is inactive, so they cannot be given a sign-in account.', `No link was sent to ${EMAIL}. This staff member is inactive, so they cannot be given a sign-in account.`],
     ['account', undefined, `No link was sent to ${EMAIL}. We couldn't set up a sign-in account for them.`],
   ] as const)('a %s failure (%s) is an error that says no link was sent', (reason, detail, message) => {
-    expect(describeEmailOutcome(failed(reason, detail), at)).toEqual({ tone: 'error', message })
+    expect(describeEmailOutcome(failed(reason, detail), retry)).toEqual({ tone: 'error', message })
+  })
+
+  it('uses the retry phrase it is given, so a screen with its own Send again button says that instead', () => {
+    expect(describeEmailOutcome(failed('too-many-requests'), 'use Send again').message)
+      .toBe(`No link was sent to ${EMAIL}. Firebase is limiting emails for now. Wait a few minutes, then use Send again.`)
+    expect(describeEmailOutcome(failed('other'), 'use Send again').message).toBe(`No link was sent to ${EMAIL}. To try again, use Send again.`)
   })
 
   it('never claims delivery for a failure, and never says "try again in a moment"', () => {
     for (const reason of ['account', 'too-many-requests', 'invalid-email', 'network', 'other'] as const) {
-      const { message } = describeEmailOutcome(failed(reason), at)
+      const { message } = describeEmailOutcome(failed(reason), retry)
       expect(message).not.toMatch(/we've sent|emailed/i)
       expect(message).not.toMatch(/in a moment/i)
       expect(message).toContain(EMAIL)

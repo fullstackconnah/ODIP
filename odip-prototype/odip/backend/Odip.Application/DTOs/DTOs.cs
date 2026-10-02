@@ -2386,6 +2386,13 @@ public record AdminUserDto
     public string? WorkerScreeningNumber { get; init; }
     public DateOnly? WorkerScreeningExpiryDate { get; init; }
     public string? Notes { get; init; }
+
+    /// <summary>
+    /// Set by the CREATE response only (null everywhere else): whether the user's Firebase sign-in account was just created or already
+    /// existed (<see cref="FirebaseAccountStatus"/>). An account that already existed was left as it was, so a password the admin typed was
+    /// not applied to it, and the screen has to say so.
+    /// </summary>
+    public string? FirebaseAccount { get; init; }
 }
 
 public record CreateAdminUserDto
@@ -2448,6 +2455,20 @@ public record TenantSummaryDto(
     bool IsActive,
     DateTime CreatedAt,
     int UserCount);
+
+/// <summary>
+/// What a tenant create with a first user answers: the summary, plus that user's id and what became of their Firebase sign-in account
+/// (<see cref="FirebaseAccountStatus"/>: created, existing, or failed when it could not be set up). Both are null when no first user was given.
+/// </summary>
+public record TenantCreatedDto(
+    Guid Id,
+    string Name,
+    string EmailDomain,
+    bool IsActive,
+    DateTime CreatedAt,
+    int UserCount,
+    Guid? InitialUserId,
+    string? FirebaseAccount) : TenantSummaryDto(Id, Name, EmailDomain, IsActive, CreatedAt, UserCount);
 
 // ── Bundled Tenant Creation ───────────────────────────────────────────────
 

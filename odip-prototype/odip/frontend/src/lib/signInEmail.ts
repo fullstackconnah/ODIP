@@ -59,9 +59,10 @@ export function sendSetPasswordEmailFor(email: string, account: AccountState): P
 /**
  * The sentence for an outcome, and whether it is good news. It always names the address, never claims delivery for a failure, and gives
  * advice that fits the failure: only a rate limit or a dropped connection is worth trying again soon, and an invalid address needs fixing
- * first. `retryAt` says where the person can try again, as a phrase that follows "Send set-password email" ("on their row").
+ * first. `retry` is what the person does to try again, as an imperative that follows "then" and "To try again,": the control THIS screen
+ * offers ("use Send set-password email on their row", "use Send again").
  */
-export function describeEmailOutcome(outcome: EmailOutcome, retryAt: string): { tone: 'success' | 'error'; message: string } {
+export function describeEmailOutcome(outcome: EmailOutcome, retry: string): { tone: 'success' | 'error'; message: string } {
   const { email } = outcome
   if (outcome.ok) {
     const verb = outcome.account === 'created' ? 'set' : 'reset'
@@ -73,12 +74,12 @@ export function describeEmailOutcome(outcome: EmailOutcome, retryAt: string): { 
     case 'account':
       return { tone: 'error', message: `${noLink} ${outcome.detail ?? "We couldn't set up a sign-in account for them."}` }
     case 'too-many-requests':
-      return { tone: 'error', message: `${noLink} Firebase is limiting emails for now. Wait a few minutes, then use Send set-password email ${retryAt} again.` }
+      return { tone: 'error', message: `${noLink} Firebase is limiting emails for now. Wait a few minutes, then ${retry}.` }
     case 'invalid-email':
-      return { tone: 'error', message: `${noLink} That doesn't look like a valid email address. Correct it, then use Send set-password email ${retryAt}.` }
+      return { tone: 'error', message: `${noLink} That doesn't look like a valid email address. Correct it, then ${retry}.` }
     case 'network':
-      return { tone: 'error', message: `${noLink} We couldn't reach Firebase. Check your connection, then use Send set-password email ${retryAt} again.` }
+      return { tone: 'error', message: `${noLink} We couldn't reach Firebase. Check your connection, then ${retry}.` }
     case 'other':
-      return { tone: 'error', message: `${noLink} Use Send set-password email ${retryAt} to try again.` }
+      return { tone: 'error', message: `${noLink} To try again, ${retry}.` }
   }
 }

@@ -11,6 +11,8 @@ export interface AdminUserDto {
   isActive: boolean
   createdAt: string
   lastLoginAt: string | null
+  /** Set by the CREATE response only: whether the user's Firebase sign-in account was just made or already existed (and was left as it was). */
+  firebaseAccount?: FirebaseAccountState | null
 }
 
 export interface CreateAdminUserDto {

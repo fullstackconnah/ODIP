@@ -6,6 +6,7 @@ import type {
   TenantSummaryDto,
   TenantDto,
   CreateTenantWithSetupDto,
+  TenantCreatedDto,
   UpdateTenantDto,
   AdminUserDto,
   CreateAdminUserDto,
@@ -30,7 +31,7 @@ export function useCreateTenantWithSetup() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: CreateTenantWithSetupDto) =>
-      apiPost<TenantSummaryDto>('/admin/tenants/with-setup', data),
+      apiPost<TenantCreatedDto>('/admin/tenants/with-setup', data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-tenants'] }),
   })
 }

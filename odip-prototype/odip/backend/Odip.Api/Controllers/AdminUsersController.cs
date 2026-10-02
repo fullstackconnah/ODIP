@@ -262,8 +262,13 @@ public class AdminUsersController : ControllerBase
             throw; // handled by ExceptionHandlingMiddleware -> standard 500 ApiResponse envelope
         }
 
-        return CreatedAtAction(nameof(GetById), new { id = user.Id },
-            ApiResponse<AdminUserDto>.Ok(ToAdminUserDto(user, tenant.Name)));
+        // Say which it was: a password the admin typed is applied to an account made here and NOT to one that already existed, and the
+        // set-password email is worded "set" or "reset" accordingly.
+        var created = ToAdminUserDto(user, tenant.Name) with
+        {
+            FirebaseAccount = createdFirebaseUser ? FirebaseAccountStatus.Created : FirebaseAccountStatus.Existing,
+        };
+        return CreatedAtAction(nameof(GetById), new { id = user.Id }, ApiResponse<AdminUserDto>.Ok(created));
     }
 
     // PUT api/v1/admin/users/{id}

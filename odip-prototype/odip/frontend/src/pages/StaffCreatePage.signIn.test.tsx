@@ -149,7 +149,7 @@ describe('StaffCreatePage: the sign-in email after a create', () => {
     await fillAndCreate(u)
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'No link was sent to sam.staff@acme.example.com. Firebase is limiting emails for now. Wait a few minutes, then use Send set-password email on their staff page again.',
+      'No link was sent to sam.staff@acme.example.com. Firebase is limiting emails for now. Wait a few minutes, then use Send again.',
     )
     expect(screen.queryByText(/We've sent/)).not.toBeInTheDocument()
 

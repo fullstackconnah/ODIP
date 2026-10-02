@@ -121,6 +121,7 @@ public class TenantsController : ControllerBase
             _db.ProviderSettings.Add(settings);
         }
 
+        Guid? initialUserId = null;
         if (dto.InitialUser is { } iu)
         {
             if (!Enum.TryParse<UserRole>(iu.Role, true, out var role) || role == UserRole.SuperAdmin)
@@ -140,12 +141,14 @@ public class TenantsController : ControllerBase
                 UpdatedAt = DateTime.UtcNow,
             };
             _db.Users.Add(user);
+            initialUserId = user.Id;
         }
 
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
 
         // Create Firebase Auth user for initial admin (best-effort — after commit so DB records are preserved)
+        string? firebaseAccount = null;
         if (dto.InitialUser is { } firebaseIu)
         {
             try
@@ -153,16 +156,18 @@ public class TenantsController : ControllerBase
                 await _firebaseUserService.CreateUserAsync(
                     EmailIdentity.Normalise(firebaseIu.Email), $"{firebaseIu.FirstName} {firebaseIu.LastName}",
                     string.IsNullOrEmpty(firebaseIu.Password) ? null : firebaseIu.Password, ct);
+                firebaseAccount = FirebaseAccountStatus.Created;
             }
             catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.EmailAlreadyExists)
             {
-                // Already exists in Firebase — OK
+                // Already exists in Firebase: left exactly as it was, so a password typed here was not applied. The response says so.
+                firebaseAccount = FirebaseAccountStatus.Existing;
             }
         }
 
-        return CreatedAtAction(nameof(GetAll), null, ApiResponse<TenantSummaryDto>.Ok(new TenantSummaryDto(
+        return CreatedAtAction(nameof(GetAll), null, ApiResponse<TenantCreatedDto>.Ok(new TenantCreatedDto(
             tenant.Id, tenant.Name, tenant.EmailDomain, tenant.IsActive, tenant.CreatedAt,
-            dto.InitialUser is not null ? 1 : 0)));
+            dto.InitialUser is not null ? 1 : 0, initialUserId, firebaseAccount)));
     }
 
     // PUT api/v1/admin/tenants/{id}

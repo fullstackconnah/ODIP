@@ -203,7 +203,7 @@ export default function StaffCreatePage() {
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
         <PageHeader title="Staff member created" subtitle={created.name} />
         <Card className="space-y-4">
-          <SignInEmailOutcome outcome={created.outcome} retryAt="on their staff page" onRetry={sendAgain} retrying={retrying} />
+          <SignInEmailOutcome outcome={created.outcome} retry="use Send again" onRetry={sendAgain} retrying={retrying} />
           <div className="flex justify-end">
             <Button to="/staff">Done</Button>
           </div>

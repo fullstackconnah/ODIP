@@ -67,6 +67,7 @@ vi.mock('@/api/hooks', () => ({
   useAdminTenantsSummary: () => ({ data: [] }),
   useCreateAdminUser: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateAdminUser: () => ({ mutate: vi.fn(), isPending: false }),
+  useEnsureUserSignInAccount: () => ({ mutateAsync: vi.fn() }),
   // NotificationPreferencesTab (mounted whenever the Notifications tab is selected) and
   // AdminNotificationsTab (Failed Sends, canManageNotifications-gated).
   useNotificationPreferences: () => ({ data: { rows: [] }, isLoading: false, isError: false }),
@@ -81,6 +82,7 @@ vi.mock('@/api/hooks', () => ({
 vi.mock('@/api/hooks/admin', () => ({
   useCreateTenantWithSetup: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateTenant: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useEnsureUserSignInAccount: () => ({ mutateAsync: vi.fn() }),
 }))
 
 vi.mock('@/lib/permissions', () => ({

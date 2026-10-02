@@ -60,3 +60,12 @@ export interface CreateTenantWithSetupDto {
   } | null
   initialUser?: CreateInitialUserDto | null
 }
+
+/**
+ * What a tenant create answers: the summary, plus the first user's id and what became of their Firebase sign-in account (created, or
+ * existing when one was already there and was left as it was). Both are absent when no first user was given.
+ */
+export interface TenantCreatedDto extends TenantSummaryDto {
+  initialUserId?: string | null
+  firebaseAccount?: 'created' | 'existing' | null
+}

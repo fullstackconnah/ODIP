@@ -118,7 +118,7 @@ describe('UsersTab: Send set-password email', () => {
 
     await waitFor(() => expect(onNotify).toHaveBeenCalledWith(
       'error',
-      'No link was sent to u1@example.com.au. Firebase is limiting emails for now. Wait a few minutes, then use Send set-password email on their row again.',
+      'No link was sent to u1@example.com.au. Firebase is limiting emails for now. Wait a few minutes, then use Send set-password email on their row.',
     ))
     await waitFor(() => expect(sendIn('User Number1')).toBeEnabled())
 

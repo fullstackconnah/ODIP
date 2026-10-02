@@ -98,7 +98,7 @@ export default function UsersTab({ onAddUser, onEditUser, onNotify }: UsersTabPr
     setSendingId(target.id)
     const outcome = await ensureAndSendSetPasswordEmail(target.email, () => ensureAccount.mutateAsync(target.id))
     setSendingId(null)
-    const { tone, message } = describeEmailOutcome(outcome, 'on their row')
+    const { tone, message } = describeEmailOutcome(outcome, 'use Send set-password email on their row')
     onNotify?.(tone, message)
   }
 

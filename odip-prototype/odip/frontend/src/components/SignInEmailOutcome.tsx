@@ -4,8 +4,8 @@ import { describeEmailOutcome, type EmailOutcome } from '@/lib/signInEmail'
 
 type SignInEmailOutcomeProps = {
   outcome: EmailOutcome
-  /** Where to try again, as the phrase that follows "Send set-password email" ("on their row"). Used by the failures with no better advice. */
-  retryAt: string
+  /** What the person does to try again, as an imperative ("use Send again"): it ends the advice in a failure. */
+  retry: string
   /** When given, a failure carries a "Send again" button right beside it, so the retry is where the person is looking. */
   onRetry?: () => void
   /** The retry is under way: the button is switched off so it cannot send a second email. */
@@ -18,8 +18,8 @@ type SignInEmailOutcomeProps = {
  * that interrupts, names the address and says no link was sent. Shown where the person made the request (a create form's done state), so the
  * answer is not taken away by a navigation or a timer.
  */
-export function SignInEmailOutcome({ outcome, retryAt, onRetry, retrying = false, className }: SignInEmailOutcomeProps) {
-  const { tone, message } = describeEmailOutcome(outcome, retryAt)
+export function SignInEmailOutcome({ outcome, retry, onRetry, retrying = false, className }: SignInEmailOutcomeProps) {
+  const { tone, message } = describeEmailOutcome(outcome, retry)
   return (
     <Callout
       tone={tone === 'success' ? 'success' : 'warning'}

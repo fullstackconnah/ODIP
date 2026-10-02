@@ -8,6 +8,7 @@ vi.mock('@/api/hooks', () => ({
   useAdminTenantsSummary: () => ({ data: [{ id: 'tenant-1', name: 'Sample Support Co' }] }),
   useCreateAdminUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateAdminUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useEnsureUserSignInAccount: () => ({ mutateAsync: vi.fn() }),
 }))
 
 const user1: AdminUserDto = {

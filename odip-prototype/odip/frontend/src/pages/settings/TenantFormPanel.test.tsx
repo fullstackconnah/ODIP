@@ -6,6 +6,7 @@ import TenantFormPanel from './TenantFormPanel'
 vi.mock('@/api/hooks/admin', () => ({
   useCreateTenantWithSetup: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateTenant: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useEnsureUserSignInAccount: () => ({ mutateAsync: vi.fn() }),
 }))
 
 // The panel's single-line inputs take a fixed `--control-h` height. A textarea that reuses that class ignores its `rows`

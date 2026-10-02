@@ -72,7 +72,7 @@ export default function StaffDetailPage() {
     setSending(true)
     const outcome = await ensureAndSendSetPasswordEmail(email, () => ensureAccount.mutateAsync(overview.staff.id))
     setSending(false)
-    const { tone, message } = describeEmailOutcome(outcome, 'on this page')
+    const { tone, message } = describeEmailOutcome(outcome, 'use Send set-password email on this page')
     notify(tone, message)
   }
 
