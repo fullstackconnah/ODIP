@@ -773,3 +773,11 @@ not. Never hand-roll a `fixed right-0` panel: use `SlideOver`.
 - **Don't** tint a glance segment its own badge calls fine, or fill one with anything but the warning-container or error-container
 - **Don't** tint an attention tile at zero, or claim "All clear" without data (while its request is in flight, or after it failed)
 - **Don't** restyle a single module more heavily than any other; design effort is uniform by commitment
+
+## Marketing surface (/welcome/)
+
+The public landing page ("Living Canopy Light") is the same product seen from outside, documented in `frontend/welcome/DESIGN.md`. It shares this system's tokens by value: `frontend/welcome/welcome.css` repeats the `@theme` values from `src/index.css` under the same names (the greens, Warm Paper, Ledger Ink, Ruled Line, Field Grey, the warning and error tones, the radii and both faces), and `frontend/welcome/tokens.test.ts` fails if any of them drifts from the app.
+
+- **Change a shared token here first.** When this file or `src/index.css` changes a colour, radius or face that the landing declares, update `welcome.css` in the same change, or the test fails.
+- **Copy, never import.** The landing is its own Vite entry and does not import `src/index.css`, so the app's base styles and components do not leak onto it, and its canopy styles do not leak into the app.
+- **What the landing adds** is a forest canopy ground (`#0f2000`, the app's `on-primary-fixed`), warm-paper text at 84% and 70%, Sprout hairlines at 20%, and a WebGL light field. Its paper surfaces ("clearings") follow this system exactly. None of these additions belong in the app.
