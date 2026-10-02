@@ -131,6 +131,12 @@ public sealed class DemoTenantGuard
                 nameof(IncidentReport.FamilyNotified), nameof(IncidentReport.FamilyNotifiedAt),
                 nameof(IncidentReport.SupportCoordinatorNotified), nameof(IncidentReport.SupportCoordinatorNotifiedAt), nameof(IncidentReport.UpdatedAt),
             },
+            // A medication that was ceased or put on hold was prescribed first: the pack adds it Active and replays the change as a save of its own, to the
+            // rows it has just added (plan 4.4). Never the dose, the schedule or who it is for.
+            [typeof(ParticipantMedication)] = new HashSet<string>
+            {
+                nameof(ParticipantMedication.Status), nameof(ParticipantMedication.EndDate), nameof(ParticipantMedication.Notes), nameof(ParticipantMedication.UpdatedAt),
+            },
             [typeof(LeaveRequest)] = new HashSet<string>
             {
                 nameof(LeaveRequest.Status), nameof(LeaveRequest.DecidedAt), nameof(LeaveRequest.DecisionNote), nameof(LeaveRequest.UpdatedAt),

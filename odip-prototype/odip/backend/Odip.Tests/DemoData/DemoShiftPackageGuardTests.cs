@@ -69,6 +69,12 @@ public class DemoShiftPackageGuardTests
         StartedAt = new DateTime(2026, 10, 1, 20, 58, 0, DateTimeKind.Utc), TimeZoneId = "Australia/Sydney", IsActive = true,
     };
 
+    private static ParticipantMedication Medication() => new()
+    {
+        Id = Guid.NewGuid(), TenantId = DemoTenant, ParticipantId = OwnedParticipant, Name = "Melatonin", Strength = "2mg", DoseDescription = "1 tablet (2mg)", Type = MedicationType.Regular,
+        TimesOfDay = "20:00", StartDate = new DateTime(2026, 6, 24), Status = MedicationStatus.Active,
+    };
+
     // ── additions point only at people the Demo tenant owns ──
 
     public static IEnumerable<object[]> NewRows() => new[]
@@ -226,6 +232,55 @@ public class DemoShiftPackageGuardTests
             case nameof(IncidentReport.InvolvedParticipantId): tracked.InvolvedParticipantId = Guid.NewGuid(); break;
             case nameof(IncidentReport.CreatedAt): tracked.CreatedAt = DateTime.UtcNow; break;
             default: tracked.ShiftId = Guid.NewGuid(); break;
+        }
+
+        var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(db.ChangeTracker));
+        Assert.Contains(property, ex.Message);
+    }
+
+    [Theory]
+    [InlineData(nameof(ParticipantMedication.Status))]
+    [InlineData(nameof(ParticipantMedication.EndDate))]
+    [InlineData(nameof(ParticipantMedication.Notes))]
+    [InlineData(nameof(ParticipantMedication.UpdatedAt))]
+    public async Task AMedication_MayBeCeasedOrPutOnHold(string property)
+    {
+        var medication = Medication();
+        await using var db = await DbWithAsync(NewOptions(), medication);
+        var tracked = await db.ParticipantMedications.SingleAsync(m => m.Id == medication.Id);
+
+        switch (property)
+        {
+            case nameof(ParticipantMedication.Status): tracked.Status = MedicationStatus.OnHold; break;
+            case nameof(ParticipantMedication.EndDate): tracked.EndDate = new DateTime(2026, 9, 12); break;
+            case nameof(ParticipantMedication.Notes): tracked.Notes = "On hold while the sleep review is booked."; break;
+            default: tracked.UpdatedAt = DateTime.UtcNow; break;
+        }
+
+        NewGuard().Verify(db.ChangeTracker);
+    }
+
+    [Theory]
+    [InlineData(nameof(ParticipantMedication.Name))]
+    [InlineData(nameof(ParticipantMedication.DoseDescription))]
+    [InlineData(nameof(ParticipantMedication.TimesOfDay))]
+    [InlineData(nameof(ParticipantMedication.IsHighRisk))]
+    [InlineData(nameof(ParticipantMedication.ParticipantId))]
+    [InlineData(nameof(ParticipantMedication.StartDate))]
+    public async Task AMedication_NeverHasItsDoseItsScheduleOrWhoItIsForRewritten(string property)
+    {
+        var medication = Medication();
+        await using var db = await DbWithAsync(NewOptions(), medication);
+        var tracked = await db.ParticipantMedications.SingleAsync(m => m.Id == medication.Id);
+
+        switch (property)
+        {
+            case nameof(ParticipantMedication.Name): tracked.Name = "Another"; break;
+            case nameof(ParticipantMedication.DoseDescription): tracked.DoseDescription = "2 tablets"; break;
+            case nameof(ParticipantMedication.TimesOfDay): tracked.TimesOfDay = "06:00"; break;
+            case nameof(ParticipantMedication.IsHighRisk): tracked.IsHighRisk = true; break;
+            case nameof(ParticipantMedication.ParticipantId): tracked.ParticipantId = Guid.NewGuid(); break;
+            default: tracked.StartDate = new DateTime(2026, 1, 1); break;
         }
 
         var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(db.ChangeTracker));

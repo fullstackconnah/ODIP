@@ -6,6 +6,7 @@ using Odip.Domain.Rostering;
 using Odip.Infrastructure.DemoData;
 using Odip.Infrastructure.DemoData.Packs;
 using Xunit;
+using static Odip.Tests.DemoData.DemoAudit;
 using static Odip.Tests.DemoData.DemoLive;
 
 namespace Odip.Tests.DemoData;
@@ -35,15 +36,6 @@ public class DemoIncidentScriptTests
         await using var db = env.AdminDb();
         return (await db.AuditLogs.Where(a => a.EntityId == entityId).ToListAsync()).OrderBy(a => a.ChangedAt).ToList();
     }
-
-    /// <summary>Whether an audit entry records this field going from <paramref name="old"/> to <paramref name="now"/> (null: no value), as the interceptor writes it.</summary>
-    private static bool Says(AuditLog entry, string field, string? old, string? now)
-    {
-        static string Json(string? value) => value is null ? "null" : "\"" + value + "\"";
-        return entry.Changes.Contains($"\"Field\":\"{field}\",\"Old\":{Json(old)},\"New\":{Json(now)}", StringComparison.Ordinal);
-    }
-
-    private static bool Mentions(AuditLog entry, string field) => entry.Changes.Contains($"\"Field\":\"{field}\"", StringComparison.Ordinal);
 
     // ── the history of each of the twelve ──
 
