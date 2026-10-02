@@ -44,7 +44,9 @@ function AllClearField({ labels }: { labels: string[] }) {
     <div className={`flex items-center gap-3 rounded-md px-[var(--section-gap)] py-[var(--section-gap)] ${TONE.success.solid}`}>
       <CircleCheck className="h-6 w-6 shrink-0" aria-hidden="true" />
       <div className="flex min-w-0 flex-col gap-0.5">
-        <p className="text-sm font-semibold">All clear. Nothing needs you right now.</p>
+        {/* The commonest login there is, so its one sentence takes the headline step the system already owns (the page title's, a StatCard value's), as a payoff and
+            not a notification. A sentence, not a heading: the page's one h1 is the greeting. The audit line under it stays 13px. */}
+        <p className="text-xl font-display font-bold">All clear. Nothing needs you right now.</p>
         <p className="text-[13px]">Checked and at zero: {joinList(labels)}.</p>
       </div>
     </div>

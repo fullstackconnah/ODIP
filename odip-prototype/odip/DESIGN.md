@@ -288,7 +288,8 @@ The ramp is short and flat because the density comes from layout. Measured at 19
   muted ink at the same size), the figures of a glance strip (`FactBar variant="glance"`) and the figures of the attention band (`StatCard variant="attention"`), all in tabular figures.
   Its four `--text-display*` tokens sit in the density token block.
 - **Headline** (700, 1.25rem / `text-xl`): the page title in `PageHeader`, one per screen. StatCard values
-  use the same size in display bold.
+  use the same size in display bold, and so does the one sentence of the dashboard's all-clear field ("All clear. Nothing needs you right now."), a payoff in the commonest
+  login state; it is a `<p>`, not a heading, so The One Heading Rule holds, and the audit line under it stays 13px.
 - **Title** (600, 0.875rem / `text-sm`): card and section headings.
 - **Body** (400, 0.875rem / `text-sm`): the default. Table cells, descriptive copy, input text.
 - **Body secondary** (400, 13px): table secondary text, the `PageHeader` subtitle (inline after the

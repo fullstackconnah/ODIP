@@ -281,3 +281,41 @@ describe('AttentionBand — naming the clear items', () => {
     expect(screen.queryByText('overdue tasks')).not.toBeInTheDocument()
   })
 })
+
+// The good-day state is the commonest login there is, so its one sentence is a payoff, not a notification: it takes the HEADLINE step the system already owns (20px,
+// display bold: the page title's, and a StatCard value's), and the audit line under it stays 13px. No size is added, and it is a sentence, not a heading.
+describe('AttentionBand — the all-clear field is a payoff', () => {
+  const ZERO = [item('Alpha', 0), item('Beta', 0)]
+
+  it('sets its headline sentence at the headline step (text-xl, display bold) and its audit line at 13px', () => {
+    renderBand(ZERO)
+
+    const headline = screen.getByText('All clear. Nothing needs you right now.')
+    expect(headline).toHaveClass('text-xl', 'font-display', 'font-bold')
+    const audit = screen.getByText(/^Checked and at zero:/)
+    expect(audit).toHaveClass('text-[13px]')
+    expect(audit.className).not.toMatch(/text-xl|font-bold|font-display|text-display/)
+  })
+
+  it('adds no new type size: the field uses the headline step and the 13px step and nothing else', () => {
+    renderBand(ZERO)
+
+    // (A bracket value only counts as a size when it is a length: text-[var(--color-…)] is a colour.)
+    const sizes = new Set(band().innerHTML.match(/\btext-(?:xs|sm|base|lg|xl|[2-9]xl|display|\[\d+(?:\.\d+)?(?:px|rem)\])/g))
+    expect(sizes).toEqual(new Set(['text-xl', 'text-[13px]']))
+  })
+
+  it('is a sentence, not a heading: the page keeps its one h1 and The One Heading Rule', () => {
+    renderBand(ZERO)
+
+    expect(within(band()).queryAllByRole('heading')).toHaveLength(0)
+    expect(screen.getByText('All clear. Nothing needs you right now.').tagName).toBe('P')
+  })
+
+  it('leaves the All clear row at the row\'s own 13px: only the field is a payoff', () => {
+    renderBand([item('Alpha', 2), item('Beta', 0)])
+
+    expect(clearRow()).toHaveClass('text-[13px]')
+    expect(band().innerHTML).not.toMatch(/text-xl/)
+  })
+})

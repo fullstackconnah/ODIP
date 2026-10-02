@@ -102,7 +102,7 @@
       },
       "headline": {
         "displayName": "Headline",
-        "purpose": "Page title, 20px, one per screen (28px display on a detail page and on the dashboard)."
+        "purpose": "Page title, 20px, one per screen (28px display on a detail page and on the dashboard). Also a StatCard value and the dashboard's all-clear field sentence."
       },
       "title": {
         "displayName": "Title",
