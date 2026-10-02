@@ -15,8 +15,12 @@ namespace Odip.Domain.Billing.Pricing;
 /// </summary>
 public static class PlanPricingEngine
 {
-    /// <summary>The most blocks, days and dated occurrences one quote prices, so a request cannot ask for an unbounded amount of work or answer (20,000 is 54 blocks every day for a year).</summary>
-    public const int MaxBlocks = 200, MaxPeriodDays = 800, MaxOccurrences = 20_000;
+    /// <summary>
+    /// The most blocks, days, dated occurrences and estimated lines one quote prices, so a request under the body limit cannot ask for an unbounded amount of work
+    /// or answer. 25,000 occurrences is 200 blocks of one weekday each over 800 days; the line estimate (<see cref="PlanBlock.MaxLinesPerOccurrence"/> an occurrence)
+    /// is what bounds the answer: a block's headcount changes and companions make more lines per occurrence.
+    /// </summary>
+    public const int MaxBlocks = 200, MaxPeriodDays = 800, MaxOccurrences = 25_000, MaxEstimatedLines = 100_000;
 
     /// <summary>The years an agreement period may fall in: far inside what date arithmetic can hold, so an occurrence that ends the next day can never overflow.</summary>
     public const int FirstYear = 2000, LastYear = 2100;
@@ -58,6 +62,9 @@ public static class PlanPricingEngine
         else if (CountOccurrences(blocks, request.PeriodFrom, request.PeriodTo) > MaxOccurrences)
             issues.Add(string.Empty, PlanFailureReason.InvalidInput,
                 string.Create(CultureInfo.InvariantCulture, $"The blocks and period make more than {MaxOccurrences:N0} dated occurrences: shorten the period or price fewer blocks."), null);
+        else if (EstimateLines(blocks, request.PeriodFrom, request.PeriodTo) is var estimate && estimate > MaxEstimatedLines)
+            issues.Add(string.Empty, PlanFailureReason.InvalidInput,
+                string.Create(CultureInfo.InvariantCulture, $"The blocks and period would make about {estimate:N0} lines, more than the {MaxEstimatedLines:N0} one quote prices: shorten the period, price fewer blocks, or use fewer headcount changes."), null);
         else
         {
             var pricer = new OccurrencePricer(policy, new PlanCatalogue(request.Catalogue ?? Array.Empty<SupportCatalogueItem>()), new HolidayCalendar(request.Holidays ?? Array.Empty<HolidayEntry>()));
@@ -157,6 +164,16 @@ public static class PlanPricingEngine
             .Distinct()
             .OrderBy(date => date)
             .ToList();
+
+    /// <summary>What the quote would produce at most: every valid block's dated occurrences times its own upper bound of lines. A block that fails validation prices nothing and adds nothing.</summary>
+    private static long EstimateLines(IReadOnlyList<PlanBlock> blocks, DateOnly from, DateOnly to)
+    {
+        long total = 0;
+        foreach (var block in blocks)
+            if (block?.Days is not null && block.Validate().Count == 0)
+                total += (long)Dates(block, from, to).Count * block.MaxLinesPerOccurrence;
+        return total;
+    }
 
     private static int CountOccurrences(IReadOnlyList<PlanBlock> blocks, DateOnly from, DateOnly to) =>
         blocks.Where(block => block?.Days is not null).Sum(block => Dates(block, from, to).Count);

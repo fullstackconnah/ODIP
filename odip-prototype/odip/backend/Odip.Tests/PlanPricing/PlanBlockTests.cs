@@ -205,6 +205,21 @@ public class PlanBlockTests
     }
 
     [Fact]
+    public void A_block_has_at_most_ten_headcount_changes_because_each_one_cuts_every_occurrence_into_another_line()
+    {
+        PlanBlock WithChanges(int count) => Valid(b => b with
+        {
+            Start = new TimeOnly(0, 0), End = new TimeOnly(0, 0), ParticipantsPresent = 5,
+            HeadcountChanges = Enumerable.Range(1, count).Select(i => new PlanHeadcountChange { From = TimeOnly.MinValue.AddMinutes(i * 15), ParticipantsPresent = 1 + i % 4 }).ToList(),
+        });
+
+        Assert.Equal(10, PlanBlock.MaxHeadcountChanges);
+        Assert.Empty(WithChanges(10).Validate());
+        Assert.Contains(WithChanges(11).Validate(), m => m.Contains("at most 10 headcount changes"));
+        Assert.Contains(WithChanges(90).Validate(), m => m.Contains("at most 10 headcount changes"));
+    }
+
+    [Fact]
     public void A_headcount_change_after_midnight_counts_from_the_start_of_an_overnight_block()
     {
         var block = Valid(b => b with

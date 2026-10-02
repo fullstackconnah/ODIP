@@ -78,7 +78,7 @@ One migration, `AddPlanPricingSettingsAndHolidayOverrides`: two `CreateTable`s, 
 
 `POST api/v1/plan-pricing/quote` (SuperAdmin, Admin, Coordinator; **internal**, phase C's builder is the only caller): body `blocks`, `periodFrom`,
 `periodTo`, `includeLines`. The server reads the caller's tenant's settings, the catalogue rows that touch the period and the holidays; the client sends
-no price and no policy. At most 200 blocks, 800 days and 20,000 dated occurrences (a bigger plan is an issue in the answer; `includeLines: false` keeps the answer small). `GET` and `PUT api/v1/plan-pricing/settings` (PUT: Admin and SuperAdmin; only the fields sent
+no price and no policy. At most 200 blocks, 800 days, 25,000 dated occurrences and about 100,000 lines (each block's occurrences times an upper bound of its lines: a plain block is 3, and every headcount change, up to 10 a block, adds one); a bigger plan is an issue in the answer, not work done. `includeLines: false` keeps the answer small. `GET` and `PUT api/v1/plan-pricing/settings` (PUT: Admin and SuperAdmin; only the fields sent
 change; sending the registration groups confirms them).
 
 ## Known limits

@@ -114,6 +114,10 @@ public sealed record PlanAccommodation
 public sealed record PlanBlock
 {
     private const int MinutesPerDay = 1440;
+
+    /// <summary>The most headcount changes a block may have: each one cuts every occurrence into another line, so an unbounded list is an unbounded answer.</summary>
+    public const int MaxHeadcountChanges = 10;
+
     private static readonly string[] States = { "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA" };
 
     /// <summary>The client's own key for the block (unique in a request): lines and totals are attributed to it.</summary>
@@ -140,6 +144,31 @@ public sealed record PlanBlock
     public PlanProviderTravel? Travel { get; init; }
     public PlanActivityTransport? Transport { get; init; }
     public PlanAccommodation? Accommodation { get; init; }
+
+    /// <summary>
+    /// An upper bound on the lines one occurrence can produce, for the engine's ceiling on a quote's size: the day bands the occurrence can touch (06:00, 20:00
+    /// and midnight cut it) plus two for a part-day holiday's hours, one more for each headcount change, and the sleepover, centre capital, travel, transport and
+    /// accommodation lines the block asks for. A plain 09:00 to 13:00 block is 3.
+    /// </summary>
+    public int MaxLinesPerOccurrence
+    {
+        get
+        {
+            var start = (int)(Start.Ticks / TimeSpan.TicksPerMinute);
+            var end = start + DurationMinutes;
+            var bands = 1;
+            for (var day = 0; day <= 1; day++)
+                foreach (var minute in new[] { 0, 360, 1200 })
+                {
+                    var at = day * MinutesPerDay + minute;
+                    if (at > start && at < end) bands++;
+                }
+
+            var companions = (WorkerMaySleep ? 2 : 0) + (Setting == PlanSetting.Centre ? 1 : 0) + (Travel is { Claim: true } ? 2 : 0)
+                + (Transport is not null ? 1 : 0) + (Accommodation is { Nights: > 0 } ? 2 : 0);
+            return bands + 2 + (HeadcountChanges?.Count ?? 0) + companions;
+        }
+    }
 
     /// <summary>Derived: the end is on the next day when it is not after the start.</summary>
     public bool EndsNextDay => End <= Start;
@@ -268,6 +297,12 @@ public sealed record PlanBlock
     private void ValidateHeadcountChanges(Action<string> add)
     {
         if (HeadcountChanges is null || HeadcountChanges.Count == 0) return;
+
+        if (HeadcountChanges.Count > MaxHeadcountChanges)
+        {
+            add(string.Create(CultureInfo.InvariantCulture, $"a block can have at most {MaxHeadcountChanges} headcount changes."));
+            return;
+        }
 
         var offsets = new HashSet<int>();
         foreach (var change in HeadcountChanges)

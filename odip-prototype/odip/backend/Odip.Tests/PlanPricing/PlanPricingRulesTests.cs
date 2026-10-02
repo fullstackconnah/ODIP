@@ -403,13 +403,54 @@ public class PlanPricingRulesTests
         var everyDay = Enum.GetValues<DayOfWeek>().ToArray();
         PlanBlock Daily(int i) => Weekday(PlanSupportType.CommunityAccess, id: $"d{i}") with { Days = everyDay };
 
-        var tooMany = Quote(Enumerable.Range(0, 30).Select(Daily).ToList(), Mon12Oct, Mon12Oct.AddDays(PlanPricingEngine.MaxPeriodDays - 1));   // 30 x 800 = 24,000
+        var tooMany = Quote(Enumerable.Range(0, 32).Select(Daily).ToList(), Mon12Oct, Mon12Oct.AddDays(PlanPricingEngine.MaxPeriodDays - 1));   // 32 x 800 = 25,600
         var within = Quote(Enumerable.Range(0, 20).Select(Daily).ToList(), Mon12Oct, Mon12Oct.AddDays(364));                                      // 20 x 365 = 7,300
 
         Assert.Empty(tooMany.Lines);
         Assert.Contains(PlanPricingEngine.MaxOccurrences.ToString("N0", System.Globalization.CultureInfo.InvariantCulture), Assert.Single(tooMany.Issues).Message);
         Assert.Equal(7300, within.Lines.Count);
         Assert.Equal(PlanFailureReason.InvalidInput, tooMany.Issues[0].Reason);
+    }
+
+    [Fact]
+    public void A_quote_that_would_make_more_lines_than_the_ceiling_is_refused_before_anything_is_priced()
+    {
+        // 15 blocks of 24 hours every day with the most headcount changes a block may have: 12,000 occurrences (inside the occurrence limit)
+        // but about 280,000 lines, each with a trace. The request is under 1 MiB, which is why the line estimate is the guard that counts.
+        var everyDay = Enum.GetValues<DayOfWeek>().ToArray();
+        PlanBlock Heavy(int i) => new()
+        {
+            Id = $"h{i}", SupportType = PlanSupportType.PersonalCare, Days = everyDay, Start = T(0), End = T(0), ParticipantsPresent = 5, Location = new PlanLocation { State = "NSW" },
+            HeadcountChanges = Enumerable.Range(1, PlanBlock.MaxHeadcountChanges).Select(k => new PlanHeadcountChange { From = new TimeOnly(k, 0), ParticipantsPresent = 1 + k % 4 }).ToList(),
+        };
+        var blocks = Enumerable.Range(0, 15).Select(Heavy).ToList();
+        Assert.All(blocks, b => Assert.Empty(b.Validate()));
+
+        var quote = Quote(blocks, Mon12Oct, Mon12Oct.AddDays(PlanPricingEngine.MaxPeriodDays - 1));
+
+        Assert.Empty(quote.Lines);
+        var issue = Assert.Single(quote.Issues);
+        Assert.Equal(PlanFailureReason.InvalidInput, issue.Reason);
+        Assert.Contains(PlanPricingEngine.MaxEstimatedLines.ToString("N0", System.Globalization.CultureInfo.InvariantCulture), issue.Message);
+        Assert.Contains("headcount changes", issue.Message);
+    }
+
+    [Fact]
+    public void A_plan_at_the_documented_limits_with_no_headcount_changes_still_prices()
+    {
+        // 200 blocks, one weekday each, over 800 days: about 23,000 occurrences and as many lines. The blocks are fifteen minutes at different times of day,
+        // so none overlaps another and the estimate (a few lines an occurrence) stays well under the ceiling.
+        var blocks = Enumerable.Range(0, 200).Select(i => Block($"w{i}", PlanSupportType.PersonalCare, (DayOfWeek)(i % 7), T(0).AddMinutes(i / 7 * 30), T(0).AddMinutes(i / 7 * 30 + 15))).ToList();
+        var from = Mon12Oct;
+        var to = Mon12Oct.AddDays(PlanPricingEngine.MaxPeriodDays - 1);
+        var expected = blocks.Sum(b => Enumerable.Range(0, PlanPricingEngine.MaxPeriodDays).Count(d => from.AddDays(d).DayOfWeek == b.Days[0]));
+        Assert.InRange(expected, 22_000, PlanPricingEngine.MaxOccurrences);
+
+        var quote = Quote(blocks, from, to);
+
+        Assert.DoesNotContain(quote.Issues, i => i.Reason == PlanFailureReason.InvalidInput);
+        Assert.Equal(expected, quote.Lines.Count(l => l.Kind == PlannedLineKind.Support));
+        Assert.Equal(200, quote.Totals.ByBlock.Count);
     }
 
     [Fact]
