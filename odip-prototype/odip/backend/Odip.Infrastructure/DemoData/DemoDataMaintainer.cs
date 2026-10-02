@@ -140,7 +140,7 @@ public sealed class DemoDataMaintainer
 
         var directory = await DemoDirectory.LoadAsync(db, ct);
         directory.FillOwned(owned);
-        var run = new DemoRun(db, anchors, tenantId, directory, _logger);
+        var run = new DemoRun(db, anchors, tenantId, directory, _clock, _logger);
 
         var failures = new List<DemoPackFailure>();
         foreach (var pack in _packs)

@@ -15,5 +15,9 @@ public static class DemoPacks
         new StaffCredentialsPack(),
         new CompatibilityPack(),
         new EmergencyContactsPack(),
+        new ShiftPatternsPack(),
+        new LeaveAndAvailabilityPack(),
+        new RosterWeeksPack(),
+        new LeaveCoverageTasksPack(),
     };
 }

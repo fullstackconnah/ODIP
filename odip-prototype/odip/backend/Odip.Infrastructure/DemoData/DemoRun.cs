@@ -26,9 +26,10 @@ public sealed class DemoRun
     private readonly Dictionary<string, int> _changed = new();
     private readonly List<string> _skipped = new();
 
-    internal DemoRun(OdipDbContext db, DemoAnchors anchors, Guid tenantId, DemoDirectory directory, ILogger logger)
+    internal DemoRun(OdipDbContext db, DemoAnchors anchors, Guid tenantId, DemoDirectory directory, TimeProvider clock, ILogger logger)
     {
         Db = db;
+        Clock = clock;
         Anchors = anchors;
         TenantId = tenantId;
         Directory = directory;
@@ -45,6 +46,9 @@ public sealed class DemoRun
     public DemoDirectory Directory { get; }
 
     public ILogger Logger { get; }
+
+    /// <summary>The tick's clock, for the app's own services (obligation tasks) that take a <see cref="TimeProvider"/>.</summary>
+    public TimeProvider Clock { get; }
 
     public DateTime NowUtc => Anchors.NowUtc;
 
