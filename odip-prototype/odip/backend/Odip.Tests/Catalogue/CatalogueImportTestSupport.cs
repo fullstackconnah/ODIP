@@ -1,3 +1,4 @@
+using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Odip.Application.DTOs;
@@ -34,6 +35,28 @@ internal static class CatalogueImportTestSupport
         using var stream = CatalogueFixtures.Open(fixture);
         return NewImporter(db, clock).PreviewImportAsync(stream, fixture);
     }
+
+    /// <summary>A copy of a fixture workbook after <paramref name="change"/> has edited it (a republished file, a damaged one), as a stream the importer can read.</summary>
+    public static MemoryStream Workbook(string fixture, Action<XLWorkbook> change)
+    {
+        using var workbook = new XLWorkbook(CatalogueFixtures.PathOf(fixture));
+        change(workbook);
+        var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        stream.Position = 0;
+        return stream;
+    }
+
+    /// <summary>Sets the Start date (column K of the 2026-27 layout) of the Current-sheet rows whose item number satisfies <paramref name="which"/>.</summary>
+    public static void SetStartDates(XLWorkbook workbook, Func<string, bool> which, int yyyymmdd)
+    {
+        var sheet = workbook.Worksheet("Current Support Items");
+        foreach (var row in sheet.RowsUsed().Skip(1))
+            if (which(row.Cell(1).GetString().Trim())) row.Cell(11).Value = yyyymmdd;
+    }
+
+    public static Task<CatalogueImportPreviewDto> PreviewAsync(OdipDbContext db, Stream workbook, string fileName, TimeProvider? clock = null) =>
+        NewImporter(db, clock).PreviewImportAsync(workbook, fileName);
 
     /// <summary>What an admin does: upload the file, read the preview, confirm it with the proposed version unless one is given.</summary>
     public static async Task<CatalogueImportResultDto> ImportAsync(OdipDbContext db, string fixture, string? version = null, TimeProvider? clock = null)

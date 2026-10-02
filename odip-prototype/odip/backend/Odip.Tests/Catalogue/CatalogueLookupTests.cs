@@ -9,8 +9,9 @@ namespace Odip.Tests.Catalogue;
 
 /// <summary>
 /// The one date-effective lookup (phase A item 4): (code, service date, zone) gives the single row valid on that date and its price, or a typed
-/// failure: none, ambiguous, zone not eligible (or not priced at all). Validity is the row's own dates; IsActive is not consulted, because an
-/// end-dated row is still the right row for the service dates inside its window.
+/// failure: none, ambiguous, zone not eligible (or not priced at all). Validity is the row's own dates (EffectiveCatalogueResolver.IsValidOn): an
+/// end-dated row is still the right row for the service dates inside its window, whatever its IsActive flag says; only a row that is inactive AND
+/// open-ended (withdrawn by hand) is valid on no date.
 /// </summary>
 public class CatalogueLookupTests
 {
@@ -94,6 +95,15 @@ public class CatalogueLookupTests
 
         Assert.True(result.Found);
         Assert.Equal(70.23m, result.Price);
+    }
+
+    [Fact]
+    public void A_row_withdrawn_by_hand_inactive_and_open_ended_is_found_on_no_date()
+    {
+        // An import always end-dates what it deactivates, so an inactive row with no end date can only have been switched off by hand.
+        var withdrawn = Row(Jul1_2026, null, 73.58m, active: false);
+
+        Assert.Equal(CatalogueLookupFailure.NotFound, EffectiveCatalogueResolver.Find(new[] { withdrawn }, Code, new DateOnly(2026, 10, 5), PriceZone.National).Failure);
     }
 
     [Fact]

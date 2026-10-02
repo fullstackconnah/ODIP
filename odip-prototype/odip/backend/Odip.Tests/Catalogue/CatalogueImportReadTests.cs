@@ -39,6 +39,43 @@ public class CatalogueImportReadTests
     }
 
     [Fact]
+    public async Task A_republished_file_whose_changed_rows_start_in_december_proposes_a_label_that_says_so()
+    {
+        // NDIA republishes a complete catalogue: unchanged rows keep their 1 July start, changed rows start on the day the new prices apply. The two
+        // files must not both be proposed as "2026-27". The version column is 20 characters, so the date is written as yyyy-MM-dd.
+        await using var db = CreateDb();
+        var community = new HashSet<string> { "04_104_0125_6_1", "04_105_0125_6_1" };
+        await using var december = Workbook(CatalogueFixtures.File2026_27, wb => SetStartDates(wb, community.Contains, 20261201));
+
+        var preview = await PreviewAsync(db, december, "republished.xlsx");
+
+        Assert.Equal("2026-27 (2026-12-01)", preview.DetectedVersion);
+        Assert.InRange(preview.DetectedVersion.Length, 1, 20);
+        Assert.Equal(new DateOnly(2026, 7, 1), preview.EffectiveFrom);   // the catalogue still takes effect on 1 July
+    }
+
+    [Fact]
+    public async Task A_file_whose_every_current_row_starts_in_december_is_labelled_with_that_date_too()
+    {
+        await using var db = CreateDb();
+        await using var december = Workbook(CatalogueFixtures.File2026_27, wb => SetStartDates(wb, _ => true, 20261201));
+
+        var preview = await PreviewAsync(db, december, "all-december.xlsx");
+
+        Assert.Equal("2026-27 (2026-12-01)", preview.DetectedVersion);
+    }
+
+    [Fact]
+    public async Task Starts_a_few_days_after_1_July_do_not_change_the_label_of_the_real_2026_27_file()
+    {
+        // Four rows of the official file start on 2 and 3 July: that is the file's own slack, not a later price set.
+        var preview = await Preview2026_27();
+
+        Assert.Equal("2026-27", preview.DetectedVersion);
+        Assert.Contains(preview.Rows, r => r.EffectiveFrom == new DateOnly(2026, 7, 3));
+    }
+
+    [Fact]
     public async Task Rows_outside_RG_0125_are_imported_not_only_community_access()
     {
         var preview = await Preview2026_27();

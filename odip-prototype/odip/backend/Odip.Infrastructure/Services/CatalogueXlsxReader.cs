@@ -30,6 +30,8 @@ public static class CatalogueXlsxReader
 {
     private static readonly string[] States = { "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA" };
     private const int MaxWarningLines = 12;
+    /// <summary>A start this many days after the financial year began counts as a later price set (see <see cref="ProposedVersion"/>).</summary>
+    private const int MaterialLaterStartDays = 28;
 
     public static ParsedCatalogue Read(Stream xlsx, string? sourceDocument)
     {
@@ -77,8 +79,9 @@ public static class CatalogueXlsxReader
 
             rows = DropDuplicates(rows, warnings);
             var currentStarts = rows.Where(r => !r.IsLegacy).Select(r => r.EffectiveFrom).ToList();
-            var effectiveFrom = (currentStarts.Count > 0 ? currentStarts : rows.Select(r => r.EffectiveFrom).ToList()).Min();
-            var version = FinancialYear(effectiveFrom);
+            var starts = currentStarts.Count > 0 ? currentStarts : rows.Select(r => r.EffectiveFrom).ToList();
+            var effectiveFrom = starts.Min();
+            var version = ProposedVersion(starts);
             var source = SafeFileName(sourceDocument) ?? $"Support Catalogue {version}";
 
             return new ParsedCatalogue(format!.Value, version, effectiveFrom, source, rows.Select(r => r with { SourceDocument = source }).ToList(), Limit(warnings));
@@ -345,10 +348,20 @@ public static class CatalogueXlsxReader
 
     // ── Small helpers ─────────────────────────────────────────────────────────────
 
-    private static string FinancialYear(DateOnly date)
+    /// <summary>
+    /// The version label proposed for a file: its financial year ("2026-27"), and when a start date is well after that year began, the latest such date as well
+    /// ("2026-27 (2026-12-01)"). NDIA republishes a complete catalogue in which unchanged rows keep their 1 July start and changed rows start on the day the new
+    /// prices apply, so the July and the December files must not both be proposed as "2026-27". A start within four weeks of 1 July is the file's own slack (four
+    /// rows of the 2026-27 file start on 2 and 3 July), not a later price set. The date is ISO because the version column is 20 characters.
+    /// </summary>
+    private static string ProposedVersion(IReadOnlyCollection<DateOnly> starts)
     {
-        var start = date.Month >= 7 ? date.Year : date.Year - 1;
-        return $"{start}-{(start + 1) % 100:D2}";
+        var earliest = starts.Min();
+        var yearStart = earliest.Month >= 7 ? earliest.Year : earliest.Year - 1;
+        var label = FormattableString.Invariant($"{yearStart}-{(yearStart + 1) % 100:D2}");
+        var threshold = new DateOnly(yearStart, 7, 1).AddDays(MaterialLaterStartDays);
+        var later = starts.Where(d => d > threshold).Select(d => (DateOnly?)d).Max();
+        return later is { } date ? FormattableString.Invariant($"{label} ({date:yyyy-MM-dd})") : label;
     }
 
     private static string? SafeFileName(string? name)

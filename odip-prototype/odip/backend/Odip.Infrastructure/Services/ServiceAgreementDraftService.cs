@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Catalogue;
+using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Infrastructure.Data;
 
@@ -28,9 +29,9 @@ public sealed class ServiceAgreementDraftService
             // Evening, Night, Saturday, Sunday and Public Holiday items of other families (SIL, ICBS, nurses...) would pass the Weekday and hourly tests and
             // quote "weekday" lines at their holiday rates. The draft stays scoped to the community access group, the set it always accepted.
             var candidates = await _db.SupportCatalogueItems
-                .Where(x => x.ItemNumber == requested.ItemCode && x.IsActive && x.ActivityGroup.GroupCode == CatalogueGroups.CommunityAccessGroupCode
-                    && x.DayType == Odip.Domain.Enums.ClaimDayType.Weekday && x.Unit == "H"
-                    && x.EffectiveFrom <= effectiveDate && (x.EffectiveTo == null || x.EffectiveTo >= effectiveDate))
+                .Where(x => x.ItemNumber == requested.ItemCode && x.ActivityGroup.GroupCode == CatalogueGroups.CommunityAccessGroupCode
+                    && x.DayType == Odip.Domain.Enums.ClaimDayType.Weekday && x.Unit == "H")
+                .Where(EffectiveCatalogueResolver.ValidOn(effectiveDate))   // valid on the agreement's start date, not "current": see EffectiveCatalogueResolver.IsValidOn
                 .ToListAsync(ct);
             if (candidates.Count != 1) return (null, candidates.Count == 0
                 ? $"No active effective weekday catalogue price exists for {requested.ItemCode}."

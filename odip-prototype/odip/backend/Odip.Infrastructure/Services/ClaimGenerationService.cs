@@ -183,9 +183,10 @@ public class ClaimGenerationService
             .ToListAsync(ct))
             .ToHashSet();
 
-        // Load catalogue items
+        // Load catalogue items: every row of the group, history included. Each stretch of days is priced by the rows valid on ITS dates
+        // (EffectiveCatalogueResolver.IsValidOn), so an import that end-dates a row (a December price set) cannot reprice a trip that ended before it.
         var catalogueItems = await _db.SupportCatalogueItems
-            .Where(i => i.ActivityGroupId == activityGroupId && i.IsActive)
+            .Where(i => i.ActivityGroupId == activityGroupId)
             .ToListAsync(ct);
 
         if (!catalogueItems.Any())
@@ -204,7 +205,7 @@ public class ClaimGenerationService
             ConfirmedParticipantCount = confirmedBookings.Count
         };
 
-        var dayGroups = GroupDaysByType(trip.TripDays.OrderBy(d => d.Date).ToList(), publicHolidays);
+        var dayGroups = GroupDaysByType(trip.TripDays.OrderBy(d => d.Date).ToList(), publicHolidays, date => PriceEpochOn(catalogueItems, date));
         var tripFirstDate = trip.StartDate;
         var tripLastDate = tripEnd;
         var eveningThreshold = new TimeOnly(20, 0);
@@ -223,7 +224,7 @@ public class ClaimGenerationService
                 if (group.DayType != ClaimDayType.Weekday)
                 {
                     // Non-weekday: single line item
-                    var catItem = FindCatalogueItem(catalogueItems, group.DayType, isIntensive);
+                    var catItem = FindCatalogueItem(catalogueItems, group.DayType, isIntensive, group.From);
                     if (catItem == null) continue;
 
                     var hours = group.DayCount * activeHoursPerDay;
@@ -289,7 +290,7 @@ public class ClaimGenerationService
                     // Create weekday daytime line item
                     if (totalDaytimeHours > 0)
                     {
-                        var catItem = FindCatalogueItem(catalogueItems, ClaimDayType.Weekday, isIntensive);
+                        var catItem = FindCatalogueItem(catalogueItems, ClaimDayType.Weekday, isIntensive, group.From);
                         if (catItem != null)
                         {
                             var unitPrice = GetPriceForState(catItem, state);
@@ -311,7 +312,7 @@ public class ClaimGenerationService
                     // Create weekday evening line item
                     if (totalEveningHours > 0)
                     {
-                        var catItem = FindCatalogueItem(catalogueItems, ClaimDayType.WeekdayEvening, isIntensive);
+                        var catItem = FindCatalogueItem(catalogueItems, ClaimDayType.WeekdayEvening, isIntensive, group.From);
                         if (catItem != null)
                         {
                             var unitPrice = GetPriceForState(catItem, state);
@@ -338,12 +339,17 @@ public class ClaimGenerationService
 
     // ─── Helpers ────────────────────────────────────────────────────────
 
+    /// <summary>The row to price a stretch of days from: the one valid on its first day (every day of a group shares the same valid rows, see <see cref="PriceEpochOn"/>).</summary>
     private static SupportCatalogueItem? FindCatalogueItem(
-        List<SupportCatalogueItem> items, ClaimDayType dayType, bool isIntensive)
-    {
-        return items.FirstOrDefault(i => i.DayType == dayType && i.IsIntensive == isIntensive)
-            ?? items.FirstOrDefault(i => i.DayType == dayType);
-    }
+        List<SupportCatalogueItem> items, ClaimDayType dayType, bool isIntensive, DateOnly serviceDate) =>
+        EffectiveCatalogueResolver.FindForDay(items, dayType, isIntensive, serviceDate);
+
+    /// <summary>
+    /// Which catalogue rows are valid on a date, as one string: two days with the same epoch are priced by the same rows. A stretch of consecutive
+    /// same-type days that crosses a price change would otherwise be one line at one price; it is split where the epoch changes instead.
+    /// </summary>
+    private static string PriceEpochOn(List<SupportCatalogueItem> items, DateOnly date) =>
+        string.Join(",", items.Where(i => EffectiveCatalogueResolver.IsValidOn(i, date)).Select(i => i.Id).Order());
 
     private static string BuildClaimReference(TripInstance trip)
     {
@@ -353,7 +359,7 @@ public class ClaimGenerationService
         return raw.Length > 50 ? raw[..50] : raw;
     }
 
-    private static List<DayGroup> GroupDaysByType(List<TripDay> days, HashSet<DateOnly> publicHolidays)
+    private static List<DayGroup> GroupDaysByType(List<TripDay> days, HashSet<DateOnly> publicHolidays, Func<DateOnly, string> priceEpochOf)
     {
         var result = new List<DayGroup>();
         DayGroup? current = null;
@@ -361,10 +367,11 @@ public class ClaimGenerationService
         foreach (var day in days)
         {
             var dayType = DayTypeResolver.Resolve(day.Date, day.IsPublicHoliday || publicHolidays.Contains(day.Date));
+            var epoch = priceEpochOf(day.Date);
 
-            if (current == null || current.DayType != dayType || current.To.AddDays(1) != day.Date)
+            if (current == null || current.DayType != dayType || current.To.AddDays(1) != day.Date || current.PriceEpoch != epoch)
             {
-                current = new DayGroup { DayType = dayType, From = day.Date, To = day.Date, DayCount = 1 };
+                current = new DayGroup { DayType = dayType, From = day.Date, To = day.Date, DayCount = 1, PriceEpoch = epoch };
                 result.Add(current);
             }
             else
@@ -423,5 +430,7 @@ public class ClaimGenerationService
         public DateOnly From { get; set; }
         public DateOnly To { get; set; }
         public int DayCount { get; set; }
+        /// <summary>The catalogue rows valid on every day of the group (see <see cref="ClaimGenerationService.PriceEpochOn"/>).</summary>
+        public string PriceEpoch { get; set; } = string.Empty;
     }
 }

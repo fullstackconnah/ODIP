@@ -43,8 +43,11 @@ public class SupportCatalogueItem
     public DateOnly? EffectiveTo { get; set; }
     /// <summary>
     /// "In the current catalogue": true on an imported row unless its own end date has already passed, false on a row an import has
-    /// end-dated (superseded by a newer version, or its code left the catalogue). The claim screens read this flag; the date-effective
-    /// lookup does not, because an end-dated row is still the right row for service dates inside its window.
+    /// end-dated (superseded by a newer version, or its code left the catalogue). The Support Catalogue list reads this flag. It is NOT what
+    /// prices a service: the claim engines, the agreement draft and the date-effective lookup use the row valid on the SERVICE date
+    /// (<c>EffectiveCatalogueResolver.IsValidOn</c>), where an inactive row still counts if it has an end date, because it is still the right row
+    /// for the dates inside its window. An inactive row with no end date was withdrawn by hand (an import always end-dates what it deactivates)
+    /// and prices nothing.
     /// </summary>
     public bool IsActive { get; set; } = true;
 

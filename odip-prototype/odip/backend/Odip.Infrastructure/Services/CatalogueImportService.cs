@@ -50,8 +50,13 @@ public class CatalogueImportService
             warnings.Add(FormattableString.Invariant($"Existing item {e.Item.ItemNumber} ({e.Item.Description}) is not in the new catalogue and will be end-dated {e.EffectiveTo:yyyy-MM-dd}."));
         if (withdrawn.Count > MaxWarningLines)
             warnings.Add($"...and {withdrawn.Count - MaxWarningLines} more existing items that are not in the new catalogue will be end-dated.");
-        if (plan.FileStart > today)
-            warnings.Add(FormattableString.Invariant($"This catalogue starts on {plan.FileStart:yyyy-MM-dd}, after today ({today:yyyy-MM-dd}). The claim screens switch to it as soon as you confirm; import it on or after its start date."));
+        // A row that starts after today prices services from its own start date: earlier services keep the row it replaces (claims and agreements read the
+        // row valid on the service date). Say so row by row, so a republished file whose changed rows start later is not mistaken for a mistake.
+        var later = rows.Where(r => r.EffectiveFrom > today).OrderBy(r => r.EffectiveFrom).ThenBy(r => r.ItemNumber, StringComparer.Ordinal).ToList();
+        foreach (var r in later.Take(MaxWarningLines))
+            warnings.Add(FormattableString.Invariant($"{r.ItemNumber} ({r.Description}) starts on {r.EffectiveFrom:yyyy-MM-dd}, after today ({today:yyyy-MM-dd}): it prices services from that date; earlier services keep the row it replaces."));
+        if (later.Count > MaxWarningLines)
+            warnings.Add(FormattableString.Invariant($"...and {later.Count - MaxWarningLines} more rows start after today."));
         var newer = existing.Where(x => CatalogueImportPlanner.HasCatalogueDates(x) && x.EffectiveFrom > plan.FileStart).Select(x => (DateOnly?)x.EffectiveFrom).Min();
         if (newer is { } from)
             warnings.Add(FormattableString.Invariant($"This file starts on {plan.FileStart:yyyy-MM-dd}, before catalogue rows already imported (from {from:yyyy-MM-dd}). It is added as history and the newer rows are not changed."));

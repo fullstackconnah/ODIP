@@ -395,13 +395,42 @@ public class CatalogueImportCommitTests
     }
 
     [Fact]
-    public async Task The_preview_warns_when_the_catalogue_starts_after_today()
+    public async Task The_preview_names_each_row_that_starts_after_today_up_to_ten_and_counts_the_rest()
     {
         await using var db = CreateDb();
 
-        var preview = await PreviewAsync(db, CatalogueFixtures.File2026_27, ClockOn(2026, 6, 1));
+        var preview = await PreviewAsync(db, CatalogueFixtures.File2026_27, ClockOn(2026, 6, 1));   // every row of the file starts after this "today"
 
-        Assert.Contains(preview.Warnings, w => w.Contains("2026-07-01") && w.Contains("after today", StringComparison.OrdinalIgnoreCase));
+        var warnings = preview.Warnings.Where(w => w.Contains("after today", StringComparison.OrdinalIgnoreCase)).ToList();
+        Assert.Equal(11, warnings.Count);
+        Assert.StartsWith("01_002_0107_1_1 (", warnings[0], StringComparison.Ordinal);
+        Assert.Contains("starts on 2026-07-01, after today (2026-06-01)", warnings[0]);
+        Assert.Contains("earlier services keep the row it replaces", warnings[0]);
+        Assert.Equal("...and 1007 more rows start after today.", warnings[10]);
+    }
+
+    [Fact]
+    public async Task A_republished_file_warns_for_the_rows_that_start_later_and_only_for_those()
+    {
+        await using var db = CreateDb();
+        var community = new HashSet<string>(CommunityAccessCodes);
+        await using var december = Workbook(CatalogueFixtures.File2026_27, wb => SetStartDates(wb, community.Contains, 20261201));   // ten rows start on 1 Dec, the rest on 1 Jul
+
+        var preview = await PreviewAsync(db, december, "republished.xlsx");   // "today" is 2 Oct 2026
+
+        var warnings = preview.Warnings.Where(w => w.Contains("after today", StringComparison.OrdinalIgnoreCase)).ToList();
+        Assert.Equal(CommunityAccessCodes.OrderBy(c => c, StringComparer.Ordinal), warnings.Select(w => w.Split(' ')[0]).OrderBy(c => c, StringComparer.Ordinal));
+        Assert.All(warnings, w => Assert.Contains("starts on 2026-12-01, after today (2026-10-02)", w));
+    }
+
+    [Fact]
+    public async Task A_file_whose_rows_all_started_on_or_before_today_has_no_future_start_warning()
+    {
+        await using var db = CreateDb();
+
+        var preview = await PreviewAsync(db, CatalogueFixtures.File2026_27);   // today is 2 Oct 2026
+
+        Assert.DoesNotContain(preview.Warnings, w => w.Contains("after today", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

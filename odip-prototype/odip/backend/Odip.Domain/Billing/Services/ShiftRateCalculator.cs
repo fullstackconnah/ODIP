@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq.Expressions;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 
@@ -235,12 +236,48 @@ public static class EffectiveCatalogueResolver
     }
 
     /// <summary>
-    /// The date-effective lookup: the single catalogue row for <paramref name="itemCode"/> that is valid on <paramref name="serviceDate"/>, and its price for
-    /// <paramref name="zone"/>, or a typed failure (none, ambiguous, zone not eligible, not priced). A row is valid from its own EffectiveFrom to its own
-    /// EffectiveTo (open-ended when null), both days included. IsActive is deliberately not consulted: an import end-dates the rows a newer catalogue
-    /// supersedes and marks them inactive, yet each is still the right row for the service dates inside its window, and a plan that crosses 1 July
-    /// needs both years' prices. The code is matched exactly, registration group included, because the same digits mean different items in
-    /// different groups. Pure: callers load the rows (see <c>FindCatalogueItemAsync</c> for the database path).
+    /// Whether a catalogue row prices a service on <paramref name="date"/>: the date is inside the row's own window (EffectiveFrom to EffectiveTo, open-ended when
+    /// EffectiveTo is null, both days included), and the row has not been withdrawn by hand. IsActive is not "valid today": an import end-dates the rows a
+    /// newer catalogue supersedes and marks them inactive, yet each is still the right row for the service dates inside its window, and a service that
+    /// happened before a December price set must keep the price of its own date. So an inactive row is valid when it has an end date (history), and
+    /// is valid on no date when it is both inactive and open-ended (an import always end-dates what it deactivates, so only a hand edit leaves that).
+    /// This is the one definition of "valid on a date": the lookup, both claim engines and the agreement draft use it, as a method here and as
+    /// <see cref="ValidOn"/> inside a database query.
+    /// </summary>
+    public static bool IsValidOn(SupportCatalogueItem item, DateOnly date) =>
+        item.EffectiveFrom <= date
+        && (!item.EffectiveTo.HasValue || item.EffectiveTo.Value >= date)
+        && (item.IsActive || item.EffectiveTo.HasValue);
+
+    /// <summary><see cref="IsValidOn"/> as an expression, for a query that must filter in the database (a unit test pins that the two agree).</summary>
+    public static Expression<Func<SupportCatalogueItem, bool>> ValidOn(DateOnly date) =>
+        item => item.EffectiveFrom <= date
+            && (item.EffectiveTo == null || item.EffectiveTo >= date)
+            && (item.IsActive || item.EffectiveTo != null);
+
+    /// <summary>
+    /// The row a claim engine prices a service from, by day type and intensity rather than by code: among the rows of <paramref name="groupItems"/> valid on
+    /// <paramref name="serviceDate"/> (<see cref="IsValidOn"/>), the exact match for the day type and intensity, else any row of the day type (an intensive
+    /// participant with no intensive item is priced from the standard one, as the engines always did). Null when no row is valid that day: the caller leaves
+    /// the line out, as it always did for a day type the catalogue lacks, rather than price it from a row that did not apply. If two rows are valid (old
+    /// imports could leave a one-day overlap) the newer version wins, so the choice never depends on row order.
+    /// </summary>
+    public static SupportCatalogueItem? FindForDay(IEnumerable<SupportCatalogueItem> groupItems, ClaimDayType dayType, bool isIntensive, DateOnly serviceDate)
+    {
+        ArgumentNullException.ThrowIfNull(groupItems);
+        var valid = groupItems.Where(i => i.DayType == dayType && IsValidOn(i, serviceDate)).ToList();
+        return Newest(valid.Where(i => i.IsIntensive == isIntensive)) ?? Newest(valid);
+
+        static SupportCatalogueItem? Newest(IEnumerable<SupportCatalogueItem> rows) =>
+            rows.OrderByDescending(i => i.EffectiveFrom).ThenByDescending(i => i.IsActive)
+                .ThenBy(i => i.ItemNumber, StringComparer.Ordinal).ThenBy(i => i.Id).FirstOrDefault();
+    }
+
+    /// <summary>
+    /// The date-effective lookup: the single catalogue row for <paramref name="itemCode"/> that is valid on <paramref name="serviceDate"/> (see
+    /// <see cref="IsValidOn"/>), and its price for <paramref name="zone"/>, or a typed failure (none, ambiguous, zone not eligible, not priced). The code is
+    /// matched exactly, registration group included, because the same digits mean different items in different groups. Pure: callers load the rows
+    /// (see <c>FindCatalogueItemAsync</c> for the database path).
     /// </summary>
     public static CatalogueLookupResult Find(IEnumerable<SupportCatalogueItem> catalogueItems, string itemCode, DateOnly serviceDate, PriceZone zone)
     {
@@ -250,10 +287,7 @@ public static class EffectiveCatalogueResolver
 
         var matches = code.Length == 0
             ? new List<SupportCatalogueItem>()
-            : catalogueItems.Where(item =>
-                string.Equals(item.ItemNumber, code, StringComparison.Ordinal) &&
-                item.EffectiveFrom <= serviceDate &&
-                (!item.EffectiveTo.HasValue || item.EffectiveTo.Value >= serviceDate)).ToList();
+            : catalogueItems.Where(item => string.Equals(item.ItemNumber, code, StringComparison.Ordinal) && IsValidOn(item, serviceDate)).ToList();
 
         if (matches.Count == 0)
             return CatalogueLookupResult.Fail(CatalogueLookupFailure.NotFound, null, $"No catalogue row for '{code}' is valid on {date}.");

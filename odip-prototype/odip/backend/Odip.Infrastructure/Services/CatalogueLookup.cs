@@ -17,7 +17,8 @@ public static class CatalogueLookupExtensions
     {
         var code = (itemCode ?? string.Empty).Trim();
         var rows = await db.SupportCatalogueItems.AsNoTracking()
-            .Where(i => i.ItemNumber == code && i.EffectiveFrom <= serviceDate && (i.EffectiveTo == null || i.EffectiveTo >= serviceDate))
+            .Where(i => i.ItemNumber == code)
+            .Where(EffectiveCatalogueResolver.ValidOn(serviceDate))
             .ToListAsync(ct);
         return EffectiveCatalogueResolver.Find(rows, code, serviceDate, zone);
     }
