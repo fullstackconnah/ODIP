@@ -120,6 +120,30 @@ public class ServiceAgreementDraftServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("E")]    // an Each item such as a sleepover
+    [InlineData("D")]    // a per-day item such as STA accommodation
+    [InlineData("WK")]
+    public async Task CreateAsync_RejectsAnItemThatIsNotPricedPerHour_BecauseALineIsHoursAtTheUnitPrice(string unit)
+    {
+        // The catalogue holds every item since the 2026-27 import: pricing "8 hours" of a $311.79 sleepover would quote 8 x $311.79.
+        var tenantId = Guid.NewGuid();
+        var (db, _) = CreateDb(tenantId);
+        using (db)
+        {
+            var participant = AddParticipant(db, tenantId);
+            AddCatalogue(db).Unit = unit;
+            await db.SaveChangesAsync();
+
+            var (draft, error) = await new ServiceAgreementDraftService(db)
+                .CreateAsync(tenantId, participant.Id, Request(), "synthetic-actor", CancellationToken.None);
+
+            Assert.Null(draft);
+            Assert.Equal("No active effective weekday catalogue price exists for TEST-CODE.", error);
+            Assert.Empty(db.ServiceAgreementDrafts);
+        }
+    }
+
     [Fact]
     public async Task CreateAsync_FailsClosedForInactiveExpiredOrAmbiguousCatalogueRows()
     {

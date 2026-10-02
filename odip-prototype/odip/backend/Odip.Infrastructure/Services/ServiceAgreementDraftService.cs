@@ -22,8 +22,10 @@ public sealed class ServiceAgreementDraftService
         var lines = new List<ServiceAgreementDraftLine>();
         foreach (var requested in request.Lines)
         {
+            // A line is hours at the unit price, so only a per-hour item can be quoted: the catalogue now holds every item (sleepover and accommodation nights
+            // are Each / Day, and a day-less item is stored as Weekday), and 8 "hours" of a $311.79 sleepover would quote 8 x $311.79.
             var candidates = await _db.SupportCatalogueItems
-                .Where(x => x.ItemNumber == requested.ItemCode && x.IsActive && x.DayType == Odip.Domain.Enums.ClaimDayType.Weekday
+                .Where(x => x.ItemNumber == requested.ItemCode && x.IsActive && x.DayType == Odip.Domain.Enums.ClaimDayType.Weekday && x.Unit == "H"
                     && x.EffectiveFrom <= effectiveDate && (x.EffectiveTo == null || x.EffectiveTo >= effectiveDate))
                 .ToListAsync(ct);
             if (candidates.Count != 1) return (null, candidates.Count == 0
