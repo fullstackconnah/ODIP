@@ -225,9 +225,3 @@ public sealed class DemoDataMaintainer
             _logger.LogInformation("Demo data: skipped stories: {Stories}", string.Join("; ", result.SkippedStories));
     }
 }
-
-/// <summary>The packs a production tick runs, in dependency order (a pack may rely on rows an earlier pack inserted).</summary>
-public static class DemoPacks
-{
-    public static IReadOnlyList<IDemoPack> Default() => Array.Empty<IDemoPack>();
-}
