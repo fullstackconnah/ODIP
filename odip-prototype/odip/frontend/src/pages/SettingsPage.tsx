@@ -502,8 +502,8 @@ function SupportCatalogueTab() {
       setVersion(data.data?.detectedVersion || '')
       setPreviewStep('preview')
     } catch (err: unknown) {
-      const axiosErr = err as AxiosError<{ message?: string }>
-      setImportError(axiosErr?.response?.data?.message || 'Upload failed')
+      // The API explains a refusal in errors[0] (ApiResponse.Fail); the old `data.message` read always fell back to the generic text.
+      setImportError(extractErrorMessage(err, 'Upload failed'))
     } finally {
       setUploading(false)
     }
@@ -520,8 +520,7 @@ function SupportCatalogueTab() {
       setPreview(null)
       setImporting(false)
     } catch (err: unknown) {
-      const axiosErr = err as AxiosError<{ message?: string }>
-      setImportError(axiosErr?.response?.data?.message || 'Confirm failed')
+      setImportError(extractErrorMessage(err, 'Confirm failed'))
     } finally {
       setConfirming(false)
     }

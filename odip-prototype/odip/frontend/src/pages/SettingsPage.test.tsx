@@ -516,9 +516,24 @@ describe('SettingsPage — catalogue import preview', () => {
     expect(screen.queryByText('Import NDIS Support Catalogue')).not.toBeInTheDocument()   // closed after a successful import
   })
 
+  it('shows why the server refused an upload that is not a catalogue, instead of a generic failure', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    mockImportPost.mockRejectedValueOnce({ response: { status: 400, data: { success: false, errors: ['No support items found. Upload the NDIS Support Catalogue .xlsx (the 2026-27 or 2025-26 file).'] } } })
+    renderSettingsPageWithQueryClient()
+
+    await user.click(screen.getByRole('tab', { name: 'Support Catalogue' }))
+    await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
+    await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, new File(['x'], 'notes.xlsx'))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No support items found. Upload the NDIS Support Catalogue .xlsx (the 2026-27 or 2025-26 file).')
+    expect(screen.queryByText('Catalogue Version')).not.toBeInTheDocument()   // still on the upload step
+  })
+
   it("shows the server's refusal and keeps the typed version when the confirm is rejected", async () => {
     const { user } = await openPreview()
-    mockImportPost.mockRejectedValueOnce({ response: { data: { message: 'Nothing was imported. 04_104_0125_6_1: the row has no start date.' } } })
+    // The API's failure shape (ApiResponse.Fail): the explanation is in errors[0], there is no top-level message.
+    mockImportPost.mockRejectedValueOnce({ response: { status: 400, data: { success: false, errors: ['Nothing was imported. 04_104_0125_6_1: the row has no start date.'] } } })
 
     const version = screen.getByDisplayValue('2026-27')
     await user.clear(version)
