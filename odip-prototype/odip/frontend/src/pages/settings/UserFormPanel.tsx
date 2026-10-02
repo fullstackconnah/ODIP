@@ -7,6 +7,9 @@ import {
 import type { AdminUserDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { SlideOver } from '@/components/SlideOver'
+import type { Notify } from '@/hooks/useToast'
+import { canSendSetPasswordEmail, sendSetPasswordEmail } from '@/lib/setPasswordEmail'
+import { generateTemporaryPassword } from '@/lib/temporaryPassword'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -17,6 +20,11 @@ interface UserFormPanelProps {
   onClose: () => void
   user?: AdminUserDto
   defaultTenantId?: string
+  /**
+   * Where a create's outcome is announced once the panel has closed: whether the set-password email went, or that a temporary password
+   * was set. Without it nothing is announced.
+   */
+  onNotify?: Notify
 }
 
 // ---------------------------------------------------------------------------
@@ -30,6 +38,9 @@ const ROLE_OPTIONS = [
   { value: 'ReadOnly', label: 'Read Only' },
 ]
 
+// Firebase refuses a shorter password, and the create would then fail with a generic "unable to create the sign-in account".
+const MIN_PASSWORD_LENGTH = 6
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -39,6 +50,7 @@ export default function UserFormPanel({
   onClose,
   user,
   defaultTenantId,
+  onNotify,
 }: UserFormPanelProps) {
   const isEdit = !!user
 
@@ -47,6 +59,7 @@ export default function UserFormPanel({
   // trigger hear nothing. aria-labelledby wires each label to its dropdown explicitly.
   const tenantLabelId = useId()
   const roleLabelId = useId()
+  const passwordHintId = useId()
 
   const { data: tenants = [] } = useAdminTenantsSummary()
   const createMutation = useCreateAdminUser()
@@ -60,12 +73,16 @@ export default function UserFormPanel({
   const [role, setRole] = useState('')
   const [isActive, setIsActive] = useState(true)
   const [password, setPassword] = useState('')
+  // Create mode only. The default is no password: Firebase emails the user a link to set their own. Opening this swaps that for a
+  // temporary password the admin chooses, for demo or offline use. Closed, the field is empty, so what is sent is what is shown.
+  const [tempPasswordOpen, setTempPasswordOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Reset form state when the panel opens or the user prop changes
   useEffect(() => {
     if (!isOpen) return
     setError(null)
+    setTempPasswordOpen(false)
 
     if (user) {
       setTenantId(user.tenantId)
@@ -99,13 +116,19 @@ export default function UserFormPanel({
   ])
   const dirty = current !== initial
 
+  const passwordTooShort = password !== '' && password.length < MIN_PASSWORD_LENGTH
+
   const isFormValid =
     tenantId.trim() !== '' &&
     firstName.trim() !== '' &&
     lastName.trim() !== '' &&
     email.trim() !== '' &&
     username.trim() !== '' &&
-    role.trim() !== ''
+    role.trim() !== '' &&
+    !passwordTooShort
+
+  // Whether Firebase can email a link here: not in local dev auth, where there is no Firebase to send it.
+  const emailLinkAvailable = canSendSetPasswordEmail()
 
   async function handleSubmit() {
     setError(null)
@@ -134,7 +157,6 @@ export default function UserFormPanel({
           password: password || undefined,
         })
       }
-      onClose()
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { errors?: string[]; message?: string } | string } }
       setError(
@@ -143,6 +165,44 @@ export default function UserFormPanel({
           : axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message) ||
           'Failed to save user.',
       )
+      return
+    }
+
+    // The panel closes before the email goes: the user exists now, so there is nothing left to edit and nothing to submit twice.
+    onClose()
+    if (!isEdit) await announceCreated(email.trim(), password !== '')
+  }
+
+  /**
+   * Says how a create went, and sends the set-password email when that is the plan. Never throws: the user exists by now, so a
+   * failed email must not read as a failed create (creating again would only be refused as a duplicate).
+   */
+  async function announceCreated(createdEmail: string, withPassword: boolean) {
+    if (withPassword) {
+      onNotify?.('success', 'User created with a temporary password.')
+    } else if (!emailLinkAvailable) {
+      onNotify?.('success', 'User created.')
+    } else {
+      const sent = await sendSetPasswordEmail(createdEmail).then(() => true, () => false)
+      if (sent) {
+        onNotify?.('success', `User created. We've emailed ${createdEmail} a link to set their password (check spam if it doesn't arrive).`)
+      } else {
+        onNotify?.('error', "User created, but the set-password email couldn't be sent. Use 'Send set-password email' to try again.")
+      }
+    }
+  }
+
+  function toggleTempPassword() {
+    setTempPasswordOpen(open => !open)
+    setPassword('')
+  }
+
+  function handleGenerate() {
+    try {
+      setPassword(generateTemporaryPassword())
+      setError(null)
+    } catch {
+      setError("Couldn't generate a password in this browser. Type one instead.")
     }
   }
 
@@ -267,27 +327,55 @@ export default function UserFormPanel({
         />
       </div>
 
-      {/* Password — create mode only */}
+      {/* Sign-in — create mode only. The default is no password: Firebase emails the user a link to set their own. */}
       {!isEdit && (
-        <div>
-          <label className={labelClass}>Password</label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className={inputClass}
-              placeholder="Min 6 characters"
-            />
-            <button
-              type="button"
-              onClick={() => setPassword(Math.random().toString(36).slice(-10) + 'A1!')}
-              className="px-3 h-[var(--control-h)] border border-[var(--color-border)] rounded-[var(--radius-sm)] text-xs font-medium hover:bg-[var(--color-accent)] transition-colors whitespace-nowrap"
-            >
-              Generate
-            </button>
-          </div>
-          <p className="text-xs text-[var(--color-muted-foreground)] mt-1">Optional. User will sign in with this password via email/password auth.</p>
+        <div className="space-y-2">
+          {emailLinkAvailable && !tempPasswordOpen && (
+            <p className="text-xs text-[var(--color-muted-foreground)]">
+              We&apos;ll email {email.trim() || 'the user'} a link to set their password.
+            </p>
+          )}
+          <button
+            type="button"
+            aria-expanded={tempPasswordOpen}
+            onClick={toggleTempPassword}
+            className="text-xs font-medium text-[var(--color-primary)] hover:underline"
+          >
+            Set a temporary password instead
+          </button>
+          {tempPasswordOpen && (
+            <div>
+              <label htmlFor="uf-password" className={labelClass}>Temporary password</label>
+              <div className="flex gap-2">
+                <input
+                  id="uf-password"
+                  type="text"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  autoComplete="off"
+                  aria-describedby={passwordHintId}
+                  aria-invalid={passwordTooShort || undefined}
+                  className={inputClass}
+                  placeholder="Min 6 characters"
+                />
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  className="px-3 h-[var(--control-h)] border border-[var(--color-border)] rounded-[var(--radius-sm)] text-xs font-medium hover:bg-[var(--color-accent)] transition-colors whitespace-nowrap"
+                >
+                  Generate
+                </button>
+              </div>
+              <p
+                id={passwordHintId}
+                className={`text-xs mt-1 ${passwordTooShort ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}
+              >
+                {passwordTooShort
+                  ? `Use at least ${MIN_PASSWORD_LENGTH} characters.`
+                  : 'They can sign in with this straight away. Share it with them securely.'}
+              </p>
+            </div>
+          )}
         </div>
       )}
 

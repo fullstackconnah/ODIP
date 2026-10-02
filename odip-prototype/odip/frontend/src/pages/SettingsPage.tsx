@@ -25,6 +25,7 @@ import NotificationPreferencesTab from '@/pages/settings/NotificationPreferences
 import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
 import type { TenantSummaryDto, AdminUserDto } from '@/api/types'
 import { usePermissions } from '@/lib/permissions'
+import { useToast } from '@/hooks/useToast'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { plural } from '@/lib/format'
@@ -124,6 +125,8 @@ export default function SettingsPage() {
   const [userPanelOpen, setUserPanelOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<AdminUserDto | undefined>()
   const [defaultTenantId, setDefaultTenantId] = useState<string | undefined>()
+  // The user panel closes on a create, so what became of it (the set-password email) is said here, over whichever tab opened the panel.
+  const { toast, notify } = useToast()
 
   const allTabs = [
     { key: 'templates' as const, label: 'Event Templates' },
@@ -286,7 +289,10 @@ export default function SettingsPage() {
         onClose={() => { setUserPanelOpen(false); setEditingUser(undefined); setDefaultTenantId(undefined) }}
         user={editingUser}
         defaultTenantId={defaultTenantId}
+        onNotify={notify}
       />
+
+      {toast}
     </div>
   )
 }
