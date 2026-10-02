@@ -35,7 +35,7 @@ public static class PlanPricingEngine
         [16] = "Home and Living",
     };
 
-    public static PlanQuote Quote(PlanQuoteRequest request)
+    public static PlanQuote Quote(PlanQuoteRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -75,6 +75,7 @@ public static class PlanPricingEngine
 
             for (var blockIndex = 0; blockIndex < blocks.Count; blockIndex++)
             {
+                ct.ThrowIfCancellationRequested();
                 var block = blocks[blockIndex];
                 if (block is null)
                 {
@@ -111,6 +112,8 @@ public static class PlanPricingEngine
                 var blockLines = new List<PlannedLine>();
                 foreach (var date in Dates(block, request.PeriodFrom, request.PeriodTo))
                 {
+                    // A client that gave up must not leave the CPU pricing the rest of the quote: the token is looked at once per occurrence.
+                    ct.ThrowIfCancellationRequested();
                     var result = pricer.Price(block, date);
                     foreach (var (reason, message) in result.Issues) issues.Add(id, reason, message, date);
 

@@ -427,6 +427,32 @@ public class PlanPricingRulesTests
     // ── The request ───────────────────────────────────────────────────────────────
 
     [Fact]
+    public void The_engine_stops_between_occurrences_when_its_token_is_cancelled_instead_of_pricing_on()
+    {
+        // Review L8: the loop never looked at the token, so a client that gave up left the CPU pricing the rest of the quote. The first thing the first occurrence asks
+        // for is the delivery zone: that is where this test's client goes away, and the very next occurrence must be the one that stops.
+        using var cts = new CancellationTokenSource();
+        var request = new PlanQuoteRequest
+        {
+            Blocks = new[] { Weekday(PlanSupportType.CommunityAccess) with { Days = Enum.GetValues<DayOfWeek>() } },
+            PeriodFrom = Mon12Oct, PeriodTo = Mon12Oct.AddDays(100), Catalogue = RealCatalogue,
+            ZoneLookup = id => { cts.Cancel(); return TimeZoneInfo.FindSystemTimeZoneById(id); },
+        };
+
+        Assert.Throws<OperationCanceledException>(() => PlanPricingEngine.Quote(request, cts.Token));
+    }
+
+    [Fact]
+    public void A_token_that_is_never_cancelled_prices_the_whole_period_as_before()
+    {
+        var block = Weekday(PlanSupportType.CommunityAccess) with { Days = Enum.GetValues<DayOfWeek>() };
+        var request = new PlanQuoteRequest { Blocks = new[] { block }, PeriodFrom = Mon12Oct, PeriodTo = Mon12Oct.AddDays(6), Catalogue = RealCatalogue };
+
+        Assert.Equal(Json(PlanPricingEngine.Quote(request)), Json(PlanPricingEngine.Quote(request, CancellationToken.None)));
+        Assert.Equal(7, PlanPricingEngine.Quote(request, new CancellationTokenSource().Token).Lines.Count);
+    }
+
+    [Fact]
     public void A_block_with_a_missing_headcount_list_is_refused_with_the_message_and_the_others_are_priced()
     {
         var noList = Weekday(PlanSupportType.CommunityAccess, id: "no-list") with { HeadcountChanges = null! };

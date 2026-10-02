@@ -38,7 +38,7 @@ public sealed class PlanPricingService
         {
             Blocks = blocks, PeriodFrom = from, PeriodTo = to, Policy = policy, Catalogue = catalogue, Holidays = holidays,
             HolidayCoverage = coverage, HolidayOverridesThrough = overridesThrough,
-        });
+        }, ct);
     }
 
     /// <summary>

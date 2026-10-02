@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Odip.Api.Controllers;
@@ -184,6 +185,41 @@ public class PlanPricingApiTests
         Assert.Empty(quote.Lines);
         Assert.Equal(3 * 294.32m, quote.Totals.Amount);
         Assert.Equal(3, quote.Totals.LineCount);
+    }
+
+    // ── Review L8: the size and the cost of an answer ──
+
+    [Fact]
+    public void The_quote_is_rate_limited_like_the_rest_of_the_api()
+    {
+        var quote = typeof(PlanPricingController).GetMethod(nameof(PlanPricingController.Quote))!;
+
+        Assert.Equal("api", quote.GetCustomAttribute<EnableRateLimitingAttribute>()?.PolicyName);
+    }
+
+    [Fact]
+    public async Task A_quote_of_more_than_60000_lines_is_refused_with_its_lines_and_answered_without_them()
+    {
+        var (db, controller) = await SetUpAsync(TenantA);
+        await using var _ = db;
+        // 20 blocks on every day of 800 days is 16,000 occurrences (inside the engine's own limits) of a support, its travel time, its travel kilometres and its
+        // vehicle: four lines each, 64,000 in all. As JSON that is tens of megabytes, which is what the builder's totals-only mode is for.
+        var blocks = Enumerable.Range(0, 20).Select(i => Block($"b{i}", PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(6 + i % 12), T(7 + i % 12), b => b with
+        {
+            Days = Enum.GetValues<DayOfWeek>(),
+            Travel = new PlanProviderTravel { Claim = true, MinutesEachWay = 15, KmEachWay = 4m },
+            Transport = new PlanActivityTransport { Km = 8m },
+        })).ToList();
+        var from = Mon12Oct;
+        var to = from.AddDays(PlanPricingEngine.MaxPeriodDays - 1);
+
+        var refused = BadRequest(await controller.Quote(Request(blocks, from, to, includeLines: true), CancellationToken.None));
+        var totalsOnly = Ok(await controller.Quote(Request(blocks, from, to, includeLines: false), CancellationToken.None));
+
+        Assert.Contains("60,000", refused);
+        Assert.Contains("includeLines", refused);
+        Assert.Empty(totalsOnly.Lines);
+        Assert.Equal(64_000, totalsOnly.Totals.LineCount);
     }
 
     [Fact]

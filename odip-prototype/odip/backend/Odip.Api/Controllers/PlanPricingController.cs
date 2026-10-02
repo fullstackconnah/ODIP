@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
+using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -25,6 +27,9 @@ public class PlanPricingController : ControllerBase
     /// <summary>The most a kilometre may be claimed at: the 2025-26 rates are 0.99 and 2.76, so a figure above this is a slipped decimal point (9.90 for 0.99 made every kilometre line ten times too high).</summary>
     private const decimal MaxKmRate = 5m;
 
+    /// <summary>The most lines one answer carries: 60,000 lines is tens of megabytes of JSON. Above it the caller asks for the totals only (includeLines false).</summary>
+    public const int MaxLinesReturned = 60_000;
+
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _tenant;
     private readonly PlanPricingService _service;
@@ -42,6 +47,7 @@ public class PlanPricingController : ControllerBase
 
     [HttpPost("quote")]
     [RequestSizeLimit(1_048_576)]
+    [EnableRateLimiting("api")]
     public async Task<ActionResult<ApiResponse<PlanQuote>>> Quote([FromBody] PlanQuoteRequestDto dto, CancellationToken ct)
     {
         if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<PlanQuote>.Fail(ChooseOrganisation));
@@ -55,6 +61,10 @@ public class PlanPricingController : ControllerBase
             return BadRequest(ApiResponse<PlanQuote>.Fail($"A quote prices at most {PlanPricingEngine.MaxBlocks} blocks."));
 
         var quote = await _service.QuoteAsync(tenantId, dto.Blocks, dto.PeriodFrom, dto.PeriodTo, ct);
+        if (dto.IncludeLines && quote.Lines.Count > MaxLinesReturned)
+            return BadRequest(ApiResponse<PlanQuote>.Fail(string.Create(CultureInfo.InvariantCulture,
+                $"The quote has {quote.Lines.Count:N0} lines, more than the {MaxLinesReturned:N0} one answer carries: ask for the totals only (includeLines: false), shorten the period, or price fewer blocks.")));
+
         return Ok(ApiResponse<PlanQuote>.Ok(dto.IncludeLines ? quote : quote with { Lines = Array.Empty<PlannedLine>() }));
     }
 
