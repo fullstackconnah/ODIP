@@ -60,6 +60,7 @@ const STATUS_ENUMS: Record<string, readonly string[]> = {
 const NOT_A_PILL: Record<string, string> = {
   AmbulantStatus: 'a mobility level, chosen from a list and printed as a plain label',
   MedicationCompetencyStatus: 'the result of the competency gate; the UI sees error codes and a flag, never the word',
+  DemoTickStatus: 'the outcome of one demo-data top-up tick, read from logs and tests; no API sends it and no screen shows it',
 }
 
 /** The extra enums the walk treats as statuses although their names do not end in "Status" (they are pills too). */

@@ -11,6 +11,7 @@ using Odip.Api.RateLimiting;
 using Odip.Api.Services;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.DemoData;
 using Odip.Infrastructure.Services;
 
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
@@ -209,6 +210,9 @@ builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.Notific
 // EarlyAccess:NotifyEmail and Notifications:Smtp:Host — by default nothing is sent). One singleton instance
 // serves as both the IEarlyAccessNotifier the controller calls and the hosted service that drains its queue.
 builder.Services.AddEarlyAccess();
+
+// ── Demo-data top-up (DemoData:Scenarios, Off by default: with it Off this registers nothing) ──
+builder.Services.AddDemoData(builder.Configuration);
 
 // ── Obligation tasks (item 9 of the connection map — generic task engine) ──
 builder.Services.AddScoped<Odip.Application.Interfaces.IObligationTaskService, Odip.Infrastructure.Tasks.ObligationTaskService>();
