@@ -34,11 +34,15 @@ const httpError = (status: number, message: string) =>
   Object.assign(new Error(`Request failed with status code ${status}`), { response: { status, data: { success: false, errors: [message] } } })
 const paged = (items: unknown[]) => ({ items, totalCount: items.length, page: 1, pageSize: 200, totalPages: 1, hasNext: false, hasPrevious: false })
 
-/** Who is where before the test starts: one finalised participant, one draft intake nobody enquired about, and one open enquiry. */
-function createServer(mode: Mode) {
+/**
+ * Who is where before the test starts: one finalised participant, one draft intake nobody enquired about, and one open enquiry. `extra` adds
+ * participants the way the data really has them (a draft marked active, for one).
+ */
+function createServer(mode: Mode, extra: FakeParticipant[] = []) {
   const participants: FakeParticipant[] = [
     { id: 'p-alex', firstName: 'Alex', lastName: 'Active', phone: null, email: null, isDraft: false, isActive: true, intakeCompletedAt: '2026-08-01T00:00:00Z' },
     { id: 'p-dana', firstName: 'Dana', lastName: 'Direct', phone: '0411 111 111', email: null, isDraft: true, isActive: false, intakeCompletedAt: null },
+    ...extra,
   ]
   const inquiries: FakeInquiry[] = [
     { id: 'enq-ada', firstName: 'Ada', lastName: 'Lovelace', phone: '0400 000 001', source: 'Phone', participantId: null, createdAt: '2026-09-01' },
@@ -62,8 +66,9 @@ function createServer(mode: Mode) {
       createdAt: '2026-09-15', participantIsDraft: true, participantIsActive: p.isActive, participantIntakeCompletedAt: null, isDirectIntake: true,
     })),
   ]
-  // ParticipantStages.InOnboarding: intake complete, still a draft, not active. By the participant's flags, not by any onboarding row.
-  const inOnboarding = () => participants.filter(p => p.isDraft && !p.isActive && p.intakeCompletedAt)
+  // ParticipantStages.InOnboarding: a draft whose intake is complete. By the participant's flags, not by any onboarding row, and IsActive is no part of
+  // it: a draft is on Enquiries or Onboarding by its intake alone (the seeded demo draft is a draft that is marked active).
+  const inOnboarding = () => participants.filter(p => p.isDraft && p.intakeCompletedAt)
   const worklist = () => inOnboarding().map(p => ({
     participantId: p.id, fullName: name(p), stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 5,
     reasons: ['Profile requires date of birth.'],
@@ -137,7 +142,8 @@ function createServer(mode: Mode) {
       if (participant.isDraft) {
         if (!participant.intakeCompletedAt) throw httpError(400, "Complete the participant's intake before completing their profile.")
         participant.isDraft = false
-        participant.isActive = mode === 'Warn'
+        // Already active (a draft marked active) stays active; otherwise the readiness mode decides.
+        if (!participant.isActive) participant.isActive = mode === 'Warn'
       }
       return { success: true, data: { id: participant.id, fullName: name(participant), isDraft: participant.isDraft, isActive: participant.isActive, intakeCompletedAt: participant.intakeCompletedAt } }
     }
@@ -182,9 +188,9 @@ async function startAndCompleteIntake(user: ReturnType<typeof userEvent.setup>) 
 }
 
 /** Onboarding tab -> the checklist -> Edit profile -> the Profile wizard, to the end. */
-async function openChecklistAndCompleteProfile(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('button', { name: 'Open onboarding for Ada Lovelace' }))
-  await screen.findByRole('heading', { name: 'Ada Lovelace', level: 1 })
+async function openChecklistAndCompleteProfile(user: ReturnType<typeof userEvent.setup>, fullName = 'Ada Lovelace') {
+  await user.click(await screen.findByRole('button', { name: `Open onboarding for ${fullName}` }))
+  await screen.findByRole('heading', { name: fullName, level: 1 })
   await user.click(screen.getAllByRole('link', { name: 'Edit profile' })[0])
   await screen.findByRole('heading', { name: /profile/i })
   for (let i = 0; i < 6; i++) await next(user)
@@ -262,6 +268,28 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
     await user.click(tab('Enquiries'))
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
     expect(screen.queryByText('Dana Direct')).not.toBeInTheDocument()
+  }, 60_000)
+
+  it('keeps a draft that the data marks active (the seeded demo draft) on a tab at every step: Enquiries, then Onboarding, then Active', async () => {
+    // Participant.IsActive defaults to true and Create only recently started forcing it to false, so older drafts are active drafts. IsActive is no part of
+    // a draft's stage: this participant used to fall off every tab the moment her intake was complete.
+    createServer('Warn', [{ id: 'p-priya', firstName: 'Priya', lastName: 'Preseed', phone: null, email: null, isDraft: true, isActive: true, intakeCompletedAt: null }])
+    const user = userEvent.setup()
+    renderApp('/participants?tab=enquiries')
+
+    expect(within(await findRow('Priya Preseed')).getByText('Draft intake')).toBeInTheDocument()
+    await user.click(within(await findRow('Priya Preseed')).getByRole('button', { name: 'Resume intake' }))
+    await screen.findByDisplayValue('Priya')
+    for (let i = 0; i < 8; i++) await next(user)
+    await user.click(await screen.findByRole('button', { name: /complete intake/i }))
+
+    expect(await screen.findByText('Intake complete — Priya Preseed is now in onboarding.')).toBeInTheDocument()
+    expect(within(await findRow('Priya Preseed')).getByText('Validate profile essentials')).toBeInTheDocument()
+    await openChecklistAndCompleteProfile(user, 'Priya Preseed')
+
+    expect(await screen.findByText('Priya Preseed is now an active participant.')).toBeInTheDocument()
+    expect(tab('Active participants')).toHaveAttribute('aria-selected', 'true')
+    expect(within(await findRow('Priya Preseed')).getByText('Active')).toBeInTheDocument()
   }, 60_000)
 })
 

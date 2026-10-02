@@ -33,10 +33,12 @@ public class ParticipantStagesSqlTests
         var sql = ParticipantStages.InOnboarding(db.Participants).ToQueryString();
 
         Assert.Contains("\"IsDraft\"", sql);
-        Assert.Contains("NOT (", sql); // not active
-        Assert.Contains("\"IsActive\"", sql);
         Assert.Contains("\"IntakeCompletedAt\" IS NOT NULL", sql);
         Assert.DoesNotContain("ParticipantOnboardings", sql);
+        // A draft's stage follows its intake alone. The select list names every column, IsActive included, so only the filter is checked: if it
+        // asks about IsActive too, a draft that is marked active (the seeded demo draft is) falls off every tab once its intake is complete.
+        var filter = sql[sql.IndexOf("WHERE", StringComparison.Ordinal)..];
+        Assert.DoesNotContain("\"IsActive\"", filter);
     }
 
     [Fact]
@@ -54,9 +56,10 @@ public class ParticipantStagesSqlTests
 
     /// <summary>The in-memory check and the query predicate are one rule; this holds the two forms together over every flag combination.</summary>
     [Theory]
-    [InlineData(true, false, true, true)]    // draft, intake complete, not active: in onboarding
+    [InlineData(true, false, true, true)]    // draft, intake complete: in onboarding
     [InlineData(true, false, false, false)]  // draft with an open intake: an Enquiries-tab row
-    [InlineData(true, true, true, false)]    // a draft that is somehow active is not "not yet active"
+    [InlineData(true, true, true, true)]     // a draft marked active (the seeded demo draft: Participant.IsActive defaults to true) is in onboarding too
+    [InlineData(true, true, false, false)]   // the same draft while its intake is open: an Enquiries-tab row
     [InlineData(false, false, true, false)]  // finalised and inactive: Archived
     [InlineData(false, true, true, false)]   // finalised and active: the Active tab
     [InlineData(false, true, false, false)]  // legacy active participant, intake never stamped

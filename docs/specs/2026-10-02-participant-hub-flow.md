@@ -17,9 +17,12 @@ onboarding row happens to exist:
 |---|---|---|
 | Enquiry | no participant yet | Enquiries, "New" |
 | Intake in progress | `IsDraft` and `IntakeCompletedAt` null | Enquiries, "Draft intake" (with its enquiry, or alone: a direct intake) |
-| In onboarding | `IsDraft`, not `IsActive`, `IntakeCompletedAt` set | Onboarding |
+| In onboarding | `IsDraft`, `IntakeCompletedAt` set (`IsActive` is not read for a draft) | Onboarding |
 | Active | `!IsDraft` and `IsActive` | Active participants |
 | Archived | `!IsDraft` and not `IsActive` | Active participants, Archived view |
+
+A draft's tab follows its intake alone. `IsActive` is not read for a draft: it defaults to true on the entity and drafts made before Create forced it to
+false (the seeded demo draft is one) kept it, so asking "not active" as well left such a draft on no tab once its intake was complete.
 
 Completing the intake moves a participant from the first two to Onboarding. **Completing the profile** (`POST /participants/{id}/complete-profile`,
 the Profile wizard's Complete Profile) finalises them and applies the organisation's readiness mode: Warn activates, Enforce does not (no signed

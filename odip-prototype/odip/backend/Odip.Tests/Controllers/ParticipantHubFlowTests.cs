@@ -19,7 +19,7 @@ namespace Odip.Tests.Controllers;
 /// The Participants hub's lifecycle: enquiry, draft intake, intake complete (the Onboarding tab), active (the Active tab).
 /// The Onboarding tab used to list whoever had a <see cref="ParticipantOnboarding"/> ROW, so it missed a participant whose intake was
 /// completed before completion created one, and it listed active participants and intakes that were still open. It now lists
-/// participants by state: intake complete, not yet finalised or active, whether or not an enquiry or an onboarding row exists.
+/// participants by state: a draft whose intake is complete, whether or not an enquiry or an onboarding row exists.
 /// The Enquiries tab's feed carries the drafts started in the Intake wizard with no enquiry, so they are not lost with the Drafts view.
 /// Same EF InMemory + Moq&lt;ICurrentTenant&gt; pattern as ParticipantIntakeOnboardingTests.
 /// </summary>
@@ -314,6 +314,74 @@ public class ParticipantHubFlowTests
 
         Assert.Equal(own.Id, row.ParticipantId);
         Assert.True(row.IsDirectIntake);
+    }
+
+    // ── Every participant is on exactly one tab, whatever IsActive says about a draft ────────────────────
+
+    /// <summary>
+    /// A draft's tab follows its intake alone: IsActive is no part of it. Participant.IsActive defaults to true and Create only started forcing
+    /// it to false on 2026-09-27, so a draft made before then and never re-saved through the old full PUT (which recomputed it) is active: the
+    /// seeded demo draft is one. A rule that also asked "not active" left such a draft on no tab once its intake was complete.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false, false, "enquiries")]
+    [InlineData(true, false, true, "onboarding")]
+    [InlineData(true, true, false, "enquiries")]
+    [InlineData(true, true, true, "onboarding")]
+    [InlineData(false, true, false, "active")]
+    [InlineData(false, true, true, "active")]
+    [InlineData(false, false, false, "archived")]
+    [InlineData(false, false, true, "archived")]
+    public async Task EveryParticipant_IsOnExactlyOneTab_AndADraftsTabFollowsItsIntakeAlone(bool isDraft, bool isActive, bool intakeDone, string expectedTab)
+    {
+        var tenantId = Guid.NewGuid();
+        using var caller = NewCaller(tenantId);
+        var participant = await SeedAsync(caller.Db, tenantId, "Pat", "Partition", draft: isDraft, intakeDone: intakeDone, active: isActive);
+
+        var tabs = new List<string>();
+        if ((await EnquiriesAsync(caller)).Any(row => row.ParticipantId == participant.Id)) tabs.Add("enquiries");
+        if ((await WorklistAsync(caller)).Any(row => row.ParticipantId == participant.Id)) tabs.Add("onboarding");
+        if ((await ActiveRegisterAsync(caller)).Any(row => row.Id == participant.Id)) tabs.Add("active");
+        if ((await ArchivedAsync(caller)).Any(row => row.Id == participant.Id)) tabs.Add("archived");
+
+        Assert.Equal([expectedTab], tabs);
+    }
+
+    [Fact]
+    public async Task Worklist_ListsADraftThatIsMarkedActive_OnceItsIntakeIsComplete()
+    {
+        var tenantId = Guid.NewGuid();
+        using var caller = NewCaller(tenantId);
+        var seeded = await SeedAsync(caller.Db, tenantId, "Priya", "Preseed", draft: true, intakeDone: true, active: true);
+
+        var row = Assert.Single(await WorklistAsync(caller));
+
+        Assert.Equal(seeded.Id, row.ParticipantId);
+        Assert.Equal("Onboarding incomplete", row.Stage);
+    }
+
+    [Fact]
+    public async Task Lifecycle_ADraftMarkedActive_IsOnATabAtEveryStep_AndCompletingTheProfileKeepsThemActive()
+    {
+        // The seeded demo draft: IsDraft with the entity's default IsActive=true, no enquiry, no onboarding row.
+        var tenantId = Guid.NewGuid();
+        using var caller = NewCaller(tenantId);
+        var seeded = await SeedAsync(caller.Db, tenantId, "Priya", "Preseed", draft: true, intakeDone: false, active: true);
+        Assert.Equal(seeded.Id, Assert.Single(await EnquiriesAsync(caller)).ParticipantId);
+        Assert.Empty(await WorklistAsync(caller));
+
+        // Resume and complete the intake: SaveIntake never reads or changes IsActive, and she must be on Onboarding, not on no tab.
+        Ok(await caller.Participants.SaveIntake(seeded.Id, IntakeBody("Priya", "Preseed", complete: true), CancellationToken.None));
+        Assert.True((await caller.Db.Participants.SingleAsync()).IsActive);
+        Assert.Empty(await EnquiriesAsync(caller));
+        Assert.Equal(seeded.Id, Assert.Single(await WorklistAsync(caller)).ParticipantId);
+
+        // Complete Profile finalises her; she was already active, so she is on the Active register.
+        var completed = Ok(await caller.Participants.CompleteProfile(seeded.Id, CancellationToken.None));
+        Assert.False(completed.IsDraft);
+        Assert.True(completed.IsActive);
+        Assert.Empty(await WorklistAsync(caller));
+        Assert.Equal(seeded.Id, Assert.Single(await ActiveRegisterAsync(caller)).Id);
     }
 
     // ── The whole lifecycle, through the controllers the screens call ────────────────────────────────────
