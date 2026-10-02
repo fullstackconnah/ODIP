@@ -78,9 +78,14 @@ export function endChecklist(input: {
   const noteDone = input.noteCount > 0 || input.nothingToNote
   const handoverDone = !!input.handoverText.trim() || input.nothingToHandOver
   return [
-    { id: 'doses', label: doseBlockers ? `${doseBlockers} dose${doseBlockers === 1 ? '' : 's'} need an outcome` : 'Every due dose has an outcome', done: doseBlockers === 0 },
+    { id: 'doses', label: doseBlockers ? `${doseBlockers} dose${doseBlockers === 1 ? '' : 's'} ${doseBlockers === 1 ? 'needs' : 'need'} an outcome` : 'Every due dose has an outcome', done: doseBlockers === 0 },
     { id: 'breaks', label: breakRunning ? 'A break is still running' : input.breaksConfirmed ? 'Breaks confirmed' : 'Check your breaks and confirm them', done: !breakRunning && input.breaksConfirmed },
     { id: 'note', label: noteDone ? 'Shift note done' : 'Add a note, or say nothing to note', done: noteDone },
     { id: 'handover', label: handoverDone ? 'Handover done' : 'Write a handover, or say nothing to hand over', done: handoverDone },
   ]
+}
+
+/** Changes whenever a break is added, removed, ended or edited, so a "my breaks are correct" tick can be dropped when the breaks change. */
+export function breaksSignature(breaks: { id: string; startedAt: string; endedAt: string | null }[]): string {
+  return breaks.map(b => `${b.id}|${b.startedAt}|${b.endedAt ?? ''}`).join(';')
 }

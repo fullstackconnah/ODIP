@@ -11,7 +11,7 @@ import { SHIFT_PACKAGE_ERROR_CODES } from '@/api/types'
 import { apiErrorMessages, apiErrorStatus, finishBlockersFromError, hasApiErrorCode, shiftDetailFromError } from '@/lib/shiftPackageErrors'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
-import { endChecklist } from './checklist'
+import { breaksSignature, endChecklist } from './checklist'
 import { requestGeolocation } from './geolocation'
 import { minutesBetween, providerLocalToUtcInstant, utcInstantToProviderLocal } from './shiftTime'
 import { Section } from './ui'
@@ -142,7 +142,10 @@ export function EndSection({ shift, online, canAct, onRecord }: {
   const qc = useQueryClient()
   const finish = useFinishShift()
   const { data: notes } = useShiftNotes(shift.id)
-  const [breaksConfirmed, setBreaksConfirmed] = useState(false)
+  const [confirmedSig, setConfirmedSig] = useState<string | null>(null)
+  const sig = breaksSignature(shift.breaks)
+  // The tick belongs to the breaks as they were when it was made; any edit, removal or new break drops it.
+  const breaksConfirmed = confirmedSig === sig
   const [nothingToNote, setNothingToNote] = useState(false)
   const [handoverText, setHandoverText] = useState('')
   const [nothingToHandOver, setNothingToHandOver] = useState(false)
@@ -235,7 +238,7 @@ export function EndSection({ shift, online, canAct, onRecord }: {
           ? <p className="text-sm text-[var(--color-muted-foreground)]">No breaks taken.</p>
           : <ul className="space-y-2">{shift.breaks.map(b => <BreakRow key={b.id} shift={shift} brk={b} online={online} />)}</ul>}
         <label className="flex items-center gap-2 text-sm min-h-[44px]">
-          <input type="checkbox" checked={breaksConfirmed} onChange={e => setBreaksConfirmed(e.target.checked)} />
+          <input type="checkbox" checked={breaksConfirmed} onChange={e => setConfirmedSig(e.target.checked ? sig : null)} />
           {shift.breaks.length === 0 ? 'I took no breaks' : 'My breaks are correct'}
         </label>
       </div>
@@ -298,7 +301,7 @@ export function EndSection({ shift, online, canAct, onRecord }: {
       </div>
 
       {blockers.length > 0 && (
-        <Callout tone="warning" title="You can't finish yet">
+        <Callout tone="info" title="You can't finish yet">
           <ul className="list-disc pl-5">{blockers.map((b, i) => <li key={`${b.code}-${i}`}>{b.message}</li>)}</ul>
         </Callout>
       )}

@@ -150,10 +150,10 @@ function DoseSheetBody({ open, onClose, shift, target, initialOutcome = 'Adminis
         <p className="text-sm">{med.doseDescription}{med.directions ? `. ${med.directions}` : ''}</p>
 
         {blockedByCompetency && (
-          <Callout tone="warning" title="You can't record doses">{shift.canRecordDosesReason ?? 'Your Medication Competency is not current.'}</Callout>
+          <Callout tone="info" title="You can't record doses">{shift.canRecordDosesReason ?? 'Your Medication Competency is not current.'}</Callout>
         )}
         {!blockedByCompetency && shift.canRecordDosesReason && (
-          <Callout tone="warning">{shift.canRecordDosesReason}</Callout>
+          <Callout tone="info">{shift.canRecordDosesReason}</Callout>
         )}
 
         <fieldset className="space-y-2">

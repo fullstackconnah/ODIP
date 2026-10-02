@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildChecklist, clockLabel, endChecklist } from './checklist'
+import { breaksSignature, buildChecklist, clockLabel, endChecklist } from './checklist'
 import type { PortalDoseSlotDto, PortalShiftRoutineDto } from '@/api/types'
 
 const dose = (over: Partial<PortalDoseSlotDto>): PortalDoseSlotDto => ({
@@ -71,5 +71,19 @@ describe('endChecklist', () => {
   it('needs the breaks confirmed', () => {
     expect(endChecklist({ ...base, breaksConfirmed: false }).find(i => i.id === 'breaks')?.done).toBe(false)
     expect(endChecklist(base).find(i => i.id === 'breaks')?.done).toBe(true)
+  })
+})
+
+describe('wording and break signature', () => {
+  const blocker = { code: 'DOSE_OUTCOME_MISSING' as const, message: 'x', medicationId: 'm', medicationName: 'P', scheduledAt: '2026-10-05T08:00:00' }
+  const base = { blockers: [], breaksConfirmed: true, noteCount: 1, nothingToNote: false, handoverText: '', nothingToHandOver: false }
+  it('agrees the verb with the count', () => {
+    expect(endChecklist({ ...base, blockers: [blocker] })[0].label).toBe('1 dose needs an outcome')
+    expect(endChecklist({ ...base, blockers: [blocker, blocker] })[0].label).toBe('2 doses need an outcome')
+  })
+  it('changes the break signature when a break is edited or ended', () => {
+    const a = [{ id: 'b', startedAt: '2026-10-05T01:00:00Z', endedAt: null }]
+    expect(breaksSignature(a)).not.toBe(breaksSignature([{ ...a[0], endedAt: '2026-10-05T01:30:00Z' }]))
+    expect(breaksSignature(a)).not.toBe(breaksSignature([]))
   })
 })
