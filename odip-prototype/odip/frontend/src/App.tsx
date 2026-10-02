@@ -63,7 +63,7 @@ const PortalShiftsPage = React.lazy(() => import('@/pages/portal/PortalShiftsPag
 const PortalShiftDetailPage = React.lazy(() => import('@/pages/portal/PortalShiftDetailPage'))
 const PortalWitnessApprovalsPage = React.lazy(() => import('@/pages/portal/PortalWitnessApprovalsPage'))
 const PortalLeavePage = React.lazy(() => import('@/pages/portal/PortalLeavePage'))
-const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage'))
+const NotFoundPage = React.lazy(() => import('@/pages/NotFoundPage'))
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -258,48 +258,46 @@ describe('ShiftChip one-line label', () => {
 
 // Landing-spotted: at the board's native width a day column is 123-130px, and the time, the separator, the drag handle and the actions
 // trigger left the name 0-5px: a one-letter link. Below 14rem the name now sits UNDER the time on its own line (the chip grows to two
-// lines); from 14rem it is the one line "time · name" it was.
+// lines); from 14rem it is the one line "time · name" it was. jsdom cannot measure a container query, so the pixel result is covered by the
+// Playwright roster screenshots; what is asserted here is what stays true at every width: the whole name is in the document and reachable, in
+// reading order after the time, with the decoration kept out of what a screen reader announces.
 describe('ShiftChip keeps the name readable in a narrow day column', () => {
-  const NAME_UNDER_TIME = ['flex-col', '@[14rem]:flex-row']
-
-  function contentOf(shift: ReturnType<typeof makeShift>) {
-    return screen.getByText(formatShiftTimeRange(shift.startTime, shift.endTime)).parentElement as HTMLElement
-  }
-
-  it('stacks the name under the time below 14rem and puts them on one line from 14rem', () => {
-    const shift = makeShift({ participantName: "Jack O'Sullivan" })
+  it('puts the whole name after the time in reading order, as a link whose whole text stays in the document when the visible text is truncated', () => {
+    const shift = makeShift({ participantName: "Jack O'Sullivan", participantId: 'participant-7' })
     renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
-    expect(contentOf(shift)).toHaveClass('flex', 'min-w-0', 'flex-1', 'overflow-hidden', ...NAME_UNDER_TIME)
-    expect(contentOf(shift)).toHaveClass('@[14rem]:items-center')
+    const time = screen.getByText(formatShiftTimeRange(shift.startTime, shift.endTime))
+    const link = screen.getByRole('link', { name: "Jack O'Sullivan" })
+    expect(link).toHaveTextContent("Jack O'Sullivan")
+    expect(link).toHaveAttribute('href', '/participants/participant-7')
+    expect(time.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('hides the "·" separator while the name is under the time (a dot ending a line reads as a typo), and keeps it for the one-line layout', () => {
+  it('keeps the "·" separator out of the accessibility tree, and the open control announces time and name with a comma', () => {
     const shift = makeShift({ participantName: 'Grace Palmer' })
     renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
-    const separator = contentOf(shift).querySelector('[aria-hidden="true"]') as HTMLElement
-    expect(separator).toHaveTextContent('·')
-    expect(separator).toHaveClass('hidden', '@[14rem]:inline')
+    expect(screen.getByText('·')).toHaveAttribute('aria-hidden', 'true')
+    expect(getOpenButton(shift)).toHaveAccessibleName('9am–5pm, Grace Palmer')
   })
 
-  it('keeps the name, the override mark and the on-leave marker on one row of their own, so the markers never become a third line', () => {
+  it('keeps the name, the override mark and the on-leave marker together and apart from the time, so the markers never become a third line', () => {
     const shift = makeShift({ participantName: 'Grace Palmer', staffId: 'staff-9', staffName: 'Alex Rivera', overrideReason: 'Only cover available', assigneeOnApprovedLeave: true })
     renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
     const nameRow = screen.getByRole('link', { name: 'Grace Palmer' }).parentElement as HTMLElement
-    expect(nameRow).toHaveClass('flex', 'min-w-0', 'items-center', '@[14rem]:flex-1')
     expect(nameRow).toContainElement(screen.getByRole('img', { name: /Assigned with an override/ }))
     expect(nameRow).toContainElement(screen.getByText('On leave'))
+    expect(nameRow).not.toContainElement(screen.getByText(formatShiftTimeRange(shift.startTime, shift.endTime)))
   })
 
-  it('lets the name link shrink and truncate with its full name in the title, whichever row hosts the chip', () => {
+  it('carries the full name in the link title, so a truncated name can still be read on hover', () => {
     const shift = makeShift({ participantName: 'Grace Palmer-Hughes' })
     renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
     const link = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
-    expect(link).toHaveClass('min-w-0', 'truncate')
     expect(link).toHaveAttribute('title', 'Grace Palmer-Hughes')
+    expect(link).toHaveTextContent('Grace Palmer-Hughes')
   })
 })
 
