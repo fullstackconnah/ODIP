@@ -78,7 +78,8 @@ export default function StaffDetailPage() {
     const outcome = await ensureAndSendSetPasswordEmail(email, () => ensureAccount.mutateAsync(overview.staff.id))
     setSending(false)
     const { tone, message } = describeEmailOutcome(outcome, 'use Send set-password email on this page')
-    notify(tone, overview.staff.fullName, message)
+    // The staff id is the notice's subject, so a later send that works replaces this person's earlier failure.
+    notify(tone, overview.staff.fullName, message, overview.staff.id)
   }
 
   // Dismissing the last notice hands focus back to the button that raised it.

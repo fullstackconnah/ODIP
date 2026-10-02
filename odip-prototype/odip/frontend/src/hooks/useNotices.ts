@@ -16,35 +16,40 @@ export interface Notice {
   subject?: string
 }
 
-/** The most notices held at once. */
-export const MAX_NOTICES = 3
+/** The most SUCCESSES held at once. Errors are not counted: an error is never removed to make room. */
+export const MAX_SUCCESSES = 3
 
 /**
- * The list after a notice arrives, newest first. Over the cap, the OLDEST SUCCESS goes: a success never removes an error, because an error
- * is something nobody has dealt with yet (it leaves only when someone dismisses it). With nothing but errors held, a new error replaces the
- * oldest one, and a new success is simply not let in: three errors are still waiting, and a good result is the lesser loss. The incoming
- * notice can itself be the one that goes.
+ * The list after a notice arrives, newest first.
+ *
+ * An error is something nobody has dealt with yet, so it leaves only when someone dismisses it, or when something NEWER about the same person
+ * supersedes it: a success (the problem is over) or another error (the newest words say what is wrong now, so retries do not pile up identical
+ * failures). Notices without a `subject` never replace anything, and are never replaced.
+ *
+ * Only successes are capped. Over the cap the OLDEST successes go; a new success is always let in, and no error is ever evicted to make room.
  */
-export function withNotice(notices: readonly Notice[], incoming: Notice, max = MAX_NOTICES): Notice[] {
-  const next = [incoming, ...notices]
-  if (next.length <= max) return next
+export function withNotice(notices: readonly Notice[], incoming: Notice, max = MAX_SUCCESSES): Notice[] {
+  const kept = incoming.subject === undefined
+    ? notices
+    : notices.filter(n => !(n.tone === 'danger' && n.subject === incoming.subject))
+  const next = [incoming, ...kept]
 
-  // Newest first, so the oldest success is the last one in the list.
-  let dropAt = next.length - 1
-  for (let index = next.length - 1; index >= 0; index--) {
+  // Newest first, so the oldest successes are the last ones in the list.
+  let successes = next.filter(n => n.tone === 'success').length
+  for (let index = next.length - 1; index >= 0 && successes > max; index--) {
     if (next[index].tone === 'success') {
-      dropAt = index
-      break
+      next.splice(index, 1)
+      successes--
     }
   }
-  return next.filter((_, index) => index !== dropAt)
+  return next
 }
 
 /**
  * What to say about a person after something done to them (a set-password email sent, or not), kept until it is dismissed. Render the
  * list with `NoticesRegion`. `notify` and `dismiss` keep their identity, so they can be passed down without re-rendering the child.
  */
-export function useNotices(max = MAX_NOTICES) {
+export function useNotices(max = MAX_SUCCESSES) {
   const [notices, setNotices] = useState<Notice[]>([])
   const nextId = useRef(0)
 

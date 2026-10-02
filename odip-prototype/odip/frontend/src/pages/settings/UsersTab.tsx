@@ -19,6 +19,12 @@ import { parseApiDate } from '@/lib/utils'
 interface UsersTabProps {
   onAddUser: (tenantId?: string) => void
   onEditUser: (user: AdminUserDto) => void
+  /**
+   * Where what became of each send is kept. The page passes its own, so the notices outlive this tab (it is unmounted whenever another tab is
+   * shown): an unacknowledged failure is still there on return, and a send that finishes after the tab was left still reports. Without it the
+   * tab keeps its own, which lasts only while it is mounted.
+   */
+  notices?: ReturnType<typeof useNotices>
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +67,7 @@ function formatRelativeTime(dateStr: string | null): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
+export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: UsersTabProps) {
   const [tenantId, setTenantId] = useState('')
   const [role, setRole] = useState('')
   const [status, setStatus] = useState('')
@@ -76,7 +82,8 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
 
   const ensureAccount = useEnsureUserSignInAccount()
   // What became of each "Send set-password email", kept above the table until dismissed: a row action has no panel to say it in.
-  const { notices, notify, dismiss } = useNotices()
+  const ownNotices = useNotices()
+  const { notices, notify, dismiss } = lifted ?? ownNotices
   const { data: tenants = [] } = useAdminTenantsSummary()
   const { data: pagedResult, isLoading } = useAdminUsers({
     tenantId: tenantId || undefined,

@@ -1057,15 +1057,17 @@ Three more pieces of the same story (all in `tapArea.ts` or built on it):
 until they dismiss it. The notices are ordinary content, so they add no layer to the z-index table, and nothing floats over the next panel's footer.
 
 ```tsx
-const { notices, notify, dismiss } = useNotices()
-<NoticesRegion notices={notices} onDismiss={dismiss} className="empty:mb-0" />   // above the table
-notify('danger', person.fullName, message)                                     // the title is who it is about; tone is 'success' | 'danger'
+const { notices, notify, dismiss } = useNotices()   // hold it ABOVE anything that unmounts: SettingsPage holds the Users tab's, so a tab switch keeps them
+<NoticesRegion notices={notices} onDismiss={dismiss} focusAfterDismiss={focusRowAction} className="empty:mb-0" />   // above the table
+notify('danger', person.fullName, message, person.id)   // title: who it is about; tone: 'success' | 'danger'; subject: their stable key (optional)
 ```
 
 - **One persistent live region.** It is `role="status"` (polite), mounted before the first message and empty while idle; what is put into it is announced. A live region created already holding its text
   is announced unreliably, so only its content comes and goes. Each notice is a `Callout` with `announce={false}` (no role or `aria-live` of its own), so nothing is announced twice.
-- **Rules.** At most 3 are held (`MAX_NOTICES`), newest first. An error stays until it is dismissed, and a success never removes an error: over the cap the oldest *success* goes (with only errors held, a new error
-  replaces the oldest, and a new success is not let in). Each notice names the person, its text breaks (`break-words`), and Dismiss is a `Button iconOnly` named for them.
+- **Rules.** Newest first. Only *successes* are capped (`MAX_SUCCESSES`, 3): over the cap the oldest successes go, and a new success is always let in. An error is never evicted to make room; it stays until it is dismissed or until something newer
+  about the same person (the notice's `subject`) supersedes it: a success (the problem is over) or another error (retries do not pile up identical failures). A success never removes another person's error, and a notice with no `subject` replaces nothing.
+  Each notice names the person, its text breaks (`break-words`), and Dismiss is a `Button iconOnly` named for them. The region announces only what is added (`aria-atomic="false"`, `aria-relevant="additions"`), and Dismiss moves focus to the next notice's
+  Dismiss button, or when none is left to `focusAfterDismiss(dismissed)`: the control that raised it, found from the `subject`.
 - Collapse the empty region with an `empty:` class that cancels the gap around it (`empty:mb-0` in a `space-y` stack, `empty:-mt-[var(--section-gap)]` in a flex column with a `gap`).
 - **The control that raises a notice** is a `RowActions` cluster of `Button variant="ghost" size="sm" iconOnly` (a detail page uses a plain `Button`), named for the person it acts on ("Send set-password email to Ann One"). While its action is under way
   it is `aria-disabled` with a guard in the handler, never `disabled`: disabling the button that was just activated can drop keyboard focus in some browsers. `Button` dims only on `disabled`, so add `aria-disabled:opacity-50 aria-disabled:cursor-not-allowed`.

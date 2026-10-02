@@ -136,3 +136,48 @@ describe('SettingsPage Users tab: Send set-password email', () => {
     )).toBeInTheDocument()
   })
 })
+
+describe('SettingsPage Users tab: the notices survive leaving the tab', () => {
+  const SENT = "We've sent ann@example.com a link to set their password. It can take a few minutes, so ask them to check spam."
+  const NOT_SENT = 'No link was sent to ann@example.com. To try again, use Send set-password email on their row.'
+
+  it('keeps an unacknowledged failure through a visit to another tab', async () => {
+    sendPasswordResetEmail.mockRejectedValue(new Error('auth/network-request-failed'))
+    const u = await openUsersTab()
+    await u.click(screen.getByRole('button', { name: 'Send set-password email to Ann One' }))
+    await within(screen.getByRole('status')).findByText(NOT_SENT)
+
+    await u.click(screen.getByRole('tab', { name: 'Appearance' }))
+    expect(screen.queryByText(NOT_SENT)).not.toBeInTheDocument()
+    await u.click(screen.getByRole('tab', { name: 'Users' }))
+
+    expect(await within(screen.getByRole('status')).findByText(NOT_SENT)).toBeInTheDocument()
+  })
+
+  it('reports a send that finishes after the tab was left, instead of saying it to nobody', async () => {
+    let finishSend!: () => void
+    sendPasswordResetEmail.mockReturnValue(new Promise<void>(resolve => { finishSend = resolve }))
+    const u = await openUsersTab()
+    await u.click(screen.getByRole('button', { name: 'Send set-password email to Ann One' }))
+    await waitFor(() => expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1))
+
+    await u.click(screen.getByRole('tab', { name: 'Appearance' }))
+    finishSend()
+    await waitFor(() => expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1))
+    await u.click(screen.getByRole('tab', { name: 'Users' }))
+
+    expect(await within(screen.getByRole('status')).findByText(SENT)).toBeInTheDocument()
+  })
+
+  it('lets a dismissed notice stay dismissed after the same round trip', async () => {
+    sendPasswordResetEmail.mockRejectedValue(new Error('auth/network-request-failed'))
+    const u = await openUsersTab()
+    await u.click(screen.getByRole('button', { name: 'Send set-password email to Ann One' }))
+    await u.click(await within(screen.getByRole('status')).findByRole('button', { name: 'Dismiss notice about Ann One' }))
+
+    await u.click(screen.getByRole('tab', { name: 'Appearance' }))
+    await u.click(screen.getByRole('tab', { name: 'Users' }))
+
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+  })
+})

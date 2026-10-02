@@ -311,7 +311,7 @@ describe('UsersTab: the notices above the table', () => {
     expect(within(region()).queryByText(sentTo(1))).not.toBeInTheDocument()
   })
 
-  it('keeps an old error through three newer successes, because a success never removes one', async () => {
+  it('keeps an old error through three newer successes, because the cap counts successes only', async () => {
     sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
     const u = renderTab([user(1), user(2), user(3), user(4)])
 
@@ -324,9 +324,40 @@ describe('UsersTab: the notices above the table', () => {
       await waitFor(() => expect(isBusy(sendIn(`User Number${n}`))).toBe(false))
     }
 
-    // Three held: the old error, and the two newest successes. The oldest success made room.
-    expect(within(region()).getAllByText(/^User Number\d$/).map(el => el.textContent)).toEqual(['User Number4', 'User Number3', 'User Number1'])
+    // The old error, and the three newest successes: nothing was removed to make room, because errors are not counted against the cap.
+    expect(within(region()).getAllByText(/^User Number\d$/).map(el => el.textContent)).toEqual(['User Number4', 'User Number3', 'User Number2', 'User Number1'])
     expect(within(region()).getByText(/No link was sent to u1@example.com.au/)).toBeInTheDocument()
-    expect(within(region()).queryByText(sentTo(2))).not.toBeInTheDocument()
+  })
+
+  it("replaces a person's earlier failure when a retry for them works, and leaves everyone else's failure alone", async () => {
+    sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed')).mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
+    const u = renderTab([user(1), user(2)])
+    await u.click(sendIn('User Number1'))
+    await within(region()).findByText(/No link was sent to u1@example.com.au/)
+    await waitFor(() => expect(isBusy(sendIn('User Number1'))).toBe(false))
+    await u.click(sendIn('User Number2'))
+    await within(region()).findByText(/No link was sent to u2@example.com.au/)
+    await waitFor(() => expect(isBusy(sendIn('User Number2'))).toBe(false))
+
+    await u.click(sendIn('User Number1'))
+
+    expect(await within(region()).findByText(sentTo(1))).toBeInTheDocument()
+    // Their own failure is superseded: it is over. Number2's is not, and stays until dismissed.
+    expect(within(region()).queryByText(/No link was sent to u1@example.com.au/)).not.toBeInTheDocument()
+    expect(within(region()).getByText(/No link was sent to u2@example.com.au/)).toBeInTheDocument()
+  })
+
+  it('says a second failure for the same person once, not twice, so retries during an outage do not pile up', async () => {
+    sendPasswordResetEmail.mockRejectedValue(firebaseError('auth/network-request-failed'))
+    const u = renderTab([user(1)])
+    await u.click(sendIn('User Number1'))
+    await within(region()).findByText(/No link was sent to u1@example.com.au/)
+    await waitFor(() => expect(isBusy(sendIn('User Number1'))).toBe(false))
+
+    await u.click(sendIn('User Number1'))
+    await waitFor(() => expect(sendPasswordResetEmail).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(isBusy(sendIn('User Number1'))).toBe(false))
+
+    expect(within(region()).getAllByText(/No link was sent to u1@example.com.au/)).toHaveLength(1)
   })
 })

@@ -210,7 +210,7 @@ describe('StaffDetailPage: Send set-password email', () => {
     expect(screen.getByRole('button', { name: SEND })).toHaveFocus()
   })
 
-  it('an error stays when a later send succeeds, until it is dismissed (a success never removes an error)', async () => {
+  it('a later send that works replaces the failure about the same person: the problem it reported is over', async () => {
     sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
     const u = renderPage()
 
@@ -221,13 +221,19 @@ describe('StaffDetailPage: Send set-password email', () => {
     await u.click(screen.getByRole('button', { name: SEND }))
 
     expect(await within(region()).findByText(/We've sent alex@example.com a link to set their password/)).toBeInTheDocument()
-    expect(within(region()).getByText(/No link was sent to alex@example.com/)).toBeInTheDocument()
+    expect(within(region()).queryByText(/No link was sent to alex@example.com/)).not.toBeInTheDocument()
+  })
 
-    // Two notices about the same person: dismiss the failure by its own button, and the good news stays.
-    const failure = within(region()).getByText(/No link was sent to alex@example.com/).closest('[data-tone]') as HTMLElement
-    await u.click(within(failure).getByRole('button', { name: 'Dismiss notice about Alex Rivera' }))
+  it('a failure stays until it is dismissed, and Dismiss removes only that notice', async () => {
+    sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
+    const u = renderPage()
+
+    await u.click(screen.getByRole('button', { name: SEND }))
+    const failure = await within(region()).findByText(/No link was sent to alex@example.com/)
+    expect(failure).toBeInTheDocument()
+
+    await u.click(within(region()).getByRole('button', { name: 'Dismiss notice about Alex Rivera' }))
 
     expect(within(region()).queryByText(/No link was sent to alex@example.com/)).not.toBeInTheDocument()
-    expect(within(region()).getByText(/We've sent alex@example.com a link to set their password/)).toBeInTheDocument()
   })
 })
