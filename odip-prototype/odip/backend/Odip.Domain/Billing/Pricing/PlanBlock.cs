@@ -119,8 +119,6 @@ public sealed record PlanBlock
     /// <summary>The most headcount changes a block may have: each one cuts every occurrence into another line, so an unbounded list is an unbounded answer.</summary>
     public const int MaxHeadcountChanges = 10;
 
-    private static readonly string[] States = { "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA" };
-
     /// <summary>The client's own key for the block (unique in a request): lines and totals are attributed to it.</summary>
     public string Id { get; init; } = string.Empty;
     public PlanSupportType SupportType { get; init; }
@@ -254,7 +252,7 @@ public sealed record PlanBlock
 
     private void ValidateLocation(Action<string> add)
     {
-        if (Location is null || !States.Contains((Location.State ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase))
+        if (Location is null || !HolidayCalendar.StateCodes.Contains((Location.State ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase))
         {
             add("the delivery state must be one of ACT, NSW, NT, QLD, SA, TAS, VIC or WA.");
             return;

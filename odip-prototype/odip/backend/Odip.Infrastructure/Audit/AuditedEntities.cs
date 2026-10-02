@@ -101,9 +101,13 @@ public static class AuditedEntities
         typeof(NotificationPreference),
 
         // Plan builder pricing (phase B): the registration groups a provider says it holds and its crossing policy decide which items the
-        // builder may price and how much a plan costs, and the holiday overrides decide which days are priced at the public holiday rate (+122%
-        // on a weekday). Who changed either, and when, must be recoverable. Neither holds anything private.
+        // builder may price and how much a plan costs, and the holiday rows (the synced feed and the maintained overrides) decide which days are
+        // priced at the public holiday rate (+122% on a weekday), for every tenant: both tables are global. Who changed any of them, and when,
+        // must be recoverable. None holds anything private. PublicHoliday is written in bulk by HolidaySyncBackgroundService (no actor, which
+        // the interceptor allows), but the sync only adds the rows the feed gained and renames the ones it changed: about 150 rows on a fresh
+        // database, then a handful a year, which is not the churn that kept it out before.
         typeof(PlanPricingSettings),
+        typeof(PublicHoliday),
         typeof(PublicHolidayOverride),
     };
 

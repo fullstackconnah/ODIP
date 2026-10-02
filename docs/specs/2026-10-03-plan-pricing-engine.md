@@ -70,7 +70,9 @@ phase D). A family whose registration group is off is refused with `Registration
 against the Nager.Date feed: Boxing Day 26 December 2026 (ACT, NSW, NT, QLD, VIC, WA; SA's Proclamation Day), Anzac Day 25 April 2027 (NSW, WA, and the
 ACT's extra day), and the part-day rows (NT and SA 19:00, QLD 18:00, to midnight, on Christmas Eve and New Year's Eve). Not seeded: the Tasmanian
 area-limited days (the table has no area). After the seed the table is the owner's to maintain; there is no screen or route for it yet (SQL, or a
-migration), and a whole-day holiday can also be added with `POST api/v1/public-holidays`.
+migration), and a whole-day holiday can also be added with `POST api/v1/public-holidays`. That route, `DELETE api/v1/public-holidays/{id}` and
+`POST api/v1/public-holidays/sync` are SuperAdmin only (the table is global and a row moves every tenant's prices), the state must be one of the eight
+codes or left out for a national holiday, and `PublicHoliday` is an audited entity like the overrides (review M6).
 
 One migration, `AddPlanPricingSettingsAndHolidayOverrides`: two `CreateTable`s, their indexes and the seed rows. It touches nothing that exists.
 

@@ -18,6 +18,9 @@ public sealed record HolidayCoverage(string? State, int Year);
 /// <summary>The holidays of every state for a quote. <see cref="On"/> answers for one delivery state on one date.</summary>
 public sealed class HolidayCalendar
 {
+    /// <summary>The eight state and territory codes a holiday row, a delivery location and a catalogue price column use. A holiday with no state is national.</summary>
+    public static readonly IReadOnlyList<string> StateCodes = new[] { "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA" };
+
     private readonly Dictionary<DateOnly, List<HolidayEntry>> _byDate;
 
     public HolidayCalendar(IEnumerable<HolidayEntry> entries)

@@ -191,9 +191,9 @@ INTERNAL (plan builder phase B): phase C's builder is the only intended caller; 
 
 ## PublicHolidaysController — `api/v1/public-holidays` — class: `[Authorize]`
 - GET `` (`?year&state`) — Authenticated — list public holidays
-- POST `` — A, SA — add a public holiday manually
-- DELETE `/{id:guid}` — A, SA — delete a public holiday
-- POST `/sync` — A, SA — sync holidays from the Nager.Date external API
+- POST `` — SA — add a public holiday manually (`state` must be one of ACT, NSW, NT, QLD, SA, TAS, VIC, WA, or omitted for every state; audited)
+- DELETE `/{id:guid}` — SA — delete a public holiday (audited)
+- POST `/sync` — SA — sync holidays from the Nager.Date external API (audited)
 
 ---
 
