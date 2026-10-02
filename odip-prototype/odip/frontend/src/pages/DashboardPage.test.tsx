@@ -1,10 +1,19 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { act, cleanup, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 import { BAND_GRID_CLASS, BAND_SPAN_CLASS, bandSpans } from './dashboard/bandLayout'
 import { TONE } from '@/lib/tone'
 import { restoreZone, setZone } from '@/test/timeZone'
+
+const PAGES = dirname(fileURLToPath(import.meta.url))
+// The app's real route table: every `<Route path="...">` App.tsx declares, but not the catch-all (path="*"), which would "match" a path nobody built. A route renamed
+// there must fail a test here, not a coordinator's click.
+const APP_ROUTES = [...readFileSync(join(PAGES, '..', 'App.tsx'), 'utf8').matchAll(/<Route path="([^"]+)"/g)].map((match) => match[1]).filter((path) => path !== '*')
+const routeExists = (pathname: string) => APP_ROUTES.some((route) => new RegExp('^' + route.replace(/:[^/]+/g, '[^/]+') + '$').test(pathname))
 
 const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeaveQueue, mockUsePendingCompletionQueue, mockUseStaff, mockUseSettings } = vi.hoisted(() => ({
   mockUseParticipantAlertsAggregate: vi.fn(),
@@ -931,7 +940,7 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
     expect(links[0]).toHaveAttribute('href', href)
   })
 
-  it('opens every action link to a route that exists today, one link per tile, each with a name of its own', () => {
+  it('has one link per tile, in tile order, each with a name of its own, and each to the target in the table above', () => {
     showAll()
     renderPage()
 
@@ -941,6 +950,26 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
     const names = links.map((a) => a.textContent)
     expect(names.every((name) => name && name.length > 0)).toBe(true)
     expect(new Set(names).size).toBe(names.length)
+  })
+
+  // The table above is a literal list: renaming /schedule in App.tsx would leave it green while the tile sent people to a page that is not there. This reads the real route table.
+  it('opens every action link to a path the app\'s route table (App.tsx) declares', () => {
+    showAll()
+    renderPage()
+
+    // The guard itself: the table was found, a parameter segment matches, and a path nobody declared does not.
+    expect(APP_ROUTES.length).toBeGreaterThan(40)
+    expect(routeExists('/trips/abc')).toBe(true)
+    expect(routeExists('/not-a-page')).toBe(false)
+    const hrefs = within(band()).getAllByRole('link').map((a) => a.getAttribute('href')!)
+    expect(hrefs).toHaveLength(EXPECTED.length)
+    for (const href of hrefs) expect(routeExists(new URL(href, 'http://odip.test').pathname), href).toBe(true)
+  })
+
+  it('names filters the target pages actually read (?status= on Tasks, ?qsc= on Incidents), so a renamed parameter fails here', () => {
+    const read = (file: string) => readFileSync(join(PAGES, file), 'utf8')
+    expect(read('TasksPage.tsx')).toMatch(/searchParams\.get\('status'\)/)
+    expect(read('IncidentsPage.tsx')).toMatch(/searchParams\.get\('qsc'\)\s*===\s*'overdue'/)
   })
 
   it('names the Schedule for vehicles and staff, where trips are assigned them, and the Trips list for accommodation, which is chosen on the trip', () => {

@@ -10,6 +10,7 @@ describe('useNow', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
   it('starts at the current time', () => {
@@ -42,12 +43,18 @@ describe('useNow', () => {
     expect(result.current.getHours()).toBe(8)
   })
 
-  it('stops its timer and its listener when the component goes away', () => {
+  it('stops its timer and removes its visibilitychange listener when the component goes away', () => {
+    const add = vi.spyOn(document, 'addEventListener')
+    const remove = vi.spyOn(document, 'removeEventListener')
     const { unmount } = renderHook(() => useNow())
     expect(vi.getTimerCount()).toBe(1)
+    const added = add.mock.calls.find(([type]) => type === 'visibilitychange')
+    expect(added).toBeDefined()
 
     unmount()
 
     expect(vi.getTimerCount()).toBe(0)
+    // The very function that was added is the one removed: a different function would leave every remount's listener behind.
+    expect(remove).toHaveBeenCalledWith('visibilitychange', added![1])
   })
 })
