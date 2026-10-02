@@ -969,6 +969,13 @@ public static class DbSeeder
             || await context.BookingTasks.IgnoreQueryFilters().AnyAsync(ct);
     }
 
+    /// <summary>
+    /// Seeds the community access group with the real 2026-27 Access Community, Social and Rec Activities - Standard items (RG 0125), so a fresh
+    /// database prices claims from codes that exist in the NDIA catalogue. Every field is what the importer would make of the same row of the
+    /// 2026-27 Support Catalogue (national, remote and very remote prices from 1 July 2026), so importing the real file afterwards adds the rest of the
+    /// catalogue and leaves these five rows exactly as they are. Like every seed, a no-op once any group exists: a live database keeps what it has, and
+    /// the admin's catalogue import end-dates the old demo codes.
+    /// </summary>
     public static async Task SeedNdisDataAsync(OdipDbContext context, CancellationToken ct = default)
     {
         if (await context.SupportActivityGroups.AnyAsync(ct))
@@ -985,98 +992,60 @@ public static class DbSeeder
         };
         context.SupportActivityGroups.Add(group);
 
-        var items = new List<SupportCatalogueItem>
+        // (id suffix, item number, day type, national, remote MM6, very remote MM7) - NDIS-CODES 4.2, from the 2026-27 catalogue.
+        var catalogue = new (int Id, string Code, string Name, ClaimDayType Day, decimal National, decimal Remote, decimal VeryRemote)[]
         {
-            new()
-            {
-                Id = Guid.Parse("d0000000-0000-0000-0000-000000000001"),
-                ActivityGroupId = groupId,
-                ItemNumber = "04_210_0125_6_1",
-                Description = "Group Activities - Standard - Weekday Daytime - TTP",
-                Unit = "H",
-                DayType = ClaimDayType.Weekday,
-                PriceLimit_ACT = 67.56m,
-                PriceLimit_NSW = 67.56m,
-                PriceLimit_NT = 67.56m,
-                PriceLimit_QLD = 67.56m,
-                PriceLimit_SA = 67.56m,
-                PriceLimit_TAS = 67.56m,
-                PriceLimit_VIC = 67.56m,
-                PriceLimit_WA = 67.56m,
-                PriceLimit_Remote = 94.58m,
-                PriceLimit_VeryRemote = 101.34m,
-                CatalogueVersion = "2024-25",
-                EffectiveFrom = new DateOnly(2024, 7, 1),
-                IsActive = true
-            },
-            new()
-            {
-                Id = Guid.Parse("d0000000-0000-0000-0000-000000000002"),
-                ActivityGroupId = groupId,
-                ItemNumber = "04_212_0125_6_1",
-                Description = "Group Activities - Standard - Saturday - TTP",
-                Unit = "H",
-                DayType = ClaimDayType.Saturday,
-                PriceLimit_ACT = 94.91m,
-                PriceLimit_NSW = 94.91m,
-                PriceLimit_NT = 94.91m,
-                PriceLimit_QLD = 94.91m,
-                PriceLimit_SA = 94.91m,
-                PriceLimit_TAS = 94.91m,
-                PriceLimit_VIC = 94.91m,
-                PriceLimit_WA = 94.91m,
-                PriceLimit_Remote = 132.87m,
-                PriceLimit_VeryRemote = 142.37m,
-                CatalogueVersion = "2024-25",
-                EffectiveFrom = new DateOnly(2024, 7, 1),
-                IsActive = true
-            },
-            new()
-            {
-                Id = Guid.Parse("d0000000-0000-0000-0000-000000000003"),
-                ActivityGroupId = groupId,
-                ItemNumber = "04_213_0125_6_1",
-                Description = "Group Activities - Standard - Sunday - TTP",
-                Unit = "H",
-                DayType = ClaimDayType.Sunday,
-                PriceLimit_ACT = 122.25m,
-                PriceLimit_NSW = 122.25m,
-                PriceLimit_NT = 122.25m,
-                PriceLimit_QLD = 122.25m,
-                PriceLimit_SA = 122.25m,
-                PriceLimit_TAS = 122.25m,
-                PriceLimit_VIC = 122.25m,
-                PriceLimit_WA = 122.25m,
-                PriceLimit_Remote = 171.15m,
-                PriceLimit_VeryRemote = 183.38m,
-                CatalogueVersion = "2024-25",
-                EffectiveFrom = new DateOnly(2024, 7, 1),
-                IsActive = true
-            },
-            new()
-            {
-                Id = Guid.Parse("d0000000-0000-0000-0000-000000000004"),
-                ActivityGroupId = groupId,
-                ItemNumber = "04_214_0125_6_1",
-                Description = "Group Activities - Standard - Public Holiday - TTP",
-                Unit = "H",
-                DayType = ClaimDayType.PublicHoliday,
-                PriceLimit_ACT = 149.60m,
-                PriceLimit_NSW = 149.60m,
-                PriceLimit_NT = 149.60m,
-                PriceLimit_QLD = 149.60m,
-                PriceLimit_SA = 149.60m,
-                PriceLimit_TAS = 149.60m,
-                PriceLimit_VIC = 149.60m,
-                PriceLimit_WA = 149.60m,
-                PriceLimit_Remote = 209.44m,
-                PriceLimit_VeryRemote = 224.40m,
-                CatalogueVersion = "2024-25",
-                EffectiveFrom = new DateOnly(2024, 7, 1),
-                IsActive = true
-            }
+            (11, "04_104_0125_6_1", "Access Community Social and Rec Activ - Standard - Weekday Daytime", ClaimDayType.Weekday, 73.58m, 103.01m, 110.37m),
+            (12, "04_103_0125_6_1", "Access Community Social and Rec Activ - Standard - Weekday Evening", ClaimDayType.WeekdayEvening, 81.07m, 113.50m, 121.61m),
+            (13, "04_105_0125_6_1", "Access Community Social and Rec Activ - Standard - Saturday", ClaimDayType.Saturday, 103.54m, 144.96m, 155.31m),
+            (14, "04_106_0125_6_1", "Access Community Social and Rec Activ - Standard - Sunday", ClaimDayType.Sunday, 133.50m, 186.90m, 200.25m),
+            (15, "04_102_0125_6_1", "Access Community Social and Rec Activ - Standard - Public Holiday", ClaimDayType.PublicHoliday, 163.46m, 228.84m, 245.19m),
         };
-        context.SupportCatalogueItems.AddRange(items);
+
+        foreach (var c in catalogue)
+        {
+            context.SupportCatalogueItems.Add(new SupportCatalogueItem
+            {
+                Id = Guid.Parse($"d0000000-0000-0000-0000-0000000000{c.Id}"),
+                ActivityGroupId = groupId,
+                ItemNumber = c.Code,
+                Description = c.Name,
+                Unit = "H",
+                DayType = c.Day,
+                IsIntensive = false,
+                // The eight state limits stay because the claim screens still read them; every state has the National price.
+                PriceLimit_ACT = c.National,
+                PriceLimit_NSW = c.National,
+                PriceLimit_NT = c.National,
+                PriceLimit_QLD = c.National,
+                PriceLimit_SA = c.National,
+                PriceLimit_TAS = c.National,
+                PriceLimit_VIC = c.National,
+                PriceLimit_WA = c.National,
+                PriceLimit_Remote = c.Remote,
+                PriceLimit_VeryRemote = c.VeryRemote,
+                CatalogueVersion = "2026-27",
+                EffectiveFrom = new DateOnly(2026, 7, 1),
+                EffectiveTo = null,
+                IsActive = true,
+                RegistrationGroup = "0125",
+                SupportCategoryNumber = 4,
+                PaceSupportCategoryNumber = 4,
+                OutcomeDomain = 6,
+                SupportPurpose = 1,
+                CatalogueType = CatalogueItemType.Priced,
+                NonFaceToFace = CatalogueClaimFlag.Yes,
+                ProviderTravel = CatalogueClaimFlag.Yes,
+                ShortNoticeCancellation = CatalogueClaimFlag.Yes,
+                NdiaRequestedReports = CatalogueClaimFlag.No,
+                IrregularSil = CatalogueClaimFlag.No,
+                IsLegacy = false,
+                PriceNational = c.National,
+                PriceRemote = c.Remote,
+                PriceVeryRemote = c.VeryRemote,
+                SourceDocument = "NDIS Support Catalogue 2026-27 (demo seed)"
+            });
+        }
 
         await context.SaveChangesAsync(ct);
     }

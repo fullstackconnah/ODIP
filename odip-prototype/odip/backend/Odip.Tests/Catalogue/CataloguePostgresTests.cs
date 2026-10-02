@@ -2,7 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
+using Odip.Application.DTOs;
+using Odip.Domain.Billing.Services;
 using Odip.Domain.Enums;
+using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 using Odip.Tests.Postgres;
 using Xunit;
 
@@ -92,5 +96,41 @@ public class CataloguePostgresTests : IClassFixture<PostgresFixture>
             Assert.False(r.IsLegacy);
             Assert.Equal(ClaimDayType.Weekday, r.DayType);
         });
+    }
+
+    [SkippableFact]
+    public async Task TheImportAndTheLookup_RunOnNpgsql_OverTheSeed_AndReimportingChangesNothing()
+    {
+        RequirePostgres();
+        var connectionString = await _pg.CreateDatabaseAsync();
+        await using (var migrate = PostgresFixture.NewContext(connectionString)) await migrate.Database.MigrateAsync();
+        await using var db = PostgresFixture.NewContext(connectionString);
+        await DbSeeder.SeedNdisDataAsync(db);
+
+        // The real 2026-27 file over the seeded database: the five seeded rows are what the file says, so only the rest is added.
+        var first = await CatalogueImportTestSupport.ImportAsync(db, CatalogueFixtures.File2026_27);
+        Assert.Equal(new CatalogueImportResultDto(1012, 0, 5, 0), first);
+
+        // Importing it again changes nothing, read back through a fresh context so nothing is served from the change tracker.
+        await using var reader = PostgresFixture.NewContext(connectionString);
+        var before = await CatalogueImportTestSupport.SnapshotAsync(reader);
+        var again = await CatalogueImportTestSupport.ImportAsync(db, CatalogueFixtures.File2026_27);
+        await using var reader2 = PostgresFixture.NewContext(connectionString);
+        Assert.Equal(new CatalogueImportResultDto(0, 0, 1017, 0), again);
+        Assert.Equal(before, await CatalogueImportTestSupport.SnapshotAsync(reader2));
+        Assert.Equal(11, await reader2.SupportActivityGroups.CountAsync());
+
+        // An older file imported afterwards is history: it adds rows, end-dates nothing the newer file owns, and the date-effective lookup
+        // (a LINQ query over DateOnly windows) gives each service date its own year's price.
+        await CatalogueImportTestSupport.ImportAsync(db, CatalogueFixtures.File2025_26Trimmed);
+        await using var lookup = PostgresFixture.NewContext(connectionString);
+        Assert.Equal(70.23m, (await lookup.FindCatalogueItemAsync("04_104_0125_6_1", new DateOnly(2026, 6, 30), PriceZone.National)).Price);
+        Assert.Equal(73.58m, (await lookup.FindCatalogueItemAsync("04_104_0125_6_1", new DateOnly(2026, 7, 1), PriceZone.National)).Price);
+        Assert.Equal(103.01m, (await lookup.FindCatalogueItemAsync("04_104_0125_6_1", new DateOnly(2026, 10, 5), PriceZone.Remote)).Price);
+        Assert.Equal(CatalogueLookupFailure.NotPriced, (await lookup.FindCatalogueItemAsync("01_003_0107_1_1", new DateOnly(2026, 10, 5), PriceZone.National)).Failure);
+
+        // GRP_COMMUNITY_ACCESS still has exactly its ten current items active.
+        var active = await lookup.SupportCatalogueItems.Where(i => i.IsActive && i.ActivityGroup.GroupCode == "GRP_COMMUNITY_ACCESS").Select(i => i.ItemNumber).ToListAsync();
+        Assert.Equal(10, active.Count);
     }
 }
