@@ -195,7 +195,7 @@ main,
   inset: 0 0 auto;
   z-index: 40;
   padding-top: env(safe-area-inset-top, 0px);
-  background: linear-gradient(rgb(15 32 0 / 0.99), rgb(15 32 0 / 0.95));
+  background: var(--forest);
   border-bottom: 1px solid var(--hairline);
 }
 .site-header__inner {
@@ -249,6 +249,7 @@ main,
   color: var(--paper);
   font-size: 0.9375rem;
   font-weight: 600;
+  white-space: nowrap;
   text-decoration: none;
 }
 .signin:hover {
@@ -307,6 +308,9 @@ main,
 }
 .btn--olive:hover {
   background: rgb(57 98 0 / 0.9);
+}
+.btn--head {
+  white-space: nowrap;
 }
 .cta-short {
   display: none;
@@ -1327,6 +1331,24 @@ main,
 @media (max-width: 379.98px) {
   .site-header .brand__name {
     display: none;
+  }
+}
+/* The smallest phones: tighter header spacing keeps wordmark, pause, Sign in and Early access on one line. */
+@media (max-width: 359.98px) {
+  .site-header__inner {
+    gap: 4px;
+    padding-inline: 12px;
+  }
+  .site-nav {
+    gap: 2px;
+  }
+  .signin {
+    padding: 0 6px;
+    font-size: 0.875rem;
+  }
+  .btn--head {
+    padding: 0 10px;
+    font-size: 0.875rem;
   }
 }
 
