@@ -4,7 +4,7 @@ import { useClaim, useUpdateClaim, useUpdateClaimLineItem } from '@/api/hooks'
 import type { TripClaimStatus, ClaimLineItemDto } from '@/api/types'
 import { PLAN_TYPE_LABELS, type PlanType } from '@/api/types/enums'
 import { Download, Check, DollarSign, XCircle } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { apiClient } from '@/api/client'
 import { NoShowModal } from '@/components/NoShowModal'
 import { DataTable } from '@/components/DataTable'
@@ -47,6 +47,14 @@ export default function ClaimDetailPage() {
   const [saved, setSaved] = useState(false)
   const [statusConfirmTarget, setStatusConfirmTarget] = useState<TripClaimStatus | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
+  // "Saved!" puts the label back after two seconds. The timer is kept so a newer save can replace it and leaving the page can cancel it: left
+  // running it fires setSaved into a tree that is gone.
+  const savedResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
+    }
+  }, [])
 
   if (!notesInit && claim) {
     setNotes(claim.notes || '')
@@ -67,7 +75,11 @@ export default function ClaimDetailPage() {
   function handleSaveNotes() {
     if (!id) return
     updateClaim.mutate({ claimId: id, data: { notes } }, {
-      onSuccess: () => { setSaved(true); setTimeout(() => setSaved(false), 2000) }
+      onSuccess: () => {
+        setSaved(true)
+        if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
+        savedResetTimer.current = setTimeout(() => setSaved(false), 2000)
+      }
     })
   }
 

@@ -72,6 +72,43 @@ const participants = [
   },
 ]
 
+// Participants hub — the Enquiries and Onboarding tabs. The mock keeps no state, so these show the shape of each stage, not the flow itself
+// (starting or completing an intake does not move anyone). The real server derives all of it from the participant's own flags:
+//   Enquiries   = every enquiry, plus drafts started in the Intake wizard with no enquiry (isDirectIntake). The tab lists only the open ones:
+//                 no participant yet, or a draft whose intake is not complete.
+//   Onboarding  = drafts whose intake is complete and who are not active (the worklist below).
+//   Active      = finalised participants (isDraft=false): GET /participants?isActive=true|false&isDraft=false
+const enquiryFeed = [
+  { id: 'inq-0001', participantId: null, firstName: 'Noah', lastName: 'Fitzgerald', phone: '0412 555 010', email: null, source: 'Phone', provenance: 'GP referral',
+    createdAt: '2026-09-28T01:10:00Z', participantIsDraft: null, participantIsActive: null, participantIntakeCompletedAt: null },
+  { id: 'inq-0002', participantId: 'p-0101', firstName: 'Priya', lastName: 'Nair', phone: null, email: 'priya.nair@example.com.au', source: 'Web', provenance: null,
+    createdAt: '2026-09-26T04:00:00Z', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: null },
+  // A draft intake started in the Intake wizard with no enquiry behind it: it rides in the same feed, with the participant's id as its id.
+  { id: 'p-0102', participantId: 'p-0102', firstName: 'Tomas', lastName: 'Becker', phone: '0433 555 020', email: null, source: '', provenance: null,
+    createdAt: '2026-09-25T02:30:00Z', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: null, isDirectIntake: true },
+  // Moved on, so the Enquiries tab does not list them: intake complete (the Onboarding tab) and finalised (Active participants).
+  { id: 'inq-0003', participantId: 'p-0103', firstName: 'Mei', lastName: 'Tanaka', phone: '0455 555 030', email: null, source: 'Email', provenance: 'Support coordinator',
+    createdAt: '2026-09-20T03:20:00Z', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: '2026-09-29T05:00:00Z' },
+  { id: 'inq-0004', participantId: 'p-0001', firstName: 'Liam', lastName: 'Okafor', phone: null, email: null, source: 'Phone', provenance: null,
+    createdAt: '2026-02-01T00:00:00Z', participantIsDraft: false, participantIsActive: true, participantIntakeCompletedAt: '2026-02-10T00:00:00Z' },
+]
+
+const onboardingWorklist = [
+  { participantId: 'p-0103', fullName: 'Mei Tanaka', stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 5,
+    reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.'] },
+]
+
+// Drafts are not on the register, so the participants list never returns these; only their detail and checklist are served (the mock's default
+// would answer an unknown id with the first participant).
+const draftParticipants = [
+  { id: 'p-0101', firstName: 'Priya', lastName: 'Nair', preferredName: null, fullName: 'Priya Nair', maskedNdisNumber: null, planType: 'SelfManaged', region: null,
+    isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: null, wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
+  { id: 'p-0102', firstName: 'Tomas', lastName: 'Becker', preferredName: null, fullName: 'Tomas Becker', maskedNdisNumber: null, planType: 'SelfManaged', region: null,
+    isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: null, wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
+  { id: 'p-0103', firstName: 'Mei', lastName: 'Tanaka', preferredName: null, fullName: 'Mei Tanaka', maskedNdisNumber: null, planType: 'SelfManaged', region: null,
+    isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: '2026-09-29T05:00:00Z', wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
+]
+
 const participantDetailExtras = {
   'p-0001': {
     dateOfBirth: '1998-03-14', ndisNumber: '430158289', fundingOrganisation: 'MyPlan Partners',
@@ -2095,7 +2132,15 @@ const routes = [
   ['dashboard/summary', () => dashboardSummary],
 
   // participants (paged list)
-  ['participants', () => paged(participants)],
+  // Honours the filters the Active participants tab sends (Active = isActive=true, Archived = isActive=false, both isDraft=false); the fixtures here have no drafts.
+  ['participants', (searchParams) => paged(participants.filter((p) =>
+    flagMatches(searchParams, 'isActive', p.isActive) && flagMatches(searchParams, 'isDraft', !!p.isDraft)))],
+  ['inquiries', () => enquiryFeed],
+  ['inquiries/onboarding-worklist', () => onboardingWorklist],
+  ['inquiries/:id/onboarding', (id) => ({
+    participantId: id, intakeComplete: true, profileComplete: false, serviceTypeConfirmed: false, serviceAgreementSigned: false, isReady: false,
+    reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.'],
+  })],
   ['participants/:id/bookings', (id) => bookings.filter((b) => b.participantId === id)],
   // NDIS Claims (shift-completion design spec §2/§4, PR 3) — see the `claims` fixture's own
   // comment for why this only ever returns Shift-kind rows, mirroring the real
@@ -2147,7 +2192,7 @@ const routes = [
     reviewDate: '2026-11-01',
   })],
   ['participants/:id', (id) => {
-    const p = participants.find((x) => x.id === id)
+    const p = participants.find((x) => x.id === id) || draftParticipants.find((x) => x.id === id)
     return p ? participantDetail(p) : participantDetail(participants[0])
   }],
 
@@ -2473,6 +2518,11 @@ const putRoutes = [
     }
   }],
 ]
+
+/** A boolean list filter: true when the request does not send the param, or sends the value this row has. */
+function flagMatches(searchParams, key, actual) {
+  return !searchParams.has(key) || searchParams.get(key) === String(actual)
+}
 
 function matchRoute(pattern, segments) {
   const patSegs = pattern.split('/')

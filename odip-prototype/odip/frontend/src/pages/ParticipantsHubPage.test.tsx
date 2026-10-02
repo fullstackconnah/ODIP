@@ -149,7 +149,7 @@ describe('ParticipantsHubPage — single PageHeader + tabbed lifecycle', () => {
 // sat in its own row inside the panel, under a generic subtitle that restated the tab labels.
 describe('ParticipantsHubPage — one description line, not two', () => {
   const ACTIVE = 'The operational register — participants you can roster and book.'
-  const ENQUIRIES = 'Lightweight capture of new prospects before intake.'
+  const ENQUIRIES = 'Open enquiries and intakes in progress — start or resume an intake.'
 
   it('shows the active stage\'s description once, as the inline subtitle beside the H1', () => {
     renderHub()
@@ -220,5 +220,16 @@ describe('ParticipantsHubPage — the URL is the only source of the stage (useTa
     expect(hub.location.current).toBe('/participants?q=sophie&tab=onboarding')
     await user.click(screen.getByRole('tab', { name: 'Active participants' }))
     expect(hub.location.current).toBe('/participants?q=sophie')
+  })
+})
+
+// The register's Drafts view is gone (a draft is an Enquiries row while its intake is open, an Onboarding row once it is complete), but the view was
+// component state, never a URL param: no link ever carried ?view=drafts, so it is an unknown param like any other and gets no special handling.
+describe('ParticipantsHubPage — query params it does not know', () => {
+  it('ignores ?view=, drafts included: the stage is only ever ?tab=, so the default tab opens and the URL is left alone', () => {
+    const hub = renderHub('/participants?view=drafts')
+
+    expect(screen.getByRole('tab', { name: 'Active participants' })).toHaveAttribute('aria-selected', 'true')
+    expect(hub.location.current).toBe('/participants?view=drafts')
   })
 })

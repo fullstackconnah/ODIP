@@ -3,10 +3,11 @@ import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 
-const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeaveCount, mockUseStaff } = vi.hoisted(() => ({
+const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeaveQueue, mockUsePendingCompletionQueue, mockUseStaff } = vi.hoisted(() => ({
   mockUseParticipantAlertsAggregate: vi.fn(),
   mockUseDashboard: vi.fn(),
-  mockUsePendingLeaveCount: vi.fn(),
+  mockUsePendingLeaveQueue: vi.fn(),
+  mockUsePendingCompletionQueue: vi.fn(),
   mockUseStaff: vi.fn(),
 }))
 
@@ -15,7 +16,8 @@ vi.mock('@/api/hooks', () => ({
   useSettings: () => ({ data: undefined }),
   useStaff: mockUseStaff,
   useParticipantAlertsAggregate: mockUseParticipantAlertsAggregate,
-  usePendingLeaveCount: mockUsePendingLeaveCount,
+  usePendingLeaveQueue: mockUsePendingLeaveQueue,
+  usePendingCompletionQueue: mockUsePendingCompletionQueue,
 }))
 
 afterEach(() => {
@@ -25,7 +27,8 @@ afterEach(() => {
 
 beforeEach(() => {
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
-  mockUsePendingLeaveCount.mockReturnValue(0)
+  mockUsePendingLeaveQueue.mockReturnValue({ count: 0, loading: false, error: false })
+  mockUsePendingCompletionQueue.mockReturnValue({ count: 0, loading: false, error: false })
   mockUseStaff.mockReturnValue({ data: [] })
   mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
   mockUseDashboard.mockReturnValue({
@@ -47,13 +50,15 @@ function renderPage() {
   return render(<MemoryRouter><DashboardPage /></MemoryRouter>)
 }
 
-// L3-03: each attention figure must be reproducible on the page behind it.
+// L3-03: each attention figure must be reproducible on the page behind it. The band's tile for a count above zero carries its figure, a line saying what
+// it counts, and a link to the page where the rows are.
 
 describe('Dashboard "Overdue" figure', () => {
   it('links the tile to the task list filtered to Overdue, which the server answers with the same predicate', () => {
     renderPage()
 
-    expect(screen.getByText('Overdue').closest('a')).toHaveAttribute('href', '/tasks?status=Overdue')
+    const tile = screen.getByRole('group', { name: 'Overdue 2' })
+    expect(within(tile).getByRole('link', { name: 'Open overdue tasks' })).toHaveAttribute('href', '/tasks?status=Overdue')
   })
 
   it('links the Overdue Tasks panel "View All" to the same filtered list', () => {
@@ -82,7 +87,7 @@ describe('Dashboard "Critical Participant Alerts" figure', () => {
 
     renderPage()
 
-    const tile = screen.getAllByText('Critical Participant Alerts')[0].closest('a')!
+    const tile = screen.getByRole('group', { name: 'Critical Participant Alerts 3' })
     expect(tile).toHaveTextContent('3')
     expect(tile).toHaveTextContent('2 participants')
   })
@@ -101,7 +106,7 @@ describe('Dashboard "Qualification Issues" figure', () => {
 
     renderPage()
 
-    const tile = screen.getByText('Qualification Issues').closest('a')!
+    const tile = screen.getByRole('group', { name: 'Qualification Issues 5' })
     expect(tile).toHaveTextContent('5')
     expect(tile).toHaveTextContent('2 staff members')
   })

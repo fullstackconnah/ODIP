@@ -2,20 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { usePatchParticipant, useParticipants } from './participants'
+import { useCreateParticipant, usePatchParticipant, useParticipants } from './participants'
 import type { PatchParticipantDto } from '../types'
 
 // CORE-02: usePatchParticipant is a thin TanStack Query mutation wrapper around apiPatchRaw — only
 // that named export needs mocking (the rest of the module, e.g. apiPutRaw used by
 // useUpdateParticipant, stays real).
-const { mockApiPatchRaw, mockApiGet } = vi.hoisted(() => ({
+const { mockApiPatchRaw, mockApiPostRaw, mockApiGet } = vi.hoisted(() => ({
   mockApiPatchRaw: vi.fn(),
+  mockApiPostRaw: vi.fn(),
   mockApiGet: vi.fn(),
 }))
 
 vi.mock('../client', async () => {
   const actual = await vi.importActual<typeof import('../client')>('../client')
-  return { ...actual, apiPatchRaw: mockApiPatchRaw, apiGet: mockApiGet }
+  return { ...actual, apiPatchRaw: mockApiPatchRaw, apiPostRaw: mockApiPostRaw, apiGet: mockApiGet }
 })
 
 function createWrapper(queryClient: QueryClient) {
@@ -62,6 +63,42 @@ describe('usePatchParticipant', () => {
     const { result } = renderHook(() => usePatchParticipant(), { wrapper: createWrapper(queryClient) })
 
     result.current.mutate({ id: 'p1', data: {} })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(invalidateSpy).not.toHaveBeenCalled()
+  })
+})
+
+// Creating a participant ("Save as draft" or "Complete intake" in the Intake wizard, /participants/new) changes more than the register: a draft with an open intake
+// is a row on the Enquiries tab (a direct intake, in the GET /inquiries feed), and a completed intake is on the Onboarding tab. The app's 30s staleTime would
+// otherwise show a tab loaded in the last 30 seconds without the new participant.
+describe('useCreateParticipant', () => {
+  beforeEach(() => {
+    mockApiPostRaw.mockReset()
+  })
+
+  it('refreshes the register, the onboarding worklist and the enquiries feed on success', async () => {
+    mockApiPostRaw.mockResolvedValue({ success: true, data: { id: 'p-new' }, message: null, errors: null })
+    const queryClient = new QueryClient()
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result } = renderHook(() => useCreateParticipant(), { wrapper: createWrapper(queryClient) })
+
+    result.current.mutate({ firstName: 'Dana', lastName: 'Direct', isDraft: true, completeIntake: false } as never)
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(mockApiPostRaw).toHaveBeenCalledWith('/participants', expect.objectContaining({ firstName: 'Dana', lastName: 'Direct', isDraft: true, completeIntake: false }))
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['participants'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['participant-onboarding-worklist'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['participant-inquiries'] })
+  })
+
+  it('does not invalidate any query when the create fails', async () => {
+    mockApiPostRaw.mockRejectedValue(new Error('network error'))
+    const queryClient = new QueryClient()
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result } = renderHook(() => useCreateParticipant(), { wrapper: createWrapper(queryClient) })
+
+    result.current.mutate({ firstName: 'Dana', lastName: 'Direct' } as never)
 
     await waitFor(() => expect(result.current.isError).toBe(true))
     expect(invalidateSpy).not.toHaveBeenCalled()

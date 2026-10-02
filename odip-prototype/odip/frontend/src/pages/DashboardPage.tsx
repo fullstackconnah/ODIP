@@ -1,15 +1,19 @@
 import { useMemo } from 'react'
-import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveCount } from '@/api/hooks'
+import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveQueue, usePendingCompletionQueue } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
 import { formatRatio, formatRelative, plural } from '@/lib/format'
 import { credentialIssueCount, staffCredentials } from '@/lib/credentials'
+import { awaitsData } from '@/lib/queryPhase'
+import { localIsoDate } from '@/lib/dateOnly'
+import { formatToday, greetingFor } from '@/lib/greeting'
 import { usePermissions } from '@/lib/permissions'
+import { useNow } from '@/hooks/useNow'
 import { ALERT_SEVERITY_STYLES, ALERT_TYPE_LABELS } from '@/components/alertSeverityStyles'
 import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
 import { Card } from '@/components/Card'
-import { StatCard, type StatCardProps } from '@/components/StatCard'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_FLOOR } from '@/components/tapArea'
+import { AttentionBand, type BandItem } from './dashboard/AttentionBand'
 import { Link } from 'react-router-dom'
 import {
   Map, ListChecks, ChevronRight, ShieldAlert
@@ -17,40 +21,66 @@ import {
 
 // ── Helpers ──
 
-// Tint an attention tile only when its count is actionable (> 0); at zero it is quiet.
-const tinted = (count: number, tone: 'danger' | 'warning') => (count > 0 ? tone : undefined)
+// The server's "upcoming" window (DashboardController.GetSummary): a trip that starts today or in the next 60 days. The three "Missing …" counts are of those trips,
+// so their lines say so, and a count of one reads in the singular.
+const tripsStart = (n: number) => (n === 1 ? 'Trip starts' : 'Trips start')
 
-// The attention band's shape by item count (7 without alerts, 8 with them, 9 with a pending-leave item too). Below md it is two
-// columns (an odd last item takes the whole row, like the trip glance strip on a phone). From md it is two balanced rows
-// (ceil(n / 2) columns; an odd last item stretches over the spare slot, so a row is never left with a hole). It becomes ONE
-// row once the band's own width gives every item 173px: n × 173 + (n − 1) × 8px gaps, so 1259 / 1440 / 1621px for 7 / 8 / 9.
-// 173px is what the widest label needs on ONE line ("Critical Participant Alerts" is 152.6px at 13px, plus the tile's 8px
-// sides and 1px borders, plus a pixel or two of slack), so a one-row band is always one line tall per label (78px) and never
-// wraps one. That is a container query on the band, not a viewport breakpoint, so the 232px sidebar and the pointer's gutter
-// do not matter. Full class strings, so Tailwind can see them.
-const BAND_SHAPE: Record<number, { grid: string; last: string }> = {
-  7: { grid: 'md:grid-cols-4 @min-[1259px]:grid-cols-7', last: 'col-span-2 @min-[1259px]:col-span-1' },
-  8: { grid: 'md:grid-cols-4 @min-[1440px]:grid-cols-8', last: '' },
-  9: { grid: 'md:grid-cols-5 @min-[1621px]:grid-cols-9', last: 'col-span-2 @min-[1621px]:col-span-1' },
+// The title: a greeting by the hour with today's date after it, both read from the viewer's clock (lib/greeting.ts), which the page refreshes every minute (`useNow`), so a
+// page left open since the morning is not still saying "Good morning" at three, or yesterday's date at midnight. The tab keeps naming the page, whatever the hour: the `h1`
+// is the greeting, the document title stays "Management Dashboard".
+// The greeting and the date need no data (the clock and the sign-in are enough), so the page opens with them while the summary is still on its way; the counts line is data, and
+// is left out until the counts are.
+function DashboardHeader({ now, fullName, counts }: {
+  now: Date
+  fullName: string | null
+  counts?: { upcomingTrips: number; activeParticipants: number; outstandingTasks: number }
+}) {
+  return (
+    <PageHeader
+      variant="detail"
+      title={greetingFor(now, fullName)}
+      titleNote={<time dateTime={localIsoDate(now)}>{formatToday(now)}</time>}
+      documentTitle="Management Dashboard"
+      subtitle={
+        counts && (
+          <PageHeaderMeta>
+            <span className="tabular-nums">{plural(counts.upcomingTrips, 'upcoming trip')}</span>
+            <span className="tabular-nums">{plural(counts.activeParticipants, 'active participant')}</span>
+            <span className="tabular-nums">{plural(counts.outstandingTasks, 'outstanding task')}</span>
+          </PageHeaderMeta>
+        )
+      }
+    />
+  )
 }
-const BAND_SHAPE_FALLBACK = { grid: 'md:grid-cols-4', last: '' }
 
 export default function DashboardPage() {
-  const { canViewAlerts, canApproveLeave, canAccessPage } = usePermissions()
-  const { data, isLoading, isError } = useDashboard()
+  const { canViewAlerts, canApproveLeave, canReviewCompletions, canAccessPage, isReadOnly, fullName } = usePermissions()
+  // The viewer's clock, ticking every minute. The title reads it, and so does the one figure that depends on the day (the qualification count below), so the page never
+  // advertises a new date beside a count that still belongs to yesterday.
+  const now = useNow()
+  const today = localIsoDate(now)
+  const summary = useDashboard()
   const { data: settings } = useSettings()
-  const { data: allStaff = [], isLoading: staffLoading, isError: staffError } = useStaff({ isActive: 'true' })
-  const { data: alertsAggregate = [], isLoading: alertsLoading, isError: alertsError } = useParticipantAlertsAggregate(canViewAlerts)
-  const pendingLeaveCount = usePendingLeaveCount(canApproveLeave)
+  const staff = useStaff({ isActive: 'true' })
+  const alerts = useParticipantAlertsAggregate(canViewAlerts)
+  // "Waiting" is not `isLoading`: a request PAUSED while the browser is offline is pending with isLoading false (lib/queryPhase.ts), and reading that as an answer
+  // is how a band says "All clear" over data that was never asked for. A disabled query (the alerts, for a role that cannot view them) is not waiting.
+  const { data: allStaff = [], isError: staffError } = staff
+  const { data: alertsAggregate = [], isError: alertsError } = alerts
+  const staffLoading = awaitsData(staff)
+  const alertsLoading = awaitsData(alerts)
+  const pendingLeave = usePendingLeaveQueue(canApproveLeave)
+  const pendingCompletions = usePendingCompletionQueue(canReviewCompletions)
 
   const warningDays = settings?.qualificationWarningDays ?? 30
 
-  // Hooks must run unconditionally on every render — this has to sit above the isLoading/isError
+  // Hooks must run unconditionally on every render — this has to sit above the loading/error
   // early returns below, not after them.
   // The same rule as the Qualifications list (lib/credentials.ts), so this figure is the sum of that page's issue counts: a credential
-  // needs action when it has no date, is expired, is due today or is due within the warning window.
+  // needs action when it has no date, is expired, is due today or is due within the warning window. Counted against `today`, and recounted when the day turns over
+  // (a window that opens at midnight is counted at midnight, though react-query hands back the same staff array until something changes).
   const { qualIssueCount, qualIssueStaffCount } = useMemo(() => {
-    const today = new Date()
     let issues = 0
     let staffWithIssues = 0
     for (const s of allStaff) {
@@ -59,25 +89,24 @@ export default function DashboardPage() {
       if (n > 0) staffWithIssues += 1
     }
     return { qualIssueCount: issues, qualIssueStaffCount: staffWithIssues }
-  }, [allStaff, warningDays])
+  }, [allStaff, warningDays, today])
 
-  if (isLoading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent" />
-      </div>
-    )
-  }
-
-  if (isError) return (
+  if (summary.isError) return (
     <div className="p-[var(--card-pad)] text-center text-[var(--color-destructive)]">Failed to load dashboard. Please refresh the page.</div>
   )
 
-  const d = data || {
-    upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 0,
-    overdueTaskCount: 0, conflictCount: 0, tripsMissingAccommodation: 0,
-    tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0,
-    qscOverdueCount: 0, upcomingTrips: [], overdueTasks: [],
+  // No summary yet (in flight, or paused offline) is a spinner, never a summary of zeros: the band's "All clear" is only ever said over data that arrived. The greeting and the
+  // date do not wait for it, so the personality is the first thing on screen and the spinner sits under it.
+  const d = summary.data
+  if (!d) {
+    return (
+      <div className="flex flex-col gap-[var(--section-gap)]">
+        <DashboardHeader now={now} fullName={fullName} />
+        <div className="flex h-64 items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent" />
+        </div>
+      </div>
+    )
   }
 
   // Defensive filter (fix round 1 — review finding): the aggregate endpoint already excludes
@@ -94,89 +123,127 @@ export default function DashboardPage() {
   // How many participants those alerts belong to: one flagged row each on the Participants table.
   const criticalParticipantCount = new Set(criticalAlertItems.map((i) => i.participantId)).size
 
-  // The needs-attention band: a fixed order, so a position always means the same item. An item is dropped only by the two
-  // conditions the dashboard always had (the alerts item needs canViewAlerts, Pending Leave needs canApproveLeave and a
-  // non-empty queue); everything else stays in place at zero and just goes quiet. Every count, link and caption is the one
-  // the KPI row carried; the everyday counts moved into the header's summary line.
+  // The needs-attention band: every item the dashboard counts, in a fixed order, handed to the band, which makes a tile of each one that needs somebody and names the rest
+  // in one "All clear" row. An item is left out only by what the role can open: Qualification Issues needs the Qualifications page, the alerts item needs canViewAlerts,
+  // Pending Leave needs canApproveLeave and Shift Completions needs canReviewCompletions (the same gates as the nav badge). Every count but Shift Completions is one the KPI
+  // row carried; the everyday counts live in the header's summary line. Each line says what the count means in the server's own terms, and each link goes to the page where
+  // it is fixed (a route that exists today). "Nothing needs you right now" is only as true as this list, so it carries what the nav badges count too (leave AND completions).
   //
-  // The two items computed from their own request never claim "All clear", or show a definite 0, without data: while the
-  // request is in flight (`loading`) or after it failed (`error`) the item is an en dash placeholder, never tinted and with no
-  // caption. A false negative here is worse than a placeholder, since coordinators rely on these two items to know whether any
-  // staff qualification or participant needs urgent attention. Qualification Issues counts the staff list; Critical
-  // Participant Alerts counts the participant-alerts aggregate.
-  const attentionItems: StatCardProps[] = [
-    // The tile links to the Qualifications page, so a role that cannot open it (a SupportWorker) gets no tile rather than one that bounces.
-    ...(canAccessPage('qualifications')
-      ? [
-          {
-            label: 'Qualification Issues',
-            value: qualIssueCount,
-            to: '/qualifications',
-            tone: tinted(qualIssueCount, 'danger'),
-            loading: staffLoading,
-            error: staffError,
-            // The tile counts credential issues; the Qualifications page's tabs count staff ("All Issues (4)"). Say both, so 12 reads against 4.
-            caption: staffLoading || staffError ? undefined : qualIssueCount === 0 ? 'All clear' : plural(qualIssueStaffCount, 'staff member'),
-          },
-        ]
-      : []),
-    ...(canViewAlerts
-      ? [
-          {
-            label: 'Critical Participant Alerts',
-            value: criticalAlertItems.length,
-            to: '/participants',
-            tone: tinted(criticalAlertItems.length, 'danger'),
-            loading: alertsLoading,
-            error: alertsError,
-            // The tile counts alerts; the Participants table shows one flagged row per participant. Say both, so 3 reads against 2 rows.
-            caption: alertsLoading || alertsError ? undefined : criticalAlertItems.length === 0 ? 'All clear' : plural(criticalParticipantCount, 'participant'),
-          },
-        ]
-      : []),
-    // Links to the Tasks list on its Overdue filter: the same rule the figure counts (TaskOverdue on the server), so the rows match the number.
-    { label: 'Overdue', value: d.overdueTaskCount, to: '/tasks?status=Overdue', tone: tinted(d.overdueTaskCount, 'danger') },
-    { label: 'Missing Accommodation', value: d.tripsMissingAccommodation, tone: tinted(d.tripsMissingAccommodation, 'warning') },
-    { label: 'Missing Vehicles', value: d.tripsMissingVehicles, tone: tinted(d.tripsMissingVehicles, 'warning') },
-    { label: 'Missing Staff', value: d.tripsMissingStaff, tone: tinted(d.tripsMissingStaff, 'warning') },
-    { label: 'Open Incidents', value: d.openIncidentCount, tone: tinted(d.openIncidentCount, 'warning') },
-    { label: 'QSC Overdue', value: d.qscOverdueCount, tone: tinted(d.qscOverdueCount, 'danger') },
-    // Pending Leave stays out at zero (it was never one of the fixed items): nothing to action when the queue is empty.
-    ...(canApproveLeave && pendingLeaveCount > 0
-      ? [{ label: 'Pending Leave', value: pendingLeaveCount, to: '/rostering/leave', tone: 'warning' as const }]
-      : []),
-  ]
-  const bandShape = BAND_SHAPE[attentionItems.length] ?? BAND_SHAPE_FALLBACK
+  // The four items computed from their own request never claim "All clear", or show a definite 0, without data: while the request is in flight (`loading`) or after it
+  // failed (`error`) the item is an en dash placeholder, never tinted, with no line and no link of its own, and the band is not "all clear" while one is. A false negative
+  // here is worse than a placeholder, since coordinators rely on these items to know whether any staff qualification, participant, leave request or shift needs them.
+  // Qualification Issues counts the staff list; Critical Participant Alerts counts the participant-alerts aggregate; Pending Leave and Shift Completions count their queues.
+  // (The summary's `conflictCount` is not an item: no page lists or fixes conflicts, and it counts every flagged record regardless of date, including the staff overrides a
+  // coordinator has already acknowledged.)
+  const attentionItems: BandItem[] = []
+  // The tile links to the Qualifications page, so a role that cannot open it (a SupportWorker) gets no tile rather than one that bounces.
+  if (canAccessPage('qualifications')) {
+    attentionItems.push({
+      label: 'Qualification Issues',
+      noun: 'qualification issues',
+      count: qualIssueCount,
+      tone: 'danger',
+      // The tile counts credential issues; the Qualifications page's tabs count staff ("All Issues (4)"). Say both, so 12 reads against 4.
+      detail: `Expired, undated or due within ${plural(warningDays, 'day')}, across ${plural(qualIssueStaffCount, 'staff member')}.`,
+      action: { label: 'Review qualifications', to: '/qualifications' },
+      to: '/qualifications',
+      loading: staffLoading,
+      error: staffError,
+    })
+  }
+  if (canViewAlerts) {
+    attentionItems.push({
+      label: 'Critical Participant Alerts',
+      noun: 'critical participant alerts',
+      count: criticalAlertItems.length,
+      tone: 'danger',
+      // The tile counts alerts; the Participants table shows one flagged row per participant. Say both, so 3 reads against 2 rows.
+      detail: `Critical alerts across ${plural(criticalParticipantCount, 'participant')}.`,
+      action: { label: 'Review participants', to: '/participants' },
+      to: '/participants',
+      loading: alertsLoading,
+      error: alertsError,
+    })
+  }
+  // ReadOnly reaches the Schedule but its writes are refused (permissions.ts keeps canWrite for it and the server answers 403), so it is offered the page and not a verb it
+  // cannot use. Both links go to the same page, so they may share a name.
+  const scheduleVerb = (verb: string) => (isReadOnly ? 'Open schedule' : verb)
+  attentionItems.push(
+    // Opens the Tasks list on its Overdue filter: the same rule the figure counts (TaskOverdue on the server), so the rows match the number.
+    {
+      label: 'Overdue', noun: 'overdue tasks', count: d.overdueTaskCount, tone: 'danger',
+      detail: 'Tasks past their due date and still open.',
+      action: { label: 'Open overdue tasks', to: '/tasks?status=Overdue' },
+    },
+    // The three "Missing" counts are of the trips the server calls upcoming (they start today or within 60 days). A vehicle or a staff member is assigned to a trip on the
+    // Schedule (the same assignments the count reads), and accommodation on the trip's own tab, so that one opens the Trips list to choose the trip.
+    {
+      label: 'Missing Accommodation', noun: 'trips missing accommodation', count: d.tripsMissingAccommodation, tone: 'warning',
+      detail: `${tripsStart(d.tripsMissingAccommodation)} within 60 days with no accommodation reserved.`,
+      action: { label: 'Open trips', to: '/trips' },
+    },
+    {
+      label: 'Missing Vehicles', noun: 'trips missing vehicles', count: d.tripsMissingVehicles, tone: 'warning',
+      detail: `${tripsStart(d.tripsMissingVehicles)} within 60 days with no vehicle assigned.`,
+      action: { label: scheduleVerb('Assign vehicles'), to: '/schedule' },
+    },
+    {
+      label: 'Missing Staff', noun: 'trips missing staff', count: d.tripsMissingStaff, tone: 'warning',
+      detail: `${tripsStart(d.tripsMissingStaff)} within 60 days with no staff assigned.`,
+      action: { label: scheduleVerb('Assign staff'), to: '/schedule' },
+    },
+    {
+      label: 'Open Incidents', noun: 'open incidents', count: d.openIncidentCount, tone: 'warning',
+      detail: 'Incidents not yet resolved or closed.',
+      action: { label: 'Open incidents', to: '/incidents' },
+    },
+    // The Incidents list already has this filter (?qsc=overdue): the same rule the figure counts.
+    {
+      label: 'QSC Overdue', noun: 'overdue QSC reports', count: d.qscOverdueCount, tone: 'danger',
+      detail: 'Reportable incidents with no QSC report after 24 hours.',
+      action: { label: 'Review QSC reports', to: '/incidents?qsc=overdue' },
+    },
+  )
+  if (canApproveLeave) {
+    attentionItems.push({
+      label: 'Pending Leave',
+      noun: 'pending leave',
+      count: pendingLeave.count,
+      tone: 'warning',
+      detail: 'Leave and unavailability requests waiting for a decision.',
+      action: { label: 'Review leave requests', to: '/rostering/leave' },
+      to: '/rostering/leave',
+      loading: pendingLeave.loading,
+      error: pendingLeave.error,
+    })
+  }
+  // The other half of what the Staff & roster badge counts (leave plus completions): without it the band could say nothing needs anybody beside a red badge.
+  if (canReviewCompletions) {
+    attentionItems.push({
+      label: 'Shift Completions',
+      noun: 'shift completions',
+      count: pendingCompletions.count,
+      tone: 'warning',
+      detail: 'Submitted shifts waiting for review before they are billed.',
+      action: { label: 'Review completions', to: '/rostering/completions' },
+      to: '/rostering/completions',
+      loading: pendingCompletions.loading,
+      error: pendingCompletions.error,
+    })
+  }
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
-      {/* Title at the display step (PageHeader variant="detail"), with the everyday counts as one quiet line in the meta
-          row: they are context, not something to act on, so they no longer take a tile each. */}
-      <PageHeader
-        variant="detail"
-        title="Management Dashboard"
-        subtitle={
-          <PageHeaderMeta>
-            <span className="tabular-nums">{plural(d.upcomingTripCount, 'upcoming trip')}</span>
-            <span className="tabular-nums">{plural(d.activeParticipantCount, 'active participant')}</span>
-            <span className="tabular-nums">{plural(d.outstandingTaskCount, 'outstanding task')}</span>
-          </PageHeaderMeta>
-        }
+      {/* The top of the page is the peak: a greeting and today's date at the display step, the everyday counts as one quiet line in the meta row (context, not
+          something to act on), and under them the needs-attention band, which is as big as the day's trouble: a tall tile per item that needs somebody, or one
+          Pale Sprout field when nothing does (DESIGN.md "Attention band"). Everything below is the ordinary dense page. */}
+      <DashboardHeader
+        now={now}
+        fullName={fullName}
+        counts={{ upcomingTrips: d.upcomingTripCount, activeParticipants: d.activeParticipantCount, outstandingTasks: d.outstandingTaskCount }}
       />
 
-      {/* ── Needs attention — display-step figures; only a non-zero item is tinted (DESIGN.md "Attention band") ── */}
-      <section aria-label="Needs attention" className="@container">
-        <div className={`grid grid-cols-2 gap-2 ${bandShape.grid}`}>
-          {attentionItems.map((item, i) => (
-            <StatCard
-              key={item.label}
-              variant="attention"
-              {...item}
-              className={i === attentionItems.length - 1 ? bandShape.last || undefined : undefined}
-            />
-          ))}
-        </div>
-      </section>
+      <AttentionBand items={attentionItems} />
 
       {/* ── Main Content Grid — Upcoming Trips / Overdue Tasks ──
           One column below xl, then an even split (1920: (1648 − 16) / 2 = 816px each). Each panel
@@ -280,12 +347,13 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Critical Participant Alerts — coordinator/admin-facing (task 6c) */}
+      {/* Critical Participant Alerts — coordinator/admin-facing (task 6c). The same detail as the band's alerts tile, listed: it takes the panels' own heading and
+          link size (the title step, 12px "View All") rather than the 18px heading it used to have, so the band above stays the loudest thing on the page. */}
       {canViewAlerts && criticalAlertItems.length > 0 && (
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-lg font-display font-bold text-[var(--color-foreground)]">Critical Participant Alerts</h3>
-            <Link to="/participants" className={`${TAP_FLOOR} text-sm font-bold text-[var(--color-primary)] hover:underline`}>
+            <h3 className="text-sm font-semibold">Critical Participant Alerts</h3>
+            <Link to="/participants" className={`${TAP_FLOOR} text-xs font-bold text-[var(--color-primary)] hover:underline`}>
               View All
             </Link>
           </div>
