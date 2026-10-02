@@ -57,7 +57,11 @@ public class CatalogueImportService
             warnings.Add(FormattableString.Invariant($"{r.ItemNumber} ({r.Description}) starts on {r.EffectiveFrom:yyyy-MM-dd}, after today ({today:yyyy-MM-dd}): it prices services from that date; earlier services keep the row it replaces."));
         if (later.Count > MaxWarningLines)
             warnings.Add(FormattableString.Invariant($"...and {later.Count - MaxWarningLines} more rows start after today."));
-        var newer = existing.Where(x => CatalogueImportPlanner.HasCatalogueDates(x) && x.EffectiveFrom > plan.FileStart).Select(x => (DateOnly?)x.EffectiveFrom).Min();
+        // The file is older than what is imported only when imported rows start AFTER everything the file itself starts (its latest Current start): a few
+        // rows that start days after the catalogue's first day (the real file has some on 2 and 3 July), or a republished file's changed rows, are the
+        // file's own, and previewing the same file again must not call it history.
+        var fileLatest = rows.Where(r => !r.IsLegacy).Select(r => (DateOnly?)r.EffectiveFrom).Max() ?? rows.Max(r => r.EffectiveFrom);
+        var newer = existing.Where(x => CatalogueImportPlanner.HasCatalogueDates(x) && x.EffectiveFrom > fileLatest).Select(x => (DateOnly?)x.EffectiveFrom).Min();
         if (newer is { } from)
             warnings.Add(FormattableString.Invariant($"This file starts on {plan.FileStart:yyyy-MM-dd}, before catalogue rows already imported (from {from:yyyy-MM-dd}). It is added as history and the newer rows are not changed."));
 

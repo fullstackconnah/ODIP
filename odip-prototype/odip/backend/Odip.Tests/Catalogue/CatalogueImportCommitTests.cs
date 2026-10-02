@@ -118,6 +118,7 @@ public class CatalogueImportCommitTests
         var result = await ImportAsync(db, CatalogueFixtures.File2026_27);
 
         Assert.Equal((0, 1017, 0, 1017), (preview.ItemsToAdd, preview.ItemsUnchanged, preview.ItemsToDeactivate, preview.Rows.Count(r => r.IsUnchanged && !r.IsNew && !r.PriceChanged)));
+        Assert.Empty(preview.Warnings);   // four rows start on 2-3 July: that must not read as "this file is older than rows already imported"
         Assert.Equal(new CatalogueImportResultDto(0, 0, 1017, 0), result);
         Assert.Equal(before, await SnapshotAsync(db));
         Assert.Equal(11, await db.SupportActivityGroups.CountAsync());
@@ -352,6 +353,23 @@ public class CatalogueImportCommitTests
     }
 
     // ── The preview says what the commit will do ──────────────────────────────────
+
+    [Fact]
+    public async Task A_republished_file_is_not_called_older_than_rows_that_it_republishes()
+    {
+        // The December price set: its changed rows start on 1 Dec. Importing it, then previewing it again, must not warn that it is "added as history".
+        await using var db = CreateDb();
+        var community = new HashSet<string>(CommunityAccessCodes);
+        await using var first = Workbook(CatalogueFixtures.File2026_27, wb => SetStartDates(wb, community.Contains, 20261201));
+        var december = await PreviewAsync(db, first, "republished.xlsx", ClockOn(2026, 12, 10));
+        await NewImporter(db, ClockOn(2026, 12, 10)).CommitImportAsync(new ConfirmCatalogueImportDto { CatalogueVersion = december.DetectedVersion, Rows = december.Rows });
+
+        await using var again = Workbook(CatalogueFixtures.File2026_27, wb => SetStartDates(wb, community.Contains, 20261201));
+        var preview = await PreviewAsync(db, again, "republished.xlsx", ClockOn(2026, 12, 10));
+
+        Assert.Empty(preview.Warnings);
+        Assert.Equal((0, 1017), (preview.ItemsToAdd, preview.ItemsUnchanged));
+    }
 
     [Fact]
     public async Task The_preview_warns_about_active_rows_that_leave_the_catalogue_and_not_about_rows_that_are_merely_superseded()
