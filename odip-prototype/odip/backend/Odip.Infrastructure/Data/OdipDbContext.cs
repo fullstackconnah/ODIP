@@ -88,6 +88,9 @@ public class OdipDbContext : DbContext
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
+    /// <summary>Public landing-page early-access requests. NOT tenant-scoped: see <see cref="Entities.EarlyAccessRequest"/>'s type doc.</summary>
+    public DbSet<EarlyAccessRequest> EarlyAccessRequests => Set<EarlyAccessRequest>();
+
     // Billing
     public DbSet<FundingSource> FundingSources => Set<FundingSource>();
     public DbSet<ServiceBooking> ServiceBookings => Set<ServiceBooking>();
@@ -1763,6 +1766,27 @@ public class OdipDbContext : DbContext
 
             entity.HasIndex(e => e.ParticipantId);
             entity.HasIndex(e => e.RelatedMedicationId);
+        });
+
+        // ── Early-access requests (public landing page) ─────────────────────────────
+        // Deliberately configured OUTSIDE the multi-tenancy block below: the submitter is an
+        // anonymous visitor with no tenant, so EarlyAccessRequest is not an ITenantEntity (the
+        // TenantId stamping in SaveChangesAsync never touches it), has no TenantId column, and
+        // gets NO HasQueryFilter — a tenant claim or a SuperAdmin view-as header must neither
+        // scope nor hide these rows. Do not add a filter here.
+        modelBuilder.Entity<EarlyAccessRequest>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Organisation).HasMaxLength(150).IsRequired();
+            // 254 is the longest valid email address (RFC 5321 path limit minus the angle brackets).
+            entity.Property(e => e.Email).HasMaxLength(254).IsRequired();
+            // Concurrency token: two simultaneous repeat submissions from one address must both be
+            // counted. The loser's UPDATE matches no row, EF throws DbUpdateConcurrencyException and
+            // EarlyAccessService retries against the fresh count instead of losing an increment.
+            entity.Property(e => e.RequestCount).IsConcurrencyToken();
+            // Email is stored trimmed + lower-cased, so a plain unique index is case-insensitive in effect.
+            entity.HasIndex(e => e.Email).IsUnique();
         });
 
         // ── Multi-Tenancy Query Filters ─────────────────────────────────────────────

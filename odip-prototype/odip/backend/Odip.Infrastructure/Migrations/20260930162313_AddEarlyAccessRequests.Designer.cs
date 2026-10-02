@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Odip.Infrastructure.Data;
@@ -12,9 +13,11 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    partial class OdipDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260930162313_AddEarlyAccessRequests")]
+    partial class AddEarlyAccessRequests
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1527,10 +1530,6 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("IdempotencyKey")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<bool>("LimitBreachAcknowledged")
                         .HasColumnType("boolean");
 
@@ -1567,19 +1566,11 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid?>("RecordedByUserId")
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("RecordedWithoutCompetency")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
                     b.Property<DateTime?>("ScheduledAt")
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
-
-                    b.Property<Guid?>("SupersededByAdministrationId")
-                        .HasColumnType("uuid");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -1617,11 +1608,6 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("TripInstanceId");
 
                     b.HasIndex("ParticipantMedicationId", "AdministeredAt");
-
-                    b.HasIndex("TenantId", "IdempotencyKey")
-                        .IsUnique()
-                        .HasDatabaseName("IX_MedicationAdministrations_TenantId_IdempotencyKey")
-                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
 
                     b.HasIndex("WitnessUserId", "WitnessStatus");
 
@@ -3213,20 +3199,10 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<string>("ManagerPhone")
                         .HasColumnType("text");
 
-                    b.Property<int>("MedicationCompetencyMode")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
                     b.Property<string>("OrganisationName")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
-
-                    b.Property<int>("ParticipantReadinessMode")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
 
                     b.Property<string>("RegistrationNumber")
                         .IsRequired()
@@ -4471,50 +4447,6 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("NotificationPreferences");
                 });
 
-            modelBuilder.Entity("Odip.Domain.Rostering.HandoverAcknowledgement", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("AcknowledgedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("ShiftId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("SourceCompletionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ShiftId");
-
-                    b.HasIndex("TenantId");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("SourceCompletionId", "UserId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_HandoverAcknowledgements_SourceCompletionId_UserId");
-
-                    b.HasIndex("TenantId", "ShiftId");
-
-                    b.ToTable("HandoverAcknowledgements");
-                });
-
             modelBuilder.Entity("Odip.Domain.Rostering.LeaveRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4724,50 +4656,6 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("Shifts");
                 });
 
-            modelBuilder.Entity("Odip.Domain.Rostering.ShiftBreak", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("EditedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<DateTime?>("EndedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("ShiftCompletionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("StartedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ShiftCompletionId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_ShiftBreaks_ShiftCompletionId_Running")
-                        .HasFilter("\"EndedAt\" IS NULL");
-
-                    b.HasIndex("TenantId");
-
-                    b.HasIndex("TenantId", "ShiftCompletionId");
-
-                    b.ToTable("ShiftBreaks");
-                });
-
             modelBuilder.Entity("Odip.Domain.Rostering.ShiftCompletion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4792,17 +4680,7 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<bool>("GeolocationDeclined")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("HandoverText")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
                     b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("NothingToHandOver")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("NothingToNoteConfirmed")
                         .HasColumnType("boolean");
 
                     b.Property<string>("ReturnReason")
@@ -4979,63 +4857,6 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ParticipantId");
 
                     b.ToTable("ShiftPatterns");
-                });
-
-            modelBuilder.Entity("Odip.Domain.Rostering.ShiftRoutineCheck", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CheckedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("CheckedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("ParticipantRoutineId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("RoutineTitle")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime?>("ScheduledAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("ShiftCompletionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CheckedByUserId");
-
-                    b.HasIndex("ParticipantRoutineId");
-
-                    b.HasIndex("TenantId");
-
-                    b.HasIndex("ShiftCompletionId", "ParticipantRoutineId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_ShiftRoutineChecks_Completion_Routine_Untimed")
-                        .HasFilter("\"ScheduledAt\" IS NULL");
-
-                    b.HasIndex("TenantId", "ShiftCompletionId");
-
-                    b.HasIndex("ShiftCompletionId", "ParticipantRoutineId", "ScheduledAt")
-                        .IsUnique()
-                        .HasDatabaseName("IX_ShiftRoutineChecks_Completion_Routine_ScheduledAt")
-                        .HasFilter("\"ScheduledAt\" IS NOT NULL");
-
-                    b.ToTable("ShiftRoutineChecks");
                 });
 
             modelBuilder.Entity("Odip.Domain.Rostering.StaffParticipantCompatibility", b =>
@@ -6095,33 +5916,6 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Odip.Domain.Rostering.HandoverAcknowledgement", b =>
-                {
-                    b.HasOne("Odip.Domain.Rostering.Shift", "Shift")
-                        .WithMany()
-                        .HasForeignKey("ShiftId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Odip.Domain.Rostering.ShiftCompletion", "SourceCompletion")
-                        .WithMany()
-                        .HasForeignKey("SourceCompletionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Odip.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Shift");
-
-                    b.Navigation("SourceCompletion");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("Odip.Domain.Rostering.LeaveRequest", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.User", "User")
@@ -6160,17 +5954,6 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Participant");
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("Odip.Domain.Rostering.ShiftBreak", b =>
-                {
-                    b.HasOne("Odip.Domain.Rostering.ShiftCompletion", "ShiftCompletion")
-                        .WithMany()
-                        .HasForeignKey("ShiftCompletionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ShiftCompletion");
                 });
 
             modelBuilder.Entity("Odip.Domain.Rostering.ShiftCompletion", b =>
@@ -6219,33 +6002,6 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("DefaultUser");
 
                     b.Navigation("Participant");
-                });
-
-            modelBuilder.Entity("Odip.Domain.Rostering.ShiftRoutineCheck", b =>
-                {
-                    b.HasOne("Odip.Domain.Entities.User", "CheckedByUser")
-                        .WithMany()
-                        .HasForeignKey("CheckedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Odip.Domain.Entities.ParticipantRoutine", "ParticipantRoutine")
-                        .WithMany()
-                        .HasForeignKey("ParticipantRoutineId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Odip.Domain.Rostering.ShiftCompletion", "ShiftCompletion")
-                        .WithMany()
-                        .HasForeignKey("ShiftCompletionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("CheckedByUser");
-
-                    b.Navigation("ParticipantRoutine");
-
-                    b.Navigation("ShiftCompletion");
                 });
 
             modelBuilder.Entity("Odip.Domain.Rostering.StaffParticipantCompatibility", b =>

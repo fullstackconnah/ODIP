@@ -93,6 +93,38 @@ public class ExceptionHandlingMiddlewareTests
         Assert.DoesNotContain("secret internal details", body!.Errors![0]);
     }
 
+    // Kestrel throws BadHttpRequestException for client errors (a body over [RequestSizeLimit] is 413). They are
+    // the caller's fault: the status must be honoured, not flattened into a 500, and nothing about the framework's
+    // message may reach the client.
+    [Theory]
+    [InlineData(413)]
+    [InlineData(400)]
+    [InlineData(408)]
+    [InlineData(431)]
+    public async Task BadHttpRequestException_KeepsItsClientErrorStatus(int status)
+    {
+        var (statusCode, body) = await InvokeWithException(
+            new BadHttpRequestException("Request body too large. The max request body size is 4096 bytes.", status));
+
+        Assert.Equal(status, statusCode);
+        Assert.False(body!.Success);
+        Assert.DoesNotContain("4096", body.Errors![0]);
+        Assert.DoesNotContain("max request body size", body.Errors[0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task BadHttpRequestException_IsLoggedAsAWarning_NotAnError()
+    {
+        var (middleware, context) = CreateMiddleware(_ => throw new BadHttpRequestException("too large", 413));
+
+        await middleware.InvokeAsync(context);
+
+        _logger.Verify(l => l.Log(
+            LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), null, It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+        _logger.Verify(l => l.Log(
+            LogLevel.Error, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Never);
+    }
+
     [Fact]
     public async Task ResponseContentType_IsJson()
     {

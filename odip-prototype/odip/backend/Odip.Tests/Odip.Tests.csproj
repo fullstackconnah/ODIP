@@ -19,6 +19,9 @@
   <ItemGroup>
     <!-- Golden outputs for MarCharacterizationTests (produced by the pre-refactor implementation). -->
     <None Include="Medications\Golden\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Program.cs sets this at startup; the Postgres-backed tests need the same DateTime mapping. Via runtimeconfig
+         (not code) so it is in force before any test touches Npgsql, whatever the test order. -->
+    <RuntimeHostConfigurationOption Include="Npgsql.EnableLegacyTimestampBehavior" Value="true" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Odip.Api\Odip.Api.csproj" />

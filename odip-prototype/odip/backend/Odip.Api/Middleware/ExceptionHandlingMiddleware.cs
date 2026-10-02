@@ -27,7 +27,16 @@ public class ExceptionHandlingMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "An unhandled exception occurred.");
+            if (ex is BadHttpRequestException badRequest)
+            {
+                // Kestrel's own client-error signal (body over [RequestSizeLimit], malformed framing, ...):
+                // the caller's fault, not ours, so no stack trace and no error-level noise.
+                _logger.LogWarning("Rejected a bad request ({StatusCode}): {Message}", badRequest.StatusCode, badRequest.Message);
+            }
+            else
+            {
+                _logger.LogError(ex, "An unhandled exception occurred.");
+            }
             await HandleExceptionAsync(context, ex);
         }
     }
@@ -43,6 +52,10 @@ public class ExceptionHandlingMiddleware
             KeyNotFoundException => ((int)HttpStatusCode.NotFound, "The requested resource was not found."),
             UnauthorizedAccessException => ((int)HttpStatusCode.Unauthorized, "You are not authorized to perform this action."),
             InvalidOperationException => ((int)HttpStatusCode.BadRequest, "The operation could not be completed."),
+            // Honour the status Kestrel chose (413 for an over-limit body, 400/408/431 ...) instead of
+            // turning a client error into a 500. BadHttpRequestException is an IOException, so it matches
+            // none of the cases above.
+            BadHttpRequestException bad => (bad.StatusCode, "The request could not be processed. Please check its size and format."),
             _ => ((int)HttpStatusCode.InternalServerError, "An unexpected error occurred. Please try again later.")
         };
 
