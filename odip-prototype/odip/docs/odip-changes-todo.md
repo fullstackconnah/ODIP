@@ -249,9 +249,12 @@ owner decision (collected under Open Flags at the end).
     finds the user by email (across tenants), taking the tenant from that user's row, but
     it accepts only the sign-in providers in `Auth:AllowedSignInProviders` (default
     `password` and `custom`). Enabling Microsoft in the Firebase console is not enough:
-    add `microsoft.com` to that list (`Auth__AllowedSignInProviders=microsoft.com` in the
-    environment), which is the decision to trust the `email_verified` a Microsoft account
-    asserts.
+    add `microsoft.com` to that list, which is the decision to trust the `email_verified`
+    a Microsoft account asserts. The value REPLACES the default list, it does not add to
+    it, so the others must be in it:
+    `Auth__AllowedSignInProviders=password,custom,microsoft.com`. Setting only
+    `microsoft.com` would refuse every email-and-password sign-in, the owner's and the
+    demo accounts' included. Workers who are not on M365 stay on email and password.
   - Frontend swaps `signInWithEmailAndPassword` for
     `signInWithPopup(auth, new OAuthProvider('microsoft.com'))`.
   - Needs an Entra ID app registration (free on any M365 business plan) and its
@@ -265,8 +268,9 @@ owner decision (collected under Open Flags at the end).
 ### Harden the token exchange (do BEFORE Firebase goes live)
 - [x] Require `email_verified` in `AuthController.Exchange` (shipped 2026-08-30, PR #25),
       and accept only the providers in `Auth:AllowedSignInProviders` (below). Once SSO
-      lands, list `microsoft.com` there and disable the email/password provider (that half
-      still pending SSO).
+      lands, add `microsoft.com` there (the value replaces the default list, so keep
+      `password` in it while email/password is enabled) and disable the email/password
+      provider (that half still pending SSO).
   - `Odip.Api/Controllers/AuthController.cs:82` reads only the `email` claim today.
   - The Firebase API key ships in the client bundle, so with email/password enabled
     anyone can call `createUserWithEmailAndPassword` using a provisioned-but-not-yet-
@@ -311,7 +315,8 @@ owner decision (collected under Open Flags at the end).
     the same 401 and a log line, a token whose provider is not in `Auth:AllowedSignInProviders`
     and one that does not say. The setting is a list in appsettings or one comma-separated
     value in the environment (`Auth__AllowedSignInProviders=password,custom`, the default);
-    blank means the default. `custom` is a token minted with the service-account key, which
+    blank means the default, and any other value replaces it rather than adding to it.
+    `custom` is a token minted with the service-account key, which
     only its holder can do. Before deploy, check the Firebase console: only Email/Password
     should be enabled today.
   - The SSO plan above retires this whole flow. With the email/password provider disabled
