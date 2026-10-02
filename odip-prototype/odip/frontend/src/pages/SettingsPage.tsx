@@ -275,6 +275,7 @@ export default function SettingsPage() {
         <UsersTab
           onAddUser={(tid) => { setDefaultTenantId(tid); setEditingUser(undefined); setUserPanelOpen(true) }}
           onEditUser={(u) => { setEditingUser(u); setUserPanelOpen(true) }}
+          onNotify={notify}
         />
       )}
 

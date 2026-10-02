@@ -4,14 +4,25 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import SettingsPage from './SettingsPage'
 
-// The seam between the Users tab, the user panel and the message that outlives the panel: a create closes the panel, so what became of
-// the set-password email has to be said by the page. The panel and the toast have their own tests; this one proves they are wired together.
+// The seam between the Users tab, the user panel and the message that outlives them: a create closes the panel, and a row action has no
+// panel at all, so what became of the set-password email has to be said by the page. The tab, the panel and the toast have their own
+// tests; this one proves they are wired together.
 
-const { mockCreate, sendPasswordResetEmail, settingsData } = vi.hoisted(() => ({
+const { mockCreate, sendPasswordResetEmail, settingsData, usersPage } = vi.hoisted(() => ({
   mockCreate: vi.fn(),
   sendPasswordResetEmail: vi.fn(),
   // A stable reference, like a cached query's data: QualificationSettingsTab re-syncs from it on every new identity.
   settingsData: { qualificationWarningDays: 30 },
+  usersPage: {
+    data: {
+      items: [{
+        id: 'user-1', firstName: 'Ann', lastName: 'One', fullName: 'Ann One', email: 'ann@example.com', username: 'ann', role: 'Coordinator',
+        tenantId: 'tenant-1', tenantName: 'Sample Support Co', isActive: true, createdAt: '2026-01-01T00:00:00Z', lastLoginAt: null,
+      }],
+      totalCount: 1, page: 1, pageSize: 20, totalPages: 1, hasNext: false, hasPrevious: false,
+    },
+    isLoading: false,
+  },
 }))
 
 // The same hooks the other SettingsPage tests stub, plus the ones the Users tab and the user panel call.
@@ -32,7 +43,7 @@ vi.mock('@/api/hooks', () => ({
   useDeactivateEventTemplate: () => ({ mutate: vi.fn(), isPending: false }),
   useTrips: () => ({ data: [] }),
   useAdminTenantsSummary: () => ({ data: [{ id: 'tenant-1', name: 'Sample Support Co' }] }),
-  useAdminUsers: () => ({ data: { items: [], totalCount: 0, hasNext: false, hasPrevious: false }, isLoading: false }),
+  useAdminUsers: () => usersPage,
   useCreateAdminUser: () => ({ mutateAsync: mockCreate, isPending: false }),
   useUpdateAdminUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useNotificationPreferences: () => ({ data: { rows: [] }, isLoading: false, isError: false }),
@@ -56,13 +67,18 @@ beforeEach(() => {
   sendPasswordResetEmail.mockReset().mockResolvedValue(undefined)
 })
 
+async function openUsersTab() {
+  const u = userEvent.setup()
+  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: ['/settings'] })
+  render(<RouterProvider router={router} />)
+  await u.click(screen.getByRole('tab', { name: 'Users' }))
+  return u
+}
+
 describe('SettingsPage Users tab: creating a user', () => {
   it('closes the panel and then says, over the page, that the set-password email went', async () => {
-    const u = userEvent.setup()
-    const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: ['/settings'] })
-    render(<RouterProvider router={router} />)
+    const u = await openUsersTab()
 
-    await u.click(screen.getByRole('tab', { name: 'Users' }))
     await u.click(screen.getByRole('button', { name: '+ Add User' }))
     await u.click(screen.getByRole('button', { name: 'Tenant *' }))
     await u.click(await screen.findByRole('option', { name: 'Sample Support Co' }))
@@ -83,5 +99,27 @@ describe('SettingsPage Users tab: creating a user', () => {
     })
     expect(sendPasswordResetEmail).toHaveBeenCalledWith({ name: 'auth-stub' }, 'new.person@example.com')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New User' })).not.toBeInTheDocument())
+  })
+})
+
+describe('SettingsPage Users tab: Send set-password email', () => {
+  it('says, over the page, that the email went', async () => {
+    const u = await openUsersTab()
+
+    await u.click(screen.getByRole('button', { name: 'Send set-password email' }))
+
+    expect(
+      await screen.findByText("We've emailed ann@example.com a link to set their password (check spam if it doesn't arrive)."),
+    ).toBeInTheDocument()
+    expect(sendPasswordResetEmail).toHaveBeenCalledWith({ name: 'auth-stub' }, 'ann@example.com')
+  })
+
+  it('says, as an alert, that it could not be sent', async () => {
+    sendPasswordResetEmail.mockRejectedValue(new Error('auth/network-request-failed'))
+    const u = await openUsersTab()
+
+    await u.click(screen.getByRole('button', { name: 'Send set-password email' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("The set-password email couldn't be sent to ann@example.com. Try again in a moment.")
   })
 })

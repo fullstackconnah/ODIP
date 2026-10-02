@@ -1,10 +1,12 @@
 import { useState } from 'react'
-import { Search, Pencil } from 'lucide-react'
+import { Search, Pencil, Mail } from 'lucide-react'
 import { useAdminUsers, useAdminTenantsSummary } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { DataTable } from '@/components/DataTable'
+import type { Notify } from '@/hooks/useToast'
 import { formatRelative, plural } from '@/lib/format'
+import { canSendSetPasswordEmail, sendSetPasswordEmail } from '@/lib/setPasswordEmail'
 import { parseApiDate } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -14,6 +16,8 @@ import { parseApiDate } from '@/lib/utils'
 interface UsersTabProps {
   onAddUser: (tenantId?: string) => void
   onEditUser: (user: AdminUserDto) => void
+  /** Where the outcome of "Send set-password email" is said. Without it the email still goes, but nothing reports whether it did. */
+  onNotify?: Notify
 }
 
 // ---------------------------------------------------------------------------
@@ -56,12 +60,17 @@ function formatRelativeTime(dateStr: string | null): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
+export default function UsersTab({ onAddUser, onEditUser, onNotify }: UsersTabProps) {
   const [tenantId, setTenantId] = useState('')
   const [role, setRole] = useState('')
   const [status, setStatus] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  // The user whose set-password email is going out. One at a time: a second click on a busy button would only send a duplicate, and
+  // Firebase limits how many reset emails it will send.
+  const [sendingId, setSendingId] = useState<string | null>(null)
+  // Firebase sends the email, so without Firebase (local dev auth) the action is not offered rather than offered and broken.
+  const emailEnabled = canSendSetPasswordEmail()
 
   const { data: tenants = [] } = useAdminTenantsSummary()
   const { data: pagedResult, isLoading } = useAdminUsers({
@@ -80,6 +89,17 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
 
   const startItem = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
   const endItem = Math.min(page * PAGE_SIZE, totalCount)
+
+  async function handleSendSetPasswordEmail(target: AdminUserDto) {
+    setSendingId(target.id)
+    const sent = await sendSetPasswordEmail(target.email).then(() => true, () => false)
+    setSendingId(null)
+    if (sent) {
+      onNotify?.('success', `We've emailed ${target.email} a link to set their password (check spam if it doesn't arrive).`)
+    } else {
+      onNotify?.('error', `The set-password email couldn't be sent to ${target.email}. Try again in a moment.`)
+    }
+  }
 
   const inputClass =
     'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
@@ -203,14 +223,28 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
             header: '',
             align: 'right',
             render: (user: AdminUserDto) => (
-              <button
-                onClick={() => onEditUser(user)}
-                className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] transition-colors"
-                title="Edit user"
-                aria-label="Edit user"
-              >
-                <Pencil className="w-4 h-4 text-[var(--color-muted-foreground)]" />
-              </button>
+              <div className="flex items-center justify-end gap-1">
+                {emailEnabled && user.isActive && (
+                  <button
+                    onClick={() => handleSendSetPasswordEmail(user)}
+                    disabled={sendingId !== null}
+                    aria-busy={sendingId === user.id || undefined}
+                    className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    title="Send set-password email"
+                    aria-label="Send set-password email"
+                  >
+                    <Mail className="w-4 h-4 text-[var(--color-muted-foreground)]" />
+                  </button>
+                )}
+                <button
+                  onClick={() => onEditUser(user)}
+                  className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] transition-colors"
+                  title="Edit user"
+                  aria-label="Edit user"
+                >
+                  <Pencil className="w-4 h-4 text-[var(--color-muted-foreground)]" />
+                </button>
+              </div>
             ),
           },
         ]}
