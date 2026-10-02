@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -8,6 +10,7 @@ using Odip.Domain.Billing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
@@ -17,8 +20,8 @@ using Xunit;
 namespace Odip.Tests.Tasks;
 
 /// <summary>
-/// Review follow-up to <see cref="ProviderTodayRemainingSitesTests"/>: three more provider-date sites that decide what a user SEES (which service
-/// bookings are active, which trips the schedule shows, whether a contact can be added), each pinned where the UTC date and the provider's differ.
+/// Review follow-up to <see cref="ProviderTodayRemainingSitesTests"/>: four more provider-date sites that decide what a user SEES (which service
+/// bookings are active, which trips the schedule shows, which shifts the portal lists, whether a contact can be added), each pinned where the UTC date and the provider's differ.
 /// Clock: 2026-10-02 22:00Z = Sat 3 Oct 08:00 AEST, no ProviderSettings row (Sydney, the production default).
 /// </summary>
 public class ProviderTodayVisibleStateTests
@@ -87,5 +90,39 @@ public class ProviderTodayVisibleStateTests
 
         if (allowed) Assert.IsType<OkObjectResult>(result.Result);
         else Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task MyShifts_DefaultWindowStartsOnTheProviderDate_SoYesterdayInSydneyIsNotListed()
+    {
+        using var db = CreateDb();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        var worker = new User { Id = Guid.NewGuid(), Email = "ben@example.com", Username = "ben", FirstName = "Ben", LastName = "Turner", Role = UserRole.SupportWorker, IsActive = true };
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", IsActive = true };
+        db.Users.Add(worker);
+        db.Participants.Add(participant);
+        Shift ShiftOn(DateOnly day) => new()
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = worker.Id, ServiceDate = day, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0),
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        };
+        var yesterdayInSydney = ShiftOn(Oct2);
+        var todayInSydney = ShiftOn(new DateOnly(2026, 10, 3));
+        db.Shifts.AddRange(yesterdayInSydney, todayInSydney);
+        db.SaveChanges();
+        var controller = new PortalController(db, tenant.Object, clock: Clock)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, worker.Id.ToString())], "Test")) },
+            },
+        };
+
+        var result = await controller.GetMyShifts(null, null, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal([todayInSydney.Id], body.Data!.Shifts.Select(x => x.Id));
     }
 }
