@@ -264,7 +264,8 @@
         "status": "opt-in; every default unchanged",
         "shipsOn": [
           "Trip detail (2026-09-30)",
-          "Management Dashboard title and meta row (2026-10-01)"
+          "Management Dashboard title and meta row (2026-10-01)",
+          "Management Dashboard greeting and date title (2026-10-02)"
         ],
         "adoptNext": [
           "Participant detail",
@@ -329,6 +330,16 @@
             "component": "formatRatio(numerator, denominator)",
             "prop": "numerator, denominator",
             "effect": "the ONE spelling of an \"x / y\" figure (src/lib/format.ts; glanceRatio is its earlier name): a space each side of the slash. Every ratio in a glance strip is built with it so two figures cannot drift (\"12 / 10\" beside \"12/14\")"
+          },
+          {
+            "component": "PageHeader",
+            "prop": "titleNote",
+            "effect": "a second phrase inside the same h1, in the muted ink at the same size (the dashboard's date after its greeting, as a time element); the two parts wrap as units. Opt-in: no note, no wrapper spans"
+          },
+          {
+            "component": "PageHeader",
+            "prop": "documentTitle",
+            "effect": "names the tab and the history when the h1 says something else (the dashboard's h1 is a greeting that changes with the hour, the tab stays \"Management Dashboard\"); defaults to title"
           }
         ]
       },
@@ -336,18 +347,19 @@
         "name": "Attention band",
         "status": "opt-in; every other StatCard unchanged",
         "shipsOn": [
-          "Management Dashboard (2026-10-01)"
+          "Management Dashboard (2026-10-01)",
+          "Management Dashboard bolder pass: tall tiles, the All clear row and field (2026-10-02)"
         ],
         "items": [
-          "Qualification Issues (link /qualifications, danger)",
-          "Critical Participant Alerts (canViewAlerts only; link /participants; danger)",
-          "Overdue (danger)",
-          "Missing Accommodation (warning)",
-          "Missing Vehicles (warning)",
-          "Missing Staff (warning)",
-          "Open Incidents (warning)",
-          "QSC Overdue (danger)",
-          "Pending Leave (canApproveLeave and a non-empty queue only; link /rostering/leave; warning)"
+          "Qualification Issues (the Qualifications page; danger; link /qualifications)",
+          "Critical Participant Alerts (canViewAlerts only; danger; link /participants)",
+          "Overdue (danger; link /tasks?status=Overdue)",
+          "Missing Accommodation (warning; link /trips)",
+          "Missing Vehicles (warning; link /schedule)",
+          "Missing Staff (warning; link /schedule)",
+          "Open Incidents (warning; link /incidents)",
+          "QSC Overdue (danger; link /incidents?qsc=overdue)",
+          "Pending Leave (canApproveLeave only; warning; link /rostering/leave)"
         ],
         "api": [
           {
@@ -394,7 +406,17 @@
           {
             "component": "Attention band layout",
             "prop": "shape",
-            "effect": "two columns below 768px; two balanced rows from 768px (an odd last item stretches over the spare slot); one row when the band's own width (a container query) gives every item 173px, what the widest label needs on one line: 1259 / 1440 / 1621px for 7 / 8 / 9 items"
+            "effect": "only items above zero are tiles, dealt into balanced rows by the band's own width (a container query): up to 1, 2, 3, 4 and 5 tiles a row from 0, 36, 56, 72 and 96rem; 60 tracks, each tile spanning 60 / its row length, the 8px between tiles as padding; zeros are one All clear row on Pale Sprout, and all-zero is one Pale Sprout field"
+          },
+          {
+            "component": "StatCard",
+            "prop": "action",
+            "effect": "attention variant: { label, to }. Makes the tall tile: stacked figure, label (14px 600), detail line (13px) and a link, padded --section-gap; a named group, not a link. The link's pad stretches over the whole tile (one big target, ring around the tile) with a --tap-min floor; the compact tile is used while loading or error"
+          },
+          {
+            "component": "StatCard",
+            "prop": "detail",
+            "effect": "attention variant, with action: the one honest line saying what the count means, in the on-container ink (never grey)"
           }
         ]
       },
@@ -868,9 +890,9 @@
       "name": "Attention Band",
       "kind": "custom",
       "refersTo": "attention-tile",
-      "description": "StatCard variant=\"attention\": display-step tabular figures over 13px labels, one tile each. A non-zero count is filled with the glance strip's error or warning container; a zero stays on the card fill with a muted figure, and the all-clear is the lime chip.",
-      "html": "<div class=\"ds-ab\"><div class=\"ds-at ds-at-error\"><div class=\"ds-at-fig\">5</div><div class=\"ds-at-label\">Qualification Issues</div></div><div class=\"ds-at ds-at-warning\"><div class=\"ds-at-fig\">2</div><div class=\"ds-at-label\">Missing Staff</div></div><div class=\"ds-at\"><div class=\"ds-at-fig\">0 <span class=\"ds-chip\">All clear</span></div><div class=\"ds-at-label\">Critical Participant Alerts</div></div><div class=\"ds-at\"><div class=\"ds-at-fig\">0</div><div class=\"ds-at-label\">Overdue</div></div></div>",
-      "css": ".ds-ab{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:720px}.ds-at{display:flex;flex-direction:column;gap:2px;padding:12px 8px;border:1px solid #c3c9b5;border-radius:0.5rem;background:#fff;color:#43493a}.ds-at-fig{order:1;display:flex;align-items:center;gap:8px;font:800 1.75rem/1.2 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:-0.015em;font-variant-numeric:tabular-nums}.ds-at-label{order:2;font-size:13px;font-weight:500;line-height:1.25}.ds-at-error{background:#ffdad6;color:#93000a}.ds-at-warning{background:#fef3c7;color:#92400e}.ds-chip{font:700 12px/16px Manrope,system-ui,sans-serif;padding:2px 8px;border-radius:9999px;background:#bbf37c;color:#0f2000}"
+      "description": "StatCard variant=\"attention\" with an action: a tall tile for each item that needs somebody (display-step figure, label, one honest line, a link), filled with the glance strip's error or warning container. Items at zero are one All clear row on Pale Sprout; with nothing to act on the whole band is one Pale Sprout field.",
+      "html": "<div class=\"ds-ab\"><div class=\"ds-at ds-at-error\"><div class=\"ds-at-fig\">5</div><div class=\"ds-at-label\">Qualification Issues</div><div class=\"ds-at-line\">Expired, undated or due within 30 days, across 3 staff members.</div><div class=\"ds-at-link\">Review qualifications</div></div><div class=\"ds-at ds-at-warning\"><div class=\"ds-at-fig\">2</div><div class=\"ds-at-label\">Missing Staff</div><div class=\"ds-at-line\">Trips start within 60 days with no staff assigned.</div><div class=\"ds-at-link\">Assign staff</div></div><div class=\"ds-clear\">All clear on Overdue and Open Incidents</div></div>",
+      "css": ".ds-ab{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;width:560px}.ds-at{display:flex;flex-direction:column;gap:4px;padding:16px;border:1px solid #c3c9b5;border-radius:0.5rem}.ds-at-fig{font:800 1.75rem/1.2 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:-0.015em;font-variant-numeric:tabular-nums}.ds-at-label{font:600 14px/1.25 'Plus Jakarta Sans',system-ui,sans-serif}.ds-at-line{font-size:13px;line-height:1.35}.ds-at-link{margin-top:auto;padding-top:8px;font:700 14px/1.4 Manrope,system-ui,sans-serif}.ds-at-error{background:#ffdad6;color:#93000a}.ds-at-warning{background:#fef3c7;color:#92400e}.ds-clear{grid-column:1/-1;padding:12px 16px;border-radius:0.5rem;background:#bbf37c;color:#0f2000;font:400 13px/1.4 Manrope,system-ui,sans-serif}"
     }
   ],
   "narrative": {
@@ -932,7 +954,7 @@
       },
       {
         "name": "The Attention Tint Rule",
-        "body": "A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family: `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Figure, label and icon take the matching on-container colour (never grey), and the chip becomes a card-white pill so it does not vanish into its own fill. Positive and neutral segments stay on the card fill: an all-clear is a lime chip, never a fill. One tone decides chip and fill (`glanceState`), and no colour outside the two containers is used: the fills are TONE.warning.solid and TONE.danger.solid (the pairs the status badges wear, src/lib/tone.ts) and `attentionOf` decides which tones ask for a tint. If most segments are tinted, review the tones, not the tint. The attention band's tiles follow the same rule with a count as the signal: a non-zero danger or warning count takes the error or warning container, and a zero stays on the card fill.",
+        "body": "A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family: `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Figure, label and icon take the matching on-container colour (never grey), and the chip becomes a card-white pill so it does not vanish into its own fill. Positive and neutral segments stay on the card fill: an all-clear is a lime chip, never a fill. One tone decides chip and fill (`glanceState`), and no colour outside the two containers is used: the fills are TONE.warning.solid and TONE.danger.solid (the pairs the status badges wear, src/lib/tone.ts) and `attentionOf` decides which tones ask for a tint. If most segments are tinted, review the tones, not the tint. The attention band's tiles follow the same rule with a count as the signal: a danger or warning count above zero takes the error or warning container, and a zero is not a tile at all (it is named in the All clear row).",
         "section": "components"
       },
       {
@@ -942,12 +964,12 @@
       },
       {
         "name": "The Quiet Zero Rule",
-        "body": "Only a count somebody can act on is loud. A zero never takes a tint and its figure is muted, and a value that is not known yet, or failed to load, is an en dash, never a 0 and never an \"All clear\". If most items are tinted the band has stopped saying anything, so review the tones, not the tint.",
+        "body": "Only a count somebody can act on is loud, and only that is a tile. A zero is a name in the All clear row (Pale Sprout, never a tint), and a value that is not known yet, or failed to load, is an en dash tile, never a 0 and never an \"All clear\". The band is the all-clear field only when every item has data and is at zero. If most items are tiles the band has stopped saying anything, so review the tones, not the tint.",
         "section": "components"
       },
       {
         "name": "The Attention Band Pattern",
-        "body": "The dashboard opts into a band of `StatCard variant=\"attention\"` tiles directly under its display-step title and meta row: a fixed order (Qualification Issues, Critical Participant Alerts, Overdue, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents, QSC Overdue, Pending Leave), the alerts item only with `canViewAlerts` and Pending Leave only with `canApproveLeave` and a non-empty queue. A non-zero count is tinted like a glance segment (danger: error container, warning: warning container); a zero is untinted with a muted figure; an item with no data (still loading, or failed) shows an en dash, `aria-busy` while loading and a screen-reader-only \"Couldn't load\" after a failure, and never an \"All clear\". Two columns below 768px, two balanced rows from 768px, one row when the band's own width gives every item 173px, what the widest label needs on one line. The everyday counts (upcoming trips, active participants, outstanding tasks) are one quiet line in the header's meta row. Every other StatCard is unchanged.",
+        "body": "The dashboard opts into a band of `StatCard variant=\"attention\"` tiles directly under its display-step greeting and meta row: a fixed order (Qualification Issues, Critical Participant Alerts, Overdue, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents, QSC Overdue, Pending Leave), Qualification Issues only for a role that can open the Qualifications page, the alerts item only with `canViewAlerts` and Pending Leave only with `canApproveLeave`. An item above zero is a tall tile: the display-step figure, the label, one honest line saying what the count means and a link to where it is fixed, filled like a glance segment (danger: error container, warning: warning container) with everything in the on-container ink. Items at zero are one All clear row on Pale Sprout naming them, and when every item is at zero the band is one full-width Pale Sprout field (\"All clear. Nothing needs you right now.\"). An item with no data (still loading, or failed) is a quiet en dash tile, `aria-busy` while loading and a screen-reader-only \"Couldn't load\" after a failure, never named as clear, and the band is not the all-clear field while one exists. Tiles are dealt into balanced rows by the band's own width, up to 1, 2, 3, 4 and 5 a row. The everyday counts (upcoming trips, active participants, outstanding tasks) are one quiet line in the header's meta row. Every other StatCard is unchanged.",
         "section": "components"
       }
     ],
@@ -963,7 +985,7 @@
       "**Do** colour a status by its tone: add the word to `STATUS_TONE` (or pass a `colorMap` of tones for a domain whose word means something else), never a class string of its own",
       "**Do** make nouns agree with counts through `plural()`, spell ratios through `formatRatio()` (\"x / y\") and relative times through `formatRelative()` (`src/lib/format.ts`), and state a dated deadline through `deadlineState()` and `deadlineLabel()` (`src/lib/deadline.ts`), never by hand",
       "**Do** early-return a record that is loading, failed or missing through `PageState`, give a detail page one `BackButton` that names its destination, and keep its active tab in the URL with `useTabParam`",
-      "**Do** put what needs action in the attention band and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on",
+      "**Do** put what needs action in the attention band, as a tall tile with its figure, a line saying what it means and a link to where it is fixed, and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on; **do** let the all-clear be the Pale Sprout row and field and nothing else",
       "**Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed (\"Couldn't load\"), and never an \"All clear\" without data",
       "**Do** use `Button` for every action; it owns height, radius and focus",
       "**Do** keep compliance state, alerts and countdowns visually equal to ordinary data",
@@ -981,7 +1003,7 @@
       "**Don't** add a second page heading",
       "**Don't** use the display step (`text-display`) anywhere but a detail page's title, the dashboard's title and the figures of a glance strip or the attention band, or add a second display size",
       "**Don't** tint a glance segment its own badge calls fine, or fill one with anything but the warning-container or error-container",
-      "**Don't** tint an attention tile at zero, or claim \"All clear\" without data (while its request is in flight, or after it failed)",
+      "**Don't** make a tile of a zero or tint one, or claim \"All clear\" without data (while its request is in flight, or after it failed)",
       "**Don't** restyle a single module more heavily than any other; design effort is uniform by commitment"
     ]
   }

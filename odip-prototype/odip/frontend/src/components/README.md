@@ -818,10 +818,10 @@ tile. **When to use StatCard vs a hand-rolled metric block**: any single-number 
 stat — keeps the "hero-metric template" tendency the design guardrails ban confined to
 one real, reused component instead of copy-pasted markup per page.
 
-`StatCard` takes `label`, `value`, `to`, `tone`, `caption`, `className`, `variant`, `loading` and `error`. `variant` is `'default'` (the default: the small KPI
+`StatCard` takes `label`, `value`, `to`, `tone`, `caption`, `className`, `variant`, `detail`, `action`, `loading` and `error`. `variant` is `'default'` (the default: the small KPI
 tile, a 12px label over a `text-xl` value, unchanged and still what Vehicles uses) or `'attention'`, the opt-in tile of the dashboard's **attention
 band** (DESIGN.md "Attention band"): a display-step tabular figure (`text-display`) over a 13px medium label, in its own bordered `--radius-md` tile
-with an 8px side inset (the compact card's).
+with an 8px side inset (the compact card's). Given an `action` it is the band's **tall tile** instead (below); the compact tile is what an item with no data shows.
 
 - `tone`: `'danger'` fills the tile with the error-container and `'warning'` with the warning-container, and the figure and the label take the matching
   on-container colour. Those are the glance strip's own tints: both take `TONE.warning.solid` and `TONE.danger.solid` from `lib/tone.ts` (`attentionOf` decides
@@ -834,20 +834,25 @@ with an 8px side inset (the compact card's).
 - `to`: the whole tile is a `Link` with a focus ring and a `--tap-min` floor, and its accessible name is its content ("Qualification Issues 5"). A tile
   without `to` is a named group ("Overdue 2"), so the number and the label are always in the name. A tinted tile carries `data-attention="error" | "warning"`,
   as a glance cell does.
+- `action` (`{ label, to }`, attention only) and `detail` (a string): a count somebody has to act on. `action` makes the **tall tile**: stacked, the display-step figure, the label (14px, 600), the `detail` line
+  (13px: one honest line saying what the count means) and a link to where it is fixed (`action.label`, `action.to`, a chevron), padded `--section-gap` on every side, so it is the biggest colour field on the
+  page. The fill and the on-container ink are the tone's, as above, and the line and the link take that ink, never grey. The tile is a named group ("Overdue 2"), not a link, so leave `to` off; the link's
+  `::after` stretches over the whole tile, so the tile is one big target (and the focus ring surrounds it) while the page keeps ONE link with a name of its own ("Open overdue tasks"), and its own box keeps a
+  `--tap-min` floor. It has no caption (`detail` takes that job), and it is the compact tile whatever it is given while `loading` or `error` is set. The default variant ignores `detail` and `action`.
 - `loading` and `error` (attention only; the default tile ignores them): the figure is an en dash in the muted style, never tinted, with no caption, and a
   screen-reader-only text replaces the number: "Loading" (and the tile is `aria-busy`) while the request is in flight, "Couldn't load" (not busy) after it
   failed; `loading` wins if both are set. Use them for a figure whose own request has no data yet, so it is never read as a definite zero or an "All clear".
 
-Lay the tiles out in a `<section aria-label="…" className="@container">`; `DashboardPage` shows the shapes (two columns below `md`, two balanced rows
-from `md`, one row once the band's own width gives every item 173px, what the widest label needs on one line). Source order is label, figure, caption, like a glance cell, so a screen reader
-hears "Overdue, 2".
+Lay the tiles out with `pages/dashboard/AttentionBand.tsx`, which makes a tall tile of each item above zero, names the items at zero in one "All clear" row on Pale Sprout, and shows one Pale Sprout field when every
+item is at zero; its rows are dealt by `pages/dashboard/bandLayout.ts` (balanced, 1 to 5 tiles a row by the band's own width). The compact tile's source order is label, figure, caption, like a glance cell, so a screen reader
+hears "Overdue, 2"; the tall tile reads its figure, label, line and link in that order.
 
 ---
 
 ## PageHeader
 
 `PageHeader.tsx` — the title/subtitle/primary-action row every page starts with, plus an
-optional row of filter/toolbar children below it. Props: `title`, `subtitle`, `action`,
+optional row of filter/toolbar children below it. Props: `title`, `titleNote`, `documentTitle`, `subtitle`, `action`,
 `children`, `variant`.
 
 `variant` is `'default'` (the default: the 20px title, exactly as every page renders it) or `'detail'`, the
@@ -874,7 +879,9 @@ under the title instead of a section-gap away, and always renders the subtitle b
 
 `PageHeaderMeta` joins its children with `aria-hidden` middots. Falsy children are skipped BEFORE the separators are placed, so a
 missing fact never leaves a dangling dot; each separator belongs to the item before it, so a wrapped line can end with a dot but never
-begins with one. **When not to**: a list or hub page (keep the default), or any page that does not lead with a status and countable facts.
+begins with one. `titleNote` (a node) sets a second phrase inside the same `h1`, in the muted ink at the same size (the dashboard's date after its greeting, as a `<time>`); the two parts wrap as units. `documentTitle`
+names the tab and the history when the `h1` says something else (it defaults to `title`): the dashboard's `h1` is a greeting that changes with the hour, and the tab stays "Management Dashboard".
+**When not to**: a list or hub page (keep the default), or any page that does not lead with a status and countable facts.
 The trip detail page opts in with a status-led meta row, and the dashboard opts in for its title with a meta row of plain counts and no status
 ("3 upcoming trips · 5 active participants · 4 outstanding tasks", each noun agreeing with its count, in `tabular-nums`); the other detail pages adopt it next.
 

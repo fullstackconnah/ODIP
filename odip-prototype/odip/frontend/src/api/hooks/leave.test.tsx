@@ -19,7 +19,7 @@ vi.mock('../client', () => ({
 
 import {
   useMyLeave, useCreateLeaveRequest, useCancelMyLeave, useCreateMyUnavailability, useCancelMyUnavailability,
-  useLeaveRequests, useRecurringUnavailabilities, usePendingLeaveCount,
+  useLeaveRequests, useRecurringUnavailabilities, usePendingLeaveCount, usePendingLeaveQueue,
   useCreateLeaveOnBehalf, useApproveLeave, useDeclineLeave, useCancelLeave, useUpdateLeave,
   useCreateUnavailabilityOnBehalf, useApproveUnavailability, useDeclineUnavailability, useCancelUnavailability,
   useUpdateUnavailability,
@@ -111,6 +111,37 @@ describe('leave hooks — coordinator', () => {
     await waitFor(() => expect(result.current).toBe(3))
     expect(mockApiGetWithDefault).toHaveBeenCalledWith('/leave', [], { status: 'Pending' })
     expect(mockApiGetWithDefault).toHaveBeenCalledWith('/leave/unavailability', [], { status: 'Pending' })
+  })
+
+  describe('usePendingLeaveQueue: the count and whether it can be trusted', () => {
+    it('is loading, with a count of 0, until both requests answer, then reports the sum and settles', async () => {
+      mockApiGetWithDefault
+        .mockResolvedValueOnce([{ id: '1' }, { id: '2' }])
+        .mockResolvedValueOnce([{ id: 'rule-1' }])
+      const qc = new QueryClient()
+      const { result } = renderHook(() => usePendingLeaveQueue(), { wrapper: wrapper(qc) })
+
+      expect(result.current).toEqual({ count: 0, loading: true, error: false })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      expect(result.current).toEqual({ count: 3, loading: false, error: false })
+    })
+
+    it('reports an error, not a settled zero, when a request fails', async () => {
+      mockApiGetWithDefault.mockRejectedValue(new Error('boom'))
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      const { result } = renderHook(() => usePendingLeaveQueue(), { wrapper: wrapper(qc) })
+
+      await waitFor(() => expect(result.current.error).toBe(true))
+      expect(result.current).toEqual({ count: 0, loading: false, error: true })
+    })
+
+    it('asks for nothing and says nothing is loading when the caller is not enabled', () => {
+      const qc = new QueryClient()
+      const { result } = renderHook(() => usePendingLeaveQueue(false), { wrapper: wrapper(qc) })
+
+      expect(result.current).toEqual({ count: 0, loading: false, error: false })
+      expect(mockApiGetWithDefault).not.toHaveBeenCalled()
+    })
   })
 
   it('useCreateLeaveOnBehalf posts to /leave and invalidates leave-requests + roster-board', async () => {

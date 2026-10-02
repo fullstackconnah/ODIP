@@ -161,6 +161,14 @@ components:
   attention-tile-error:
     backgroundColor: "{colors.error-container}"
     textColor: "{colors.on-error-container}"
+  attention-tile-tall:
+    rounded: "{rounded.md}"
+    padding: "16px"
+  all-clear:
+    backgroundColor: "{colors.primary-fixed}"
+    textColor: "{colors.on-primary-fixed}"
+    rounded: "{rounded.md}"
+    padding: "12px 16px"
 ---
 
 # Design System: ODIP
@@ -184,6 +192,11 @@ components:
 > Added 2026-10-02 from the wrong-or-hidden-information fixes (code review round 2): **every real status has a deliberate tone and an unknown one is neutral**,
 > **In progress is info blue** (owner decision), and **The Column Rule** (Tables): no column is removed at any width, the box scrolls, the first column and the
 > actions stay pinned. The status table and the rule are written under Status Badges & Alerts and Tables.
+
+> Added 2026-10-02 from the dashboard's bolder pass: the dashboard's title is a **greeting with today's date** (`PageHeader`'s `titleNote` and `documentTitle`), and the **attention band**
+> is now a tall tile for each item that needs somebody, one **All clear** row on Pale Sprout for the items that do not, and one Pale Sprout field when nothing does. Nothing new was added to
+> the system: every figure is still the display step, every fill is still a tone, and the all-clear is the documented "you are here / all clear" green, at full strength. Both parts stay
+> opt-in (`StatCard`'s `action`, `PageHeader`'s `titleNote`); every other tile and header is unchanged.
 
 ## Overview
 
@@ -227,7 +240,7 @@ for the secondary and accessibility roles. Unchanged by the density work.
   content without becoming the loudest thing on screen.
 - **Pale Sprout** (`#bbf37c`): the *fixed* step, a high-visibility tint for the active navigation
   item, confirmed/active status badges and similar "you are here / all clear" surfaces, paired with
-  near-black text.
+  near-black text. The dashboard's all-clear row and field wear it at full strength (13.2:1 against `#0f2000`).
 
 ### Secondary
 - **Slate Blue** (`#515f74`): informational and neutral-support colour, also the `info` status and
@@ -271,8 +284,8 @@ the layout, not the type.
 ### Hierarchy
 The ramp is short and flat because the density comes from layout. Measured at 1920: h1 20px (28px on a detail page and on the dashboard), table cells 14px.
 - **Display** (800, 1.75rem / 28px, 1.2 leading, -0.015em tracking, the `text-display` utility): the ONE step above the
-  headline, in Plus Jakarta Sans. Only the title of a detail page and of the dashboard (`PageHeader variant="detail"`), the figures of a
-  glance strip (`FactBar variant="glance"`) and the figures of the attention band (`StatCard variant="attention"`), all in tabular figures.
+  headline, in Plus Jakarta Sans. Only the title of a detail page and of the dashboard (`PageHeader variant="detail"`; the dashboard's is a greeting with the date after it in the
+  muted ink at the same size), the figures of a glance strip (`FactBar variant="glance"`) and the figures of the attention band (`StatCard variant="attention"`), all in tabular figures.
   Its four `--text-display*` tokens sit in the density token block.
 - **Headline** (700, 1.25rem / `text-xl`): the page title in `PageHeader`, one per screen. StatCard values
   use the same size in display bold.
@@ -461,7 +474,7 @@ Tactile and plain, like a well-used key on a desk.
   page-level void, never inside a card.
 - **StatCard:** a Card with a 12px label, a `text-xl` display-bold value and an optional caption; tone
   (neutral, info, success, warning, danger) tints the fill with the tone's soft wash and sets the figure in its ink (`src/lib/tone.ts`). Its opt-in `variant="attention"` is the
-  attention band's tile (see Attention band); the default tile, which Vehicles still uses for its three fleet figures, is unchanged.
+  attention band's tile, and given an `action` it is the band's tall tile (see Attention band); the default tile, which Vehicles still uses for its three fleet figures, is unchanged.
 
 ### Fact list and fact bar
 
@@ -547,7 +560,11 @@ their own facts to tones. It stops at the header: the tab strip and every panel 
 
 - **Title.** `PageHeader variant="detail"`: the display step (28px, Plus Jakarta Sans 800, balanced wrap), still the page's one
   `h1`. The title and its meta row are ONE block, so `--section-gap` opens below the pair rather than between them. The
-  actions stay on the right and wrap under the title below 768px exactly as the default header does.
+  actions stay on the right and wrap under the title below 768px exactly as the default header does. Two opt-in props serve the dashboard: `titleNote` sets a second phrase
+  in the same `h1`, in the muted ink at the same size (the date after the greeting; each part wraps as a unit, so a phone breaks between them and never inside the date), and
+  `documentTitle` names the tab when the `h1` says something else (the greeting changes with the hour, the tab stays "Management Dashboard"). The greeting is
+  "Good morning, Sarah" (before noon, then afternoon until 6 pm, then evening; the first word of the signed-in full name, none if there is none) and the date is "Friday 2 October",
+  both from the viewer's own clock and refreshed every minute (`lib/greeting.ts`, `hooks/useNow.ts`), so a page left open does not go stale.
 - **Meta row.** `PageHeaderMeta` in the subtitle slot. The status leads as `StatusBadge size="md"` (13px semibold, 24px tall); the
   quiet facts follow in 13px muted, joined by middots: "Confirmed · Caloundra QLD · SCB-2608 · 14–17 Aug 2026 · 4 days". A missing
   fact is dropped before the separators are placed, so there is never a dangling dot; a separator belongs to the item before it, so a
@@ -573,44 +590,59 @@ tone decides both chip and fill (`glanceState`), so they cannot disagree, and no
 `TONE.warning.solid` and `TONE.danger.solid` (the pairs the status badges wear, `src/lib/tone.ts`), and `attentionOf` decides which tones ask for a tint,
 so the glance strip, the attention tile and a badge cannot drift apart. Colour is never the only cue:
 the chip text says the same thing. If most segments end up tinted the strip has stopped saying anything, so review the tones, not the tint. The attention band's tiles
-follow the same rule with a count as the signal: a non-zero danger or warning count takes the error or warning container, and a zero stays
-on the card fill.
+follow the same rule with a count as the signal: a danger or warning count above zero takes the error or warning container, and a zero is not a tile at all (it is named in the
+All clear row).
 
 ### Attention band
 
-The dashboard's answer to "what needs me?": one band of display-step figures directly under the title, where an item that needs action is the
-loudest thing on the page and an item at zero goes quiet. It replaces the row of equal KPI tiles, which gave "3 upcoming trips" the same weight
-as "2 QSC overdue"; those everyday counts now live in the header's meta row. It is `StatCard variant="attention"` tiles in a
-`<section aria-label="Needs attention">`, opt-in, so every other StatCard is unchanged.
+The dashboard's answer to "what needs me?", directly under the title, and the peak of the page: as big as the day's trouble. An item that needs action is a **tall tile**, an item at
+zero is only a name in ONE **All clear** row, and when nothing needs anybody the whole band is one Pale Sprout field. It replaces the row of equal KPI tiles, which gave "3 upcoming trips"
+the same weight as "2 QSC overdue"; those everyday counts now live in the header's meta row. It is `StatCard variant="attention"` tiles in a
+`<section aria-label="Needs attention">`, composed by `pages/dashboard/AttentionBand.tsx`, opt-in, so every other StatCard is unchanged.
 
-- **Items, in a fixed order**, so a position always means the same thing: Qualification Issues (link `/qualifications`, danger), Critical
-  Participant Alerts (only with `canViewAlerts`; link `/participants`; danger), Overdue (danger), Missing Accommodation, Missing Vehicles, Missing
-  Staff and Open Incidents (warning), QSC Overdue (danger), Pending Leave (only with `canApproveLeave` and a non-empty queue; link
-  `/rostering/leave`; warning). Only those two conditions drop an item; every other one keeps its place at zero, so the layout is stable.
-- **Tile.** A display-step tabular figure over a 13px medium label, in its own bordered `--radius-md` tile with `--card-pad` above and below and 8px at the sides
-  (the compact card's inset: the glance cell's 12px, 16px from xl, wrapped "Critical Participant Alerts" at 1920). No icon, and no chip on an
-  item that needs attention. Source order is label then figure (the strip's order), so a screen reader hears "Overdue, 2". A
-  linked tile's accessible name is its content ("Qualification Issues 5") and an unlinked one is a named group ("Overdue 2"), so the number and
-  the label are always in the name and colour never carries the meaning alone.
-- **Non-zero is loud, zero is quiet.** A non-zero count is tinted exactly as a glance segment is (The Attention Tint Rule): danger takes the error
-  container (`TONE.danger.solid`), warning the warning container (`TONE.warning.solid`), and the figure and the label take the matching on-container colour. A zero is untinted, on the card fill,
-  with the figure and the label in `muted-foreground`. The two items that carry a caption say "All clear" at zero, as the lime positive chip beside
-  the figure (the glance strip's own all-clear); it never appears on a tint.
-- **Loading and failure are not zero.** An item computed from its own request shows an en dash (`–`) in the muted figure style, never a definite 0,
-  while that request is in flight (`aria-busy="true"` and a screen-reader-only "Loading") and after it fails (not busy, and a screen-reader-only
-  "Couldn't load"). Either way it is untinted and never says "All clear": an all-clear is never claimed without data. Qualification Issues (the
-  staff list) and Critical Participant Alerts (the participant-alerts aggregate) do this.
-- **Shape.** Two columns below 768px (an odd last item takes the whole row, as on the trip strip). From 768px two balanced rows: ceil(n / 2) columns,
-  an odd last item stretching over the spare slot so no row has a hole. ONE row when the band's own width gives every item 173px, measured by a
-  container query so the 232px sidebar does not matter: n × 173 + (n − 1) × 8px, which is 1259, 1440 and 1621px for 7, 8 and 9 items. 173px is what
-  the widest label ("Critical Participant Alerts", 152.6px at 13px) needs on one line inside the tile's 8px sides and borders, so a one-row band is
-  78px tall and never wraps a label. So the band is one row at a 1920 viewport for every role, and two balanced rows at 1440 and 1280. A label wraps
-  only where its tile is narrower than that (a 360px phone, a tablet); nothing truncates, scrolls sideways or shrinks the type.
-- **Touch.** A linked item is the whole tile and keeps a `--tap-min` floor (it is already taller than 44px).
+**Items, in a fixed order**, so a position among the tiles always means the same thing. Each has a tone (what a count above zero takes), a line that says what the count is, in the server's own
+terms, and a link to where it is fixed, a route that exists today:
 
-**The Quiet Zero Rule.** Only a count somebody can act on is loud. A zero never takes a tint and its figure is muted, and a value that is not
-known yet, or failed to load, is an en dash, never a 0 and never an "All clear". If most items are tinted the band has stopped saying anything,
-so review the tones, not the tint.
+| Item | Tone | The line | The link |
+|---|---|---|---|
+| Qualification Issues (the Qualifications page) | danger | Expired, undated or due within 30 days, across 3 staff members. | Review qualifications, `/qualifications` |
+| Critical Participant Alerts (`canViewAlerts`) | danger | Critical alerts across 2 participants. | Review participants, `/participants` |
+| Overdue | danger | Tasks past their due date and still open. | Open overdue tasks, `/tasks?status=Overdue` |
+| Missing Accommodation | warning | Trips start within 60 days with no accommodation reserved. | Open trips, `/trips` |
+| Missing Vehicles | warning | Trips start within 60 days with no vehicle assigned. | Assign vehicles, `/schedule` |
+| Missing Staff | warning | Trips start within 60 days with no staff assigned. | Assign staff, `/schedule` |
+| Open Incidents | warning | Incidents not yet resolved or closed. | Open incidents, `/incidents` |
+| QSC Overdue | danger | Reportable incidents with no QSC report after 24 hours. | Review QSC reports, `/incidents?qsc=overdue` |
+| Pending Leave (`canApproveLeave`) | warning | Leave and unavailability requests waiting for a decision. | Review leave requests, `/rostering/leave` |
+
+Only those three conditions drop an item. The lines are the server's rules in words (`DashboardController.GetSummary`: a trip counts when it starts today or within 60 days; the Qualifications
+page's own warning window; QSC overdue is a reportable incident with no report after 24 hours), and a count of one reads in the singular ("Trip starts", "1 staff member"). A vehicle or a staff
+member is assigned to a trip on the Schedule (the assignments the count reads) and accommodation on the trip's own tab, so that tile opens the Trips list to choose the trip; QSC Overdue and
+Overdue open their lists already filtered to the rule the figure counts.
+
+- **Tall tile.** Stacked: the display-step tabular figure, the label at the title step (14px, 600), the line at body secondary (13px) and the link (14px, 700, with a chevron), padded
+  `--section-gap` on every side (16px, 20px on touch), the airier step that no dense page uses. Nothing sits beside the figure, so the tile stays tall at any width; four lines deep it is the biggest
+  colour field on the page. The fill is the tone's solid pair (`TONE.danger.solid` the error container, `TONE.warning.solid` the warning container, the Attention Tint Rule), and the figure, label, line
+  and link all take the matching on-container colour, so secondary text is tinted from the hue, never grey (6.4:1 on the warning container, 7.2:1 on the error container). No icon, no chip. The tile is a
+  named group, so its accessible name carries the number and the label ("Overdue 2"), and holds ONE link whose name says what it does ("Open overdue tasks"). The link's pad stretches over the whole tile
+  (`after:inset-0`), so the tile is one big target and the focus ring (`ring-2`, the olive ring token) surrounds the tile and not the words; the link's own box keeps a `--tap-min` floor.
+- **A zero is a name, not a tile.** The items at zero are named in ONE row after the tiles on Pale Sprout (`TONE.success.solid`, `#bbf37c` with `#0f2000`) with a check: "All clear on Missing Vehicles,
+  Open Incidents and QSC Overdue" (the names joined "A, B and C", no serial comma). A zero is never tinted and never a tile, so the band's weight is the day's trouble.
+- **Nothing needs you.** When every item has data and is at zero the band is one full-width Pale Sprout field, a larger check, "All clear. Nothing needs you right now." and, under it, "Checked and at
+  zero:" and every item's name, so the claim can be audited. It is the same green at the same strength as the row, only the whole band.
+- **Loading and failure are not zero.** An item computed from its own request shows an en dash (`–`) in the muted figure style, never a definite 0, while that request is in flight (`aria-busy="true"` and a
+  screen-reader-only "Loading") and after it fails (not busy, and a screen-reader-only "Couldn't load"). It is the compact tile (card fill, a link to the page it counts), has no line and no action, is never
+  tinted, is not named in the All clear row, and while one exists the band is not the all-clear field: an all-clear is never claimed without data. Qualification Issues (the staff list), Critical Participant
+  Alerts (the participant-alerts aggregate) and Pending Leave (the approvals queue, `usePendingLeaveQueue`: its count is 0 while loading and after a failure) do this.
+- **Shape.** The band is a size container and its tiles are dealt into balanced rows by ITS width (the 232px sidebar and the pointer's gutter do not matter): up to 1, 2, 3, 4 and 5 tiles a row from band
+  widths of 0, 36, 56, 72 and 96rem (a 390 phone gets 1, a 768 tablet 2, 1280 gets 3, 1440 gets 4 and 1920 gets 5). With n tiles and r to a row there are ceil(n / r) rows, the tiles dealt out evenly (7 at 4 a row
+  is 4 + 3) and equal in width within a row, so every row is full and none has a hole (`pages/dashboard/bandLayout.ts`: a 60-track grid, each tile spanning 60 / its row length). The 8px between tiles is padding,
+  not a grid gap (60 tracks would add 59 gaps). Nothing truncates, scrolls sideways or shrinks the type, and no label wraps inside its tile at any width.
+- **Touch.** The whole tile is the target and the link keeps a `--tap-min` floor, so it is a 44px target.
+
+**The Quiet Zero Rule.** Only a count somebody can act on is loud, and only that is a tile. A zero is a name in the All clear row (Pale Sprout, never a tint), and a value that is not known yet, or failed to load,
+is an en dash tile, never a 0 and never an "All clear". The band is the all-clear field only when every item has data and is at zero. If most items are tiles the band has stopped saying anything, so review
+the tones, not the tint.
 
 ### Status Badges & Alerts
 
@@ -702,7 +734,7 @@ wall-clock fields, each with its reason: adding a wall-clock field means adding 
 - A wall-clock value is never turned into an instant: no `parseApiDate`, no `formatWithTimeZone`, no `new Date(x)` then `toLocaleString`. Read as UTC it moved by the offset
   (an incident typed as 08:00 showed "6:00 pm" in Sydney and "4:00 am" in New York).
 - "Today" for a calendar rule is the PROVIDER's date. On the server that is `ProviderTimeZoneResolver.TodayAsync` (never `DateTime.UtcNow`, which is still yesterday until
-  10:00 or 11:00 in Sydney); in the browser it is the viewer's local date (`localIsoDate`, `deadlineState`), never `new Date().toISOString().split('T')[0]` (the UTC date).
+  10:00 or 11:00 in Sydney); in the browser it is the viewer's local date (`localIsoDate`, `deadlineState`; the dashboard's greeting and date are read the same way, `lib/greeting.ts`: the browser has no provider zone of its own, so the viewer's own day is the stand-in), never `new Date().toISOString().split('T')[0]` (the UTC date).
 - A due day is overdue from the day AFTER it, never on it (`deadlineState`, `isPastDue`), and a count of days or nights is whole calendar days (`calendarDaysUntil`,
   `eachDay`), never milliseconds divided by 86 400 000 (a day is 23 hours long when the clocks go forward).
 - A wall-clock value is compared with "now" only after the provider's zone is applied (`ProviderLocalTime.LocalToUtc`), the way the MAR decides a dose is overdue.
@@ -748,7 +780,7 @@ not. Never hand-roll a `fixed right-0` panel: use `SlideOver`.
 - **Do** colour a status by its tone: add the word to `STATUS_TONE` (or pass a `colorMap` of tones for a domain whose word means something else), never a class string of its own
 - **Do** make nouns agree with counts through `plural()`, spell ratios through `formatRatio()` ("x / y") and relative times through `formatRelative()` (`src/lib/format.ts`), and state a dated deadline through `deadlineState()` and `deadlineLabel()` (`src/lib/deadline.ts`), never by hand
 - **Do** early-return a record that is loading, failed or missing through `PageState`, give a detail page one `BackButton` that names its destination, and keep its active tab in the URL with `useTabParam`
-- **Do** put what needs action in the attention band and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on
+- **Do** put what needs action in the attention band, as a tall tile with its figure, a line saying what it means and a link to where it is fixed, and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on; **do** let the all-clear be the Pale Sprout row and field and nothing else
 - **Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed ("Couldn't load"), and never an "All clear" without data
 - **Do** read every date and time by its kind (instant, wall clock, date: "Time on the wire"), take "today" from the provider (server) or the viewer's local date (browser), and call a due day overdue only from the day after it (`deadlineState`, `isPastDue`)
 - **Do** use `Button` for every action; it owns height, radius and focus
@@ -771,7 +803,7 @@ not. Never hand-roll a `fixed right-0` panel: use `SlideOver`.
 - **Don't** add a second page heading
 - **Don't** use the display step (`text-display`) anywhere but a detail page's title, the dashboard's title and the figures of a glance strip or the attention band, or add a second display size
 - **Don't** tint a glance segment its own badge calls fine, or fill one with anything but the warning-container or error-container
-- **Don't** tint an attention tile at zero, or claim "All clear" without data (while its request is in flight, or after it failed)
+- **Don't** make a tile of a zero or tint one, or claim "All clear" without data (while its request is in flight, or after it failed)
 - **Don't** restyle a single module more heavily than any other; design effort is uniform by commitment
 
 ## Marketing surface (/welcome/)

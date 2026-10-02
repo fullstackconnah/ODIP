@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CARD_WASH, TONE, attentionOf, type Attention, type Tone } from '@/lib/tone'
 import { Card } from './Card'
@@ -9,10 +10,13 @@ export type StatCardTone = Exclude<Tone, 'accessible'>
 /**
  * `default` (the default) is the small KPI tile: a 12px label over a `text-xl` value. `attention` is the opt-in tile of the
  * dashboard's attention band (DESIGN.md "Attention band"): the value is a display-step tabular figure, the tile is filled
- * with the same container tint the glance strip uses, and a tile at zero recedes. A StatCard that does not ask for it
- * renders exactly as before.
+ * with the same container tint the glance strip uses, and a tile at zero recedes. Given an `action` it is the tall tile of a count
+ * somebody has to act on. A StatCard that does not ask for it renders exactly as before.
  */
 export type StatCardVariant = 'default' | 'attention'
+
+/** Where a count is fixed: the text of the link and the route it opens. */
+export type StatCardAction = { label: string; to: string }
 
 export type StatCardProps = {
   label: string
@@ -32,6 +36,18 @@ export type StatCardProps = {
    */
   caption?: string
   variant?: StatCardVariant
+  /**
+   * `attention` variant only: the one honest line under the label, saying what the count means ("Tasks past their due date and still open."). Only the
+   * tall tile (see `action`) shows it.
+   */
+  detail?: string
+  /**
+   * `attention` variant only: where the count is fixed, as a link inside the tile. It makes the TALL tile: the figure, the label, the `detail` line and
+   * this link, which stretches over the whole tile so the tile is one big target while the page keeps one link with a name of its own. The tall tile is a
+   * named group, not a link, so leave `to` off; it has no caption (the `detail` line takes that job). A tile with no data (`loading` or `error`) is the
+   * compact tile whatever it is given: there is no count for the line to explain.
+   */
+  action?: StatCardAction
   /**
    * `attention` variant only (the default tile ignores it): the value is not known yet. The tile shows an en dash in the muted
    * figure style with `aria-busy`, is never tinted, and shows no caption, so a request in flight is never read as a
@@ -153,6 +169,44 @@ function AttentionTile({ label, value, className, to, tone = 'neutral', caption,
   )
 }
 
+// ── The tall action tile ──
+
+// A count that needs somebody, made big enough to act on: the figure, the label, one honest line saying what the count means, and the link to where it is
+// fixed, stacked in that order. It wears the same fills as the compact tile (ATTENTION_LOOK: the one tone table behind the glance strip and the band), so only
+// the structure is new, and the structure is what makes it tall: its padding is --section-gap on every side (the airier step the dense pages do not use) and
+// it is four lines deep, so it is the biggest colour field on the page. Colour is never the only cue: the number, the label and the line each say it in words.
+const ACTION_TILE =
+  'relative flex min-w-0 flex-col rounded-md border border-[var(--color-border)] p-[var(--section-gap)] transition-opacity has-[a:hover]:opacity-90'
+
+// The link's `::after` fills the (positioned) tile, so the whole tile is the target while the page keeps ONE link with a name of its own ("Open overdue
+// tasks"). The focus ring is drawn on that pseudo-element for the same reason: it surrounds the tile, not just the words. `--tap-min` floors the link's own
+// box at 44px on touch.
+const ACTION_LINK =
+  'mt-auto inline-flex min-h-[var(--tap-min)] items-center gap-0.5 self-start pt-2 text-sm font-bold underline-offset-4 hover:underline focus:outline-none ' +
+  'after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-[var(--color-ring)]'
+
+function ActionTile({ label, value, className, tone = 'neutral', detail, action }: StatCardProps & { action: StatCardAction }) {
+  const attention = attentionOf(tone)
+  const classes = `${ACTION_TILE} ${ATTENTION_LOOK[attention ?? 'quiet']} ${className ?? ''}`.trim()
+
+  // A named group, so its accessible name carries the number as well as the label (like the compact tile without a link).
+  return (
+    <div role="group" aria-label={`${label} ${value}`} data-attention={attention} className={classes}>
+      <div className="flex flex-1 flex-col gap-1">
+        <span className="text-display tabular-nums">{value}</span>
+        <span className="text-sm font-semibold leading-tight">{label}</span>
+        {detail && <span className="text-[13px] leading-snug">{detail}</span>}
+        <Link to={action.to} className={ACTION_LINK}>
+          {action.label}
+          <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+        </Link>
+      </div>
+    </div>
+  )
+}
+
 export function StatCard(props: StatCardProps) {
-  return props.variant === 'attention' ? <AttentionTile {...props} /> : <DefaultStatCard {...props} />
+  if (props.variant !== 'attention') return <DefaultStatCard {...props} />
+  const { action } = props
+  return action && !props.loading && !props.error ? <ActionTile {...props} action={action} /> : <AttentionTile {...props} />
 }

@@ -227,9 +227,169 @@ describe('StatCard — attention variant', () => {
     expect(tile('Overdue')).not.toHaveAttribute('aria-busy')
   })
 
-  it('passes className through to the tile (the band uses it to stretch an odd last item)', () => {
-    renderCard(<StatCard variant="attention" label="Overdue" value={3} className="col-span-2" />)
+  it('passes className through to the tile (the band gives it h-full)', () => {
+    renderCard(<StatCard variant="attention" label="Overdue" value={3} className="h-full" />)
 
-    expect(tile('Overdue')).toHaveClass('col-span-2')
+    expect(tile('Overdue')).toHaveClass('h-full')
+  })
+})
+
+// The tall tile of a count somebody has to act on (DESIGN.md "Attention band"): the figure, the label, one honest line and a link to where it is fixed.
+// It is opt-in through `action`, so a tile that does not ask for it is the compact tile pinned above, class for class.
+describe('StatCard — attention variant, the tall action tile', () => {
+  const ACTION = { label: 'Open overdue tasks', to: '/tasks?status=Overdue' }
+  const renderTall = (props: Partial<React.ComponentProps<typeof StatCard>> = {}) =>
+    renderCard(
+      <StatCard
+        variant="attention"
+        label="Overdue"
+        value={2}
+        tone="danger"
+        detail="Tasks past their due date and still open."
+        action={ACTION}
+        {...props}
+      />,
+    )
+  const group = (name = 'Overdue 2') => screen.getByRole('group', { name })
+
+  it('stacks the figure, the label, the line and the link, in that order', () => {
+    renderTall()
+
+    const tile = group()
+    const parts = [
+      within(tile).getByText('2'),
+      within(tile).getByText('Overdue'),
+      within(tile).getByText('Tasks past their due date and still open.'),
+      within(tile).getByRole('link', { name: 'Open overdue tasks' }),
+    ]
+    for (let i = 1; i < parts.length; i++) {
+      expect(parts[i - 1].compareDocumentPosition(parts[i]) & Node.DOCUMENT_POSITION_FOLLOWING, `part ${i}`).toBeTruthy()
+    }
+    // One column of them: nothing sits beside the figure, so the tile stays tall at any width.
+    expect(parts[0].parentElement).toHaveClass('flex', 'flex-col')
+    expect(parts[0].parentElement).toBe(parts[3].parentElement)
+  })
+
+  it('sets the figure at the display step in tabular figures, the label at the title step and the line at the 13px secondary step', () => {
+    renderTall()
+
+    const tile = group()
+    expect(within(tile).getByText('2')).toHaveClass('text-display', 'tabular-nums')
+    expect(within(tile).getByText('Overdue')).toHaveClass('text-sm', 'font-semibold')
+    expect(within(tile).getByText('Tasks past their due date and still open.')).toHaveClass('text-[13px]')
+    // No new type size: the only display class on the tile is the figure's, and nothing is bigger than it.
+    expect(tile.querySelectorAll('.text-display')).toHaveLength(1)
+    expect(tile.innerHTML).not.toMatch(/text-(?:xl|2xl|3xl|4xl|5xl|6xl|\[(?:1[5-9]|[2-9]\d)px\])/)
+  })
+
+  it('is a named group carrying the number and the label, not a link: the link is inside it', () => {
+    renderTall()
+
+    const tile = group()
+    expect(tile.tagName).toBe('DIV')
+    expect(tile).not.toHaveAttribute('href')
+    expect(screen.getAllByRole('link')).toHaveLength(1)
+    expect(within(tile).getByRole('link', { name: 'Open overdue tasks' })).toHaveAttribute('href', '/tasks?status=Overdue')
+  })
+
+  it('tints a danger tile with the error container and a warning tile with the warning container, everything in the on-container colour', () => {
+    renderCard(
+      <>
+        <StatCard variant="attention" label="Danger" value={1} tone="danger" detail="d" action={ACTION} />
+        <StatCard variant="attention" label="Warning" value={1} tone="warning" detail="w" action={{ label: 'Go', to: '/x' }} />
+      </>,
+    )
+
+    const danger = group('Danger 1')
+    expect(danger).toHaveAttribute('data-attention', 'error')
+    expect(danger).toHaveClass('bg-[var(--color-error-container)]', 'text-[var(--color-on-error-container)]')
+    const warning = group('Warning 1')
+    expect(warning).toHaveAttribute('data-attention', 'warning')
+    expect(warning).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]')
+    // The line and the link inherit that colour from the tile: no grey of their own on a tint.
+    for (const el of [within(danger).getByText('d'), within(danger).getByRole('link')]) expect(el.className).not.toMatch(/muted-foreground|text-\[var/)
+  })
+
+  it('stays on the card fill with the muted ink when its tone does not ask for attention', () => {
+    renderTall({ tone: 'info' })
+
+    expect(group()).not.toHaveAttribute('data-attention')
+    expect(group()).toHaveClass('bg-[var(--color-card)]', 'text-[var(--color-muted-foreground)]')
+  })
+
+  it('gives the link the whole tile as its hit area and its focus ring, with a --tap-min floor on its own box', () => {
+    renderTall()
+
+    const link = screen.getByRole('link', { name: 'Open overdue tasks' })
+    expect(group()).toHaveClass('relative')
+    expect(link).toHaveClass('after:absolute', 'after:inset-0', 'after:rounded-md', 'focus-visible:after:ring-2', 'focus-visible:after:ring-[var(--color-ring)]', 'min-h-[var(--tap-min)]', 'focus:outline-none')
+    // The ring token is the app's, never an alpha-suffixed one, and 44px is the token, never a number.
+    expect(link.className).not.toMatch(/ring-\[var\(--color-ring\)\]\/\d+/)
+    expect(link.className).not.toMatch(/(?:min-h|h)-\[44px\]/)
+  })
+
+  it('is padded from --section-gap on every side (the airier step), and never hard-codes a size', () => {
+    renderTall()
+
+    expect(group()).toHaveClass('p-[var(--section-gap)]', 'rounded-md', 'border', 'border-[var(--color-border)]')
+    expect(group().className).not.toMatch(/\bp-\d|\[\d+px\]/)
+  })
+
+  it('hides the link\'s arrow from assistive tech: the chevron is decoration', () => {
+    renderTall()
+
+    const icon = screen.getByRole('link', { name: 'Open overdue tasks' }).querySelector('svg')
+    expect(icon).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('drops the line when there is none, rather than leaving an empty row', () => {
+    renderTall({ detail: undefined })
+
+    expect(group().querySelectorAll('span')).toHaveLength(2) // the figure and the label
+  })
+
+  it('ignores a caption: the line takes that job', () => {
+    renderTall({ caption: 'All clear' })
+
+    expect(screen.queryByText('All clear')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the compact tile while it has no data, whatever else it is given: there is no count for the line to explain', () => {
+    renderCard(<StatCard variant="attention" label="Qualification Issues" value={0} tone="danger" detail="Expired." action={ACTION} to="/qualifications" loading />)
+
+    const link = screen.getByRole('link', { name: 'Qualification Issues Loading' })
+    expect(link).toHaveAttribute('href', '/qualifications')
+    expect(link).toHaveAttribute('aria-busy', 'true')
+    expect(link).not.toHaveAttribute('data-attention')
+    expect(screen.queryByText('Expired.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Open overdue tasks')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the compact tile after a failed request too', () => {
+    renderCard(<StatCard variant="attention" label="Overdue" value={3} tone="warning" detail="Late." action={ACTION} error />)
+
+    expect(screen.getByRole('group', { name: "Overdue Couldn't load" })).not.toHaveAttribute('data-attention')
+    expect(screen.queryByText('Late.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('is still the compact tile without an action, even with a line: the compact tile does not show one', () => {
+    renderCard(<StatCard variant="attention" label="Overdue" value={3} tone="danger" detail="Late." />)
+
+    expect(screen.queryByText('Late.')).not.toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Overdue 3' })).toHaveClass('px-2')
+  })
+
+  it('does nothing to the default variant: it ignores detail and action', () => {
+    renderCard(<StatCard label="Vehicles" value={3} detail="Late." action={ACTION} />)
+
+    expect(screen.queryByText('Late.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('passes className through to the tile (the band gives it h-full)', () => {
+    renderTall({ className: 'h-full' })
+
+    expect(group()).toHaveClass('h-full')
   })
 })

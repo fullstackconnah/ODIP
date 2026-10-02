@@ -16,7 +16,7 @@ vi.mock('@/api/hooks', () => ({
   useUpdateStaff: () => ({ mutate: vi.fn(), isPending: false }),
   useDashboard: () => ({ data: undefined, isLoading: false, isError: false }),
   useParticipantAlertsAggregate: () => ({ data: [], isLoading: false }),
-  usePendingLeaveCount: () => 0,
+  usePendingLeaveQueue: () => ({ count: 0, loading: false, error: false }),
 }))
 
 // Today is Thu 1 Oct 2026, 03:40 on the wall clock of whatever zone is set. The dates below are offsets from it.
@@ -152,8 +152,8 @@ describe('QualificationsPage and the Dashboard agree', () => {
     unmount()
 
     render(<MemoryRouter><DashboardPage /></MemoryRouter>)
-    const band = screen.getByRole('region', { name: 'Needs attention' })
-    const tile = [...band.firstElementChild!.children].find(el => el.querySelector('span')?.textContent === 'Qualification Issues') as HTMLElement
+    // With issues, Qualification Issues is a tall tile: a named group ("Qualification Issues 12") whose figure is the count.
+    const tile = within(screen.getByRole('region', { name: 'Needs attention' })).getByRole('group', { name: /^Qualification Issues \d+$/ })
 
     expect(listTotal).toBe(12)
     expect(tile.querySelector('.text-display')!.textContent).toBe(String(listTotal))

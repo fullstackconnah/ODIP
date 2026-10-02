@@ -1,13 +1,15 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
+import { BAND_GRID_CLASS, BAND_SPAN_CLASS, bandSpans } from './dashboard/bandLayout'
 import { TONE } from '@/lib/tone'
+import { restoreZone, setZone } from '@/test/timeZone'
 
-const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeaveCount, mockUseStaff } = vi.hoisted(() => ({
+const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeaveQueue, mockUseStaff } = vi.hoisted(() => ({
   mockUseParticipantAlertsAggregate: vi.fn(),
   mockUseDashboard: vi.fn(),
-  mockUsePendingLeaveCount: vi.fn(),
+  mockUsePendingLeaveQueue: vi.fn(),
   mockUseStaff: vi.fn(),
 }))
 
@@ -18,8 +20,11 @@ vi.mock('@/api/hooks', () => ({
   useSettings: () => ({ data: undefined }),
   useStaff: mockUseStaff,
   useParticipantAlertsAggregate: mockUseParticipantAlertsAggregate,
-  usePendingLeaveCount: mockUsePendingLeaveCount,
+  usePendingLeaveQueue: mockUsePendingLeaveQueue,
 }))
+
+// The pending leave queue as the page reads it: the count, and whether that count can be trusted yet (it is 0 while loading, and after a failure).
+const pendingLeave = (count: number, o: { loading?: boolean; error?: boolean } = {}) => ({ count, loading: false, error: false, ...o })
 
 function renderPage() {
   return render(
@@ -36,7 +41,8 @@ afterEach(() => {
 
 beforeEach(() => {
   mockUseDashboard.mockReturnValue({ data: undefined, isLoading: false, isError: false })
-  mockUsePendingLeaveCount.mockReturnValue(0)
+  mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+  mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0))
   mockUseStaff.mockReturnValue({ data: [] })
 })
 
@@ -224,14 +230,15 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     expect(screen.getByText('QSC report overdue')).toBeInTheDocument()
   })
 
-  it('shows an "All clear" tile and no list section when there are no Critical alerts', () => {
+  it('has no tile and no list section when there are no Critical alerts: the band names the item among the clear ones', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     renderPage()
 
-    // Only the metric tile's heading appears — the list section is omitted entirely when empty.
-    expect(screen.getAllByText('Critical Participant Alerts')).toHaveLength(1)
-    expect(screen.getAllByText('All clear').length).toBeGreaterThan(0)
+    // The list section is omitted entirely when empty, and a zero is not a tile.
+    expect(screen.queryByRole('heading', { name: 'Critical Participant Alerts' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /Critical Participant Alerts/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/^Checked and at zero:.*Critical Participant Alerts/)).toBeInTheDocument()
   })
 
   it('is hidden entirely for a SupportWorker (matches the backend Admin/Coordinator/SuperAdmin gate)', () => {
@@ -281,10 +288,12 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     renderPage()
 
     expect(screen.getByText('Critical Participant Alerts')).toBeInTheDocument()
-    // The unrelated Qualification Issues tile also renders "All clear" (its own zero-issue
-    // state, from the useStaff mock's empty list) — assert only the Critical Alerts tile's own
-    // copy is absent, by checking the count stays at that one pre-existing occurrence.
-    expect(screen.getAllByText('All clear')).toHaveLength(1)
+    // The rest of the band IS clear (the useStaff mock's empty list, the zeros of the summary), so it still says so, but it does not name the item whose
+    // request is in flight, and the band is not the all-clear field while that item is waiting.
+    const row = screen.getByText('All clear', { selector: 'span.font-semibold' }).closest('p') as HTMLElement
+    expect(row).toHaveTextContent('Qualification Issues')
+    expect(row).not.toHaveTextContent('Critical Participant Alerts')
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 })
 
@@ -292,30 +301,48 @@ describe('DashboardPage — Pending Leave card (I-6)', () => {
   it('links to the leave approvals queue with the pending count for a Coordinator', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
-    mockUsePendingLeaveCount.mockReturnValue(3)
+    mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(3))
     renderPage()
 
-    const link = screen.getByText('Pending Leave').closest('a')
-    expect(link).toHaveAttribute('href', '/rostering/leave')
-    expect(within(link as HTMLElement).getByText('3')).toBeInTheDocument()
+    const tile = screen.getByRole('group', { name: 'Pending Leave 3' })
+    expect(within(tile).getByRole('link', { name: 'Review leave requests' })).toHaveAttribute('href', '/rostering/leave')
+    expect(within(tile).getByText('3')).toBeInTheDocument()
   })
 
-  it('is hidden when there are no pending leave requests', () => {
+  it('is no tile when there are no pending leave requests: the band names it among the items that are clear', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
-    mockUsePendingLeaveCount.mockReturnValue(0)
+    mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0))
     renderPage()
 
-    expect(screen.queryByText('Pending Leave')).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /Pending Leave/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/^Checked and at zero:.*Pending Leave/)).toBeInTheDocument()
+  })
+
+  it('does not call the queue clear while it is still loading, or after it failed (its count is 0 in both)', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+
+    mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { loading: true }))
+    const { unmount } = renderPage()
+    expect(screen.getByRole('link', { name: 'Pending Leave Loading' })).toHaveAttribute('href', '/rostering/leave')
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
+    expect(screen.getByText('All clear', { selector: 'span.font-semibold' }).closest('p')).not.toHaveTextContent('Pending Leave')
+    unmount()
+
+    mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { error: true }))
+    renderPage()
+    expect(screen.getByRole('link', { name: "Pending Leave Couldn't load" })).toHaveAttribute('href', '/rostering/leave')
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 
   it('is hidden for a SupportWorker (matches the backend Admin/Coordinator/SuperAdmin gate)', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
-    mockUsePendingLeaveCount.mockReturnValue(3)
+    mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(3))
     renderPage()
 
-    expect(screen.queryByText('Pending Leave')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Pending Leave/)).not.toBeInTheDocument()
   })
 })
 
@@ -359,13 +386,10 @@ describe('DashboardPage — 44px touch targets', () => {
     }
   })
 
-  it('keeps the link text sizes: text-xs for the two panels, text-sm for the alerts heading row', () => {
+  it('sets all three at text-xs: the alerts list takes the panels\' own link size now, so the band stays the loudest thing on the page', () => {
     renderWithLists()
 
-    const [trips, tasks, alerts] = screen.getAllByRole('link', { name: 'View All' })
-    expect(trips).toHaveClass('text-xs')
-    expect(tasks).toHaveClass('text-xs')
-    expect(alerts).toHaveClass('text-sm')
+    for (const link of screen.getAllByRole('link', { name: 'View All' })) expect(link).toHaveClass('text-xs')
   })
 
   it('lifts each upcoming-trip row to --tap-min while it stays h-10 (40px) on a mouse', () => {
@@ -392,7 +416,7 @@ describe('DashboardPage — 44px touch targets', () => {
   })
 })
 
-// ── Bolder dashboard: display-step title with a summary line, and the needs-attention band ──
+// ── Bolder dashboard: a greeting and the date as the title, and the needs-attention band as the peak ──
 
 const summaryData = (overrides: Record<string, unknown> = {}) => ({
   data: {
@@ -405,7 +429,7 @@ const summaryData = (overrides: Record<string, unknown> = {}) => ({
   isLoading: false, isError: false,
 })
 
-const asRole = (role: string) => localStorage.setItem('odip_user', JSON.stringify({ role }))
+const asRole = (role: string, fullName?: string) => localStorage.setItem('odip_user', JSON.stringify(fullName ? { role, fullName } : { role }))
 
 const criticalAlertFor = (participantId: string, participantName: string) => ({
   participantId, participantName, isActive: true,
@@ -416,28 +440,188 @@ const criticalAlertFor = (participantId: string, participantName: string) => ({
 // One staff member whose first-aid certificate expired long ago: exactly one qualification issue, whatever today is.
 const staffWithOneIssue = { data: [{ isFirstAidQualified: true, firstAidExpiryDate: '2000-01-01' }] }
 
+// Two staff and three issues: the first one's First Aid has expired and his Driver Licence is flagged with no date; the second one's First Aid has expired too.
+const staffWithThreeIssues = {
+  data: [
+    { isFirstAidQualified: true, firstAidExpiryDate: '2000-01-01', isDriverEligible: true, driverLicenceExpiryDate: null },
+    { isFirstAidQualified: true, firstAidExpiryDate: '2000-01-01' },
+  ],
+}
+
+// Three Critical alerts on two participants: the tile counts alerts (3), the Participants table shows one flagged row per participant (2).
+const threeAlertsOnTwoParticipants = {
+  data: [
+    {
+      participantId: 'p1', participantName: 'Jamie Smith', isActive: true, criticalCount: 2, warningCount: 0, infoCount: 0,
+      alerts: [
+        { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details', linkTo: null },
+        { type: 'qsc-report-overdue', severity: 'Critical', message: 'QSC report has not been submitted', deepLinkTab: 'details', linkTo: '/incidents/i1' },
+      ],
+    },
+    criticalAlertFor('p2', 'Alex Rivera'),
+  ],
+  isLoading: false,
+}
+
 const band = () => screen.getByRole('region', { name: 'Needs attention' })
-const bandGrid = () => band().firstElementChild as HTMLElement
-const bandItems = () => [...bandGrid().children] as HTMLElement[]
-const labelOf = (el: HTMLElement) => el.querySelector('span')!.textContent
-const bandLabels = () => bandItems().map(labelOf)
-const itemFor = (label: string) => bandItems().find((el) => labelOf(el) === label) as HTMLElement
+const grid = () => band().querySelector('div.grid') as HTMLElement
+// The band's tiles, in order: each grid cell holds one tile, a named group or (a placeholder that has a page to go to) a link.
+const tiles = () => [...grid().children].map((cell) => cell.firstElementChild as HTMLElement)
+const labelOf = (tile: HTMLElement) => tile.querySelector('span:not(.text-display)')!.textContent
+const tileLabels = () => tiles().map(labelOf)
+const tileFor = (label: string) => tiles().find((tile) => labelOf(tile) === label) as HTMLElement
+const clearRow = () => screen.queryByText('All clear', { selector: 'span.font-semibold' })?.closest('p') ?? null
 
 const FULL_ORDER = [
   'Qualification Issues', 'Critical Participant Alerts', 'Overdue', 'Missing Accommodation',
   'Missing Vehicles', 'Missing Staff', 'Open Incidents', 'QSC Overdue', 'Pending Leave',
 ]
 
-describe('DashboardPage — header (display title and summary line)', () => {
-  it('titles the page at the display step and keeps it the one h1', () => {
+// Every item above zero, for a Coordinator: all nine are tiles, each with the count 3 (the staff list and the alerts give 3 issues and 3 alerts).
+function showAllNine() {
+  asRole('Coordinator')
+  mockUseStaff.mockReturnValue(staffWithThreeIssues)
+  mockUseParticipantAlertsAggregate.mockReturnValue(threeAlertsOnTwoParticipants)
+  mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(3))
+  mockUseDashboard.mockReturnValue(summaryData({
+    overdueTaskCount: 3, tripsMissingAccommodation: 3, tripsMissingVehicles: 3, tripsMissingStaff: 3, openIncidentCount: 3, qscOverdueCount: 3,
+  }))
+}
+
+describe('DashboardPage — header (a greeting, the date and the summary line)', () => {
+  // Pins "now" without stopping the timers (the clock is the only thing these tests move).
+  const pinTo = (when: Date) => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(when)
+  }
+  const heading = () => screen.getByRole('heading', { level: 1 })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    restoreZone()
+    document.title = ''
+  })
+
+  it('greets the signed-in user by first name and time of day with today\'s date after it, all in the one h1 at the display step', () => {
+    pinTo(new Date(2026, 9, 2, 9, 30))
+    asRole('Coordinator', 'Sarah Mitchell')
     renderPage()
 
     const h1s = screen.getAllByRole('heading', { level: 1 })
     expect(h1s).toHaveLength(1)
-    expect(h1s[0]).toHaveTextContent('Management Dashboard')
+    expect(h1s[0]).toHaveTextContent('Good morning, Sarah Friday 2 October')
     // The display step (28px, Plus Jakarta Sans 800), not the default 20px page title.
     expect(h1s[0]).toHaveClass('text-display')
     expect(h1s[0]).not.toHaveClass('text-xl')
+    // The old title is gone from the page; it names the tab instead.
+    expect(screen.queryByText('Management Dashboard')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    [0, 5, 'Good morning'],
+    [11, 59, 'Good morning'],
+    [12, 0, 'Good afternoon'],
+    [17, 59, 'Good afternoon'],
+    [18, 0, 'Good evening'],
+    [23, 59, 'Good evening'],
+  ])('says "%s:%s" is "%s"', (hour, minute, expected) => {
+    pinTo(new Date(2026, 9, 2, hour, minute))
+    asRole('Coordinator', 'Sarah Mitchell')
+    renderPage()
+
+    expect(heading()).toHaveTextContent(`${expected}, Sarah`)
+  })
+
+  it('uses the first name only: the rest of the full name is not in the heading', () => {
+    pinTo(new Date(2026, 9, 2, 14, 0))
+    asRole('Admin', 'Callum Radford')
+    renderPage()
+
+    expect(heading()).toHaveTextContent('Good afternoon, Callum Friday 2 October')
+    expect(heading()).not.toHaveTextContent('Radford')
+  })
+
+  it('greets without a comma or an invented name when the sign-in carries none', () => {
+    pinTo(new Date(2026, 9, 2, 9, 30))
+    asRole('Coordinator')
+    renderPage()
+
+    expect(heading()).toHaveTextContent('Good morning Friday 2 October')
+    expect(heading().textContent).not.toMatch(/,/)
+  })
+
+  // 2026-10-01 23:30 UTC is Friday 9:30 am in Sydney (UTC+10) and still Thursday evening in UTC: the heading follows the wall clock the viewer is looking at,
+  // the greeting and the date together, never the UTC date (still yesterday until 10:00 or 11:00 in Sydney).
+  it('reads the greeting and the date from the viewer\'s wall clock, never the UTC date', () => {
+    pinTo(new Date('2026-10-01T23:30:00Z'))
+    asRole('Coordinator', 'Sarah Mitchell')
+
+    if (!setZone('Australia/Sydney')) return // this runtime cannot switch zones
+    const sydney = renderPage()
+    expect(heading()).toHaveTextContent('Good morning, Sarah Friday 2 October')
+    expect(document.querySelector('time')).toHaveAttribute('datetime', '2026-10-02')
+    sydney.unmount()
+
+    setZone('UTC')
+    renderPage()
+    expect(heading()).toHaveTextContent('Good evening, Sarah Thursday 1 October')
+    expect(document.querySelector('time')).toHaveAttribute('datetime', '2026-10-01')
+  })
+
+  it('holds the date across the Sydney clock change (Sunday 4 October, 02:00 becomes 03:00)', () => {
+    if (!setZone('Australia/Sydney')) return
+    asRole('Coordinator', 'Sarah Mitchell')
+
+    pinTo(new Date('2026-10-03T15:59:00Z')) // 01:59 AEST
+    const before = renderPage()
+    expect(heading()).toHaveTextContent('Good morning, Sarah Sunday 4 October')
+    before.unmount()
+
+    pinTo(new Date('2026-10-03T16:30:00Z')) // 03:30 AEDT, the same morning
+    renderPage()
+    expect(heading()).toHaveTextContent('Good morning, Sarah Sunday 4 October')
+  })
+
+  it('sets the date in a time element in the muted ink at the same size, after the greeting', () => {
+    pinTo(new Date(2026, 9, 2, 9, 30))
+    asRole('Coordinator', 'Sarah Mitchell')
+    renderPage()
+
+    const time = document.querySelector('time') as HTMLElement
+    expect(time).toHaveTextContent('Friday 2 October')
+    expect(time).toHaveAttribute('datetime', '2026-10-02')
+    expect(heading()).toContainElement(time)
+    expect(time.parentElement).toHaveClass('text-[var(--color-muted-foreground)]')
+    expect(time.parentElement!.className).not.toMatch(/\btext-(?:xs|sm|base|lg|xl|[2-9]xl|display)\b/)
+    expect(screen.getByText('Good morning, Sarah').compareDocumentPosition(time) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('keeps the tab named "Management Dashboard" while the heading is the greeting', () => {
+    pinTo(new Date(2026, 9, 2, 9, 30))
+    asRole('Coordinator', 'Sarah Mitchell')
+    renderPage()
+
+    expect(document.title).toBe('Management Dashboard — Odip')
+    expect(heading()).toHaveTextContent('Good morning, Sarah')
+  })
+
+  it('moves on with the clock: a page left open since the morning says good afternoon without a reload, and the tab name does not move', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 9, 2, 11, 59, 30))
+    asRole('Coordinator', 'Sarah Mitchell')
+    renderPage()
+    expect(heading()).toHaveTextContent('Good morning, Sarah Friday 2 October')
+
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    expect(heading()).toHaveTextContent('Good afternoon, Sarah Friday 2 October')
+    expect(document.title).toBe('Management Dashboard — Odip')
+
+    act(() => {
+      vi.advanceTimersByTime(12 * 60 * 60_000) // past midnight
+    })
+    expect(heading()).toHaveTextContent('Good morning, Sarah Saturday 3 October')
   })
 
   it('replaces the generic subtitle with one quiet line of the everyday counts, in the meta row, joined by middots', () => {
@@ -496,45 +680,55 @@ describe('DashboardPage — loading and error keep their behaviour', () => {
   })
 })
 
-describe('DashboardPage — needs-attention band: order and role gating', () => {
-  it('is one named region holding every item in the fixed order for a Coordinator with leave waiting', () => {
-    asRole('Coordinator')
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
-    mockUsePendingLeaveCount.mockReturnValue(3)
+describe('DashboardPage — needs-attention band: a tile for what needs you', () => {
+  it('holds every item in its fixed order for a Coordinator with all nine above zero: one named region', () => {
+    showAllNine()
     renderPage()
 
-    expect(bandLabels()).toEqual(FULL_ORDER)
+    expect(tileLabels()).toEqual(FULL_ORDER)
     // The band is the only region: one landmark, named by what it is for.
     expect(screen.getAllByRole('region')).toHaveLength(1)
+    expect(clearRow()).toBeNull()
   })
 
-  it('keeps every item in its place at zero (only Pending Leave, which was never fixed, drops out)', () => {
+  it('makes a tile of each item above zero, in that order, and of nothing else: the zero is named in the All clear row instead', () => {
     asRole('Coordinator')
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUseStaff.mockReturnValue(staffWithOneIssue)
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false })
+    mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(2))
+    mockUseDashboard.mockReturnValue(summaryData({
+      overdueTaskCount: 2, tripsMissingAccommodation: 1, tripsMissingVehicles: 0, tripsMissingStaff: 4, openIncidentCount: 3, qscOverdueCount: 1,
+    }))
     renderPage()
 
-    expect(bandLabels()).toEqual(FULL_ORDER.filter((label) => label !== 'Pending Leave'))
-    for (const item of bandItems()) expect(within(item).getByText('0')).toBeInTheDocument()
+    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => label !== 'Missing Vehicles'))
+    expect(screen.queryByRole('group', { name: /Missing Vehicles/ })).not.toBeInTheDocument()
+    expect(clearRow()).toHaveTextContent('All clear on Missing Vehicles')
   })
 
-  it('leaves out the alerts item, Pending Leave and Qualification Issues for a role without canViewAlerts / canApproveLeave / the Qualifications page, even with leave waiting', () => {
+  it('leaves out the alerts item, Pending Leave and Qualification Issues for a role without canViewAlerts / canApproveLeave / the Qualifications page', () => {
     asRole('SupportWorker')
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
-    mockUsePendingLeaveCount.mockReturnValue(3)
+    mockUseStaff.mockReturnValue(staffWithThreeIssues)
+    mockUseParticipantAlertsAggregate.mockReturnValue(threeAlertsOnTwoParticipants)
+    mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(3))
+    mockUseDashboard.mockReturnValue(summaryData({
+      overdueTaskCount: 3, tripsMissingAccommodation: 3, tripsMissingVehicles: 3, tripsMissingStaff: 3, openIncidentCount: 3, qscOverdueCount: 3,
+    }))
     renderPage()
 
-    expect(bandLabels()).toEqual(
-      FULL_ORDER.filter((label) => !['Critical Participant Alerts', 'Pending Leave', 'Qualification Issues'].includes(label)),
-    )
-    expect(screen.queryByText('Critical Participant Alerts')).not.toBeInTheDocument()
-    expect(screen.queryByText('Pending Leave')).not.toBeInTheDocument()
+    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => !['Critical Participant Alerts', 'Pending Leave', 'Qualification Issues'].includes(label)))
+    expect(screen.queryByText(/Critical Participant Alerts/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Pending Leave/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Qualification Issues/)).not.toBeInTheDocument()
   })
 
   it('shows Qualification Issues, linked to the Qualifications page, to every role that can open that page, and to none that cannot', () => {
+    mockUseStaff.mockReturnValue(staffWithOneIssue)
     for (const role of ['SuperAdmin', 'Admin', 'Coordinator', 'ReadOnly']) {
       asRole(role)
       const { unmount } = renderPage()
-      expect(itemFor('Qualification Issues'), role).toHaveAttribute('href', '/qualifications')
+      const tile = screen.getByRole('group', { name: 'Qualification Issues 1' })
+      expect(within(tile).getByRole('link', { name: 'Review qualifications' }), role).toHaveAttribute('href', '/qualifications')
       unmount()
       localStorage.clear()
     }
@@ -546,174 +740,253 @@ describe('DashboardPage — needs-attention band: order and role gating', () => 
   })
 
   it('spells the accommodation item out (the KPI row abbreviated it to fit a 136px tile)', () => {
+    mockUseDashboard.mockReturnValue(summaryData({ tripsMissingAccommodation: 1 }))
     renderPage()
 
     expect(screen.getByText('Missing Accommodation')).toBeInTheDocument()
     expect(screen.queryByText('Missing Accomm.')).not.toBeInTheDocument()
   })
-})
 
-describe('DashboardPage — needs-attention band: tint, zero and figures', () => {
-  it('tints a non-zero item by its tone family and leaves a zero item quiet with a muted figure', () => {
+  it('carries the same numbers as before: each figure is the count its KPI tile showed, at the display step in tabular figures', () => {
     asRole('Coordinator')
-    mockUseStaff.mockReturnValue(staffWithOneIssue)
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false })
-    mockUsePendingLeaveCount.mockReturnValue(2)
-    mockUseDashboard.mockReturnValue(summaryData({
-      overdueTaskCount: 2, tripsMissingAccommodation: 1, tripsMissingVehicles: 0, tripsMissingStaff: 4, openIncidentCount: 3, qscOverdueCount: 1,
-    }))
-    renderPage()
-
-    // danger -> the error container; warning -> the warning container (the trip glance strip's own tints).
-    const danger = ['Qualification Issues', 'Critical Participant Alerts', 'Overdue', 'QSC Overdue']
-    const warning = ['Missing Accommodation', 'Missing Staff', 'Open Incidents', 'Pending Leave']
-    for (const label of danger) {
-      expect(itemFor(label)).toHaveAttribute('data-attention', 'error')
-      expect(itemFor(label)).toHaveClass('bg-[var(--color-error-container)]', 'text-[var(--color-on-error-container)]')
-    }
-    for (const label of warning) {
-      expect(itemFor(label)).toHaveAttribute('data-attention', 'warning')
-      expect(itemFor(label)).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]')
-    }
-    // The one zero is untinted: card fill, muted figure and label.
-    const zero = itemFor('Missing Vehicles')
-    expect(zero).not.toHaveAttribute('data-attention')
-    expect(zero).toHaveClass('bg-[var(--color-card)]', 'text-[var(--color-muted-foreground)]')
-    expect(within(zero).getByText('0')).toBeInTheDocument()
-    expect(itemFor('Overdue')).toHaveTextContent('2')
-    expect(itemFor('Missing Staff')).toHaveTextContent('4')
-  })
-
-  it('tints nothing when every item is zero', () => {
-    asRole('Coordinator')
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
-    renderPage()
-
-    for (const item of bandItems()) {
-      expect(item).not.toHaveAttribute('data-attention')
-      expect(item).toHaveClass('bg-[var(--color-card)]')
-    }
-    expect(band().innerHTML).not.toMatch(/-container\)\]/)
-  })
-
-  it('sets every figure at the display step, in tabular figures', () => {
-    asRole('Coordinator')
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
-    renderPage()
-
-    const figures = bandItems().map((item) => item.querySelector('.text-display'))
-    expect(figures.every((figure) => figure !== null)).toBe(true)
-    for (const figure of figures) expect(figure).toHaveClass('tabular-nums')
-  })
-
-  it('carries the same numbers as before: each figure is the count its KPI tile showed', () => {
-    asRole('Coordinator')
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     mockUseDashboard.mockReturnValue(summaryData({
       overdueTaskCount: 7, tripsMissingAccommodation: 6, tripsMissingVehicles: 5, tripsMissingStaff: 4, openIncidentCount: 3, qscOverdueCount: 2,
     }))
     renderPage()
 
-    const figures = Object.fromEntries(bandItems().map((item) => [labelOf(item), item.querySelector('.text-display')!.textContent]))
-    expect(figures).toMatchObject({
+    const figures = Object.fromEntries(tiles().map((tile) => [labelOf(tile), tile.querySelector('.text-display')]))
+    expect(Object.fromEntries(Object.entries(figures).map(([label, el]) => [label, el!.textContent]))).toEqual({
       Overdue: '7', 'Missing Accommodation': '6', 'Missing Vehicles': '5', 'Missing Staff': '4', 'Open Incidents': '3', 'QSC Overdue': '2',
     })
+    for (const el of Object.values(figures)) expect(el).toHaveClass('text-display', 'tabular-nums')
+  })
+
+  it('counts the Critical alerts and the participants they belong to, and the credential issues and the staff they belong to', () => {
+    showAllNine()
+    renderPage()
+
+    expect(within(tileFor('Critical Participant Alerts')).getByText('3')).toBeInTheDocument()
+    expect(tileFor('Critical Participant Alerts')).toHaveTextContent('Critical alerts across 2 participants.')
+    expect(within(tileFor('Qualification Issues')).getByText('3')).toBeInTheDocument()
+    expect(tileFor('Qualification Issues')).toHaveTextContent('Expired, undated or due within 30 days, across 2 staff members.')
+  })
+
+  it('keeps the inactive participant\'s Critical alert out of the tile count, as it is out of the list', () => {
+    asRole('Coordinator')
+    mockUseParticipantAlertsAggregate.mockReturnValue({
+      data: [criticalAlertFor('p1', 'Jamie Smith'), { ...criticalAlertFor('p2', 'Churned Client'), isActive: false }],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(tileFor('Critical Participant Alerts')).toHaveTextContent('Critical alerts across 1 participant.')
+    expect(within(tileFor('Critical Participant Alerts')).getByText('1')).toBeInTheDocument()
   })
 })
 
-describe('DashboardPage — needs-attention band: All clear and loading', () => {
-  it('says "All clear" on Qualification Issues and Critical Participant Alerts at zero, as the lime positive chip, and nowhere else', () => {
-    asRole('Coordinator')
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+describe('DashboardPage — needs-attention band: each tile says what it means and where it is fixed', () => {
+  // [label, the honest line at 3, the link's text, where it goes]. The Missing counts are of the trips the server calls upcoming (start today or within 60 days).
+  const EXPECTED = [
+    ['Qualification Issues', 'Expired, undated or due within 30 days, across 2 staff members.', 'Review qualifications', '/qualifications'],
+    ['Critical Participant Alerts', 'Critical alerts across 2 participants.', 'Review participants', '/participants'],
+    ['Overdue', 'Tasks past their due date and still open.', 'Open overdue tasks', '/tasks?status=Overdue'],
+    ['Missing Accommodation', 'Trips start within 60 days with no accommodation reserved.', 'Open trips', '/trips'],
+    ['Missing Vehicles', 'Trips start within 60 days with no vehicle assigned.', 'Assign vehicles', '/schedule'],
+    ['Missing Staff', 'Trips start within 60 days with no staff assigned.', 'Assign staff', '/schedule'],
+    ['Open Incidents', 'Incidents not yet resolved or closed.', 'Open incidents', '/incidents'],
+    ['QSC Overdue', 'Reportable incidents with no QSC report after 24 hours.', 'Review QSC reports', '/incidents?qsc=overdue'],
+    ['Pending Leave', 'Leave and unavailability requests waiting for a decision.', 'Review leave requests', '/rostering/leave'],
+  ] as const
+
+  it.each(EXPECTED)('%s: its figure and label, the line "%s", and a "%s" link to %s', (label, line, linkText, href) => {
+    showAllNine()
     renderPage()
 
-    const clear = screen.getAllByText('All clear')
-    expect(clear).toHaveLength(2)
-    for (const chip of clear) expect(chip).toHaveClass('rounded-full', 'bg-[var(--color-primary-fixed)]')
-    expect(within(itemFor('Qualification Issues')).getByText('All clear')).toBeInTheDocument()
-    expect(within(itemFor('Critical Participant Alerts')).getByText('All clear')).toBeInTheDocument()
+    const tile = screen.getByRole('group', { name: `${label} 3` })
+    expect(within(tile).getByText(label)).toBeInTheDocument()
+    expect(within(tile).getByText('3')).toHaveClass('text-display')
+    expect(within(tile).getByText(line)).toBeInTheDocument()
+    const links = within(tile).getAllByRole('link')
+    expect(links).toHaveLength(1)
+    expect(links[0]).toHaveAccessibleName(linkText)
+    expect(links[0]).toHaveAttribute('href', href)
   })
 
-  it('drops "All clear" once an item is non-zero', () => {
+  it('opens every action link to a route that exists today, one link per tile, each with a name of its own', () => {
+    showAllNine()
+    renderPage()
+
+    const links = within(band()).getAllByRole('link')
+    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual(EXPECTED.map(([, , text, href]) => [text, href]))
+    // Every name is there and none is shared, so a list of the page's links is a list of what each does.
+    const names = links.map((a) => a.textContent)
+    expect(names.every((name) => name && name.length > 0)).toBe(true)
+    expect(new Set(names).size).toBe(names.length)
+  })
+
+  it('names the Schedule for vehicles and staff, where trips are assigned them, and the Trips list for accommodation, which is chosen on the trip', () => {
+    showAllNine()
+    renderPage()
+
+    expect(within(tileFor('Missing Vehicles')).getByRole('link')).toHaveAttribute('href', '/schedule')
+    expect(within(tileFor('Missing Staff')).getByRole('link')).toHaveAttribute('href', '/schedule')
+    expect(within(tileFor('Missing Accommodation')).getByRole('link')).toHaveAttribute('href', '/trips')
+  })
+
+  it('opens QSC Overdue on the Incidents list already filtered to it, and Overdue on the Tasks list filtered to Overdue', () => {
+    showAllNine()
+    renderPage()
+
+    expect(within(tileFor('QSC Overdue')).getByRole('link')).toHaveAttribute('href', '/incidents?qsc=overdue')
+    expect(within(tileFor('Overdue')).getByRole('link')).toHaveAttribute('href', '/tasks?status=Overdue')
+  })
+
+  it('keeps a count of one in the singular: "Trip starts", "1 staff member", "1 participant"', () => {
     asRole('Coordinator')
     mockUseStaff.mockReturnValue(staffWithOneIssue)
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false })
+    mockUseDashboard.mockReturnValue(summaryData({ tripsMissingAccommodation: 1, tripsMissingVehicles: 1, tripsMissingStaff: 1 }))
+    renderPage()
+
+    expect(tileFor('Missing Accommodation')).toHaveTextContent('Trip starts within 60 days with no accommodation reserved.')
+    expect(tileFor('Missing Vehicles')).toHaveTextContent('Trip starts within 60 days with no vehicle assigned.')
+    expect(tileFor('Missing Staff')).toHaveTextContent('Trip starts within 60 days with no staff assigned.')
+    expect(tileFor('Qualification Issues')).toHaveTextContent('across 1 staff member.')
+    expect(tileFor('Critical Participant Alerts')).toHaveTextContent('across 1 participant.')
+  })
+
+  it('states the warning window the Qualifications page uses, not a number of its own', () => {
+    asRole('Coordinator')
+    mockUseStaff.mockReturnValue(staffWithOneIssue)
+    renderPage()
+
+    expect(tileFor('Qualification Issues')).toHaveTextContent('due within 30 days')
+  })
+})
+
+describe('DashboardPage — needs-attention band: tint and the All clear states', () => {
+  it('tints a tile by its tone family: danger takes the error container, warning the warning container, everything in the on-container colour', () => {
+    showAllNine()
+    renderPage()
+
+    // danger -> the error container; warning -> the warning container (the trip glance strip's own tints).
+    const danger = ['Qualification Issues', 'Critical Participant Alerts', 'Overdue', 'QSC Overdue']
+    const warning = ['Missing Accommodation', 'Missing Vehicles', 'Missing Staff', 'Open Incidents', 'Pending Leave']
+    for (const label of danger) {
+      expect(tileFor(label)).toHaveAttribute('data-attention', 'error')
+      expect(tileFor(label)).toHaveClass('bg-[var(--color-error-container)]', 'text-[var(--color-on-error-container)]')
+    }
+    for (const label of warning) {
+      expect(tileFor(label)).toHaveAttribute('data-attention', 'warning')
+      expect(tileFor(label)).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]')
+    }
+  })
+
+  it('names the items at zero in ONE All clear row on Pale Sprout, after the tiles, and gives them no tile', () => {
+    asRole('Coordinator')
+    mockUseDashboard.mockReturnValue(summaryData({ overdueTaskCount: 2 }))
+    renderPage()
+
+    expect(tileLabels()).toEqual(['Overdue'])
+    const row = clearRow()!
+    expect(row).toHaveTextContent(
+      'All clear on Qualification Issues, Critical Participant Alerts, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents, QSC Overdue and Pending Leave',
+    )
+    expect(row).toHaveClass('bg-[var(--color-primary-fixed)]', 'text-[var(--color-on-primary-fixed)]')
+    expect(screen.getAllByText('All clear')).toHaveLength(1)
+    expect(tileFor('Overdue').compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('names only the items the role has in the All clear row', () => {
+    asRole('ReadOnly')
+    mockUseDashboard.mockReturnValue(summaryData({ overdueTaskCount: 2 }))
+    renderPage()
+
+    expect(clearRow()).toHaveTextContent(
+      'All clear on Qualification Issues, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents and QSC Overdue',
+    )
+    expect(clearRow()).not.toHaveTextContent('Critical Participant Alerts')
+    expect(clearRow()).not.toHaveTextContent('Pending Leave')
+  })
+
+  it('becomes one full-width Pale Sprout field when everything is zero: "All clear. Nothing needs you right now."', () => {
+    asRole('Coordinator')
+    renderPage()
+
+    const field = screen.getByText('All clear. Nothing needs you right now.').closest('div.rounded-md') as HTMLElement
+    expect(field).toHaveClass('bg-[var(--color-primary-fixed)]', 'text-[var(--color-on-primary-fixed)]')
+    expect(band().firstElementChild).toBe(field)
+    // The field IS the band: no tile, no link, no second row.
+    expect(band().querySelector('div.grid')).toBeNull()
+    expect(within(band()).queryAllByRole('link')).toHaveLength(0)
+    expect(within(band()).queryAllByRole('group')).toHaveLength(0)
+    expect(clearRow()).toBeNull()
+    // It names everything it checked, so the claim can be audited.
+    expect(screen.getByText(
+      'Checked and at zero: Qualification Issues, Critical Participant Alerts, Overdue, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents, QSC Overdue and Pending Leave.',
+    )).toBeInTheDocument()
+  })
+
+  it('stays one field, naming what it checked, for a role with fewer items', () => {
+    asRole('ReadOnly')
+    renderPage()
+
+    expect(screen.getByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
+    expect(screen.getByText('Checked and at zero: Qualification Issues, Overdue, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents and QSC Overdue.')).toBeInTheDocument()
+  })
+
+  it('tints nothing when every item is zero: no container fill but the one Pale Sprout field', () => {
+    asRole('Coordinator')
+    renderPage()
+
+    expect(band().innerHTML).not.toMatch(/-container\)\]/)
+    expect(band().querySelectorAll('[data-attention]')).toHaveLength(0)
+  })
+
+  it('goes back to tiles the moment something is above zero: the field is not sticky', () => {
+    asRole('Coordinator')
+    const { rerender } = renderPage()
+    expect(screen.getByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
+
+    mockUseDashboard.mockReturnValue(summaryData({ qscOverdueCount: 1 }))
+    rerender(<MemoryRouter><DashboardPage /></MemoryRouter>)
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
+    expect(tileLabels()).toEqual(['QSC Overdue'])
+    expect(clearRow()).toHaveTextContent('All clear on Qualification Issues')
+  })
+
+  it('draws no All clear row, and no Pale Sprout at all, while every item needs you', () => {
+    showAllNine()
     renderPage()
 
     expect(screen.queryByText('All clear')).not.toBeInTheDocument()
-  })
-
-  it('shows an en dash, not a definite 0, while the alerts request is in flight: busy, untinted, no "All clear"', () => {
-    asRole('Coordinator')
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isLoading: true })
-    renderPage()
-
-    const item = itemFor('Critical Participant Alerts')
-    expect(item).toHaveAttribute('aria-busy', 'true')
-    expect(item).not.toHaveAttribute('data-attention')
-    expect(within(item).getByText('–')).toHaveClass('text-display', 'tabular-nums')
-    expect(within(item).queryByText('0')).not.toBeInTheDocument()
-    expect(within(item).queryByText('All clear')).not.toBeInTheDocument()
-    expect(item).toHaveClass('bg-[var(--color-card)]', 'text-[var(--color-muted-foreground)]')
-    // Qualification Issues keeps its own zero state ("All clear" from the staff list), so exactly one remains.
-    expect(screen.getAllByText('All clear')).toHaveLength(1)
-    expect(within(itemFor('Qualification Issues')).getByText('All clear')).toBeInTheDocument()
-    // Nothing else in the band is busy.
-    expect(bandItems().filter((el) => el.getAttribute('aria-busy') === 'true')).toEqual([item])
-  })
-
-  it('settles when the alerts arrive: zero becomes a quiet 0 with "All clear", non-zero becomes the danger treatment', () => {
-    asRole('Coordinator')
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isLoading: true })
-    const { rerender } = renderPage()
-    expect(itemFor('Critical Participant Alerts')).toHaveAttribute('aria-busy', 'true')
-
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
-    rerender(<MemoryRouter><DashboardPage /></MemoryRouter>)
-    let item = itemFor('Critical Participant Alerts')
-    expect(item).not.toHaveAttribute('aria-busy')
-    expect(within(item).getByText('0')).toBeInTheDocument()
-    expect(within(item).getByText('All clear')).toBeInTheDocument()
-    expect(item).not.toHaveAttribute('data-attention')
-
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false })
-    rerender(<MemoryRouter><DashboardPage /></MemoryRouter>)
-    item = itemFor('Critical Participant Alerts')
-    expect(item).not.toHaveAttribute('aria-busy')
-    expect(item).toHaveAttribute('data-attention', 'error')
-    expect(within(item).getByText('1')).toBeInTheDocument()
-    expect(within(item).queryByText('All clear')).not.toBeInTheDocument()
-  })
-
-  it('never shows the loading placeholder to a role that cannot view alerts (the item, and the request, do not exist)', () => {
-    asRole('SupportWorker')
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isLoading: false })
-    renderPage()
-
-    expect(screen.queryByText('–')).not.toBeInTheDocument()
-    expect(band().querySelector('[aria-busy]')).toBeNull()
+    expect(band().innerHTML).not.toMatch(/primary-fixed/)
   })
 })
 
 describe('DashboardPage — needs-attention band: no "All clear" without data', () => {
-  const qualification = () => itemFor('Qualification Issues')
-  const alerts = () => itemFor('Critical Participant Alerts')
+  const qualification = () => tileFor('Qualification Issues')
+  const alerts = () => tileFor('Critical Participant Alerts')
+  const leave = () => tileFor('Pending Leave')
   const inFlight = { data: undefined, isLoading: true, isError: false }
   const failed = { data: undefined, isLoading: false, isError: true }
 
-  // The shared contract of a placeholder: an en dash where the number would be, not tinted, no caption, no number.
-  const expectPlaceholder = (item: HTMLElement, { busy, say }: { busy: boolean; say: string }) => {
-    expect(within(item).getByText('\u2013')).toHaveClass('text-display', 'tabular-nums')
-    expect(within(item).getByText(say)).toHaveClass('sr-only')
-    if (busy) expect(item).toHaveAttribute('aria-busy', 'true')
-    else expect(item).not.toHaveAttribute('aria-busy')
-    expect(item).not.toHaveAttribute('data-attention')
-    expect(item).toHaveClass('bg-[var(--color-card)]', 'text-[var(--color-muted-foreground)]')
-    expect(within(item).queryByText('0')).not.toBeInTheDocument()
-    expect(within(item).queryByText('All clear')).not.toBeInTheDocument()
+  // The shared contract of a placeholder: an en dash where the number would be, not tinted, no line, no action, no number.
+  const expectPlaceholder = (tile: HTMLElement, { busy, say }: { busy: boolean; say: string }) => {
+    expect(within(tile).getByText('–')).toHaveClass('text-display', 'tabular-nums')
+    expect(within(tile).getByText(say)).toHaveClass('sr-only')
+    if (busy) expect(tile).toHaveAttribute('aria-busy', 'true')
+    else expect(tile).not.toHaveAttribute('aria-busy')
+    expect(tile).not.toHaveAttribute('data-attention')
+    expect(tile).toHaveClass('bg-[var(--color-card)]', 'text-[var(--color-muted-foreground)]')
+    expect(within(tile).queryByText('0')).not.toBeInTheDocument()
+    expect(within(tile).queryByText('All clear')).not.toBeInTheDocument()
+    // No line saying what a count means (there is no count), and nowhere to "fix" it from the tile but the page it counts.
+    expect(tile.querySelectorAll('span.text-\\[13px\\]')).toHaveLength(1) // only the label
   }
+  const clearNames = () => clearRow()?.textContent ?? ''
 
-  it('shows an en dash on Qualification Issues while the staff list loads: busy, untinted, no "All clear"', () => {
+  it('shows an en dash on Qualification Issues while the staff list loads: busy, untinted, a link to the page, no "All clear"', () => {
     asRole('Coordinator')
     mockUseStaff.mockReturnValue(inFlight)
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
@@ -721,9 +994,10 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
 
     expectPlaceholder(qualification(), { busy: true, say: 'Loading' })
     expect(within(band()).getByRole('link', { name: 'Qualification Issues Loading' })).toHaveAttribute('href', '/qualifications')
-    // The alerts item HAS its data (none), so it keeps its own "All clear": exactly one remains.
-    expect(screen.getAllByText('All clear')).toHaveLength(1)
-    expect(within(alerts()).getByText('All clear')).toBeInTheDocument()
+    // The rest of the band HAS its data, so it says so, but not for the item that is waiting, and the band is not the all-clear field.
+    expect(clearNames()).not.toMatch(/Qualification Issues/)
+    expect(clearNames()).toMatch(/Critical Participant Alerts/)
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 
   it('shows an en dash and "Couldn\'t load" on Qualification Issues when the staff request fails: not busy, no "All clear"', () => {
@@ -734,8 +1008,8 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
 
     expectPlaceholder(qualification(), { busy: false, say: "Couldn't load" })
     expect(within(band()).getByRole('link', { name: "Qualification Issues Couldn't load" })).toHaveAttribute('href', '/qualifications')
-    expect(screen.getAllByText('All clear')).toHaveLength(1)
-    expect(within(alerts()).getByText('All clear')).toBeInTheDocument()
+    expect(clearNames()).not.toMatch(/Qualification Issues/)
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 
   it('shows an en dash and "Couldn\'t load" on Critical Participant Alerts when the alerts request fails: not busy, no "All clear"', () => {
@@ -745,35 +1019,66 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
 
     expectPlaceholder(alerts(), { busy: false, say: "Couldn't load" })
     expect(within(band()).getByRole('link', { name: "Critical Participant Alerts Couldn't load" })).toHaveAttribute('href', '/participants')
-    // Qualification Issues has its data (no issues), so it keeps its own "All clear": exactly one remains.
-    expect(screen.getAllByText('All clear')).toHaveLength(1)
-    expect(within(qualification()).getByText('All clear')).toBeInTheDocument()
+    expect(clearNames()).not.toMatch(/Critical Participant Alerts/)
+    expect(clearNames()).toMatch(/Qualification Issues/)
     // No participant alerts section is invented from a failed request.
-    expect(screen.getAllByText('Critical Participant Alerts')).toHaveLength(1)
+    expect(screen.queryByRole('heading', { name: 'Critical Participant Alerts' })).not.toBeInTheDocument()
   })
 
-  it('claims "All clear" nowhere while both requests are in flight', () => {
+  it('shows an en dash on Pending Leave while the queue loads or after it failed, for a role that approves leave: never a clear queue', () => {
+    asRole('Coordinator')
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+
+    mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { loading: true }))
+    const first = renderPage()
+    expectPlaceholder(leave(), { busy: true, say: 'Loading' })
+    expect(within(band()).getByRole('link', { name: 'Pending Leave Loading' })).toHaveAttribute('href', '/rostering/leave')
+    expect(clearNames()).not.toMatch(/Pending Leave/)
+    first.unmount()
+
+    mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { error: true }))
+    renderPage()
+    expectPlaceholder(leave(), { busy: false, say: "Couldn't load" })
+    expect(within(band()).getByRole('link', { name: "Pending Leave Couldn't load" })).toHaveAttribute('href', '/rostering/leave')
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
+  })
+
+  it('shows the placeholder in the item\'s own place among the tiles, so the rows do not jump when its data arrives', () => {
+    asRole('Coordinator')
+    mockUseStaff.mockReturnValue(inFlight)
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUseDashboard.mockReturnValue(summaryData({ overdueTaskCount: 2, tripsMissingStaff: 1 }))
+    renderPage()
+
+    expect(tileLabels()).toEqual(['Qualification Issues', 'Overdue', 'Missing Staff'])
+  })
+
+  it('claims "All clear" for none of the items while their requests are all in flight', () => {
     asRole('Coordinator')
     mockUseStaff.mockReturnValue(inFlight)
     mockUseParticipantAlertsAggregate.mockReturnValue(inFlight)
+    mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { loading: true }))
     renderPage()
 
-    expect(screen.queryByText('All clear')).not.toBeInTheDocument()
+    // The items the summary answered are clear, and the row names only those: not one of the three that are waiting.
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
+    expect(clearNames()).toBe('All clear on Overdue, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents and QSC Overdue')
     expectPlaceholder(qualification(), { busy: true, say: 'Loading' })
     expectPlaceholder(alerts(), { busy: true, say: 'Loading' })
-    expect(bandItems().filter((el) => el.getAttribute('aria-busy') === 'true')).toHaveLength(2)
+    expectPlaceholder(leave(), { busy: true, say: 'Loading' })
+    expect(tiles().filter((tile) => tile.getAttribute('aria-busy') === 'true')).toHaveLength(3)
   })
 
-  it('claims "All clear" nowhere while both requests have failed, and says so twice', () => {
+  it('claims "All clear" for none of the items whose requests have all failed, and says so three times', () => {
     asRole('Coordinator')
     mockUseStaff.mockReturnValue(failed)
     mockUseParticipantAlertsAggregate.mockReturnValue(failed)
+    mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { error: true }))
     renderPage()
 
-    expect(screen.queryByText('All clear')).not.toBeInTheDocument()
-    expect(screen.getAllByText("Couldn't load")).toHaveLength(2)
-    expectPlaceholder(qualification(), { busy: false, say: "Couldn't load" })
-    expectPlaceholder(alerts(), { busy: false, say: "Couldn't load" })
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
+    expect(clearNames()).not.toMatch(/Qualification Issues|Critical Participant Alerts|Pending Leave/)
+    expect(screen.getAllByText("Couldn't load")).toHaveLength(3)
   })
 
   it('treats a failed request as a placeholder even when rows are still cached, so a stale count is never tinted', () => {
@@ -786,146 +1091,131 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
     expectPlaceholder(alerts(), { busy: false, say: "Couldn't load" })
   })
 
-  it('still fails honestly for a role without alerts: the staff item is the only placeholder', () => {
-    // ReadOnly: no alerts and no leave, but it can open the Qualifications page, so it keeps the tile (a SupportWorker no longer gets one).
+  it('fails honestly for a role without alerts or leave: the staff item is the only placeholder', () => {
+    // ReadOnly: no alerts and no leave, but it can open the Qualifications page, so it keeps the tile (a SupportWorker gets none).
     asRole('ReadOnly')
     mockUseStaff.mockReturnValue(failed)
     renderPage()
 
     expectPlaceholder(qualification(), { busy: false, say: "Couldn't load" })
     expect(screen.getAllByText("Couldn't load")).toHaveLength(1)
-    expect(screen.queryByText('All clear')).not.toBeInTheDocument()
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 
-  it('settles from each placeholder: a zero becomes a quiet 0 with "All clear", a count becomes the danger treatment', () => {
+  it('never shows the loading placeholder to a role that cannot view alerts (the item, and the request, do not exist)', () => {
+    asRole('SupportWorker')
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isLoading: false })
+    mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0))
+    mockUseDashboard.mockReturnValue(summaryData({ overdueTaskCount: 1 }))
+    renderPage()
+
+    expect(screen.queryByText('–')).not.toBeInTheDocument()
+    expect(band().querySelector('[aria-busy]')).toBeNull()
+  })
+
+  it('settles from each placeholder: a zero joins the All clear row, a count becomes a tinted tile', () => {
     asRole('Coordinator')
     mockUseStaff.mockReturnValue(failed)
     mockUseParticipantAlertsAggregate.mockReturnValue(inFlight)
+    mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { loading: true }))
     const { rerender } = renderPage()
     expectPlaceholder(qualification(), { busy: false, say: "Couldn't load" })
     expectPlaceholder(alerts(), { busy: true, say: 'Loading' })
+    expectPlaceholder(leave(), { busy: true, say: 'Loading' })
 
-    // The staff retry succeeds with nobody expiring; the alerts arrive with one Critical alert.
+    // The staff retry succeeds with nobody expiring; the alerts arrive with one Critical alert; the leave queue is empty.
     mockUseStaff.mockReturnValue({ data: [], isLoading: false, isError: false })
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false, isError: false })
+    mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0))
     rerender(<MemoryRouter><DashboardPage /></MemoryRouter>)
-    expect(qualification()).not.toHaveAttribute('data-attention')
-    expect(within(qualification()).getByText('0')).toBeInTheDocument()
-    expect(within(qualification()).getByText('All clear')).toBeInTheDocument()
+    expect(tileLabels()).toEqual(['Critical Participant Alerts'])
     expect(alerts()).toHaveAttribute('data-attention', 'error')
     expect(within(alerts()).getByText('1')).toBeInTheDocument()
+    expect(clearNames()).toMatch(/Qualification Issues/)
+    expect(clearNames()).toMatch(/Pending Leave/)
     expect(within(band()).queryByText("Couldn't load")).not.toBeInTheDocument()
 
-    // Later the staff list is refreshed with an expiring credential: the item is loud, not "All clear".
+    // Later the staff list is refreshed with an expiring credential: the item is a tile, not clear.
     mockUseStaff.mockReturnValue({ ...staffWithOneIssue, isLoading: false, isError: false })
     rerender(<MemoryRouter><DashboardPage /></MemoryRouter>)
     expect(qualification()).toHaveAttribute('data-attention', 'error')
     expect(within(qualification()).getByText('1')).toBeInTheDocument()
-    expect(within(qualification()).queryByText('All clear')).not.toBeInTheDocument()
+    expect(clearNames()).not.toMatch(/Qualification Issues/)
   })
 })
 
-describe('DashboardPage — needs-attention band: links and accessible names', () => {
-  it('links Qualification Issues, Critical Participant Alerts, Overdue and Pending Leave, and only those', () => {
-    asRole('Coordinator')
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
-    mockUsePendingLeaveCount.mockReturnValue(3)
+describe('DashboardPage — needs-attention band: accessibility', () => {
+  it('is one labelled region, with a link for each action whose name says what it does, and the number and the label in every tile\'s name', () => {
+    showAllNine()
     renderPage()
 
-    const links = within(band()).getAllByRole('link')
-    expect(links.map((a) => [labelOf(a), a.getAttribute('href')])).toEqual([
-      ['Qualification Issues', '/qualifications'],
-      ['Critical Participant Alerts', '/participants'],
-      ['Overdue', '/tasks?status=Overdue'],
-      ['Pending Leave', '/rostering/leave'],
-    ])
+    expect(screen.getByRole('region', { name: 'Needs attention' })).toBe(band())
+    for (const link of within(band()).getAllByRole('link')) expect(link).toHaveAccessibleName()
+    const names = within(band()).getAllByRole('group').map((group) => group.getAttribute('aria-label'))
+    expect(names).toEqual(FULL_ORDER.map((label) => `${label} 3`))
   })
 
-  it('links only Qualification Issues and Overdue for a role without alerts or leave', () => {
-    asRole('ReadOnly')
+  it('floors every action link at --tap-min and makes the whole tile its hit area, so it keeps a 44px target on touch', () => {
+    showAllNine()
     renderPage()
 
-    expect(within(band()).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/qualifications', '/tasks?status=Overdue'])
+    for (const link of within(band()).getAllByRole('link')) {
+      expect(link).toHaveClass('min-h-[var(--tap-min)]', 'after:absolute', 'after:inset-0')
+      expect(link.closest('[role="group"]')).toHaveClass('relative')
+    }
+    expect(band().innerHTML).not.toMatch(/(?:min-h|min-w|h|w)-\[44px\]/)
   })
 
-  it('gives every item an accessible name that includes its number and its label', () => {
-    asRole('Coordinator')
-    mockUseStaff.mockReturnValue(staffWithOneIssue)
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
-    mockUsePendingLeaveCount.mockReturnValue(3)
-    mockUseDashboard.mockReturnValue(summaryData({ overdueTaskCount: 2, tripsMissingStaff: 4 }))
+  it('sets the tiles and the rest of the page at the same text sizes the system owns: nothing in the band is bigger than the display step or below 13px', () => {
+    showAllNine()
     renderPage()
 
-    const inBand = within(band())
-    // The caption says how many staff the issues belong to, so 12 reads against the Qualifications page's "All Issues (4)".
-    expect(inBand.getByRole('link', { name: 'Qualification Issues 1 1 staff member' })).toHaveAttribute('href', '/qualifications')
-    expect(inBand.getByRole('link', { name: 'Critical Participant Alerts 0 All clear' })).toHaveAttribute('href', '/participants')
-    expect(inBand.getByRole('link', { name: 'Overdue 2' })).toHaveAttribute('href', '/tasks?status=Overdue')
-    expect(inBand.getByRole('group', { name: 'Missing Accommodation 0' })).toBeInTheDocument()
-    expect(inBand.getByRole('group', { name: 'Missing Staff 4' })).toBeInTheDocument()
-    expect(inBand.getByRole('group', { name: 'QSC Overdue 0' })).toBeInTheDocument()
-    expect(inBand.getByRole('link', { name: 'Pending Leave 3' })).toHaveAttribute('href', '/rostering/leave')
-    // Every item is either a link or a named group: nothing is left unnamed, and nothing relies on colour alone.
-    expect(inBand.getAllByRole('group')).toHaveLength(5)
-    expect(inBand.getAllByRole('link')).toHaveLength(4)
+    expect(band().innerHTML).not.toMatch(/text-(?:xl|2xl|3xl|4xl|5xl|6xl|\[(?:1[0-2]|1[5-9]|[2-9]\d)px\]|\[0?\.\d+rem\])/)
+    expect(band().querySelectorAll('.text-display')).toHaveLength(9)
   })
 
-  it('floors every linked item at --tap-min so it keeps a 44px hit area on touch', () => {
-    asRole('Coordinator')
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
-    mockUsePendingLeaveCount.mockReturnValue(1)
-    renderPage()
-
-    for (const link of within(band()).getAllByRole('link')) expect(link).toHaveClass('min-h-[var(--tap-min)]')
+  it('still has exactly one h1 whatever the band shows', () => {
+    for (const setUp of [showAllNine, () => asRole('Coordinator')]) {
+      setUp()
+      const { unmount } = renderPage()
+      expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+      unmount()
+      localStorage.clear()
+    }
   })
 })
 
-// jsdom has no layout, so the responsive contract is pinned as classes: two columns below md, two balanced rows from md, and
-// ONE row once the band's own width (a container query, so the sidebar does not matter) gives every item 173px, what the widest
-// label needs on one line ("Critical Participant Alerts", 152.6px, plus the 8px sides and 1px borders): n x 173 + (n - 1) x 8 =
-// 1259 / 1440 / 1621px for 7 / 8 / 9 items.
+// jsdom has no layout, so the responsive contract is pinned as classes and custom properties (the spans themselves are tested in bandLayout.test.ts): a 60-track
+// grid with the 8px between tiles as padding, each tile reading its own spans from the band's width (a container query, so the 232px sidebar does not matter).
 describe('DashboardPage — needs-attention band: responsive shape', () => {
-  it('is a size container with two columns by default', () => {
+  it('is a size container holding a 60-track grid, not a viewport breakpoint', () => {
+    showAllNine()
     renderPage()
 
     expect(band()).toHaveClass('@container')
-    expect(bandGrid()).toHaveClass('grid', 'grid-cols-2', 'gap-2')
-    // No auto-fit: rows are balanced by count, not filled greedily.
-    expect(bandGrid().className).not.toMatch(/auto-fit|minmax/)
+    expect(grid().className).toBe(BAND_GRID_CLASS)
+    // No auto-fit, no viewport breakpoint: rows are balanced by count and by the band's own width.
+    expect(grid().className).not.toMatch(/auto-fit|minmax/)
+    for (const cell of grid().children) expect(cell.className).not.toMatch(/(?:^|\s)(?:sm|md|lg|xl|2xl):/)
   })
 
-  it('shapes 7 items (no alerts, no leave) as 4 + 3 and one row from 1259px, the odd last item taking the spare slot', () => {
-    asRole('ReadOnly')
-    renderPage()
-
-    expect(bandItems()).toHaveLength(7)
-    expect(bandGrid()).toHaveClass('md:grid-cols-4', '@min-[1259px]:grid-cols-7')
-    const last = bandItems()[6]
-    expect(last).toHaveClass('col-span-2', '@min-[1259px]:col-span-1')
-    for (const item of bandItems().slice(0, 6)) expect(item.className).not.toMatch(/col-span/)
-  })
-
-  it('shapes 8 items (alerts, no leave) as 4 + 4 and one row from 1440px, with nothing to stretch', () => {
+  it.each([
+    [1, { overdueTaskCount: 2 }],
+    [2, { overdueTaskCount: 2, qscOverdueCount: 1 }],
+    [3, { overdueTaskCount: 2, qscOverdueCount: 1, tripsMissingStaff: 1 }],
+    [5, { overdueTaskCount: 2, qscOverdueCount: 1, tripsMissingStaff: 1, openIncidentCount: 1, tripsMissingVehicles: 1 }],
+  ])('deals %i tile(s) into balanced rows: each cell reads the spans bandSpans gives it', (count, counts) => {
     asRole('Coordinator')
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUseDashboard.mockReturnValue(summaryData(counts))
     renderPage()
 
-    expect(bandItems()).toHaveLength(8)
-    expect(bandGrid()).toHaveClass('md:grid-cols-4', '@min-[1440px]:grid-cols-8')
-    for (const item of bandItems()) expect(item.className).not.toMatch(/col-span/)
-  })
-
-  it('shapes 9 items (alerts and leave) as 5 + 4 and one row from 1621px, the odd last item taking the spare slot', () => {
-    asRole('Coordinator')
-    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
-    mockUsePendingLeaveCount.mockReturnValue(2)
-    renderPage()
-
-    expect(bandItems()).toHaveLength(9)
-    expect(bandGrid()).toHaveClass('md:grid-cols-5', '@min-[1621px]:grid-cols-9')
-    expect(bandItems()[8]).toHaveClass('col-span-2', '@min-[1621px]:col-span-1')
-    // Whole items: nothing truncates or scrolls sideways.
-    expect(bandGrid().className).not.toMatch(/overflow|truncate/)
+    const cells = [...grid().children] as HTMLElement[]
+    expect(cells).toHaveLength(count)
+    const spans = bandSpans(count)
+    cells.forEach((cell, i) => {
+      expect(cell.className).toBe(BAND_SPAN_CLASS)
+      spans[i].forEach((span, step) => expect(cell.style.getPropertyValue(`--span-${step}`)).toBe(String(span)))
+    })
   })
 
   it('keeps the band a peak in the page: it sits between the header and the panels', () => {
@@ -936,6 +1226,13 @@ describe('DashboardPage — needs-attention band: responsive shape', () => {
     expect(children.indexOf(band())).toBe(1)
     expect(children[0]).toContainElement(screen.getByRole('heading', { level: 1 }))
     expect(children[2].className).toMatch(/xl:grid-cols-2/)
+  })
+
+  it('never truncates, scrolls sideways or shrinks the type in the band', () => {
+    showAllNine()
+    renderPage()
+
+    expect(band().innerHTML).not.toMatch(/overflow|truncate|line-clamp/)
   })
 })
 
