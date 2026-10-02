@@ -41,15 +41,29 @@ public class FirebaseUserService : IFirebaseUserService
 {
     public async Task<string> CreateUserAsync(string email, string displayName, string? password, CancellationToken ct)
     {
-        var record = await FirebaseAuth.DefaultInstance.CreateUserAsync(new UserRecordArgs
-        {
-            Email = email,
-            DisplayName = displayName,
-            Password = password,
-            Disabled = false,
-        }, ct);
+        var record = await FirebaseAuth.DefaultInstance.CreateUserAsync(BuildCreateUserArgs(email, displayName, password), ct);
         return record.Uid;
     }
+
+    /// <summary>
+    /// The Firebase create-user spec for every account the app provisions on someone's behalf: an admin
+    /// creating a user, and the first user of a new tenant. Public and static so it can be unit tested
+    /// without a live Firebase connection — FirebaseAuth.DefaultInstance cannot run offline.
+    /// </summary>
+    public static UserRecordArgs BuildCreateUserArgs(string email, string displayName, string? password) => new()
+    {
+        Email = email,
+        DisplayName = displayName,
+        Password = password,
+        Disabled = false,
+        // AuthController.Exchange refuses unverified emails and nothing ever sends an app-created user a
+        // verification link, so without this the account could never sign in. The admin vouches for the
+        // address, and Firebase allows only one email/password account per address, so nobody else can
+        // register it afterwards. With no password the account stays unusable until its owner follows the
+        // emailed set-password link, which proves they control the mailbox. Creation only: never set this in
+        // UpdateUserByEmailAsync, whose account may pre-date the app or be someone else's own sign-up.
+        EmailVerified = true,
+    };
 
     public async Task UpdateUserByEmailAsync(string email, string displayName, bool disabled, CancellationToken ct)
     {

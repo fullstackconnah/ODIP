@@ -2,6 +2,7 @@ using FirebaseAdmin.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -127,13 +128,8 @@ public class TenantsController : ControllerBase
         {
             try
             {
-                await FirebaseAuth.DefaultInstance.CreateUserAsync(new UserRecordArgs
-                {
-                    Email = firebaseIu.Email,
-                    DisplayName = $"{firebaseIu.FirstName} {firebaseIu.LastName}",
-                    Password = firebaseIu.Password,
-                    Disabled = false,
-                });
+                await FirebaseAuth.DefaultInstance.CreateUserAsync(FirebaseUserService.BuildCreateUserArgs(
+                    firebaseIu.Email, $"{firebaseIu.FirstName} {firebaseIu.LastName}", firebaseIu.Password));
             }
             catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.EmailAlreadyExists)
             {
