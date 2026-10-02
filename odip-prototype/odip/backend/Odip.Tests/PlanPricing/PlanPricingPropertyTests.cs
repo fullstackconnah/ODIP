@@ -1,22 +1,33 @@
 using Odip.Domain.Billing.Pricing;
+using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Xunit;
 using static Odip.Tests.PlanPricing.PlanPricingTestSupport;
 
 namespace Odip.Tests.PlanPricing;
 
 /// <summary>
-/// Properties of the engine over many generated plans (a seeded generator, so a failure names its seed and reruns identically). The window is
-/// 12 October to 8 November 2026, which holds no clock change in any state, so wall-clock minutes equal elapsed minutes. The checks are written
-/// independently of the engine: integer cents for the group arithmetic, plain loops for the dates.
+/// Properties of the engine over many generated plans (a seeded generator, so a failure names its seed and reruns identically). A case's period is
+/// one of three windows: 12 October to 8 November 2026, which holds no clock change in any state, and two that hold the night the clocks go forward
+/// (Sunday 4 October 2026) and the night they go back (Sunday 4 April 2027) in NSW, ACT, VIC, TAS and SA, where an hour is lost or repeated and the
+/// elapsed-hours rules apply. The checks are written independently of the engine: integer cents for the group arithmetic, plain loops for the dates and
+/// a catalogue lookup of its own for every price.
 /// </summary>
 public class PlanPricingPropertyTests
 {
     private const int Cases = 150;
     private static readonly DateOnly From = new(2026, 10, 12), To = new(2026, 11, 8);
+
+    private static readonly (DateOnly From, DateOnly To)[] Windows =
+    {
+        (From, To),
+        (new DateOnly(2026, 9, 28), new DateOnly(2026, 10, 11)),   // the clocks go forward at 02:00 on Sunday 4 October
+        (new DateOnly(2027, 3, 29), new DateOnly(2027, 4, 11)),    // and go back at 03:00 on Sunday 4 April
+    };
     private static readonly string[] States = { "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA" };
 
-    private sealed record Case(int Seed, List<PlanBlock> Blocks, List<HolidayEntry> Holidays, PlanPricingPolicy Policy, PlanQuote Quote);
+    private sealed record Case(int Seed, List<PlanBlock> Blocks, List<HolidayEntry> Holidays, PlanPricingPolicy Policy, DateOnly From, DateOnly To, PlanQuote Quote);
 
     // ── The generator ─────────────────────────────────────────────────────────────
 
@@ -57,11 +68,15 @@ public class PlanPricingPropertyTests
     private static PlanBlock WithSleepover(Random random, PlanBlock block)
     {
         if (random.Next(3) != 0) return block;
-        block = block with { WorkerMaySleep = true, SleepoverActiveHours = random.Next(5) < 2 ? random.Next(1, 9) * 0.5m : 0m };
-        if (random.Next(2) == 0) return block;
+        block = block with { WorkerMaySleep = true, SleepoverActiveHours = random.Next(5) < 2 ? random.Next(3, 9) * 0.5m : 0m };
+        // Without a window the whole block is the night, and above 12 hours a block has to say which part is (review L2).
+        if (block.DurationMinutes <= 12 * 60 && random.Next(2) == 0) return block;
 
-        var offset = random.Next(0, block.DurationMinutes / 15) * 15;
-        var length = random.Next(1, Math.Max(2, (block.DurationMinutes - offset) / 15 + 1)) * 15;
+        // Most windows are long enough to be a sleepover (8 hours or more); the rest are any stretch of the block.
+        var longEnough = block.DurationMinutes >= 8 * 60 && random.Next(5) < 3;
+        var offset = longEnough ? random.Next(0, (block.DurationMinutes - 8 * 60) / 15 + 1) * 15 : random.Next(0, block.DurationMinutes / 15) * 15;
+        var longest = block.DurationMinutes - offset;
+        var length = longEnough ? random.Next(8 * 4, longest / 15 + 1) * 15 : random.Next(1, Math.Max(2, longest / 15 + 1)) * 15;
         var from = block.Start.AddMinutes(offset);
         return block with { SleepoverWindow = new PlanSleepoverWindow { From = from, To = from.AddMinutes(length) } };
     }
@@ -69,7 +84,8 @@ public class PlanPricingPropertyTests
     private static PlanBlock WithHeadcount(Random random, PlanBlock block)
     {
         if (random.Next(5) != 0 || block.DurationMinutes < 60) return block;
-        var changes = Enumerable.Range(0, random.Next(1, 3))
+        // Up to the cap of ten changes: a long list cuts every occurrence into many lines, and the short lists the generator used to make never showed it.
+        var changes = Enumerable.Range(0, random.Next(1, PlanBlock.MaxHeadcountChanges + 1))
             .Select(_ => random.Next(1, block.DurationMinutes / 15) * 15).Distinct()
             .Select(offset => new PlanHeadcountChange { From = block.Start.AddMinutes(offset), ParticipantsPresent = random.Next(1, 5) }).ToList();
         return block with { HeadcountChanges = changes };
@@ -86,12 +102,12 @@ public class PlanPricingPropertyTests
     private static int? RandomSharing(Random random, PlanBlock block) =>
         random.Next(3) == 0 ? null : random.Next(1, Math.Max(block.ParticipantsPresent, block.Changes.Select(c => c.ParticipantsPresent).DefaultIfEmpty(0).Max()) + 1);
 
-    private static List<HolidayEntry> RandomHolidays(Random random)
+    private static List<HolidayEntry> RandomHolidays(Random random, DateOnly from, DateOnly to)
     {
         var holidays = new List<HolidayEntry>();
         for (var i = 0; i < random.Next(0, 4); i++)
         {
-            var date = From.AddDays(random.Next(0, (To.DayNumber - From.DayNumber) + 1));
+            var date = from.AddDays(random.Next(0, (to.DayNumber - from.DayNumber) + 1));
             var state = random.Next(3) == 0 ? null : States[random.Next(8)];
             holidays.Add(random.Next(4) == 0
                 ? new HolidayEntry(date, state, "Part day", new TimeOnly(random.Next(0, 23), 0), random.Next(2) == 0 ? null : new TimeOnly(23, 30), "random")
@@ -106,20 +122,36 @@ public class PlanPricingPropertyTests
     private static Case MakeCase(int seed)
     {
         var random = new Random(seed);
+        var (from, to) = Windows[random.Next(Windows.Length)];
         var blocks = Enumerable.Range(0, random.Next(1, 5)).Select(i => RandomBlock(random, i)).ToList();
-        var holidays = RandomHolidays(random);
+        var holidays = RandomHolidays(random, from, to);
         var policy = PlanPricingPolicy.Default with { Crossing = random.Next(2) == 0 ? CrossingPolicy.Split : CrossingPolicy.HigherOf };
-        return new Case(seed, blocks, holidays, policy, Quote(blocks, From, To, policy, holidays));
+        return new Case(seed, blocks, holidays, policy, from, to, Quote(blocks, from, to, policy, holidays));
     }
 
     private static string Tag(Case c) => $"seed {c.Seed}";
 
-    private static List<DateOnly> Dates(PlanBlock block)
+    private static List<DateOnly> Dates(PlanBlock block, DateOnly from, DateOnly to)
     {
         var dates = new List<DateOnly>();
-        for (var d = From; d <= To; d = d.AddDays(1))
+        for (var d = from; d <= to; d = d.AddDays(1))
             if (block.Days.Contains(d.DayOfWeek)) dates.Add(d);
         return dates;
+    }
+
+    // ── A catalogue lookup of the test's own ──────────────────────────────────────
+
+    private static readonly Lazy<ILookup<string, SupportCatalogueItem>> CatalogueByCode = new(() => RealCatalogue.ToLookup(r => r.ItemNumber, StringComparer.Ordinal));
+
+    /// <summary>
+    /// The catalogue maximum for a line, found without the engine's own resolver or the line's own trace: the one row of the item valid on the service date, at the price
+    /// column of the zone the block is delivered in.
+    /// </summary>
+    private static decimal CatalogueMaximum(Case c, PlannedLine line)
+    {
+        var zone = c.Blocks.Single(b => b.Id == line.BlockId).Location.Zone;
+        var row = Assert.Single(CatalogueByCode.Value[line.ItemCode!], r => r.EffectiveFrom <= line.ServiceDate && (r.EffectiveTo is null || r.EffectiveTo >= line.ServiceDate));
+        return (zone switch { PriceZone.Remote => row.PriceRemote, PriceZone.VeryRemote => row.PriceVeryRemote, _ => row.PriceNational })!.Value;
     }
 
     // ── Properties ────────────────────────────────────────────────────────────────
@@ -141,6 +173,9 @@ public class PlanPricingPropertyTests
         Assert.Contains(lines, l => l.Kind == PlannedLineKind.CentreCapital);
         Assert.Contains(lines, l => l.Kind == PlannedLineKind.ParticipantAccommodation);
         Assert.Contains(AllCases.Value, c => c.Quote.HolidayOccurrences.Any(h => h.Skipped));
+        Assert.Contains(AllCases.Value.SelectMany(c => c.Blocks), b => b.Changes.Count >= 5);   // long headcount lists, up to the cap of ten (the old generator made at most two)
+        if (ProviderLocalTime.TzDataAvailable)
+            Assert.Contains(lines, l => l.Trace.Rules.Contains("clock-change:elapsed-hours"));   // a support over a night the clocks changed
         Assert.True(lines.Count > 1000);
     }
 
@@ -163,14 +198,20 @@ public class PlanPricingPropertyTests
             foreach (var block in c.Blocks.Where(b => b.Validate().Count == 0))
             {
                 var skipped = c.Quote.HolidayOccurrences.Where(h => h.BlockId == block.Id && h.Skipped).Select(h => h.Date).ToHashSet();
-                foreach (var date in Dates(block))
+                foreach (var date in Dates(block, c.From, c.To))
                 {
                     var start = date.ToDateTime(block.Start);
                     var end = start.AddMinutes(block.DurationMinutes);
                     var inside = c.Quote.Lines.Where(l => l.BlockId == block.Id && l.StartLocal is { } s && s >= start && s < end).ToList();
                     var minutes = inside.Sum(l => (l.EndLocal!.Value - l.StartLocal!.Value).TotalMinutes);
 
-                    Assert.Equal(skipped.Contains(date) ? 0 : block.DurationMinutes, minutes);
+                    if (skipped.Contains(date)) { Assert.Equal(0, minutes); continue; }
+
+                    // The wall clock never shows the hour it skips going forward, so a part that lies wholly inside it is no line at all (and the support in it takes no time).
+                    var zone = ProviderLocalTime.ResolveZone(StateTimeZoneMap.Resolve(block.Location.State));
+                    var missing = Enumerable.Range(0, block.DurationMinutes).Count(m => zone.IsInvalidTime(start.AddMinutes(m)));
+                    Assert.True(minutes <= block.DurationMinutes && minutes >= block.DurationMinutes - missing, $"{Tag(c)}, block {block.Id} on {date}: {minutes} wall minutes of {block.DurationMinutes} ({missing} do not exist)");
+                    if (missing == 0) Assert.Equal(block.DurationMinutes, minutes);
                 }
             }
     }
@@ -181,8 +222,10 @@ public class PlanPricingPropertyTests
         foreach (var c in AllCases.Value)
             foreach (var line in c.Quote.Lines.Where(l => l.IsPriced && l.Kind is PlannedLineKind.Support or PlannedLineKind.SleepoverActiveHours or PlannedLineKind.Sleepover or PlannedLineKind.WorkerAccommodation))
             {
-                var maxCents = (long)(line.Trace.MaximumUnitPrice!.Value * 100m);
-                Assert.Equal((decimal)maxCents, line.Trace.MaximumUnitPrice!.Value * 100m);      // a catalogue price has whole cents
+                var maximum = CatalogueMaximum(c, line);                                          // looked up here, not read from the line's own trace
+                Assert.True(maximum == line.Trace.MaximumUnitPrice, $"{Tag(c)}: {line.ItemCode} on {line.ServiceDate} is priced from {line.Trace.MaximumUnitPrice} but the catalogue says {maximum}");
+                var maxCents = (long)(maximum * 100m);
+                Assert.Equal((decimal)maxCents, maximum * 100m);                                  // a catalogue price has whole cents
                 var unitCents = maxCents * line.Trace.Workers / line.Trace.ParticipantsPresent;   // integer division is the floor
                 Assert.True(line.UnitPrice * 100m == unitCents, $"{Tag(c)}: {line.ItemCode} unit {line.UnitPrice} but floor({maxCents} x {line.Trace.Workers} / {line.Trace.ParticipantsPresent}) = {unitCents} cents");
 
@@ -200,8 +243,8 @@ public class PlanPricingPropertyTests
     {
         foreach (var c in AllCases.Value.Take(60))
         {
-            var again = Quote(c.Blocks, From, To, c.Policy, c.Holidays);
-            var shuffled = Quote(c.Blocks.Select(b => b with { Days = b.Days.Reverse().ToList() }).ToList(), From, To, c.Policy,
+            var again = Quote(c.Blocks, c.From, c.To, c.Policy, c.Holidays);
+            var shuffled = Quote(c.Blocks.Select(b => b with { Days = b.Days.Reverse().ToList() }).ToList(), c.From, c.To, c.Policy,
                 Enumerable.Reverse(c.Holidays), RealCatalogue.Reverse().ToList());
 
             Assert.Equal(Json(c.Quote), Json(again));
@@ -231,7 +274,7 @@ public class PlanPricingPropertyTests
             foreach (var total in c.Quote.Totals.ByBlock)
             {
                 var block = c.Blocks.Single(b => b.Id == total.BlockId);
-                Assert.Equal(Dates(block).Count, total.Occurrences + total.SkippedOccurrences);
+                Assert.Equal(Dates(block, c.From, c.To).Count, total.Occurrences + total.SkippedOccurrences);
             }
     }
 
@@ -259,7 +302,36 @@ public class PlanPricingPropertyTests
     }
 
     [Fact]
-    public void A_priced_line_never_exceeds_the_catalogue_maximum_for_its_workers_and_participants_and_every_line_names_its_price_basis()
+    public void Every_priced_lines_maximum_is_the_catalogue_price_of_its_item_zone_and_service_date_and_no_unit_price_exceeds_it_for_its_workers_and_participants()
+    {
+        // Review L7: this was named "never exceeds the catalogue maximum" and only checked that the trace was filled in. The maximum is now looked up independently, for
+        // every kind of line, and an hourly unit price is bounded by it with its group arithmetic.
+        foreach (var c in AllCases.Value)
+            foreach (var line in c.Quote.Lines.Where(l => l.IsPriced))
+            {
+                var maximum = CatalogueMaximum(c, line);
+                Assert.True(maximum == line.Trace.MaximumUnitPrice, $"{Tag(c)}: {line.Kind} {line.ItemCode} on {line.ServiceDate} is priced from {line.Trace.MaximumUnitPrice} but the catalogue says {maximum}");
+                if (line.Kind is PlannedLineKind.Support or PlannedLineKind.SleepoverActiveHours or PlannedLineKind.Sleepover or PlannedLineKind.WorkerAccommodation)
+                    Assert.True(line.UnitPrice <= maximum * line.Trace.Workers / line.Trace.ParticipantsPresent, $"{Tag(c)}: {line.ItemCode} unit {line.UnitPrice} is above {maximum} x {line.Trace.Workers} / {line.Trace.ParticipantsPresent}");
+                else
+                    Assert.True(line.UnitPrice <= maximum, $"{Tag(c)}: {line.ItemCode} unit {line.UnitPrice} is above {maximum}");
+            }
+    }
+
+    [Fact]
+    public void Every_line_has_a_positive_quantity_and_no_unit_price_or_total_is_negative()
+    {
+        // The property the widened generator needed: a headcount change on either side of the hour the clocks skip once made a line of minus half an hour.
+        foreach (var c in AllCases.Value)
+            foreach (var line in c.Quote.Lines)
+            {
+                Assert.True(line.Qty > 0m, $"{Tag(c)}: block {line.BlockId} {line.Kind} on {line.ServiceDate} has quantity {line.Qty}");
+                Assert.True(line.UnitPrice >= 0m && line.Total >= 0m, $"{Tag(c)}: block {line.BlockId} {line.Kind} on {line.ServiceDate} has unit {line.UnitPrice} and total {line.Total}");
+            }
+    }
+
+    [Fact]
+    public void Every_priced_line_names_its_price_basis_and_a_row_that_started_on_or_before_its_service_date()
     {
         foreach (var c in AllCases.Value)
             foreach (var line in c.Quote.Lines.Where(l => l.IsPriced))
