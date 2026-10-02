@@ -19,6 +19,12 @@ public record ParticipantInquiryDto
     public bool? ParticipantIsDraft { get; init; }
     public bool? ParticipantIsActive { get; init; }
     public DateTime? ParticipantIntakeCompletedAt { get; init; }
+    /// <summary>
+    /// True for a row that is not an enquiry: a draft participant whose intake was started in the Intake wizard (/participants/new) with no
+    /// enquiry behind it. It rides in this feed so the Enquiries tab shows every intake in progress; its <see cref="Id"/> is the participant's,
+    /// there is no enquiry record to edit, and <see cref="Source"/> is empty.
+    /// </summary>
+    public bool IsDirectIntake { get; init; }
 }
 
 /// <summary>
