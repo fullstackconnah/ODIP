@@ -1596,6 +1596,42 @@ public class ParticipantsControllerTests
         Assert.Contains("under 18", body.Errors[0], StringComparison.OrdinalIgnoreCase);
     }
 
+    // Sat 3 Oct 08:00 in Sydney, still Fri 2 Oct in UTC. A participant born 2008-10-03 turns 18 today in the provider's calendar.
+    private static CreateParticipantDto TurnsEighteenTodayInSydney() => MinimalCreateDto() with
+    {
+        DateOfBirth = new DateOnly(2008, 10, 3),
+        ContactRoles = new()
+        {
+            new CreateParticipantContactRoleDto { NewPersonFirstName = "Denise", NewPersonLastName = "Wilson", RoleType = Domain.Enums.ContactRoleType.PlanNominee },
+        },
+    };
+
+    [Fact]
+    public async Task Create_PlanNomineeOnTheParticipantsEighteenthBirthdayInTheProviderCalendar_IsAccepted()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db), clock: Odip.Tests.Medications.FakeClock.AtUtc(2026, 10, 2, 22, 0));
+
+        var result = await controller.Create(TurnsEighteenTodayInSydney(), CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Single(await db.ParticipantContactRoles.ToListAsync());
+    }
+
+    [Fact]
+    public async Task SaveIntake_PlanNomineeOnTheParticipantsEighteenthBirthdayInTheProviderCalendar_IsAccepted()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsDraft = true, IsActive = false };
+        db.Participants.Add(participant);
+        await db.SaveChangesAsync();
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db), clock: Odip.Tests.Medications.FakeClock.AtUtc(2026, 10, 2, 22, 0));
+
+        var result = await controller.SaveIntake(participant.Id, TurnsEighteenTodayInSydney() with { IsDraft = true }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
     [Fact]
     public async Task Create_TwoActivePrimaryNextOfKinRoles_ReturnsBadRequest()
     {
