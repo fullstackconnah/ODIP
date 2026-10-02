@@ -344,6 +344,37 @@ public class CatalogueImportCommitTests
     }
 
     [Fact]
+    public async Task An_import_heals_a_catalogue_that_was_inserted_twice_by_ending_the_extra_copy_of_every_row()
+    {
+        // Two confirms that both read an empty table each insert the whole catalogue: every code then has two active rows with the same start date, and the
+        // lookup answers Ambiguous. The next import of the same file keeps one copy and ends the other with an empty window.
+        await using var db = CreateDb();
+        await ImportAsync(db, CatalogueFixtures.File2026_27);
+        foreach (var original in await db.SupportCatalogueItems.AsNoTracking().ToListAsync())
+        {
+            var copy = (SupportCatalogueItem)db.Entry(original).CurrentValues.ToObject();
+            copy.Id = Guid.NewGuid();
+            db.SupportCatalogueItems.Add(copy);
+        }
+        await db.SaveChangesAsync();
+        Assert.Equal(CatalogueLookupFailure.Ambiguous, (await db.FindCatalogueItemAsync("04_104_0125_6_1", new DateOnly(2026, 10, 5), PriceZone.National)).Failure);
+
+        var preview = await PreviewAsync(db, CatalogueFixtures.File2026_27);
+        var result = await ImportAsync(db, CatalogueFixtures.File2026_27);
+
+        Assert.Equal((1017, 1017), (preview.ItemsToDeactivate, preview.ItemsUnchanged));
+        Assert.Equal(new CatalogueImportResultDto(0, 0, 1017, 1017), result);
+        var rows = await RowsAsync(db);
+        foreach (var code in rows.Select(r => r.ItemNumber).Distinct())
+            Assert.NotEqual(CatalogueLookupFailure.Ambiguous, EffectiveCatalogueResolver.Find(rows, code, new DateOnly(2026, 10, 5), PriceZone.National).Failure);
+        Assert.Equal(995, rows.Count(r => r.IsActive));
+        Assert.Equal(CommunityAccessCodes.OrderBy(c => c), rows.Where(r => r.ActivityGroup.GroupCode == "GRP_COMMUNITY_ACCESS" && r.IsActive).Select(r => r.ItemNumber).OrderBy(c => c));
+
+        var again = await ImportAsync(db, CatalogueFixtures.File2026_27);
+        Assert.Equal(new CatalogueImportResultDto(0, 0, 1017, 0), again);   // and once healed, importing again changes nothing
+    }
+
+    [Fact]
     public async Task A_republished_file_that_extends_an_end_date_is_flagged_because_an_import_never_lengthens_a_row()
     {
         await using var db = CreateDb();

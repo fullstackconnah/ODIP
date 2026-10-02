@@ -108,7 +108,9 @@ internal static class CatalogueImportPlanner
                 // An import only ever shortens a catalogue row it already holds, never lengthens it: a row end-dated because a newer catalogue replaced or
                 // dropped it must stay ended when an older file that still lists it (open-ended) is imported again, and an inactive row is not brought back.
                 // (A row from before catalogue dates, written by the previous importer, has an end date that is only that importer's "today": replaceable.)
-                var match = dbRows.FirstOrDefault(x => x.EffectiveFrom == row.EffectiveFrom);
+                // Normally one row has this code and start date. If a double import left several (two confirms that both read an empty table), the active
+                // one is the match, the lowest Id breaking a tie, so the choice never depends on row order; the extra copies are ended below.
+                var match = dbRows.Where(x => x.EffectiveFrom == row.EffectiveFrom).OrderByDescending(x => x.IsActive).ThenBy(x => x.Id).FirstOrDefault();
                 var held = match is not null && HasCatalogueDates(match) ? match : null;
                 if (held?.EffectiveTo is { } heldTo && (effectiveTo is null || heldTo < effectiveTo))
                 {
@@ -130,8 +132,8 @@ internal static class CatalogueImportPlanner
                     {
                         if (x.EffectiveTo is null || x.EffectiveTo >= row.EffectiveFrom) EndDate(x, row.EffectiveFrom, withdrawn: false);
                     }
-                    else if (!HasCatalogueDates(x) && x.EffectiveFrom > row.EffectiveFrom)
-                        EndDate(x, row.EffectiveFrom, withdrawn: false);
+                    else if (x.EffectiveFrom == row.EffectiveFrom || (!HasCatalogueDates(x) && x.EffectiveFrom > row.EffectiveFrom))
+                        EndDate(x, row.EffectiveFrom, withdrawn: false);   // an extra copy of this very version, or a previous-importer row stamped later: an empty window
                 }
             }
         }

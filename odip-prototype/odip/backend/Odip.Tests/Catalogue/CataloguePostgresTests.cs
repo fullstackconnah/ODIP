@@ -133,4 +133,31 @@ public class CataloguePostgresTests : IClassFixture<PostgresFixture>
         var active = await lookup.SupportCatalogueItems.Where(i => i.IsActive && i.ActivityGroup.GroupCode == "GRP_COMMUNITY_ACCESS").Select(i => i.ItemNumber).ToListAsync();
         Assert.Equal(10, active.Count);
     }
+
+    [SkippableFact]
+    public async Task TwoConfirmsOfTheSameFileAtTheSameTime_LeaveOneCopyOfTheCatalogue()
+    {
+        RequirePostgres();
+        var connectionString = await _pg.CreateDatabaseAsync();
+        await using (var migrate = PostgresFixture.NewContext(connectionString)) await migrate.Database.MigrateAsync();
+
+        // Two requests: each has its own context and importer, and both confirm the same previewed rows together. Without the advisory lock each reads an
+        // empty table and inserts all 1,017 rows (and both try to create the eleven groups); with it the second waits, reads what the first wrote, finds
+        // nothing to add, and the catalogue is there once.
+        await using var first = PostgresFixture.NewContext(connectionString);
+        await using var second = PostgresFixture.NewContext(connectionString);
+        var preview = await CatalogueImportTestSupport.PreviewAsync(first, CatalogueFixtures.File2026_27);
+        var confirm = new ConfirmCatalogueImportDto { CatalogueVersion = preview.DetectedVersion, Rows = preview.Rows };
+
+        var results = await Task.WhenAll(
+            CatalogueImportTestSupport.NewImporter(first).CommitImportAsync(confirm),
+            CatalogueImportTestSupport.NewImporter(second).CommitImportAsync(confirm));
+
+        await using var check = PostgresFixture.NewContext(connectionString);
+        Assert.Equal(1017, await check.SupportCatalogueItems.CountAsync());
+        Assert.Equal(11, await check.SupportActivityGroups.CountAsync());
+        Assert.Equal(1017, results.Sum(r => r.Added));       // one confirm wrote the catalogue...
+        Assert.Equal(1017, results.Sum(r => r.Unchanged));   // ...and the other waited, read it, and had nothing to do
+        Assert.Equal(0, results.Sum(r => r.EndDated));
+    }
 }

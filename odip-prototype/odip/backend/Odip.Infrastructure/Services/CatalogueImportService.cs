@@ -94,6 +94,10 @@ public class CatalogueImportService
     public async Task<CatalogueImportResultDto> CommitImportAsync(ConfirmCatalogueImportDto dto, CancellationToken ct = default)
     {
         var rows = Validate(dto);
+
+        // Read, plan and save are one unit: with another confirm in between, both would plan against the same table and insert the catalogue twice.
+        await using var gate = await CatalogueImportLock.AcquireAsync(_db, ct);
+
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var existing = await _db.SupportCatalogueItems.ToListAsync(ct);
         var groups = await _db.SupportActivityGroups.ToListAsync(ct);
@@ -128,6 +132,7 @@ public class CatalogueImportService
         }
 
         await _db.SaveChangesAsync(ct);
+        await gate.CommitAsync(ct);
         return new CatalogueImportResultDto(
             plan.Rows.Count(p => p.Action == ImportAction.Add),
             plan.Rows.Count(p => p.Action == ImportAction.Update),
