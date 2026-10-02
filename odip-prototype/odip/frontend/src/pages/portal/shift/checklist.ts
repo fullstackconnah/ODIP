@@ -67,6 +67,7 @@ export interface EndItem {
 /** What must clear before Finish. Doses and breaks come from the server's `finishBlockers` (its rule is the rule). */
 export function endChecklist(input: {
   blockers: PortalFinishBlockerDto[]
+  breaksConfirmed: boolean
   noteCount: number
   nothingToNote: boolean
   handoverText: string
@@ -78,7 +79,7 @@ export function endChecklist(input: {
   const handoverDone = !!input.handoverText.trim() || input.nothingToHandOver
   return [
     { id: 'doses', label: doseBlockers ? `${doseBlockers} dose${doseBlockers === 1 ? '' : 's'} need an outcome` : 'Every due dose has an outcome', done: doseBlockers === 0 },
-    { id: 'breaks', label: breakRunning ? 'A break is still running' : 'Breaks confirmed', done: !breakRunning },
+    { id: 'breaks', label: breakRunning ? 'A break is still running' : input.breaksConfirmed ? 'Breaks confirmed' : 'Check your breaks and confirm them', done: !breakRunning && input.breaksConfirmed },
     { id: 'note', label: noteDone ? 'Shift note done' : 'Add a note, or say nothing to note', done: noteDone },
     { id: 'handover', label: handoverDone ? 'Handover done' : 'Write a handover, or say nothing to hand over', done: handoverDone },
   ]

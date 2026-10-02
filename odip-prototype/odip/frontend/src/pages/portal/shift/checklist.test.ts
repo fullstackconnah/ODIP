@@ -47,7 +47,7 @@ describe('buildChecklist', () => {
 })
 
 describe('endChecklist', () => {
-  const base = { blockers: [], noteCount: 1, nothingToNote: false, handoverText: '', nothingToHandOver: false }
+  const base = { blockers: [], breaksConfirmed: true, noteCount: 1, nothingToNote: false, handoverText: '', nothingToHandOver: false }
   it('needs a note or Nothing to note', () => {
     expect(endChecklist({ ...base, noteCount: 0 }).find(i => i.id === 'note')?.done).toBe(false)
     expect(endChecklist({ ...base, noteCount: 0, nothingToNote: true }).find(i => i.id === 'note')?.done).toBe(true)
@@ -67,5 +67,9 @@ describe('endChecklist', () => {
     })
     expect(items.find(i => i.id === 'doses')?.done).toBe(false)
     expect(items.find(i => i.id === 'breaks')?.done).toBe(false)
+  })
+  it('needs the breaks confirmed', () => {
+    expect(endChecklist({ ...base, breaksConfirmed: false }).find(i => i.id === 'breaks')?.done).toBe(false)
+    expect(endChecklist(base).find(i => i.id === 'breaks')?.done).toBe(true)
   })
 })
