@@ -330,7 +330,7 @@ syntax (`h-[var(--control-h)]`) and never restate the pixel value.
 | `--table-head-h` | 32px | 40px |
 | `--cell-px` | 12px | 12px |
 | `--card-pad` | 12px | 16px |
-| `--section-gap` | 16px | 20px |
+| `--section-gap` (between stacked blocks; also the padding of the attention band's tiles and all-clear field) | 16px | 20px |
 | `--field-gap-y` / `--field-gap-x` | 12px / 16px | 16px / 16px |
 | `--gutter` | 20px | 16px |
 | `--tap-min` | 0px | 44px |
@@ -586,7 +586,8 @@ their own facts to tones. It stops at the header: the tab strip and every panel 
 **The Attention Tint Rule.** A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family:
 `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Everything in
 the cell (figure, label, icon) takes the matching on-container colour, so secondary text is tinted from the hue, never grey, and the chip becomes a
-card-white pill so it does not vanish into its own fill. Positive and neutral segments stay on the card fill: an all-clear is a lime chip, never a fill. One
+card-white pill so it does not vanish into its own fill. Positive and neutral segments stay on the card fill: on a glance segment, or a compact attention tile, an all-clear is a lime chip, never a fill
+(the dashboard's all-clear row and field are the one deliberate exception, a whole surface in Pale Sprout that says nothing needs anybody: see Attention band). One
 tone decides both chip and fill (`glanceState`), so they cannot disagree, and no colour outside the two containers is ever used. The two fills are
 `TONE.warning.solid` and `TONE.danger.solid` (the pairs the status badges wear, `src/lib/tone.ts`), and `attentionOf` decides which tones ask for a tint,
 so the glance strip, the attention tile and a badge cannot drift apart. Colour is never the only cue:

@@ -71,7 +71,7 @@
   --table-head-h: 32px;    /* table header row */
   --cell-px: 12px;         /* table cell horizontal padding */
   --card-pad: 12px;        /* Card internal padding (non-compact) */
-  --section-gap: 16px;     /* gap between stacked page blocks */
+  --section-gap: 16px;     /* gap between stacked page blocks; also the padding of the attention band's tiles and all-clear field */
   --field-gap-y: 12px;     /* form grid row gap */
   --field-gap-x: 16px;     /* form grid column gap */
   --gutter: 20px;          /* main content side padding */

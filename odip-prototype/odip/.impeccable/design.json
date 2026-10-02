@@ -213,7 +213,8 @@
         {
           "name": "--section-gap",
           "fine": "16px",
-          "coarse": "20px"
+          "coarse": "20px",
+          "note": "between stacked page blocks; also the padding of the attention band's tiles and all-clear field"
         },
         {
           "name": "--field-gap-y",
@@ -955,7 +956,7 @@
       },
       {
         "name": "The Attention Tint Rule",
-        "body": "A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family: `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Figure, label and icon take the matching on-container colour (never grey), and the chip becomes a card-white pill so it does not vanish into its own fill. Positive and neutral segments stay on the card fill: an all-clear is a lime chip, never a fill. One tone decides chip and fill (`glanceState`), and no colour outside the two containers is used: the fills are TONE.warning.solid and TONE.danger.solid (the pairs the status badges wear, src/lib/tone.ts) and `attentionOf` decides which tones ask for a tint. If most segments are tinted, review the tones, not the tint. The attention band's tiles follow the same rule with a count as the signal: a danger or warning count above zero takes the error or warning container, and a zero is not a tile at all (it is named in the All clear row).",
+        "body": "A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family: `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Figure, label and icon take the matching on-container colour (never grey), and the chip becomes a card-white pill so it does not vanish into its own fill. Positive and neutral segments stay on the card fill: on a glance segment, or a compact attention tile, an all-clear is a lime chip, never a fill (the dashboard's all-clear row and field are the one deliberate exception, a whole surface in Pale Sprout that says nothing needs anybody). One tone decides chip and fill (`glanceState`), and no colour outside the two containers is used: the fills are TONE.warning.solid and TONE.danger.solid (the pairs the status badges wear, src/lib/tone.ts) and `attentionOf` decides which tones ask for a tint. If most segments are tinted, review the tones, not the tint. The attention band's tiles follow the same rule with a count as the signal: a danger or warning count above zero takes the error or warning container, and a zero is not a tile at all (it is named in the All clear row).",
         "section": "components"
       },
       {
