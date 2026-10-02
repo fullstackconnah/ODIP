@@ -23,6 +23,8 @@ production keeps them off.
   readiness is in Warn mode (otherwise every write would be refused).
 - `support/` - `env`, `api` (dev-login + authenticated calls), `dates` (Sydney-zone date maths), `data`
   (unique-token builders for participants, staff, trips, vehicles, shifts), `fixtures` (signed-in page).
+  Test staff get an address at the Demo tenant's own email domain (`DEMO_EMAIL_DOMAIN` in `env`): the API refuses any
+  other address that is not at a common email provider until the request says `addressConfirmed` (400 AddressNeedsConfirmation).
 - `tests/_canary/` - stack canary: health, seed, dev-login per role, Warn mode, the activate / book / roster write
   paths, and one browser sign-in through the served frontend. Tag `@smoke` marks the quick subset.
 - `scripts/serve.mjs` - stand-in for nginx (static + SPA fallback + `/api` proxy, security headers read from
