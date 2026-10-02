@@ -137,9 +137,46 @@ public class CatalogueServiceDateTests
         await db.SaveChangesAsync();
 
         // The line is left out, as a day type with no catalogue item always was, rather than priced at a price that did not apply: with no other
-        // shift in range there is nothing to claim.
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        // shift in range there is nothing to claim, and the refusal says why (it is not "no shifts found").
+        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             new ShiftClaimGenerationService(db).PreviewAsync(participant.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30)));
+        Assert.Equal("No catalogue row covers these shifts' dates (16/06/2026 to 16/06/2026). Import the catalogue for that period first.", refusal.Message);
+    }
+
+    [Fact]
+    public async Task A_range_of_shifts_all_dated_before_the_catalogue_names_the_first_and_last_of_them()
+    {
+        await using var db = await WithDecemberPriceSetAsync();
+        AddProviderSettings(db);
+        var participant = AddParticipant(db);
+        AddCompletedShift(db, participant.Id, new DateOnly(2026, 6, 9));
+        AddCompletedShift(db, participant.Id, new DateOnly(2026, 6, 23));
+        AddCompletedShift(db, participant.Id, new DateOnly(2026, 6, 16));
+        await db.SaveChangesAsync();
+
+        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new ShiftClaimGenerationService(db).GenerateDraftClaimAsync(participant.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30)));
+
+        Assert.Equal("No catalogue row covers these shifts' dates (09/06/2026 to 23/06/2026). Import the catalogue for that period first.", refusal.Message);
+        Assert.Empty(db.TripClaims);   // nothing was saved
+    }
+
+    [Fact]
+    public async Task A_shift_that_has_a_row_but_not_for_its_day_type_still_reads_as_nothing_to_claim()
+    {
+        // The old wording stays for the case it was true for: rows are valid on the date, none is for the shift's day type (a Saturday with no Saturday item).
+        await using var db = CreateDb();
+        var group = await SeedCommunityAccessGroupAsync(db);
+        db.SupportCatalogueItems.Add(LegacyRow(group.Id, "04_ONLY_WEEKDAY", ClaimDayType.Weekday, 60m, new DateOnly(2026, 7, 1)));
+        AddProviderSettings(db);
+        var participant = AddParticipant(db);
+        AddCompletedShift(db, participant.Id, new DateOnly(2026, 11, 14));   // a Saturday
+        await db.SaveChangesAsync();
+
+        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new ShiftClaimGenerationService(db).PreviewAsync(participant.Id, new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 30)));
+
+        Assert.Equal("No completed, unclaimed shifts found in this date range.", refusal.Message);
     }
 
     // ── Trip claims ───────────────────────────────────────────────────────────────
@@ -192,6 +229,44 @@ public class CatalogueServiceDateTests
 
         var line = Assert.Single(preview.LineItems);
         Assert.Equal((WeekdayDecember, 16m), (line.UnitPrice, line.Hours));
+    }
+
+    [Fact]
+    public async Task A_trip_dated_before_every_catalogue_row_says_so_and_saves_no_claim()
+    {
+        await using var db = await WithDecemberPriceSetAsync();
+        AddProviderSettings(db);
+        var participant = AddParticipant(db);
+        var trip = AddCompletedTrip(db, participant, new DateOnly(2026, 6, 16), 3);   // Tue 16 to Thu 18 June: before the 2026-27 catalogue starts
+        await db.SaveChangesAsync();
+        var service = new ClaimGenerationService(db);
+
+        var preview = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewClaimAsync(trip.Id, null));
+        var generate = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GenerateDraftClaimAsync(trip.Id));
+        var again = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GenerateDraftClaimAsync(trip.Id));
+
+        const string expected = "No catalogue row covers this trip's dates (16/06/2026 to 18/06/2026). Import the catalogue for that period first.";
+        Assert.Equal(expected, preview.Message);
+        Assert.Equal(expected, generate.Message);
+        Assert.Equal(expected, again.Message);   // not "An active claim already exists for this trip": there is no empty draft to block it
+        Assert.Empty(db.TripClaims);
+        Assert.Empty(db.ClaimLineItems);
+        Assert.All(db.ParticipantBookings, b => Assert.NotEqual(ClaimStatus.InClaim, b.ClaimStatus));
+    }
+
+    [Fact]
+    public async Task A_trip_that_starts_before_the_catalogue_but_runs_into_it_is_still_claimed_for_the_days_it_covers()
+    {
+        await using var db = await WithDecemberPriceSetAsync();
+        AddProviderSettings(db);
+        var participant = AddParticipant(db);
+        var trip = AddCompletedTrip(db, participant, new DateOnly(2026, 6, 29), 4);   // Mon 29 and Tue 30 June (no row), Wed 1 and Thu 2 July (the July rows)
+        await db.SaveChangesAsync();
+
+        var preview = await new ClaimGenerationService(db).PreviewClaimAsync(trip.Id, null);
+
+        var line = Assert.Single(preview.LineItems);
+        Assert.Equal((new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 2), WeekdayJuly, 16m), (line.SupportsDeliveredFrom, line.SupportsDeliveredTo, line.UnitPrice, line.Hours));
     }
 
     // ── Agreement drafts ──────────────────────────────────────────────────────────

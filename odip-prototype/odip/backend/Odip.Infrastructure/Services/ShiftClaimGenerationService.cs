@@ -173,7 +173,14 @@ public class ShiftClaimGenerationService
         }
 
         if (lineItems.Count == 0)
+        {
+            // Nothing priced because no row of the group is valid on any of these dates (the catalogue starts after them): say so, the same way the trip engine does.
+            // Shifts that have a row for their date but not for their day type still read as nothing to claim, as they always did.
+            if (!shifts.Any(s => catalogueItems.Any(i => EffectiveCatalogueResolver.IsValidOn(i, s.ServiceDate))))
+                throw new InvalidOperationException(FormattableString.Invariant(
+                    $"No catalogue row covers these shifts' dates ({shifts[0].ServiceDate:dd/MM/yyyy} to {shifts[^1].ServiceDate:dd/MM/yyyy}). Import the catalogue for that period first."));
             throw new InvalidOperationException("No completed, unclaimed shifts found in this date range.");
+        }
 
         return (lineItems, participant);
     }

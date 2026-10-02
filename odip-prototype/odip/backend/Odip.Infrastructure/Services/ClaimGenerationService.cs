@@ -192,6 +192,14 @@ public class ClaimGenerationService
         if (!catalogueItems.Any())
             throw new InvalidOperationException("No support catalogue items found. Please import the NDIS Support Catalogue in Settings before generating claims.");
 
+        // A trip dated wholly before the earliest catalogue row (a June trip with only the 2026-27 file imported) has no row to price from on any day. Say so:
+        // returning no lines would save an empty Draft claim, and the "active claim already exists" check would then block the trip until someone deleted it.
+        // A trip that only partly precedes the catalogue is still claimed for the days that have a row.
+        var tripDates = trip.TripDays.Select(d => d.Date).ToList();
+        if (tripDates.Count > 0 && !tripDates.Any(date => catalogueItems.Any(i => EffectiveCatalogueResolver.IsValidOn(i, date))))
+            throw new InvalidOperationException(FormattableString.Invariant(
+                $"No catalogue row covers this trip's dates ({trip.StartDate:dd/MM/yyyy} to {tripEnd:dd/MM/yyyy}). Import the catalogue for that period first."));
+
         var confirmedStaffCount = trip.StaffAssignments.Count(s => s.Status == AssignmentStatus.Confirmed);
         var gstCode = settings.GSTRegistered ? GSTCode.P1 : GSTCode.P2;
 

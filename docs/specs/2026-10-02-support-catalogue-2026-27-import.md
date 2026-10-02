@@ -69,4 +69,6 @@ backward compatible: roll forward, or restore the database from before the impor
 - The Support Catalogue list is unpaginated (about 865 KB of JSON for 995 items) and shows a Weekday badge on items that have no day
   band; both move to the plan builder's catalogue work.
 - A service dated before every catalogue row that covers it (for example before 1 July 2026 with only the 2026-27 file imported) is left
-  out of a claim, not priced from a row that did not apply.
+  out of a claim, not priced from a row that did not apply. When NO day of a trip, and none of the shifts in a range, has a row, the claim
+  engines refuse with "No catalogue row covers this trip's dates (dd/MM/yyyy to dd/MM/yyyy). Import the catalogue for that period first."
+  (shifts: "these shifts' dates") and save nothing; import the 2025-26 workbook for that period, then claim again.
