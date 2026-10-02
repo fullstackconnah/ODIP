@@ -55,8 +55,9 @@ public class SupportCatalogueController : ControllerBase
         return Ok(ApiResponse<List<SupportActivityGroupDto>>.Ok(result));
     }
 
+    // SuperAdmin only, like the Settings tab: the catalogue is global (a group or an item carries no tenant) and an import end-dates rows for every tenant.
     [HttpPost("import/preview")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<ApiResponse<CatalogueImportPreviewDto>>> PreviewImport(
         IFormFile file, [FromServices] CatalogueImportService importer, CancellationToken ct)
     {
@@ -79,7 +80,7 @@ public class SupportCatalogueController : ControllerBase
     }
 
     [HttpPost("import/confirm")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> ConfirmImport(
         [FromBody] ConfirmCatalogueImportDto dto, [FromServices] CatalogueImportService importer, CancellationToken ct)
     {

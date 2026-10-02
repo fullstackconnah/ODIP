@@ -16,7 +16,7 @@ using static Odip.Tests.Catalogue.CatalogueImportTestSupport;
 namespace Odip.Tests.Catalogue;
 
 /// <summary>
-/// The catalogue endpoints (phase A item 3): the importer routes keep their Admin / SuperAdmin gate, answer a refusal with the importer's own
+/// The catalogue endpoints (phase A item 3): the importer routes are SuperAdmin-only, answer a refusal with the importer's own
 /// explanation, and the rows the preview sends are exactly what the confirm step posts back, through the same JSON options the API uses.
 /// </summary>
 public class SupportCatalogueControllerTests
@@ -38,13 +38,15 @@ public class SupportCatalogueControllerTests
     }
 
     [Fact]
-    public void Both_import_routes_are_still_Admin_or_SuperAdmin_only_and_the_controller_requires_a_signed_in_user()
+    public void Both_import_routes_are_SuperAdmin_only_like_the_Settings_tab_and_the_listing_needs_only_a_signed_in_user()
     {
+        // The catalogue is global (no tenant on a group or an item) and an import end-dates rows for every tenant, so a tenant's Admin must not run it.
         Assert.NotNull(typeof(SupportCatalogueController).GetCustomAttribute<AuthorizeAttribute>());
+        Assert.Null(typeof(SupportCatalogueController).GetMethod(nameof(SupportCatalogueController.GetAll))!.GetCustomAttribute<AuthorizeAttribute>());
         foreach (var action in new[] { nameof(SupportCatalogueController.PreviewImport), nameof(SupportCatalogueController.ConfirmImport) })
         {
             var authorize = typeof(SupportCatalogueController).GetMethod(action)!.GetCustomAttribute<AuthorizeAttribute>();
-            Assert.Equal("Admin,SuperAdmin", authorize?.Roles);
+            Assert.Equal("SuperAdmin", authorize?.Roles);
         }
     }
 
