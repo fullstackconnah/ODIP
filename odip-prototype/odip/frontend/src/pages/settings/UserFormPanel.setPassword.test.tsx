@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import UserFormPanel from './UserFormPanel'
 import type { AdminUserDto } from '@/api/types'
@@ -36,6 +36,9 @@ const EMAIL = 'new.person@example.com'
 const SENT_SET = `We've sent ${EMAIL} a link to set their password. It can take a few minutes, so ask them to check spam.`
 const SENT_RESET = `We've sent ${EMAIL} a link to reset their password. It can take a few minutes, so ask them to check spam.`
 const NOT_SENT = `No link was sent to ${EMAIL}.`
+const NETWORK_FAILURE = `${NOT_SENT} We couldn't reach Firebase. Check your connection, then use Send again.`
+const TYPED_CREATED =
+  'New Person can sign in now with the temporary password you set. Share it with them securely, and ask them to change it with Forgot password after they first sign in.'
 
 /** Firebase's own errors carry the reason in `code`. */
 const firebaseError = (code: string) => Object.assign(new Error(`Firebase: Error (${code}).`), { code })
@@ -109,7 +112,7 @@ describe('UserFormPanel create: the emailed set-password link', () => {
     expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1)
     expect(sendPasswordResetEmail).toHaveBeenCalledWith(authStub, EMAIL)
     expect(screen.getByRole('dialog', { name: 'User created' })).toBeInTheDocument()
-    expect(screen.getByText('New Person was created.')).toBeInTheDocument()
+    expect(screen.getByText('New Person was created.', { selector: 'p' })).toBeInTheDocument()
     // It stays: the answer is not taken away by a close. Done closes.
     expect(onClose).not.toHaveBeenCalled()
 
@@ -135,17 +138,97 @@ describe('UserFormPanel create: the emailed set-password link', () => {
 
     await u.click(createButton())
 
-    const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent(`${NOT_SENT} Firebase is limiting emails for now. Wait a few minutes, then use Send again.`)
+    expect(await screen.findByText(`${NOT_SENT} Firebase is limiting emails for now. Wait a few minutes, then use Send again.`)).toBeInTheDocument()
     expect(screen.queryByText(/We've sent/)).not.toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
 
-    await u.click(within(alert).getByRole('button', { name: 'Send again' }))
+    await u.click(screen.getByRole('button', { name: 'Send again' }))
 
     expect(await screen.findByText(SENT_SET)).toBeInTheDocument()
     // The user exists, so sending again must not create them again.
     expect(mockCreate).toHaveBeenCalledTimes(1)
     expect(sendPasswordResetEmail).toHaveBeenCalledTimes(2)
+  })
+
+  describe('what a screen reader user is told, and where focus goes, when the form becomes the done view', () => {
+    it("writes the outcome into a status region that was already there, so it is announced rather than appearing pre-filled", async () => {
+      const { u } = renderCreate()
+      const region = screen.getByRole('status')
+      expect(region).toBeEmptyDOMElement()
+      await fillRequiredFields(u)
+
+      await u.click(createButton())
+
+      expect(await screen.findByText('New Person was created.', { selector: 'p' })).toBeInTheDocument()
+      // The SAME node (a live region created already holding its text is announced unreliably), now holding the whole sentence.
+      expect(screen.getByRole('status')).toBe(region)
+      expect(region).toHaveTextContent(`New Person was created. ${SENT_SET}`)
+    })
+
+    it('announces a failure through that same region, once: the visible warning does not announce itself as well', async () => {
+      sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/too-many-requests'))
+      const { u } = renderCreate()
+      await fillRequiredFields(u)
+
+      await u.click(createButton())
+
+      expect(await screen.findByText(`${NOT_SENT} Firebase is limiting emails for now. Wait a few minutes, then use Send again.`)).toBeInTheDocument()
+      expect(screen.getByRole('status')).toHaveTextContent(`${NOT_SENT} Firebase is limiting emails for now. Wait a few minutes, then use Send again.`)
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getAllByRole('status')).toHaveLength(1)
+    })
+
+    it('moves focus to the done message, instead of letting it fall to the top of the page when the Create button goes', async () => {
+      const { u } = renderCreate()
+      await fillRequiredFields(u)
+
+      await u.click(createButton())
+
+      expect(await screen.findByText('New Person was created.', { selector: 'p' })).toHaveFocus()
+    })
+
+    it('moves focus there again when Send again works and its own button goes, but keeps it on Send again while that is still needed', async () => {
+      sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed')).mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
+      const { u } = renderCreate()
+      await fillRequiredFields(u)
+      await u.click(createButton())
+      await screen.findByText(NETWORK_FAILURE)
+
+      await u.click(screen.getByRole('button', { name: 'Send again' }))
+      await waitFor(() => expect(sendPasswordResetEmail).toHaveBeenCalledTimes(2))
+      // Failed again: the button is still there and still has focus.
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Send again' })).toHaveFocus())
+
+      await u.click(screen.getByRole('button', { name: 'Send again' }))
+      expect(await screen.findByText(SENT_SET)).toBeInTheDocument()
+
+      // It worked, so the button is gone, and focus is on the done message rather than the page.
+      expect(screen.getByText('New Person was created.', { selector: 'p' })).toHaveFocus()
+    })
+
+    it('switches Send again off with aria-disabled, not `disabled`, while it sends, and a second click sends nothing more', async () => {
+      sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
+      const { u } = renderCreate()
+      await fillRequiredFields(u)
+      await u.click(createButton())
+      await screen.findByText(NETWORK_FAILURE)
+      let finishSend!: () => void
+      sendPasswordResetEmail.mockReturnValue(new Promise<void>(resolve => { finishSend = resolve }))
+
+      await u.click(screen.getByRole('button', { name: 'Send again' }))
+
+      const busy = await screen.findByRole('button', { name: 'Sending...' })
+      expect(busy).toHaveAttribute('aria-disabled', 'true')
+      expect(busy).not.toBeDisabled()
+      expect(busy).toHaveFocus()
+      await u.click(busy)
+      expect(sendPasswordResetEmail).toHaveBeenCalledTimes(2)
+
+      finishSend()
+
+      expect(await screen.findByText(SENT_SET)).toBeInTheDocument()
+      expect(sendPasswordResetEmail).toHaveBeenCalledTimes(2)
+    })
   })
 
   it('says where to retry, and never claims a link went, when Firebase fails for a reason it has no special advice for', async () => {
@@ -155,9 +238,8 @@ describe('UserFormPanel create: the emailed set-password link', () => {
 
     await u.click(createButton())
 
-    const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent(`${NOT_SENT} To try again, use Send again.`)
-    expect(alert.textContent).not.toMatch(/we've sent|in a moment/i)
+    const failure = await screen.findByText(`${NOT_SENT} To try again, use Send again.`)
+    expect(failure.textContent).not.toMatch(/we've sent|in a moment/i)
   })
 
   it('shows who will be emailed while the default is in force, and not once a temporary password replaces it', async () => {
@@ -196,7 +278,7 @@ describe('UserFormPanel create: the emailed set-password link', () => {
 
     await u.click(createButton())
 
-    expect(await screen.findByText('New Person was created.')).toBeInTheDocument()
+    expect(await screen.findByText('New Person was created.', { selector: 'p' })).toBeInTheDocument()
     expect(mockCreate.mock.calls[0][0]).toEqual(createBody())
     expect(sendPasswordResetEmail).not.toHaveBeenCalled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -256,9 +338,7 @@ describe('UserFormPanel create: a temporary password instead', () => {
 
     await u.click(createButton())
 
-    expect(await screen.findByText(
-      'New Person can sign in now with the temporary password you set. Share it with them securely, and ask them to change it with Forgot password after they first sign in.',
-    )).toBeInTheDocument()
+    expect(await screen.findByText(TYPED_CREATED)).toBeInTheDocument()
     expect(mockCreate.mock.calls[0][0]).toEqual(createBody(password))
     expect(sendPasswordResetEmail).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
@@ -272,7 +352,7 @@ describe('UserFormPanel create: a temporary password instead', () => {
     await u.type(screen.getByLabelText('Temporary password'), 'Winter-2026!')
     await u.click(createButton())
 
-    expect(await screen.findByText(/can sign in now with the temporary password you set/)).toBeInTheDocument()
+    expect(await screen.findByText(TYPED_CREATED)).toBeInTheDocument()
     expect(mockCreate.mock.calls[0][0]).toEqual(createBody('Winter-2026!'))
     expect(sendPasswordResetEmail).not.toHaveBeenCalled()
   })
@@ -326,8 +406,7 @@ describe('UserFormPanel create: a temporary password instead', () => {
     it('says the password was NOT applied, instead of claiming they can sign in with it, and sends nothing yet', async () => {
       await createWithPasswordOnAnExistingAccount()
 
-      const warning = await screen.findByRole('alert')
-      expect(warning).toHaveTextContent(`${EMAIL} already had a sign-in account, so the password you set wasn't applied.`)
+      expect(await screen.findByText(`${EMAIL} already had a sign-in account, so the password you set wasn't applied.`)).toBeInTheDocument()
       expect(screen.queryByText(/can sign in now/)).not.toBeInTheDocument()
       expect(sendPasswordResetEmail).not.toHaveBeenCalled()
     })
@@ -343,11 +422,31 @@ describe('UserFormPanel create: a temporary password instead', () => {
       expect(sendPasswordResetEmail).toHaveBeenCalledWith(authStub, EMAIL)
     })
 
+    it('announces that through the status region too, and switches the send button off with aria-disabled (not `disabled`) while it sends', async () => {
+      const { u } = await createWithPasswordOnAnExistingAccount()
+      expect(await screen.findByRole('status')).toHaveTextContent(`New Person was created. ${EMAIL} already had a sign-in account, so the password you set wasn't applied.`)
+      let finishSend!: () => void
+      sendPasswordResetEmail.mockReturnValue(new Promise<void>(resolve => { finishSend = resolve }))
+
+      await u.click(screen.getByRole('button', { name: 'Send set-password email' }))
+
+      const busy = await screen.findByRole('button', { name: 'Sending...' })
+      expect(busy).toHaveAttribute('aria-disabled', 'true')
+      expect(busy).not.toBeDisabled()
+      await u.click(busy)
+      expect(mockEnsure).toHaveBeenCalledTimes(1)
+      expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1)
+
+      finishSend()
+
+      expect(await screen.findByText(SENT_RESET)).toBeInTheDocument()
+    })
+
     it('does not offer to send where Firebase is not configured', async () => {
       firebase.auth = null
       await createWithPasswordOnAnExistingAccount()
 
-      expect(await screen.findByRole('alert')).toHaveTextContent("so the password you set wasn't applied.")
+      expect(await screen.findByText(`${EMAIL} already had a sign-in account, so the password you set wasn't applied.`)).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Send set-password email' })).not.toBeInTheDocument()
     })
   })

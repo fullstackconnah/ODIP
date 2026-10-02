@@ -83,3 +83,16 @@ export function describeEmailOutcome(outcome: EmailOutcome, retry: string): { to
       return { tone: 'danger', message: `${noLink} To try again, ${retry}.` }
   }
 }
+
+/**
+ * What a create says when the admin typed a password. A typed password only reached an account the app made; an account that already existed
+ * kept its own, so it is not claimed to work and the way in is the emailed link.
+ */
+export function describeTypedPassword(account: AccountState, name: string, email: string): string {
+  return account === 'existing'
+    ? `${email} already had a sign-in account, so the password you set wasn't applied.`
+    : `${name} can sign in now with the temporary password you set. Share it with them securely, and ask them to change it with Forgot password after they first sign in.`
+}
+
+/** A tenant whose first user's sign-in account could not be set up: the tenant and the user exist, so the way on is the Users tab. */
+export const TENANT_FIRST_USER_ACCOUNT_FAILED = "Tenant created, but their sign-in account couldn't be set up. Use Send set-password email in the Users tab."

@@ -151,7 +151,7 @@ describe('StaffCreatePage: the sign-in email after a create', () => {
 
     finishEnsure({ firebaseAccount: 'created' })
 
-    expect(await screen.findByText(/We've sent sam.staff@acme.example.com a link to set their password/)).toBeInTheDocument()
+    expect(await screen.findByText("We've sent sam.staff@acme.example.com a link to set their password. It can take a few minutes, so ask them to check spam.")).toBeInTheDocument()
     expect(mockCreate).toHaveBeenCalledTimes(1)
   })
 
@@ -166,7 +166,7 @@ describe('StaffCreatePage: the sign-in email after a create', () => {
 
     await u.click(screen.getByRole('button', { name: 'Create Staff Member' }))
 
-    expect(await screen.findByText(/We've sent sam.staff@acme.example.com a link/)).toBeInTheDocument()
+    expect(await screen.findByText("We've sent sam.staff@acme.example.com a link to set their password. It can take a few minutes, so ask them to check spam.")).toBeInTheDocument()
     expect(mockCreate).toHaveBeenCalledTimes(2)
   })
 
@@ -186,16 +186,72 @@ describe('StaffCreatePage: the sign-in email after a create', () => {
 
     await fillAndCreate(u)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    expect(await screen.findByText(
       'No link was sent to sam.staff@acme.example.com. Firebase is limiting emails for now. Wait a few minutes, then use Send again.',
-    )
+    )).toBeInTheDocument()
     expect(screen.queryByText(/We've sent/)).not.toBeInTheDocument()
 
     await u.click(screen.getByRole('button', { name: 'Send again' }))
 
-    expect(await screen.findByText(/We've sent sam.staff@acme.example.com a link to set their password/)).toBeInTheDocument()
+    expect(await screen.findByText("We've sent sam.staff@acme.example.com a link to set their password. It can take a few minutes, so ask them to check spam.")).toBeInTheDocument()
     expect(mockEnsure).toHaveBeenCalledTimes(2)
     expect(sendPasswordResetEmail).toHaveBeenCalledTimes(2)
+  })
+
+  describe('what a screen reader user is told, and where focus goes, when the form becomes the done view', () => {
+    const SENT = "We've sent sam.staff@acme.example.com a link to set their password. It can take a few minutes, so ask them to check spam."
+    const NETWORK = 'No link was sent to sam.staff@acme.example.com. We couldn\'t reach Firebase. Check your connection, then use Send again.'
+
+    it('writes the outcome into a status region that was already there, and moves focus to the done message', async () => {
+      const { u } = renderCreatePage()
+      const region = screen.getByRole('status')
+      expect(region).toBeEmptyDOMElement()
+
+      await fillAndCreate(u)
+
+      const line = await screen.findByText('Sam Staff was created.', { selector: 'p' })
+      // The SAME node (a live region created already holding its text is announced unreliably), now holding the whole sentence.
+      expect(screen.getByRole('status')).toBe(region)
+      expect(region).toHaveTextContent(`Sam Staff was created. ${SENT}`)
+      expect(line).toHaveFocus()
+    })
+
+    it('announces a failure through that same region, once: the visible warning does not announce itself as well', async () => {
+      sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
+      const { u } = renderCreatePage()
+
+      await fillAndCreate(u)
+
+      await screen.findByText(NETWORK)
+      expect(screen.getByRole('status')).toHaveTextContent(`Sam Staff was created. ${NETWORK}`)
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getAllByRole('status')).toHaveLength(1)
+    })
+
+    it('switches Send again off with aria-disabled, not `disabled`, while it sends, and a second click sends nothing more', async () => {
+      sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
+      const { u } = renderCreatePage()
+      await fillAndCreate(u)
+      await screen.findByText(NETWORK)
+      let finishEnsure!: (value: { firebaseAccount: 'created' | 'existing' }) => void
+      mockEnsure.mockReturnValue(new Promise(resolve => { finishEnsure = resolve }))
+
+      await u.click(screen.getByRole('button', { name: 'Send again' }))
+
+      const busy = await screen.findByRole('button', { name: 'Sending...' })
+      expect(busy).toHaveAttribute('aria-disabled', 'true')
+      expect(busy).not.toBeDisabled()
+      expect(busy).toHaveFocus()
+      await u.click(busy)
+      expect(mockEnsure).toHaveBeenCalledTimes(2)
+
+      finishEnsure({ firebaseAccount: 'created' })
+
+      expect(await screen.findByText(SENT)).toBeInTheDocument()
+      expect(mockEnsure).toHaveBeenCalledTimes(2)
+      // Send again went with the warning, so focus is on the done message rather than the top of the page.
+      expect(screen.getByText('Sam Staff was created.', { selector: 'p' })).toHaveFocus()
+    })
   })
 
   it('says why, and sends nothing, when the server could not set the account up', async () => {
@@ -204,9 +260,9 @@ describe('StaffCreatePage: the sign-in email after a create', () => {
 
     await fillAndCreate(u)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    expect(await screen.findByText(
       'No link was sent to sam.staff@acme.example.com. Addresses at platform.example.com are reserved for platform administrators.',
-    )
+    )).toBeInTheDocument()
     expect(sendPasswordResetEmail).not.toHaveBeenCalled()
   })
 

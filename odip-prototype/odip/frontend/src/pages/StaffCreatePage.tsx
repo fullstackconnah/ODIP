@@ -4,18 +4,20 @@ import { useForm, useWatch, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateStaff, useUpdateStaff, useStaffDetail, useEnsureStaffSignInAccount } from '@/api/hooks'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FormField } from '@/components/FormField'
+import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
 import { SignInEmailOutcome } from '@/components/SignInEmailOutcome'
 import { TAP_FLOOR } from '@/components/tapArea'
+import { useRefocusWhenLost } from '@/hooks/useRefocusWhenLost'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { usePermissions } from '@/lib/permissions'
 import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
-import { ensureAndSendSetPasswordEmail, type EmailOutcome } from '@/lib/signInEmail'
+import { describeEmailOutcome, ensureAndSendSetPasswordEmail, type EmailOutcome } from '@/lib/signInEmail'
 import { extractErrorMessage } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
 
@@ -86,6 +88,10 @@ export default function StaffCreatePage() {
   // mutation settles before those do, so its isPending alone would let the button come back to life with the form still on screen, and a
   // second submit would post the same staff member again.
   const [submitting, setSubmitting] = useState(false)
+  // The done view's first line takes focus when the form is swapped for it (the Create button that had it is gone), and again whenever a retry
+  // removes the button that had it.
+  const doneHeading = useRef<HTMLParagraphElement>(null)
+  useRefocusWhenLost(doneHeading, created)
 
   // The account-role dropdown always hides SuperAdmin (never grantable from this form), and
   // additionally hides Admin when the person filling out the form is a Coordinator — a
@@ -196,7 +202,7 @@ export default function StaffCreatePage() {
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
   async function sendAgain() {
-    if (!created) return
+    if (!created || retrying) return
     setRetrying(true)
     const outcome = await ensureAndSendSetPasswordEmail(created.email, () => ensureStaffAccount.mutateAsync(created.id))
     setCreated({ ...created, outcome })
@@ -205,12 +211,18 @@ export default function StaffCreatePage() {
 
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
 
+  // What the done view says, once: the visible Callout shows the sentence and the status region announces it.
+  const announcement = created ? `${created.name} was created. ${describeEmailOutcome(created.outcome, 'use Send again').message}` : ''
+
   if (created) {
     return (
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
+        {/* There before anything is said, and first in the page in both views, so what is written into it later is announced. */}
+        <AnnouncementRegion message={announcement} />
         <PageHeader title="Staff member created" subtitle={created.name} />
         <Card className="space-y-4">
-          <SignInEmailOutcome outcome={created.outcome} retry="use Send again" onRetry={sendAgain} retrying={retrying} />
+          <p ref={doneHeading} tabIndex={-1} className="text-sm font-medium text-[var(--color-foreground)] focus:outline-none">{created.name} was created.</p>
+          <SignInEmailOutcome outcome={created.outcome} retry="use Send again" onRetry={sendAgain} retrying={retrying} announce={false} />
           <div className="flex justify-end">
             <Button to="/staff">Done</Button>
           </div>
@@ -243,6 +255,7 @@ export default function StaffCreatePage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
+      <AnnouncementRegion message={announcement} />
       {unsavedChangesDialog}
       <div className="text-sm text-[var(--color-muted-foreground)]">
         <Link to="/staff" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Staff</Link>

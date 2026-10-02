@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { Dropdown } from '@/components/Dropdown'
@@ -11,8 +12,11 @@ import {
   useUpdateTenant,
 } from '@/api/hooks/admin'
 import type { TenantSummaryDto, CreateTenantWithSetupDto, FirebaseAccountState, UpdateTenantDto } from '@/api/types'
+import { useRefocusWhenLost } from '@/hooks/useRefocusWhenLost'
 import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
-import { ensureAndSendSetPasswordEmail, sendSetPasswordEmailFor, type EmailOutcome } from '@/lib/signInEmail'
+import {
+  describeEmailOutcome, describeTypedPassword, ensureAndSendSetPasswordEmail, sendSetPasswordEmailFor, TENANT_FIRST_USER_ACCOUNT_FAILED, type EmailOutcome,
+} from '@/lib/signInEmail'
 import { MIN_PASSWORD_LENGTH, generateTemporaryPassword } from '@/lib/temporaryPassword'
 
 // What a successful create leaves on screen. The panel does NOT close on a create: what became of the first user's sign-in (a password to
@@ -115,6 +119,10 @@ export default function TenantFormPanel({
   const [done, setDone] = useState<Done | null>(null)
   // The create is answered but the email is still going out, or a Send under the done state is: no second submit, no second send.
   const [submitting, setSubmitting] = useState(false)
+  // The done view's first line takes focus when the form is swapped for it (the Create button that had it is gone), and again whenever a retry
+  // removes the button that had it.
+  const doneHeading = useRef<HTMLParagraphElement>(null)
+  useRefocusWhenLost(doneHeading, done)
   // Whether Firebase can email a link here: not in local dev auth, where there is no Firebase to send it.
   const emailLinkAvailable = canSendSetPasswordEmail()
 
@@ -246,10 +254,22 @@ export default function TenantFormPanel({
     }
   }
 
+  // What the done view says about the first user's sign-in, once: the visible Callout shows it and the status region announces it.
+  const first = done?.firstUser
+  const doneSentence = !first
+    ? null
+    : first.outcome
+      ? describeEmailOutcome(first.outcome, 'use Send again').message
+      : first.account === 'failed'
+        ? TENANT_FIRST_USER_ACCOUNT_FAILED
+        : first.withPassword
+          ? describeTypedPassword(first.account, first.name, first.email)
+          : null
+  const announcement = done ? [`${done.tenantName} was created.`, doneSentence].filter(Boolean).join(' ') : ''
+
   /** Sends again from the done state. A failed account step is redone through the server; anything else only needs Firebase asked again. */
   async function sendAgain() {
-    const first = done?.firstUser
-    if (!done || !first) return
+    if (!done || !first || submitting) return
     setSubmitting(true)
     // With no account yet ("failed") or a failed account step, the retry goes through the server again; otherwise only Firebase is asked again.
     const outcome =
@@ -262,8 +282,7 @@ export default function TenantFormPanel({
 
   /** There is no usable sign-in yet (the account existed and the typed password did not reach it, or it could not be set up): the way in is the link. The server makes sure of the account, then Firebase sends. */
   async function sendLinkToExistingAccount() {
-    const first = done?.firstUser
-    if (!done || !first) return
+    if (!done || !first || submitting) return
     setSubmitting(true)
     const outcome = await ensureAndSendSetPasswordEmail(first.email, () => ensureAccount.mutateAsync(first.userId))
     setDone({ ...done, firstUser: { ...first, outcome } })
@@ -309,7 +328,6 @@ export default function TenantFormPanel({
   if (!isOpen) return null
 
   if (done) {
-    const first = done.firstUser
     return (
       <SlideOver
         open
@@ -321,41 +339,33 @@ export default function TenantFormPanel({
         footerClassName="px-6 py-4 flex items-center justify-end gap-3"
         footer={<Button onClick={onClose}>Done</Button>}
       >
-        <p className="text-sm font-medium text-[var(--color-foreground)]">{done.tenantName} was created.</p>
+        <AnnouncementRegion message={announcement} />
+        <p ref={doneHeading} tabIndex={-1} className="text-sm font-medium text-[var(--color-foreground)] focus:outline-none">{done.tenantName} was created.</p>
         {first &&
           (first.outcome ? (
-            <SignInEmailOutcome outcome={first.outcome} retry="use Send again" onRetry={sendAgain} retrying={submitting} />
-          ) : first.account === 'failed' ? (
+            <SignInEmailOutcome outcome={first.outcome} retry="use Send again" onRetry={sendAgain} retrying={submitting} announce={false} />
+          ) : first.account === 'failed' || (first.withPassword && first.account === 'existing') ? (
             <Callout
               tone="warning"
+              announce={false}
               actions={
                 emailLinkAvailable ? (
-                  <Button variant="secondary" size="sm" onClick={sendLinkToExistingAccount} disabled={submitting}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={sendLinkToExistingAccount}
+                    aria-disabled={submitting || undefined}
+                    className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+                  >
                     {submitting ? 'Sending...' : 'Send set-password email'}
                   </Button>
                 ) : undefined
               }
             >
-              <span className="break-words">Tenant created, but their sign-in account couldn't be set up. Use Send set-password email in the Users tab.</span>
-            </Callout>
-          ) : first.withPassword && first.account === 'existing' ? (
-            <Callout
-              tone="warning"
-              actions={
-                emailLinkAvailable ? (
-                  <Button variant="secondary" size="sm" onClick={sendLinkToExistingAccount} disabled={submitting}>
-                    {submitting ? 'Sending...' : 'Send set-password email'}
-                  </Button>
-                ) : undefined
-              }
-            >
-              <span className="break-words">{first.email} already had a sign-in account, so the password you set wasn&apos;t applied.</span>
+              <span className="break-words">{doneSentence}</span>
             </Callout>
           ) : first.withPassword ? (
-            <Callout tone="success">
-              {first.name} can sign in now with the temporary password you set. Share it with them securely, and ask them to change it with
-              Forgot password after they first sign in.
-            </Callout>
+            <Callout tone="success" announce={false}>{doneSentence}</Callout>
           ) : null)}
       </SlideOver>
     )
@@ -390,6 +400,9 @@ export default function TenantFormPanel({
         </>
       }
     >
+      {/* There before anything is said, and at the same place as in the done view, so what is written into it later is announced. */}
+      <AnnouncementRegion message="" />
+
       {/* ── Section 1: Tenant Details ─────────────────────────────── */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-[var(--color-foreground)]">

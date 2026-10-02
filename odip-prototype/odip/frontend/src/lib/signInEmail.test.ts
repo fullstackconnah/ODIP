@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { describeEmailOutcome, ensureAndSendSetPasswordEmail, sendSetPasswordEmailFor, type EmailOutcome } from './signInEmail'
+import {
+  describeEmailOutcome, describeTypedPassword, ensureAndSendSetPasswordEmail, sendSetPasswordEmailFor, TENANT_FIRST_USER_ACCOUNT_FAILED, type EmailOutcome,
+} from './signInEmail'
 
 const { sendPasswordResetEmail, firebase } = vi.hoisted(() => ({
   sendPasswordResetEmail: vi.fn(),
@@ -190,5 +192,27 @@ describe('the three outcomes of the account step, as POST .../sign-in-account wo
     expect(message).toBe(`No link was sent to ${EMAIL}. ${otherFailure}`)
     expect(message).not.toMatch(/try again later/i)
     expect(sendPasswordResetEmail).not.toHaveBeenCalled()
+  })
+})
+
+describe('describeTypedPassword', () => {
+  it("says they can sign in now, and what to ask of them, for an account the app made", () => {
+    expect(describeTypedPassword('created', 'Ann One', 'ann@example.com')).toBe(
+      'Ann One can sign in now with the temporary password you set. Share it with them securely, and ask them to change it with Forgot password after they first sign in.',
+    )
+  })
+
+  it("says the password was not applied, naming the address, for an account that already existed", () => {
+    expect(describeTypedPassword('existing', 'Ann One', 'ann@example.com')).toBe("ann@example.com already had a sign-in account, so the password you set wasn't applied.")
+  })
+
+  it('never claims they can sign in with a password that did not reach their account', () => {
+    expect(describeTypedPassword('existing', 'Ann One', 'ann@example.com')).not.toMatch(/can sign in now/)
+  })
+})
+
+describe('TENANT_FIRST_USER_ACCOUNT_FAILED', () => {
+  it("says the tenant exists, that the first user's account could not be set up, and where to go on", () => {
+    expect(TENANT_FIRST_USER_ACCOUNT_FAILED).toBe("Tenant created, but their sign-in account couldn't be set up. Use Send set-password email in the Users tab.")
   })
 })

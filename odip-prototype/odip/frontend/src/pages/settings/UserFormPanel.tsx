@@ -1,4 +1,4 @@
-import { useState, useEffect, useId } from 'react'
+import { useState, useEffect, useId, useRef } from 'react'
 import {
   useAdminTenantsSummary,
   useCreateAdminUser,
@@ -6,13 +6,17 @@ import {
   useUpdateAdminUser,
 } from '@/api/hooks'
 import type { AdminUserDto, FirebaseAccountState } from '@/api/types'
+import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { Dropdown } from '@/components/Dropdown'
 import { SignInEmailOutcome } from '@/components/SignInEmailOutcome'
 import { SlideOver } from '@/components/SlideOver'
+import { useRefocusWhenLost } from '@/hooks/useRefocusWhenLost'
 import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
-import { ensureAndSendSetPasswordEmail, sendSetPasswordEmailFor, type EmailOutcome } from '@/lib/signInEmail'
+import {
+  describeEmailOutcome, describeTypedPassword, ensureAndSendSetPasswordEmail, sendSetPasswordEmailFor, type EmailOutcome,
+} from '@/lib/signInEmail'
 import { MIN_PASSWORD_LENGTH, generateTemporaryPassword } from '@/lib/temporaryPassword'
 
 // ---------------------------------------------------------------------------
@@ -89,6 +93,10 @@ export default function UserFormPanel({
   const [done, setDone] = useState<Done | null>(null)
   // The create is answered but the email is still going out, or a Send under the done state is: no second submit, no second send.
   const [submitting, setSubmitting] = useState(false)
+  // The done view's first line takes focus when the form is swapped for it (the Create button that had it is gone), and again whenever a retry
+  // removes the button that had it.
+  const doneHeading = useRef<HTMLParagraphElement>(null)
+  useRefocusWhenLost(doneHeading, done)
 
   // Reset form state when the panel opens or the user prop changes
   useEffect(() => {
@@ -202,9 +210,19 @@ export default function UserFormPanel({
     setSubmitting(false)
   }
 
+  // What the done view says about their sign-in, once: the visible Callout shows it and the status region announces it.
+  const doneSentence = !done
+    ? null
+    : done.outcome
+      ? describeEmailOutcome(done.outcome, 'use Send again').message
+      : done.withPassword
+        ? describeTypedPassword(done.account, done.name, done.email)
+        : null
+  const announcement = done ? [`${done.name} was created.`, doneSentence].filter(Boolean).join(' ') : ''
+
   /** Sends again from the done state. A failed account step is redone through the server; anything else only needs Firebase asked again. */
   async function sendAgain() {
-    if (!done) return
+    if (!done || submitting) return
     setSubmitting(true)
     const redoAccount = !!done.outcome && !done.outcome.ok && done.outcome.reason === 'account'
     const outcome = redoAccount
@@ -216,7 +234,7 @@ export default function UserFormPanel({
 
   /** The typed password did not reach an account that already existed, so the way in is the link: the server makes sure of the account, then Firebase sends. */
   async function sendLinkToExistingAccount() {
-    if (!done) return
+    if (!done || submitting) return
     setSubmitting(true)
     const outcome = await ensureAndSendSetPasswordEmail(done.email, () => ensureAccount.mutateAsync(done.userId))
     setDone({ ...done, outcome })
@@ -259,27 +277,32 @@ export default function UserFormPanel({
           </div>
         }
       >
-        <p className="text-sm font-medium text-[var(--color-foreground)]">{done.name} was created.</p>
+        <AnnouncementRegion message={announcement} />
+        <p ref={doneHeading} tabIndex={-1} className="text-sm font-medium text-[var(--color-foreground)] focus:outline-none">{done.name} was created.</p>
         {done.outcome ? (
-          <SignInEmailOutcome outcome={done.outcome} retry="use Send again" onRetry={sendAgain} retrying={submitting} />
+          <SignInEmailOutcome outcome={done.outcome} retry="use Send again" onRetry={sendAgain} retrying={submitting} announce={false} />
         ) : done.withPassword && done.account === 'existing' ? (
           <Callout
             tone="warning"
+            announce={false}
             actions={
               emailLinkAvailable ? (
-                <Button variant="secondary" size="sm" onClick={sendLinkToExistingAccount} disabled={submitting}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={sendLinkToExistingAccount}
+                  aria-disabled={submitting || undefined}
+                  className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+                >
                   {submitting ? 'Sending...' : 'Send set-password email'}
                 </Button>
               ) : undefined
             }
           >
-            <span className="break-words">{done.email} already had a sign-in account, so the password you set wasn&apos;t applied.</span>
+            <span className="break-words">{doneSentence}</span>
           </Callout>
         ) : done.withPassword ? (
-          <Callout tone="success">
-            {done.name} can sign in now with the temporary password you set. Share it with them securely, and ask them to change it with Forgot
-            password after they first sign in.
-          </Callout>
+          <Callout tone="success" announce={false}>{doneSentence}</Callout>
         ) : null}
       </SlideOver>
     )
@@ -313,6 +336,9 @@ export default function UserFormPanel({
         </div>
       }
     >
+      {/* There before anything is said, and at the same place as in the done view, so what is written into it later is announced. */}
+      <AnnouncementRegion message="" />
+
       {/* Tenant */}
       <div>
         <label id={tenantLabelId} className={labelClass}>Tenant *</label>
