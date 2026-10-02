@@ -6,6 +6,8 @@ on:
     paths:
       - 'odip-prototype/odip/backend/**'
       - 'odip-prototype/odip/frontend/**'
+      - 'odip-prototype/odip/e2e/**'
+      - 'odip-prototype/odip/nginx/**'
       - '.github/workflows/pr-validation.yml'
 
 # PR validation only needs to read its source. It never receives deployment or cloud credentials.
@@ -94,3 +96,135 @@ jobs:
           npm ci --no-audit --no-fund
           npm test
           npm run build
+
+  # Informational (not a required check yet): the real API + PostgreSQL + built frontend, driven by Playwright.
+  # DEV_AUTH_ENABLED / VITE_DEV_AUTH are set only inside this job. Production keeps them off (deploy/compose.yaml).
+  e2e:
+    name: E2E (Playwright, real API + PostgreSQL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: '0'
+      E2E_API_URL: http://127.0.0.1:5000
+      E2E_BASE_URL: http://127.0.0.1:8475
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: odip_e2e
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d odip_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+          cache-dependency-path: |
+            odip-prototype/odip/frontend/package-lock.json
+            odip-prototype/odip/e2e/package-lock.json
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('odip-prototype/odip/backend/**/*.csproj') }}
+
+      - name: Build the API (Release) and the frontend (dev sign-in baked in), in parallel
+        run: |
+          set -euo pipefail
+          dotnet publish odip-prototype/odip/backend/Odip.Api/Odip.Api.csproj \
+            -c Release -o "$RUNNER_TEMP/odip-api" --nologo -v minimal &
+          api=$!
+          ( npm --prefix odip-prototype/odip/frontend ci --no-audit --no-fund \
+            && VITE_DEV_AUTH=true npm --prefix odip-prototype/odip/frontend run build ) &
+          web=$!
+          wait "$api"
+          wait "$web"
+
+      - uses: actions/cache@v4
+        id: pw
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('odip-prototype/odip/e2e/package-lock.json') }}
+
+      - name: Install e2e dependencies and Chromium
+        working-directory: odip-prototype/odip/e2e
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          if [ "${{ steps.pw.outputs.cache-hit }}" = "true" ]; then
+            npx playwright install-deps chromium
+          else
+            npx playwright install --with-deps --only-shell chromium
+          fi
+
+      - name: Start the API (migrates and seeds on boot)
+        env:
+          ConnectionStrings__DefaultConnection: Host=127.0.0.1;Port=5432;Database=odip_e2e;Username=postgres;Password=postgres;Include Error Detail=true
+          JWT_SECRET: e2e-only-signing-key-0123456789-abcdefghij
+          DEV_AUTH_ENABLED: 'true'
+          ASPNETCORE_ENVIRONMENT: Production
+          ASPNETCORE_URLS: http://0.0.0.0:5000
+          HolidaySync__FromYear: '2100'
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/odip-api"
+          nohup dotnet Odip.Api.dll > "$RUNNER_TEMP/api.log" 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:5000/api/health/ready > /dev/null 2>&1; then exit 0; fi
+            sleep 1
+          done
+          echo '::error::API not ready after 90 s'
+          tail -n 80 "$RUNNER_TEMP/api.log"
+          exit 1
+
+      - name: Start the web tier (nginx with the repo production config)
+        run: |
+          set -euo pipefail
+          docker run -d --name odip-web --add-host=api:host-gateway -p 8475:80 \
+            -v "$GITHUB_WORKSPACE/odip-prototype/odip/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro" \
+            -v "$GITHUB_WORKSPACE/odip-prototype/odip/frontend/dist:/usr/share/nginx/html:ro" \
+            nginx:alpine
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8475/api/health/live > /dev/null 2>&1; then exit 0; fi
+            sleep 1
+          done
+          docker logs odip-web
+          echo '::error::the web tier cannot reach the API'
+          exit 1
+
+      - name: Run Playwright
+        working-directory: odip-prototype/odip/e2e
+        env:
+          CI: 'true'
+        run: npx playwright test
+
+      - name: Collect the API log
+        if: failure()
+        run: |
+          mkdir -p odip-prototype/odip/e2e/test-results
+          cp "$RUNNER_TEMP/api.log" odip-prototype/odip/e2e/test-results/api.log || true
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-diagnostics
+          path: |
+            odip-prototype/odip/e2e/playwright-report
+            odip-prototype/odip/e2e/test-results
+          retention-days: 7
