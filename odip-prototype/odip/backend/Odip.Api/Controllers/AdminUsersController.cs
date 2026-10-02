@@ -433,13 +433,21 @@ public class AdminUsersController : ControllerBase
             return Ok(ApiResponse<SignInAccountDto>.Ok(new SignInAccountDto(
                 result == SignInAccountResult.Created ? FirebaseAccountStatus.Created : FirebaseAccountStatus.Existing)));
         }
+        catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex))
+        {
+            // Firebase refused the address itself (a legacy row with a typo). Retrying cannot fix that and correcting the address can, so it is the
+            // admin's to act on (400), not a fault on our side (502).
+            _logger.LogWarning("Firebase refused the address of user {UserId} as invalid: {Email}", user.Id, email);
+            return BadRequest(ApiResponse<object>.Fail("That doesn't look like a valid email address. Correct it first."));
+        }
         catch (Exception ex)
         {
             // Deliberately broad, as in Create: the failure that matters (a service account Google cannot authenticate) is not a
-            // FirebaseAuthException, and the same call with no Firebase app configured fails the same way, so it is the same 502.
+            // FirebaseAuthException, and the same call with no Firebase app configured fails the same way, so it is the same 502. The line says
+            // where to turn rather than promising a retry will help: an unusable service account stays unusable.
             _logger.LogError(ex, "Failed to ensure a Firebase sign-in account for {Email}", email);
             return StatusCode(StatusCodes.Status502BadGateway,
-                ApiResponse<object>.Fail("Unable to set up the user's sign-in account. Please try again later."));
+                ApiResponse<object>.Fail("Unable to set up the user's sign-in account. If it keeps happening, ask whoever runs the Firebase project."));
         }
     }
 }

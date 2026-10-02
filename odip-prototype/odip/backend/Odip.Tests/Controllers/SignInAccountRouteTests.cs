@@ -150,6 +150,54 @@ public class SignInAccountRouteTests
         Assert.IsType<OkObjectResult>(result);
     }
 
+    // Three outcomes of the account step, worded for what the admin can DO about them: success, an address Firebase refuses as malformed
+    // (correcting it fixes it, retrying never will: a 400 the admin acts on), and anything else (a 502 that says where to turn, not "try later").
+    private static Mock<IFirebaseUserService> FirebaseThrowing(Exception failure)
+    {
+        var firebase = new Mock<IFirebaseUserService>();
+        firebase.Setup(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+        return firebase;
+    }
+
+    private const string InvalidAddressSentence = "That doesn't look like a valid email address. Correct it first.";
+    private const string NeutralFailureEnding = "If it keeps happening, ask whoever runs the Firebase project.";
+
+    [Fact]
+    public async Task AdminUsers_route_says_a_malformed_address_needs_correcting_and_that_is_a_400_not_a_502()
+    {
+        using var db = AdminDb();
+        var user = await SeedAdminSideUser(db, "sam.staff@acme");
+
+        var result = await AdminController(db, FirebaseThrowing(FirebaseTestExceptions.InvalidEmail())).EnsureSignInAccount(user.Id, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(InvalidAddressSentence, Assert.IsType<ApiResponse<object>>(badRequest.Value).Errors!.Single());
+    }
+
+    [Theory]
+    [MemberData(nameof(OtherFirebaseFailures))]
+    public async Task AdminUsers_route_keeps_every_other_failure_a_502_with_a_neutral_line_and_no_advice_to_try_later(Exception failure)
+    {
+        using var db = AdminDb();
+        var user = await SeedAdminSideUser(db, "sam.staff@acme.example.com");
+
+        var result = await AdminController(db, FirebaseThrowing(failure)).EnsureSignInAccount(user.Id, CancellationToken.None);
+
+        var status = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+        var message = Assert.IsType<ApiResponse<object>>(status.Value).Errors!.Single();
+        Assert.Equal($"Unable to set up the user's sign-in account. {NeutralFailureEnding}", message);
+        Assert.DoesNotContain("try again", message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // A 400 that is not about the address (a weak password), a refusal of the service account, and a failure that is not Firebase's at all.
+    public static IEnumerable<object[]> OtherFirebaseFailures() =>
+    [
+        [FirebaseTestExceptions.WeakPassword()],
+        [FirebaseTestExceptions.PermissionDenied()],
+        [new InvalidOperationException("simulated Firebase outage")],
+    ];
+
     [Fact]
     public async Task AdminUsers_route_is_a_404_for_an_unknown_user()
     {
@@ -307,6 +355,34 @@ public class SignInAccountRouteTests
         var result = await StaffControllerFor(db, "Admin", FirebaseReturning(SignInAccountResult.Created)).EnsureSignInAccount(staff.Id, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Staff_route_says_a_malformed_address_needs_correcting_and_that_is_a_400_not_a_502()
+    {
+        var (db, tenantId) = StaffDb();
+        var staff = await SeedStaff(db, tenantId, "sam.staff@acme");
+
+        var result = await StaffControllerFor(db, "Admin", FirebaseThrowing(FirebaseTestExceptions.InvalidEmail())).EnsureSignInAccount(staff.Id, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(InvalidAddressSentence, Assert.IsType<ApiResponse<SignInAccountDto>>(badRequest.Value).Errors!.Single());
+    }
+
+    [Theory]
+    [MemberData(nameof(OtherFirebaseFailures))]
+    public async Task Staff_route_keeps_every_other_failure_a_502_with_a_neutral_line_and_no_advice_to_try_later(Exception failure)
+    {
+        var (db, tenantId) = StaffDb();
+        var staff = await SeedStaff(db, tenantId, "sam.staff@acme.example.com");
+
+        var result = await StaffControllerFor(db, "Admin", FirebaseThrowing(failure)).EnsureSignInAccount(staff.Id, CancellationToken.None);
+
+        var status = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+        var message = Assert.IsType<ApiResponse<SignInAccountDto>>(status.Value).Errors!.Single();
+        Assert.Equal($"Unable to set up the staff member's sign-in account. {NeutralFailureEnding}", message);
+        Assert.DoesNotContain("try again", message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

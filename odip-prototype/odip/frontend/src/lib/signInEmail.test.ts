@@ -160,3 +160,35 @@ describe('describeEmailOutcome', () => {
     }
   })
 })
+
+describe('the three outcomes of the account step, as POST .../sign-in-account words them', () => {
+  // Success, an address Firebase refuses as malformed (a 400 the admin fixes by correcting it), and anything else (a 502 that says where to turn).
+  const retry = 'use Send set-password email on their row'
+  const invalidAddress = "That doesn't look like a valid email address. Correct it first."
+  const otherFailure = "Unable to set up the user's sign-in account. If it keeps happening, ask whoever runs the Firebase project."
+
+  it('success: the account is made sure of and the link goes', async () => {
+    sendPasswordResetEmail.mockResolvedValue(undefined)
+
+    const outcome = await ensureAndSendSetPasswordEmail(EMAIL, async () => ({ firebaseAccount: 'created' }))
+
+    expect(describeEmailOutcome(outcome, retry).tone).toBe('success')
+  })
+
+  it('an address Firebase refuses as invalid is told to be corrected, with no email sent and no retry that cannot work', async () => {
+    const outcome = await ensureAndSendSetPasswordEmail('jane@acme', () => Promise.reject(apiError(invalidAddress)))
+
+    expect(describeEmailOutcome(outcome, retry)).toEqual({ tone: 'danger', message: `No link was sent to jane@acme. ${invalidAddress}` })
+    expect(sendPasswordResetEmail).not.toHaveBeenCalled()
+  })
+
+  it('any other failure says where to turn, and never promises that trying again later will help', async () => {
+    const outcome = await ensureAndSendSetPasswordEmail(EMAIL, () => Promise.reject(apiError(otherFailure)))
+
+    const { tone, message } = describeEmailOutcome(outcome, retry)
+    expect(tone).toBe('danger')
+    expect(message).toBe(`No link was sent to ${EMAIL}. ${otherFailure}`)
+    expect(message).not.toMatch(/try again later/i)
+    expect(sendPasswordResetEmail).not.toHaveBeenCalled()
+  })
+})
