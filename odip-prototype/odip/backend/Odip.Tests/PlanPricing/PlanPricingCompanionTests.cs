@@ -51,7 +51,7 @@ public class PlanPricingCompanionTests
     [Fact]
     public void Several_participants_on_one_trip_divide_the_travel_time_and_the_item_rate_is_not_divided()
     {
-        var quote = QuoteOne(WithTravel(Community(), 25, sharing: 3), Mon12Oct);
+        var quote = QuoteOne(WithTravel(Community(b => b with { ParticipantsPresent = 3 }), 25, sharing: 3), Mon12Oct);
 
         var travel = TravelTime(quote);
         Assert.Equal((0.2778m, 73.58m, 20.43m), (travel.Qty, travel.UnitPrice, travel.Total));   // 50 minutes / 3 at $73.58 an hour, floored
@@ -129,7 +129,7 @@ public class PlanPricingCompanionTests
     public void Kilometres_are_one_way_without_a_return_leg_shared_by_the_trip_and_use_the_providers_rate()
     {
         var oneWay = QuoteOne(WithTravel(Community(), 0, back: false, km: 10m), Mon12Oct).Lines.Single(l => l.Kind == PlannedLineKind.ProviderTravelCosts);
-        var shared = QuoteOne(WithTravel(Community(), 0, sharing: 3, km: 10m), Mon12Oct).Lines.Single(l => l.Kind == PlannedLineKind.ProviderTravelCosts);
+        var shared = QuoteOne(WithTravel(Community(b => b with { ParticipantsPresent = 3 }), 0, sharing: 3, km: 10m), Mon12Oct).Lines.Single(l => l.Kind == PlannedLineKind.ProviderTravelCosts);
         var own = QuoteOne(WithTravel(Community(), 0, km: 10m), Mon12Oct, PlanPricingPolicy.Default with { KmRateStandard = 1.10m }).Lines.Single(l => l.Kind == PlannedLineKind.ProviderTravelCosts);
 
         Assert.Equal(9.90m, oneWay.Total);
@@ -161,7 +161,7 @@ public class PlanPricingCompanionTests
     public void Tolls_and_parking_alone_are_at_cost_and_not_provisional_and_a_share_is_floored_to_the_cent()
     {
         var tolls = Community(b => b with { Transport = new PlanActivityTransport { Tolls = 12.50m, Parking = 6m } });
-        var shared = Community(b => b with { Transport = new PlanActivityTransport { Km = 10m, Tolls = 1m, ParticipantsSharing = 3 } });
+        var shared = Community(b => b with { ParticipantsPresent = 3, Transport = new PlanActivityTransport { Km = 10m, Tolls = 1m, ParticipantsSharing = 3 } });
 
         var costs = QuoteOne(tolls, Mon12Oct).Lines.Single(l => l.Kind == PlannedLineKind.ActivityTransport);
         var third = QuoteOne(shared, Mon12Oct).Lines.Single(l => l.Kind == PlannedLineKind.ActivityTransport);
@@ -325,6 +325,58 @@ public class PlanPricingCompanionTests
 
         Assert.DoesNotContain(quote.Lines, l => l.Kind is PlannedLineKind.ParticipantAccommodation or PlannedLineKind.WorkerAccommodation);
         Assert.Equal(PlanFailureReason.AccommodationNotAvailable, Assert.Single(quote.Issues).Reason);
+    }
+
+    // ── Review M7: a trip is shared by the participants present unless the plan says otherwise ──
+
+    private static PlanBlock GroupDayOut(Func<PlanBlock, PlanBlock>? change = null) =>
+        Block("g", PlanSupportType.GroupActivity, DayOfWeek.Saturday, T(9), T(15), b =>
+        {
+            b = b with
+            {
+                ParticipantsPresent = 3,
+                Location = new PlanLocation { State = "NSW", Zone = PriceZone.National, Mm = 2 },
+                Travel = new PlanProviderTravel { Claim = true, MinutesEachWay = 35, ReturnToBase = true, KmEachWay = 12m },
+                Transport = new PlanActivityTransport { Km = 40m },
+            };
+            return change is null ? b : change(b);
+        });
+
+    [Fact]
+    public void A_group_trip_with_no_sharing_given_is_shared_by_every_participant_present_not_charged_in_full_to_each_plan()
+    {
+        // Saturday 1:3, 35 minutes each way (capped to 30) and back, 12 km each way, 40 km of activity transport, sharing left out. It used to default to 1, so each of the
+        // three participants' plans carried the whole trip: 3 x 103.54 of travel time and 3 x 39.60 of transport against the one trip NDIS-CODES 6 and 7 allow.
+        var left = QuoteOne(GroupDayOut(), Sat17Oct);
+        var three = QuoteOne(GroupDayOut(b => b with { Travel = b.Travel! with { ParticipantsSharing = 3 }, Transport = b.Transport! with { ParticipantsSharing = 3 } }), Sat17Oct);
+
+        var time = left.Lines.Single(l => l.Kind == PlannedLineKind.ProviderTravelTime);
+        var km = left.Lines.Single(l => l.Kind == PlannedLineKind.ProviderTravelCosts);
+        var vehicle = left.Lines.Single(l => l.Kind == PlannedLineKind.ActivityTransport);
+        Assert.Equal(("H", 0.3333m, 103.54m, 34.51m), (time.Unit, time.Qty, time.UnitPrice, time.Total));   // 60 minutes / 3 at the Saturday rate
+        Assert.Equal(7.92m, km.Total);                                                                          // 12 km x 2 x 0.99 = 23.76, a third each
+        Assert.Equal(13.20m, vehicle.Total);                                                                    // 39.60, a third each
+        Assert.Equal(Json(three.Lines), Json(left.Lines));                                                      // the same as saying 3
+        Assert.Contains(5, time.Trace.OpenQuestions);                                                           // the group travel-time basis is still an open question
+    }
+
+    [Fact]
+    public void Saying_that_one_participant_takes_the_whole_trip_is_still_possible()
+    {
+        var quote = QuoteOne(GroupDayOut(b => b with { Travel = b.Travel! with { ParticipantsSharing = 1 }, Transport = b.Transport! with { ParticipantsSharing = 1 } }), Sat17Oct);
+
+        Assert.Equal(103.54m, quote.Lines.Single(l => l.Kind == PlannedLineKind.ProviderTravelTime).Total);
+        Assert.Equal(23.76m, quote.Lines.Single(l => l.Kind == PlannedLineKind.ProviderTravelCosts).Total);
+        Assert.Equal(39.60m, quote.Lines.Single(l => l.Kind == PlannedLineKind.ActivityTransport).Total);
+    }
+
+    [Fact]
+    public void A_trip_shared_by_more_participants_than_are_present_is_refused_as_invalid_input()
+    {
+        var quote = QuoteOne(GroupDayOut(b => b with { Travel = b.Travel! with { ParticipantsSharing = 4 } }), Sat17Oct);
+
+        Assert.Equal(PlanFailureReason.InvalidInput, Assert.Single(quote.Issues).Reason);
+        Assert.Empty(quote.Lines.Where(l => l.IsPriced));
     }
 
     private static SupportCatalogueItem With(SupportCatalogueItem row, Action<SupportCatalogueItem> change)

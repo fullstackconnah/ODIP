@@ -622,7 +622,7 @@ internal sealed class OccurrencePricer
         var perLeg = cap is { } c ? Math.Min(travel.MinutesEachWay, c) : travel.MinutesEachWay;
         var legs = travel.ReturnToBase ? 2 : 1;
         var claimable = perLeg * legs;
-        var sharing = travel.ParticipantsSharing;
+        var sharing = travel.ParticipantsSharing ?? block.ParticipantsPresent;
         var questions = new List<int>();
         var flags = PlannedLineFlags.None;
         if (_policy.TravelRatesProvisional)
@@ -672,13 +672,14 @@ internal sealed class OccurrencePricer
         }
 
         var rate = transport.Vehicle == VehicleKind.Accessible ? _policy.KmRateAccessible : _policy.KmRateStandard;
-        var dollars = PlanMoney.FloorToCent((transport.Km * rate + transport.Tolls + transport.Parking) / transport.ParticipantsSharing);
+        var sharing = transport.ParticipantsSharing ?? block.ParticipantsPresent;
+        var dollars = PlanMoney.FloorToCent((transport.Km * rate + transport.Tolls + transport.Parking) / sharing);
         var provisional = transport.Km > 0m && _policy.TravelRatesProvisional;
         var need = new ItemNeed(SupportFamily.ActivityBasedTransport, null, null, RegistrationGroupOf(block, _policy));
         AddDollarLine(occ, need, PlannedLineKind.ActivityTransport, "Activity-based transport", dollars, provisional ? PlannedLineFlags.Provisional : PlannedLineFlags.None,
             provisional ? new[] { 6 } : Array.Empty<int>(),
             new[] { "abt:vehicle-costs", "price:catalogue-by-service-date" },
-            $"Activity-based transport: {Number(transport.Km)} km in a {transport.Vehicle.ToString().ToLowerInvariant()} vehicle at ${Money(rate)} a kilometre plus tolls ${Money(transport.Tolls)} and parking ${Money(transport.Parking)} at cost{(transport.ParticipantsSharing > 1 ? $", shared by {transport.ParticipantsSharing} participants" : string.Empty)}; the worker's time in the vehicle stays on the support item{(provisional ? "; the kilometre rate is a 2025-26 value" : string.Empty)}");
+            $"Activity-based transport: {Number(transport.Km)} km in a {transport.Vehicle.ToString().ToLowerInvariant()} vehicle at ${Money(rate)} a kilometre plus tolls ${Money(transport.Tolls)} and parking ${Money(transport.Parking)} at cost{(sharing > 1 ? $", shared by {sharing} participants" : string.Empty)}; the worker's time in the vehicle stays on the support item{(provisional ? "; the kilometre rate is a 2025-26 value" : string.Empty)}");
     }
 
     /// <summary>A line claimed in dollars at $1.00 (provider travel costs, activity-based transport).</summary>

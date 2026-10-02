@@ -262,13 +262,13 @@ public class PlanBlockTests
     [Fact]
     public void Travel_transport_and_accommodation_stay_inside_sensible_bounds()
     {
-        Assert.Empty(Valid(b => b with { Travel = new PlanProviderTravel { Claim = true, MinutesEachWay = 25, ReturnToBase = true, ParticipantsSharing = 3, KmEachWay = 12.5m } }).Validate());
+        Assert.Empty(Valid(b => b with { ParticipantsPresent = 3, Travel = new PlanProviderTravel { Claim = true, MinutesEachWay = 25, ReturnToBase = true, ParticipantsSharing = 3, KmEachWay = 12.5m } }).Validate());
         Assert.NotEmpty(Valid(b => b with { Travel = new PlanProviderTravel { Claim = true, MinutesEachWay = -1 } }).Validate());
         Assert.NotEmpty(Valid(b => b with { Travel = new PlanProviderTravel { Claim = true, MinutesEachWay = 481 } }).Validate());
         Assert.NotEmpty(Valid(b => b with { Travel = new PlanProviderTravel { Claim = true, ParticipantsSharing = 0 } }).Validate());
         Assert.NotEmpty(Valid(b => b with { Travel = new PlanProviderTravel { Claim = true, KmEachWay = -0.5m } }).Validate());
 
-        Assert.Empty(Valid(b => b with { Transport = new PlanActivityTransport { Km = 40, Vehicle = VehicleKind.Accessible, Tolls = 12.5m, Parking = 9m, ParticipantsSharing = 3 } }).Validate());
+        Assert.Empty(Valid(b => b with { ParticipantsPresent = 3, Transport = new PlanActivityTransport { Km = 40, Vehicle = VehicleKind.Accessible, Tolls = 12.5m, Parking = 9m, ParticipantsSharing = 3 } }).Validate());
         Assert.NotEmpty(Valid(b => b with { Transport = new PlanActivityTransport { Km = -1 } }).Validate());
         Assert.NotEmpty(Valid(b => b with { Transport = new PlanActivityTransport { Km = 1, Tolls = -1m } }).Validate());
         Assert.NotEmpty(Valid(b => b with { Transport = new PlanActivityTransport { Km = 1, Parking = -1m } }).Validate());
@@ -277,6 +277,42 @@ public class PlanBlockTests
         Assert.Empty(Valid(b => b with { SupportType = PlanSupportType.StaSupport, Accommodation = new PlanAccommodation { Nights = 2, WorkerOnSite = true } }).Validate());
         Assert.NotEmpty(Valid(b => b with { Accommodation = new PlanAccommodation { Nights = -1 } }).Validate());
         Assert.NotEmpty(Valid(b => b with { Accommodation = new PlanAccommodation { Nights = 15 } }).Validate());
+    }
+
+    // ── Review M7: a trip is shared by the participants present unless the plan says otherwise ──
+
+    [Fact]
+    public void Nobody_is_assumed_to_share_a_trip_or_a_vehicle_until_the_plan_says_so_and_the_pricer_then_uses_the_participants_present()
+    {
+        Assert.Null(new PlanProviderTravel().ParticipantsSharing);
+        Assert.Null(new PlanActivityTransport().ParticipantsSharing);
+        Assert.Empty(Valid(b => b with { ParticipantsPresent = 3, Travel = new PlanProviderTravel { Claim = true, MinutesEachWay = 30 }, Transport = new PlanActivityTransport { Km = 10 } }).Validate());
+    }
+
+    [Fact]
+    public void More_participants_cannot_share_a_trip_or_a_vehicle_than_are_present()
+    {
+        var trip = Valid(b => b with { ParticipantsPresent = 3, Travel = new PlanProviderTravel { Claim = true, ParticipantsSharing = 4 } }).Validate();
+        var vehicle = Valid(b => b with { ParticipantsPresent = 3, Transport = new PlanActivityTransport { Km = 1, ParticipantsSharing = 4 } }).Validate();
+
+        Assert.Contains("4 participants cannot share the trip: at most 3 are present", Assert.Single(trip));
+        Assert.Contains("4 participants cannot share the vehicle: at most 3 are present", Assert.Single(vehicle));
+        Assert.Empty(Valid(b => b with { ParticipantsPresent = 3, Travel = new PlanProviderTravel { Claim = true, ParticipantsSharing = 2 } }).Validate());   // a smaller group on the trip is fine
+    }
+
+    [Fact]
+    public void The_most_that_can_share_is_the_most_present_at_any_time_in_the_block()
+    {
+        // Two are present at 09:00 and four from 11:00, so four can share a trip or a vehicle and five cannot.
+        PlanBlock Block(int sharing) => Valid(b => b with
+        {
+            ParticipantsPresent = 2,
+            HeadcountChanges = new[] { new PlanHeadcountChange { From = new TimeOnly(11, 0), ParticipantsPresent = 4 } },
+            Travel = new PlanProviderTravel { Claim = true, ParticipantsSharing = sharing },
+        });
+
+        Assert.Empty(Block(4).Validate());
+        Assert.Contains("at most 4 are present", Assert.Single(Block(5).Validate()));
     }
 
     [Fact]

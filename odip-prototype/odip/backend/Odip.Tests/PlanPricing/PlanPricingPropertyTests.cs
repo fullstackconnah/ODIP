@@ -77,10 +77,14 @@ public class PlanPricingPropertyTests
 
     private static PlanBlock WithExtras(Random random, PlanBlock block) => block with
     {
-        Travel = random.Next(3) == 0 ? new PlanProviderTravel { Claim = true, MinutesEachWay = random.Next(0, 9) * 15, ReturnToBase = random.Next(2) == 0, ParticipantsSharing = random.Next(1, 4), KmEachWay = random.Next(0, 30) } : null,
-        Transport = random.Next(4) == 0 ? new PlanActivityTransport { Km = random.Next(0, 60), Tolls = random.Next(0, 3) * 5, Vehicle = (VehicleKind)random.Next(2), ParticipantsSharing = random.Next(1, 4) } : null,
+        Travel = random.Next(3) == 0 ? new PlanProviderTravel { Claim = true, MinutesEachWay = random.Next(0, 9) * 15, ReturnToBase = random.Next(2) == 0, ParticipantsSharing = RandomSharing(random, block), KmEachWay = random.Next(0, 30) } : null,
+        Transport = random.Next(4) == 0 ? new PlanActivityTransport { Km = random.Next(0, 60), Tolls = random.Next(0, 3) * 5, Vehicle = (VehicleKind)random.Next(2), ParticipantsSharing = RandomSharing(random, block) } : null,
         Accommodation = block.SupportType == PlanSupportType.StaSupport && random.Next(2) == 0 ? new PlanAccommodation { Nights = random.Next(1, 4), WorkerOnSite = random.Next(2) == 0 } : null,
     };
+
+    /// <summary>Sharing is left out about a third of the time (the pricer then uses the participants present) and is never more than the participants present.</summary>
+    private static int? RandomSharing(Random random, PlanBlock block) =>
+        random.Next(3) == 0 ? null : random.Next(1, Math.Max(block.ParticipantsPresent, block.Changes.Select(c => c.ParticipantsPresent).DefaultIfEmpty(0).Max()) + 1);
 
     private static List<HolidayEntry> RandomHolidays(Random random)
     {

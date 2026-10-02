@@ -80,8 +80,8 @@ public sealed record PlanProviderTravel
     public int MinutesEachWay { get; init; }
     /// <summary>Also claim the leg from the last participant back to base.</summary>
     public bool ReturnToBase { get; init; }
-    /// <summary>The participants one trip serves: the travel time and the cost are divided among them.</summary>
-    public int ParticipantsSharing { get; init; } = 1;
+    /// <summary>The participants one trip serves: the travel time and the cost are divided among them. Not given means every participant present (one trip is one claim, not one per plan).</summary>
+    public int? ParticipantsSharing { get; init; }
     /// <summary>Kilometres each way, claimed at the provider's standard per-kilometre rate on the provider-travel (non-labour) item.</summary>
     public decimal KmEachWay { get; init; }
 }
@@ -95,8 +95,8 @@ public sealed record PlanActivityTransport
     public decimal Tolls { get; init; }
     /// <summary>Parking, in dollars, at cost.</summary>
     public decimal Parking { get; init; }
-    /// <summary>The participants who share the vehicle: the dollar amount is divided among them.</summary>
-    public int ParticipantsSharing { get; init; } = 1;
+    /// <summary>The participants who share the vehicle: the dollar amount is divided among them. Not given means every participant present (one vehicle is one claim, not one per plan).</summary>
+    public int? ParticipantsSharing { get; init; }
 }
 
 /// <summary>Short-term accommodation nights for an occurrence of an STA block (items 01_250 and 01_251).</summary>
@@ -231,7 +231,7 @@ public sealed record PlanBlock
         if (Travel is { } travel)
         {
             if (travel.MinutesEachWay is < 0 or > 480) Add("travel minutes each way must be between 0 and 480.");
-            if (travel.ParticipantsSharing is < 1 or > 40) Add("participants sharing the trip must be between 1 and 40.");
+            ValidateSharing(travel.ParticipantsSharing, "trip", Add);
             if (travel.KmEachWay is < 0m or > 2000m) Add("travel kilometres each way must be between 0 and 2000.");
         }
 
@@ -241,13 +241,23 @@ public sealed record PlanBlock
             if (transport.Km is < 0m or > 2000m) Add("transport kilometres must be between 0 and 2000.");
             if (transport.Tolls is < 0m or > 10000m) Add("tolls must be between $0 and $10,000.");
             if (transport.Parking is < 0m or > 10000m) Add("parking must be between $0 and $10,000.");
-            if (transport.ParticipantsSharing is < 1 or > 40) Add("participants sharing the vehicle must be between 1 and 40.");
+            ValidateSharing(transport.ParticipantsSharing, "vehicle", Add);
         }
 
         if (Accommodation is { } accommodation && accommodation.Nights is < 0 or > 14)
             Add("accommodation nights must be between 0 and 14.");
 
         return messages;
+    }
+
+    /// <summary>The participants sharing a trip or a vehicle are between 1 and 40 and no more than the most present at any time in the block (a trip cannot be shared by people who are not there).</summary>
+    private void ValidateSharing(int? sharing, string what, Action<string> add)
+    {
+        if (sharing is not { } n) return;
+        if (n is < 1 or > 40) { add($"participants sharing the {what} must be between 1 and 40."); return; }
+        if (ParticipantsPresent is < 1 or > 40) return;   // already reported: there is nothing sensible to compare with
+        var most = Math.Max(ParticipantsPresent, Changes.Select(c => c.ParticipantsPresent).DefaultIfEmpty(0).Max());
+        if (n > most) add($"{n} participants cannot share the {what}: at most {most} are present.");
     }
 
     private void ValidateLocation(Action<string> add)
