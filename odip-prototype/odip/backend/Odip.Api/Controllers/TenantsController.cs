@@ -2,6 +2,7 @@ using FirebaseAdmin.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -16,8 +17,19 @@ namespace Odip.Api.Controllers;
 public class TenantsController : ControllerBase
 {
     private readonly OdipDbContext _db;
+    private readonly IFirebaseUserService _firebaseUserService;
+    private readonly ILogger<TenantsController>? _logger;
 
-    public TenantsController(OdipDbContext db) => _db = db;
+    private const string DomainRequiredMessage = "Email domain is required.";
+
+    // IFirebaseUserService is intentionally NOT registered in Program.cs — see AdminUsersController: ActivatorUtilities falls back to
+    // the parameter's default, so production needs no DI change while a unit test injects a mock.
+    public TenantsController(OdipDbContext db, IFirebaseUserService? firebaseUserService = null, ILogger<TenantsController>? logger = null)
+    {
+        _db = db;
+        _firebaseUserService = firebaseUserService ?? new FirebaseUserService();
+        _logger = logger;
+    }
 
     // GET api/v1/admin/tenants
     [HttpGet]
@@ -36,7 +48,14 @@ public class TenantsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateTenantDto dto)
     {
-        var domain = dto.EmailDomain.ToLower();
+        // Stored and compared in one tidied form (see EmailIdentity.NormaliseDomain): an address's own domain never matches a row typed "@acme.com.au".
+        var domain = EmailIdentity.NormaliseDomain(dto.EmailDomain);
+
+        if (domain.Length == 0)
+            return BadRequest(ApiResponse<object>.Fail(DomainRequiredMessage));
+
+        if (CommonEmailProviders.Covers(domain))
+            return BadRequest(ApiResponse<object>.Fail(CommonEmailProviders.SharedDomainMessage(domain)));
 
         if (await _db.Tenants.AnyAsync(t => t.EmailDomain == domain))
             return Conflict("A tenant with this email domain already exists");
@@ -56,12 +75,38 @@ public class TenantsController : ControllerBase
 
     // POST api/v1/admin/tenants/with-setup
     [HttpPost("with-setup")]
-    public async Task<IActionResult> CreateWithSetup([FromBody] CreateTenantWithSetupDto dto)
+    public async Task<IActionResult> CreateWithSetup([FromBody] CreateTenantWithSetupDto dto, CancellationToken ct = default)
     {
-        var domain = dto.EmailDomain.ToLower();
+        var domain = EmailIdentity.NormaliseDomain(dto.EmailDomain);
+
+        if (domain.Length == 0)
+            return BadRequest(ApiResponse<object>.Fail(DomainRequiredMessage));
+
+        if (CommonEmailProviders.Covers(domain))
+            return BadRequest(ApiResponse<object>.Fail(CommonEmailProviders.SharedDomainMessage(domain)));
 
         if (await _db.Tenants.AnyAsync(t => t.EmailDomain == domain))
             return Conflict("A tenant with this email domain already exists");
+
+        if (dto.InitialUser is { } candidate)
+        {
+            // A typed password is a live credential (the account is verified from the start), so it is held to PasswordPolicy before anything
+            // is written or sent. Blank means none: the first user sets their own from the emailed link.
+            var passwordError = PasswordPolicy.Check(candidate.Password);
+            if (passwordError is not null)
+                return BadRequest(ApiResponse<object>.Fail(passwordError));
+
+            // The first user's address is stored and compared in one form (see EmailIdentity), and must be new in any case: the exchange
+            // matches case-insensitively, so two rows differing only in case would be ambiguous.
+            var candidateEmail = EmailIdentity.Normalise(candidate.Email);
+            if (await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email.ToLower() == candidateEmail, ct))
+                return Conflict("A user with this email already exists");
+
+            // An address at neither the new tenant's own domain nor a common provider is a live login for whoever owns it: ask the admin to check
+            // it before the tenant, the user or an account is made (see AddressConfirmation); the screen answers with the flag.
+            if (!candidate.AddressConfirmed && AddressConfirmation.Needed(candidateEmail, domain))
+                return BadRequest(ApiResponse<object>.Fail(AddressConfirmation.Message(candidateEmail, domain), AddressConfirmation.Code));
+        }
 
         await using var transaction = await _db.Database.BeginTransactionAsync();
 
@@ -98,6 +143,7 @@ public class TenantsController : ControllerBase
             _db.ProviderSettings.Add(settings);
         }
 
+        Guid? initialUserId = null;
         if (dto.InitialUser is { } iu)
         {
             if (!Enum.TryParse<UserRole>(iu.Role, true, out var role) || role == UserRole.SuperAdmin)
@@ -109,7 +155,7 @@ public class TenantsController : ControllerBase
                 TenantId = tenant.Id,
                 FirstName = iu.FirstName,
                 LastName = iu.LastName,
-                Email = iu.Email,
+                Email = EmailIdentity.Normalise(iu.Email),
                 Username = iu.Username,
                 Role = role,
                 IsActive = true,
@@ -117,33 +163,42 @@ public class TenantsController : ControllerBase
                 UpdatedAt = DateTime.UtcNow,
             };
             _db.Users.Add(user);
+            initialUserId = user.Id;
         }
 
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
 
         // Create Firebase Auth user for initial admin (best-effort — after commit so DB records are preserved)
+        string? firebaseAccount = null;
         if (dto.InitialUser is { } firebaseIu)
         {
             try
             {
-                await FirebaseAuth.DefaultInstance.CreateUserAsync(new UserRecordArgs
-                {
-                    Email = firebaseIu.Email,
-                    DisplayName = $"{firebaseIu.FirstName} {firebaseIu.LastName}",
-                    Password = firebaseIu.Password,
-                    Disabled = false,
-                });
+                await _firebaseUserService.CreateUserAsync(
+                    EmailIdentity.Normalise(firebaseIu.Email), $"{firebaseIu.FirstName} {firebaseIu.LastName}",
+                    string.IsNullOrEmpty(firebaseIu.Password) ? null : firebaseIu.Password, ct);
+                firebaseAccount = FirebaseAccountStatus.Created;
             }
             catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.EmailAlreadyExists)
             {
-                // Already exists in Firebase — OK
+                // Already exists in Firebase: left exactly as it was, so a password typed here was not applied. The response says so.
+                firebaseAccount = FirebaseAccountStatus.Existing;
+            }
+            catch (Exception ex)
+            {
+                // The tenant and the user are already committed, so a 500 here would hide a tenant that exists (and the admin would try to
+                // create it again and be told its domain is taken). Deliberately broad, as in AdminUsersController.Create: an unusable service
+                // account is not a FirebaseAuthException, and neither is a missing Firebase app. The response says "failed" so the screen can
+                // point at Send set-password email, which makes the account (POST admin/users/{id}/sign-in-account).
+                _logger?.LogError(ex, "Tenant {TenantId} was created, but its first user's Firebase sign-in account could not be set up", tenant.Id);
+                firebaseAccount = FirebaseAccountStatus.Failed;
             }
         }
 
-        return CreatedAtAction(nameof(GetAll), null, ApiResponse<TenantSummaryDto>.Ok(new TenantSummaryDto(
+        return CreatedAtAction(nameof(GetAll), null, ApiResponse<TenantCreatedDto>.Ok(new TenantCreatedDto(
             tenant.Id, tenant.Name, tenant.EmailDomain, tenant.IsActive, tenant.CreatedAt,
-            dto.InitialUser is not null ? 1 : 0)));
+            dto.InitialUser is not null ? 1 : 0, initialUserId, firebaseAccount)));
     }
 
     // PUT api/v1/admin/tenants/{id}
@@ -154,12 +209,21 @@ public class TenantsController : ControllerBase
         if (tenant is null)
             return NotFound();
 
-        if (tenant.EmailDomain != dto.EmailDomain.ToLower() &&
-            await _db.Tenants.AnyAsync(t => t.EmailDomain == dto.EmailDomain.ToLower() && t.Id != id))
+        var domain = EmailIdentity.NormaliseDomain(dto.EmailDomain);
+        if (domain.Length == 0)
+            return BadRequest(ApiResponse<object>.Fail(DomainRequiredMessage));
+
+        // Only a CHANGE to a shared provider is refused: a row that already holds one stays editable (renamed, switched off), and the domain is
+        // simply nobody's own, so it blocks no other tenant's staff (see StaffController.OtherOrganisationAddressErrorAsync).
+        var domainChanged = tenant.EmailDomain != domain;
+        if (domainChanged && CommonEmailProviders.Covers(domain))
+            return BadRequest(ApiResponse<object>.Fail(CommonEmailProviders.SharedDomainMessage(domain)));
+
+        if (domainChanged && await _db.Tenants.AnyAsync(t => t.EmailDomain == domain && t.Id != id))
             return Conflict("A tenant with this email domain already exists");
 
         tenant.Name = dto.Name;
-        tenant.EmailDomain = dto.EmailDomain.ToLower();
+        tenant.EmailDomain = domain;
         tenant.IsActive = dto.IsActive;
         await _db.SaveChangesAsync();
         return Ok(ApiResponse<TenantDto>.Ok(new TenantDto(tenant.Id, tenant.Name, tenant.EmailDomain, tenant.IsActive, tenant.CreatedAt)));

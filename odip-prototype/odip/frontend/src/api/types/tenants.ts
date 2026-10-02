@@ -40,6 +40,8 @@ export interface CreateInitialUserDto {
   username: string
   role: string
   password?: string
+  /** The admin has checked an address the server asked about (see lib/addressConfirmation.ts). Sent only on the retry that follows that question. */
+  addressConfirmed?: boolean
 }
 
 export interface CreateTenantWithSetupDto {
@@ -59,4 +61,14 @@ export interface CreateTenantWithSetupDto {
     invoiceFooterNotes?: string
   } | null
   initialUser?: CreateInitialUserDto | null
+}
+
+/**
+ * What a tenant create answers: the summary, plus the first user's id and what became of their Firebase sign-in account: created, existing
+ * (one was already there and was left as it was), or failed (the tenant and user are committed but the account could not be set up).
+ * Both are absent when no first user was given.
+ */
+export interface TenantCreatedDto extends TenantSummaryDto {
+  initialUserId?: string | null
+  firebaseAccount?: 'created' | 'existing' | 'failed' | null
 }

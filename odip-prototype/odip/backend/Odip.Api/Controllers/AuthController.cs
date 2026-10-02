@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.Interfaces;
 using Odip.Application.DTOs;
@@ -24,18 +25,24 @@ public class AuthController : ControllerBase
     private readonly IConfiguration _config;
     private readonly ILogger<AuthController> _logger;
     private readonly ILoginAttemptTracker _loginAttempts;
+    private readonly IFirebaseTokenVerifier _tokenVerifier;
 
+    // IFirebaseTokenVerifier is intentionally NOT registered in Program.cs, for the same reason as IFirebaseUserService on
+    // AdminUsersController: ActivatorUtilities falls back to the parameter's default, so production needs no DI change while a
+    // unit test can inject a fake that returns claims instead of calling Firebase.
     public AuthController(
         OdipDbContext db,
         IConfiguration config,
         ILogger<AuthController> logger,
         ILoginAttemptTracker loginAttempts,
-        ICurrentTenant currentTenant)
+        ICurrentTenant currentTenant,
+        IFirebaseTokenVerifier? tokenVerifier = null)
     {
         _db = db;
         _config = config;
         _logger = logger;
         _loginAttempts = loginAttempts;
+        _tokenVerifier = tokenVerifier ?? new FirebaseTokenVerifier();
         // currentTenant is intentionally unused: AuthResponseDto.StaffId (the only thing that
         // ever needed ICurrentTenant.ViewAsUserId here) was dropped per the staff/user
         // unification design spec §4.3. The parameter is kept so DI resolution and existing test
@@ -69,28 +76,32 @@ public class AuthController : ControllerBase
         {
             _loginAttempts.RecordFailure(attemptKey);
             _logger.LogWarning(logMessage, logArgs);
-            // The message is deliberately identical for every cause. Distinguishing
-            // "unknown domain" from "user not found" would confirm which addresses exist.
+            // The message is deliberately identical for every cause. Telling "no such user" from "that address is on
+            // two rows" or "its tenant is inactive" would confirm which addresses exist.
             return Unauthorized(ApiResponse<AuthResponseDto>.Fail("Invalid or expired token"));
         }
 
         // 1. Verify Firebase ID token
-        FirebaseToken decodedToken;
+        IReadOnlyDictionary<string, object> claims;
         try
         {
-            decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(dto.IdToken, ct);
+            claims = await _tokenVerifier.VerifyIdTokenAsync(dto.IdToken, ct);
         }
         catch (FirebaseAuthException ex)
         {
             return Rejected("Firebase token verification failed: {Message}", ex.Message);
         }
 
-        var email = decodedToken.Claims.TryGetValue("email", out var emailClaim)
+        var rawEmail = claims.TryGetValue("email", out var emailClaim)
             ? emailClaim?.ToString()
             : null;
 
-        if (string.IsNullOrEmpty(email))
+        if (string.IsNullOrWhiteSpace(rawEmail))
             return Rejected("Exchange failed — token carried no email claim");
+
+        // Both sides of the lookups below are compared in one form (see EmailIdentity). Firebase lower-cases an address, but a user row
+        // stored as typed before that rule existed is mixed-case, and an exact comparison would answer its owner with a 401.
+        var email = EmailIdentity.Normalise(rawEmail);
 
         // Firebase issues an ID token as soon as an account is created, before the
         // owner has clicked the verification link. Without this check, anyone who
@@ -98,18 +109,39 @@ public class AuthController : ControllerBase
         // could sign up in Firebase with that address and exchange the resulting
         // unverified token for a fully authenticated ODIP session — a window that
         // stays open for as long as the real owner hasn't claimed the account.
-        if (!IsEmailVerified(decodedToken.Claims))
+        //
+        // Accounts the app creates itself (an admin creating a user, a tenant's first user, "Send set-password email" for a user or staff
+        // member who has none yet) are created VERIFIED (FirebaseUserService.BuildCreateUserArgs): nothing ever sends them a verification
+        // link, so without that they could never pass this check. It does not reopen the window above. Firebase allows one email/password
+        // account per address, so once the app has made the account nobody else can sign up with that address, and one made without a
+        // password cannot be signed into until its owner follows the emailed set-password link, which proves they control the mailbox. An
+        // account that already existed is never marked verified by the app: EnsureSignInAccountAsync and UpdateUserByEmailAsync leave it as it is.
+        if (!IsEmailVerified(claims))
             return Rejected("Exchange failed — email not verified: {Email}", email);
 
-        var domain = email.Split('@').Last().ToLower();
+        // How the person signed in decides what "verified" proves (see SignInProviders), so a token from a provider that is not listed is refused,
+        // and so is one that does not say which it came from. Both paths below come after this.
+        var provider = SignInProviders.From(claims);
+        if (provider is null)
+        {
+            claims.TryGetValue("firebase", out var firebaseClaim);
+            return Rejected(
+                "Exchange failed — token carried no readable firebase.sign_in_provider (the firebase claim is {ClaimType}): {Email}",
+                firebaseClaim?.GetType().Name ?? "missing", email);
+        }
+
+        if (!SignInProviders.Allowed(_config).Contains(provider))
+            return Rejected("Exchange failed — sign-in provider {Provider} is not allowed (see {ConfigKey}): {Email}", provider, SignInProviders.ConfigKey, email);
+
+        var domain = email.Split('@').Last();
 
         // 2. SuperAdmin path — bypasses tenant resolution
-        var superAdminDomain = _config["Auth:SuperAdminDomain"] ?? "odip.com.au";
+        var superAdminDomain = SuperAdminDomain.From(_config);
         if (domain == superAdminDomain)
         {
             var superAdmin = await _db.Users
                 .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(u => u.Email == email && u.IsActive, ct);
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == email && u.IsActive, ct);
 
             if (superAdmin is null)
             {
@@ -136,22 +168,39 @@ public class AuthController : ControllerBase
             }));
         }
 
-        // 3. Standard tenant path
+        // 3. Standard tenant path. Staff sign in with whatever address they own (their own mailbox at a provider such as gmail.com as readily as
+        // the organisation's), so the domain of the address says nothing about the tenant: the tenant is the one on the user's own row. That is
+        // why the lookup crosses tenants (IgnoreQueryFilters; the tenant is what is being found), and why an address that matches more than one
+        // active row is refused instead of guessed at: signing in as the wrong person, in the wrong tenant, is worse than a 401. Take(2) is
+        // enough to tell one from many, and the order makes the two ids the refusal's log line names the same two every time. Tenant.EmailDomain
+        // plays no part in signing in.
+        var matches = await _db.Users
+            .IgnoreQueryFilters()
+            .Where(u => u.Email.ToLower() == email && u.IsActive)
+            .OrderBy(u => u.Id)
+            .Take(2)
+            .ToListAsync(ct);
+
+        if (matches.Count == 0)
+        {
+            return Rejected("Exchange failed — no active user has this email: {Email}", email);
+        }
+
+        if (matches.Count > 1)
+        {
+            return Rejected(
+                "Exchange failed — email matches more than one active user ({FirstUserId} and {SecondUserId}), so nobody was signed in. " +
+                "Fix the duplicate rows: {Email}", matches[0].Id, matches[1].Id, email);
+        }
+
+        var user = matches[0];
+
         var tenant = await _db.Tenants
-            .FirstOrDefaultAsync(t => t.EmailDomain == domain && t.IsActive, ct);
+            .FirstOrDefaultAsync(t => t.Id == user.TenantId && t.IsActive, ct);
 
         if (tenant is null)
         {
-            return Rejected("Exchange failed — unknown email domain: {Domain}", domain);
-        }
-
-        var user = await _db.Users
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(u => u.Email == email && u.TenantId == tenant.Id && u.IsActive, ct);
-
-        if (user is null)
-        {
-            return Rejected("Exchange failed — user not found in tenant: {Email}", email);
+            return Rejected("Exchange failed — the tenant of user {UserId} is missing or inactive: {Email}", user.Id, email);
         }
 
         user.LastLoginAt = DateTime.UtcNow;

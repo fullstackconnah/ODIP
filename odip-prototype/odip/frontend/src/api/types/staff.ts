@@ -41,6 +41,8 @@ export interface CreateStaffDto {
   lastName: string
   /** Required — a staff record now IS a real login-capable account. */
   email: string
+  /** The admin has checked an address the server asked about (see lib/addressConfirmation.ts). Sent only on the retry that follows that question. */
+  addressConfirmed?: boolean
   role: UserRole
   position: Position
   mobile?: string

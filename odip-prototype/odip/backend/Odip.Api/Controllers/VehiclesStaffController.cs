@@ -1,11 +1,14 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Api.Rostering;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
@@ -340,15 +343,56 @@ public class StaffController : ControllerBase
     private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
     // The request's clock: a test fixes it. Every calendar rule uses the PROVIDER's date from it (ProviderTimeZoneResolver.TodayAsync), never the UTC date.
     private readonly TimeProvider _clock;
+    private readonly IFirebaseUserService _firebaseUserService;
+    private readonly ILogger<StaffController>? _logger;
+    // The tenant this request writes to (the caller's own, or the one a SuperAdmin is viewing as). Null when there is none: a SuperAdmin
+    // with no tenant selected, and a test that does not care.
+    private readonly ICurrentTenant? _currentTenant;
 
+    private const string OtherOrganisationMessage = "That address belongs to another organisation on ODIP.";
+
+    /// <summary>
+    /// Global uniqueness of an address makes a squat permanent (the first tenant to type an address owns it, and an archived row keeps it), so a
+    /// caller who is not a SuperAdmin may not give staff an address at ANOTHER tenant's own email domain: it would block that tenant from ever adding
+    /// the person, and send the person into this tenant's workspace. Returns the refusal, or null. It is a refusal, not a question: it cannot be
+    /// confirmed away. The match is on the whole domain, so a subdomain is only unusual (AddressConfirmation), not another organisation's. A shared
+    /// provider (gmail.com) is nobody's own, even if a tenant was given it as its domain, so it is never another organisation's either.
+    /// </summary>
+    private async Task<string?> OtherOrganisationAddressErrorAsync(string normalisedEmail, Guid? ownTenantId, CancellationToken ct)
+    {
+        if (User?.IsInRole("SuperAdmin") ?? false) return null;
+        var at = normalisedEmail.LastIndexOf('@');
+        if (at < 0) return null;
+
+        var domain = normalisedEmail[(at + 1)..];
+        if (CommonEmailProviders.Covers(domain)) return null;
+        var own = ownTenantId ?? Guid.Empty;
+        // Tenants are written with their domain tidied (EmailIdentity.NormaliseDomain), but a row from before that rule may hold " Acme.com" or "@acme.com"
+        // and must keep protecting its tenant, so the stored side is tidied the same way here. There are few tenants, so they are compared in memory
+        // rather than by an expression the database has to translate.
+        var otherDomains = await _db.Tenants.Where(t => t.Id != own).Select(t => t.EmailDomain).ToListAsync(ct);
+        var belongsToAnother = otherDomains.Any(other => EmailIdentity.NormaliseDomain(other) == domain);
+        return belongsToAnother ? OtherOrganisationMessage : null;
+    }
+
+    /// <summary>The email domain of a tenant, or null when none is given or it cannot be found. Tenants have no query filter, so any tenant is readable.</summary>
+    private async Task<string?> TenantEmailDomainAsync(Guid? tenantId, CancellationToken ct) =>
+        tenantId is null ? null : await _db.Tenants.Where(t => t.Id == tenantId).Select(t => t.EmailDomain).FirstOrDefaultAsync(ct);
+
+    // IFirebaseUserService is intentionally NOT registered in Program.cs — see AdminUsersController: ActivatorUtilities falls back to the
+    // parameter's default, so production needs no DI change while a unit test injects a mock.
     public StaffController(
         OdipDbContext db, IStaffAvailabilityItemsQuery? availabilityItemsQuery = null,
-        Microsoft.Extensions.Configuration.IConfiguration? config = null, TimeProvider? clock = null)
+        Microsoft.Extensions.Configuration.IConfiguration? config = null, TimeProvider? clock = null,
+        IFirebaseUserService? firebaseUserService = null, ILogger<StaffController>? logger = null, ICurrentTenant? currentTenant = null)
     {
         _db = db;
         _clock = clock ?? TimeProvider.System;
         _availabilityItemsQuery = availabilityItemsQuery ?? new StaffAvailabilityItemsQuery(db);
         _config = config;
+        _firebaseUserService = firebaseUserService ?? new FirebaseUserService();
+        _logger = logger;
+        _currentTenant = currentTenant;
     }
 
     /// <summary>Same default as RosteringController's own VarianceReviewMinutes — kept independent
@@ -394,6 +438,34 @@ public class StaffController : ControllerBase
         if (targetRole == UserRole.SuperAdmin) return "Cannot grant the SuperAdmin role.";
         if (targetRole == UserRole.Admin && !IsInRole("Admin")) return "Only an Admin can assign the Admin role.";
         return null;
+    }
+
+    /// <summary>
+    /// An address on <c>Auth:SuperAdminDomain</c> signs in as SuperAdmin whatever the user's Role (AuthController.Exchange), so only a
+    /// SuperAdmin may enter one. Returns the refusal, or null when <paramref name="normalisedEmail"/> is allowed for this caller.
+    /// </summary>
+    private string? ReservedDomainError(string normalisedEmail)
+    {
+        if (User?.IsInRole("SuperAdmin") ?? false) return null;
+        var domain = SuperAdminDomain.From(_config);
+        return SuperAdminDomain.Covers(normalisedEmail, domain) ? SuperAdminDomain.ReservedMessage(domain) : null;
+    }
+
+    /// <summary>
+    /// A row that already holds an address on <c>Auth:SuperAdminDomain</c> is a SuperAdmin session whatever its Role, whenever it is active
+    /// (AuthController.Exchange). Archiving a row only sets IsActive = false and never touches Firebase, so a tenant caller who could bring one
+    /// back to life, or change its role, would hand a platform session to whoever still owns that mailbox. Returns the refusal, or null: for a
+    /// SuperAdmin, for a row not on that domain, and for any change that only takes capability away or touches other fields (the carve-out in
+    /// <see cref="Update"/> that keeps legacy rows editable).
+    /// </summary>
+    private string? ReservedRowChangeError(User row, bool becomesActive, UserRole newRole)
+    {
+        if (User?.IsInRole("SuperAdmin") ?? false) return null;
+        var domain = SuperAdminDomain.From(_config);
+        if (!SuperAdminDomain.Covers(EmailIdentity.Normalise(row.Email), domain)) return null;
+        var reactivating = !row.IsActive && becomesActive;
+        var changingRole = newRole != row.Role;
+        return reactivating || changingRole ? SuperAdminDomain.ReservedRowMessage(domain) : null;
     }
 
     [HttpGet]
@@ -469,9 +541,21 @@ public class StaffController : ControllerBase
 
         // Username/Email uniqueness is GLOBAL across tenants (design spec §2/§7) — IgnoreQueryFilters
         // so the check sees every tenant's users, not just the caller's own (matches AdminUsersController).
-        var emailLower = dto.Email.Trim().ToLowerInvariant();
+        var emailLower = EmailIdentity.Normalise(dto.Email);
+        var reservedError = ReservedDomainError(emailLower);
+        if (reservedError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(reservedError));
+
+        var otherOrganisationError = await OtherOrganisationAddressErrorAsync(emailLower, _currentTenant?.TenantId, ct);
+        if (otherOrganisationError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(otherOrganisationError));
+
         var emailTaken = await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email.ToLower() == emailLower, ct);
         if (emailTaken) return Conflict(ApiResponse<StaffDetailDto>.Fail("A user with this email already exists."));
+
+        // Any address can sign in, so one at neither the tenant's own domain nor a common provider (a typo, another organisation's) is a live
+        // login for whoever owns it: ask for a confirmation first (see AddressConfirmation).
+        var tenantDomain = await TenantEmailDomainAsync(_currentTenant?.TenantId, ct);
+        if (tenantDomain is not null && !dto.AddressConfirmed && AddressConfirmation.Needed(emailLower, tenantDomain))
+            return BadRequest(ApiResponse<StaffDetailDto>.Fail(AddressConfirmation.Message(emailLower, tenantDomain), AddressConfirmation.Code));
 
         // Collision-safe username handling: reuses the migration's own algorithm (Task 1's
         // StaffUserUnificationMapping.ResolveUsername) rather than duplicating a second,
@@ -484,7 +568,7 @@ public class StaffController : ControllerBase
         var s = new User
         {
             Id = Guid.NewGuid(), FirstName = dto.FirstName, LastName = dto.LastName,
-            Username = username, Email = dto.Email,
+            Username = username, Email = emailLower,
             Role = dto.Role, Position = dto.Position,
             Mobile = dto.Mobile, Region = dto.Region,
             IsDriverEligible = dto.IsDriverEligible, IsFirstAidQualified = dto.IsFirstAidQualified,
@@ -532,13 +616,45 @@ public class StaffController : ControllerBase
         var guardError = ValidateRoleGuardrails(dto.Role, existingRole: s.Role);
         if (guardError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(guardError));
 
-        var emailLower = dto.Email.Trim().ToLowerInvariant();
+        // A row already on the SuperAdmin domain may not be brought back to life, or have its role changed, by a tenant caller.
+        var reservedRowError = ReservedRowChangeError(s, becomesActive: dto.IsActive, newRole: dto.Role);
+        if (reservedRowError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(reservedRowError));
+
+        var emailLower = EmailIdentity.Normalise(dto.Email);
+        var addressChanged = emailLower != EmailIdentity.Normalise(s.Email);
+        // Only when the address is being CHANGED: an edit to some other field of a row that already holds such an address (the role guardrail
+        // above is what keeps a tenant caller off SuperAdmin accounts) must not start failing because of the address.
+        if (addressChanged)
+        {
+            // Once a row has signed in its address is a working identity: re-pointing it at another mailbox lets that mailbox's owner ask for the
+            // set-password link and sign in AS this person, with the row's role, history and attribution, and locks the person out. Before the first
+            // sign-in it is only a typo to fix, so that stays open to everyone who may edit staff.
+            if (s.LastLoginAt is not null && !((User?.IsInRole("Admin") ?? false) || (User?.IsInRole("SuperAdmin") ?? false)))
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    ApiResponse<StaffDetailDto>.Fail("Only an Admin can change the address of someone who has already signed in."));
+
+            var reservedError = ReservedDomainError(emailLower);
+            if (reservedError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(reservedError));
+
+            var otherOrganisationError = await OtherOrganisationAddressErrorAsync(emailLower, s.TenantId, ct);
+            if (otherOrganisationError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(otherOrganisationError));
+        }
+
         var emailTaken = await _db.Users.IgnoreQueryFilters()
             .AnyAsync(u => u.Id != id && u.Email.ToLower() == emailLower, ct);
         if (emailTaken) return Conflict(ApiResponse<StaffDetailDto>.Fail("A user with this email already exists."));
 
+        // A NEW address at neither the tenant's own domain nor a common provider needs a confirmation (see AddressConfirmation). An address the
+        // row already holds never does, so legacy rows stay editable.
+        if (addressChanged && !dto.AddressConfirmed)
+        {
+            var rowTenantDomain = await TenantEmailDomainAsync(s.TenantId, ct);
+            if (rowTenantDomain is not null && AddressConfirmation.Needed(emailLower, rowTenantDomain))
+                return BadRequest(ApiResponse<StaffDetailDto>.Fail(AddressConfirmation.Message(emailLower, rowTenantDomain), AddressConfirmation.Code));
+        }
+
         s.FirstName = dto.FirstName; s.LastName = dto.LastName; s.Position = dto.Position; s.Role = dto.Role;
-        s.Email = dto.Email; s.Mobile = dto.Mobile; s.Region = dto.Region;
+        s.Email = emailLower; s.Mobile = dto.Mobile; s.Region = dto.Region;
         s.IsDriverEligible = dto.IsDriverEligible; s.IsFirstAidQualified = dto.IsFirstAidQualified;
         s.IsMedicationCompetent = dto.IsMedicationCompetent; s.IsManualHandlingCompetent = dto.IsManualHandlingCompetent;
         s.IsOvernightEligible = dto.IsOvernightEligible; s.IsActive = dto.IsActive;
@@ -552,6 +668,9 @@ public class StaffController : ControllerBase
         s.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
+        // The address is the whole of this person's sign-in, so a change leaves a trace: who changed whose, never the addresses themselves.
+        if (addressChanged)
+            _logger?.LogInformation("The sign-in address of staff member {TargetUserId} was changed by {ActorUserId}", s.Id, User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown");
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         return Ok(ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
         {
@@ -586,6 +705,64 @@ public class StaffController : ControllerBase
         s.IsActive = false; s.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true, "Staff member archived"));
+    }
+
+    /// <summary>
+    /// Makes sure this staff member has a Firebase sign-in account (creating a verified, passwordless one when there is none) and says
+    /// which, so the browser can then send the set-password email and word it truthfully. Create writes only the user row, so a staff
+    /// member added here has had no account until this runs. An account that already exists is left exactly as it is. Tenant-scoped like
+    /// every other staff write: a row in another tenant is simply not found.
+    /// </summary>
+    [HttpPost("{id:guid}/sign-in-account")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<SignInAccountDto>>> EnsureSignInAccount(Guid id, CancellationToken ct)
+    {
+        var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (s == null) return NotFound(ApiResponse<SignInAccountDto>.Fail("Staff not found"));
+
+        // The same §4.1 guardrail as every other staff write: only a SuperAdmin touches a SuperAdmin account.
+        if (s.Role == UserRole.SuperAdmin && !(User?.IsInRole("SuperAdmin") ?? false))
+            return BadRequest(ApiResponse<SignInAccountDto>.Fail("Cannot edit a SuperAdmin account."));
+
+        if (!s.IsActive)
+            return BadRequest(ApiResponse<SignInAccountDto>.Fail("This staff member is inactive, so they cannot be given a sign-in account."));
+
+        if (string.IsNullOrWhiteSpace(s.Email))
+            return BadRequest(ApiResponse<SignInAccountDto>.Fail("This staff member has no email address."));
+
+        var email = EmailIdentity.Normalise(s.Email);
+
+        // An address the app invented for a row that had none (see PlaceholderEmail) can never receive the link, so no account is made for it.
+        if (PlaceholderEmail.Covers(email))
+            return BadRequest(ApiResponse<SignInAccountDto>.Fail(PlaceholderEmail.Message(s.FullName)));
+
+        var reservedError = ReservedDomainError(email);
+        if (reservedError != null) return BadRequest(ApiResponse<SignInAccountDto>.Fail(reservedError));
+
+        try
+        {
+            var result = await _firebaseUserService.EnsureSignInAccountAsync(email, s.FullName, ct);
+            var account = result == SignInAccountResult.Created ? FirebaseAccountStatus.Created : FirebaseAccountStatus.Existing;
+            // No audit record exists yet (the email itself goes from the browser to Firebase), so this line is the only trace of who asked for it.
+            _logger?.LogInformation("Sign-in account for user {TargetUserId} was {Account}, as asked by {ActorUserId}", s.Id, account, User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown");
+            return Ok(ApiResponse<SignInAccountDto>.Ok(new SignInAccountDto(account)));
+        }
+        catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex))
+        {
+            // Firebase refused the address itself (a legacy row with a typo). Retrying cannot fix that and correcting the address can, so it is the
+            // admin's to act on (400), not a fault on our side (502).
+            _logger?.LogWarning("Firebase refused the address of staff member {UserId} as invalid", s.Id);
+            return BadRequest(ApiResponse<SignInAccountDto>.Fail("That doesn't look like a valid email address. Correct it first."));
+        }
+        catch (Exception ex)
+        {
+            // Deliberately broad, as in AdminUsersController.Create: an unusable service account is not a FirebaseAuthException, and the
+            // same call with no Firebase app configured fails the same way, so it is the same 502. The line says where to turn rather than
+            // promising a retry will help: an unusable service account stays unusable.
+            _logger?.LogError(ex, "Failed to ensure a Firebase sign-in account for {Email}", email);
+            return StatusCode(StatusCodes.Status502BadGateway,
+                ApiResponse<SignInAccountDto>.Fail("Unable to set up the staff member's sign-in account. If it keeps happening, ask whoever runs the Firebase project."));
+        }
     }
 
     /// <summary>

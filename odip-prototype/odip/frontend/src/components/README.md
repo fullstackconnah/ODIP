@@ -39,6 +39,8 @@ copying it.
 - [Tabs](#tabs) and [useTabParam](#usetabparam) (the active tab in the URL)
 - [ActionButtons](#actionbuttons)
 - [Touch hit areas](#touch-hit-areas) (`TAP_AREA`, `TAP_FLOOR`, `TAP_AREA_LINKS`, `--tap-min`)
+- [NoticesRegion](#noticesregion) (`hooks/useNotices.ts`: what became of a row or detail-page action, kept at the top until dismissed)
+- [AnnouncementRegion](#announcementregion) (`hooks/useRefocusWhenLost.ts`: a create's done view, audible and with focus kept)
 - [ErrorBoundary](#errorboundary)
 - [Picking a picker](#picking-a-picker) (Dropdown vs SearchableSelect vs ToggleGroup)
 
@@ -1056,6 +1058,49 @@ Three more pieces of the same story (all in `tapArea.ts` or built on it):
   overlap.
 
 ---
+
+## NoticesRegion
+
+`components/NoticesRegion.tsx` with `hooks/useNotices.ts` says what became of an action on a row or on a detail page (a set-password email sent, or not) at the place the person acted, and keeps saying it
+until they dismiss it. The notices are ordinary content, so they add no layer to the z-index table, and nothing floats over the next panel's footer.
+
+```tsx
+const { notices, notify, dismiss } = useNotices()   // hold it ABOVE anything that unmounts: SettingsPage holds the Users tab's, so a tab switch keeps them
+<NoticesRegion notices={notices} onDismiss={dismiss} focusAfterDismiss={focusRowAction} className="empty:mb-0" />   // above the table
+notify('danger', person.fullName, message, person.id)   // title: who it is about; tone: 'success' | 'danger'; subject: their stable key (optional)
+```
+
+- **One persistent live region.** It is `role="status"` (polite), mounted before the first message and empty while idle; what is put into it is announced. A live region created already holding its text
+  is announced unreliably, so only its content comes and goes. Each notice is a `Callout` with `announce={false}` (no role or `aria-live` of its own), so nothing is announced twice.
+- **Rules.** Newest first. Only *successes* are capped (`MAX_SUCCESSES`, 3): over the cap the oldest successes go, and a new success is always let in. An error is never evicted to make room; it stays until it is dismissed or until something newer
+  about the same person (the notice's `subject`) supersedes it: a success (the problem is over) or another error (retries do not pile up identical failures). A success never removes another person's error, and a notice with no `subject` replaces nothing.
+  Each notice names the person, its text breaks (`break-words`), and Dismiss is a `Button iconOnly` named for them. The region announces only what is added (`aria-atomic="false"`, `aria-relevant="additions"`), and Dismiss moves focus to the next notice's
+  Dismiss button, or when none is left to `focusAfterDismiss(dismissed)`: the control that raised it, found from the `subject`.
+- Collapse the empty region with an `empty:` class that cancels the gap around it (`empty:mb-0` in a `space-y` stack, `empty:-mt-[var(--section-gap)]` in a flex column with a `gap`).
+- **The control that raises a notice** is a `RowActions` cluster of `Button variant="ghost" size="sm" iconOnly` (a detail page uses a plain `Button`), named for the person it acts on ("Send set-password email to Ann One"). While its action is under way
+  it is `aria-disabled` with a guard in the handler, never `disabled`: disabling the button that was just activated can drop keyboard focus in some browsers. `Button` dims only on `disabled`, so add `aria-disabled:opacity-50 aria-disabled:cursor-not-allowed`.
+- **What it reports today** is only the set-password email (`lib/signInEmail.ts` words it). That flow exists only while people sign in with an email and a password: the SSO plan (`docs/odip-changes-todo.md`, "Harden the token exchange") disables
+  that provider and retires the emails, the two sign-in-account routes and the temporary-password option with it. The region and the hook are generic and stay.
+- **When not to use**: the result of a CREATE belongs in the panel's own done state (a `SignInEmailOutcome` Callout and a Done button, as in `UserFormPanel`), which stays open until the person closes it; a failure
+  next to a field is an inline error.
+---
+
+## AnnouncementRegion
+
+`components/AnnouncementRegion.tsx` with `hooks/useRefocusWhenLost.ts` makes a create's DONE view usable without sight: a form swapped in place for its outcome (`UserFormPanel`, `TenantFormPanel`, `StaffCreatePage`).
+The focused Create button unmounts in that swap, so focus falls to the top of the page and a Callout that appears already holding its text is announced unreliably.
+
+```tsx
+const doneLine = useRef<HTMLParagraphElement>(null)
+useRefocusWhenLost(doneLine, done)                 // focus the done line after each change, but only if focus was lost
+<AnnouncementRegion message={announcement} />      // FIRST in the content, in the form view AND the done view, so React keeps the same node
+<p ref={doneLine} tabIndex={-1} className="... focus:outline-none">{name} was created.</p>
+<SignInEmailOutcome ... announce={false} />        // the visible Callout does not announce itself as well
+```
+
+- **One sentence, two places.** The announcement and the visible text come from the same function (`describeEmailOutcome`, `describeTypedPassword`, `TENANT_FIRST_USER_ACCOUNT_FAILED` in `lib/signInEmail.ts`), so they cannot drift apart.
+- **Focus only when lost.** `useRefocusWhenLost` moves focus after the swap, and again when a retry removes the button that had it, but leaves it alone when a control that still exists holds it (a Send again that failed and is still there).
+- **Sends in a done view are `aria-disabled` while they send**, with a guard in the handler, like the table's.
 
 ## ErrorBoundary
 

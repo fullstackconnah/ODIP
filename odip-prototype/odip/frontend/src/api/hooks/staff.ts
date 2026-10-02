@@ -14,6 +14,7 @@ import type {
   UpdateStaffAvailabilityDto,
   RosterFindingDto,
   StaffOverviewDto,
+  SignInAccountDto,
 } from '../types'
 
 export function useStaff(params?: Record<string, string>) {
@@ -93,6 +94,16 @@ export function useDeleteStaff() {
   return useMutation({
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/staff/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['staff'] }),
+  })
+}
+
+/**
+ * POST /staff/{id}/sign-in-account: makes sure the staff member has a Firebase sign-in account (staff added through the staff form have a
+ * user row and nothing else) and says whether it made one. Run before asking Firebase to email them a set-password link (lib/signInEmail.ts).
+ */
+export function useEnsureStaffSignInAccount() {
+  return useMutation({
+    mutationFn: (id: string) => apiPost<SignInAccountDto>(`/staff/${id}/sign-in-account`),
   })
 }
 

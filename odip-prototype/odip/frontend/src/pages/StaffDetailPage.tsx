@@ -1,25 +1,29 @@
 import { useParams, Link } from 'react-router-dom'
-import { useMemo } from 'react'
-import { useStaffOverview, useSettings } from '@/api/hooks'
+import { useMemo, useState } from 'react'
+import { useStaffOverview, useSettings, useEnsureStaffSignInAccount } from '@/api/hooks'
 import { Tabs } from '@/components/Tabs'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { NoticesRegion } from '@/components/NoticesRegion'
 import { BackButton } from '@/components/BackButton'
 import { useTabParam } from '@/hooks/useTabParam'
+import { useNotices } from '@/hooks/useNotices'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { DataTable } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { usePermissions } from '@/lib/permissions'
+import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
+import { describeEmailOutcome, ensureAndSendSetPasswordEmail } from '@/lib/signInEmail'
 import { formatDateAu } from '@/lib/utils'
 import { staffCredentials, type StaffCredential } from '@/lib/credentials'
 import { DEADLINE_TONE, deadlineLabel } from '@/lib/deadline'
 import { formatShiftTimeRange, formatVarianceMinutes } from '@/pages/rostering/lib/roster'
 import AvailabilityList from '@/pages/schedule/AvailabilityList'
 import {
-  Pencil, CalendarOff, CalendarClock, ShieldCheck, ClipboardList, AlertTriangle, ClipboardCheck,
+  Pencil, CalendarOff, CalendarClock, ShieldCheck, ClipboardList, AlertTriangle, ClipboardCheck, Mail,
 } from 'lucide-react'
 import type { StaffOverviewUpcomingShiftDto, StaffOverviewTripAssignmentDto } from '@/api/types/staff'
 import type { IncidentListDto } from '@/api/types/incidents'
@@ -41,8 +45,15 @@ function credentialBadge(row: StaffCredential) {
 
 export default function StaffDetailPage() {
   const { id } = useParams()
-  const { canWrite, canAccessPage } = usePermissions()
+  const { canWrite, canAccessPage, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
   const canAccessLeaveApprovals = canAccessPage('leave-approvals')
+  // POST /staff/{id}/sign-in-account is Admin, Coordinator and SuperAdmin only (canWrite also admits ReadOnly, whom the server refuses), and
+  // Firebase sends the email, so without Firebase (local dev auth) the action is not offered rather than offered and broken.
+  const canManageSignIn = (isSuperAdmin || isAdmin || isCoordinator) && canSendSetPasswordEmail()
+  const ensureAccount = useEnsureStaffSignInAccount()
+  // What became of each "Send set-password email", kept at the top of the page until dismissed.
+  const { notices, notify, dismiss } = useNotices()
+  const [sending, setSending] = useState(false)
 
   const [tab, setTab] = useTabParam(TAB_KEYS, 'availability')
 
@@ -54,6 +65,25 @@ export default function StaffDetailPage() {
     () => (overview ? staffCredentials(overview.staff, { warnDays: warningDays }) : []),
     [overview, warningDays]
   )
+
+  // The server makes sure the account exists first (staff added through the staff form have none), then Firebase is asked to send the link;
+  // what is said afterwards follows what actually happened in those two steps (lib/signInEmail.ts).
+  async function handleSendSetPasswordEmail() {
+    // The button says "busy" with aria-disabled, not `disabled` (that can drop keyboard focus on the button just activated), so a click
+    // still arrives while a send is under way: this is what refuses it.
+    if (sending) return
+    const email = overview?.staff.email
+    if (!overview || !email) return
+    setSending(true)
+    const outcome = await ensureAndSendSetPasswordEmail(email, () => ensureAccount.mutateAsync(overview.staff.id))
+    setSending(false)
+    const { tone, message } = describeEmailOutcome(outcome, 'use Send set-password email on this page')
+    // The staff id is the notice's subject, so a later send that works replaces this person's earlier failure.
+    notify(tone, overview.staff.fullName, message, overview.staff.id)
+  }
+
+  // Dismissing the last notice hands focus back to the button that raised it.
+  const focusSendButton = () => document.querySelector<HTMLElement>('[data-send-set-password]')
 
   if (isLoading) return <PageState kind="loading" noun="staff member" />
   if (!overview) {
@@ -85,6 +115,19 @@ export default function StaffDetailPage() {
                 <CalendarOff className="w-4 h-4" /> Leave & availability
               </Button>
             )}
+            {canManageSignIn && staff.isActive && !!staff.email && (
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={handleSendSetPasswordEmail}
+                data-send-set-password
+                aria-disabled={sending || undefined}
+                aria-busy={sending || undefined}
+                className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+              >
+                <Mail className="w-4 h-4" /> Send set-password email
+              </Button>
+            )}
             {canWrite && (
               <Button to={`/staff/${id}/edit`} variant="primary" size="md">
                 <Pencil className="w-4 h-4" /> Edit
@@ -93,6 +136,9 @@ export default function StaffDetailPage() {
           </div>
         }
       />
+
+      {/* Notices for the actions above. Always mounted (a live region must exist before its content), and collapsed while empty. */}
+      <NoticesRegion notices={notices} onDismiss={dismiss} focusAfterDismiss={focusSendButton} className="empty:-mt-[var(--section-gap)]" />
 
       <Tabs
         tabs={[

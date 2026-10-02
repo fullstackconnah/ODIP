@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using FirebaseAdmin.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -157,10 +158,21 @@ public class AdminUsersController : ControllerBase
         if (!Enum.TryParse<UserRole>(dto.Role, true, out var role) || role == UserRole.SuperAdmin)
             return BadRequest(ApiResponse<object>.Fail("Invalid role. SuperAdmin cannot be assigned."));
 
+        // A typed password is a live credential (the account is verified from the start), so it is held to PasswordPolicy here, as a 400,
+        // before Firebase is asked anything. Blank means none: the user sets their own from the emailed link.
+        var passwordError = PasswordPolicy.Check(dto.Password);
+        if (passwordError is not null)
+            return BadRequest(ApiResponse<object>.Fail(passwordError));
+        var password = string.IsNullOrEmpty(dto.Password) ? null : dto.Password;
+
+        // The address in the one form ODIP stores and compares (see EmailIdentity): the uniqueness check, Firebase and the row all see
+        // the same value, so the exchange can find the row from the lower-case address Firebase puts in a token.
+        var email = EmailIdentity.Normalise(dto.Email);
+
         // Validate email uniqueness across all tenants
         var emailExists = await _db.Users
             .IgnoreQueryFilters()
-            .AnyAsync(u => u.Email.ToLower() == dto.Email.ToLower(), ct);
+            .AnyAsync(u => u.Email.ToLower() == email, ct);
         if (emailExists)
             return Conflict(ApiResponse<object>.Fail("A user with this email already exists"));
 
@@ -170,6 +182,11 @@ public class AdminUsersController : ControllerBase
             .AnyAsync(u => u.Username.ToLower() == dto.Username.ToLower(), ct);
         if (usernameExists)
             return Conflict(ApiResponse<object>.Fail("A user with this username already exists"));
+
+        // Any address can sign in, so one at neither the tenant's own domain nor a common provider (a typo, another organisation's) is a live
+        // login for whoever owns it. Ask the admin to check it before anything is made (see AddressConfirmation); the screen answers with the flag.
+        if (!dto.AddressConfirmed && AddressConfirmation.Needed(email, tenant.EmailDomain))
+            return BadRequest(ApiResponse<object>.Fail(AddressConfirmation.Message(email, tenant.EmailDomain), AddressConfirmation.Code));
 
         // Create the Firebase Auth account FIRST, before any DB write. This is the fix for a
         // confirmed data-integrity bug: previously the DB row was inserted before the Firebase
@@ -182,7 +199,7 @@ public class AdminUsersController : ControllerBase
         try
         {
             firebaseUid = await _firebaseUserService.CreateUserAsync(
-                dto.Email, $"{dto.FirstName} {dto.LastName}", dto.Password, ct);
+                email, $"{dto.FirstName} {dto.LastName}", password, ct);
             createdFirebaseUser = true;
         }
         catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.EmailAlreadyExists)
@@ -190,15 +207,24 @@ public class AdminUsersController : ControllerBase
             // User already exists in Firebase — that's OK, they'll be able to sign in.
             // We didn't create anything, so there's nothing to compensate for.
         }
+        catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex))
+        {
+            // Firebase refused the address itself. Retrying cannot fix that and correcting the address can, so it is the admin's to act on (400), not
+            // a fault on our side (502). Nothing was created, in Firebase or in the database.
+            // The address is personal data and stays out of the log; no user exists yet to name, so it is the tenant the new user was for.
+            _logger.LogWarning("Firebase refused the address of a new user in tenant {TenantId} as invalid", dto.TenantId);
+            return BadRequest(ApiResponse<object>.Fail("That doesn't look like a valid email address. Correct it first."));
+        }
         catch (Exception ex)
         {
             // Deliberately broad: this scope wraps only the single external Firebase call.
             // The confirmed failure mode (TokenResponseException from the Google.Apis auth
             // stack when the service account can't be authenticated) is NOT a
             // FirebaseAuthException, so a narrower catch would let it through unhandled again.
-            _logger.LogError(ex, "Failed to create Firebase Auth user for {Email}", dto.Email);
+            // The line says where to turn rather than promising a retry will help: an unusable service account stays unusable.
+            _logger.LogError(ex, "Failed to create Firebase Auth user for {Email}", email);
             return StatusCode(StatusCodes.Status502BadGateway,
-                ApiResponse<object>.Fail("Unable to create the user's sign-in account. Please try again later."));
+                ApiResponse<object>.Fail("Unable to create the user's sign-in account. If it keeps happening, ask whoever runs the Firebase project."));
         }
 
         var user = new User
@@ -207,7 +233,7 @@ public class AdminUsersController : ControllerBase
             TenantId = dto.TenantId,
             FirstName = dto.FirstName,
             LastName = dto.LastName,
-            Email = dto.Email,
+            Email = email,
             Username = dto.Username,
             Role = role,
             IsActive = true,
@@ -247,12 +273,17 @@ public class AdminUsersController : ControllerBase
 
             _logger.LogError(ex,
                 "Failed to save new user {Email} after Firebase account creation; compensated by deleting Firebase user {FirebaseUid}",
-                dto.Email, firebaseUid);
+                email, firebaseUid);
             throw; // handled by ExceptionHandlingMiddleware -> standard 500 ApiResponse envelope
         }
 
-        return CreatedAtAction(nameof(GetById), new { id = user.Id },
-            ApiResponse<AdminUserDto>.Ok(ToAdminUserDto(user, tenant.Name)));
+        // Say which it was: a password the admin typed is applied to an account made here and NOT to one that already existed, and the
+        // set-password email is worded "set" or "reset" accordingly.
+        var created = ToAdminUserDto(user, tenant.Name) with
+        {
+            FirebaseAccount = createdFirebaseUser ? FirebaseAccountStatus.Created : FirebaseAccountStatus.Existing,
+        };
+        return CreatedAtAction(nameof(GetById), new { id = user.Id }, ApiResponse<AdminUserDto>.Ok(created));
     }
 
     // PUT api/v1/admin/users/{id}
@@ -271,10 +302,13 @@ public class AdminUsersController : ControllerBase
         if (!Enum.TryParse<UserRole>(dto.Role, true, out var role) || role == UserRole.SuperAdmin)
             return BadRequest(ApiResponse<object>.Fail("Invalid role. SuperAdmin cannot be assigned."));
 
+        // The address in the one form ODIP stores and compares (see EmailIdentity). Saving also repairs a row stored as typed.
+        var email = EmailIdentity.Normalise(dto.Email);
+
         // Validate email uniqueness (excluding current user)
         var emailExists = await _db.Users
             .IgnoreQueryFilters()
-            .AnyAsync(u => u.Email.ToLower() == dto.Email.ToLower() && u.Id != id, ct);
+            .AnyAsync(u => u.Email.ToLower() == email && u.Id != id, ct);
         if (emailExists)
             return Conflict(ApiResponse<object>.Fail("A user with this email already exists"));
 
@@ -289,9 +323,16 @@ public class AdminUsersController : ControllerBase
         // email (Firebase email changes require re-auth and are intentionally not synced — see
         // note below), and the original display name / disabled state are kept so we can revert
         // the Firebase side if the DB save fails after a successful Firebase update.
-        var originalEmail = user.Email;
+        // Normalised for the Firebase lookup: a row stored in another case still finds its account.
+        var originalEmail = EmailIdentity.Normalise(user.Email);
         var originalDisplayName = user.FullName;
         var originalDisabled = !user.IsActive;
+
+        // A NEW address at neither the user's tenant's own domain nor a common provider needs a confirmation, as on create (see AddressConfirmation):
+        // it is a live login for whoever owns it. An address the row already holds never asks, so legacy rows stay editable. This comes before Firebase
+        // is touched, so a refused edit changes nothing anywhere.
+        if (email != originalEmail && !dto.AddressConfirmed && AddressConfirmation.Needed(email, user.Tenant?.EmailDomain))
+            return BadRequest(ApiResponse<object>.Fail(AddressConfirmation.Message(email, user.Tenant?.EmailDomain), AddressConfirmation.Code));
 
         // Sync changes to Firebase Auth FIRST, before persisting DB changes. This is the fix for
         // a confirmed data-integrity bug: previously the DB save happened first, so a Firebase
@@ -313,20 +354,34 @@ public class AdminUsersController : ControllerBase
             // Firebase user may not exist if they were created before this feature — skip.
             // Nothing was changed in Firebase, so there's nothing to compensate for.
         }
+        catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex) && email != originalEmail)
+        {
+            // The sync looks the account up by the ORIGINAL address, and Firebase refuses it as malformed, so no account can exist for it. This edit
+            // is CHANGING that address: refusing here would make exactly the edit that fixes it impossible. Skip the sync (there is nothing to
+            // sync) and save the correction; the corrected address gets its account from the sign-in-account route.
+            _logger.LogWarning("Skipping the Firebase sync of user {UserId}: its stored address is not one Firebase accepts, and this edit changes it", user.Id);
+        }
+        catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex))
+        {
+            // The stored address is malformed and this edit leaves it as it is: retrying cannot fix that, correcting the address can.
+            _logger.LogWarning("Firebase refused the stored address of user {UserId} as invalid", user.Id);
+            return BadRequest(ApiResponse<object>.Fail("That doesn't look like a valid email address. Correct it first."));
+        }
         catch (Exception ex)
         {
             // Deliberately broad: this scope wraps only the single external Firebase call.
             // The confirmed failure mode (TokenResponseException from the Google.Apis auth
             // stack) is NOT a FirebaseAuthException, so a narrower catch would let it through
             // unhandled again, as it did before this fix.
+            // The line says where to turn rather than promising a retry will help: an unusable service account stays unusable.
             _logger.LogError(ex, "Failed to sync user {Email} to Firebase Auth", originalEmail);
             return StatusCode(StatusCodes.Status502BadGateway,
-                ApiResponse<object>.Fail("Unable to sync the user's sign-in account. Please try again later."));
+                ApiResponse<object>.Fail("Unable to sync the user's sign-in account. If it keeps happening, ask whoever runs the Firebase project."));
         }
 
         user.FirstName = dto.FirstName;
         user.LastName = dto.LastName;
-        user.Email = dto.Email;
+        user.Email = email;
         user.Username = dto.Username;
         user.Role = role;
         user.IsActive = dto.IsActive;
@@ -376,6 +431,64 @@ public class AdminUsersController : ControllerBase
             throw; // handled by ExceptionHandlingMiddleware -> standard 500 ApiResponse envelope
         }
 
+        // The address is the whole of this person's sign-in, so a change leaves a trace: who changed whose, never the addresses themselves.
+        if (email != originalEmail)
+            _logger.LogInformation("The sign-in address of user {TargetUserId} was changed by {ActorUserId}", user.Id, User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown");
+
         return Ok(ApiResponse<AdminUserDto>.Ok(ToAdminUserDto(user, user.Tenant?.Name ?? "")));
+    }
+
+    // POST api/v1/admin/users/{id}/sign-in-account
+    /// <summary>
+    /// Makes sure this user has a Firebase sign-in account (creating a verified, passwordless one when there is none) and says which, so
+    /// the browser can then send the set-password email and word it truthfully. An account that already exists is left exactly as it is.
+    /// Like <see cref="GetAll"/> it looks past the tenant filter: this is the SuperAdmin's account administration surface.
+    /// </summary>
+    [HttpPost("{id:guid}/sign-in-account")]
+    public async Task<IActionResult> EnsureSignInAccount(Guid id, CancellationToken ct)
+    {
+        var user = await _db.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Id == id, ct);
+
+        if (user is null)
+            return NotFound(ApiResponse<object>.Fail("User not found"));
+
+        if (!user.IsActive)
+            return BadRequest(ApiResponse<object>.Fail("This user is inactive, so they cannot be given a sign-in account."));
+
+        if (string.IsNullOrWhiteSpace(user.Email))
+            return BadRequest(ApiResponse<object>.Fail("This user has no email address."));
+
+        var email = EmailIdentity.Normalise(user.Email);
+
+        // An address the app invented for a row that had none (see PlaceholderEmail) can never receive the link, so no account is made for it.
+        if (PlaceholderEmail.Covers(email))
+            return BadRequest(ApiResponse<object>.Fail(PlaceholderEmail.Message(user.FullName)));
+
+        try
+        {
+            var result = await _firebaseUserService.EnsureSignInAccountAsync(email, user.FullName, ct);
+            var account = result == SignInAccountResult.Created ? FirebaseAccountStatus.Created : FirebaseAccountStatus.Existing;
+            // No audit record exists yet (the email itself goes from the browser to Firebase), so this line is the only trace of who asked for it.
+            _logger.LogInformation("Sign-in account for user {TargetUserId} was {Account}, as asked by {ActorUserId}", user.Id, account, User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown");
+            return Ok(ApiResponse<SignInAccountDto>.Ok(new SignInAccountDto(account)));
+        }
+        catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex))
+        {
+            // Firebase refused the address itself (a legacy row with a typo). Retrying cannot fix that and correcting the address can, so it is the
+            // admin's to act on (400), not a fault on our side (502).
+            _logger.LogWarning("Firebase refused the address of user {UserId} as invalid", user.Id);
+            return BadRequest(ApiResponse<object>.Fail("That doesn't look like a valid email address. Correct it first."));
+        }
+        catch (Exception ex)
+        {
+            // Deliberately broad, as in Create: the failure that matters (a service account Google cannot authenticate) is not a
+            // FirebaseAuthException, and the same call with no Firebase app configured fails the same way, so it is the same 502. The line says
+            // where to turn rather than promising a retry will help: an unusable service account stays unusable.
+            _logger.LogError(ex, "Failed to ensure a Firebase sign-in account for {Email}", email);
+            return StatusCode(StatusCodes.Status502BadGateway,
+                ApiResponse<object>.Fail("Unable to set up the user's sign-in account. If it keeps happening, ask whoever runs the Firebase project."));
+        }
     }
 }

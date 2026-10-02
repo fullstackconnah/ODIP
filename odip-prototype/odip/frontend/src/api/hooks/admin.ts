@@ -6,11 +6,13 @@ import type {
   TenantSummaryDto,
   TenantDto,
   CreateTenantWithSetupDto,
+  TenantCreatedDto,
   UpdateTenantDto,
   AdminUserDto,
   CreateAdminUserDto,
   UpdateAdminUserDto,
   ProviderSettingsDto,
+  SignInAccountDto,
 } from '../types'
 
 // ── Tenant Hooks ──────────────────────────────────────────────
@@ -29,7 +31,7 @@ export function useCreateTenantWithSetup() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: CreateTenantWithSetupDto) =>
-      apiPost<TenantSummaryDto>('/admin/tenants/with-setup', data),
+      apiPost<TenantCreatedDto>('/admin/tenants/with-setup', data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-tenants'] }),
   })
 }
@@ -99,5 +101,16 @@ export function useUpdateAdminUser() {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
       qc.invalidateQueries({ queryKey: ['admin-tenant-users'] })
     },
+  })
+}
+
+/**
+ * POST /admin/users/{id}/sign-in-account: makes sure the user has a Firebase sign-in account (creating a verified, passwordless one when
+ * there is none) and says whether it made one. Run before asking Firebase to email the user a set-password link, so the email is only
+ * ever asked of an account that exists and the words can follow what happened (see lib/signInEmail.ts). Changes nothing the lists show.
+ */
+export function useEnsureUserSignInAccount() {
+  return useMutation({
+    mutationFn: (id: string) => apiPost<SignInAccountDto>(`/admin/users/${id}/sign-in-account`),
   })
 }

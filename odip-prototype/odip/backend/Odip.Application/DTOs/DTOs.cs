@@ -1430,6 +1430,12 @@ public record CreateStaffDto
     public string LastName { get; init; } = string.Empty;
     [Required, StringLength(200), EmailAddress]
     public string Email { get; init; } = string.Empty;
+    /// <summary>
+    /// The admin has checked the address after being told it is at neither the tenant's own domain nor a common email provider
+    /// (<see cref="Odip.Application.Common.AddressConfirmation"/>). Without it such an address is refused with a 400. On an update it
+    /// matters only when the address is being changed.
+    /// </summary>
+    public bool AddressConfirmed { get; init; }
     public UserRole Role { get; init; } = UserRole.SupportWorker;
     public Position Position { get; init; }
     [StringLength(50)]
@@ -2386,6 +2392,13 @@ public record AdminUserDto
     public string? WorkerScreeningNumber { get; init; }
     public DateOnly? WorkerScreeningExpiryDate { get; init; }
     public string? Notes { get; init; }
+
+    /// <summary>
+    /// Set by the CREATE response only (null everywhere else): whether the user's Firebase sign-in account was just created or already
+    /// existed (<see cref="FirebaseAccountStatus"/>). An account that already existed was left as it was, so a password the admin typed was
+    /// not applied to it, and the screen has to say so.
+    /// </summary>
+    public string? FirebaseAccount { get; init; }
 }
 
 public record CreateAdminUserDto
@@ -2397,6 +2410,11 @@ public record CreateAdminUserDto
     public string Role { get; init; } = string.Empty;
     public Guid TenantId { get; init; }
     public string? Password { get; init; }
+    /// <summary>
+    /// The admin has checked the address after being told it is at neither the tenant's own domain nor a common email provider
+    /// (<see cref="Odip.Application.Common.AddressConfirmation"/>). Without it such an address is refused with a 400.
+    /// </summary>
+    public bool AddressConfirmed { get; init; }
     public Position? Position { get; init; }
     public string? Mobile { get; init; }
     public string? Region { get; init; }
@@ -2422,6 +2440,11 @@ public record UpdateAdminUserDto
     public string Username { get; init; } = string.Empty;
     public string Role { get; init; } = string.Empty;
     public bool IsActive { get; init; }
+    /// <summary>
+    /// The admin has checked a NEW address after being told it is at neither the user's tenant's own domain nor a common email provider
+    /// (<see cref="Odip.Application.Common.AddressConfirmation"/>). Without it such a change is refused with a 400; an address the row already holds never asks.
+    /// </summary>
+    public bool AddressConfirmed { get; init; }
     public Position? Position { get; init; }
     public string? Mobile { get; init; }
     public string? Region { get; init; }
@@ -2449,6 +2472,20 @@ public record TenantSummaryDto(
     DateTime CreatedAt,
     int UserCount);
 
+/// <summary>
+/// What a tenant create with a first user answers: the summary, plus that user's id and what became of their Firebase sign-in account
+/// (<see cref="FirebaseAccountStatus"/>: created, existing, or failed when it could not be set up). Both are null when no first user was given.
+/// </summary>
+public record TenantCreatedDto(
+    Guid Id,
+    string Name,
+    string EmailDomain,
+    bool IsActive,
+    DateTime CreatedAt,
+    int UserCount,
+    Guid? InitialUserId,
+    string? FirebaseAccount) : TenantSummaryDto(Id, Name, EmailDomain, IsActive, CreatedAt, UserCount);
+
 // ── Bundled Tenant Creation ───────────────────────────────────────────────
 
 public record CreateTenantWithSetupDto(
@@ -2463,7 +2500,9 @@ public record CreateInitialUserDto(
     string Email,
     string Username,
     string Role,
-    string? Password);
+    string? Password,
+    // The admin has checked the address after being told it is at neither the new tenant's domain nor a common email provider.
+    bool AddressConfirmed = false);
 
 // ── Public Holidays Sync DTOs ──────────────────────────────────────────────
 

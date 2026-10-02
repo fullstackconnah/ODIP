@@ -25,6 +25,7 @@ import NotificationPreferencesTab from '@/pages/settings/NotificationPreferences
 import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
 import type { TenantSummaryDto, AdminUserDto } from '@/api/types'
 import { usePermissions } from '@/lib/permissions'
+import { useNotices } from '@/hooks/useNotices'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { plural } from '@/lib/format'
@@ -133,6 +134,9 @@ export default function SettingsPage() {
   const [userPanelOpen, setUserPanelOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<AdminUserDto | undefined>()
   const [defaultTenantId, setDefaultTenantId] = useState<string | undefined>()
+  // What became of each Users-tab "Send set-password email". Held here, not in the tab, because the tab is unmounted whenever another tab is
+  // shown: an unacknowledged failure must still be there on return, and a send that finishes while the tab is away must still report.
+  const userNotices = useNotices()
 
   const allTabs = [
     { key: 'templates' as const, label: 'Event Templates' },
@@ -279,6 +283,7 @@ export default function SettingsPage() {
 
       {tab === 'users' && (
         <UsersTab
+          notices={userNotices}
           onAddUser={(tid) => { setDefaultTenantId(tid); setEditingUser(undefined); setUserPanelOpen(true) }}
           onEditUser={(u) => { setEditingUser(u); setUserPanelOpen(true) }}
         />

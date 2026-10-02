@@ -245,22 +245,32 @@ owner decision (collected under Open Flags at the end).
 
 ### Microsoft 365 SSO
 - [ ] Sign in with Microsoft business accounts via Firebase's Microsoft OAuth provider
-  - Backend needs no changes: `/auth/exchange` verifies a Firebase ID token and maps
-    the email domain to a tenant, and does not care which provider minted the token.
+  - Backend: no code, but one setting. `/auth/exchange` verifies a Firebase ID token and
+    finds the user by email (across tenants), taking the tenant from that user's row, but
+    it accepts only the sign-in providers in `Auth:AllowedSignInProviders` (default
+    `password` and `custom`). Enabling Microsoft in the Firebase console is not enough:
+    add `microsoft.com` to that list, which is the decision to trust the `email_verified`
+    a Microsoft account asserts. The value REPLACES the default list, it does not add to
+    it, so the others must be in it:
+    `Auth__AllowedSignInProviders=password,custom,microsoft.com`. Setting only
+    `microsoft.com` would refuse every email-and-password sign-in, the owner's and the
+    demo accounts' included. Workers who are not on M365 stay on email and password.
   - Frontend swaps `signInWithEmailAndPassword` for
     `signInWithPopup(auth, new OAuthProvider('microsoft.com'))`.
   - Needs an Entra ID app registration (free on any M365 business plan) and its
     client ID / secret pasted into the Firebase console's Microsoft provider.
   - Roughly 2-3 hours of code plus about 30 minutes across the two portals.
-  - Chosen over talking to Entra ID directly with MSAL because tenants are keyed on
-    `EmailDomain` — ODIP is built to onboard other NDIS orgs, and the next one may be
-    on Google Workspace. Firebase covers that and non-M365 support workers behind one
-    interface; going direct would make an M365 account mandatory for every user.
+  - Chosen over talking to Entra ID directly with MSAL because ODIP is built to onboard
+    other NDIS orgs, and the next one may be on Google Workspace. Firebase covers that
+    and non-M365 support workers behind one interface; going direct would make an M365
+    account mandatory for every user.
 
 ### Harden the token exchange (do BEFORE Firebase goes live)
 - [x] Require `email_verified` in `AuthController.Exchange` (shipped 2026-08-30, PR #25),
-      and once SSO lands require `sign_in_provider == "microsoft.com"` and disable the
-      email/password provider (that half still pending SSO).
+      and accept only the providers in `Auth:AllowedSignInProviders` (below). Once SSO
+      lands, add `microsoft.com` there (the value replaces the default list, so keep
+      `password` in it while email/password is enabled) and disable the email/password
+      provider (that half still pending SSO).
   - `Odip.Api/Controllers/AuthController.cs:82` reads only the `email` claim today.
   - The Firebase API key ships in the client bundle, so with email/password enabled
     anyone can call `createUserWithEmailAndPassword` using a provisioned-but-not-yet-
@@ -272,3 +282,43 @@ owner decision (collected under Open Flags at the end).
   - Not exploitable while Firebase is unconfigured. That is what makes now the cheap
     time to fix it, and why it gates the Firebase rollout rather than sitting in the
     general backlog.
+  - Accounts the app creates itself are created with `emailVerified: true`
+    (`FirebaseUserService.BuildCreateUserArgs`): an admin creating a user, a tenant's
+    first user, and the "Send set-password email" action for a user or staff member who
+    has no Firebase account yet. Nothing ever sends them a verification link, so without
+    it they could never pass the check above. It does not reopen the window described
+    above: the account exists before anyone else can sign up with that address, and one
+    made without a password is unusable until its owner follows the emailed set-password
+    link, which proves they control the mailbox. An account that already existed is never
+    marked verified by the app.
+  - Staff added through the staff form have a user row and no Firebase account, so they
+    get one on demand: `POST api/v1/staff/{id}/sign-in-account` (Admin, Coordinator,
+    SuperAdmin) and `POST api/v1/admin/users/{id}/sign-in-account` (SuperAdmin, for the
+    Users tab). The browser then asks Firebase to email the set-password link. An address
+    on `Auth:SuperAdminDomain` signs in as SuperAdmin whatever the user's role, so the
+    staff routes (create, an edit that changes the address, and this one) refuse such an
+    address unless the caller is a SuperAdmin. A staff edit also refuses, for anyone but a
+    SuperAdmin, to reactivate a row already on that domain or change its role. Both routes
+    refuse an address the app invented (`@placeholder.local`, from the staff/user unification
+    migration) and log at Information who asked, for whom, and whether the account was
+    created or already existed: there is no audit record yet.
+  - Any address signs in. The exchange no longer maps the address's domain to a tenant: it
+    finds the one active user with that address (compared lower-case) across tenants and
+    uses that user's tenant. No match, an inactive tenant, and two active rows with the
+    same address all answer the same 401 (the two-row case logs both user ids, so the
+    duplicate can be fixed). `Tenant.EmailDomain` is still stored and unique, but it is not
+    read at sign-in. The SuperAdmin domain keeps its own path.
+  - Only listed sign-in providers get in. The Firebase API key is public, so anyone can
+    obtain an ID token from every provider enabled in the console, and what `email_verified`
+    proves differs: control of the mailbox for email/password, whatever the provider asserts
+    for a federated one. The exchange reads `firebase.sign_in_provider` and refuses, with
+    the same 401 and a log line, a token whose provider is not in `Auth:AllowedSignInProviders`
+    and one that does not say. The setting is a list in appsettings or one comma-separated
+    value in the environment (`Auth__AllowedSignInProviders=password,custom`, the default);
+    blank means the default, and any other value replaces it rather than adding to it.
+    `custom` is a token minted with the service-account key, which
+    only its holder can do. Before deploy, check the Firebase console: only Email/Password
+    should be enabled today.
+  - The SSO plan above retires this whole flow. With the email/password provider disabled
+    there is no password to set, so the set-password emails, the two sign-in-account
+    routes, the temporary-password option and the verified-at-creation rule go with it.

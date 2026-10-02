@@ -11,6 +11,8 @@ export interface AdminUserDto {
   isActive: boolean
   createdAt: string
   lastLoginAt: string | null
+  /** Set by the CREATE response only: whether the user's Firebase sign-in account was just made or already existed (and was left as it was). */
+  firebaseAccount?: FirebaseAccountState | null
 }
 
 export interface CreateAdminUserDto {
@@ -21,6 +23,8 @@ export interface CreateAdminUserDto {
   role: string
   tenantId: string
   password?: string
+  /** The admin has checked an address the server asked about (see lib/addressConfirmation.ts). Sent only on the retry that follows that question. */
+  addressConfirmed?: boolean
 }
 
 export interface UpdateAdminUserDto {
@@ -30,4 +34,14 @@ export interface UpdateAdminUserDto {
   username: string
   role: string
   isActive: boolean
+  /** The admin has checked a NEW address the server asked about (see lib/addressConfirmation.ts). Sent only on the retry that follows that question. */
+  addressConfirmed?: boolean
+}
+
+/** What became of a person's Firebase sign-in account: ODIP just made it, or it was already there and was left as it was. */
+export type FirebaseAccountState = 'created' | 'existing'
+
+/** POST /admin/users/{id}/sign-in-account and POST /staff/{id}/sign-in-account: makes sure the account exists, and says which. */
+export interface SignInAccountDto {
+  firebaseAccount: FirebaseAccountState
 }

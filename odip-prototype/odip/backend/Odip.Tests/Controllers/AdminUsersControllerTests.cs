@@ -129,7 +129,7 @@ public class AdminUsersControllerTests
         var tenant = SeedTenant(db);
 
         var firebase = new Mock<IFirebaseUserService>();
-        firebase.Setup(f => f.CreateUserAsync("new.user@test.example.com", "New User", "P@ssword1", It.IsAny<CancellationToken>()))
+        firebase.Setup(f => f.CreateUserAsync("new.user@test.example.com", "New User", "P@ssword1234!", It.IsAny<CancellationToken>()))
             .ReturnsAsync("firebase-uid-1");
 
         var controller = new AdminUsersController(db, new Mock<ILogger<AdminUsersController>>().Object, firebase.Object);
@@ -137,7 +137,7 @@ public class AdminUsersControllerTests
         var dto = new CreateAdminUserDto
         {
             FirstName = "New", LastName = "User", Email = "new.user@test.example.com",
-            Username = "newuser", Role = "Coordinator", TenantId = tenant.Id, Password = "P@ssword1",
+            Username = "newuser", Role = "Coordinator", TenantId = tenant.Id, Password = "P@ssword1234!",
         };
 
         var result = await controller.Create(dto, CancellationToken.None);
@@ -149,7 +149,7 @@ public class AdminUsersControllerTests
         var saved = await db.Users.IgnoreQueryFilters().Where(u => u.Email == "new.user@test.example.com").ToListAsync();
         Assert.Single(saved);
 
-        firebase.Verify(f => f.CreateUserAsync("new.user@test.example.com", "New User", "P@ssword1", It.IsAny<CancellationToken>()), Times.Once);
+        firebase.Verify(f => f.CreateUserAsync("new.user@test.example.com", "New User", "P@ssword1234!", It.IsAny<CancellationToken>()), Times.Once);
         firebase.Verify(f => f.DeleteUserAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -172,7 +172,7 @@ public class AdminUsersControllerTests
         var dto = new CreateAdminUserDto
         {
             FirstName = "New", LastName = "User", Email = "new.user@test.example.com",
-            Username = "newuser", Role = "Coordinator", TenantId = tenant.Id, Password = "P@ssword1",
+            Username = "newuser", Role = "Coordinator", TenantId = tenant.Id, Password = "P@ssword1234!",
         };
 
         var result = await controller.Create(dto, CancellationToken.None);
@@ -205,7 +205,7 @@ public class AdminUsersControllerTests
         // Display name here must match dto's FirstName+LastName ("New User") — a mismatch here
         // means Moq's Setup silently never matches the controller's actual call, so the mock
         // falls back to its loose-mock default return value instead of running this callback.
-        firebase.Setup(f => f.CreateUserAsync("race.user@test.example.com", "New User", "P@ssword1", It.IsAny<CancellationToken>()))
+        firebase.Setup(f => f.CreateUserAsync("race.user@test.example.com", "New User", "P@ssword1234!", It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>
             {
                 // Firebase "succeeded" — now arm the DB save to fail, simulating a conflicting
@@ -219,7 +219,7 @@ public class AdminUsersControllerTests
         var dto = new CreateAdminUserDto
         {
             FirstName = "New", LastName = "User", Email = "race.user@test.example.com",
-            Username = "newuser-noconflict", Role = "Coordinator", TenantId = tenant.Id, Password = "P@ssword1",
+            Username = "newuser-noconflict", Role = "Coordinator", TenantId = tenant.Id, Password = "P@ssword1234!",
         };
 
         await Assert.ThrowsAsync<DbUpdateException>(() => controller.Create(dto, CancellationToken.None));

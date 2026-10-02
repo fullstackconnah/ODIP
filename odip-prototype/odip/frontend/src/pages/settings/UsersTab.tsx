@@ -1,10 +1,15 @@
 import { useState } from 'react'
-import { Search, Pencil } from 'lucide-react'
-import { useAdminUsers, useAdminTenantsSummary } from '@/api/hooks'
+import { Search, Pencil, Mail } from 'lucide-react'
+import { useAdminUsers, useAdminTenantsSummary, useEnsureUserSignInAccount } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
+import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
-import { DataTable } from '@/components/DataTable'
+import { DataTable, RowActions } from '@/components/DataTable'
+import { NoticesRegion } from '@/components/NoticesRegion'
+import { useNotices, type Notice } from '@/hooks/useNotices'
 import { formatRelative, plural } from '@/lib/format'
+import { canSendSetPasswordEmail, sendActionLabel } from '@/lib/setPasswordEmail'
+import { describeEmailOutcome, ensureAndSendSetPasswordEmail } from '@/lib/signInEmail'
 import { parseApiDate } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -14,6 +19,12 @@ import { parseApiDate } from '@/lib/utils'
 interface UsersTabProps {
   onAddUser: (tenantId?: string) => void
   onEditUser: (user: AdminUserDto) => void
+  /**
+   * Where what became of each send is kept. The page passes its own, so the notices outlive this tab (it is unmounted whenever another tab is
+   * shown): an unacknowledged failure is still there on return, and a send that finishes after the tab was left still reports. Without it the
+   * tab keeps its own, which lasts only while it is mounted.
+   */
+  notices?: ReturnType<typeof useNotices>
 }
 
 // ---------------------------------------------------------------------------
@@ -56,13 +67,23 @@ function formatRelativeTime(dateStr: string | null): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
+export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: UsersTabProps) {
   const [tenantId, setTenantId] = useState('')
   const [role, setRole] = useState('')
   const [status, setStatus] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  // The user whose set-password email is going out. One at a time: a second click would only send a duplicate, and Firebase limits how many
+  // reset emails it will send. The buttons say "busy" with aria-disabled and handleSendSetPasswordEmail refuses the click: `disabled` on the
+  // button that was just activated can drop keyboard focus in some browsers.
+  const [sendingId, setSendingId] = useState<string | null>(null)
+  // Firebase sends the email, so without Firebase (local dev auth) the action is not offered rather than offered and broken.
+  const emailEnabled = canSendSetPasswordEmail()
 
+  const ensureAccount = useEnsureUserSignInAccount()
+  // What became of each "Send set-password email", kept above the table until dismissed: a row action has no panel to say it in.
+  const ownNotices = useNotices()
+  const { notices, notify, dismiss } = lifted ?? ownNotices
   const { data: tenants = [] } = useAdminTenantsSummary()
   const { data: pagedResult, isLoading } = useAdminUsers({
     tenantId: tenantId || undefined,
@@ -80,6 +101,23 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
 
   const startItem = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
   const endItem = Math.min(page * PAGE_SIZE, totalCount)
+
+  // The server makes sure the account exists first (a user can have a row and no Firebase account), then Firebase is asked to send the link;
+  // what is said afterwards follows what actually happened in those two steps (lib/signInEmail.ts).
+  async function handleSendSetPasswordEmail(target: AdminUserDto) {
+    if (sendingId !== null) return
+    setSendingId(target.id)
+    const outcome = await ensureAndSendSetPasswordEmail(target.email, () => ensureAccount.mutateAsync(target.id))
+    setSendingId(null)
+    // The advice names the button this row really has: "reset" for someone who has signed in before, "set" for someone who never has.
+    const { tone, message } = describeEmailOutcome(outcome, `use ${sendActionLabel(target.lastLoginAt)} on their row`)
+    // The id is the notice's subject: it is how the region finds this row's send button again once the notice is dismissed.
+    notify(tone, target.fullName, message, target.id)
+  }
+
+  // Dismissing the last notice about someone hands focus back to the button that raised it, which is still in their row.
+  const focusSendButtonOf = (dismissed: Notice) =>
+    dismissed.subject ? document.querySelector<HTMLElement>(`[data-send-user="${dismissed.subject}"]`) : null
 
   const inputClass =
     'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
@@ -150,6 +188,9 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
         </button>
       </div>
 
+      {/* Notices for the row actions. Always mounted (a live region must exist before its content), and collapsed while empty. */}
+      <NoticesRegion notices={notices} onDismiss={dismiss} focusAfterDismiss={focusSendButtonOf} className="empty:mb-0" />
+
       {/* Table */}
       <DataTable
         data={users}
@@ -202,16 +243,33 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
             key: 'actions',
             header: '',
             align: 'right',
-            render: (user: AdminUserDto) => (
-              <button
-                onClick={() => onEditUser(user)}
-                className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] transition-colors"
-                title="Edit user"
-                aria-label="Edit user"
-              >
-                <Pencil className="w-4 h-4 text-[var(--color-muted-foreground)]" />
-              </button>
-            ),
+            render: (user: AdminUserDto) => {
+              // Every row has its own, so the name says whom it emails, and the wording follows their history.
+              const sendLabel = `${sendActionLabel(user.lastLoginAt)} to ${user.fullName}`
+              return (
+                <RowActions>
+                  {emailEnabled && user.isActive && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      iconOnly
+                      onClick={() => handleSendSetPasswordEmail(user)}
+                      data-send-user={user.id}
+                      aria-disabled={sendingId !== null || undefined}
+                      aria-busy={sendingId === user.id || undefined}
+                      className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+                      title={sendLabel}
+                      aria-label={sendLabel}
+                    >
+                      <Mail className="w-4 h-4" />
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" iconOnly onClick={() => onEditUser(user)} title={`Edit ${user.fullName}`} aria-label={`Edit ${user.fullName}`}>
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                </RowActions>
+              )
+            },
           },
         ]}
       />

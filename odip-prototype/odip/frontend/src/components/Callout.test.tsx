@@ -148,4 +148,25 @@ describe('Callout primitive', () => {
     expect(Info).toBeDefined()
     expect(CheckCircle2).toBeDefined()
   })
+
+  it('announce={false} drops the role and aria-live, for a Callout that sits inside a live region of its own (one announcement, not two)', () => {
+    render(
+      <div>
+        <Callout tone="warning" announce={false}>Inside a region.</Callout>
+        <Callout tone="success" announce={false}>Also inside.</Callout>
+      </div>,
+    )
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByText('Inside a region.').closest('div[class*="rounded-lg"]')).not.toHaveAttribute('aria-live')
+    // The look is unchanged: it is the same tone.
+    expect(screen.getByText('Inside a region.').closest('div[class*="rounded-lg"]')!.className).toMatch(/bg-\[var\(--color-warning-container\)\]/)
+  })
+
+  it('announces by default, as before', () => {
+    render(<Callout tone="warning">Default.</Callout>)
+
+    expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive')
+  })
 })

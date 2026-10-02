@@ -73,6 +73,12 @@ export type CalloutProps = {
   /** Optional action area rendered to the right of the body on wide viewports. */
   actions?: ReactNode
   className?: string
+  /**
+   * Whether this Callout announces itself: its own `role` and `aria-live`, per tone. True by default. Pass `false` for a Callout that sits
+   * inside a live region of its own (`NoticesRegion`): the region announces what is put into it, and a second live role on each notice would
+   * announce it twice.
+   */
+  announce?: boolean
 }
 
 /**
@@ -85,13 +91,13 @@ export type CalloutProps = {
  *   info and success are polite (`status`).
  * - The icon is decorative (`aria-hidden`); the visible text is the source of meaning.
  */
-export function Callout({ tone, title, children, icon, actions, className }: CalloutProps) {
+export function Callout({ tone, title, children, icon, actions, className, announce = true }: CalloutProps) {
   const style = TONE_STYLES[toneOf(tone) as keyof typeof TONE_STYLES]
   const Icon = icon === null ? null : (icon ?? style.icon)
   return (
     <div
-      role={style.role}
-      aria-live={style.ariaLive}
+      role={announce ? style.role : undefined}
+      aria-live={announce ? style.ariaLive : undefined}
       className={clsx(
         'flex flex-wrap items-start gap-3 p-3 rounded-lg border text-sm',
         style.container,

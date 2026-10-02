@@ -1,5 +1,6 @@
 import { call, expectStatus, Session } from './api';
 import { addDays } from './dates';
+import { DEMO_EMAIL_DOMAIN } from './env';
 
 let counter = 0;
 const RUN = Date.now().toString(36).toUpperCase();
@@ -28,11 +29,14 @@ export async function makeParticipant(coord: Session, token = uniqueToken()): Pr
   return { ...done.data, id, token };
 }
 
-/** Support worker with a far-future screening date, so assignment raises no findings. */
+/**
+ * Support worker with a far-future screening date, so assignment raises no findings. Their address is at the Demo tenant's own email domain: any
+ * other address that is not at a common provider is refused until the request carries `addressConfirmed` (400 AddressNeedsConfirmation).
+ */
 export async function makeStaff(coord: Session, token = uniqueToken()): Promise<Created> {
   const res = await expectStatus('create staff', 201, await call(coord, 'POST', '/staff', {
     firstName: 'Wk', lastName: token, role: 'SupportWorker', position: 'SupportWorker',
-    email: `wk.${token.toLowerCase()}@e2e.test`, isActive: true,
+    email: `wk.${token.toLowerCase()}@${DEMO_EMAIL_DOMAIN}`, isActive: true,
     workerScreeningNumber: 'WS1', workerScreeningExpiryDate: '2099-01-01', isDriverEligible: true,
   }));
   return { ...res.data, id: res.data.id, token };

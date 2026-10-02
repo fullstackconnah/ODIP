@@ -1,12 +1,25 @@
-import { useState, useEffect, useId } from 'react'
+import { useState, useEffect, useId, useRef } from 'react'
 import {
   useAdminTenantsSummary,
   useCreateAdminUser,
+  useEnsureUserSignInAccount,
   useUpdateAdminUser,
 } from '@/api/hooks'
-import type { AdminUserDto } from '@/api/types'
+import type { AdminUserDto, FirebaseAccountState } from '@/api/types'
+import { AnnouncementRegion } from '@/components/AnnouncementRegion'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown } from '@/components/Dropdown'
+import { SignInEmailOutcome } from '@/components/SignInEmailOutcome'
 import { SlideOver } from '@/components/SlideOver'
+import { useRefocusWhenLost } from '@/hooks/useRefocusWhenLost'
+import { addressConfirmationRequest } from '@/lib/addressConfirmation'
+import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
+import {
+  describeEmailOutcome, describeTypedPassword, ensureAndSendSetPasswordEmail, sendSetPasswordEmailFor, type EmailOutcome,
+} from '@/lib/signInEmail'
+import { MIN_PASSWORD_LENGTH, generateTemporaryPassword } from '@/lib/temporaryPassword'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -17,6 +30,19 @@ interface UserFormPanelProps {
   onClose: () => void
   user?: AdminUserDto
   defaultTenantId?: string
+}
+
+// What a successful create leaves on screen. The panel does NOT close on a create: the answer (a password to share, a link on its way, a
+// link that did not go) decides what the admin does next, and closing would take it away.
+type Done = {
+  userId: string
+  name: string
+  email: string
+  /** Whether the Firebase account was just made or already existed: a typed password only reached a made one, and "set" or "reset" follows. */
+  account: FirebaseAccountState
+  withPassword: boolean
+  /** What became of the set-password email; null when none was sent (a temporary password was set, or there is no Firebase). */
+  outcome: EmailOutcome | null
 }
 
 // ---------------------------------------------------------------------------
@@ -47,10 +73,12 @@ export default function UserFormPanel({
   // trigger hear nothing. aria-labelledby wires each label to its dropdown explicitly.
   const tenantLabelId = useId()
   const roleLabelId = useId()
+  const passwordHintId = useId()
 
   const { data: tenants = [] } = useAdminTenantsSummary()
   const createMutation = useCreateAdminUser()
   const updateMutation = useUpdateAdminUser()
+  const ensureAccount = useEnsureUserSignInAccount()
 
   const [tenantId, setTenantId] = useState('')
   const [firstName, setFirstName] = useState('')
@@ -60,12 +88,28 @@ export default function UserFormPanel({
   const [role, setRole] = useState('')
   const [isActive, setIsActive] = useState(true)
   const [password, setPassword] = useState('')
+  // Create mode only. The default is no password: Firebase emails the user a link to set their own. Opening this swaps that for a
+  // temporary password the admin chooses, for demo or offline use. Closed, the field is empty, so what is sent is what is shown.
+  const [tempPasswordOpen, setTempPasswordOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState<Done | null>(null)
+  // The create is answered but the email is still going out, or a Send under the done state is: no second submit, no second send.
+  const [submitting, setSubmitting] = useState(false)
+  // The server wants the address checked (it is at neither the tenant's domain nor a common email provider): its sentence while the question
+  // is up, null otherwise. Answering "Use this address" sends the same request again with the confirmation.
+  const [confirmAddress, setConfirmAddress] = useState<string | null>(null)
+  // The done view's first line takes focus when the form is swapped for it (the Create button that had it is gone), and again whenever a retry
+  // removes the button that had it.
+  const doneHeading = useRef<HTMLParagraphElement>(null)
+  useRefocusWhenLost(doneHeading, done)
 
   // Reset form state when the panel opens or the user prop changes
   useEffect(() => {
     if (!isOpen) return
     setError(null)
+    setTempPasswordOpen(false)
+    setConfirmAddress(null)
+    setDone(null)
 
     if (user) {
       setTenantId(user.tenantId)
@@ -88,7 +132,7 @@ export default function UserFormPanel({
     }
   }, [isOpen, user, defaultTenantId])
 
-  const isBusy = createMutation.isPending || updateMutation.isPending
+  const isBusy = createMutation.isPending || updateMutation.isPending || submitting
 
   // Unsaved edits: every field as it is now against what the open effect above put there (the user's own values in edit mode,
   // blanks and the default tenant in create mode). The two arrays list the fields in the same order.
@@ -99,17 +143,25 @@ export default function UserFormPanel({
   ])
   const dirty = current !== initial
 
+  const passwordTooShort = password !== '' && password.length < MIN_PASSWORD_LENGTH
+
   const isFormValid =
     tenantId.trim() !== '' &&
     firstName.trim() !== '' &&
     lastName.trim() !== '' &&
     email.trim() !== '' &&
     username.trim() !== '' &&
-    role.trim() !== ''
+    role.trim() !== '' &&
+    !passwordTooShort
 
-  async function handleSubmit() {
+  // Whether Firebase can email a link here: not in local dev auth, where there is no Firebase to send it.
+  const emailLinkAvailable = canSendSetPasswordEmail()
+
+  async function handleSubmit(addressConfirmed = false) {
     setError(null)
+    setSubmitting(true)
 
+    let created: AdminUserDto | undefined
     try {
       if (isEdit && user) {
         await updateMutation.mutateAsync({
@@ -121,10 +173,12 @@ export default function UserFormPanel({
             username: username.trim(),
             role,
             isActive,
+            // Sent only on the second go, once the admin has said to use an address the server asked about (it asks only when it CHANGES).
+            addressConfirmed: addressConfirmed || undefined,
           },
         })
       } else {
-        await createMutation.mutateAsync({
+        created = await createMutation.mutateAsync({
           tenantId,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
@@ -132,10 +186,17 @@ export default function UserFormPanel({
           username: username.trim(),
           role,
           password: password || undefined,
+          addressConfirmed: addressConfirmed || undefined,
         })
       }
-      onClose()
     } catch (err: unknown) {
+      const asking = addressConfirmationRequest(err)
+      if (asking) {
+        // Not a failure: the server wants the address checked first. Nothing was made, and what was typed stays.
+        setConfirmAddress(asking)
+        setSubmitting(false)
+        return
+      }
       const axiosErr = err as { response?: { data?: { errors?: string[]; message?: string } | string } }
       setError(
         (typeof axiosErr?.response?.data === 'string'
@@ -143,6 +204,70 @@ export default function UserFormPanel({
           : axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message) ||
           'Failed to save user.',
       )
+      setSubmitting(false)
+      return
+    }
+
+    if (isEdit || !created) {
+      setSubmitting(false)
+      onClose()
+      return
+    }
+
+    // The user exists now. Say what became of their sign-in, and stay to say it. A server that does not say whether the account was made
+    // is read as made, which is what a create always did before it started to say.
+    const account = created.firebaseAccount ?? 'created'
+    const address = created.email || email.trim()
+    const withPassword = password !== ''
+    // A typed password is for them to use as it is. Otherwise Firebase emails the link, which goes straight out: the create already made or
+    // found the account, so there is no ensure step. It is worded for a new account or an existing one.
+    const outcome = !withPassword && emailLinkAvailable ? await sendSetPasswordEmailFor(address, account) : null
+    setDone({ userId: created.id, name: created.fullName, email: address, account, withPassword, outcome })
+    setSubmitting(false)
+  }
+
+  // What the done view says about their sign-in, once: the visible Callout shows it and the status region announces it.
+  const doneSentence = !done
+    ? null
+    : done.outcome
+      ? describeEmailOutcome(done.outcome, 'use Send again').message
+      : done.withPassword
+        ? describeTypedPassword(done.account, done.name, done.email)
+        : null
+  const announcement = done ? [`${done.name} was created.`, doneSentence].filter(Boolean).join(' ') : ''
+
+  /** Sends again from the done state. A failed account step is redone through the server; anything else only needs Firebase asked again. */
+  async function sendAgain() {
+    if (!done || submitting) return
+    setSubmitting(true)
+    const redoAccount = !!done.outcome && !done.outcome.ok && done.outcome.reason === 'account'
+    const outcome = redoAccount
+      ? await ensureAndSendSetPasswordEmail(done.email, () => ensureAccount.mutateAsync(done.userId))
+      : await sendSetPasswordEmailFor(done.email, done.account)
+    setDone({ ...done, outcome })
+    setSubmitting(false)
+  }
+
+  /** The typed password did not reach an account that already existed, so the way in is the link: the server makes sure of the account, then Firebase sends. */
+  async function sendLinkToExistingAccount() {
+    if (!done || submitting) return
+    setSubmitting(true)
+    const outcome = await ensureAndSendSetPasswordEmail(done.email, () => ensureAccount.mutateAsync(done.userId))
+    setDone({ ...done, outcome })
+    setSubmitting(false)
+  }
+
+  function toggleTempPassword() {
+    setTempPasswordOpen(open => !open)
+    setPassword('')
+  }
+
+  function handleGenerate() {
+    try {
+      setPassword(generateTemporaryPassword())
+      setError(null)
+    } catch {
+      setError("Couldn't generate a password in this browser. Type one instead.")
     }
   }
 
@@ -152,6 +277,52 @@ export default function UserFormPanel({
     'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   if (!isOpen) return null
+
+  if (done) {
+    return (
+      <SlideOver
+        open
+        onClose={onClose}
+        title="User created"
+        dirty={false}
+        bodyClassName="px-6 py-5 space-y-4"
+        footerClassName="px-6 py-4"
+        footer={
+          <div className="flex justify-end">
+            <Button onClick={onClose}>Done</Button>
+          </div>
+        }
+      >
+        <AnnouncementRegion message={announcement} />
+        <p ref={doneHeading} tabIndex={-1} className="text-sm font-medium text-[var(--color-foreground)] focus:outline-none">{done.name} was created.</p>
+        {done.outcome ? (
+          <SignInEmailOutcome outcome={done.outcome} retry="use Send again" onRetry={sendAgain} retrying={submitting} announce={false} />
+        ) : done.withPassword && done.account === 'existing' ? (
+          <Callout
+            tone="warning"
+            announce={false}
+            actions={
+              emailLinkAvailable ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={sendLinkToExistingAccount}
+                  aria-disabled={submitting || undefined}
+                  className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+                >
+                  {submitting ? 'Sending...' : 'Send set-password email'}
+                </Button>
+              ) : undefined
+            }
+          >
+            <span className="break-words">{doneSentence}</span>
+          </Callout>
+        ) : done.withPassword ? (
+          <Callout tone="success" announce={false}>{doneSentence}</Callout>
+        ) : null}
+      </SlideOver>
+    )
+  }
 
   return (
     <SlideOver
@@ -172,7 +343,7 @@ export default function UserFormPanel({
           </button>
           <button
             type="button"
-            onClick={handleSubmit}
+            onClick={() => handleSubmit()}
             disabled={isBusy || !isFormValid}
             className="px-5 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
           >
@@ -181,6 +352,9 @@ export default function UserFormPanel({
         </div>
       }
     >
+      {/* There before anything is said, and at the same place as in the done view, so what is written into it later is announced. */}
+      <AnnouncementRegion message="" />
+
       {/* Tenant */}
       <div>
         <label id={tenantLabelId} className={labelClass}>Tenant *</label>
@@ -267,27 +441,47 @@ export default function UserFormPanel({
         />
       </div>
 
-      {/* Password — create mode only */}
+      {/* Sign-in — create mode only. The default is no password: Firebase emails the user a link to set their own. */}
       {!isEdit && (
-        <div>
-          <label className={labelClass}>Password</label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className={inputClass}
-              placeholder="Min 6 characters"
-            />
-            <button
-              type="button"
-              onClick={() => setPassword(Math.random().toString(36).slice(-10) + 'A1!')}
-              className="px-3 h-[var(--control-h)] border border-[var(--color-border)] rounded-[var(--radius-sm)] text-xs font-medium hover:bg-[var(--color-accent)] transition-colors whitespace-nowrap"
-            >
-              Generate
-            </button>
-          </div>
-          <p className="text-xs text-[var(--color-muted-foreground)] mt-1">Optional. User will sign in with this password via email/password auth.</p>
+        <div className="space-y-2">
+          {emailLinkAvailable && !tempPasswordOpen && (
+            <p className="text-xs text-[var(--color-muted-foreground)]">
+              We&apos;ll email {email.trim() || 'the user'} a link to set their password.
+            </p>
+          )}
+          {/* -ml-3 cancels the Button's own padding, so the words line up with the text above and the hover wash sits in the panel's margin. */}
+          <Button variant="ghost" size="sm" aria-expanded={tempPasswordOpen} onClick={toggleTempPassword} className="-ml-3">
+            Set a temporary password instead
+          </Button>
+          {tempPasswordOpen && (
+            <div>
+              <label htmlFor="uf-password" className={labelClass}>Temporary password</label>
+              <div className="flex gap-2">
+                <input
+                  id="uf-password"
+                  type="text"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  autoComplete="off"
+                  aria-describedby={passwordHintId}
+                  aria-invalid={passwordTooShort || undefined}
+                  className={inputClass}
+                  placeholder={`Min ${MIN_PASSWORD_LENGTH} characters`}
+                />
+                <Button variant="secondary" size="md" onClick={handleGenerate} className="shrink-0">
+                  Generate
+                </Button>
+              </div>
+              <p
+                id={passwordHintId}
+                className={`text-xs mt-1 ${passwordTooShort ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}
+              >
+                {passwordTooShort
+                  ? `Use at least ${MIN_PASSWORD_LENGTH} characters.`
+                  : `At least ${MIN_PASSWORD_LENGTH} characters. Ask them to change it with Forgot password after they first sign in.`}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -321,6 +515,19 @@ export default function UserFormPanel({
           {error}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmAddress !== null}
+        title="Check this address"
+        message={confirmAddress}
+        confirmLabel="Use this address"
+        cancelLabel="Go back"
+        onCancel={() => setConfirmAddress(null)}
+        onConfirm={() => {
+          setConfirmAddress(null)
+          void handleSubmit(true)
+        }}
+      />
     </SlideOver>
   )
 }

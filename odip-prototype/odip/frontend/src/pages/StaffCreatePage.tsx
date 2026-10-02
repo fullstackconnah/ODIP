@@ -1,18 +1,25 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, useWatch, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCreateStaff, useUpdateStaff, useStaffDetail } from '@/api/hooks'
-import { useEffect } from 'react'
+import { useCreateStaff, useUpdateStaff, useStaffDetail, useEnsureStaffSignInAccount } from '@/api/hooks'
+import { useEffect, useRef, useState } from 'react'
 import { FormField } from '@/components/FormField'
+import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
+import { SignInEmailOutcome } from '@/components/SignInEmailOutcome'
 import { TAP_FLOOR } from '@/components/tapArea'
+import { useRefocusWhenLost } from '@/hooks/useRefocusWhenLost'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import { addressConfirmationRequest } from '@/lib/addressConfirmation'
 import { usePermissions } from '@/lib/permissions'
+import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
+import { describeEmailOutcome, ensureAndSendSetPasswordEmail, type EmailOutcome } from '@/lib/signInEmail'
 import { extractErrorMessage } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
 
@@ -69,9 +76,27 @@ export default function StaffCreatePage() {
   const isEdit = !!id
   const createStaff = useCreateStaff()
   const updateStaff = useUpdateStaff()
+  const ensureStaffAccount = useEnsureStaffSignInAccount()
   const { data: existing, isLoading: isLoadingExisting } = useStaffDetail(isEdit ? id : undefined)
   const mutation = isEdit ? updateStaff : createStaff
   const { isCoordinator } = usePermissions()
+  // Staff added here get a user row and, until something makes one, no Firebase sign-in account. After a create the page makes sure there is
+  // one and asks Firebase to email the link; with no Firebase (local dev auth) there is nothing to send and the page behaves as it always did.
+  const emailLinkAvailable = canSendSetPasswordEmail()
+  // After a create: what became of that email, kept ON SCREEN. Navigating away at once would take the answer with it.
+  const [created, setCreated] = useState<{ id: string; name: string; email: string; outcome: EmailOutcome } | null>(null)
+  const [retrying, setRetrying] = useState(false)
+  // True from the click until the whole submit has finished, including the account step and the email that follow the create. The create
+  // mutation settles before those do, so its isPending alone would let the button come back to life with the form still on screen, and a
+  // second submit would post the same staff member again.
+  const [submitting, setSubmitting] = useState(false)
+  // The server wants the address checked (it is at neither the tenant's domain nor a common email provider): its sentence while the question is
+  // up, null otherwise. "Use this address" submits the same form again with the confirmation (see submitWith), for that one submit only.
+  const [confirmAddress, setConfirmAddress] = useState<string | null>(null)
+  // The done view's first line takes focus when the form is swapped for it (the Create button that had it is gone), and again whenever a retry
+  // removes the button that had it.
+  const doneHeading = useRef<HTMLParagraphElement>(null)
+  useRefocusWhenLost(doneHeading, created)
 
   // The account-role dropdown always hides SuperAdmin (never grantable from this form), and
   // additionally hides Admin when the person filling out the form is a Coordinator — a
@@ -117,6 +142,8 @@ export default function StaffCreatePage() {
     },
   })
 
+  const typedEmail = useWatch({ control, name: 'email' })
+
   useEffect(() => {
     if (existing) {
       reset({
@@ -143,11 +170,13 @@ export default function StaffCreatePage() {
     }
   }, [existing, reset])
 
-  const onSubmit = async (data: StaffFormData) => {
+  const onSubmit = async (data: StaffFormData, addressConfirmed: boolean) => {
     const payload: any = { ...data }
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
     }
+    if (addressConfirmed) payload.addressConfirmed = true
+    setSubmitting(true)
     try {
       if (isEdit) {
         const res = await updateStaff.mutateAsync({ id, data: { ...payload, isActive: existing?.isActive ?? true } })
@@ -159,17 +188,65 @@ export default function StaffCreatePage() {
         const res = await createStaff.mutateAsync(payload)
         if (res.success) {
           flushSync(() => reset(data))
-          navigate('/staff')
+          const person = res.data
+          if (emailLinkAvailable && person?.id && person.isActive && person.email) {
+            // The server stored the address lower-case; that is the one the email goes to.
+            const outcome = await ensureAndSendSetPasswordEmail(person.email, () => ensureStaffAccount.mutateAsync(person.id))
+            setCreated({ id: person.id, name: person.fullName, email: person.email, outcome })
+          } else {
+            navigate('/staff')
+          }
         }
       }
-    } catch {
-      // error handled by mutation state
+    } catch (err) {
+      const asking = addressConfirmationRequest(err)
+      if (asking) {
+        // Not a failure: the server wants the address checked first. Nothing was made, so clear the mutation's error (the red banner would show
+        // the question as a failure) and ask.
+        mutation.reset?.()
+        setConfirmAddress(asking)
+      }
+      // Any other error is handled by the mutation's state.
+    } finally {
+      setSubmitting(false)
     }
   }
 
+  // The form's submit, with or without the confirmation. The confirmation is an argument, not state or a ref, so it exists only for the one
+  // submit that carries it and can never leak into a later attempt.
+  const submitWith = (addressConfirmed: boolean) => handleSubmit(data => onSubmit(data, addressConfirmed))
+
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
+  async function sendAgain() {
+    if (!created || retrying) return
+    setRetrying(true)
+    const outcome = await ensureAndSendSetPasswordEmail(created.email, () => ensureStaffAccount.mutateAsync(created.id))
+    setCreated({ ...created, outcome })
+    setRetrying(false)
+  }
+
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
+
+  // What the done view says, once: the visible Callout shows the sentence and the status region announces it.
+  const announcement = created ? `${created.name} was created. ${describeEmailOutcome(created.outcome, 'use Send again').message}` : ''
+
+  if (created) {
+    return (
+      <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
+        {/* There before anything is said, and first in the page in both views, so what is written into it later is announced. */}
+        <AnnouncementRegion message={announcement} />
+        <PageHeader title="Staff member created" subtitle={created.name} />
+        <Card className="space-y-4">
+          <p ref={doneHeading} tabIndex={-1} className="text-sm font-medium text-[var(--color-foreground)] focus:outline-none">{created.name} was created.</p>
+          <SignInEmailOutcome outcome={created.outcome} retry="use Send again" onRetry={sendAgain} retrying={retrying} announce={false} />
+          <div className="flex justify-end">
+            <Button to="/staff">Done</Button>
+          </div>
+        </Card>
+      </div>
+    )
+  }
 
   if (isTargetSuperAdmin) {
     return (
@@ -195,6 +272,7 @@ export default function StaffCreatePage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
+      <AnnouncementRegion message={announcement} />
       {unsavedChangesDialog}
       <div className="text-sm text-[var(--color-muted-foreground)]">
         <Link to="/staff" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Staff</Link>
@@ -207,7 +285,7 @@ export default function StaffCreatePage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
+      <form onSubmit={submitWith(false)} className="flex flex-col gap-[var(--section-gap)]">
         {/* Personal Information */}
         <Card title="Personal Information">
           <div className={formGrid}>
@@ -250,7 +328,13 @@ export default function StaffCreatePage() {
               </FormField>
             )}
 
-            <FormField label="Email" required error={errors.email?.message} hint={!errors.email ? 'Used to sign in to the app.' : undefined} className={span.medium}>
+            <FormField label="Email" required error={errors.email?.message} hint={
+                !errors.email
+                  ? (!isEdit && emailLinkAvailable
+                      ? `We'll email ${typedEmail?.trim() || 'the new staff member'} a link to set their password.`
+                      : 'Used to sign in to the app.')
+                  : undefined
+              } className={span.medium}>
               <input type="email" {...register('email')} placeholder="e.g. sarah@odip.com.au" />
             </FormField>
 
@@ -361,11 +445,28 @@ export default function StaffCreatePage() {
         {/* Submit */}
         <div className="flex justify-end gap-3">
           <Button variant="secondary" to="/staff">Cancel</Button>
-          <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Staff Member')}
+          <Button type="submit" disabled={mutation.isPending || submitting}>
+            {mutation.isPending
+              ? (isEdit ? 'Saving...' : 'Creating...')
+              : submitting && !isEdit && emailLinkAvailable
+                ? 'Sending link...'
+                : (isEdit ? 'Save Changes' : 'Create Staff Member')}
           </Button>
         </div>
       </form>
+
+      <ConfirmDialog
+        open={confirmAddress !== null}
+        title="Check this address"
+        message={confirmAddress}
+        confirmLabel="Use this address"
+        cancelLabel="Go back"
+        onCancel={() => setConfirmAddress(null)}
+        onConfirm={() => {
+          setConfirmAddress(null)
+          void submitWith(true)()
+        }}
+      />
     </div>
   )
 }
