@@ -28,12 +28,12 @@ const tripsStart = (n: number) => (n === 1 ? 'Trip starts' : 'Trips start')
 // The title: a greeting by the hour with today's date after it, both read from the viewer's clock (lib/greeting.ts), which the page refreshes every minute (`useNow`), so a
 // page left open since the morning is not still saying "Good morning" at three, or yesterday's date at midnight. The tab keeps naming the page, whatever the hour: the `h1`
 // is the greeting, the document title stays "Management Dashboard".
-function DashboardHeader({ now, fullName, upcomingTrips, activeParticipants, outstandingTasks }: {
+// The greeting and the date need no data (the clock and the sign-in are enough), so the page opens with them while the summary is still on its way; the counts line is data, and
+// is left out until the counts are.
+function DashboardHeader({ now, fullName, counts }: {
   now: Date
   fullName: string | null
-  upcomingTrips: number
-  activeParticipants: number
-  outstandingTasks: number
+  counts?: { upcomingTrips: number; activeParticipants: number; outstandingTasks: number }
 }) {
   return (
     <PageHeader
@@ -42,11 +42,13 @@ function DashboardHeader({ now, fullName, upcomingTrips, activeParticipants, out
       titleNote={<time dateTime={localIsoDate(now)}>{formatToday(now)}</time>}
       documentTitle="Management Dashboard"
       subtitle={
-        <PageHeaderMeta>
-          <span className="tabular-nums">{plural(upcomingTrips, 'upcoming trip')}</span>
-          <span className="tabular-nums">{plural(activeParticipants, 'active participant')}</span>
-          <span className="tabular-nums">{plural(outstandingTasks, 'outstanding task')}</span>
-        </PageHeaderMeta>
+        counts && (
+          <PageHeaderMeta>
+            <span className="tabular-nums">{plural(counts.upcomingTrips, 'upcoming trip')}</span>
+            <span className="tabular-nums">{plural(counts.activeParticipants, 'active participant')}</span>
+            <span className="tabular-nums">{plural(counts.outstandingTasks, 'outstanding task')}</span>
+          </PageHeaderMeta>
+        )
       }
     />
   )
@@ -93,12 +95,16 @@ export default function DashboardPage() {
     <div className="p-[var(--card-pad)] text-center text-[var(--color-destructive)]">Failed to load dashboard. Please refresh the page.</div>
   )
 
-  // No summary yet (in flight, or paused offline) is a spinner, never a summary of zeros: the band's "All clear" is only ever said over data that arrived.
+  // No summary yet (in flight, or paused offline) is a spinner, never a summary of zeros: the band's "All clear" is only ever said over data that arrived. The greeting and the
+  // date do not wait for it, so the personality is the first thing on screen and the spinner sits under it.
   const d = summary.data
   if (!d) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent" />
+      <div className="flex flex-col gap-[var(--section-gap)]">
+        <DashboardHeader now={now} fullName={fullName} />
+        <div className="flex h-64 items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent" />
+        </div>
       </div>
     )
   }
@@ -234,9 +240,7 @@ export default function DashboardPage() {
       <DashboardHeader
         now={now}
         fullName={fullName}
-        upcomingTrips={d.upcomingTripCount}
-        activeParticipants={d.activeParticipantCount}
-        outstandingTasks={d.outstandingTaskCount}
+        counts={{ upcomingTrips: d.upcomingTripCount, activeParticipants: d.activeParticipantCount, outstandingTasks: d.outstandingTaskCount }}
       />
 
       <AttentionBand items={attentionItems} />

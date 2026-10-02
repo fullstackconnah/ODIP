@@ -726,13 +726,47 @@ describe('DashboardPage — the qualification count follows the day', () => {
 })
 
 describe('DashboardPage — loading and error keep their behaviour', () => {
-  it('shows only the spinner while the summary loads: no title, no band', () => {
+  // "The first thing you see when you log in": the greeting and the date need no data (the clock and the sign-in are enough), so they do not wait for the summary.
+  it('shows the greeting and the date above the spinner while the summary loads: the personality arrives first, with no counts line and no band', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 2, 9, 30))
+    asRole('Coordinator', 'Sarah Mitchell')
     mockUseDashboard.mockReturnValue({ data: undefined, isPending: true, isLoading: true, isError: false })
     const { container } = renderPage()
 
     expect(container.querySelector('.animate-spin')).not.toBeNull()
-    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
+    const h1s = screen.getAllByRole('heading', { level: 1 })
+    expect(h1s).toHaveLength(1)
+    expect(h1s[0]).toHaveTextContent('Good morning, Sarah Friday 2 October')
+    expect(h1s[0]).toHaveClass('text-display')
+    expect(document.title).toBe('Management Dashboard — Odip')
+    // The counts are data: no line of them, and no band, until the summary arrives.
+    expect(screen.queryByText(/upcoming trip/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/active participant/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/outstanding task/)).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Needs attention' })).not.toBeInTheDocument()
+    // The spinner sits UNDER the heading, in the page's own column.
+    expect(h1s[0].compareDocumentPosition(container.querySelector('.animate-spin')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    vi.useRealTimers()
+  })
+
+  it('keeps the heading steady when the summary lands: the same greeting, now with the counts and the band', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 2, 9, 30))
+    asRole('Coordinator', 'Sarah Mitchell')
+    mockUseDashboard.mockReturnValue({ data: undefined, isPending: true, isLoading: true, isError: false })
+    const { rerender } = renderPage()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Good morning, Sarah Friday 2 October')
+
+    mockUseDashboard.mockReturnValue(summaryData({ upcomingTripCount: 3, overdueTaskCount: 1 }))
+    rerender(<MemoryRouter><DashboardPage /></MemoryRouter>)
+
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Good morning, Sarah Friday 2 October')
+    expect(screen.getByText('3 upcoming trips')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Needs attention' })).toBeInTheDocument()
+    expect(document.querySelector('.animate-spin')).toBeNull()
+    vi.useRealTimers()
   })
 
   it('shows the failure message, not a band of zeros, when the summary fails', () => {
@@ -750,11 +784,13 @@ describe('DashboardPage — a paused request is waiting, not a settled zero', ()
   const paused = { data: undefined, isPending: true, isLoading: false, isError: false, fetchStatus: 'paused' }
   const disabled = { data: undefined, isPending: true, isLoading: false, isError: false, fetchStatus: 'idle' }
 
-  it('shows the spinner, and no band and no zeros, while the summary is paused', () => {
+  it('shows the spinner under the greeting, and no band and no zeros, while the summary is paused', () => {
+    asRole('Coordinator', 'Sarah Mitchell')
     mockUseDashboard.mockReturnValue(paused)
     const { container } = renderPage()
 
     expect(container.querySelector('.animate-spin')).not.toBeNull()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Sarah')
     expect(screen.queryByRole('region', { name: 'Needs attention' })).not.toBeInTheDocument()
     expect(screen.queryByText(/All clear/)).not.toBeInTheDocument()
   })
