@@ -314,7 +314,7 @@ export default function PortalShiftDetailPage() {
         <div
           role="toolbar"
           aria-label="Shift actions"
-          className="sticky bottom-0 z-20 -mx-4 flex gap-2 border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 pt-3 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom))] lg:mx-0 lg:rounded-lg lg:border"
+          className="sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 z-20 -mx-4 flex gap-2 border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 lg:mx-0 lg:rounded-lg lg:border"
         >
           <Button
             size="lg"

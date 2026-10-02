@@ -400,6 +400,11 @@ describe('PortalShiftDetailPage: During', () => {
     expect(screen.getByRole('button', { name: 'End break' })).toBeInTheDocument()
   })
 
+  it('sits above the mobile bottom nav (same offset as the wizard footer)', () => {
+    show(inProgress())
+    expect(screen.getByRole('toolbar', { name: 'Shift actions' })).toHaveClass('bottom-[var(--mobile-nav-h)]', 'lg:bottom-0')
+  })
+
   it('starts a break from the sticky action bar', async () => {
     show(inProgress())
     fireEvent.click(screen.getByRole('button', { name: 'Start break' }))
