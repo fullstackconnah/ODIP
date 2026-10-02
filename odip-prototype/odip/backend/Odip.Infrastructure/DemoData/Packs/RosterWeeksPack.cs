@@ -158,13 +158,17 @@ public sealed class RosterWeeksPack : IDemoPack
     {
         var anchors = run.Anchors;
         var patternIds = RosterCatalog.Patterns.Select(p => RosterCatalog.PatternId(p.Key)).ToList();
-        var storyIds = RosterCatalog.StoryShiftIds(RosterCatalog.PackWeeksEverCreated(anchors)).ToList();
+        var storyIds = RosterCatalog.StoryShiftIds(RosterCatalog.PackWeeksEverCreated(anchors)).ToHashSet();
 
-        var candidates = await run.Db.Shifts
+        // Ask the database only for the few shifts that could still need moving (past, and Published, Draft or PendingReview): those of this
+        // top-up's patterns, and the ones with no pattern, which are then matched against the ids of every pack week in memory. The id set grows
+        // with the weeks, so it is never sent to the database.
+        var open = await run.Db.Shifts
             .Where(s => s.ServiceDate <= anchors.D0
                         && (s.Status == ShiftStatus.Published || s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.PendingReview))
-            .Where(s => (s.ShiftPatternId != null && patternIds.Contains(s.ShiftPatternId.Value)) || storyIds.Contains(s.Id))
+            .Where(s => s.ShiftPatternId == null || patternIds.Contains(s.ShiftPatternId.Value))
             .ToListAsync(ct);
+        var candidates = open.Where(s => s.ShiftPatternId != null || storyIds.Contains(s.Id)).ToList();
         if (candidates.Count == 0) return;
 
         var candidateIds = candidates.Select(s => s.Id).ToList();

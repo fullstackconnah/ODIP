@@ -26,14 +26,17 @@ public sealed class LeaveCoverageTasksPack : IDemoPack
     public async Task RunAsync(DemoRun run, CancellationToken ct)
     {
         var anchors = run.Anchors;
-        var leaveIds = RosterCatalog.PackWeeksEverCreated(anchors).Select(w => DemoIds.For("leave", "priya-annual", w)).ToList();
-        var leaves = await run.Db.LeaveRequests.AsNoTracking()
-            .Where(l => leaveIds.Contains(l.Id) && l.Status == LeaveStatus.Approved)
-            .ToListAsync(ct);
-        if (leaves.Count == 0) return;
+        var leaveIds = RosterCatalog.PackWeeksEverCreated(anchors).Select(w => DemoIds.For("leave", "priya-annual", w)).ToHashSet();
+
+        // Leave still ahead (a handful: the database filters on the date) is what needs tasks raised; the ids of every week since the top-up
+        // began are matched in memory.
+        var current = (await run.Db.LeaveRequests.AsNoTracking()
+                .Where(l => l.Status == LeaveStatus.Approved && l.EndDate >= anchors.D0)
+                .ToListAsync(ct))
+            .Where(l => leaveIds.Contains(l.Id)).ToList();
 
         var service = new ObligationTaskService(run.Db, run.Clock);
-        var raised = await RaiseAsync(run, service, leaves.Where(l => l.EndDate >= anchors.D0).ToList(), ct);
+        var raised = await RaiseAsync(run, service, current, ct);
         var completed = await CompleteWorkedAsync(run, service, leaveIds, ct);
 
         if (raised + completed == 0) return;
@@ -84,14 +87,14 @@ public sealed class LeaveCoverageTasksPack : IDemoPack
         return count;
     }
 
-    private static async Task<int> CompleteWorkedAsync(DemoRun run, IObligationTaskService service, List<Guid> leaveIds, CancellationToken ct)
+    private static async Task<int> CompleteWorkedAsync(DemoRun run, IObligationTaskService service, HashSet<Guid> leaveIds, CancellationToken ct)
     {
-        var open = await run.Db.BookingTasks.AsNoTracking()
-            .Where(t => t.TaskType == TaskType.LeaveCoverage && t.LeaveRequestId != null && leaveIds.Contains(t.LeaveRequestId.Value)
-                        && t.ShiftId != null && t.SourceKey != null
+        var openTasks = await run.Db.BookingTasks.AsNoTracking()
+            .Where(t => t.TaskType == TaskType.LeaveCoverage && t.LeaveRequestId != null && t.ShiftId != null && t.SourceKey != null
                         && (t.Status == TaskItemStatus.NotStarted || t.Status == TaskItemStatus.InProgress))
-            .Select(t => new { t.SourceKey, t.ShiftId })
+            .Select(t => new { t.SourceKey, t.ShiftId, t.LeaveRequestId })
             .ToListAsync(ct);
+        var open = openTasks.Where(t => leaveIds.Contains(t.LeaveRequestId!.Value)).ToList();
         if (open.Count == 0) return 0;
 
         var shiftIds = open.Select(t => t.ShiftId!.Value).Distinct().ToList();

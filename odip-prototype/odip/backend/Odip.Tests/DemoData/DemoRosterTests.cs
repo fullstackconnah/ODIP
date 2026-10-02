@@ -46,18 +46,9 @@ public class DemoRosterTests
         return env;
     }
 
-    private static OdipDbContext TenantDb(DemoTestEnv env) =>
-        new(env.Options, new ScopedTenantOverride { TenantId = DemoTestEnv.DemoTenantId });
+    private static Task<RosterBoardDto> BoardAsync(DemoTestEnv env, DateOnly week) => DemoBoardAssertions.BoardAsync(env, week);
 
-    private static async Task<RosterBoardDto> BoardAsync(DemoTestEnv env, DateOnly week)
-    {
-        await using var db = TenantDb(env);
-        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db), clock: env.Clock);
-        var result = await controller.GetBoard(week, "participant", CancellationToken.None);
-        return Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
-    }
-
-    private static Guid Story(string key, DateOnly week) => DemoIds.For("shift", "story", key, week);
+    private static Guid Story(string key, DateOnly week) => DemoBoardAssertions.Story(key, week);
 
     // ── patterns ─────────────────────────────────────────────────────────────
 
@@ -244,45 +235,6 @@ public class DemoRosterTests
 
     // ── the week packs: every roster check on the board ──────────────────────
 
-    // What the board must say about each story shift, by story key. Independent of the code that builds them: these are the plan's 2.2 table, with
-    // the knock-on findings the data really produces (a pending leave covers Saturday too, an expired first aid is on every Emily shift).
-    private static readonly Dictionary<string, string[]> Designed = new()
-    {
-        ["wsc-expired"] = new[] { "WSC_EXPIRED" },
-        ["wsc-missing"] = new[] { "WSC_MISSING" },
-        ["double-a"] = new[] { "DOUBLE_BOOKED_SHIFT" },
-        ["double-b"] = new[] { "DOUBLE_BOOKED_SHIFT" },
-        ["unavailable"] = new[] { "STAFF_UNAVAILABLE" },
-        ["on-leave"] = new[] { "STAFF_ON_LEAVE", "CREDENTIAL_EXPIRED", "ASSIGNEE_ON_LEAVE" },
-        ["recurring"] = new[] { "STAFF_RECURRING_UNAVAILABLE", "ASSIGNEE_ON_LEAVE" },     // the board's badge covers an approved recurring rule too
-        ["leave-pending"] = new[] { "STAFF_LEAVE_PENDING", "CREDENTIAL_EXPIRED" },
-        ["recurring-pending"] = new[] { "STAFF_RECURRING_PENDING", "CREDENTIAL_EXPIRED" },
-        ["excluded"] = new[] { "COMPATIBILITY_EXCLUDED", "STAFF_LEAVE_PENDING", "CREDENTIAL_EXPIRED" },
-        ["needs-mh"] = new[] { "COMPETENCY_MISSING" },
-        ["needs-night"] = new[] { "COMPETENCY_MISSING" },
-        ["needs-fa"] = new[] { "WSC_EXPIRED", "COMPETENCY_MISSING" },
-        ["ratio-a"] = new[] { "RATIO_SHORTFALL" },
-        ["hours-mon"] = new[] { "OVER_HOURS" },
-        ["hours-tue"] = new[] { "OVER_HOURS" },
-        ["hours-wed"] = new[] { "OVER_HOURS" },
-        ["hours-thu"] = new[] { "OVER_HOURS" },
-        ["hours-fri"] = new[] { "OVER_HOURS" },
-    };
-
-    private static readonly string[] Unfilled = { "ratio-b", "draft", "cancelled" };
-
-    /// <summary>Codes a lapsing credential adds to any shift of that worker once its date has passed: that is the plan's "near ones age into expired".</summary>
-    private static HashSet<string> AgingCodes(User u, DateOnly date)
-    {
-        var codes = new HashSet<string>();
-        if (u.WorkerScreeningExpiryDate is null) codes.Add("WSC_MISSING");
-        else if (u.WorkerScreeningExpiryDate < date) codes.Add("WSC_EXPIRED");
-        if ((u.IsFirstAidQualified && u.FirstAidExpiryDate < date) || (u.IsDriverEligible && u.DriverLicenceExpiryDate < date)
-            || (u.IsManualHandlingCompetent && u.ManualHandlingExpiryDate < date) || (u.IsMedicationCompetent && u.MedicationCompetencyExpiryDate < date))
-            codes.Add("CREDENTIAL_EXPIRED");
-        return codes;
-    }
-
     private static readonly DateOnly LabourDay = new(2026, 10, 5);
 
     private static async Task AddHolidayAsync(DemoTestEnv env)
@@ -299,42 +251,8 @@ public class DemoRosterTests
     {
         var env = await RunAsync();
         await AddHolidayAsync(env);
-        var week = W0.AddDays(7 * weeksAhead);
 
-        var board = await BoardAsync(env, week);
-
-        await using var db = env.AdminDb();
-        var users = await db.Users.ToDictionaryAsync(u => u.Id);
-        var shifts = await db.Shifts.Where(s => s.ServiceDate >= week && s.ServiceDate <= week.AddDays(6)).ToListAsync();
-        var codesByShift = board.Exceptions.GroupBy(e => e.ShiftId).ToDictionary(g => g.Key, g => g.Select(e => e.Finding.Code).ToHashSet());
-
-        foreach (var (key, designed) in Designed)
-        {
-            var shift = shifts.SingleOrDefault(s => s.Id == Story(key, week));
-            Assert.True(shift is not null, $"story shift '{key}' is missing from the week of {week}");
-            var actual = codesByShift.GetValueOrDefault(shift!.Id) ?? new HashSet<string>();
-            var expected = designed.ToHashSet();
-            if (shift.ServiceDate == LabourDay) expected.Add("PUBLIC_HOLIDAY");
-            Assert.True(expected.IsSubsetOf(actual), $"{key} on {shift.ServiceDate}: expected {string.Join(",", expected)} but the board says {string.Join(",", actual)}");
-            var extra = actual.Except(expected).ToHashSet();
-            Assert.True(extra.IsSubsetOf(AgingCodes(users[shift.UserId!.Value], shift.ServiceDate)), $"{key}: unexpected findings {string.Join(",", extra)}");
-        }
-
-        foreach (var key in Unfilled)
-        {
-            var shift = shifts.Single(s => s.Id == Story(key, week));
-            Assert.Null(shift.UserId);
-            Assert.False(codesByShift.ContainsKey(shift.Id) && codesByShift[shift.Id].Except(new[] { "PUBLIC_HOLIDAY" }).Any(), $"{key} is unfilled, so no staff finding applies");
-        }
-
-        // Pattern shifts carry only what the staff's own credentials and the holiday produce.
-        foreach (var shift in shifts.Where(s => s.ShiftPatternId != null && s.UserId != null))
-        {
-            var actual = codesByShift.GetValueOrDefault(shift.Id) ?? new HashSet<string>();
-            var allowed = AgingCodes(users[shift.UserId!.Value], shift.ServiceDate);
-            if (shift.ServiceDate == LabourDay) allowed.Add("PUBLIC_HOLIDAY");
-            Assert.True(actual.IsSubsetOf(allowed), $"pattern shift {shift.Id} on {shift.ServiceDate}: unexpected {string.Join(",", actual.Except(allowed))}");
-        }
+        await DemoBoardAssertions.AssertDesignedWeekAsync(env, W0.AddDays(7 * weeksAhead), LabourDay);
     }
 
     [Fact]
@@ -416,7 +334,7 @@ public class DemoRosterTests
 
         await using var db = env.AdminDb();
         var storyIds = new[] { W0.AddDays(-14), W0.AddDays(-7), W0, W1, W2, W0.AddDays(21) }
-            .SelectMany(w => Designed.Keys.Concat(Unfilled).Select(k => (Week: w, Id: Story(k, w))))
+            .SelectMany(w => DemoBoardAssertions.Designed.Keys.Concat(DemoBoardAssertions.Unfilled).Select(k => (Week: w, Id: Story(k, w))))
             .ToList();
         var wanted = storyIds.Select(x => x.Id).ToList();
         var found = await db.Shifts.Where(s => wanted.Contains(s.Id)).Select(s => s.Id).ToListAsync();

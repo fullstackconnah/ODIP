@@ -118,9 +118,19 @@ internal static class RosterCatalog
     /// <summary>The pack weeks to make now: next week and the week after.</summary>
     public static IReadOnlyList<DateOnly> PackWeeks(DemoAnchors anchors) => new[] { anchors.Monday(1), anchors.Monday(2) };
 
-    /// <summary>Every pack week a story shift may exist for, past and future: used to find rows to move forward, never to create them.</summary>
-    public static IEnumerable<DateOnly> PackWeeksEverCreated(DemoAnchors anchors, int weeksBack = 10) =>
-        Enumerable.Range(-weeksBack, weeksBack + 3).Select(anchors.Monday);
+    /// <summary>The Monday before the first pack week could ever have been made (the plan's fixed 2026-09-01 start, less a day of slack).</summary>
+    private static readonly DateOnly Epoch = new(2026, 8, 31);
+
+    /// <summary>
+    /// Every pack week a story shift may exist for, from the first one the top-up could ever have made to the last it makes now: used to
+    /// recognise the rows to move forward, never to create them. Not a lookback of a few weeks: a host that was switched off for months must
+    /// still have its old Published shifts closed out when it comes back. (A clock set before the epoch gets thirteen weeks back instead.)
+    /// </summary>
+    public static IEnumerable<DateOnly> PackWeeksEverCreated(DemoAnchors anchors)
+    {
+        var first = anchors.W0 < Epoch ? anchors.Monday(-13) : Epoch;
+        for (var week = first; week <= anchors.Monday(2); week = week.AddDays(7)) yield return week;
+    }
 
     public static IEnumerable<Guid> StoryShiftIds(IEnumerable<DateOnly> weeks) =>
         weeks.SelectMany(week => Stories.Select(story => StoryShiftId(story.Key, week)));
