@@ -9,10 +9,12 @@ import type { AdminUserDto, FirebaseAccountState } from '@/api/types'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown } from '@/components/Dropdown'
 import { SignInEmailOutcome } from '@/components/SignInEmailOutcome'
 import { SlideOver } from '@/components/SlideOver'
 import { useRefocusWhenLost } from '@/hooks/useRefocusWhenLost'
+import { addressConfirmationRequest } from '@/lib/addressConfirmation'
 import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
 import {
   describeEmailOutcome, describeTypedPassword, ensureAndSendSetPasswordEmail, sendSetPasswordEmailFor, type EmailOutcome,
@@ -93,6 +95,9 @@ export default function UserFormPanel({
   const [done, setDone] = useState<Done | null>(null)
   // The create is answered but the email is still going out, or a Send under the done state is: no second submit, no second send.
   const [submitting, setSubmitting] = useState(false)
+  // The server wants the address checked (it is at neither the tenant's domain nor a common email provider): its sentence while the question
+  // is up, null otherwise. Answering "Use this address" sends the same request again with the confirmation.
+  const [confirmAddress, setConfirmAddress] = useState<string | null>(null)
   // The done view's first line takes focus when the form is swapped for it (the Create button that had it is gone), and again whenever a retry
   // removes the button that had it.
   const doneHeading = useRef<HTMLParagraphElement>(null)
@@ -103,6 +108,7 @@ export default function UserFormPanel({
     if (!isOpen) return
     setError(null)
     setTempPasswordOpen(false)
+    setConfirmAddress(null)
     setDone(null)
 
     if (user) {
@@ -151,7 +157,7 @@ export default function UserFormPanel({
   // Whether Firebase can email a link here: not in local dev auth, where there is no Firebase to send it.
   const emailLinkAvailable = canSendSetPasswordEmail()
 
-  async function handleSubmit() {
+  async function handleSubmit(addressConfirmed = false) {
     setError(null)
     setSubmitting(true)
 
@@ -178,9 +184,17 @@ export default function UserFormPanel({
           username: username.trim(),
           role,
           password: password || undefined,
+          addressConfirmed: addressConfirmed || undefined,
         })
       }
     } catch (err: unknown) {
+      const asking = addressConfirmationRequest(err)
+      if (asking) {
+        // Not a failure: the server wants the address checked first. Nothing was made, and what was typed stays.
+        setConfirmAddress(asking)
+        setSubmitting(false)
+        return
+      }
       const axiosErr = err as { response?: { data?: { errors?: string[]; message?: string } | string } }
       setError(
         (typeof axiosErr?.response?.data === 'string'
@@ -327,7 +341,7 @@ export default function UserFormPanel({
           </button>
           <button
             type="button"
-            onClick={handleSubmit}
+            onClick={() => handleSubmit()}
             disabled={isBusy || !isFormValid}
             className="px-5 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
           >
@@ -499,6 +513,19 @@ export default function UserFormPanel({
           {error}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmAddress !== null}
+        title="Check this address"
+        message={confirmAddress}
+        confirmLabel="Use this address"
+        cancelLabel="Go back"
+        onCancel={() => setConfirmAddress(null)}
+        onConfirm={() => {
+          setConfirmAddress(null)
+          void handleSubmit(true)
+        }}
+      />
     </SlideOver>
   )
 }

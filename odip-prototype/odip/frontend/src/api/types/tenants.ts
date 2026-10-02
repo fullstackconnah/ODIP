@@ -40,6 +40,8 @@ export interface CreateInitialUserDto {
   username: string
   role: string
   password?: string
+  /** The admin has checked an address the server asked about (see lib/addressConfirmation.ts). Sent only on the retry that follows that question. */
+  addressConfirmed?: boolean
 }
 
 export interface CreateTenantWithSetupDto {

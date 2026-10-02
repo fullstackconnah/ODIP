@@ -9,12 +9,14 @@ import { FormField } from '@/components/FormField'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
 import { SignInEmailOutcome } from '@/components/SignInEmailOutcome'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { useRefocusWhenLost } from '@/hooks/useRefocusWhenLost'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import { addressConfirmationRequest } from '@/lib/addressConfirmation'
 import { usePermissions } from '@/lib/permissions'
 import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
 import { describeEmailOutcome, ensureAndSendSetPasswordEmail, type EmailOutcome } from '@/lib/signInEmail'
@@ -88,6 +90,9 @@ export default function StaffCreatePage() {
   // mutation settles before those do, so its isPending alone would let the button come back to life with the form still on screen, and a
   // second submit would post the same staff member again.
   const [submitting, setSubmitting] = useState(false)
+  // The server wants the address checked (it is at neither the tenant's domain nor a common email provider): its sentence while the question is
+  // up, null otherwise. "Use this address" submits the same form again with the confirmation (see submitWith), for that one submit only.
+  const [confirmAddress, setConfirmAddress] = useState<string | null>(null)
   // The done view's first line takes focus when the form is swapped for it (the Create button that had it is gone), and again whenever a retry
   // removes the button that had it.
   const doneHeading = useRef<HTMLParagraphElement>(null)
@@ -165,11 +170,12 @@ export default function StaffCreatePage() {
     }
   }, [existing, reset])
 
-  const onSubmit = async (data: StaffFormData) => {
+  const onSubmit = async (data: StaffFormData, addressConfirmed: boolean) => {
     const payload: any = { ...data }
     for (const key of Object.keys(payload)) {
       if (payload[key] === '' || payload[key] === undefined) payload[key] = null
     }
+    if (addressConfirmed) payload.addressConfirmed = true
     setSubmitting(true)
     try {
       if (isEdit) {
@@ -192,12 +198,23 @@ export default function StaffCreatePage() {
           }
         }
       }
-    } catch {
-      // error handled by mutation state
+    } catch (err) {
+      const asking = addressConfirmationRequest(err)
+      if (asking) {
+        // Not a failure: the server wants the address checked first. Nothing was made, so clear the mutation's error (the red banner would show
+        // the question as a failure) and ask.
+        mutation.reset?.()
+        setConfirmAddress(asking)
+      }
+      // Any other error is handled by the mutation's state.
     } finally {
       setSubmitting(false)
     }
   }
+
+  // The form's submit, with or without the confirmation. The confirmation is an argument, not state or a ref, so it exists only for the one
+  // submit that carries it and can never leak into a later attempt.
+  const submitWith = (addressConfirmed: boolean) => handleSubmit(data => onSubmit(data, addressConfirmed))
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
@@ -268,7 +285,7 @@ export default function StaffCreatePage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
+      <form onSubmit={submitWith(false)} className="flex flex-col gap-[var(--section-gap)]">
         {/* Personal Information */}
         <Card title="Personal Information">
           <div className={formGrid}>
@@ -437,6 +454,19 @@ export default function StaffCreatePage() {
           </Button>
         </div>
       </form>
+
+      <ConfirmDialog
+        open={confirmAddress !== null}
+        title="Check this address"
+        message={confirmAddress}
+        confirmLabel="Use this address"
+        cancelLabel="Go back"
+        onCancel={() => setConfirmAddress(null)}
+        onConfirm={() => {
+          setConfirmAddress(null)
+          void submitWith(true)()
+        }}
+      />
     </div>
   )
 }

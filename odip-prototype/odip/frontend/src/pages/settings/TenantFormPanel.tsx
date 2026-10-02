@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown } from '@/components/Dropdown'
 import { SignInEmailOutcome } from '@/components/SignInEmailOutcome'
 import { SlideOver } from '@/components/SlideOver'
@@ -13,6 +14,7 @@ import {
 } from '@/api/hooks/admin'
 import type { TenantSummaryDto, CreateTenantWithSetupDto, FirebaseAccountState, UpdateTenantDto } from '@/api/types'
 import { useRefocusWhenLost } from '@/hooks/useRefocusWhenLost'
+import { addressConfirmationRequest } from '@/lib/addressConfirmation'
 import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
 import {
   describeEmailOutcome, describeTypedPassword, ensureAndSendSetPasswordEmail, sendSetPasswordEmailFor, TENANT_FIRST_USER_ACCOUNT_FAILED, type EmailOutcome,
@@ -119,6 +121,9 @@ export default function TenantFormPanel({
   const [done, setDone] = useState<Done | null>(null)
   // The create is answered but the email is still going out, or a Send under the done state is: no second submit, no second send.
   const [submitting, setSubmitting] = useState(false)
+  // The server wants the first user's address checked (it is at neither the new tenant's domain nor a common email provider): its sentence while
+  // the question is up, null otherwise. Answering "Use this address" sends the same request again with the confirmation.
+  const [confirmAddress, setConfirmAddress] = useState<string | null>(null)
   // The done view's first line takes focus when the form is swapped for it (the Create button that had it is gone), and again whenever a retry
   // removes the button that had it.
   const doneHeading = useRef<HTMLParagraphElement>(null)
@@ -131,6 +136,7 @@ export default function TenantFormPanel({
     if (!isOpen) return
     setError(null)
     setSuccessMessage(null)
+    setConfirmAddress(null)
     setDone(null)
     setProviderExpanded(false)
     setUserExpanded(false)
@@ -173,7 +179,7 @@ export default function TenantFormPanel({
   }, [])
 
   // ── Submit handler ────────────────────────────────────────────────────────
-  async function handleSubmit() {
+  async function handleSubmit(addressConfirmed = false) {
     setError(null)
     setSubmitting(true)
 
@@ -208,7 +214,7 @@ export default function TenantFormPanel({
         // Build initial user only if required fields are filled
         const hasUser = firstName && lastName && email && username
         const initialUser = hasUser
-          ? { firstName, lastName, email, username, role: role || 'Admin', password: userPassword || undefined }
+          ? { firstName, lastName, email, username, role: role || 'Admin', password: userPassword || undefined, addressConfirmed: addressConfirmed || undefined }
           : null
 
         const data: CreateTenantWithSetupDto = {
@@ -244,6 +250,12 @@ export default function TenantFormPanel({
       }, 1500)
     } catch (err: unknown) {
       setSubmitting(false)
+      const asking = addressConfirmationRequest(err)
+      if (asking) {
+        // Not a failure: the server wants the first user's address checked first. No tenant, user or account was made, and what was typed stays.
+        setConfirmAddress(asking)
+        return
+      }
       const axiosErr = err as { response?: { data?: { errors?: string[]; message?: string } | string } }
       setError(
         (typeof axiosErr?.response?.data === 'string'
@@ -392,7 +404,7 @@ export default function TenantFormPanel({
           </button>
           <button
             type="button"
-            onClick={handleSubmit}
+            onClick={() => handleSubmit()}
             disabled={!canSubmit}
             className="px-5 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
           >
@@ -725,6 +737,19 @@ export default function TenantFormPanel({
           {error}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmAddress !== null}
+        title="Check this address"
+        message={confirmAddress}
+        confirmLabel="Use this address"
+        cancelLabel="Go back"
+        onCancel={() => setConfirmAddress(null)}
+        onConfirm={() => {
+          setConfirmAddress(null)
+          void handleSubmit(true)
+        }}
+      />
     </SlideOver>
   )
 }
