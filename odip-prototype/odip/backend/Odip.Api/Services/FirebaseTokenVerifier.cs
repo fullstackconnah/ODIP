@@ -10,7 +10,9 @@ public interface IFirebaseTokenVerifier
 {
     /// <summary>
     /// Verifies a Firebase ID token and returns its claims. Throws <see cref="FirebaseAuthException"/> for a token that
-    /// does not verify (malformed, expired, wrong project).
+    /// does not verify (malformed, expired, wrong project). The claims are the SDK's own: every claim in the payload except iss, aud, exp, iat, sub and uid
+    /// (so "email", "email_verified" and "firebase" are among them), and a nested object such as "firebase" is a Newtonsoft JObject
+    /// (see <see cref="SignInProviders"/>).
     /// </summary>
     Task<IReadOnlyDictionary<string, object>> VerifyIdTokenAsync(string idToken, CancellationToken ct);
 }

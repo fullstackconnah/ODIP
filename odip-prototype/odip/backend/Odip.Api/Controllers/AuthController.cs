@@ -119,6 +119,20 @@ public class AuthController : ControllerBase
         if (!IsEmailVerified(claims))
             return Rejected("Exchange failed — email not verified: {Email}", email);
 
+        // How the person signed in decides what "verified" proves (see SignInProviders), so a token from a provider that is not listed is refused,
+        // and so is one that does not say which it came from. Both paths below come after this.
+        var provider = SignInProviders.From(claims);
+        if (provider is null)
+        {
+            claims.TryGetValue("firebase", out var firebaseClaim);
+            return Rejected(
+                "Exchange failed — token carried no readable firebase.sign_in_provider (the firebase claim is {ClaimType}): {Email}",
+                firebaseClaim?.GetType().Name ?? "missing", email);
+        }
+
+        if (!SignInProviders.Allowed(_config).Contains(provider))
+            return Rejected("Exchange failed — sign-in provider {Provider} is not allowed (see {ConfigKey}): {Email}", provider, SignInProviders.ConfigKey, email);
+
         var domain = email.Split('@').Last();
 
         // 2. SuperAdmin path — bypasses tenant resolution

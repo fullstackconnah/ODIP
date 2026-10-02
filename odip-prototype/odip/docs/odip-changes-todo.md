@@ -245,9 +245,13 @@ owner decision (collected under Open Flags at the end).
 
 ### Microsoft 365 SSO
 - [ ] Sign in with Microsoft business accounts via Firebase's Microsoft OAuth provider
-  - Backend needs no changes: `/auth/exchange` verifies a Firebase ID token and finds
-    the user by email (across tenants), taking the tenant from that user's row, and does
-    not care which provider minted the token.
+  - Backend: no code, but one setting. `/auth/exchange` verifies a Firebase ID token and
+    finds the user by email (across tenants), taking the tenant from that user's row, but
+    it accepts only the sign-in providers in `Auth:AllowedSignInProviders` (default
+    `password` and `custom`). Enabling Microsoft in the Firebase console is not enough:
+    add `microsoft.com` to that list (`Auth__AllowedSignInProviders=microsoft.com` in the
+    environment), which is the decision to trust the `email_verified` a Microsoft account
+    asserts.
   - Frontend swaps `signInWithEmailAndPassword` for
     `signInWithPopup(auth, new OAuthProvider('microsoft.com'))`.
   - Needs an Entra ID app registration (free on any M365 business plan) and its
@@ -260,8 +264,9 @@ owner decision (collected under Open Flags at the end).
 
 ### Harden the token exchange (do BEFORE Firebase goes live)
 - [x] Require `email_verified` in `AuthController.Exchange` (shipped 2026-08-30, PR #25),
-      and once SSO lands require `sign_in_provider == "microsoft.com"` and disable the
-      email/password provider (that half still pending SSO).
+      and accept only the providers in `Auth:AllowedSignInProviders` (below). Once SSO
+      lands, list `microsoft.com` there and disable the email/password provider (that half
+      still pending SSO).
   - `Odip.Api/Controllers/AuthController.cs:82` reads only the `email` claim today.
   - The Firebase API key ships in the client bundle, so with email/password enabled
     anyone can call `createUserWithEmailAndPassword` using a provisioned-but-not-yet-
@@ -299,6 +304,16 @@ owner decision (collected under Open Flags at the end).
     same address all answer the same 401 (the two-row case logs both user ids, so the
     duplicate can be fixed). `Tenant.EmailDomain` is still stored and unique, but it is not
     read at sign-in. The SuperAdmin domain keeps its own path.
+  - Only listed sign-in providers get in. The Firebase API key is public, so anyone can
+    obtain an ID token from every provider enabled in the console, and what `email_verified`
+    proves differs: control of the mailbox for email/password, whatever the provider asserts
+    for a federated one. The exchange reads `firebase.sign_in_provider` and refuses, with
+    the same 401 and a log line, a token whose provider is not in `Auth:AllowedSignInProviders`
+    and one that does not say. The setting is a list in appsettings or one comma-separated
+    value in the environment (`Auth__AllowedSignInProviders=password,custom`, the default);
+    blank means the default. `custom` is a token minted with the service-account key, which
+    only its holder can do. Before deploy, check the Firebase console: only Email/Password
+    should be enabled today.
   - The SSO plan above retires this whole flow. With the email/password provider disabled
     there is no password to set, so the set-password emails, the two sign-in-account
     routes, the temporary-password option and the verified-at-creation rule go with it.

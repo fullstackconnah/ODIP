@@ -20,7 +20,7 @@ namespace Odip.Tests.Controllers;
 
 /// <summary>
 /// The sign-in exchange (Firebase ID token to ODIP session), run end to end through <see cref="IFirebaseTokenVerifier"/> with
-/// a fake that returns claims. Firebase lower-cases every address, so a token's email is always lower-case; these tests pin that a
+/// a fake that returns claims (built the way the Admin SDK builds them, see <see cref="FirebaseTestClaims"/>). Firebase lower-cases every address, so a token's email is always lower-case; these tests pin that a
 /// user row is found whatever case it was stored in (rows written before the email-identity rule existed are mixed-case, and no
 /// migration repairs them), on both the tenant path and the SuperAdmin path.
 /// </summary>
@@ -29,7 +29,7 @@ public class AuthControllerExchangeTests
     private const string TenantDomain = "acme.example.com";
     private const string SuperAdminDomain = "platform.example.com";
 
-    private sealed class FakeVerifier(Dictionary<string, object> claims) : IFirebaseTokenVerifier
+    private sealed class FakeVerifier(IReadOnlyDictionary<string, object> claims) : IFirebaseTokenVerifier
     {
         public Task<IReadOnlyDictionary<string, object>> VerifyIdTokenAsync(string idToken, CancellationToken ct) =>
             Task.FromResult<IReadOnlyDictionary<string, object>>(claims);
@@ -68,14 +68,19 @@ public class AuthControllerExchangeTests
         return user;
     }
 
-    private static AuthController CreateController(OdipDbContext db, string tokenEmail, bool emailVerified = true, ILogger<AuthController>? logger = null)
+    // A person who signed in with email and password unless the test says otherwise (the one provider the app's own sign-in screen uses).
+    private static AuthController CreateController(
+        OdipDbContext db, string tokenEmail, bool emailVerified = true, ILogger<AuthController>? logger = null, string? signInProvider = "password",
+        Dictionary<string, string?>? settings = null) =>
+        CreateController(db, FirebaseTestClaims.For(tokenEmail, emailVerified, signInProvider), logger, settings);
+
+    private static AuthController CreateController(
+        OdipDbContext db, IReadOnlyDictionary<string, object> claims, ILogger<AuthController>? logger = null, Dictionary<string, string?>? settings = null)
     {
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["Jwt:Secret"] = new string('k', 48),
-            ["Auth:SuperAdminDomain"] = SuperAdminDomain,
-        }).Build();
-        var claims = new Dictionary<string, object> { ["email"] = tokenEmail, ["email_verified"] = emailVerified };
+        var configured = new Dictionary<string, string?> { ["Jwt:Secret"] = new string('k', 48), ["Auth:SuperAdminDomain"] = SuperAdminDomain };
+        foreach (var (key, value) in settings ?? [])
+            configured[key] = value;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(configured).Build();
         // The lockout is per client address. Each controller has its own tracker, so a test that wants every attempt to spend from one budget
         // reuses one controller.
         var http = new DefaultHttpContext();
@@ -347,10 +352,10 @@ public class AuthControllerExchangeTests
     // free retry, and the lockout could be dodged by aiming at that one case. A refusal never stamps LastLoginAt either, the record of when someone
     // last got in, because nobody did.
 
-    private static async Task AssertRefusalsSpendTheFailureBudget(OdipDbContext db, string tokenEmail, bool emailVerified = true)
+    private static async Task AssertRefusalsSpendTheFailureBudget(OdipDbContext db, string tokenEmail, bool emailVerified = true, string? signInProvider = "password")
     {
         // One controller, so one client address and one budget for every attempt.
-        var controller = CreateController(db, tokenEmail, emailVerified);
+        var controller = CreateController(db, tokenEmail, emailVerified, signInProvider: signInProvider);
 
         for (var attempt = 0; attempt < LoginAttemptTracker.MaxFailures; attempt++)
             Assert.IsType<UnauthorizedObjectResult>((await Exchange(controller)).Result);
@@ -455,5 +460,124 @@ public class AuthControllerExchangeTests
         var stamped = StoredLastLoginAt(db, superAdmin.Id);
         Assert.NotNull(stamped);
         Assert.InRange(stamped!.Value, before, DateTime.UtcNow);
+    }
+
+    // ── The sign-in provider ────────────────────────────────────────────
+    // The exchange takes a token's verified email as the whole identity, and what "verified" proves depends on how the person signed in: control of the
+    // mailbox for email and password, whatever the provider chooses to assert for a federated one. The Firebase project's web API key is public, so
+    // anyone can obtain a token from every provider enabled in the console. Only the providers in Auth:AllowedSignInProviders (password and custom
+    // unless it is set) get in, and a token that does not say which one it came from is refused.
+
+    private static void VerifyWarningMentioning(Mock<ILogger<AuthController>> logger, string text) =>
+        logger.Verify(l => l.Log(
+            LogLevel.Warning, It.IsAny<EventId>(),
+            It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains(text)),
+            It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+
+    [Theory]
+    [InlineData("password")]
+    [InlineData("custom")]
+    public async Task The_providers_accepted_by_default_sign_in(string provider)
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
+
+        var result = await Exchange(CreateController(db, "jane.smith@gmail.com", signInProvider: provider));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(user.Id, Assert.IsType<ApiResponse<AuthResponseDto>>(ok.Value).Data!.Id);
+    }
+
+    [Theory]
+    [InlineData("google.com")]
+    [InlineData("microsoft.com")]
+    [InlineData("apple.com")]
+    [InlineData("phone")]
+    [InlineData("anonymous")]
+    [InlineData("saml.acme")]
+    public async Task A_provider_that_is_not_listed_is_refused_for_a_user_who_exists_with_the_same_answer_as_any_other_refusal(string provider)
+    {
+        using var db = CreateDb();
+        var user = SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
+        var logger = new Mock<ILogger<AuthController>>();
+
+        var result = await Exchange(CreateController(db, "jane.smith@gmail.com", logger: logger.Object, signInProvider: provider));
+
+        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
+        Assert.Equal("Invalid or expired token", Assert.IsType<ApiResponse<AuthResponseDto>>(unauthorized.Value).Errors!.Single());
+        Assert.Null(StoredLastLoginAt(db, user.Id));
+        // The log, not the answer, says why.
+        VerifyWarningMentioning(logger, provider);
+    }
+
+    [Fact]
+    public async Task A_token_that_names_no_provider_is_refused()
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
+
+        var result = await Exchange(CreateController(db, "jane.smith@gmail.com", signInProvider: null));
+
+        Assert.IsType<UnauthorizedObjectResult>(result.Result);
+    }
+
+    [Theory]
+    [InlineData("""{"email":"jane.smith@gmail.com","email_verified":true,"firebase":"password"}""")]                      // not an object
+    [InlineData("""{"email":"jane.smith@gmail.com","email_verified":true,"firebase":null}""")]
+    [InlineData("""{"email":"jane.smith@gmail.com","email_verified":true,"firebase":{}}""")]                              // no provider in it
+    [InlineData("""{"email":"jane.smith@gmail.com","email_verified":true,"firebase":{"sign_in_provider":null}}""")]
+    [InlineData("""{"email":"jane.smith@gmail.com","email_verified":true,"firebase":{"sign_in_provider":5}}""")]          // not a string
+    [InlineData("""{"email":"jane.smith@gmail.com","email_verified":true,"firebase":{"sign_in_provider":" "}}""")]        // blank
+    public async Task A_token_whose_firebase_claim_carries_no_readable_provider_is_refused(string payload)
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
+
+        var result = await Exchange(CreateController(db, FirebaseTestClaims.FromPayload(payload)));
+
+        Assert.IsType<UnauthorizedObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task The_SuperAdmin_path_needs_an_accepted_provider_too()
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "platform.admin@platform.example.com", UserRole.SuperAdmin);
+
+        Assert.IsType<UnauthorizedObjectResult>((await Exchange(CreateController(db, "platform.admin@platform.example.com", signInProvider: "google.com"))).Result);
+        Assert.IsType<OkObjectResult>((await Exchange(CreateController(db, "platform.admin@platform.example.com"))).Result);
+    }
+
+    [Fact]
+    public async Task A_provider_that_is_not_listed_spends_from_the_failure_budget()
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
+
+        await AssertRefusalsSpendTheFailureBudget(db, "jane.smith@gmail.com", signInProvider: "google.com");
+    }
+
+    [Fact]
+    public async Task The_setting_replaces_the_default_list_whatever_the_case_it_is_written_in()
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
+        var onlyMicrosoft = new Dictionary<string, string?> { ["Auth:AllowedSignInProviders:0"] = "Microsoft.com" };
+
+        Assert.IsType<OkObjectResult>((await Exchange(CreateController(db, "jane.smith@gmail.com", signInProvider: "microsoft.com", settings: onlyMicrosoft))).Result);
+        // Replaces rather than adds to: email and password no longer gets in.
+        Assert.IsType<UnauthorizedObjectResult>((await Exchange(CreateController(db, "jane.smith@gmail.com", signInProvider: "password", settings: onlyMicrosoft))).Result);
+    }
+
+    [Fact]
+    public async Task A_single_comma_separated_setting_is_read_as_a_list_the_way_an_environment_variable_gives_one()
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
+        var settings = new Dictionary<string, string?> { ["Auth:AllowedSignInProviders"] = "password, google.com" };
+
+        Assert.IsType<OkObjectResult>((await Exchange(CreateController(db, "jane.smith@gmail.com", signInProvider: "password", settings: settings))).Result);
+        Assert.IsType<OkObjectResult>((await Exchange(CreateController(db, "jane.smith@gmail.com", signInProvider: "google.com", settings: settings))).Result);
+        Assert.IsType<UnauthorizedObjectResult>((await Exchange(CreateController(db, "jane.smith@gmail.com", signInProvider: "microsoft.com", settings: settings))).Result);
     }
 }
