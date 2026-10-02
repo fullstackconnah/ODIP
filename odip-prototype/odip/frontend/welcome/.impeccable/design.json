@@ -1,656 +1,177 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-01T16:35:36Z",
-  "title": "Design System: Odip Landing (Tourist Drive)",
+  "generatedAt": "2026-10-02T00:00:00Z",
+  "title": "Design System: Odip Landing (Living Canopy Light)",
   "extensions": {
     "colorMeta": {
-      "sign-green": {
-        "role": "primary",
-        "displayName": "Guide-Sign Green",
-        "canonical": "#1d4a10",
-        "tonalRamp": [
-          "#001000",
-          "#0a2d01",
-          "#224e15",
-          "#406e35",
-          "#629257",
-          "#83b477",
-          "#a8db9c",
-          "#cefec3"
-        ]
-      },
-      "sign-brown": {
-        "role": "secondary",
-        "displayName": "Tourist-Sign Brown",
-        "canonical": "#5b3418",
-        "tonalRamp": [
-          "#190500",
-          "#3b1a00",
-          "#5f371b",
-          "#7f5539",
-          "#a4785b",
-          "#c8997b",
-          "#efbfa0",
-          "#ffeadd"
-        ]
-      },
-      "sign-blue": {
-        "role": "tertiary",
-        "displayName": "Service-Sign Blue",
-        "canonical": "#0a4a94",
-        "tonalRamp": [
-          "#000924",
-          "#01224d",
-          "#054083",
-          "#245fab",
-          "#4984d3",
-          "#6aa6f8",
-          "#abcdfc",
-          "#e4f0ff"
-        ]
-      },
-      "ink": {
-        "role": "neutral",
-        "displayName": "Ledger Ink",
-        "canonical": "#1b1c1a",
-        "tonalRamp": [
-          "#0b0b0a",
-          "#232422",
-          "#424340",
-          "#60615e",
-          "#828481",
-          "#a4a5a2",
-          "#cacbc8",
-          "#edefec"
-        ]
-      },
-      "paper": {
-        "role": "neutral",
-        "displayName": "Warm Paper",
-        "canonical": "#fbf9f5",
-        "tonalRamp": [
-          "#0c0b09",
-          "#252421",
-          "#44423f",
-          "#62605d",
-          "#85837f",
-          "#a6a4a1",
-          "#cccac6",
-          "#f0eeea"
-        ]
-      },
-      "muted": {
-        "role": "neutral",
-        "displayName": "Quiet Ink",
-        "canonical": "#43493a",
-        "tonalRamp": [
-          "#090d03",
-          "#212619",
-          "#3f4536",
-          "#5d6353",
-          "#7f8676",
-          "#a1a896",
-          "#c6cebc",
-          "#eaf2df"
-        ]
-      },
-      "ruled": {
-        "role": "neutral",
-        "displayName": "Ruled Line",
-        "canonical": "#c3c9b5",
-        "tonalRamp": [
-          "#090d02",
-          "#222617",
-          "#404534",
-          "#5e6351",
-          "#818673",
-          "#a2a894",
-          "#c8ceba",
-          "#ebf2dd"
-        ]
-      },
-      "sky": {
-        "role": "country",
-        "displayName": "Pale Slate",
-        "canonical": "#d5e3fc",
-        "tonalRamp": [
-          "#040b1b",
-          "#1a2436",
-          "#384357",
-          "#556176",
-          "#77849a",
-          "#98a5bd",
-          "#bdcbe4",
-          "#e6effe"
-        ]
-      },
-      "sprout": {
-        "role": "country",
-        "displayName": "Pale Sprout",
-        "canonical": "#bbf37c",
-        "tonalRamp": [
-          "#050f00",
-          "#182a00",
-          "#314c08",
-          "#476e06",
-          "#62950d",
-          "#83b83f",
-          "#a8df68",
-          "#d6feae"
-        ]
-      },
-      "fern": {
-        "role": "country",
-        "displayName": "Deep Fern",
-        "canonical": "#4d7c0f",
-        "tonalRamp": [
-          "#040f00",
-          "#162b00",
-          "#2d4d00",
-          "#446f09",
-          "#63942f",
-          "#84b654",
-          "#a9dd7a",
-          "#d3ffaf"
-        ]
-      },
-      "olive": {
-        "role": "country",
-        "displayName": "Ledger Olive",
-        "canonical": "#396200",
-        "tonalRamp": [
-          "#040f00",
-          "#152b00",
-          "#2d4d07",
-          "#446e15",
-          "#66923e",
-          "#87b560",
-          "#acdc85",
-          "#d4feb3"
-        ]
-      },
-      "grass": {
-        "role": "country",
-        "displayName": "Paddock Grass",
-        "canonical": "#94c956",
-        "tonalRamp": [
-          "#050f00",
-          "#182a00",
-          "#304c02",
-          "#486e0e",
-          "#639517",
-          "#83b743",
-          "#a8de6c",
-          "#d5ffab"
-        ]
-      },
-      "ground": {
-        "role": "country",
-        "displayName": "Ground",
-        "canonical": "#dcefc0",
-        "tonalRamp": [
-          "#070e00",
-          "#1c2900",
-          "#3a4820",
-          "#57673e",
-          "#7a8a5f",
-          "#9bac80",
-          "#c0d3a5",
-          "#e4f7c8"
-        ]
-      },
-      "sand": {
-        "role": "country",
-        "displayName": "Sand",
-        "canonical": "#f0dfc3",
-        "tonalRamp": [
-          "#130900",
-          "#2e220a",
-          "#4e4028",
-          "#6d5e46",
-          "#908167",
-          "#b2a288",
-          "#d9c8ad",
-          "#fdecd0"
-        ]
-      },
-      "ochre": {
-        "role": "country",
-        "displayName": "Sandstone Ochre",
-        "canonical": "#cf9250",
-        "tonalRamp": [
-          "#160700",
-          "#361d00",
-          "#5f3802",
-          "#87530e",
-          "#af7531",
-          "#d39654",
-          "#fcbc7a",
-          "#feebd8"
-        ]
-      },
-      "asphalt": {
-        "role": "country",
-        "displayName": "Road Asphalt",
-        "canonical": "#383d40",
-        "tonalRamp": [
-          "#080c0e",
-          "#202528",
-          "#3e4346",
-          "#5c6165",
-          "#7e8488",
-          "#a0a6a9",
-          "#c5cccf",
-          "#e9f0f3"
-        ]
-      },
-      "error-ink": {
-        "role": "error",
-        "displayName": "Error Ink",
-        "canonical": "#6b1d05",
-        "tonalRamp": [
-          "#1e0100",
-          "#440e01",
-          "#73250e",
-          "#96452f",
-          "#bd6851",
-          "#e38a71",
-          "#fdb7a4",
-          "#ffe9e3"
-        ]
-      },
-      "notice-ink": {
-        "role": "notice",
-        "displayName": "Notice Ink",
-        "canonical": "#5a3d00",
-        "tonalRamp": [
-          "#130900",
-          "#322000",
-          "#593c00",
-          "#795a26",
-          "#9d7d4a",
-          "#c09f6a",
-          "#e7c58f",
-          "#feecd0"
-        ]
-      }
+      "primary": { "role": "primary", "displayName": "Ledger Olive", "canonical": "#396200", "tonalRamp": ["#050f00", "#162b00", "#2a4a00", "#426b11", "#618c38", "#81ae5a", "#a6d57f", "#d2ffb0"] },
+      "primary-container": { "role": "primary", "displayName": "Deep Fern", "canonical": "#4d7c0f", "tonalRamp": ["#050f00", "#172a01", "#2b4a02", "#416c00", "#5d8e28", "#7eb04d", "#a3d773", "#d3ffaf"] },
+      "primary-fixed": { "role": "primary", "displayName": "Pale Sprout", "canonical": "#bbf37c", "tonalRamp": ["#060e00", "#182a00", "#2e4902", "#456b02", "#5d8e01", "#7db138", "#a2d861", "#d5ffaa"] },
+      "on-primary-fixed": { "role": "neutral", "displayName": "Forest", "canonical": "#0f2000", "tonalRamp": ["#050f00", "#182a07", "#334723", "#516541", "#70855f", "#90a780", "#b5cda4", "#dff8ce"] },
+      "background": { "role": "neutral", "displayName": "Warm Paper", "canonical": "#fbf9f5", "tonalRamp": ["#0c0b09", "#252421", "#413f3c", "#5f5d5a", "#7f7d79", "#a09e9a", "#c6c4c0", "#f0eeea"] },
+      "foreground": { "role": "neutral", "displayName": "Ledger Ink", "canonical": "#1b1c1a", "tonalRamp": ["#0b0b0a", "#232422", "#3f403e", "#5d5e5c", "#7c7e7b", "#9d9f9c", "#c3c5c2", "#edefec"] },
+      "muted-foreground": { "role": "neutral", "displayName": "Moss Ink", "canonical": "#43493a", "tonalRamp": ["#090d03", "#212619", "#3c4234", "#5a6051", "#798070", "#9aa290", "#c0c7b6", "#eaf2df"] },
+      "border": { "role": "neutral", "displayName": "Ruled Line", "canonical": "#c3c9b5", "tonalRamp": ["#090d02", "#222617", "#3d4232", "#5b604f", "#7b806e", "#9ca18e", "#c1c7b3", "#ebf2dd"] },
+      "input": { "role": "neutral", "displayName": "Field Grey", "canonical": "#e4e2de", "tonalRamp": ["#0c0b08", "#252421", "#413f3c", "#5f5d5a", "#7f7d79", "#a09e9a", "#c6c4c0", "#f0eeea"] },
+      "destructive": { "role": "status", "displayName": "Alarm Red", "canonical": "#ba1a1a", "tonalRamp": ["#1f0000", "#4b0002", "#7d0106", "#b10710", "#d83d35", "#ff6458", "#ffaba0", "#ffe9e5"] },
+      "error-container": { "role": "status", "displayName": "Error Blush", "canonical": "#ffdad6", "tonalRamp": ["#190404", "#361c1a", "#543734", "#745552", "#957471", "#b79591", "#debab6", "#fee9e6"] },
+      "on-error-container": { "role": "status", "displayName": "Error Ink", "canonical": "#93000a", "tonalRamp": ["#1f0000", "#4b0002", "#7c0108", "#a92320", "#cf4a41", "#f66d61", "#ffaba1", "#ffe9e6"] },
+      "warning-container": { "role": "status", "displayName": "Amber Wash", "canonical": "#fef3c7", "tonalRamp": ["#0f0b00", "#2c2301", "#493f18", "#675e36", "#887d55", "#a99f75", "#cfc59a", "#faefc3"] },
+      "on-warning-container": { "role": "status", "displayName": "Amber Ink", "canonical": "#92400e", "tonalRamp": ["#190500", "#3f1600", "#692a01", "#944211", "#b86337", "#dd8458", "#ffae87", "#ffeae0"] },
+      "canopy-text": { "role": "neutral", "displayName": "Canopy Text (Warm Paper 84%)", "canonical": "rgb(251 249 245 / 0.84)" },
+      "canopy-text-quiet": { "role": "neutral", "displayName": "Canopy Text Quiet (Warm Paper 70%)", "canonical": "rgb(251 249 245 / 0.7)" },
+      "canopy-hairline": { "role": "neutral", "displayName": "Canopy Hairline (Sprout 20%)", "canonical": "rgb(187 243 124 / 0.2)" }
     },
     "typographyMeta": {
-      "display": {
-        "displayName": "Display",
-        "purpose": "The hero name \"Odip\" only. Overpass 800, 60 to 96px, 0.95 leading."
-      },
-      "headline": {
-        "displayName": "Headline",
-        "purpose": "The hero tagline beside a 4px white rule, 17ch wide. Overpass 700."
-      },
-      "section-heading": {
-        "displayName": "Section heading",
-        "purpose": "The h2 of the tour, fork and markers bands, at most 20ch. Overpass 800."
-      },
-      "destination-heading": {
-        "displayName": "Destination heading",
-        "purpose": "\"Request early access\" on the form sign. Overpass 800, 32 to 52px."
-      },
-      "way-name": {
-        "displayName": "Way name",
-        "purpose": "The two names on the fork sign. Overpass 800, 22 to 34px."
-      },
-      "exit-cta": {
-        "displayName": "Exit cta",
-        "purpose": "The hero exit bar; the town sign uses the same size at 700. Overpass 800."
-      },
-      "stop-label": {
-        "displayName": "Stop label",
-        "purpose": "The h3 on each brown stop sign, 30px; its km marker is Overpass 600."
-      },
-      "plate-figure": {
-        "displayName": "Plate figure",
-        "purpose": "The number inside a route-marker shield. Overpass 800, 36px."
-      },
-      "plate-label": {
-        "displayName": "Plate label",
-        "purpose": "The label under a route-marker shield. Overpass 800, 22px."
-      },
-      "submit": {
-        "displayName": "Submit",
-        "purpose": "The Submit label on the destination sign. Overpass 800, 22px (18px on phones)."
-      },
-      "control-lg": {
-        "displayName": "Control lg",
-        "purpose": "Stage signs (18px, 16px on phones) and the band lead. Overpass 700."
-      },
-      "label": {
-        "displayName": "Label",
-        "purpose": "Field labels above the inputs. Overpass 700, 17px."
-      },
-      "control": {
-        "displayName": "Control",
-        "purpose": "Header and footer chips and stop links. Overpass 700, 16px."
-      },
-      "tag": {
-        "displayName": "Tag",
-        "purpose": "The Sample-data tag and the error glyph; the smallest text on the page (13px)."
-      },
-      "body": {
-        "displayName": "Body",
-        "purpose": "Running text. Manrope 400, 17px at 1.6; inputs are 500."
-      },
-      "lede": {
-        "displayName": "Lede",
-        "purpose": "The line under a section heading, 19px, 62ch. A stop sentence is the same size at 1.55 and 58ch."
-      },
-      "sign-body": {
-        "displayName": "Sign body",
-        "purpose": "Secondary copy on a green sign. Manrope 500, 16 to 19px, 72ch."
-      },
-      "caption": {
-        "displayName": "Caption",
-        "purpose": "Figure captions and notices, 15px, Quiet Ink."
-      },
-      "hint": {
-        "displayName": "Hint",
-        "purpose": "The sideways-scroll hint, 14px, Quiet Ink."
-      }
+      "display": { "displayName": "Display", "purpose": "The hero headline only: two lines from 1024px, three on phones." },
+      "headline": { "displayName": "Headline", "purpose": "Each act's heading on the canopy; the readings heading is a step smaller." },
+      "headline-sm": { "displayName": "Headline small", "purpose": "The early-access clearing's heading, on paper." },
+      "title": { "displayName": "Title", "purpose": "The lived moment in each crossing, about 21ch wide." },
+      "numeral": { "displayName": "Numeral", "purpose": "The readings' figures, in Sprout, tabular." },
+      "lede": { "displayName": "Lede", "purpose": "The hero sub and act ledes, in Canopy Text." },
+      "body": { "displayName": "Body", "purpose": "Form, notices, footer notes; 62ch maximum." },
+      "caption": { "displayName": "Caption", "purpose": "Screenshot captions on paper." },
+      "button": { "displayName": "Button", "purpose": "Every button and the Sign in link." },
+      "label": { "displayName": "Label", "purpose": "Uppercase, tracked 0.16em: section index, crossing 'when', reading labels, footer headings. Never under 12px." }
     },
     "shadows": [
-      {
-        "name": "sign-cast",
-        "value": "0 1px 0 rgba(255,255,255,0.18) inset, 0 22px 30px -18px rgba(12,28,6,0.55)",
-        "purpose": "Every sign. The inset line is the lit top edge; the cast is the dark of the sign, long and offset down."
-      },
-      {
-        "name": "chip-cast",
-        "value": "0 10px 16px -12px rgba(12,28,6,0.6)",
-        "purpose": "Header and footer chips."
-      },
-      {
-        "name": "stops-bar",
-        "value": "0 14px 24px -16px rgba(31,45,10,0.5)",
-        "purpose": "The sticky stops bar."
-      },
-      {
-        "name": "strip",
-        "value": "0 40px 60px -36px rgba(31,61,5,0.6)",
-        "purpose": "The strip map panel."
-      },
-      {
-        "name": "proof-frame",
-        "value": "0 1px 0 #fff inset, 0 24px 40px -24px rgba(31,45,10,0.6)",
-        "purpose": "A framed real product screen."
-      },
-      {
-        "name": "phone-bezel",
-        "value": "0 24px 40px -22px rgba(31,45,10,0.7)",
-        "purpose": "The 280px phone bezel around a mobile capture."
-      },
-      {
-        "name": "town-sign",
-        "value": "0 26px 34px -22px rgba(80,50,10,0.6)",
-        "purpose": "The inverse town-entry sign; warm because it falls on sand."
-      },
-      {
-        "name": "fold-crease",
-        "value": "inset 0 1px 0 rgba(255,255,255,0.9)",
-        "purpose": "The lit crease on the top edge of a strip sheet; a 26px shade (rgba(60,50,20,0.16) to 0) sits under it."
-      },
-      {
-        "name": "focus-halo",
-        "value": "0 0 0 6px #fff",
-        "purpose": "The outer ring of the two-tone focus ring on paper (ink outline, white halo); on signs it inverts to a white outline and an ink halo."
-      }
+      { "name": "sprout-glow", "value": "0 10px 24px -14px rgb(187 243 124 / 0.7)", "purpose": "Under the Sprout CTA only." },
+      { "name": "olive-glow", "value": "0 8px 20px -12px rgb(57 98 0 / 0.75)", "purpose": "Under the olive button on paper." },
+      { "name": "pill-lift", "value": "0 12px 32px -12px rgb(15 32 0 / 0.9)", "purpose": "The bottom section pill below 1200px." },
+      { "name": "carrier-halo", "value": "0 0 0 5px rgb(15 32 0 / 0.85)", "purpose": "Cuts the crossing carrier out of the seam and track." },
+      { "name": "quiet-scrim", "value": "background: rgb(15 32 0 / 0.8); filter: blur(24px)", "purpose": "Behind canopy text on the poster (no WebGL, or before the first frame); fades out when the field goes live." }
     ],
     "motion": [
-      {
-        "name": "ease-sign",
-        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
-        "purpose": "Every hover: 0.16s on signs, chips and Submit, 0.18s on the exit bar, 0.2s on arrows. Stage signs lift 2px, chips press 1px."
-      },
-      {
-        "name": "fold-unfold",
-        "value": "smoothstep over the fold top at 1.0 to 0.45 of viewport height; rotateX(-58deg to 0) about 50% 0; perspective 1400px at 50% 12%",
-        "purpose": "The one 3D event. Desktop (1024px and up) with motion allowed and JavaScript on. 58.0 deg at 100%, 47.4 at 85%, 25.1 at 70%, 10.6 at 60%, 0 at 45%."
-      },
-      {
-        "name": "reading-line",
-        "value": "0.6 of viewport height",
-        "purpose": "Where the route fill, the odometer and the current stop read."
-      },
-      {
-        "name": "route-fill",
-        "value": "--fill = clamp01((readingLine - top) / height)",
-        "purpose": "The asphalt road draws down each fold rail, at every width, until reduced motion."
-      },
-      {
-        "name": "odometer",
-        "value": "round(60 * (1 - progress)) km",
-        "purpose": "Counts 60 down to 0 along the strip; the form plate reads \"Early access 0 km\"."
-      },
-      {
-        "name": "country-drift",
-        "value": "--drift (0 to 1) times a per-layer (dx, dy): clouds 60,-8; far 26,-14; mid 1 -18,-22; mid 2 24,-30; trees -30,-36; rocks -44,-8",
-        "purpose": "Translation only. The hero drifts with its scroll share, the wide-desktop tour backdrop with the tour. The ground stays."
-      },
-      {
-        "name": "frame-loop",
-        "value": "one pending requestAnimationFrame; passive scroll listener",
-        "purpose": "Scroll and resize schedule the update. A media-query change clears the state under reduced motion and re-runs it otherwise."
-      },
-      {
-        "name": "reduced-motion",
-        "value": "transition and animation 0.01ms; no folding, drift or odometer; route drawn; smooth scroll off",
-        "purpose": "prefers-reduced-motion: reduce. No JavaScript behaves the same: --unfold 1, --fill 1, --drift 0."
-      }
+      { "name": "canvas-fade", "value": "opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "The live canvas fading in over the poster." },
+      { "name": "control-state", "value": "0.15s ease-out", "purpose": "Button background, border and colour changes." },
+      { "name": "crossing", "value": "2.6s", "purpose": "One crossing: carrier ease-in-out cubic over 0-50%, seam flare as a sine hump over 30-75%, record reveal ease-out expo from 42%, caption settle ease-out cubic from 62%." },
+      { "name": "field", "value": "continuous, 0.5 render scale (0.35 low power), DPR cap 2, 4 leaf layers (3 low power)", "purpose": "Sway, travelling gusts, pointer breeze with inertia, scroll-drifted camera. Rests when paused, hidden or off screen; one still frame under reduced motion." },
+      { "name": "reduced-motion", "value": "transition-duration and animation-duration 0.01ms", "purpose": "Crossings arrive at once, the field is still, no smooth scroll." }
     ],
     "breakpoints": [
-      {
-        "name": "sm",
-        "value": "640px"
-      },
-      {
-        "name": "lg",
-        "value": "1024px"
-      },
-      {
-        "name": "xl",
-        "value": "1280px"
-      },
-      {
-        "name": "max-narrow",
-        "value": "374.98px"
-      },
-      {
-        "name": "max-phone",
-        "value": "639.98px"
-      },
-      {
-        "name": "max-tablet",
-        "value": "1023.98px"
-      }
+      { "name": "header-tight", "value": "360px" },
+      { "name": "wordmark-text", "value": "380px" },
+      { "name": "short-cta", "value": "640px" },
+      { "name": "phone-screens", "value": "680px" },
+      { "name": "readings-rows", "value": "760px" },
+      { "name": "pause-icon-only", "value": "900px" },
+      { "name": "hero-two-column", "value": "1024px" },
+      { "name": "crossing-vertical-seam", "value": "1100px" },
+      { "name": "margin-index", "value": "1200px" },
+      { "name": "side-captions", "value": "1280px" }
     ]
   },
   "components": [
     {
-      "name": "Guide Sign (hero)",
-      "kind": "custom",
-      "refersTo": "sign-hero",
-      "description": "The green guide sign that carries the offer: name, tagline, what Odip is, and the exit bar to Request early access.",
-      "html": "<div class=\"ds-sign ds-hero\"><div class=\"ds-hero-title\"><span class=\"ds-hero-name\">Odip</span><span class=\"ds-hero-tag\">Supported holidays, planned end to end</span></div><p class=\"ds-hero-sub\">Trip management software for NDIS providers that run supported holidays.</p><a class=\"ds-exit\" href=\"#\"><span>Request early access</span><span class=\"ds-exit-arrow\"><svg class=\"ds-pic\" viewBox=\"0 -960 960 960\" aria-hidden=\"true\" focusable=\"false\"><path d=\"m266-207-89-89 361-361H227v-126h526v526H627v-311L266-207Z\"/></svg></span></a></div>",
-      "css": ".ds-sign{position:relative;isolation:isolate;background:var(--bg,#1d4a10);color:#fff;font-family:Overpass,'Arial Narrow','Helvetica Neue',Arial,sans-serif;border-radius:var(--r,14px);box-shadow:0 1px 0 rgba(255,255,255,.18) inset,0 22px 30px -18px rgba(12,28,6,.55)}.ds-sign::before{content:\"\";position:absolute;inset:var(--gap,7px);border:var(--ring,3px) solid #fff;border-radius:calc(var(--r,14px) - var(--gap,7px) + 4px);pointer-events:none;z-index:0}.ds-sign>*{position:relative;z-index:1}.ds-pic{width:1.25em;height:1.25em;fill:currentColor;flex:none}.ds-hero{--r:18px;--gap:10px;--ring:4px;max-width:560px;padding:28px 36px 0;overflow:hidden}.ds-hero-title{display:flex;flex-wrap:wrap;align-items:center;gap:6px 24px}.ds-hero-name{font-weight:800;font-size:64px;line-height:.95;letter-spacing:-.02em}.ds-hero-tag{flex:1 1 200px;max-width:17ch;padding-left:24px;border-left:4px solid #fff;font-weight:700;font-size:26px;line-height:1.12}.ds-hero-sub{margin:14px 0 0;font:500 16px/1.5 Manrope,system-ui,sans-serif;color:#eaf4e2}.ds-exit{display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:68px;margin:22px -36px 0;padding:14px 32px 14px 36px;border-top:4px solid #fff;color:#fff;text-decoration:none;font-weight:800;font-size:24px;line-height:1.1;transition:background-color .18s,color .18s}.ds-exit-arrow{display:grid;place-items:center;width:48px;height:48px;border-radius:50%;background:#fff;color:#1d4a10;font-size:28px;transition:transform .2s}.ds-exit:hover{background:#fff;color:#1d4a10}.ds-exit:hover .ds-exit-arrow{background:#1d4a10;color:#fff;transform:translate(3px,-3px)}.ds-exit:focus-visible{outline:3px solid #fff;outline-offset:3px;box-shadow:0 0 0 6px #1b1c1a}"
-    },
-    {
-      "name": "Tourist Stop Sign",
-      "kind": "custom",
-      "refersTo": "sign-exit",
-      "description": "The brown sign that marks a stop: a ringed pictogram box, the stop name and its distance marker.",
-      "html": "<div class=\"ds-sign ds-stop\"><span class=\"ds-stop-pic\"><svg class=\"ds-pic\" viewBox=\"0 -960 960 960\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M-16-224v-79q0-51 49-82t127-31h17q-17 25-25 52.86T144-305v81H-16Zm240 0v-81q0-35 18-65t53-52q35-22 82-33t102.96-11q57.04 0 103.54 11 46.5 11 81.5 33t53 52q18 30 18 65v81H224Zm592 0v-81q0-31.37-8-59.12-8-27.75-24-51.88h16q79.2 0 127.6 30.87Q976-354.26 976-303v79H816ZM160.09-452Q123-452 96.5-478.39 70-504.77 70-541.82 70-580 96.39-606q26.38-26 63.43-26Q198-632 224-606.15q26 25.85 26 64.06 0 37.09-25.85 63.59T160.09-452Zm640 0q-37.09 0-63.59-26.39-26.5-26.38-26.5-63.43Q710-580 736.39-606q26.38-26 63.43-26Q838-632 864-606.15q26 25.85 26 64.06 0 37.09-25.85 63.59T800.09-452ZM480-495q-56.67 0-96.33-39.67Q344-574.33 344-631q0-57 39.67-96.5Q423.33-767 480-767q57 0 96.5 39.5T616-631q0 56.67-39.5 96.33Q537-495 480-495Z\"/></svg></span><h3 class=\"ds-stop-label\">Crew</h3><span class=\"ds-stop-km\">40 km</span></div>",
-      "css": ".ds-sign{position:relative;isolation:isolate;background:var(--bg,#1d4a10);color:#fff;font-family:Overpass,'Arial Narrow','Helvetica Neue',Arial,sans-serif;border-radius:var(--r,14px);box-shadow:0 1px 0 rgba(255,255,255,.18) inset,0 22px 30px -18px rgba(12,28,6,.55)}.ds-sign::before{content:\"\";position:absolute;inset:var(--gap,7px);border:var(--ring,3px) solid #fff;border-radius:calc(var(--r,14px) - var(--gap,7px) + 4px);pointer-events:none;z-index:0}.ds-sign>*{position:relative;z-index:1}.ds-pic{width:1.25em;height:1.25em;fill:currentColor;flex:none}.ds-stop{--bg:#5b3418;--r:12px;--gap:5px;--ring:2px;display:inline-grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;min-width:300px;padding:15px 22px 15px 16px}.ds-stop-pic{display:grid;place-items:center;width:50px;height:50px;border:2px solid #fff;border-radius:8px;font-size:32px}.ds-stop-label{margin:0;font-weight:800;font-size:30px;line-height:1.05;letter-spacing:-.005em}.ds-stop-km{font-weight:600;font-size:16px;opacity:.92;white-space:nowrap;font-variant-numeric:tabular-nums}"
-    },
-    {
-      "name": "Stage Sign",
-      "kind": "chip",
-      "refersTo": "sign-mini",
-      "description": "The small brown sign on a post in the hero band; an anchor to its stop. Lifts 2px on hover.",
-      "html": "<a class=\"ds-sign ds-mini\" href=\"#\"><svg class=\"ds-pic\" viewBox=\"0 -960 960 960\" aria-hidden=\"true\" focusable=\"false\"><path d=\"m600-85-240-84-174 69q-36 14-68-8t-32-62v-560q0-24 14-43t37-27l223-75 240 84 174-69q36-14 68 8t32 62v560q0 24-14 43t-37 27L600-85Zm-40-147v-440l-160-56v440l160 56Z\"/></svg><span>Plan</span></a>",
-      "css": ".ds-sign{position:relative;isolation:isolate;background:var(--bg,#1d4a10);color:#fff;font-family:Overpass,'Arial Narrow','Helvetica Neue',Arial,sans-serif;border-radius:var(--r,14px);box-shadow:0 1px 0 rgba(255,255,255,.18) inset,0 22px 30px -18px rgba(12,28,6,.55)}.ds-sign::before{content:\"\";position:absolute;inset:var(--gap,7px);border:var(--ring,3px) solid #fff;border-radius:calc(var(--r,14px) - var(--gap,7px) + 4px);pointer-events:none;z-index:0}.ds-sign>*{position:relative;z-index:1}.ds-pic{width:1.25em;height:1.25em;fill:currentColor;flex:none}.ds-mini{--bg:#5b3418;--r:10px;--gap:4px;--ring:2px;display:inline-flex;align-items:center;gap:10px;min-height:52px;padding:0 18px 0 14px;font-weight:700;font-size:18px;line-height:1.1;text-decoration:none;transition:background-color .16s,transform .16s}.ds-mini .ds-pic{width:1.6rem;height:1.6rem}.ds-mini:hover{--bg:#74441f;transform:translateY(-2px)}.ds-mini:focus-visible{outline:3px solid #fff;outline-offset:3px;box-shadow:0 0 0 6px #1b1c1a}"
-    },
-    {
-      "name": "Service Sign Chip (Sign in)",
+      "name": "Sprout Button",
       "kind": "button",
-      "refersTo": "sign-service",
-      "description": "The blue service sign. Used for Sign in and nothing else; the green variant is the header Request chip.",
-      "html": "<a class=\"ds-sign ds-chip ds-chip-blue\" href=\"#\"><svg class=\"ds-pic\" viewBox=\"0 -960 960 960\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M472-86v-126h276v-536H472v-126h276q53 0 89.5 36.5T874-748v536q0 53-36.5 89.5T748-86H472ZM361-232l-88-89 96-96H86v-126h283l-96-96 88-89 247 248-247 248Z\"/></svg><span>Sign in</span></a> <a class=\"ds-sign ds-chip\" href=\"#\"><span>Request early access</span></a>",
-      "css": ".ds-sign{position:relative;isolation:isolate;background:var(--bg,#1d4a10);color:#fff;font-family:Overpass,'Arial Narrow','Helvetica Neue',Arial,sans-serif;border-radius:var(--r,14px);box-shadow:0 1px 0 rgba(255,255,255,.18) inset,0 22px 30px -18px rgba(12,28,6,.55)}.ds-sign::before{content:\"\";position:absolute;inset:var(--gap,7px);border:var(--ring,3px) solid #fff;border-radius:calc(var(--r,14px) - var(--gap,7px) + 4px);pointer-events:none;z-index:0}.ds-sign>*{position:relative;z-index:1}.ds-pic{width:1.25em;height:1.25em;fill:currentColor;flex:none}.ds-chip{--r:10px;--gap:3px;--ring:2px;display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;font-weight:700;font-size:16px;line-height:1;text-decoration:none;white-space:nowrap;box-shadow:0 10px 16px -12px rgba(12,28,6,.6);transition:background-color .16s,transform .16s}.ds-chip:hover{--bg:#2a5f18}.ds-chip-blue{--bg:#0a4a94}.ds-chip-blue:hover{--bg:#0d5cb8}.ds-chip:active{transform:translateY(1px)}.ds-chip:focus-visible{outline:3px solid #fff;outline-offset:3px;box-shadow:0 0 0 6px #1b1c1a}"
+      "refersTo": "button-sprout",
+      "description": "The primary action on the canopy: Request early access.",
+      "html": "<div class=\"ds-canopy\"><a class=\"ds-btn-sprout\" href=\"#\">Request early access <svg width=\"18\" height=\"18\" viewBox=\"0 -960 960 960\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M592-417H126v-126h466L390-745l90-89 354 354-354 354-90-89 202-202Z\"/></svg></a></div>",
+      "css": ".ds-canopy { background: #0f2000; padding: 24px; } .ds-btn-sprout { display: inline-flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 24px; border: 1px solid transparent; border-radius: 0.375rem; background: #bbf37c; color: #0f2000; font: 600 1rem/1.2 Manrope, system-ui, sans-serif; text-decoration: none; box-shadow: 0 10px 24px -14px rgb(187 243 124 / 0.7); transition: background-color 0.15s ease-out; } .ds-btn-sprout:hover { background: color-mix(in srgb, #bbf37c 84%, #fbf9f5); } .ds-btn-sprout:focus-visible { outline: 2px solid #bbf37c; outline-offset: 3px; }"
     },
     {
-      "name": "Early-access Field",
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "The secondary action on the canopy: See it at work.",
+      "html": "<div class=\"ds-canopy\"><a class=\"ds-btn-ghost\" href=\"#\">See it at work</a></div>",
+      "css": ".ds-canopy { background: #0f2000; padding: 24px; } .ds-btn-ghost { display: inline-flex; align-items: center; min-height: 52px; padding: 0 24px; border: 1px solid rgb(251 249 245 / 0.45); border-radius: 0.375rem; background: rgb(15 32 0 / 0.45); color: #fbf9f5; font: 600 1rem/1.2 Manrope, system-ui, sans-serif; text-decoration: none; transition: border-color 0.15s ease-out, color 0.15s ease-out; } .ds-btn-ghost:hover { border-color: #bbf37c; color: #bbf37c; } .ds-btn-ghost:focus-visible { outline: 2px solid #bbf37c; outline-offset: 3px; }"
+    },
+    {
+      "name": "Olive Button",
+      "kind": "button",
+      "refersTo": "button-olive",
+      "description": "The app's primary button, on paper: the form's submit.",
+      "html": "<div class=\"ds-paper\"><button class=\"ds-btn-olive\" type=\"button\">Request early access</button></div>",
+      "css": ".ds-paper { background: #fbf9f5; padding: 24px; border-radius: 0.75rem; } .ds-btn-olive { width: 100%; min-height: 48px; padding: 0 18px; border: 1px solid transparent; border-radius: 0.375rem; background: #396200; color: #fbf9f5; font: 600 0.9375rem/1.2 Manrope, system-ui, sans-serif; cursor: pointer; box-shadow: 0 8px 20px -12px rgb(57 98 0 / 0.75); transition: background-color 0.15s ease-out; } .ds-btn-olive:hover { background: rgb(57 98 0 / 0.9); } .ds-btn-olive:focus-visible { outline: 2px solid #396200; outline-offset: 2px; } .ds-btn-olive[disabled] { opacity: 0.55; cursor: not-allowed; }"
+    },
+    {
+      "name": "Form Field",
       "kind": "input",
-      "refersTo": "field-input",
-      "description": "A white 52px input on the green form sign, with a visible label above. The invalid state adds a peach border and a text row with a \"!\" glyph, never colour alone.",
-      "html": "<div class=\"ds-on-green\"><div class=\"ds-field\"><label for=\"ds-n\">Your name</label><input id=\"ds-n\" type=\"text\" value=\"Alex Morgan\"></div><div class=\"ds-field\"><label for=\"ds-e\">Email</label><input id=\"ds-e\" type=\"email\" value=\"alex@\" aria-invalid=\"true\"><p class=\"ds-field-error\">Enter a valid email address, like name@organisation.org.au.</p></div></div>",
-      "css": ".ds-pic{width:1.25em;height:1.25em;fill:currentColor;flex:none}.ds-on-green{display:grid;gap:18px;max-width:420px;padding:24px;border-radius:14px;background:#1d4a10;color:#fff;font-family:Manrope,system-ui,sans-serif}.ds-field{display:grid;gap:6px}.ds-field label{font:700 17px Overpass,'Arial Narrow',Arial,sans-serif}.ds-field input{width:100%;min-height:52px;padding:10px 14px;border:3px solid transparent;border-radius:8px;background:#fff;color:#1b1c1a;font:500 17px/1.3 Manrope,system-ui,sans-serif}.ds-field input:focus-visible{outline:3px solid #fff;outline-offset:2px;box-shadow:0 0 0 6px #1b1c1a}.ds-field input[aria-invalid=\"true\"]{border-color:#ffb199;background:#fff8f5}.ds-field-error{display:flex;gap:8px;align-items:flex-start;margin:0;padding:6px 10px;border-radius:6px;background:#ffe6dc;color:#6b1d05;font-size:15px;font-weight:600;line-height:1.4}.ds-field-error::before{content:\"!\";display:grid;place-items:center;flex:none;width:20px;height:20px;margin-top:1px;border-radius:50%;background:#6b1d05;color:#fff;font:800 13px/1 Overpass,Arial,sans-serif}"
+      "refersTo": "input-field",
+      "description": "The early-access form's field, on paper, with its error state.",
+      "html": "<div class=\"ds-paper\"><div class=\"ds-field\"><label for=\"ds-email\">Work email</label><input id=\"ds-email\" type=\"email\" placeholder=\"you@provider.org.au\"></div><div class=\"ds-field\"><label for=\"ds-org\">Organisation</label><input id=\"ds-org\" aria-invalid=\"true\"><span class=\"ds-field-error\">Enter your organisation.</span></div></div>",
+      "css": ".ds-paper { display: grid; gap: 18px; background: #fbf9f5; padding: 24px; border-radius: 0.75rem; } .ds-field { display: grid; gap: 4px; } .ds-field label { font: 500 0.8125rem/1.4 Manrope, system-ui, sans-serif; color: #43493a; } .ds-field input { min-height: 44px; padding: 0 12px; border: 1px solid #c3c9b5; border-radius: 0.375rem; background: #e4e2de; color: #1b1c1a; font: 400 1rem/1.4 Manrope, system-ui, sans-serif; } .ds-field input:focus-visible { outline: 2px solid #396200; outline-offset: 2px; } .ds-field input[aria-invalid='true'] { border-color: #ba1a1a; } .ds-field-error { font: 600 0.75rem/1.4 Manrope, system-ui, sans-serif; color: #ba1a1a; }"
     },
     {
-      "name": "Submit Button",
-      "kind": "button",
-      "refersTo": "button-submit",
-      "description": "The white 60px Submit on the green form sign. Hover fills Pale Sprout and nudges the arrow 4px; while sending it is aria-disabled at 0.65 opacity, never disabled.",
-      "html": "<div class=\"ds-on-green\"><button class=\"ds-submit\" type=\"button\"><span>Request early access</span><svg class=\"ds-pic\" viewBox=\"0 -960 960 960\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M592-417H126v-126h466L390-745l90-89 354 354-354 354-90-89 202-202Z\"/></svg></button></div>",
-      "css": ".ds-pic{width:1.25em;height:1.25em;fill:currentColor;flex:none}.ds-on-green{display:grid;max-width:420px;padding:24px;border-radius:14px;background:#1d4a10}.ds-submit{display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:60px;padding:0 28px;border:0;border-radius:10px;background:#fff;color:#1d4a10;font:800 22px/1 Overpass,'Arial Narrow','Helvetica Neue',Arial,sans-serif;cursor:pointer;transition:background-color .16s,transform .16s}.ds-submit .ds-pic{font-size:24px;transition:transform .2s}.ds-submit:hover{background:#bbf37c}.ds-submit:hover .ds-pic{transform:translateX(4px)}.ds-submit[aria-disabled=\"true\"]{opacity:.65;cursor:default}.ds-submit:focus-visible{outline:3px solid #fff;outline-offset:3px;box-shadow:0 0 0 6px #1b1c1a}"
+      "name": "Section Index",
+      "kind": "nav",
+      "refersTo": "section-pill-current",
+      "description": "The section index as the bottom pill below 1200px; the current act is a Sprout pill.",
+      "html": "<div class=\"ds-canopy\"><nav class=\"ds-pill\" aria-label=\"Sections\"><a href=\"#\" aria-current=\"true\">Before</a><a href=\"#\">During</a><a href=\"#\">After</a><a href=\"#\">Early access</a></nav></div>",
+      "css": ".ds-canopy { background: #0f2000; padding: 24px; } .ds-pill { display: inline-flex; gap: 2px; padding: 4px; border: 1px solid rgb(187 243 124 / 0.2); border-radius: 999px; background: rgb(15 32 0 / 0.95); box-shadow: 0 12px 32px -12px rgb(15 32 0 / 0.9); } .ds-pill a { display: flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 999px; color: rgb(251 249 245 / 0.84); font: 600 0.8125rem/1 Manrope, system-ui, sans-serif; text-decoration: none; white-space: nowrap; } .ds-pill a:hover { color: #fbf9f5; } .ds-pill a[aria-current] { background: #bbf37c; color: #0f2000; } .ds-pill a:focus-visible { outline: 2px solid #bbf37c; outline-offset: 3px; }"
     },
     {
-      "name": "Proof Figure with Sample-data Tag",
+      "name": "Sample Data Tag",
       "kind": "chip",
       "refersTo": "tag-sample-data",
-      "description": "A real product screen in a framed white canvas, its caption opening with the brown Sample data tag. Every screen carries the tag.",
-      "html": "<figure class=\"ds-fig\"><div class=\"ds-frame\"></div><figcaption><span class=\"ds-tag\">Sample data</span> A trip record at a glance</figcaption></figure>",
-      "css": ".ds-pic{width:1.25em;height:1.25em;fill:currentColor;flex:none}.ds-fig{margin:0;max-width:420px;font-family:Manrope,system-ui,sans-serif}.ds-frame{height:150px;border:1px solid #b3bb9f;border-radius:10px;background:linear-gradient(#fff,#f4f1e9);box-shadow:0 1px 0 #fff inset,0 24px 40px -24px rgba(31,45,10,.6)}.ds-fig figcaption{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;margin-top:12px;font-size:15px;line-height:1.4;color:#43493a}.ds-tag{display:inline-block;padding:2px 8px;border:1.5px solid #5b3418;border-radius:4px;background:#fff;color:#5b3418;font:700 13px/1.4 Overpass,'Arial Narrow','Helvetica Neue',Arial,sans-serif}"
+      "description": "The app's neutral badge; one on every figure.",
+      "html": "<div class=\"ds-paper\"><span class=\"ds-tag\">Sample data</span></div>",
+      "css": ".ds-paper { background: #fbf9f5; padding: 24px; } .ds-tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; background: #e4e2de; color: #43493a; font: 600 0.75rem/1.5 Manrope, system-ui, sans-serif; letter-spacing: 0.02em; white-space: nowrap; }"
     },
     {
-      "name": "Route-marker Plate",
-      "kind": "custom",
-      "refersTo": "route-shield-plate",
-      "description": "A green six-point shield with a true number from the code, a label, and a description that continues the label as a sentence.",
-      "html": "<div class=\"ds-plate\"><span class=\"ds-plate-shield\"><span>18</span></span><p class=\"ds-plate-label\">roster checks</p><p class=\"ds-plate-desc\">run when you assign a shift.</p></div>",
-      "css": ".ds-pic{width:1.25em;height:1.25em;fill:currentColor;flex:none}.ds-plate{display:grid;justify-items:start;gap:6px;max-width:240px;padding:20px;border-radius:12px;background:#f0dfc3;font-family:Manrope,system-ui,sans-serif}.ds-plate-shield{position:relative;display:grid;place-items:center;width:84px;height:92px;padding-bottom:12px;margin-bottom:8px;background:#fff;color:#fff;font:800 36px/1 Overpass,'Arial Narrow','Helvetica Neue',Arial,sans-serif;clip-path:polygon(50% 0,100% 10%,100% 62%,50% 100%,0 62%,0 10%)}.ds-plate-shield::before{content:\"\";position:absolute;inset:4px;background:#1d4a10;clip-path:polygon(50% 0,100% 10%,100% 62%,50% 100%,0 62%,0 10%)}.ds-plate-shield span{position:relative}.ds-plate-label{margin:0;font:800 22px/1.15 Overpass,'Arial Narrow','Helvetica Neue',Arial,sans-serif;color:#1b1c1a}.ds-plate-desc{margin:0;font-size:16px;line-height:1.5;color:#43493a;max-width:32ch}"
-    },
-    {
-      "name": "Town-entry Sign",
+      "name": "Dashboard Readout",
       "kind": "card",
-      "refersTo": "sign-town",
-      "description": "The inverse sign: paper face, green text and a single 6px green border, no inner ring. Carries the one proof the page may name: Oassist.",
-      "html": "<div class=\"ds-town\"><span class=\"ds-town-pic\"><svg class=\"ds-pic\" viewBox=\"0 -960 960 960\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M34-136v-439l255-255 256 255v439H345v-231H234v231H34Zm200-280h111v-111H234v111Zm391 280v-472L381-851h157l197 197v518H625Zm190 0v-551L651-851h156l119 118v597H815Z\"/></svg></span><p class=\"ds-town-text\"><strong>Oassist</strong>: a registered NDIS provider of supported holidays. <span>Odip was built here.</span></p></div>",
-      "css": ".ds-pic{width:1.25em;height:1.25em;fill:currentColor;flex:none}.ds-town{display:flex;align-items:center;gap:20px;max-width:520px;padding:20px 24px;border:6px solid #1d4a10;border-radius:20px;background:#fffdf7;color:#1d4a10;box-shadow:0 26px 34px -22px rgba(80,50,10,.6);font-family:Overpass,'Arial Narrow','Helvetica Neue',Arial,sans-serif}.ds-town-pic{display:grid;place-items:center;flex:none;width:64px;height:64px;border-radius:50%;background:#1d4a10;color:#fff;font-size:36px}.ds-town-text{margin:0;font-weight:700;font-size:22px;line-height:1.25}.ds-town-text strong{font-weight:800;font-size:1.25em}.ds-town-text span{display:block;margin-top:6px;font-weight:800}"
+      "refersTo": "paper-clearing",
+      "description": "The hero's paper clearing: a sample-data readout built from the app's attention tiles.",
+      "html": "<div class=\"ds-canopy\"><figure class=\"ds-readout\"><figcaption class=\"ds-readout-cap\"><span class=\"ds-tag\">Sample data</span> From the Odip dashboard</figcaption><p class=\"ds-readout-title\">Upcoming trips, next 60 days</p><dl class=\"ds-tiles\"><div class=\"ds-tile\"><dt>Missing accommodation</dt><dd>1</dd></div><div class=\"ds-tile\"><dt>Missing vehicles</dt><dd>1</dd></div><div class=\"ds-tile\"><dt>Missing staff</dt><dd>2</dd></div></dl></figure></div>",
+      "css": ".ds-canopy { background: #0f2000; padding: 24px; } .ds-readout { max-width: 400px; margin: 0; padding: 20px; border-radius: 0.75rem; background: #fbf9f5; color: #1b1c1a; } .ds-readout-cap { display: flex; align-items: center; gap: 10px; font: 400 0.8125rem/1.4 Manrope, system-ui, sans-serif; color: #43493a; } .ds-tag { padding: 2px 8px; border-radius: 999px; background: #e4e2de; font-weight: 600; font-size: 0.75rem; } .ds-readout-title { margin: 14px 0 0; font: 700 0.9375rem/1.3 'Plus Jakarta Sans', system-ui, sans-serif; } .ds-tiles { display: grid; gap: 6px; margin: 12px 0 0; } .ds-tile { display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 14px; min-height: 52px; padding: 8px 14px; border: 1px solid rgb(146 64 14 / 0.2); border-radius: 0.5rem; background: #fef3c7; color: #92400e; } .ds-tile dt { font: 600 0.875rem/1.3 Manrope, system-ui, sans-serif; } .ds-tile dd { margin: 0; min-width: 1.4ch; font: 800 1.75rem/1 'Plus Jakarta Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; }"
     },
     {
-      "name": "Stops Bar",
-      "kind": "nav",
-      "refersTo": "stop-link",
-      "description": "The sticky bar from 1024px: numbered stop links (the current one inverted, aria-current=\"step\") and the green odometer counting down to 0 km.",
-      "html": "<nav class=\"ds-stops\" aria-label=\"Stops on the route\"><a class=\"ds-stop-link\" href=\"#\"><span class=\"ds-stop-n\">2</span>Stay</a><a class=\"ds-stop-link\" href=\"#\" aria-current=\"step\"><span class=\"ds-stop-n\">3</span>Crew</a><a class=\"ds-stop-link\" href=\"#\"><span class=\"ds-stop-n\">4</span>Care</a><p class=\"ds-odo\">Early access <strong>40 km</strong></p></nav>",
-      "css": ".ds-pic{width:1.25em;height:1.25em;fill:currentColor;flex:none}.ds-stops{display:flex;align-items:center;gap:6px;padding:6px 10px 6px 8px;border:1px solid #c3c9b5;border-radius:12px;background:#fbf9f5;box-shadow:0 14px 24px -16px rgba(31,45,10,.5);font-family:Overpass,'Arial Narrow','Helvetica Neue',Arial,sans-serif}.ds-stop-link{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 14px 0 8px;border-radius:10px;color:#1b1c1a;font-weight:700;font-size:16px;text-decoration:none;transition:background-color .16s,color .16s}.ds-stop-link:hover{background:#efeeea}.ds-stop-n{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#5b3418;color:#fff;font-size:15px;font-weight:800}.ds-stop-link[aria-current=\"step\"]{background:#5b3418;color:#fff}.ds-stop-link[aria-current=\"step\"] .ds-stop-n{background:#fff;color:#5b3418}.ds-stop-link:focus-visible{outline:3px solid #1b1c1a;outline-offset:3px;box-shadow:0 0 0 6px #fff}.ds-odo{display:inline-flex;align-items:center;gap:8px;margin:0 0 0 auto;padding:8px 14px;border-radius:8px;background:#1d4a10;color:#fff;font-weight:700;font-size:15px;line-height:1;white-space:nowrap}.ds-odo strong{font-weight:800;font-variant-numeric:tabular-nums}"
+      "name": "Canopy Light Toggle",
+      "kind": "custom",
+      "refersTo": "light-toggle",
+      "description": "The field's pause control, 'Canopy light · Live'; bottom right from 1200px, in the header below.",
+      "html": "<div class=\"ds-canopy\"><button class=\"ds-toggle\" type=\"button\" aria-pressed=\"false\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M6.5 5h3.75v14H6.5zM13.75 5h3.75v14h-3.75z\"/></svg><span class=\"ds-sr\">Pause the </span>Canopy light<span class=\"ds-state\" aria-hidden=\"true\">Live</span></button></div>",
+      "css": ".ds-canopy { background: #0f2000; padding: 24px; } .ds-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px 0 13px; border: 1px solid rgb(187 243 124 / 0.2); border-radius: 999px; background: rgb(15 32 0 / 0.78); color: rgb(251 249 245 / 0.84); font: 600 0.75rem/1 Manrope, system-ui, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer; } .ds-toggle svg { color: #bbf37c; } .ds-toggle:hover { border-color: #bbf37c; color: #fbf9f5; } .ds-toggle:focus-visible { outline: 2px solid #bbf37c; outline-offset: 3px; } .ds-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } .ds-state { color: #bbf37c; } .ds-state::before { content: '·'; margin-right: 8px; color: rgb(251 249 245 / 0.7); }"
+    },
+    {
+      "name": "Translation Gate",
+      "kind": "custom",
+      "refersTo": "crossing-carrier-arrived",
+      "description": "A crossing at rest: the lived moment on the canopy, the Sprout seam and arrived carrier, the record on paper.",
+      "html": "<div class=\"ds-gate\"><div class=\"ds-moment\"><p class=\"ds-when\">Rostering, the week before</p><p class=\"ds-text\">The coordinator drags a worker onto an overnight shift.</p></div><div class=\"ds-seam\"><span class=\"ds-carrier\">Shift assigned</span></div><div class=\"ds-record\"><span class=\"ds-tag\">Sample data</span><p>Assigning a shift runs 18 checks.</p></div></div>",
+      "css": ".ds-gate { display: grid; grid-template-columns: minmax(0, 4fr) 64px minmax(0, 8fr); align-items: center; gap: 0; padding: 32px 24px; background: #0f2000; } .ds-when { margin: 0; font: 600 0.75rem/1.4 Manrope, system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: #bbf37c; } .ds-text { margin: 14px 0 0; max-width: 21ch; font: 700 1.5rem/1.3 'Plus Jakarta Sans', system-ui, sans-serif; letter-spacing: -0.015em; color: #fbf9f5; } .ds-seam { position: relative; align-self: stretch; min-height: 200px; } .ds-seam::before { content: ''; position: absolute; top: 0; bottom: 0; left: 31px; width: 2px; border-radius: 2px; background: linear-gradient(to bottom, rgb(187 243 124 / 0), #bbf37c 14%, #bbf37c 86%, rgb(187 243 124 / 0)); } .ds-carrier { position: absolute; top: 50%; left: 32px; transform: translate(-50%, -50%); padding: 8px 14px; border-radius: 999px; background: #bbf37c; color: #0f2000; font: 700 0.8125rem/1.2 Manrope, system-ui, sans-serif; white-space: nowrap; box-shadow: 0 0 0 5px rgb(15 32 0 / 0.85); } .ds-record { padding: 28px; border-radius: 0.75rem; background: #fbf9f5; color: #1b1c1a; font: 400 0.9375rem/1.5 Manrope, system-ui, sans-serif; } .ds-tag { padding: 2px 8px; border-radius: 999px; background: #e4e2de; color: #43493a; font: 600 0.75rem/1.5 Manrope, system-ui, sans-serif; }"
     }
   ],
   "narrative": {
-    "northStar": "Tourist Drive",
-    "overview": "The page is the drive to the holiday. A visitor meets one wide green guide sign over a road that runs into layered ranges, reads the offer in a second, then follows a single route down the page. Six brown tourist signs mark the stops (Plan, Stay, Crew, Care, Fund and claim, Report on time), each opening onto the real product with sample data, until the road ends at the early-access form, marked \"Early access 0 km\". It is a Persuade surface for operations leads and coordinators at Australian NDIS providers that run supported holidays. The offer has to read as serious software, not as a holiday or transport company, so the sign grammar is restrained, the lettering is plain, the country does the nature work and the real screens do the proving.\n\nThe world is Australian road wayfinding with three sign colours and one job each. Green guide signs carry the offer and the destination. White-on-brown tourist signs mark each stop. Blue service signs are used only for Sign in. White Overpass lettering inside a white ring inset from the panel's edge is the whole sign language. The country the road runs through is authored SVG (Pale Slate sky, fern and olive ranges, Pale Sprout paddocks, ochre sandstone, white-trunked gums) and never carries copy.\n\nThe page is spacious, signed and staged; the app is dense and tonal, with shadows only on what acts or floats. They share only values copied by hand: the Organic Ledger greens, ink and paper, Manrope for reading and Material Symbols for pictograms. This file owns the landing's tokens, type roles, components and motion. Nothing here is imported into the app, and nothing from the app is imported here.\n\nThe page carries its own direction contract: a comment above the doctype in `index.html`, 150 words or fewer, in six labelled blocks (THESIS, OWN-WORLD, STORY, FIRST VIEWPORT, FORM, FINISH) that name the form (\"Australian road wayfinding\", candidate 3 of 7), the seed key 9680af9b and the staging (\"folding volume\": a concertina-folded road strip map). Its thesis is the rule everything below serves: the page is the drive to the holiday, one route, six exits and a destination, with no gradient hero, laptop mock-up or icon grid. The comment stays first in the file (pinned) and in the built page (a release check); with it there the page still renders in standards mode (checked in a browser in R1).",
+    "northStar": "Clearings in the Canopy",
+    "overview": "The landing page is the same product as the app, seen from outside. Its ground is a living light field: you look up into a eucalypt canopy at late sun, drawn in the app's own greens by one WebGL fragment shader. The product appears in that field as clearings of the app's warm paper: a dashboard readout in the first viewport, a record at the end of each crossing, and proof bands and the early-access form below. The nature side is the lived trip; the paper side is the record. The page's job is to show one becoming the other.\n\nThere is one canopy and many clearings, and they never blur into each other. Canopy text is warm paper at three strengths on forest, with Sprout as the single lit accent. Paper clearings are the app exactly: Ledger Ink text, Ruled Line borders, Field Grey inputs, the app's warning and error tones, and real screenshots of the app. Density is low on the canopy (big type, generous act gaps) and app-normal inside the clearings.\n\nThe page shares the app's tokens by value, not by import: welcome.css repeats the app's @theme values under the same names, and welcome/tokens.test.ts fails if the app changes a green and this page does not follow. This replaces the earlier stance that the landing was a separate world.",
     "keyCharacteristics": [
-      "Three sign colours, one job each: green is the offer, brown is the route and its stops, blue is Sign in",
-      "A sign is a coloured panel with a white ring inset from its edge, white Overpass lettering and a ring-bordered pictogram box",
-      "One route, six numbered stops counting down 60 km to 10 km, and the form at 0 km",
-      "The only 3D is the concertina: each stop is a paper sheet hinged at its top crease that unfolds (rotateX 58 degrees to flat) as it arrives, on desktop with motion allowed",
-      "Real product screens at natural size, each captioned with a \"Sample data\" tag; art-directed crops below 1024px",
-      "Authored SVG country; no photographs, no remote images, no icon font",
-      "Open by default: with no JavaScript or with reduced motion every fold is flat, the route fully drawn and the country still; under 1024px the folds stay flat and only the route draws",
-      "Claims only from the confirmed safe list; every number counted from the code"
+      "One full-bleed, fixed canopy behind everything, with a still poster as first paint and fallback.",
+      "Sickle-shaped gum leaves hanging in sprays from drooping twigs, in parallax layers, dense along the top edge and thinning downward; one sun, high on the right.",
+      "Soft, irregular pools of Sprout light dappling the field; no discs, no particles, no tile seams.",
+      "Paper clearings in the app's exact palette, holding the app's real screens.",
+      "The translation gate: a moment on the canopy crosses a seam of Sprout light and arrives as a record on paper.",
+      "Small tracked labels and instrument-style readouts in the margins, carrying Odip's own facts."
     ],
     "rules": [
-      {
-        "name": "The Sign Colour Rule",
-        "body": "Green is the offer and the destination, brown is the route and what sits on it, blue is Sign in. A sign colour never changes job. Blue appears on exactly three links today, all to `/login`.",
-        "section": "colors"
-      },
-      {
-        "name": "The Retroreflective White Rule",
-        "body": "White is a sign material: lettering, rings, rules, pictogram boxes, disc icons and the fields a visitor types into on a sign. It is also the canvas of a proof frame. It is never a page ground.",
-        "section": "colors"
-      },
-      {
-        "name": "The Country Stays Behind Rule",
-        "body": "The scenery is decorative (`aria-hidden`), static under reduced motion and never carries copy. Text sits on signs, paper, sand or a paper-tinted label. The one exception is the tour heading and lede over the wide-desktop backdrop, measured at 9.7:1 or better (R2).",
-        "section": "colors"
-      },
-      {
-        "name": "The Tinted Ground Rule",
-        "body": "No colour in the stylesheet is `#000`. Text is Ledger Ink, shadows take the dark of the surface they fall on, and band grounds are only country colours or Warm Paper.",
-        "section": "colors"
-      },
-      {
-        "name": "The Sign Voice Rule",
-        "body": "Overpass says, Manrope explains. Names, labels, figures and controls are Overpass; sentences, captions, intros, notes and typed text are Manrope. Headings use `text-wrap: balance`, paragraphs `text-wrap: pretty`.",
-        "section": "typography"
-      },
-      {
-        "name": "The Two Ranges Rule",
-        "body": "The only faces are Overpass 600 to 800 and Manrope 400 to 700, requested as two variable ranges from Google Fonts with `display=swap`. Both Latin subsets are preloaded so the hero's lettering is in place before first paint (CLS 0). Adding a face or weight is a new request and a new layout-shift risk.",
-        "section": "typography"
-      },
-      {
-        "name": "The Text Floor Rule",
-        "body": "Page text is never below 13px (0.8125rem). Text inside a proof screen is never below 12px as displayed (R1 fix 6, which is why crops exist). Km markers and odometer figures use tabular numerals.",
-        "section": "typography"
-      },
-      {
-        "name": "The Cast-Shadow Rule",
-        "body": "Shadows fall down and out, long (24px to 60px) with a negative spread, in a tint from the Shadow tints list. Hover lifts at most 2px (stage signs) and presses 1px (chips).",
-        "section": "elevation"
-      },
-      {
-        "name": "The One-3D Rule",
-        "body": "The fold is the only perspective on the page: one axis (rotateX at the sheet's top crease), 58 degrees at its peak, 1400px perspective, desktop with motion allowed. Everything else is flat and moves by translation only (the country's drift, the arrow nudges).",
-        "section": "elevation"
-      }
+      { "name": "The Same Greens Rule", "body": "Every colour on this page is an app token by value, declared under the app's own name in welcome.css :root and pinned by tokens.test.ts. A new colour needs a new app token first. Canopy text and hairlines are alpha mixes of Warm Paper and Sprout, never new hues.", "section": "colors" },
+      { "name": "The One Lamp Rule", "body": "Pale Sprout is the only lit thing on the canopy: the primary CTA, the current place, the seam and the sunlight. Never use it for body text, large fills or decoration on paper.", "section": "colors" },
+      { "name": "The Warm Base Rule", "body": "Never pure white and never pure black, on either ground. tokens.test.ts fails on #fff, #000, white, black or their rgb() forms in the stylesheet.", "section": "colors" },
+      { "name": "The Twelve Pixel Floor Rule", "body": "No text below 0.75rem (12px), including tags, labels and the pill.", "section": "typography" },
+      { "name": "The Small Caps Instrument Rule", "body": "Small tracked uppercase labels are for wayfinding and readouts only (section index, crossing 'when', reading labels, the pause control, footer headings). Below 1200px the pill drops the uppercase and tracking so the four items fit.", "section": "typography" },
+      { "name": "The Quiet Zone Rule", "body": "Text on the canopy never sits on moving light without a guaranteed ground. Every canopy text block carries data-quiet: live, the shader darkens the field behind it (six content zones plus two fixed ones, for the index and the pause control); on the poster, a soft forest scrim (80%, blurred 24px) does the same and fades out when the live field takes over. Worst sampled contrast at b25faca8 is 5.69:1 over 507 positions.", "section": "elevation" },
+      { "name": "The Flat Clearing Rule", "body": "Paper clearings never take a drop shadow. Their depth comes from the light pool the field throws round them (data-pool, up to six in view).", "section": "elevation" }
     ],
     "dos": [
-      "**Do** give each sign colour one job: green guide signs carry the offer and destination, brown tourist signs mark the route and its stops, blue service signs appear only on Sign in.",
-      "**Do** build every sign as a coloured panel with a white ring inset by its variant's gap, white Overpass lettering and a ring-bordered pictogram box, taking radius, gap and stroke from the variant table.",
-      "**Do** set anything a sign says (names, labels, figures, controls) in Overpass 600 to 800 and anything read (sentences, captions, intros, typed text) in Manrope 400 to 700.",
-      "**Do** keep the route honest: stops numbered 1 to 6 at 60, 50, 40, 30, 20 and 10 km and the form at 0 km. Change a stop's name, order or pictogram in the stops list, the stage sign, the shield, the fold id, the aria ids, the alt text and `page.test.ts` together.",
-      "**Do** keep the concertina's numbers (smoothstep, 1.0 to 0.45 of the viewport height, 58 degree peak, 1400px perspective, reading line at 60%) and check any change with a four-frame filmstrip at fold-top 98, 85, 70 and 60% of the viewport; the sentence must stay legible at the reading line.",
-      "**Do** make every motion default to open: with no JavaScript or with reduced motion every fold must be flat, the route fully drawn and the country still; under 1024px the folds stay flat whatever the preference.",
-      "**Do** show real screens from the real app at natural size, each in a figure whose caption starts with the \"Sample data\" tag and says only what the screen shows, with alt text that is a full sentence of what is on screen.",
-      "**Do** serve an art-directed `-m` crop below 1024px for every wide screen, 1x and 2x WebP, with `width` and `height` equal to the file's size, `loading=\"lazy\"` and `decoding=\"async\"`.",
-      "**Do** crop out app defects and fixture-only labels instead of showing them (raw enum text, the dark-on-dark body-map pill, authored notes boxes), and keep the footer's \"some on-screen notes were written for the sample\".",
-      "**Do** state counts exactly as the code counts them (18 roster checks: 2 hard stops, 16 warnings, 4 that ask for a reason; 11 incident types; 5 credentials; 3 funding types; 25 audited record types) and re-count them on the release commit.",
-      "**Do** say what Odip is in the first viewport: trip management software for NDIS providers that run supported holidays, one record for travellers, accommodation, staff, vehicles and funding, then the claims.",
-      "**Do** name every action for assistive tech at every width: the short header label stays visible and the link carries `aria-label=\"Request early access\"`.",
-      "**Do** make a sideways scroll frame a `role=\"group\"` named \"Screen: <caption>, scrolls sideways\", focusable only while it really scrolls, with the fade and hint only then.",
-      "**Do** keep the two-tone 3px focus ring on every interactive element and 44px or more on every target.",
-      "**Do** keep the form honest: a neutral collection notice identical under the form and in the footer, `TODO(release)` comments for facts the owner has not supplied (a timeframe is stated only if it will be honoured), a success message that repeats the typed address, typed values kept on every failure, and a duplicate email answered exactly like a new one.",
-      "**Do** show errors as text with a glyph on a tinted row, never colour alone, and move focus to the first invalid field or, with none, to the status line.",
-      "**Do** ship Submit disabled with the no-JavaScript note visible by default, and let the script hide the note and enable the button.",
-      "**Do** keep to the CSP: same-origin scripts only and none inline, images from self, data and blob, fonts from Google Fonts, fetch to self; the art stays authored SVG."
+      "Do take every colour, radius and face from the app's @theme by value, under the app's token name, and keep tokens.test.ts green.",
+      "Do give every block of text on the canopy a quiet zone (data-quiet) and re-run the pixel-sampled contrast check after any shader change: 4.5:1 for body text, 3:1 for large text, at the worst frame.",
+      "Do put the product on paper: real app screens with accurate alt text, one \"Sample data\" tag per figure.",
+      "Do keep Pale Sprout for the single brightest thing in each view: the CTA, the current place, the seam, the light.",
+      "Do keep every target at least 44px and the header on one line from 320px up.",
+      "Do recapture the poster with capture/poster.mjs after any change to canopy-shader.ts or STILL_TIME, and keep it well under 60 KB."
     ],
     "donts": [
-      "**Don't** build the NDIS SaaS template: the contract's \"no gradient hero, laptop mock-up or icon grid\", plus stock photography, a logo strip, a testimonial carousel or a pricing table. The sky, grass and sand bands are the country's horizon drawn from the palette, not a gradient hero.",
-      "**Don't** invent proof: no customers, testimonials, pricing, press, logos or ratings, and no customer count above one.",
-      "**Don't** claim integrations (Xero, Brevity, Employment Hero, Splose, Linxio, Budgetly), connecting or submitting to PRODA or the NDIS Commission, a 5-day rule or live countdown timers, a complaints register, offline mode or a PWA, data residency, e-signing, payment reconciliation, SMS, or per-traveller bed or room allocation. `page.test.ts` pins most of these words.",
-      "**Don't** over-read a feature. The 24 hours run from when the incident record was created in Odip, so say \"unreported 24 hours after it was logged\"; Odip flags it, the form does not; say \"keeps an audit history of changes\", never \"every change\". A shift note that mentions an injury \"prompts\" an incident report (an advisory keyword scan with false positives and negatives), never \"flags\" or \"detects\". Roster checks: \"Two block the shift; the others warn, and some ask for a reason\", never \"the rest\".",
-      "**Don't** promise an outcome in a name: the sixth stop is \"Report on time\", never \"Stay compliant\".",
-      "**Don't** say \"rooms\": the product reserves bed and bedroom counts. Say \"accommodation\".",
-      "**Don't** say Odip connects to PRODA: Odip exports the files and the provider uploads them. Say \"PRODA bulk file\" and re-check the \"BPR CSV\" and \"PRODA file\" labels on each release.",
-      "**Don't** use hype or scarcity: no exclamation marks, \"limited places\" or \"hurry\" (pinned).",
-      "**Don't** use blue for anything but Sign in, put copy on the scenery, or use `#000`.",
-      "**Don't** front-load the unfold. The easeOutCubic version spent 34 to 15 degrees inside the bottom 15% of the screen and read as a shade-in (R1 fix 4). Do not shorten the 1.0 to 0.45 range or lower the 58 degree peak without a filmstrip.",
-      "**Don't** ship a dead control: no `noscript` wrapper for the form note, and the script blocked with JavaScript on must look the same as JavaScript off (R1 fix 9).",
-      "**Don't** show a screen too small to read: no thumbnails, no proof text under 12px as shown, no run of nested sideways scrollers hiding the proof (R1 fix 6).",
-      "**Don't** let a scroll frame become a landmark: seven identical \"region\" labels failed axe (R1 fix 1).",
-      "**Don't** hide the short Request label from assistive tech (R1 fix 1).",
-      "**Don't** let blur validation move the layout under a pressed Submit.",
-      "**Don't** import the app's tokens, components or utilities here, or copy these tokens into the app.",
-      "**Don't** add a third face, an icon font, a photograph, a remote image, an inline script or a third-party script.",
-      "**Don't** add a figure without all of it: lazy 1x and 2x WebP, real alt text, manifest dimensions, the Sample-data tag and a manifest entry that says whether it is fixture-fed.",
-      "**Don't** let a fixture show a state the product cannot produce. A fixture-fed screen is flagged `fixture: true`, shows only labels the real API can send, and anything else waits on a recapture from real data (the \"NDIA Managed\" badge is the open case)."
+      "Don't use pure white or pure black anywhere, on either ground.",
+      "Don't add a colour, font or radius that the app does not have.",
+      "Don't set text over moving light without a quiet zone, or animate anything except the field, the crossings, the canvas fade-in and the 0.15s colour changes on controls.",
+      "Don't draw the light as discs, bokeh, particles or fireflies, or the leaves as straight blades; the light is soft pools under a gum canopy, and the leaves are sickle-shaped and hang from petioles.",
+      "Don't clip a leaf or a pool of light at a shader cell edge; no straight edge may appear in the field.",
+      "Don't make the header translucent: copy scrolling under a 95% header ghosts through it.",
+      "Don't scroll-jack, fake a loader, or put a screenshot on a gradient.",
+      "Don't shadow a paper clearing."
     ]
   }
 }
