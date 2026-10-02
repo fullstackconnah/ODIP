@@ -349,6 +349,26 @@ public class StaffController : ControllerBase
     // with no tenant selected, and a test that does not care.
     private readonly ICurrentTenant? _currentTenant;
 
+    private const string OtherOrganisationMessage = "That address belongs to another organisation on ODIP.";
+
+    /// <summary>
+    /// Global uniqueness of an address makes a squat permanent (the first tenant to type an address owns it, and an archived row keeps it), so a
+    /// caller who is not a SuperAdmin may not give staff an address at ANOTHER tenant's own email domain: it would block that tenant from ever adding
+    /// the person, and send the person into this tenant's workspace. Returns the refusal, or null. It is a refusal, not a question: it cannot be
+    /// confirmed away. The match is on the whole domain, so a subdomain is only unusual (AddressConfirmation), not another organisation's.
+    /// </summary>
+    private async Task<string?> OtherOrganisationAddressErrorAsync(string normalisedEmail, Guid? ownTenantId, CancellationToken ct)
+    {
+        if (User?.IsInRole("SuperAdmin") ?? false) return null;
+        var at = normalisedEmail.LastIndexOf('@');
+        if (at < 0) return null;
+
+        var domain = normalisedEmail[(at + 1)..];
+        var own = ownTenantId ?? Guid.Empty;
+        var belongsToAnother = await _db.Tenants.AnyAsync(t => t.EmailDomain == domain && t.Id != own, ct);
+        return belongsToAnother ? OtherOrganisationMessage : null;
+    }
+
     /// <summary>The email domain of a tenant, or null when none is given or it cannot be found. Tenants have no query filter, so any tenant is readable.</summary>
     private async Task<string?> TenantEmailDomainAsync(Guid? tenantId, CancellationToken ct) =>
         tenantId is null ? null : await _db.Tenants.Where(t => t.Id == tenantId).Select(t => t.EmailDomain).FirstOrDefaultAsync(ct);
@@ -519,6 +539,9 @@ public class StaffController : ControllerBase
         var reservedError = ReservedDomainError(emailLower);
         if (reservedError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(reservedError));
 
+        var otherOrganisationError = await OtherOrganisationAddressErrorAsync(emailLower, _currentTenant?.TenantId, ct);
+        if (otherOrganisationError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(otherOrganisationError));
+
         var emailTaken = await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email.ToLower() == emailLower, ct);
         if (emailTaken) return Conflict(ApiResponse<StaffDetailDto>.Fail("A user with this email already exists."));
 
@@ -599,6 +622,9 @@ public class StaffController : ControllerBase
         {
             var reservedError = ReservedDomainError(emailLower);
             if (reservedError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(reservedError));
+
+            var otherOrganisationError = await OtherOrganisationAddressErrorAsync(emailLower, s.TenantId, ct);
+            if (otherOrganisationError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(otherOrganisationError));
         }
 
         var emailTaken = await _db.Users.IgnoreQueryFilters()
