@@ -1,3 +1,4 @@
+using System.Globalization;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 
@@ -232,6 +233,76 @@ public static class EffectiveCatalogueResolver
                 $"Ambiguous overlapping catalogue rows exist for code '{mapping.ItemCode}' on {serviceDate:yyyy-MM-dd} ({dayType}).")
         };
     }
+
+    /// <summary>
+    /// The date-effective lookup: the single catalogue row for <paramref name="itemCode"/> that is valid on <paramref name="serviceDate"/>, and its price for
+    /// <paramref name="zone"/>, or a typed failure (none, ambiguous, zone not eligible, not priced). A row is valid from its own EffectiveFrom to its own
+    /// EffectiveTo (open-ended when null), both days included. IsActive is deliberately not consulted: an import end-dates the rows a newer catalogue
+    /// supersedes and marks them inactive, yet each is still the right row for the service dates inside its window, and a plan that crosses 1 July
+    /// needs both years' prices. The code is matched exactly, registration group included, because the same digits mean different items in
+    /// different groups. Pure: callers load the rows (see <c>FindCatalogueItemAsync</c> for the database path).
+    /// </summary>
+    public static CatalogueLookupResult Find(IEnumerable<SupportCatalogueItem> catalogueItems, string itemCode, DateOnly serviceDate, PriceZone zone)
+    {
+        ArgumentNullException.ThrowIfNull(catalogueItems);
+        var code = itemCode?.Trim() ?? string.Empty;
+        var date = serviceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        var matches = code.Length == 0
+            ? new List<SupportCatalogueItem>()
+            : catalogueItems.Where(item =>
+                string.Equals(item.ItemNumber, code, StringComparison.Ordinal) &&
+                item.EffectiveFrom <= serviceDate &&
+                (!item.EffectiveTo.HasValue || item.EffectiveTo.Value >= serviceDate)).ToList();
+
+        if (matches.Count == 0)
+            return CatalogueLookupResult.Fail(CatalogueLookupFailure.NotFound, null, $"No catalogue row for '{code}' is valid on {date}.");
+        if (matches.Count > 1)
+            return CatalogueLookupResult.Fail(CatalogueLookupFailure.Ambiguous, null,
+                $"{matches.Count.ToString(CultureInfo.InvariantCulture)} catalogue rows for '{code}' are valid on {date}: the catalogue has overlapping versions of this item.");
+
+        var item = matches[0];
+        if (item.PriceNational is null)
+            return CatalogueLookupResult.Fail(CatalogueLookupFailure.NotPriced, item, $"'{code}' has no price limit on {date} (a quotable item, or a row with no National price).");
+
+        var price = zone switch
+        {
+            PriceZone.National => item.PriceNational,
+            PriceZone.Remote => item.PriceRemote,
+            PriceZone.VeryRemote => item.PriceVeryRemote,
+            _ => throw new ArgumentOutOfRangeException(nameof(zone), zone, "Unknown price zone.")
+        };
+        return price is null
+            ? CatalogueLookupResult.Fail(CatalogueLookupFailure.ZoneNotEligible, item, $"'{code}' lists no {zone} price on {date}, so it is not eligible for that loading.")
+            : CatalogueLookupResult.Success(item, price.Value);
+    }
+}
+
+/// <summary>Why <see cref="EffectiveCatalogueResolver.Find"/> returned no price.</summary>
+public enum CatalogueLookupFailure
+{
+    /// <summary>No row for the code is valid on the service date (an unknown code, a date before the first catalogue, or after the last row ended).</summary>
+    NotFound = 0,
+    /// <summary>More than one row for the code is valid on the service date: overlapping versions, which an import never leaves behind.</summary>
+    Ambiguous = 1,
+    /// <summary>One row is valid but lists no price for the zone: the item is not eligible for Remote / Very Remote loading.</summary>
+    ZoneNotEligible = 2,
+    /// <summary>One row is valid but has no National price: a quotable item (claimable only if a stated plan item), or a row written before zone prices existed.</summary>
+    NotPriced = 3
+}
+
+/// <summary>The outcome of a date-effective lookup. <see cref="Item"/> is set whenever exactly one row was valid, including the two price failures; <see cref="Price"/> only on success.</summary>
+public sealed record CatalogueLookupResult
+{
+    public SupportCatalogueItem? Item { get; init; }
+    public decimal? Price { get; init; }
+    public CatalogueLookupFailure? Failure { get; init; }
+    public string? Message { get; init; }
+
+    public bool Found => Failure is null;
+
+    internal static CatalogueLookupResult Success(SupportCatalogueItem item, decimal price) => new() { Item = item, Price = price };
+    internal static CatalogueLookupResult Fail(CatalogueLookupFailure failure, SupportCatalogueItem? item, string message) => new() { Failure = failure, Item = item, Message = message };
 }
 
 public enum ShiftTimeBand { Night, Am, Pm, Evening }

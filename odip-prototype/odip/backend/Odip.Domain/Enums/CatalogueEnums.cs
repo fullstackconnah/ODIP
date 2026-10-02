@@ -48,6 +48,14 @@ public enum SupportFamily
     Other = 9
 }
 
+/// <summary>Where a support is delivered, which decides the price column: MM1-5 National, MM6 Remote (x1.40), MM7 Very Remote (x1.50).</summary>
+public enum PriceZone
+{
+    National = 0,
+    Remote = 1,
+    VeryRemote = 2
+}
+
 /// <summary>The price layout of a support catalogue workbook, told apart by its header row.</summary>
 public enum CatalogueFileFormat
 {
