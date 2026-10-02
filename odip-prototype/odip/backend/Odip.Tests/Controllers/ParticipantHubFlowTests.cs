@@ -450,11 +450,11 @@ public class ParticipantHubFlowTests
     }
 
     [Fact]
-    public async Task Lifecycle_InEnforceMode_CompletingTheProfileDoesNotActivate_AndTheStatusEndpointGivesTheReason()
+    public async Task Lifecycle_InEnforceMode_CompleteProfileIsRefusedWithTheEvidenceReason_AndTheParticipantStaysOnOnboarding()
     {
-        // Enforce keeps the fail-closed rule: activation needs verified signed-agreement evidence, which nobody has yet. The participant
-        // is finalised (so no longer in onboarding or an enquiry) but is not on the Active register, and is still listed somewhere
-        // (Archived, which is not narrowed by the stage rule) where Restore reaches the same refusal.
+        // Enforce keeps the fail-closed rule: activation needs verified signed-agreement evidence, which nobody has yet. Finalising without being able to
+        // activate would leave the participant in no stage, so Complete Profile is refused and they stay a draft on Onboarding, where the agreement-evidence
+        // gate of their checklist says why.
         var tenantId = Guid.NewGuid();
         using var caller = NewCaller(tenantId);
         await SetReadinessModeAsync(caller.Db, tenantId, ParticipantReadinessMode.Enforce);
@@ -463,16 +463,18 @@ public class ParticipantHubFlowTests
         Ok(await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "Lovelace", complete: true), CancellationToken.None));
         Assert.Equal(participantId, Assert.Single(await WorklistAsync(caller)).ParticipantId);
 
-        var completed = Ok(await caller.Participants.CompleteProfile(participantId, CancellationToken.None));
+        var refusal = await caller.Participants.CompleteProfile(participantId, CancellationToken.None);
 
-        Assert.False(completed.IsDraft);
-        Assert.False(completed.IsActive);
-        Assert.Empty(await WorklistAsync(caller));
-        Assert.Empty(await ActiveRegisterAsync(caller));
-        Assert.Equal(participantId, Assert.Single(await ArchivedAsync(caller)).Id);
-        var refusal = await caller.Participants.ChangeStatus(participantId, new ChangeParticipantStatusDto { IsActive = true }, CancellationToken.None);
-        var failure = Assert.IsType<ApiResponse<ParticipantStatusResultDto>>(Assert.IsType<BadRequestObjectResult>(refusal.Result).Value);
+        var failure = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<BadRequestObjectResult>(refusal.Result).Value);
         Assert.Equal("This participant cannot be activated until their signed service agreement evidence is recorded.", Assert.Single(failure.Errors!));
+        var saved = await caller.Db.Participants.SingleAsync();
+        Assert.True(saved.IsDraft);
+        Assert.False(saved.IsActive);
+        Assert.Equal(participantId, Assert.Single(await WorklistAsync(caller)).ParticipantId);
+        Assert.Empty(await ActiveRegisterAsync(caller));
+        Assert.Empty(await ArchivedAsync(caller));
+        var checklist = Ok(await caller.Inquiries.GetOnboarding(participantId, CancellationToken.None));
+        Assert.Contains(checklist.Reasons, reason => reason.Contains("agreement evidence", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

@@ -30,6 +30,7 @@ type FakeParticipant = {
 type FakeInquiry = { id: string; firstName: string; lastName: string; phone: string | null; source: string; participantId: string | null; createdAt: string }
 
 const INTAKE_DONE_AT = '2026-10-02T03:00:00Z'
+const EVIDENCE_REQUIRED = 'This participant cannot be activated until their signed service agreement evidence is recorded.'
 const httpError = (status: number, message: string) =>
   Object.assign(new Error(`Request failed with status code ${status}`), { response: { status, data: { success: false, errors: [message] } } })
 const paged = (items: unknown[]) => ({ items, totalCount: items.length, page: 1, pageSize: 200, totalPages: 1, hasNext: false, hasPrevious: false })
@@ -132,8 +133,9 @@ function createServer(mode: Mode, extra: FakeParticipant[] = []) {
     return { success: true, data: { id: url.split('/')[2] } }
   })
 
-  // ParticipantsController.CompleteProfile / ChangeStatus / Restore: a draft is finalised only by complete-profile, which activates in Warn mode and
-  // not in Enforce (no signed-agreement evidence exists). The status endpoint refuses a draft, and refuses activation under Enforce.
+  // ParticipantsController.CompleteProfile / ChangeStatus / Restore: a draft is finalised only by complete-profile, which also activates them: Warn
+  // does, Enforce (no signed-agreement evidence exists) refuses with the evidence message and leaves the draft on Onboarding. The status endpoint
+  // refuses a draft, and refuses activation under Enforce.
   mockApiPostRaw.mockImplementation(async (url: string, body: { isActive?: boolean }) => {
     calls.push(`POST ${url}`)
     const completeProfile = /^\/participants\/([^/]+)\/complete-profile$/.exec(url)
@@ -141,9 +143,10 @@ function createServer(mode: Mode, extra: FakeParticipant[] = []) {
       const participant = find(completeProfile[1])
       if (participant.isDraft) {
         if (!participant.intakeCompletedAt) throw httpError(400, "Complete the participant's intake before completing their profile.")
+        // A draft marked active has nothing to activate; otherwise Enforce refuses and the participant stays a draft.
+        if (!participant.isActive && mode === 'Enforce') throw httpError(400, EVIDENCE_REQUIRED)
         participant.isDraft = false
-        // Already active (a draft marked active) stays active; otherwise the readiness mode decides.
-        if (!participant.isActive) participant.isActive = mode === 'Warn'
+        participant.isActive = true
       }
       return { success: true, data: { id: participant.id, fullName: name(participant), isDraft: participant.isDraft, isActive: participant.isActive, intakeCompletedAt: participant.intakeCompletedAt } }
     }
@@ -151,7 +154,7 @@ function createServer(mode: Mode, extra: FakeParticipant[] = []) {
     if (status) {
       const participant = find(status[1])
       if (participant.isDraft) throw httpError(400, 'A draft participant cannot be activated. Complete their intake and profile first.')
-      if ((status[2] === 'restore' || body.isActive) && mode === 'Enforce') throw httpError(400, 'This participant cannot be activated until their signed service agreement evidence is recorded.')
+      if ((status[2] === 'restore' || body.isActive) && mode === 'Enforce') throw httpError(400, EVIDENCE_REQUIRED)
       participant.isActive = status[2] === 'restore' ? true : !!body.isActive
       return { success: true, data: { id: participant.id, isActive: participant.isActive, isDraft: participant.isDraft, changed: true, warnings: [] } }
     }
@@ -294,7 +297,7 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
 })
 
 describe('Participants lifecycle (wire) — readiness in Enforce mode', () => {
-  it('finalises the participant on Complete Profile but does not activate them: no hand-off to the Active tab, and the server says why', async () => {
+  it('refuses Complete Profile with the server\'s reason and keeps the participant on Onboarding: nothing is finalised, so nobody falls out of a tab', async () => {
     createServer('Enforce')
     const user = userEvent.setup()
     const router = renderApp('/participants?tab=enquiries')
@@ -304,22 +307,19 @@ describe('Participants lifecycle (wire) — readiness in Enforce mode', () => {
     await screen.findByText('Intake complete — Ada Lovelace is now in onboarding.')
     await openChecklistAndCompleteProfile(user)
 
-    // Not activated, so no hand-off to the Active tab: they stay on their own record.
-    expect(await screen.findByText('Participant detail')).toBeInTheDocument()
+    // The wizard shows the server's reason and stays where it is: no hand-off to the Active tab, and not on the record either.
+    expect(await screen.findByRole('alert')).toHaveTextContent(EVIDENCE_REQUIRED)
+    expect(router.state.location.pathname).toBe('/participants/p-ada/profile')
+    expect(screen.queryByText('Participant detail')).not.toBeInTheDocument()
     expect(mockApiPostRaw).toHaveBeenCalledWith('/participants/p-ada/complete-profile', {})
 
-    // Finalised, so they have left Onboarding; not active, so they are not on the Active tab either.
+    // Still a draft in onboarding: listed on Onboarding, and on neither the Active tab nor its Archived view.
     await router.navigate('/participants?tab=onboarding')
-    expect(await screen.findByText('No participants in onboarding')).toBeInTheDocument()
+    expect(within(await findRow('Ada Lovelace')).getByText('Validate profile essentials')).toBeInTheDocument()
     await user.click(tab('Active participants'))
     expect(await screen.findByText('Alex Active')).toBeInTheDocument()
     expect(screen.queryByText('Ada Lovelace')).not.toBeInTheDocument()
-
-    // The Archived view lists every finalised participant who is not active, so nobody is lost. Restore reaches the same refusal as the status endpoint.
     await user.click(screen.getByRole('radio', { name: 'Archived' }))
-    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
-    await user.click(within(await findRow('Ada Lovelace')).getByRole('button', { name: 'Restore' }))
-    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Restore' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('This participant cannot be activated until their signed service agreement evidence is recorded.')
+    expect(await screen.findByText('No archived participants')).toBeInTheDocument()
   }, 60_000)
 })

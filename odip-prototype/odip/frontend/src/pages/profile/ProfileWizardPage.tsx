@@ -417,9 +417,10 @@ export default function ProfileWizardPage() {
         // wizard does): the per-step saves never reset the form, so without this a finished wizard that had any
         // edit in it asks "Leave without saving?" on its way out.
         flushSync(() => reset(getValues()))
-        // Completing the profile ends the onboarding of a participant who was in it: when the organisation's readiness rule let that activate them
-        // (Warn does) they are an active participant and have left the Onboarding tab, so show them on the Active participants tab. Anyone else (an
-        // edit to a participant who was already finalised, or one readiness did not activate yet: Enforce) goes back to their own record.
+        // Completing the profile ends the onboarding of a participant who was in it, and activates them (Warn does; under Enforce the server refuses
+        // while there is no signed-agreement evidence, which lands in the catch below with its reason and leaves them in onboarding). They are an active
+        // participant and have left the Onboarding tab, so show them on the Active participants tab. Anyone else (an edit to a participant who was
+        // already finalised) goes back to their own record.
         if (wasInOnboarding && res.data?.isActive) {
           navigate(ACTIVE_TABLE_PATH, { state: participantActivatedState(id, res.data.fullName || participant.fullName) })
         } else {

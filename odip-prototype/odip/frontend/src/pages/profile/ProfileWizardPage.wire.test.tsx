@@ -123,16 +123,20 @@ describe('ProfileWizardPage (wire) — completing the profile', () => {
     expect(screen.queryByText('Participant detail')).not.toBeInTheDocument()
   })
 
-  it('stays with the participant\'s record when completing finalises them but readiness does not activate them yet (Enforce)', async () => {
-    mockApiPostRaw.mockResolvedValue({ success: true, data: { id: 'participant-1', fullName: 'Jamie Rivers', isDraft: false, isActive: false } })
+  it('shows the server\'s evidence reason and stays on the wizard when readiness will not activate the participant yet (Enforce): they stay in onboarding', async () => {
+    // The server refuses Complete Profile for a draft it cannot activate (ParticipantsController.CompleteProfile) and leaves them a draft on Onboarding.
+    mockApiPostRaw.mockRejectedValue(apiError(400, 'This participant cannot be activated until their signed service agreement evidence is recorded.'))
     const user = userEvent.setup()
     renderWizard()
     await walkToReview(user)
 
     await user.click(screen.getByRole('button', { name: /complete profile/i }))
 
-    expect(await screen.findByText('Participant detail')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('This participant cannot be activated until their signed service agreement evidence is recorded.')
+    expect(screen.queryByText('Participant detail')).not.toBeInTheDocument()
     expect(screen.queryByText('Participants list')).not.toBeInTheDocument()
+    // Still usable: the button is back, so the coordinator can retry once the evidence is recorded.
+    expect(screen.getByRole('button', { name: /complete profile/i })).toBeEnabled()
   })
 
   it('returns to the record, not the Active tab, when the participant was already finalised: this edit did not finish an onboarding', async () => {

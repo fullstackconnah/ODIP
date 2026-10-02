@@ -25,10 +25,10 @@ A draft's tab follows its intake alone. `IsActive` is not read for a draft: it d
 false (the seeded demo draft is one) kept it, so asking "not active" as well left such a draft on no tab once its intake was complete.
 
 Completing the intake moves a participant from the first two to Onboarding. **Completing the profile** (`POST /participants/{id}/complete-profile`,
-the Profile wizard's Complete Profile) finalises them and applies the organisation's readiness mode: Warn activates, Enforce does not (no signed
-agreement evidence exists yet). The wizard then opens `/participants?tab=active` with a one-off confirmation. The status endpoint cannot be the
-step that ends onboarding: it refuses a draft ("Complete their intake and profile first"), and a participant in onboarding is a draft until their
-profile is complete.
+the Profile wizard's Complete Profile) finalises them and, under the organisation's readiness mode, activates them: Warn does; Enforce
+needs verified signed-agreement evidence, which does not exist yet, so Complete Profile is refused (see Enforce below). The wizard then opens
+`/participants?tab=active` with a one-off confirmation. The status endpoint cannot be the step that ends onboarding: it refuses a draft ("Complete
+their intake and profile first"), and a participant in onboarding is a draft until their profile is complete.
 
 ## Endpoints
 
@@ -37,6 +37,7 @@ profile is complete.
 | `GET /inquiries/onboarding-worklist` | Lists participants in onboarding by the rule above. A participant with no onboarding row (intake completed before completion created one; no migration backfilled it) is listed with a blank checklist. Active, archived and open-intake participants are no longer listed. |
 | `GET /inquiries/{id}/onboarding` | Returns the blank checklist for such a participant instead of 404, writing nothing. A participant who is not in onboarding and has no row is still 404. |
 | `POST /inquiries/{id}/onboarding/profile-validation`, `.../service-needs-confirmation` | Store the missing row in the same save as the validation. |
+| `POST /participants/{id}/complete-profile` | Refuses with 400 ("This participant cannot be activated until their signed service agreement evidence is recorded.", the status endpoint's wording) when the participant is a draft that is not already active and the readiness mode does not allow activation; `IsDraft` stays true. Otherwise as before. |
 | `GET /inquiries` | Also returns drafts with an open intake that no enquiry links: `IsDirectIntake`, `Id` = the participant's id, empty `Source`. The tab lists only open enquiries (New, Draft intake). |
 
 No schema change, no migration.
@@ -50,11 +51,14 @@ No schema change, no migration.
   button (a link to the Profile wizard) whenever the participant is a draft with the intake complete, so no gate state leaves nothing that ends
   onboarding; its gate action is "Validate profile data", not to be mistaken for the wizard's Complete Profile.
 
-## Known limitation
+## Enforce
 
-Under Enforce, Complete Profile finalises a participant who cannot be activated. They are no longer in onboarding and not active, so they are listed
-under Archived, where Restore shows the server's evidence message. Keeping them on Onboarding needs a "never activated" marker the data does not
-have; decide before Enforce is switched on for an organisation.
+Under Enforce, finalising a draft that cannot be activated would leave it in no stage: not in onboarding, not active, and "Archived" is wrong for someone never
+activated. So Complete Profile is refused for it (above); it stays a draft on Onboarding, where the checklist's agreement-evidence gate says why, and the
+Profile wizard shows the server's message. A draft that is already marked active has nothing to activate and is finalised as before.
+
+Not changed here: a participant activated under Warn whose organisation later switches to Enforce is active but not strict-ready, so the operational register
+excludes them from the Active tab, and they are not in onboarding. They are on no tab until evidence exists; decide before Enforce is switched on.
 
 ## Tests
 
