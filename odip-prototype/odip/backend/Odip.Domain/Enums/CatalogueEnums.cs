@@ -65,7 +65,11 @@ public enum CatalogueFileFormat
     StateColumns = 1
 }
 
-/// <summary>The intensity of an hourly support item. Not applicable (null) to sleepover, accommodation, travel, transport and centre items.</summary>
+/// <summary>
+/// The intensity of a support item, from the classification map. A sleepover is <see cref="Standard"/> (it sits in the standard rows of NDIS-CODES 11.1).
+/// It is null where intensity does not apply: accommodation nights, provider travel, activity-based transport and centre capital cost, and every item
+/// the map does not name (<see cref="SupportFamily.Other"/>).
+/// </summary>
 public enum SupportIntensity
 {
     Standard = 0,
