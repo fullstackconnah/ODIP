@@ -108,7 +108,12 @@ public class DemoDataWiringTests
     private static DemoDataMaintainer MaintainerFor(DemoDataOptions options, params IDemoPack[] packs) =>
         new(options, TimeProvider.System, new CapturingLogger<DemoDataMaintainer>(), packs, new InProcessTickLock());
 
-    private static (ServiceProvider Provider, DemoTestEnv Env, List<DateTime> Ticks, DemoDataOptions Options) OnProvider(Action<List<DateTime>>? onTick = null)
+    /// <summary>
+    /// A service whose pack records when each tick STARTS. <paramref name="gate"/>, when given, holds every tick (inside the pack) until
+    /// the test completes it, so a test can look at a tick that is still running without racing the clock.
+    /// </summary>
+    private static (ServiceProvider Provider, DemoTestEnv Env, List<DateTime> Ticks, DemoDataOptions Options) OnProvider(
+        Task? gate = null, TimeSpan? firstRunDelay = null)
     {
         var env = DemoTestEnv.At(2026, 10, 2, 0, 30);
         env.AddTenantAsync().GetAwaiter().GetResult();
@@ -116,10 +121,14 @@ public class DemoDataWiringTests
         var options = new DemoDataOptions
         {
             Scenarios = DemoScenarioMode.On,
-            FirstRunDelay = TimeSpan.FromMilliseconds(40),
+            FirstRunDelay = firstRunDelay ?? TimeSpan.FromMilliseconds(40),
             Interval = TimeSpan.FromMilliseconds(60),
         };
-        var pack = DemoTestEnv.Pack("tick", (_, _) => { lock (ticks) ticks.Add(DateTime.UtcNow); onTick?.Invoke(ticks); return Task.CompletedTask; });
+        var pack = DemoTestEnv.Pack("tick", async (_, ct) =>
+        {
+            lock (ticks) ticks.Add(DateTime.UtcNow);
+            if (gate is not null) await gate.WaitAsync(ct);
+        });
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -144,16 +153,28 @@ public class DemoDataWiringTests
     [Fact]
     public async Task TheHostedService_WaitsBeforeTheFirstTick_ThenTicksOnTheInterval_AndStopsWhenAsked()
     {
-        var (provider, _, ticks, _) = OnProvider();
+        // Nothing below depends on how fast the test thread gets to run, because this test runs inside the image build on a loaded runner
+        // (it used to assert "no tick yet" a few milliseconds after StartAsync, against a 40 ms first-run delay). The first tick is held
+        // on a gate the test opens, and the delay is long next to a scheduling stall and to the coarse timers of a Windows machine.
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var (provider, _, ticks, options) = OnProvider(gate.Task, firstRunDelay: TimeSpan.FromMilliseconds(400));
         await using var scopeGuard = provider;
         var service = provider.GetServices<IHostedService>().OfType<DemoDataHostedService>().Single();
         var startedAt = DateTime.UtcNow;
 
-        await service.StartAsync(CancellationToken.None);
-        Assert.Empty(ticks);                                   // StartAsync returns at once: readiness never waits for the demo data
+        // StartAsync returns at once: readiness never waits for the demo data. A service that ran the held first tick inline would
+        // never come back, so the wait turns that into a failure instead of a hang.
+        await service.StartAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
 
-        Assert.True(await WaitForAsync(ticks, 3) >= 3);
-        Assert.True(ticks[0] - startedAt >= TimeSpan.FromMilliseconds(30), "the first tick must wait for the first-run delay");
+        Assert.True(await WaitForAsync(ticks, 1) >= 1, "the first tick never started");
+        Assert.True(ticks[0] - startedAt >= TimeSpan.FromMilliseconds(300), "the first tick must wait for the first-run delay");
+
+        // The first tick is still running (held), so the loop must not start a second one on top of it.
+        await Task.Delay(options.Interval * 3);
+        lock (ticks) Assert.Single(ticks);
+
+        gate.SetResult();
+        Assert.True(await WaitForAsync(ticks, 3) >= 3, "the service must keep ticking on the interval once the first tick is done");
 
         await service.StopAsync(CancellationToken.None);
         int count;
