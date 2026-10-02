@@ -428,7 +428,9 @@ public enum ClaimDayType
     Weekend = 3,
     PublicHoliday = 4,
     ShortNotice = 5,
-    WeekdayEvening = 6
+    WeekdayEvening = 6,
+    /// <summary>The catalogue's separate Weekday Night items (ASC, STA and their high-intensity twins). Appended: the values above are persisted.</summary>
+    WeekdayNight = 7
 }
 
 public enum ClaimType

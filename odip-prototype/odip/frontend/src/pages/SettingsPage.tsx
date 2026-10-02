@@ -14,7 +14,7 @@ import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import TemplateFormPanel from '@/components/TemplateFormPanel'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
-import type { MedicationCompetencyMode, EventTemplateDto, ActivityDto, ProviderSettingsDto, ParticipantReadinessMode, UpsertProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
+import type { MedicationCompetencyMode, EventTemplateDto, ActivityDto, ProviderSettingsDto, ParticipantReadinessMode, UpsertProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueFileFormat, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
 import type { AxiosError } from 'axios'
 import TenantsTab from '@/pages/settings/TenantsTab'
 import TenantFormPanel from '@/pages/settings/TenantFormPanel'
@@ -480,6 +480,11 @@ function ProviderSettingsTab() {
   )
 }
 
+/** What the uploaded workbook's header row showed: the 2026-27 layout (zone prices) or the 2025-26 one (a column per state). */
+function catalogueFormatLabel(format: CatalogueFileFormat): string {
+  return format === 'StateColumns' ? 'One price per state (2025-26 layout)' : 'National / Remote / Very Remote prices (2026-27 layout)'
+}
+
 function SupportCatalogueTab() {
   const { data: groups = [] } = useSupportCatalogue()
   const [importing, setImporting] = useState(false)
@@ -518,8 +523,8 @@ function SupportCatalogueTab() {
       setVersion(data.data?.detectedVersion || '')
       setPreviewStep('preview')
     } catch (err: unknown) {
-      const axiosErr = err as AxiosError<{ message?: string }>
-      setImportError(axiosErr?.response?.data?.message || 'Upload failed')
+      // The API explains a refusal in errors[0] (ApiResponse.Fail); the old `data.message` read always fell back to the generic text.
+      setImportError(extractErrorMessage(err, 'Upload failed'))
     } finally {
       setUploading(false)
     }
@@ -536,8 +541,7 @@ function SupportCatalogueTab() {
       setPreview(null)
       setImporting(false)
     } catch (err: unknown) {
-      const axiosErr = err as AxiosError<{ message?: string }>
-      setImportError(axiosErr?.response?.data?.message || 'Confirm failed')
+      setImportError(extractErrorMessage(err, 'Confirm failed'))
     } finally {
       setConfirming(false)
     }
@@ -548,7 +552,7 @@ function SupportCatalogueTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-semibold text-[var(--color-foreground)]">Support Catalogue</h2>
-          <p className="text-sm text-[var(--color-muted-foreground)]">NDIS price limits for Category 04 — Group Access.</p>
+          <p className="text-sm text-[var(--color-muted-foreground)]">NDIS price limits, every support item in the catalogue.</p>
         </div>
         <Button size="md" onClick={() => { setImporting(true); setPreviewStep('upload'); setImportError(null) }}>
           Import Catalogue
@@ -615,10 +619,15 @@ function SupportCatalogueTab() {
 
             {previewStep === 'preview' && preview && (
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="text-sm text-[var(--color-muted-foreground)]">
+                  <p>{preview.sourceDocument} — {catalogueFormatLabel(preview.detectedFormat)}</p>
+                  <p>Starts {formatDateAu(preview.effectiveFrom)} · {(preview.rows ?? []).length} rows, {preview.legacyItems} legacy</p>
+                </div>
+                <div className="grid grid-cols-4 gap-3 text-center">
                   <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">New items</p><p className="text-xl font-bold text-[var(--color-primary)]">{preview.itemsToAdd}</p></div>
                   <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">Updated</p><p className="text-xl font-bold text-[var(--color-warning)]">{(preview.rows ?? []).filter((r: CatalogueImportRowDto) => r.priceChanged).length}</p></div>
-                  <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">To deactivate</p><p className="text-xl font-bold text-[var(--color-destructive)]">{preview.itemsToDeactivate}</p></div>
+                  <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">Unchanged</p><p className="text-xl font-bold text-[var(--color-foreground)]">{preview.itemsUnchanged}</p></div>
+                  <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">To end-date</p><p className="text-xl font-bold text-[var(--color-destructive)]">{preview.itemsToDeactivate}</p></div>
                 </div>
                 {(preview.warnings ?? []).length > 0 && (
                   <div className="bg-[var(--color-warning-container)] rounded-[var(--radius-md)] p-[var(--card-pad)] text-xs text-[var(--color-on-warning-container)] space-y-1">

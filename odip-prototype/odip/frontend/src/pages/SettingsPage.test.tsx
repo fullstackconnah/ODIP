@@ -89,7 +89,15 @@ vi.mock('@/lib/permissions', () => ({
   usePermissions: mockUsePermissions,
 }))
 
+// The catalogue import posts straight through apiClient (preview upload, then confirm with every row), so that is the seam these tests drive.
+const { mockImportPost } = vi.hoisted(() => ({ mockImportPost: vi.fn() }))
+vi.mock('@/api/client', async () => {
+  const actual = await vi.importActual<typeof import('@/api/client')>('@/api/client')
+  return { ...actual, apiClient: Object.assign(Object.create(actual.apiClient), { post: mockImportPost }) }
+})
+
 beforeEach(() => {
+  mockImportPost.mockReset()
   mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
   mockUseEventTemplates.mockReturnValue({ data: [] })
   providerSettings.current = {}
@@ -431,6 +439,113 @@ describe('SettingsPage — Notifications tabs', () => {
 
     await user.click(screen.getByRole('tab', { name: /^notifications$/i }))
     expect(screen.getByText(/notification preferences/i)).toBeInTheDocument()
+  })
+})
+
+describe('SettingsPage — catalogue import preview', () => {
+  // Rows exactly as the API sends them: defaults (false, 0) and nulls are left out of the JSON.
+  const rows = [
+    {
+      itemNumber: '04_104_0125_6_1', description: 'Access Community Social and Rec Activ - Standard - Weekday Daytime', dayType: 'Weekday', unit: 'H',
+      registrationGroup: '0125', supportCategoryNumber: 4, paceSupportCategoryNumber: 4, outcomeDomain: 6, supportPurpose: 1, catalogueType: 'Priced',
+      nonFaceToFace: 'Yes', providerTravel: 'Yes', shortNoticeCancellation: 'Yes', ndiaRequestedReports: 'No', irregularSil: 'No',
+      priceLimit_ACT: 73.58, priceLimit_NSW: 73.58, priceLimit_NT: 73.58, priceLimit_QLD: 73.58, priceLimit_SA: 73.58, priceLimit_TAS: 73.58,
+      priceLimit_VIC: 73.58, priceLimit_WA: 73.58, priceLimit_Remote: 103.01, priceLimit_VeryRemote: 110.37,
+      effectiveFrom: '2026-07-01', priceNational: 73.58, priceRemote: 103.01, priceVeryRemote: 110.37,
+      sourceDocument: 'support-catalogue-2026-27.xlsx', family: 'CommunityAccess', groupCode: 'GRP_COMMUNITY_ACCESS', isNew: true,
+    },
+    {
+      itemNumber: '01_058_0115_1_1', description: 'STA And Assistance (Inc. Respite) - 1:1 - Weekday', dayType: 'Weekday', unit: 'D', registrationGroup: '0115',
+      isLegacy: true, effectiveFrom: '2026-07-01', effectiveTo: '2027-06-30', priceNational: 2178.57, sourceDocument: 'support-catalogue-2026-27.xlsx',
+      family: 'Other', groupCode: 'GRP_OTHER', isNew: true,
+    },
+  ]
+  const preview = (detectedFormat: string) => ({
+    detectedVersion: '2026-27', detectedFormat, sourceDocument: 'support-catalogue-2026-27.xlsx', effectiveFrom: '2026-07-01',
+    itemsToAdd: 2, itemsUnchanged: 0, legacyItems: 1, itemsToDeactivate: 4, rows,
+    warnings: ['Existing item 04_212_0125_6_1 (Group Activities - Standard - Saturday - TTP) is not in the new catalogue and will be end-dated 2026-06-30.'],
+  })
+
+  async function openPreview(detectedFormat = 'NationalRemote') {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    mockImportPost.mockResolvedValueOnce({ data: { data: preview(detectedFormat) } })
+    renderSettingsPageWithQueryClient()
+
+    await user.click(screen.getByRole('tab', { name: 'Support Catalogue' }))
+    await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
+    const file = new File(['xlsx'], 'support-catalogue-2026-27.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file)
+    await screen.findByText('Catalogue Version')
+    return { user, file }
+  }
+
+  it('uploads the file, then shows what it is, when it starts and what will change', async () => {
+    const { file } = await openPreview()
+
+    const [url, body, config] = mockImportPost.mock.calls[0]
+    expect(url).toBe('/support-catalogue/import/preview')
+    expect((body as FormData).get('file')).toBe(file)
+    expect(config).toEqual({ headers: { 'Content-Type': 'multipart/form-data' } })
+
+    expect(screen.getByText(/support-catalogue-2026-27\.xlsx/)).toBeInTheDocument()
+    expect(screen.getByText(/National \/ Remote \/ Very Remote prices/)).toBeInTheDocument()
+    expect(screen.getByText(/Starts 01\/07\/2026/)).toBeInTheDocument()
+    expect(screen.getByText(/2 rows, 1 legacy/)).toBeInTheDocument()
+    expect(screen.getByText('New items').nextSibling).toHaveTextContent('2')
+    expect(screen.getByText('Unchanged').nextSibling).toHaveTextContent('0')
+    expect(screen.getByText('To end-date').nextSibling).toHaveTextContent('4')
+    expect(screen.getByText(/04_212_0125_6_1 .* will be end-dated 2026-06-30/)).toBeInTheDocument()
+    expect(screen.getByDisplayValue('2026-27')).toBeInTheDocument()   // the version proposed from the file
+  })
+
+  it('says it is the one-price-per-state layout when the 2025-26 file was uploaded', async () => {
+    await openPreview('StateColumns')
+
+    expect(screen.getByText(/One price per state/)).toBeInTheDocument()
+    expect(screen.queryByText(/National \/ Remote \/ Very Remote prices/)).not.toBeInTheDocument()
+  })
+
+  it('confirms with the version the admin typed and posts every row back exactly as the preview sent it', async () => {
+    const { user } = await openPreview()
+    mockImportPost.mockResolvedValueOnce({ data: { success: true } })
+
+    const version = screen.getByDisplayValue('2026-27')
+    await user.clear(version)
+    await user.type(version, '2026-27 NDIA')
+    await user.click(screen.getByRole('button', { name: 'Confirm Import' }))
+
+    expect(mockImportPost).toHaveBeenLastCalledWith('/support-catalogue/import/confirm', { catalogueVersion: '2026-27 NDIA', rows })
+    expect(screen.queryByText('Import NDIS Support Catalogue')).not.toBeInTheDocument()   // closed after a successful import
+  })
+
+  it('shows why the server refused an upload that is not a catalogue, instead of a generic failure', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    mockImportPost.mockRejectedValueOnce({ response: { status: 400, data: { success: false, errors: ['No support items found. Upload the NDIS Support Catalogue .xlsx (the 2026-27 or 2025-26 file).'] } } })
+    renderSettingsPageWithQueryClient()
+
+    await user.click(screen.getByRole('tab', { name: 'Support Catalogue' }))
+    await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
+    await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, new File(['x'], 'notes.xlsx'))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No support items found. Upload the NDIS Support Catalogue .xlsx (the 2026-27 or 2025-26 file).')
+    expect(screen.queryByText('Catalogue Version')).not.toBeInTheDocument()   // still on the upload step
+  })
+
+  it("shows the server's refusal and keeps the typed version when the confirm is rejected", async () => {
+    const { user } = await openPreview()
+    // The API's failure shape (ApiResponse.Fail): the explanation is in errors[0], there is no top-level message.
+    mockImportPost.mockRejectedValueOnce({ response: { status: 400, data: { success: false, errors: ['Nothing was imported. 04_104_0125_6_1: the row has no start date.'] } } })
+
+    const version = screen.getByDisplayValue('2026-27')
+    await user.clear(version)
+    await user.type(version, 'v2')
+    await user.click(screen.getByRole('button', { name: 'Confirm Import' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nothing was imported. 04_104_0125_6_1: the row has no start date.')
+    expect(screen.getByDisplayValue('v2')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirm Import' })).toBeEnabled()
   })
 })
 

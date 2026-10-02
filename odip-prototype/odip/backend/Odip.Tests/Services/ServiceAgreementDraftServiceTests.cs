@@ -32,11 +32,16 @@ public class ServiceAgreementDraftServiceTests
             NdisNumber = "43100001234", DateOfBirth = new DateOnly(1990, 1, 2), IsActive = true, IsDraft = true
         }).Entity;
 
+    /// <summary>A draft is scoped to the community access group, so its items live in a real one (an item always has a group in production; InMemory does not enforce the FK).</summary>
+    private static SupportActivityGroup CommunityAccessGroup(OdipDbContext db) =>
+        db.SupportActivityGroups.Local.FirstOrDefault(g => g.GroupCode == "GRP_COMMUNITY_ACCESS")
+        ?? db.SupportActivityGroups.Add(new SupportActivityGroup { Id = Guid.NewGuid(), GroupCode = "GRP_COMMUNITY_ACCESS", DisplayName = "Community Access", SupportCategory = 4 }).Entity;
+
     private static SupportCatalogueItem AddCatalogue(OdipDbContext db, string code = "TEST-CODE", decimal vicPrice = 71.25m,
         DateOnly? effectiveFrom = null, DateOnly? effectiveTo = null, bool active = true, string version = "synthetic-v1") =>
         db.SupportCatalogueItems.Add(new SupportCatalogueItem
         {
-            Id = Guid.NewGuid(), ActivityGroupId = Guid.NewGuid(), ItemNumber = code, Description = "Synthetic catalogue item",
+            Id = Guid.NewGuid(), ActivityGroupId = CommunityAccessGroup(db).Id, ItemNumber = code, Description = "Synthetic catalogue item",
             DayType = ClaimDayType.Weekday, IsIntensive = false, IsActive = active, CatalogueVersion = version,
             EffectiveFrom = effectiveFrom ?? new DateOnly(2025, 1, 1), EffectiveTo = effectiveTo,
             PriceLimit_ACT = 10m, PriceLimit_NSW = 20m, PriceLimit_NT = 30m, PriceLimit_QLD = 40m,
@@ -117,6 +122,30 @@ public class ServiceAgreementDraftServiceTests
             Assert.Equal(71.25m, line.UnitPrice);
             Assert.Equal("synthetic-v1", line.CatalogueVersion);
             Assert.Null(typeof(CreateServiceAgreementDraftLineDto).GetProperty("UnitPrice"));
+        }
+    }
+
+    [Theory]
+    [InlineData("E")]    // an Each item such as a sleepover
+    [InlineData("D")]    // a per-day item such as STA accommodation
+    [InlineData("WK")]
+    public async Task CreateAsync_RejectsAnItemThatIsNotPricedPerHour_BecauseALineIsHoursAtTheUnitPrice(string unit)
+    {
+        // The catalogue holds every item since the 2026-27 import: pricing "8 hours" of a $311.79 sleepover would quote 8 x $311.79.
+        var tenantId = Guid.NewGuid();
+        var (db, _) = CreateDb(tenantId);
+        using (db)
+        {
+            var participant = AddParticipant(db, tenantId);
+            AddCatalogue(db).Unit = unit;
+            await db.SaveChangesAsync();
+
+            var (draft, error) = await new ServiceAgreementDraftService(db)
+                .CreateAsync(tenantId, participant.Id, Request(), "synthetic-actor", CancellationToken.None);
+
+            Assert.Null(draft);
+            Assert.Equal("No active effective weekday catalogue price exists for TEST-CODE.", error);
+            Assert.Empty(db.ServiceAgreementDrafts);
         }
     }
 

@@ -265,7 +265,7 @@ export const CLAIM_LINE_ITEM_STATUSES = ['Draft', 'Submitted', 'Approved', 'Paid
 export type ClaimLineItemStatus = typeof CLAIM_LINE_ITEM_STATUSES[number]
 
 // ── Claim Day Type ──────────────────────────────────────
-export const CLAIM_DAY_TYPES = ['Weekday', 'Saturday', 'Sunday', 'Weekend', 'PublicHoliday', 'ShortNotice', 'WeekdayEvening'] as const
+export const CLAIM_DAY_TYPES = ['Weekday', 'Saturday', 'Sunday', 'Weekend', 'PublicHoliday', 'ShortNotice', 'WeekdayEvening', 'WeekdayNight'] as const
 export type ClaimDayType = typeof CLAIM_DAY_TYPES[number]
 
 // ── Claim Type ──────────────────────────────────────────

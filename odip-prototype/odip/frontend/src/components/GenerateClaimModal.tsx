@@ -17,6 +17,7 @@ const dayTypeLabel = (dt: string) => {
   switch (dt) {
     case 'Weekday': return 'Weekday'
     case 'WeekdayEvening': return 'Weekday Evening'
+    case 'WeekdayNight': return 'Weekday Night'
     case 'Saturday': return 'Saturday'
     case 'Sunday': return 'Sunday'
     case 'PublicHoliday': return 'Public Holiday'

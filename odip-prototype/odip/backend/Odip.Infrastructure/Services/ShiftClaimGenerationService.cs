@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Catalogue;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -141,15 +142,21 @@ public class ShiftClaimGenerationService
             .ToListAsync(ct))
             .ToHashSet();
 
+        // Only the community access group is priced from here. It is the only group that existed when this engine picked "the first active item for the
+        // day type", and the catalogue now also holds personal care, sleepover, STA, travel and every other family: an item of those must never be
+        // "the first Weekday item" (ClaimGenerationService is already scoped to one group). GRP_COMMUNITY_ACCESS holds exactly the RG 0125 standard
+        // and ICBS items, one valid row per day type and intensity on any date.
+        // Every row of the group is loaded, history included, because each shift is priced by the row valid on ITS service date: an import that
+        // end-dates a row (a December price set) must not reprice a shift that happened before it and has not been claimed yet.
         var catalogueItems = await _db.SupportCatalogueItems
-            .Where(i => i.IsActive)
+            .Where(i => i.ActivityGroup.GroupCode == CatalogueGroups.CommunityAccessGroupCode)
             .ToListAsync(ct);
 
         var lineItems = new List<ShiftLineCalc>();
         foreach (var shift in shifts)
         {
             var dayType = DayTypeResolver.Resolve(shift.ServiceDate, publicHolidays);
-            var catItem = FindCatalogueItem(catalogueItems, dayType, participant.IsIntensiveSupport);
+            var catItem = EffectiveCatalogueResolver.FindForDay(catalogueItems, dayType, participant.IsIntensiveSupport, shift.ServiceDate);
             if (catItem == null) continue;
 
             var unitPrice = GetPriceForState(catItem, state);
@@ -166,17 +173,19 @@ public class ShiftClaimGenerationService
         }
 
         if (lineItems.Count == 0)
+        {
+            // Nothing priced because no row of the group is valid on any of these dates (the catalogue starts after them): say so, the same way the trip engine does.
+            // Shifts that have a row for their date but not for their day type still read as nothing to claim, as they always did.
+            if (!shifts.Any(s => catalogueItems.Any(i => EffectiveCatalogueResolver.IsValidOn(i, s.ServiceDate))))
+                throw new InvalidOperationException(FormattableString.Invariant(
+                    $"No catalogue row covers these shifts' dates ({shifts[0].ServiceDate:dd/MM/yyyy} to {shifts[^1].ServiceDate:dd/MM/yyyy}). Import the catalogue for that period first."));
             throw new InvalidOperationException("No completed, unclaimed shifts found in this date range.");
+        }
 
         return (lineItems, participant);
     }
 
     // ─── Helpers (mirrors ClaimGenerationService's private equivalents) ─
-
-    private static SupportCatalogueItem? FindCatalogueItem(
-        List<SupportCatalogueItem> items, ClaimDayType dayType, bool isIntensive) =>
-        items.FirstOrDefault(i => i.DayType == dayType && i.IsIntensive == isIntensive)
-            ?? items.FirstOrDefault(i => i.DayType == dayType);
 
     private static decimal GetPriceForState(SupportCatalogueItem item, string state) =>
         state.ToUpperInvariant() switch

@@ -69,6 +69,7 @@ export const CLAIM_DAY_TYPE_LABELS: Record<string, string> = {
   PublicHoliday: 'Public Holiday',
   ShortNotice: 'Short Notice',
   WeekdayEvening: 'Weekday Evening',
+  WeekdayNight: 'Weekday Night',
 }
 
 export const CLAIM_TYPE_LABELS: Record<string, string> = {
