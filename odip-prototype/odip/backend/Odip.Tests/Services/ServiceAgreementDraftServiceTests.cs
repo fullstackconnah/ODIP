@@ -32,11 +32,16 @@ public class ServiceAgreementDraftServiceTests
             NdisNumber = "43100001234", DateOfBirth = new DateOnly(1990, 1, 2), IsActive = true, IsDraft = true
         }).Entity;
 
+    /// <summary>A draft is scoped to the community access group, so its items live in a real one (an item always has a group in production; InMemory does not enforce the FK).</summary>
+    private static SupportActivityGroup CommunityAccessGroup(OdipDbContext db) =>
+        db.SupportActivityGroups.Local.FirstOrDefault(g => g.GroupCode == "GRP_COMMUNITY_ACCESS")
+        ?? db.SupportActivityGroups.Add(new SupportActivityGroup { Id = Guid.NewGuid(), GroupCode = "GRP_COMMUNITY_ACCESS", DisplayName = "Community Access", SupportCategory = 4 }).Entity;
+
     private static SupportCatalogueItem AddCatalogue(OdipDbContext db, string code = "TEST-CODE", decimal vicPrice = 71.25m,
         DateOnly? effectiveFrom = null, DateOnly? effectiveTo = null, bool active = true, string version = "synthetic-v1") =>
         db.SupportCatalogueItems.Add(new SupportCatalogueItem
         {
-            Id = Guid.NewGuid(), ActivityGroupId = Guid.NewGuid(), ItemNumber = code, Description = "Synthetic catalogue item",
+            Id = Guid.NewGuid(), ActivityGroupId = CommunityAccessGroup(db).Id, ItemNumber = code, Description = "Synthetic catalogue item",
             DayType = ClaimDayType.Weekday, IsIntensive = false, IsActive = active, CatalogueVersion = version,
             EffectiveFrom = effectiveFrom ?? new DateOnly(2025, 1, 1), EffectiveTo = effectiveTo,
             PriceLimit_ACT = 10m, PriceLimit_NSW = 20m, PriceLimit_NT = 30m, PriceLimit_QLD = 40m,

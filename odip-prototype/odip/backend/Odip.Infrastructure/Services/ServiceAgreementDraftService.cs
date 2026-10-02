@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Catalogue;
 using Odip.Domain.Entities;
 using Odip.Infrastructure.Data;
 
@@ -22,10 +23,13 @@ public sealed class ServiceAgreementDraftService
         var lines = new List<ServiceAgreementDraftLine>();
         foreach (var requested in request.Lines)
         {
-            // A line is hours at the unit price, so only a per-hour item can be quoted: the catalogue now holds every item (sleepover and accommodation nights
-            // are Each / Day, and a day-less item is stored as Weekday), and 8 "hours" of a $311.79 sleepover would quote 8 x $311.79.
+            // A line is hours at a WEEKDAY price, so only a per-hour weekday item can be quoted. The catalogue now holds every item, and the importer
+            // stores an item the classifier does not band by day as Weekday: sleepovers and accommodation nights are Each / Day, but a hundred hourly
+            // Evening, Night, Saturday, Sunday and Public Holiday items of other families (SIL, ICBS, nurses...) would pass the Weekday and hourly tests and
+            // quote "weekday" lines at their holiday rates. The draft stays scoped to the community access group, the set it always accepted.
             var candidates = await _db.SupportCatalogueItems
-                .Where(x => x.ItemNumber == requested.ItemCode && x.IsActive && x.DayType == Odip.Domain.Enums.ClaimDayType.Weekday && x.Unit == "H"
+                .Where(x => x.ItemNumber == requested.ItemCode && x.IsActive && x.ActivityGroup.GroupCode == CatalogueGroups.CommunityAccessGroupCode
+                    && x.DayType == Odip.Domain.Enums.ClaimDayType.Weekday && x.Unit == "H"
                     && x.EffectiveFrom <= effectiveDate && (x.EffectiveTo == null || x.EffectiveTo >= effectiveDate))
                 .ToListAsync(ct);
             if (candidates.Count != 1) return (null, candidates.Count == 0
