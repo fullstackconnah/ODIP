@@ -28,10 +28,9 @@ type Tab = 'overview' | 'bookings' | 'accommodation' | 'vehicles' | 'staff' | 't
 const TAB_KEYS: Tab[] = ['overview', 'bookings', 'accommodation', 'vehicles', 'staff', 'tasks', 'activities', 'claims', 'incidents', 'history']
 
 export default function TripDetailPage() {
-  const { canWrite, canAccessPage } = usePermissions()
+  const { canWrite, canAccessPage, isAdmin: isAdminRole, isSuperAdmin } = usePermissions()
   const { id } = useParams()
-  const currentUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
-  const isAdmin = currentUser.role === 'Admin'
+  const isAdmin = isAdminRole || isSuperAdmin
   const canAccessIncidents = canAccessPage('incidents')
   // PP-60: URL-synced so a shared/reloaded link lands on the same tab. Only the tabs this role can see are valid keys (L5-05): a ?tab= for
   // a tab it cannot see (incidents, history) reads as Overview, instead of selecting nothing over an empty body.

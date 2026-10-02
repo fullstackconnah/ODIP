@@ -16,6 +16,8 @@ let tripLoading = false
 let tripFailure: { error?: unknown } | null = null
 const tripRefetch = vi.fn()
 let canWrite = true
+let isAdmin = false
+let isSuperAdmin = false
 // Pages a test denies (canAccessPage returns false for them); cleared before each test.
 const deniedPages = new Set<string>()
 
@@ -26,7 +28,7 @@ const { mockUseTripSchedule, mockUseTripClaims, mockUseTripIncidents } = vi.hois
 }))
 
 vi.mock('@/lib/permissions', () => ({
-  usePermissions: () => ({ canWrite, canAccessPage: (page: string) => !deniedPages.has(page) }),
+  usePermissions: () => ({ canWrite, isAdmin, isSuperAdmin, canAccessPage: (page: string) => !deniedPages.has(page) }),
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -41,6 +43,8 @@ vi.mock('@/api/hooks', () => ({
   useTripIncidents: mockUseTripIncidents,
   useParticipants: () => ({ data: [] }),
 }))
+
+vi.mock('@/components/AuditHistoryTab', () => ({ default: () => <div>History panel</div> }))
 
 vi.mock('./trip-detail', () => ({
   OverviewTab: () => <div>Overview panel</div>,
@@ -70,6 +74,8 @@ beforeEach(() => {
   tripFailure = null
   tripRefetch.mockClear()
   canWrite = true
+  isAdmin = false
+  isSuperAdmin = false
   localStorage.clear()
   mockUseTripSchedule.mockClear()
   mockUseTripClaims.mockClear()
@@ -94,6 +100,27 @@ describe('TripDetailPage — PP-60 URL-synced tabs', () => {
     renderPage('/trips/trip-1?tab=vehicles')
 
     expect(screen.getByText('Vehicles panel')).toBeInTheDocument()
+  })
+})
+
+describe('TripDetailPage — History tab by role (L5-05)', () => {
+  it('shows the History tab to an Admin', () => {
+    isAdmin = true
+    renderPage()
+    expect(screen.getByRole('tab', { name: /history/i })).toBeInTheDocument()
+  })
+
+  it('shows the History tab to a SuperAdmin and opens it from ?tab=history', () => {
+    isSuperAdmin = true
+    renderPage('/trips/trip-1?tab=history')
+    expect(screen.getByRole('tab', { name: /history/i })).toBeInTheDocument()
+    expect(screen.getByText('History panel')).toBeInTheDocument()
+  })
+
+  it('hides the History tab from other roles and falls back to Overview', () => {
+    renderPage('/trips/trip-1?tab=history')
+    expect(screen.queryByRole('tab', { name: /history/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Overview panel')).toBeInTheDocument()
   })
 })
 
