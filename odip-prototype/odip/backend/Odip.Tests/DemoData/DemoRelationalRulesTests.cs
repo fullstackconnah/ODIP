@@ -25,6 +25,12 @@ public class DemoRelationalRulesTests
         var result = await env.Maintainer(DemoPacks.Default()).RunAsync(env.Options, CancellationToken.None);
         Assert.Empty(result.Failures);
 
+        await AssertValuesFitAsync(env);
+    }
+
+    /// <summary>Every string of every row fits its column and every NOT NULL column has a value (the environment has already had its tick).</summary>
+    internal static async Task AssertValuesFitAsync(DemoTestEnv env)
+    {
         await using var db = env.AdminDb();
         var set = typeof(DbContext).GetMethods().First(m => m.Name == nameof(DbContext.Set) && m.IsGenericMethodDefinition && m.GetParameters().Length == 0);
         var ignoreFilters = typeof(EntityFrameworkQueryableExtensions).GetMethods().First(m => m.Name == nameof(EntityFrameworkQueryableExtensions.IgnoreQueryFilters) && m.IsGenericMethodDefinition);
@@ -69,6 +75,12 @@ public class DemoRelationalRulesTests
         var result = await env.Maintainer(DemoPacks.Default()).RunAsync(env.Options, CancellationToken.None);
         Assert.Empty(result.Failures);
 
+        await AssertForeignKeysAsync(env);
+    }
+
+    /// <param name="skipPrincipals">Principal tables whose rows are not in this database for a reason that is not the top-up's (the real seed's default tenant is made by a migration, which InMemory never runs).</param>
+    internal static async Task AssertForeignKeysAsync(DemoTestEnv env, params Type[] skipPrincipals)
+    {
         await using var db = env.AdminDb();
         var set = typeof(DbContext).GetMethods().First(m => m.Name == nameof(DbContext.Set) && m.IsGenericMethodDefinition && m.GetParameters().Length == 0);
         var ignoreFilters = typeof(EntityFrameworkQueryableExtensions).GetMethods().First(m => m.Name == nameof(EntityFrameworkQueryableExtensions.IgnoreQueryFilters) && m.IsGenericMethodDefinition);
@@ -87,7 +99,8 @@ public class DemoRelationalRulesTests
         var checkedKeys = 0;
         foreach (var entityType in entityTypes)
         {
-            foreach (var foreignKey in entityType.GetForeignKeys().Where(f => f.Properties.Count == 1 && f.Properties[0].PropertyInfo is not null && f.PrincipalKey.Properties.Count == 1))
+            foreach (var foreignKey in entityType.GetForeignKeys().Where(f => f.Properties.Count == 1 && f.Properties[0].PropertyInfo is not null && f.PrincipalKey.Properties.Count == 1
+                                                                              && !skipPrincipals.Contains(f.PrincipalEntityType.ClrType)))
             {
                 var dependent = foreignKey.Properties[0];
                 var principalKey = foreignKey.PrincipalKey.Properties[0];
@@ -122,6 +135,11 @@ public class DemoRelationalRulesTests
         var result = await env.Maintainer(DemoPacks.Default()).RunAsync(env.Options, CancellationToken.None);
         Assert.Empty(result.Failures);
 
+        await AssertUniqueIndexesAsync(env);
+    }
+
+    internal static async Task AssertUniqueIndexesAsync(DemoTestEnv env)
+    {
         await using var db = env.AdminDb();
         var set = typeof(DbContext).GetMethods().First(m => m.Name == nameof(DbContext.Set) && m.IsGenericMethodDefinition && m.GetParameters().Length == 0);
         var ignoreFilters = typeof(EntityFrameworkQueryableExtensions).GetMethods().First(m => m.Name == nameof(EntityFrameworkQueryableExtensions.IgnoreQueryFilters) && m.IsGenericMethodDefinition);

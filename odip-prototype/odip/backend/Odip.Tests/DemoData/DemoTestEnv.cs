@@ -29,11 +29,13 @@ internal sealed class DemoTestEnv
     public CapturingLogger<DemoDataMaintainer> Log { get; } = new();
 
     /// <param name="nowUtc">The tick clock. 2026-10-02T00:30Z is Fri 10:30 AEST, the plan's worked example.</param>
-    public DemoTestEnv(DateTimeOffset nowUtc, bool audit = true)
+    /// <param name="countQueries">Counts every query the environment's contexts run in <see cref="CountingQueryProvider"/> (see its remarks).</param>
+    public DemoTestEnv(DateTimeOffset nowUtc, bool audit = true, bool countQueries = false)
     {
         Clock = new FakeClock(nowUtc);
         var builder = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase("demo-" + Guid.NewGuid().ToString("N"));
         if (audit) builder.AddInterceptors((IInterceptor)new AuditInterceptor(new HttpContextAccessor()));
+        if (countQueries) builder.ReplaceService<Microsoft.EntityFrameworkCore.Query.IAsyncQueryProvider, CountingQueryProvider>();
         Options = builder.Options;
     }
 
