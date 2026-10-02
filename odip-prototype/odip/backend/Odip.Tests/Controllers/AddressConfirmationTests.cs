@@ -198,6 +198,117 @@ public class AddressConfirmationTests
         Assert.IsType<ConflictObjectResult>(result);
     }
 
+    // ── A user edit that changes the address (SuperAdmin, Settings > Users) ──
+
+    private static UpdateAdminUserDto AdminUserEdit(string email, bool confirmed = false) => new()
+    {
+        FirstName = "Jane", LastName = "Smith", Email = email, Username = "jane.smith", Role = "Coordinator", IsActive = true, AddressConfirmed = confirmed,
+    };
+
+    private static async Task<User> SeedAdminSideUser(OdipDbContext db, Guid tenantId, string email)
+    {
+        var user = new User
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Jane", LastName = "Smith", Username = "jane.smith", Email = email,
+            Role = UserRole.Coordinator, IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        return user;
+    }
+
+    private static AdminUsersController AdminUsersWith(OdipDbContext db, Mock<IFirebaseUserService>? firebase = null) =>
+        new(db, new Mock<ILogger<AdminUsersController>>().Object, (firebase ?? new Mock<IFirebaseUserService>()).Object);
+
+    [Fact]
+    public async Task AdminUsers_update_refuses_a_change_to_an_unusual_address_until_it_is_confirmed_and_leaves_the_row_and_Firebase_as_they_were()
+    {
+        using var db = SuperAdminDb();
+        var tenant = SeedTenant(db);
+        var user = await SeedAdminSideUser(db, tenant.Id, "jane.smith@acme.example.com");
+        var firebase = new Mock<IFirebaseUserService>();
+
+        var refused = await AdminUsersWith(db, firebase).Update(user.Id, AdminUserEdit("Jane.Smith@Gmial.com"), CancellationToken.None);
+
+        AssertAsksForConfirmation(refused, "jane.smith@gmial.com", TenantDomain);
+        Assert.Equal("jane.smith@acme.example.com", (await db.Users.SingleAsync()).Email);
+        firebase.Verify(f => f.UpdateUserByEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AdminUsers_update_goes_ahead_once_the_new_address_is_confirmed()
+    {
+        using var db = SuperAdminDb();
+        var tenant = SeedTenant(db);
+        var user = await SeedAdminSideUser(db, tenant.Id, "jane.smith@acme.example.com");
+
+        var result = await AdminUsersWith(db).Update(user.Id, AdminUserEdit("jane.smith@gmial.com", confirmed: true), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal("jane.smith@gmial.com", (await db.Users.SingleAsync()).Email);
+    }
+
+    [Theory]
+    [InlineData("jane.smith.new@acme.example.com")]
+    [InlineData("jane.smith@gmail.com")]
+    [InlineData("jane.smith@yahoo.com.au")]
+    public async Task AdminUsers_update_asks_for_nothing_when_the_new_address_is_at_the_tenants_domain_or_a_common_provider(string address)
+    {
+        using var db = SuperAdminDb();
+        var tenant = SeedTenant(db);
+        var user = await SeedAdminSideUser(db, tenant.Id, "jane.smith@acme.example.com");
+
+        var result = await AdminUsersWith(db).Update(user.Id, AdminUserEdit(address), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Theory]
+    [InlineData("jane.smith@gmial.com")]
+    [InlineData("  Jane.Smith@GMIAL.com ")]
+    public async Task AdminUsers_update_does_not_ask_again_for_the_address_the_row_already_has_so_legacy_rows_stay_editable(string submitted)
+    {
+        using var db = SuperAdminDb();
+        var tenant = SeedTenant(db);
+        var user = await SeedAdminSideUser(db, tenant.Id, "jane.smith@gmial.com");
+
+        var result = await AdminUsersWith(db).Update(user.Id, AdminUserEdit(submitted), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task AdminUsers_update_reports_an_address_that_is_taken_before_it_asks_for_a_confirmation_of_it()
+    {
+        using var db = SuperAdminDb();
+        var tenant = SeedTenant(db);
+        var user = await SeedAdminSideUser(db, tenant.Id, "jane.smith@acme.example.com");
+        db.Users.Add(new User
+        {
+            Id = Guid.NewGuid(), TenantId = tenant.Id, FirstName = "Existing", LastName = "Person", Username = "existing", Email = "jane.smith@gmial.com",
+            Role = UserRole.Coordinator, IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await AdminUsersWith(db).Update(user.Id, AdminUserEdit("jane.smith@gmial.com"), CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task AdminUsers_update_checks_the_address_against_the_domain_of_the_users_own_tenant_not_another_tenants()
+    {
+        using var db = SuperAdminDb();
+        SeedTenant(db);
+        var other = SeedTenant(db, "Other Care", "other.example.org");
+        var user = await SeedAdminSideUser(db, other.Id, "jane.smith@other.example.org");
+
+        // acme.example.com is another tenant's own domain: for this user it is as unusual as any, and the question names HER tenant's domain.
+        var refused = await AdminUsersWith(db).Update(user.Id, AdminUserEdit("jane.smith@acme.example.com"), CancellationToken.None);
+
+        AssertAsksForConfirmation(refused, "jane.smith@acme.example.com", "other.example.org");
+    }
+
     // ── A tenant's first user ───────────────────────────────────────────
 
     private static CreateTenantWithSetupDto TenantWithFirstUserAt(string email, bool confirmed = false) => new(

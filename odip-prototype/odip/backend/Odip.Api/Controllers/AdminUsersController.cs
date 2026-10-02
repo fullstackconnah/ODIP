@@ -327,6 +327,12 @@ public class AdminUsersController : ControllerBase
         var originalDisplayName = user.FullName;
         var originalDisabled = !user.IsActive;
 
+        // A NEW address at neither the user's tenant's own domain nor a common provider needs a confirmation, as on create (see AddressConfirmation):
+        // it is a live login for whoever owns it. An address the row already holds never asks, so legacy rows stay editable. This comes before Firebase
+        // is touched, so a refused edit changes nothing anywhere.
+        if (email != originalEmail && !dto.AddressConfirmed && AddressConfirmation.Needed(email, user.Tenant?.EmailDomain))
+            return BadRequest(ApiResponse<object>.Fail(AddressConfirmation.Message(email, user.Tenant?.EmailDomain), AddressConfirmation.Code));
+
         // Sync changes to Firebase Auth FIRST, before persisting DB changes. This is the fix for
         // a confirmed data-integrity bug: previously the DB save happened first, so a Firebase
         // failure (e.g. TokenResponseException from a bad/placeholder service account, which is

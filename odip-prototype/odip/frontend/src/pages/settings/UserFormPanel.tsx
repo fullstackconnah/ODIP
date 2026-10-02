@@ -173,6 +173,8 @@ export default function UserFormPanel({
             username: username.trim(),
             role,
             isActive,
+            // Sent only on the second go, once the admin has said to use an address the server asked about (it asks only when it CHANGES).
+            addressConfirmed: addressConfirmed || undefined,
           },
         })
       } else {

@@ -34,6 +34,8 @@ export interface UpdateAdminUserDto {
   username: string
   role: string
   isActive: boolean
+  /** The admin has checked a NEW address the server asked about (see lib/addressConfirmation.ts). Sent only on the retry that follows that question. */
+  addressConfirmed?: boolean
 }
 
 /** What became of a person's Firebase sign-in account: ODIP just made it, or it was already there and was left as it was. */

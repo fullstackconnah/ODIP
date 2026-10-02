@@ -2440,6 +2440,11 @@ public record UpdateAdminUserDto
     public string Username { get; init; } = string.Empty;
     public string Role { get; init; } = string.Empty;
     public bool IsActive { get; init; }
+    /// <summary>
+    /// The admin has checked a NEW address after being told it is at neither the user's tenant's own domain nor a common email provider
+    /// (<see cref="Odip.Application.Common.AddressConfirmation"/>). Without it such a change is refused with a 400; an address the row already holds never asks.
+    /// </summary>
+    public bool AddressConfirmed { get; init; }
     public Position? Position { get; init; }
     public string? Mobile { get; init; }
     public string? Region { get; init; }
