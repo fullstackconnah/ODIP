@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -34,11 +35,15 @@ public class AuthControllerExchangeTests
             Task.FromResult<IReadOnlyDictionary<string, object>>(claims);
     }
 
+    // The shape of the request that reaches the exchange in PRODUCTION: ANONYMOUS. CurrentTenant reads the tenant and the SuperAdmin flag from a JWT the
+    // caller does not have yet, so the ambient tenant is none and the caller is no SuperAdmin; the Users query filter then admits no row at all, and
+    // the exchange finds anyone only because its look-ups call IgnoreQueryFilters(). A context that said IsSuperAdmin = true (as these tests once did)
+    // admits every row whether or not that call is there, so dropping it left every test green and every sign-in a 401 in production.
     private static OdipDbContext CreateDb()
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
         var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         return new OdipDbContext(options, tenant.Object);
     }
@@ -71,14 +76,25 @@ public class AuthControllerExchangeTests
             ["Auth:SuperAdminDomain"] = SuperAdminDomain,
         }).Build();
         var claims = new Dictionary<string, object> { ["email"] = tokenEmail, ["email_verified"] = emailVerified };
+        // The lockout is per client address. Each controller has its own tracker, so a test that wants every attempt to spend from one budget
+        // reuses one controller.
+        var http = new DefaultHttpContext();
+        http.Connection.RemoteIpAddress = ClientAddress;
 
         return new AuthController(
             db, config, logger ?? new Mock<ILogger<AuthController>>().Object, new LoginAttemptTracker(TimeProvider.System),
             new Mock<ICurrentTenant>().Object, new FakeVerifier(claims))
         {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+            ControllerContext = new ControllerContext { HttpContext = http },
         };
     }
+
+    private static readonly IPAddress ClientAddress = IPAddress.Parse("203.0.113.7");
+
+    // What is stored, read around the Users filter and the change tracker: the anonymous context the exchange runs on admits no row, and a tracked
+    // row would show an unsaved change as if it had been written.
+    private static DateTime? StoredLastLoginAt(OdipDbContext db, Guid userId) =>
+        db.Users.IgnoreQueryFilters().AsNoTracking().Single(u => u.Id == userId).LastLoginAt;
 
     private static Task<ActionResult<ApiResponse<AuthResponseDto>>> Exchange(AuthController controller) =>
         controller.Exchange(new ExchangeTokenDto { IdToken = "token-the-fake-accepts" }, CancellationToken.None);
@@ -303,5 +319,120 @@ public class AuthControllerExchangeTests
         var body = Assert.IsType<ApiResponse<AuthResponseDto>>(ok.Value).Data!;
         Assert.Equal(superAdmin.Id, body.Id);
         Assert.Null(body.TenantId);
+    }
+
+    // ── The lockout and LastLoginAt ─────────────────────────────────────
+    // Every refusal goes through Rejected(), which spends from the client's failure budget: a refusal that returned Unauthorized directly would be a
+    // free retry, and the lockout could be dodged by aiming at that one case. A refusal never stamps LastLoginAt either, the record of when someone
+    // last got in, because nobody did.
+
+    private static async Task AssertRefusalsSpendTheFailureBudget(OdipDbContext db, string tokenEmail, bool emailVerified = true)
+    {
+        // One controller, so one client address and one budget for every attempt.
+        var controller = CreateController(db, tokenEmail, emailVerified);
+
+        for (var attempt = 0; attempt < LoginAttemptTracker.MaxFailures; attempt++)
+            Assert.IsType<UnauthorizedObjectResult>((await Exchange(controller)).Result);
+
+        var lockedOut = Assert.IsType<ObjectResult>((await Exchange(controller)).Result);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, lockedOut.StatusCode);
+    }
+
+    [Fact]
+    public async Task An_address_no_active_user_has_spends_from_the_failure_budget()
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "someone.else@gmail.com");
+
+        await AssertRefusalsSpendTheFailureBudget(db, "jane.smith@gmail.com");
+    }
+
+    [Fact]
+    public async Task An_address_on_two_active_rows_spends_from_the_failure_budget()
+    {
+        using var db = CreateDb();
+        var acme = SeedTenant(db);
+        var other = SeedTenant(db, "Other Care", "other.example.org");
+        SeedUser(db, acme.Id, "jane.smith@gmail.com");
+        SeedUser(db, other.Id, "jane.smith@gmail.com");
+
+        await AssertRefusalsSpendTheFailureBudget(db, "jane.smith@gmail.com");
+    }
+
+    [Fact]
+    public async Task A_user_whose_tenant_is_inactive_spends_from_the_failure_budget()
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db, isActive: false).Id, "jane.smith@gmail.com");
+
+        await AssertRefusalsSpendTheFailureBudget(db, "jane.smith@gmail.com");
+    }
+
+    [Fact]
+    public async Task An_unverified_email_spends_from_the_failure_budget()
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
+
+        await AssertRefusalsSpendTheFailureBudget(db, "jane.smith@gmail.com", emailVerified: false);
+    }
+
+    [Fact]
+    public async Task A_SuperAdmin_address_with_no_active_row_spends_from_the_failure_budget()
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "platform.admin@platform.example.com", UserRole.SuperAdmin, isActive: false);
+
+        await AssertRefusalsSpendTheFailureBudget(db, "platform.admin@platform.example.com");
+    }
+
+    [Fact]
+    public async Task A_refused_sign_in_stamps_nobodys_LastLoginAt()
+    {
+        using var db = CreateDb();
+        var acme = SeedTenant(db);
+        var other = SeedTenant(db, "Other Care", "other.example.org");
+        var closed = SeedTenant(db, "Closed Care", "closed.example.net", isActive: false);
+        var twinOne = SeedUser(db, acme.Id, "twin@gmail.com");
+        var twinTwo = SeedUser(db, other.Id, "twin@gmail.com");
+        var inTheClosedTenant = SeedUser(db, closed.Id, "closed@gmail.com");
+        var unverified = SeedUser(db, acme.Id, "unverified@gmail.com");
+
+        Assert.IsType<UnauthorizedObjectResult>((await Exchange(CreateController(db, "twin@gmail.com"))).Result);
+        Assert.IsType<UnauthorizedObjectResult>((await Exchange(CreateController(db, "closed@gmail.com"))).Result);
+        Assert.IsType<UnauthorizedObjectResult>((await Exchange(CreateController(db, "unverified@gmail.com", emailVerified: false))).Result);
+
+        Assert.All(new[] { twinOne, twinTwo, inTheClosedTenant, unverified }, row => Assert.Null(StoredLastLoginAt(db, row.Id)));
+    }
+
+    [Fact]
+    public async Task A_sign_in_stamps_LastLoginAt_on_the_row_that_was_signed_in_to_and_on_no_other()
+    {
+        using var db = CreateDb();
+        var tenant = SeedTenant(db);
+        var signedIn = SeedUser(db, tenant.Id, "jane.smith@gmail.com");
+        var bystander = SeedUser(db, tenant.Id, "john.smith@gmail.com");
+        var before = DateTime.UtcNow;
+
+        Assert.IsType<OkObjectResult>((await Exchange(CreateController(db, "jane.smith@gmail.com"))).Result);
+
+        var stamped = StoredLastLoginAt(db, signedIn.Id);
+        Assert.NotNull(stamped);
+        Assert.InRange(stamped!.Value, before, DateTime.UtcNow);
+        Assert.Null(StoredLastLoginAt(db, bystander.Id));
+    }
+
+    [Fact]
+    public async Task A_SuperAdmin_sign_in_stamps_LastLoginAt_too()
+    {
+        using var db = CreateDb();
+        var superAdmin = SeedUser(db, SeedTenant(db).Id, "platform.admin@platform.example.com", UserRole.SuperAdmin);
+        var before = DateTime.UtcNow;
+
+        Assert.IsType<OkObjectResult>((await Exchange(CreateController(db, "platform.admin@platform.example.com"))).Result);
+
+        var stamped = StoredLastLoginAt(db, superAdmin.Id);
+        Assert.NotNull(stamped);
+        Assert.InRange(stamped!.Value, before, DateTime.UtcNow);
     }
 }
