@@ -64,9 +64,9 @@ describe('OnboardingDetailPage', () => {
 
     expect(screen.getByText('Onboarding in progress')).toBeInTheDocument()
     expect(screen.getByText('Progress: 1 of 5 gates complete')).toBeInTheDocument()
-    const recommendation = screen.getByRole('heading', { name: 'Validate saved profile' }).closest('section')!
+    const recommendation = screen.getByRole('heading', { name: 'Validate profile data' }).closest('section')!
     expect(recommendation.querySelectorAll('button')).toHaveLength(1)
-    expect(screen.getByRole('button', { name: 'Validate saved profile' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Validate profile data' })).toBeInTheDocument()
     expect(within(recommendation).getByRole('link', { name: 'Edit profile' })).toHaveAttribute('href', '/participants/p-1/profile')
   })
 
@@ -104,7 +104,7 @@ describe('OnboardingDetailPage', () => {
     const user = userEvent.setup()
     renderDetail()
 
-    await user.click(screen.getByRole('button', { name: 'Validate saved profile' }))
+    await user.click(screen.getByRole('button', { name: 'Validate profile data' }))
     expect(profileMutate).toHaveBeenCalledOnce()
     expect(screen.getByRole('alert')).toHaveTextContent(/edit the profile, then validate again/i)
   })
@@ -132,7 +132,7 @@ describe('OnboardingDetailPage', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Jamie Rivers' })).toBeInTheDocument()
     expect(screen.getByText('Read-only access: lifecycle changes are unavailable for this role.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Validate saved profile' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Validate profile data' })).not.toBeInTheDocument()
   })
 
   it('routes the Back control to the Participants hub Onboarding tab on direct deep-link', async () => {
@@ -182,6 +182,71 @@ describe('OnboardingDetailPage', () => {
   })
 })
 
+
+// Finishing onboarding is the Profile wizard's Complete Profile: it finalises the participant, and when the organisation's readiness rule allows it
+// they become active and move to Active participants. The checklist used to offer the wizard (as "Edit profile") only while the profile gate was open,
+// so a coordinator who had validated the profile data and confirmed the service needs found the participant stuck on Onboarding with nothing that ends it.
+describe('OnboardingDetailPage — finishing onboarding', () => {
+  const draft = (overrides: Record<string, unknown> = {}) => ({ firstName: 'Jamie', lastName: 'Rivers', preferredName: null, isDraft: true, ...overrides })
+  const explanation = () => screen.getByText(/finishes onboarding/i)
+
+  beforeEach(() => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseQuery.mockReturnValue({ data: incomplete, isLoading: false })
+    mockUseMutation.mockReturnValue({ mutate: vi.fn(), error: null, isPending: false })
+    mockUseParticipant.mockReturnValue({ data: draft(), isLoading: false })
+  })
+
+  it('offers Complete profile beside the explanation, as a link to the Profile wizard, for a draft whose intake is complete', () => {
+    renderDetail()
+
+    const complete = within(explanation().parentElement as HTMLElement).getByRole('link', { name: 'Complete profile' })
+    expect(complete).toHaveAttribute('href', '/participants/p-1/profile')
+  })
+
+  it('still offers it once the profile data is validated and every later gate has moved on: the case where nothing else on the page finished onboarding', () => {
+    mockUseQuery.mockReturnValue({ data: readyForSchedule, isLoading: false })
+    renderDetail()
+
+    expect(screen.queryByRole('link', { name: 'Edit profile' })).not.toBeInTheDocument()
+    expect(within(explanation().parentElement as HTMLElement).getByRole('link', { name: 'Complete profile' })).toHaveAttribute('href', '/participants/p-1/profile')
+  })
+
+  it('is not offered once the participant is finalised: there is no onboarding left to finish', () => {
+    mockUseParticipant.mockReturnValue({ data: draft({ isDraft: false }), isLoading: false })
+    renderDetail()
+
+    expect(screen.queryByRole('link', { name: 'Complete profile' })).not.toBeInTheDocument()
+  })
+
+  it('is not offered before the intake is complete: the next step is the intake', () => {
+    mockUseQuery.mockReturnValue({ data: { ...incomplete, intakeComplete: false }, isLoading: false })
+    renderDetail()
+
+    expect(screen.queryByRole('link', { name: 'Complete profile' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Complete intake' })).toBeInTheDocument()
+  })
+
+  it('is not offered while the participant is still loading, or to a role without the lifecycle capability', () => {
+    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: true })
+    const loading = renderDetail()
+    expect(screen.queryByRole('link', { name: 'Complete profile' })).not.toBeInTheDocument()
+    loading.unmount()
+
+    mockUseParticipant.mockReturnValue({ data: draft(), isLoading: false })
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    renderDetail()
+    expect(screen.queryByRole('link', { name: 'Complete profile' })).not.toBeInTheDocument()
+  })
+
+  it('calls the gate action "Validate profile data", so it is not mistaken for the Profile wizard\'s Complete Profile', () => {
+    renderDetail()
+
+    expect(screen.getByRole('heading', { name: 'Validate profile data' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Validate profile data' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /validate saved profile/i })).not.toBeInTheDocument()
+  })
+})
 
 // Regression (2026-09-29, found in live QA after the hub-back change): the page's
 // useBackTarget hook originally sat AFTER the `if (detail.isLoading) return` early return.

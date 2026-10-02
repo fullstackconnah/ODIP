@@ -46,7 +46,9 @@ No schema change, no migration.
 - Enquiries: New / Draft intake only, no filter chips, search kept, "No open enquiries". A direct intake can be resumed, not edited as an enquiry.
 - Active participants: Active and Archived views. The Drafts view, its query branch and its row action are gone; an old `?view=drafts` link opens
   Enquiries (the view was never a URL param at the time of the change, so this only catches links from other builds).
-- Onboarding and the checklist say that completing the profile finishes onboarding when readiness allows it.
+- Onboarding and the checklist say that completing the profile finishes onboarding when readiness allows it. The checklist has a Complete profile
+  button (a link to the Profile wizard) whenever the participant is a draft with the intake complete, so no gate state leaves nothing that ends
+  onboarding; its gate action is "Validate profile data", not to be mistaken for the wizard's Complete Profile.
 
 ## Known limitation
 

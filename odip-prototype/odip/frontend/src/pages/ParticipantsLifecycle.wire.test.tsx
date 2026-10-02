@@ -187,11 +187,11 @@ async function startAndCompleteIntake(user: ReturnType<typeof userEvent.setup>) 
   await user.click(await screen.findByRole('button', { name: /complete intake/i }))
 }
 
-/** Onboarding tab -> the checklist -> Edit profile -> the Profile wizard, to the end. */
+/** Onboarding tab -> the checklist -> its Complete profile button -> the Profile wizard, to the end. */
 async function openChecklistAndCompleteProfile(user: ReturnType<typeof userEvent.setup>, fullName = 'Ada Lovelace') {
   await user.click(await screen.findByRole('button', { name: `Open onboarding for ${fullName}` }))
   await screen.findByRole('heading', { name: fullName, level: 1 })
-  await user.click(screen.getAllByRole('link', { name: 'Edit profile' })[0])
+  await user.click(await screen.findByRole('link', { name: 'Complete profile' }))
   await screen.findByRole('heading', { name: /profile/i })
   for (let i = 0; i < 6; i++) await next(user)
   await user.click(await screen.findByRole('button', { name: /complete profile/i }))
