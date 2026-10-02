@@ -1,8 +1,10 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Infrastructure.Services;
 using Xunit;
 using static Odip.Tests.Catalogue.CatalogueImportTestSupport;
 
@@ -265,7 +267,7 @@ public class CatalogueImportCommitTests
         var group = await SeedCommunityAccessGroupAsync(db);
         var later = LegacyRow(group.Id, "04_104_0125_6_1", ClaimDayType.Weekday, 76.00m, new DateOnly(2027, 7, 1), version: "2027-28");
         later.SourceDocument = "support-catalogue-2027-28.xlsx";
-        var unrelated = LegacyRow(group.Id, "99_999_9999_9_9", ClaimDayType.Weekday, 10m, new DateOnly(2026, 7, 1), version: "2026-27");
+        var unrelated = LegacyRow(group.Id, "99_999_9999_9_9", ClaimDayType.Weekday, 10m, new DateOnly(2026, 8, 1), version: "2026-27 (2026-08-01)");   // newer than anything the file starts
         unrelated.SourceDocument = "support-catalogue-2026-27.xlsx";
         db.SupportCatalogueItems.AddRange(later, unrelated);
         await db.SaveChangesAsync();
@@ -316,6 +318,29 @@ public class CatalogueImportCommitTests
 
         var row = await db.SupportCatalogueItems.AsNoTracking().SingleAsync(i => i.Id == dropped.Id);
         Assert.Equal((new DateOnly(2025, 6, 30), false), (row.EffectiveTo, row.IsActive));
+    }
+
+    [Theory]
+    [InlineData("04_105_0125_6_1", "2026-07-01")]       // starts on the catalogue's first day
+    [InlineData("01_700_0118_1_3_CA2", "2026-07-03")]   // starts a couple of days after it, like four rows of the official file
+    public async Task A_code_dropped_from_a_republished_file_is_end_dated_and_counted_even_when_it_starts_with_that_catalogue(string code, string start)
+    {
+        await using var db = CreateDb();
+        await SeedCommunityAccessGroupAsync(db);
+        await ImportAsync(db, CatalogueFixtures.File2026_27);
+        await using var republished = Workbook(CatalogueFixtures.File2026_27, wb => DeleteRows(wb, code));
+
+        var preview = await PreviewAsync(db, republished, "republished.xlsx");
+        var result = await NewImporter(db).CommitImportAsync(new ConfirmCatalogueImportDto { CatalogueVersion = preview.DetectedVersion, Rows = preview.Rows });
+
+        Assert.Equal((1, 1016), (preview.ItemsToDeactivate, preview.ItemsUnchanged));
+        var endedOn = DateOnly.Parse(start).AddDays(-1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);   // the day before it starts: an empty window
+        Assert.Contains(preview.Warnings, w => w.Contains(code) && w.Contains($"is not in the new catalogue and will be end-dated {endedOn}"));
+        Assert.Equal(new CatalogueImportResultDto(0, 0, 1016, 1), result);
+        var row = await db.SupportCatalogueItems.AsNoTracking().SingleAsync(i => i.ItemNumber == code);
+        Assert.Equal((DateOnly.Parse(start), false), (row.EffectiveFrom, row.IsActive));
+        Assert.True(row.EffectiveTo < row.EffectiveFrom, "its window holds no date, so it can never be found");
+        Assert.Equal(CatalogueLookupFailure.NotFound, (await db.FindCatalogueItemAsync(code, new DateOnly(2026, 10, 5), PriceZone.National)).Failure);
     }
 
     [Fact]

@@ -55,6 +55,15 @@ internal static class CatalogueImportTestSupport
             if (which(row.Cell(1).GetString().Trim())) row.Cell(11).Value = yyyymmdd;
     }
 
+    /// <summary>Deletes the Current-sheet rows with these item numbers: a republished file that no longer lists them.</summary>
+    public static void DeleteRows(XLWorkbook workbook, params string[] codes)
+    {
+        var sheet = workbook.Worksheet("Current Support Items");
+        var wanted = new HashSet<string>(codes);
+        foreach (var number in sheet.RowsUsed().Skip(1).Where(r => wanted.Contains(r.Cell(1).GetString().Trim())).Select(r => r.RowNumber()).OrderByDescending(n => n).ToList())
+            sheet.Row(number).Delete();
+    }
+
     public static Task<CatalogueImportPreviewDto> PreviewAsync(OdipDbContext db, Stream workbook, string fileName, TimeProvider? clock = null) =>
         NewImporter(db, clock).PreviewImportAsync(workbook, fileName);
 

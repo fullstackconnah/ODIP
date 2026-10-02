@@ -43,7 +43,8 @@ internal sealed class ImportPlan
 /// <item>A row superseded by a newer one is end-dated the day before the newer row starts. The same holds in the other direction: a row that has a newer
 /// version already in the database is capped at the day before it, so importing an older file later never disturbs the newer rows.</item>
 /// <item>An active row whose code is not in the file at all is end-dated the same way, at the day before the catalogue starts, unless it belongs to a
-/// newer version than the file.</item>
+/// newer version than the file (it starts after everything the file starts). A row that starts WITH the catalogue and is missing from a republished
+/// workbook was dropped by it: it is end-dated with an empty window (it ends the day before it starts) and counted in the preview.</item>
 /// <item>An import only ever shortens a catalogue row it already holds, never lengthens it. So importing an older file again cannot bring back a row a
 /// newer catalogue replaced or dropped, and importing any file twice, in any order, changes nothing.</item>
 /// <item>Rows written before the catalogue carried its own dates have no source document: the importer that wrote them (and the demo seed) stamped the day it
@@ -62,6 +63,8 @@ internal static class CatalogueImportPlanner
         // The day the catalogue takes effect: the earliest start on the Current sheet. The Legacy sheet can reach back further (the 2025-26 file's starts
         // on 1 Jul 2024), but those are items of earlier catalogues, not the date the catalogue they sit in began.
         var fileStart = incoming.Where(r => !r.IsLegacy).Select(r => (DateOnly?)r.EffectiveFrom).Min() ?? incoming.Min(r => r.EffectiveFrom);
+        // ...and the latest start the file itself holds: a row already imported that starts after ALL of this is newer than the file, anything up to it is the same catalogue.
+        var fileLatest = incoming.Where(r => !r.IsLegacy).Select(r => (DateOnly?)r.EffectiveFrom).Max() ?? incoming.Max(r => r.EffectiveFrom);
         var existingByCode = existing.ToLookup(x => x.ItemNumber, StringComparer.Ordinal);
         var incomingCodes = incoming.Select(r => r.ItemNumber).ToHashSet(StringComparer.Ordinal);
         var ends = new Dictionary<Guid, PlannedEndDate>();
@@ -124,11 +127,13 @@ internal static class CatalogueImportPlanner
             }
         }
 
-        // Active rows whose code the file does not list. A dated row from a newer catalogue than this file is not this file's to withdraw.
+        // Active rows whose code the file does not list. A dated row from a NEWER catalogue than this file is not this file's to withdraw; a row that starts
+        // with this catalogue (the same start date, or days after it like four rows of the official file) and is missing from a republished workbook was
+        // dropped by it, so it is end-dated with an empty window, like a previous-importer row it shadows.
         foreach (var x in existing)
         {
             if (!x.IsActive || incomingCodes.Contains(x.ItemNumber)) continue;
-            if (HasCatalogueDates(x) && x.EffectiveFrom >= fileStart) continue;
+            if (HasCatalogueDates(x) && x.EffectiveFrom > fileLatest) continue;
             EndDate(x, fileStart, withdrawn: true);
         }
 
