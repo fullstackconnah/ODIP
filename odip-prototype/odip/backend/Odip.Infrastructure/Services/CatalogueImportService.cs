@@ -69,6 +69,16 @@ public class CatalogueImportService
             warnings.Add(FormattableString.Invariant($"{r.ItemNumber} ({r.Description}) was end-dated by an earlier import that left it out; this file lists it again, so it is reopened from {r.EffectiveFrom:yyyy-MM-dd}."));
         if (back.Count > MaxWarningLines)
             warnings.Add(FormattableString.Invariant($"...and {back.Count - MaxWarningLines} more rows end-dated by an earlier import are reopened."));
+        // An OLDER catalogue imported as history: its codes that the newer catalogue does not hold end the day before it starts, instead of staying open-ended and
+        // current beside a catalogue that dropped them. Only rows this import changes are named (a re-import that finds them already ended says nothing).
+        var history = plan.Capped.OrderBy(c => c.ItemNumber, StringComparer.Ordinal).ToList();
+        if (history.Count > 0 && plan.NewerCatalogueStart is { } begins)
+        {
+            foreach (var c in history.Take(MaxWarningLines))
+                warnings.Add(FormattableString.Invariant($"{c.ItemNumber} ({c.Description}) is not in the newer catalogue (from {begins:yyyy-MM-dd}), so this older file ends it on {c.EndsOn:yyyy-MM-dd}."));
+            if (history.Count > MaxWarningLines)
+                warnings.Add(FormattableString.Invariant($"...and {history.Count - MaxWarningLines} more codes of this file are not in the newer catalogue (from {begins:yyyy-MM-dd}) and end the day before it starts."));
+        }
         // A row that starts after today prices services from its own start date: earlier services keep the row it replaces (claims and agreements read the
         // row valid on the service date). Say so row by row, so a republished file whose changed rows start later is not mistaken for a mistake.
         var later = rows.Where(r => r.EffectiveFrom > today).OrderBy(r => r.EffectiveFrom).ThenBy(r => r.ItemNumber, StringComparer.Ordinal).ToList();
@@ -139,7 +149,10 @@ public class CatalogueImportService
         }
         foreach (var end in plan.EndDates)
         {
-            end.Item.EffectiveTo = end.EffectiveTo;
+            // A planned end date can land on a row this import also updated: a code listed twice with a gap updates its first version to end where the file says,
+            // while the second version's plan ends every earlier row that reaches its start the day before it. The row keeps the earlier of the two dates; for a
+            // row that was not updated the planner already never lengthens, so this is its planned date.
+            end.Item.EffectiveTo = end.Item.EffectiveTo is { } updatedTo && updatedTo <= end.EffectiveTo ? updatedTo : end.EffectiveTo;
             end.Item.IsActive = false;
         }
 

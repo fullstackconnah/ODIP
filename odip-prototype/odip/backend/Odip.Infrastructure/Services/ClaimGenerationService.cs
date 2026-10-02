@@ -74,6 +74,11 @@ public class ClaimGenerationService
 
         var (lineItems, context) = await CalculateClaimInternalAsync(trip, previewOverrides, ct);
 
+        // A claim with no lines is never saved. The preview still returns the empty list (it shows what the engine would do), but a Draft claim with no lines and
+        // a total of 0 would block the trip behind "an active claim already exists" until someone rejected it, so generating says why nothing could be built.
+        if (lineItems.Count == 0)
+            throw new InvalidOperationException(NoLinesReason(trip, context));
+
         // Persist confirmed times back to trip
         if (overrides?.DepartureTime != null) trip.DepartureTime = overrides.DepartureTime;
         if (overrides?.ReturnTime != null) trip.ReturnTime = overrides.ReturnTime;
@@ -210,7 +215,9 @@ public class ClaimGenerationService
             ActiveHoursPerDay = activeHoursPerDay,
             StaffCount = confirmedStaffCount,
             State = state,
-            ConfirmedParticipantCount = confirmedBookings.Count
+            ConfirmedParticipantCount = confirmedBookings.Count,
+            ConfirmedWithNdisNumberCount = confirmedBookings.Count(b => b.Participant != null && !string.IsNullOrWhiteSpace(b.Participant.NdisNumber)),
+            TripDayCount = trip.TripDays.Count
         };
 
         var dayGroups = GroupDaysByType(trip.TripDays.OrderBy(d => d.Date).ToList(), publicHolidays, (date, dayType) => PriceEpochOn(catalogueItems, dayType, date));
@@ -233,7 +240,11 @@ public class ClaimGenerationService
                 {
                     // Non-weekday: single line item
                     var catItem = FindCatalogueItem(catalogueItems, group.DayType, isIntensive, group.From);
-                    if (catItem == null) continue;
+                    if (catItem == null)
+                    {
+                        context.UnpricedDayTypes.Add(group.DayType);
+                        continue;
+                    }
 
                     var hours = group.DayCount * activeHoursPerDay;
                     var unitPrice = GetPriceForState(catItem, state);
@@ -315,6 +326,7 @@ public class ClaimGenerationService
                                 GSTCode = gstCode
                             });
                         }
+                        else context.UnpricedDayTypes.Add(ClaimDayType.Weekday);
                     }
 
                     // Create weekday evening line item
@@ -337,6 +349,7 @@ public class ClaimGenerationService
                                 GSTCode = gstCode
                             });
                         }
+                        else context.UnpricedDayTypes.Add(ClaimDayType.WeekdayEvening);
                     }
                 }
             }
@@ -364,6 +377,22 @@ public class ClaimGenerationService
         var dayTypes = dayType == ClaimDayType.Weekday ? new[] { ClaimDayType.Weekday, ClaimDayType.WeekdayEvening } : new[] { dayType };
         return string.Join(",", dayTypes.SelectMany(t => new[] { false, true },
             (t, intensive) => FindCatalogueItem(items, t, intensive, date)?.Id.ToString("N") ?? "-"));
+    }
+
+    /// <summary>Why a trip ended up with no claim lines, for the person generating the claim: the first cause that applies, most basic first.</summary>
+    private static string NoLinesReason(TripInstance trip, ClaimCalcContext context)
+    {
+        if (context.TripDayCount == 0)
+            return "This trip has no days recorded, so there is nothing to claim. Check the trip's dates, then generate the claim again.";
+        if (context.ConfirmedWithNdisNumberCount == 0)
+            return "None of the trip's confirmed participants has an NDIS number, so no claim lines could be built. Add the NDIS number to each participant, then generate the claim again.";
+        if (context.UnpricedDayTypes.Count > 0)
+        {
+            var tripEnd = trip.StartDate.AddDays(trip.DurationDays - 1);
+            return FormattableString.Invariant(
+                $"No catalogue item prices this trip's {string.Join(", ", context.UnpricedDayTypes)} days ({trip.StartDate:dd/MM/yyyy} to {tripEnd:dd/MM/yyyy}), so no claim lines could be built. Import the catalogue for that period first.");
+        }
+        return "No claim lines could be built for this trip. Check its active hours per day and its departure and return times, then generate the claim again.";
     }
 
     private static string BuildClaimReference(TripInstance trip)
@@ -424,6 +453,12 @@ public class ClaimGenerationService
         public int StaffCount { get; set; }
         public string State { get; set; } = "VIC";
         public int ConfirmedParticipantCount { get; set; }
+        /// <summary>How many of the confirmed participants have an NDIS number: only they get lines.</summary>
+        public int ConfirmedWithNdisNumberCount { get; set; }
+        /// <summary>How many days the trip has (rows in TripDays): none means nothing can be priced.</summary>
+        public int TripDayCount { get; set; }
+        /// <summary>Day types a line was wanted for but no catalogue item was valid on its dates (what stops the claim when it ends up with no lines).</summary>
+        public SortedSet<ClaimDayType> UnpricedDayTypes { get; } = new();
     }
 
     private class LineItemCalc
