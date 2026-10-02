@@ -226,6 +226,23 @@ public class PlanPricingApiTests
     }
 
     [Fact]
+    public async Task A_block_with_a_huge_id_that_is_wrong_in_many_ways_is_answered_in_a_few_kilobytes()
+    {
+        // Verification of fix round 1, N2: under 1 MiB in, tens of megabytes out. The answer goes out whatever includeLines says, because the issues are not lines.
+        var (db, controller) = await SetUpAsync(TenantA);
+        await using var _ = db;
+        var blocks = new[] { Community("good"), WrongInManyWays(new string('h', 900_000)) };
+
+        foreach (var includeLines in new[] { true, false })
+        {
+            var result = await controller.Quote(Request(blocks, Mon12Oct, Mon12Oct.AddDays(14), includeLines), CancellationToken.None);
+
+            var size = Json(Assert.IsType<OkObjectResult>(result.Result).Value!).Length;
+            Assert.True(size < 30_000, $"includeLines {includeLines}: the answer is {size:N0} characters");
+        }
+    }
+
+    [Fact]
     public async Task A_request_the_endpoint_cannot_price_is_refused_with_the_reason()
     {
         var (db, controller) = await SetUpAsync(TenantA);

@@ -85,16 +85,18 @@ public static class PlanPricingEngine
 
                 // A block's id is a string the client chose and may be missing: every issue and total below is keyed on one that is never null.
                 var id = block.Id ?? string.Empty;
+                // An id that is refused can be of any length, so an issue about a block that does not get past validation names it shortened (a valid id is at most 64 characters).
+                var shown = PlanBlock.ShortId(id);
                 if (!seen.Add(id))
                 {
-                    issues.Add(id, PlanFailureReason.InvalidInput, $"Block '{id}': another block has the same id; ids must be unique in a quote.", null);
+                    issues.Add(shown, PlanFailureReason.InvalidInput, $"Block '{shown}': another block has the same id; ids must be unique in a quote.", null);
                     continue;
                 }
 
                 var messages = block.Validate();
                 if (messages.Count > 0)
                 {
-                    foreach (var message in messages) issues.Add(id, PlanFailureReason.InvalidInput, message, null);
+                    foreach (var message in messages) issues.Add(shown, PlanFailureReason.InvalidInput, message, null);
                     continue;
                 }
 

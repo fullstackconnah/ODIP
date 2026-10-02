@@ -275,6 +275,31 @@ public class PlanBlockTests
         Assert.Contains(inList.Validate(), m => m.Contains("headcount changes must be a list"));
     }
 
+    // ── Verification of fix round 1, N2: a block id is echoed in every message, so it is shortened ──
+
+    [Fact]
+    public void A_block_id_is_shortened_to_64_characters_and_an_ellipsis_in_every_message_that_names_the_block()
+    {
+        var messages = PlanPricingTestSupport.WrongInManyWays(new string('x', 100_000)).Validate();
+
+        Assert.True(messages.Count >= 20, $"{messages.Count} messages");
+        Assert.All(messages, m => Assert.StartsWith($"Block '{new string('x', 64)}…': ", m));
+        Assert.True(messages.Sum(m => m.Length) < 10_000, "the messages repeat the whole id");
+    }
+
+    [Fact]
+    public void ShortId_leaves_a_normal_id_alone_and_cuts_a_long_one_without_splitting_a_surrogate_pair()
+    {
+        var sixtyFour = new string('a', 64);
+
+        Assert.Equal(string.Empty, PlanBlock.ShortId(null));
+        Assert.Equal("mon-wed", PlanBlock.ShortId("mon-wed"));
+        Assert.Equal(sixtyFour, PlanBlock.ShortId(sixtyFour));
+        Assert.Equal(sixtyFour + "…", PlanBlock.ShortId(sixtyFour + "b"));
+        // A pair that straddles the cut is dropped whole: half of one is not valid text and cannot be written as JSON.
+        Assert.Equal(new string('a', 63) + "…", PlanBlock.ShortId(new string('a', 63) + "😀" + "tail"));
+    }
+
     // ── Verification of fix round 1, N3: a huge number is a message, never an OverflowException ──
 
     [Fact]

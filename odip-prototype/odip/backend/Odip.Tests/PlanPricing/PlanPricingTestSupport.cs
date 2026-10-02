@@ -89,6 +89,23 @@ internal static class PlanPricingTestSupport
         return change is null ? block : change(block);
     }
 
+    /// <summary>
+    /// A block that is wrong in 26 ways at once (an id over 64 characters, four unknown enum values, a day that is not one, no workers and no participants, a sleepover window and active
+    /// hours with no sleeping worker, a missing and a bad headcount entry, travel, transport and accommodation numbers out of range, a state that is not one): the worst case for a
+    /// message that repeats the id, because every message names the block.
+    /// </summary>
+    public static PlanBlock WrongInManyWays(string id) => new()
+    {
+        Id = id, SupportType = (PlanSupportType)99, Intensity = (SupportIntensity)99, Setting = (PlanSetting)99, OnPublicHoliday = (HolidayDecision)99,
+        Days = new[] { (DayOfWeek)99, (DayOfWeek)99 }, Workers = 0, ParticipantsPresent = 0, Start = T(9), End = T(13),
+        Location = new PlanLocation { State = "XX" },
+        SleepoverWindow = new PlanSleepoverWindow { From = T(1), To = T(2) }, SleepoverActiveHours = -1m,
+        HeadcountChanges = new PlanHeadcountChange[] { null!, new PlanHeadcountChange { From = T(9), ParticipantsPresent = 99 } },
+        Travel = new PlanProviderTravel { Claim = true, MinutesEachWay = -1, ParticipantsSharing = 0, KmEachWay = -1m },
+        Transport = new PlanActivityTransport { Vehicle = (VehicleKind)99, Km = -1m, Tolls = -1m, Parking = -1m, ParticipantsSharing = 0 },
+        Accommodation = new PlanAccommodation { Nights = 99 },
+    };
+
     // ── Quotes ────────────────────────────────────────────────────────────────────
 
     /// <summary>Prices blocks over a period against the real 2026-27 catalogue (or the one given), with the default provider settings unless a policy is given.</summary>

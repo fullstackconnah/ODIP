@@ -122,6 +122,22 @@ public sealed record PlanBlock
     /// <summary>The most headcount changes a block may have: each one cuts every occurrence into another line, so an unbounded list is an unbounded answer.</summary>
     public const int MaxHeadcountChanges = 10;
 
+    /// <summary>The longest block id a request may use.</summary>
+    public const int MaxIdLength = 64;
+
+    /// <summary>
+    /// A block id as it is repeated in a message or an issue: the first 64 characters and an ellipsis when it is longer. A request under 1 MiB can carry one block with an id of a
+    /// million characters that is wrong in a couple of dozen ways, and every message and every issue names the block, so repeating the id would make tens of megabytes of answer.
+    /// A surrogate pair that straddles the cut is dropped whole (half of one cannot be written as JSON).
+    /// </summary>
+    public static string ShortId(string? id)
+    {
+        if (id is null) return string.Empty;
+        if (id.Length <= MaxIdLength) return id;
+        var cut = char.IsHighSurrogate(id[MaxIdLength - 1]) ? MaxIdLength - 1 : MaxIdLength;
+        return string.Concat(id.AsSpan(0, cut), "…");
+    }
+
     /// <summary>The client's own key for the block (unique in a request): lines and totals are attributed to it.</summary>
     public string Id { get; init; } = string.Empty;
     public PlanSupportType SupportType { get; init; }
@@ -199,11 +215,11 @@ public sealed record PlanBlock
     public IReadOnlyList<string> Validate()
     {
         var messages = new List<string>();
-        var who = string.IsNullOrWhiteSpace(Id) ? "A block" : $"Block '{Id}'";
+        var who = string.IsNullOrWhiteSpace(Id) ? "A block" : $"Block '{ShortId(Id)}'";
         void Add(string message) => messages.Add($"{who}: {message}");
 
         if (string.IsNullOrWhiteSpace(Id)) messages.Add("A block needs an id.");
-        if (Id is { Length: > 64 }) Add("the id is longer than 64 characters.");
+        if (Id is { Length: > MaxIdLength }) Add(string.Create(CultureInfo.InvariantCulture, $"the id is longer than {MaxIdLength} characters."));
 
         if (!Enum.IsDefined(SupportType)) Add("the support type is not one of the known types.");
         if (!Enum.IsDefined(Intensity)) Add("the intensity is not one of the known levels.");

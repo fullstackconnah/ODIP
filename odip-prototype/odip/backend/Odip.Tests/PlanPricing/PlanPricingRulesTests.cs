@@ -466,6 +466,35 @@ public class PlanPricingRulesTests
     }
 
     [Fact]
+    public void A_block_with_a_100000_character_id_that_is_wrong_in_many_ways_makes_a_small_answer()
+    {
+        // Verification of fix round 1, N2: every message names the block and every issue carries its id, so a 1 MiB request with one such block made about 56 MB of answer.
+        var id = new string('i', 100_000);
+
+        var quote = Quote(new[] { Weekday(PlanSupportType.CommunityAccess, id: "good"), WrongInManyWays(id) }, Mon12Oct, Mon12Oct.AddDays(14));
+
+        Assert.True(quote.Issues.Count >= 20, $"{quote.Issues.Count} issues");
+        Assert.All(quote.Issues, i => Assert.Equal(new string('i', 64) + "…", i.BlockId));
+        var size = Json(quote).Length;
+        Assert.True(size < 30_000, $"the answer is {size:N0} characters");
+        Assert.Equal(new[] { "good" }, quote.Lines.Select(l => l.BlockId).Distinct());   // the other block is priced
+    }
+
+    [Fact]
+    public void A_long_id_used_twice_is_one_short_duplicate_issue_and_not_the_id_again()
+    {
+        var id = new string('d', 100_000);
+        var first = Weekday(PlanSupportType.CommunityAccess, id: id);
+        var second = Weekday(PlanSupportType.CommunityAccess, id: id);
+
+        var quote = Quote(new[] { first, second, second, second }, Mon12Oct, Mon12Oct);
+
+        var duplicate = Assert.Single(quote.Issues, i => i.Message.Contains("another block has the same id"));
+        Assert.Equal(3, duplicate.Count);   // one issue with a count, the shown id each time
+        Assert.True(Json(quote).Length < 10_000, "the duplicate issue repeats the whole id");
+    }
+
+    [Fact]
     public void A_block_with_a_decimal_too_big_to_multiply_is_refused_with_its_message_and_the_others_are_priced()
     {
         // Verification of fix round 1, N3: decimal.MaxValue active hours threw an OverflowException out of Validate(), so the whole quote was a 500.
