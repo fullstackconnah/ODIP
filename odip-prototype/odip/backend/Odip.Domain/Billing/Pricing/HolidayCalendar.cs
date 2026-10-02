@@ -79,7 +79,7 @@ public static class DayBands
         var ordinary = Ordinary(date.DayOfWeek);
         var part = holidaysOnDate
             .Where(h => !h.IsWholeDay)
-            .Select(h => (Entry: h, From: Minute(h.From) ?? 0, To: Minute(h.To) ?? Day))
+            .Select(h => (Entry: h, From: Minute(h.From) ?? 0, To: EndMinute(h)))
             .Where(h => h.To > h.From)
             .OrderBy(h => h.From).ThenBy(h => h.To).ThenBy(h => h.Entry.Name, StringComparer.Ordinal)
             .ToList();
@@ -119,4 +119,12 @@ public static class DayBands
     };
 
     private static int? Minute(TimeOnly? time) => time is { } t ? t.Hour * 60 + t.Minute : null;
+
+    /// <summary>The minute a part-day holiday ends (exclusive). No end is midnight, and so is an end of 00:00 on a row that has a start: a person typing "19:00 to 00:00" means the evening, and 00:00 is never after 19:00.</summary>
+    private static int EndMinute(HolidayEntry holiday) => Minute(holiday.To) switch
+    {
+        null => Day,
+        0 when holiday.From is not null => Day,
+        var minute => minute.Value,
+    };
 }

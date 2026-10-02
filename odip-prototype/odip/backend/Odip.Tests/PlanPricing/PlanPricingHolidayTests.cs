@@ -88,6 +88,21 @@ public class PlanPricingHolidayTests
     }
 
     [Fact]
+    public void A_part_day_holiday_row_ending_at_00_00_prices_exactly_like_one_with_no_end_time()
+    {
+        // Review L1: the same NT Christmas Eve, but the row says 19:00 to 00:00 as a person typing it into the override table would. It used to be ignored: 309.30, not 563.96.
+        var written = new HolidayEntry(new DateOnly(2026, 12, 24), "NT", "Christmas Eve", T(19), T(0), "owner");
+        var omitted = written with { To = null };
+        var block = Block("nt", PlanSupportType.CommunityAccess, DayOfWeek.Thursday, T(18), T(22), b => b with { Location = new PlanLocation { State = "NT" } });
+
+        var quote = QuoteOne(block, new DateOnly(2026, 12, 24), holidays: new[] { written });
+
+        Assert.Equal(new[] { ("04_104_0125_6_1", 1m, 73.58m, 73.58m), ("04_102_0125_6_1", 3m, 163.46m, 490.38m) }, quote.Lines.Select(Row));
+        Assert.Equal(Json(QuoteOne(block, new DateOnly(2026, 12, 24), holidays: new[] { omitted }).Lines), Json(quote.Lines));
+        Assert.Equal(254.66m, Assert.Single(quote.HolidayOccurrences).Uplift);
+    }
+
+    [Fact]
     public void A_support_wholly_outside_a_part_day_holiday_is_an_ordinary_day()
     {
         var christmasEve = new HolidayEntry(new DateOnly(2026, 12, 24), "NT", "Christmas Eve", T(19), null, "NDIS-CODES 5.3");

@@ -93,6 +93,17 @@ public class HolidayCalendarTests
     }
 
     [Fact]
+    public void A_part_day_holiday_that_ends_at_00_00_runs_to_midnight_like_one_with_no_end()
+    {
+        // Review L1: a hand-added override row 19:00 to 00:00 (EndTime = 00:00:00) was dropped because 00:00 is not after 19:00, so the holiday rate never applied.
+        var written = DayBands.For(Thu, new[] { Part(Thu, "NT", "Christmas Eve", new TimeOnly(19, 0), new TimeOnly(0, 0)) });
+        var omitted = DayBands.For(Thu, new[] { Part(Thu, "NT", "Christmas Eve", new TimeOnly(19, 0), null) });
+
+        Assert.Equal("00:00-06:00 Weekday Night | 06:00-19:00 Weekday Daytime | 19:00-24:00 Public Holiday", Describe(written));
+        Assert.Equal(Describe(omitted), Describe(written));
+    }
+
+    [Fact]
     public void A_part_day_holiday_with_a_start_and_an_end_cuts_the_ordinary_bands_around_it()
     {
         var spans = DayBands.For(Mon, new[] { Part(Mon, "NSW", "Midday holiday", new TimeOnly(12, 0), new TimeOnly(14, 0)) });
