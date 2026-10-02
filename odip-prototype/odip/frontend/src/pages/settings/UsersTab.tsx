@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Search, Pencil, Mail } from 'lucide-react'
-import { useAdminUsers, useAdminTenantsSummary } from '@/api/hooks'
+import { useAdminUsers, useAdminTenantsSummary, useEnsureUserSignInAccount } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { DataTable } from '@/components/DataTable'
 import type { Notify } from '@/hooks/useToast'
 import { formatRelative, plural } from '@/lib/format'
-import { canSendSetPasswordEmail, sendSetPasswordEmail } from '@/lib/setPasswordEmail'
+import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
+import { describeEmailOutcome, ensureAndSendSetPasswordEmail } from '@/lib/signInEmail'
 import { parseApiDate } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -72,6 +73,7 @@ export default function UsersTab({ onAddUser, onEditUser, onNotify }: UsersTabPr
   // Firebase sends the email, so without Firebase (local dev auth) the action is not offered rather than offered and broken.
   const emailEnabled = canSendSetPasswordEmail()
 
+  const ensureAccount = useEnsureUserSignInAccount()
   const { data: tenants = [] } = useAdminTenantsSummary()
   const { data: pagedResult, isLoading } = useAdminUsers({
     tenantId: tenantId || undefined,
@@ -90,15 +92,14 @@ export default function UsersTab({ onAddUser, onEditUser, onNotify }: UsersTabPr
   const startItem = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
   const endItem = Math.min(page * PAGE_SIZE, totalCount)
 
+  // The server makes sure the account exists first (a user can have a row and no Firebase account), then Firebase is asked to send the link;
+  // what is said afterwards follows what actually happened in those two steps (lib/signInEmail.ts).
   async function handleSendSetPasswordEmail(target: AdminUserDto) {
     setSendingId(target.id)
-    const sent = await sendSetPasswordEmail(target.email).then(() => true, () => false)
+    const outcome = await ensureAndSendSetPasswordEmail(target.email, () => ensureAccount.mutateAsync(target.id))
     setSendingId(null)
-    if (sent) {
-      onNotify?.('success', `We've emailed ${target.email} a link to set their password (check spam if it doesn't arrive).`)
-    } else {
-      onNotify?.('error', `The set-password email couldn't be sent to ${target.email}. Try again in a moment.`)
-    }
+    const { tone, message } = describeEmailOutcome(outcome, 'on their row')
+    onNotify?.(tone, message)
   }
 
   const inputClass =

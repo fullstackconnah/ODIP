@@ -26,8 +26,12 @@ vi.mock('@/lib/firebase', () => ({
 
 const authStub = { name: 'auth-stub' }
 const EMAIL = 'new.person@example.com'
-const SUCCESS = `User created. We've emailed ${EMAIL} a link to set their password (check spam if it doesn't arrive).`
-const EMAIL_FAILED = "User created, but the set-password email couldn't be sent. Use 'Send set-password email' to try again."
+const SUCCESS = `User created. We've sent ${EMAIL} a link to set their password. It can take a few minutes, so ask them to check spam.`
+// Where the failure copy points the admin: the row action in the Users table.
+const NOT_SENT = `User created. No link was sent to ${EMAIL}.`
+
+/** Firebase's own errors carry the reason in `code`. */
+const firebaseError = (code: string) => Object.assign(new Error(`Firebase: Error (${code}).`), { code })
 
 const existingUser: AdminUserDto = {
   id: 'user-1', firstName: 'Ann', lastName: 'One', fullName: 'Ann One', email: 'ann@example.com', username: 'ann', role: 'Coordinator',
@@ -96,17 +100,30 @@ describe('UserFormPanel create: the emailed set-password link', () => {
   })
 
   it('still closes, and says the email failed and how to resend it, when Firebase cannot send it', async () => {
-    sendPasswordResetEmail.mockRejectedValue(new Error('auth/network-request-failed'))
+    sendPasswordResetEmail.mockRejectedValue(firebaseError('auth/network-request-failed'))
     const { u, onClose, onNotify } = renderCreate()
     await fillRequiredFields(u)
 
     await u.click(createButton())
 
-    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('error', EMAIL_FAILED))
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith(
+      'error', `${NOT_SENT} We couldn't reach Firebase. Check your connection, then use Send set-password email in the Users table again.`,
+    ))
     expect(onNotify).toHaveBeenCalledTimes(1)
     // The user exists, so this is not "Failed to save user", and creating again would only be refused as a duplicate.
     expect(mockCreate).toHaveBeenCalledTimes(1)
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('says where to retry, and never claims a link went, when Firebase fails for a reason it has no special advice for', async () => {
+    sendPasswordResetEmail.mockRejectedValue(new Error('boom'))
+    const { u, onNotify } = renderCreate()
+    await fillRequiredFields(u)
+
+    await u.click(createButton())
+
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('error', `${NOT_SENT} Use Send set-password email in the Users table to try again.`))
+    expect(onNotify.mock.calls[0][1]).not.toMatch(/we've sent|in a moment/i)
   })
 
   it('shows who will be emailed while the default is in force, and not once a temporary password replaces it', async () => {

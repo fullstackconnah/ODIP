@@ -31,3 +31,11 @@ export interface UpdateAdminUserDto {
   role: string
   isActive: boolean
 }
+
+/** What became of a person's Firebase sign-in account: ODIP just made it, or it was already there and was left as it was. */
+export type FirebaseAccountState = 'created' | 'existing'
+
+/** POST /admin/users/{id}/sign-in-account and POST /staff/{id}/sign-in-account: makes sure the account exists, and says which. */
+export interface SignInAccountDto {
+  firebaseAccount: FirebaseAccountState
+}

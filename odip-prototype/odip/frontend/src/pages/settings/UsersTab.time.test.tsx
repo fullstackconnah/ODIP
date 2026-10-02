@@ -8,6 +8,7 @@ const { mockUseAdminUsers } = vi.hoisted(() => ({ mockUseAdminUsers: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
   useAdminUsers: mockUseAdminUsers,
   useAdminTenantsSummary: () => ({ data: [] }),
+  useEnsureUserSignInAccount: () => ({ mutateAsync: vi.fn() }),
 }))
 
 afterEach(() => {

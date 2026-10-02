@@ -14,6 +14,7 @@ const { mockUseStaffOverview, mockUseSettings } = vi.hoisted(() => ({
 vi.mock('@/api/hooks', () => ({
   useStaffOverview: mockUseStaffOverview,
   useSettings: mockUseSettings,
+  useEnsureStaffSignInAccount: () => ({ mutateAsync: vi.fn() }),
 }))
 
 function setUserRole(role: string) {

@@ -15,6 +15,7 @@ vi.mock('@/api/hooks', () => ({
   useUpdateAccommodation: () => ({ mutate: vi.fn(), isPending: false }),
   useAdminUsers: mockUseAdminUsers,
   useAdminTenantsSummary: () => ({ data: [] }),
+  useEnsureUserSignInAccount: () => ({ mutateAsync: vi.fn() }),
 }))
 vi.mock('@/lib/permissions', () => ({ usePermissions: () => ({ canWrite: true }) }))
 

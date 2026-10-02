@@ -1,18 +1,21 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, useWatch, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCreateStaff, useUpdateStaff, useStaffDetail } from '@/api/hooks'
-import { useEffect } from 'react'
+import { useCreateStaff, useUpdateStaff, useStaffDetail, useEnsureStaffSignInAccount } from '@/api/hooks'
+import { useEffect, useState } from 'react'
 import { FormField } from '@/components/FormField'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
+import { SignInEmailOutcome } from '@/components/SignInEmailOutcome'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { usePermissions } from '@/lib/permissions'
+import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
+import { ensureAndSendSetPasswordEmail, type EmailOutcome } from '@/lib/signInEmail'
 import { extractErrorMessage } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
 
@@ -69,9 +72,16 @@ export default function StaffCreatePage() {
   const isEdit = !!id
   const createStaff = useCreateStaff()
   const updateStaff = useUpdateStaff()
+  const ensureStaffAccount = useEnsureStaffSignInAccount()
   const { data: existing, isLoading: isLoadingExisting } = useStaffDetail(isEdit ? id : undefined)
   const mutation = isEdit ? updateStaff : createStaff
   const { isCoordinator } = usePermissions()
+  // Staff added here get a user row and, until something makes one, no Firebase sign-in account. After a create the page makes sure there is
+  // one and asks Firebase to email the link; with no Firebase (local dev auth) there is nothing to send and the page behaves as it always did.
+  const emailLinkAvailable = canSendSetPasswordEmail()
+  // After a create: what became of that email, kept ON SCREEN. Navigating away at once would take the answer with it.
+  const [created, setCreated] = useState<{ id: string; name: string; email: string; outcome: EmailOutcome } | null>(null)
+  const [retrying, setRetrying] = useState(false)
 
   // The account-role dropdown always hides SuperAdmin (never grantable from this form), and
   // additionally hides Admin when the person filling out the form is a Coordinator — a
@@ -117,6 +127,8 @@ export default function StaffCreatePage() {
     },
   })
 
+  const typedEmail = useWatch({ control, name: 'email' })
+
   useEffect(() => {
     if (existing) {
       reset({
@@ -159,7 +171,14 @@ export default function StaffCreatePage() {
         const res = await createStaff.mutateAsync(payload)
         if (res.success) {
           flushSync(() => reset(data))
-          navigate('/staff')
+          const person = res.data
+          if (emailLinkAvailable && person?.id && person.isActive && person.email) {
+            // The server stored the address lower-case; that is the one the email goes to.
+            const outcome = await ensureAndSendSetPasswordEmail(person.email, () => ensureStaffAccount.mutateAsync(person.id))
+            setCreated({ id: person.id, name: person.fullName, email: person.email, outcome })
+          } else {
+            navigate('/staff')
+          }
         }
       }
     } catch {
@@ -169,7 +188,29 @@ export default function StaffCreatePage() {
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
+  async function sendAgain() {
+    if (!created) return
+    setRetrying(true)
+    const outcome = await ensureAndSendSetPasswordEmail(created.email, () => ensureStaffAccount.mutateAsync(created.id))
+    setCreated({ ...created, outcome })
+    setRetrying(false)
+  }
+
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
+
+  if (created) {
+    return (
+      <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
+        <PageHeader title="Staff member created" subtitle={created.name} />
+        <Card className="space-y-4">
+          <SignInEmailOutcome outcome={created.outcome} retryAt="on their staff page" onRetry={sendAgain} retrying={retrying} />
+          <div className="flex justify-end">
+            <Button to="/staff">Done</Button>
+          </div>
+        </Card>
+      </div>
+    )
+  }
 
   if (isTargetSuperAdmin) {
     return (
@@ -250,7 +291,13 @@ export default function StaffCreatePage() {
               </FormField>
             )}
 
-            <FormField label="Email" required error={errors.email?.message} hint={!errors.email ? 'Used to sign in to the app.' : undefined} className={span.medium}>
+            <FormField label="Email" required error={errors.email?.message} hint={
+                !errors.email
+                  ? (!isEdit && emailLinkAvailable
+                      ? `We'll email ${typedEmail?.trim() || 'the new staff member'} a link to set their password.`
+                      : 'Used to sign in to the app.')
+                  : undefined
+              } className={span.medium}>
               <input type="email" {...register('email')} placeholder="e.g. sarah@odip.com.au" />
             </FormField>
 

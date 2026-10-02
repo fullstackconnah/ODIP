@@ -1,0 +1,169 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import StaffDetailPage from './StaffDetailPage'
+import type { StaffOverviewDto, StaffDetailDto } from '@/api/types/staff'
+
+// "Send set-password email" on the staff page: staff added through the staff form have a user row and no Firebase account until something
+// makes one, so the action makes sure of the account (POST /staff/{id}/sign-in-account) and only then asks Firebase to send the link.
+
+const { mockUseStaffOverview, mockEnsure, sendPasswordResetEmail, firebase } = vi.hoisted(() => ({
+  mockUseStaffOverview: vi.fn(),
+  mockEnsure: vi.fn(),
+  sendPasswordResetEmail: vi.fn(),
+  // `auth` is null where Firebase is not configured (local dev auth). A getter, so each test can change it.
+  firebase: { auth: null as object | null },
+}))
+
+vi.mock('@/api/hooks', () => ({
+  useStaffOverview: mockUseStaffOverview,
+  useSettings: () => ({ data: { qualificationWarningDays: 30 } }),
+  useEnsureStaffSignInAccount: () => ({ mutateAsync: mockEnsure }),
+}))
+vi.mock('firebase/auth', () => ({ sendPasswordResetEmail }))
+vi.mock('@/lib/firebase', () => ({
+  get auth() {
+    return firebase.auth
+  },
+}))
+
+const authStub = { name: 'auth-stub' }
+const SEND = 'Send set-password email'
+
+function makeStaff(overrides: Partial<StaffDetailDto> = {}): StaffDetailDto {
+  return {
+    id: 'staff-1', firstName: 'Alex', lastName: 'Rivera', fullName: 'Alex Rivera', username: 'alex',
+    role: 'SupportWorker', position: 'SupportWorker', email: 'alex@example.com', mobile: null,
+    region: 'North', isDriverEligible: false, isFirstAidQualified: false, isMedicationCompetent: false,
+    isManualHandlingCompetent: false, isOvernightEligible: false, isActive: true,
+    firstAidExpiryDate: null, driverLicenceExpiryDate: null, manualHandlingExpiryDate: null,
+    medicationCompetencyExpiryDate: null, workerScreeningNumber: null, workerScreeningExpiryDate: null,
+    hasExpiredQualifications: false, notes: null,
+    ...overrides,
+  } as StaffDetailDto
+}
+
+function renderPage(staff: Partial<StaffDetailDto> = {}, role = 'Admin') {
+  localStorage.setItem('odip_user', JSON.stringify({ role }))
+  const overview: StaffOverviewDto = {
+    staff: makeStaff(staff), availability: [], upcomingShifts: [], upcomingTripAssignments: [], recentIncidents: [], recentCompletions: [],
+  }
+  mockUseStaffOverview.mockReturnValue({ data: overview, isLoading: false })
+  render(
+    <MemoryRouter initialEntries={['/staff/staff-1']}>
+      <Routes>
+        <Route path="/staff/:id" element={<StaffDetailPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  return userEvent.setup()
+}
+
+/** Firebase's own errors carry the reason in `code`. */
+const firebaseError = (code: string) => Object.assign(new Error(`Firebase: Error (${code}).`), { code })
+
+beforeEach(() => {
+  firebase.auth = authStub
+  mockEnsure.mockReset().mockResolvedValue({ firebaseAccount: 'created' })
+  sendPasswordResetEmail.mockReset().mockResolvedValue(undefined)
+})
+
+afterEach(() => {
+  localStorage.clear()
+})
+
+describe('StaffDetailPage: Send set-password email', () => {
+  it.each(['Admin', 'Coordinator', 'SuperAdmin'])('is offered to a %s for an active staff member with an email', role => {
+    renderPage({}, role)
+
+    expect(screen.getByRole('button', { name: SEND })).toBeInTheDocument()
+  })
+
+  it.each(['SupportWorker', 'ReadOnly'])('is not offered to a %s, whom the server would refuse', role => {
+    renderPage({}, role)
+
+    expect(screen.queryByRole('button', { name: SEND })).not.toBeInTheDocument()
+  })
+
+  it('is not offered for an inactive staff member', () => {
+    renderPage({ isActive: false })
+    expect(screen.queryByRole('button', { name: SEND })).not.toBeInTheDocument()
+  })
+
+  it('is not offered for a staff member with no email', () => {
+    renderPage({ email: '' })
+    expect(screen.queryByRole('button', { name: SEND })).not.toBeInTheDocument()
+  })
+
+  it('is not offered, and nothing is left broken, where Firebase is not configured (local dev auth)', () => {
+    firebase.auth = null
+    renderPage()
+
+    expect(screen.queryByRole('button', { name: SEND })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /edit/i })).toBeInTheDocument()
+  })
+
+  it('makes sure this staff member has an account, then asks Firebase to email the link, and says it was sent', async () => {
+    const u = renderPage()
+
+    await u.click(screen.getByRole('button', { name: SEND }))
+
+    expect(await screen.findByText("We've sent alex@example.com a link to set their password. It can take a few minutes, so ask them to check spam."))
+      .toBeInTheDocument()
+    expect(mockEnsure).toHaveBeenCalledTimes(1)
+    expect(mockEnsure).toHaveBeenCalledWith('staff-1')
+    expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1)
+    expect(sendPasswordResetEmail).toHaveBeenCalledWith(authStub, 'alex@example.com')
+  })
+
+  it('does not ask Firebase to send until the server has made sure of the account', async () => {
+    let finishEnsure!: (value: { firebaseAccount: 'created' | 'existing' }) => void
+    mockEnsure.mockReturnValue(new Promise(resolve => { finishEnsure = resolve }))
+    const u = renderPage()
+
+    await u.click(screen.getByRole('button', { name: SEND }))
+
+    await waitFor(() => expect(mockEnsure).toHaveBeenCalledTimes(1))
+    expect(sendPasswordResetEmail).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: SEND })).toBeDisabled()
+
+    finishEnsure({ firebaseAccount: 'created' })
+
+    await waitFor(() => expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByRole('button', { name: SEND })).toBeEnabled())
+  })
+
+  it('says "reset" when the account was already there', async () => {
+    mockEnsure.mockResolvedValue({ firebaseAccount: 'existing' })
+    const u = renderPage()
+
+    await u.click(screen.getByRole('button', { name: SEND }))
+
+    expect(await screen.findByText("We've sent alex@example.com a link to reset their password. It can take a few minutes, so ask them to check spam."))
+      .toBeInTheDocument()
+  })
+
+  it('sends nothing, and says why, when the server could not set the account up', async () => {
+    mockEnsure.mockRejectedValue({ response: { data: { success: false, errors: ['This staff member is inactive, so they cannot be given a sign-in account.'] } } })
+    const u = renderPage()
+
+    await u.click(screen.getByRole('button', { name: SEND }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'No link was sent to alex@example.com. This staff member is inactive, so they cannot be given a sign-in account.',
+    )
+    expect(sendPasswordResetEmail).not.toHaveBeenCalled()
+  })
+
+  it('says no link was sent, with advice that fits, when Firebase refuses', async () => {
+    sendPasswordResetEmail.mockRejectedValue(firebaseError('auth/invalid-email'))
+    const u = renderPage()
+
+    await u.click(screen.getByRole('button', { name: SEND }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "No link was sent to alex@example.com. That doesn't look like a valid email address. Correct it, then use Send set-password email on this page.",
+    )
+  })
+})

@@ -8,7 +8,8 @@ import type { AdminUserDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { SlideOver } from '@/components/SlideOver'
 import type { Notify } from '@/hooks/useToast'
-import { canSendSetPasswordEmail, sendSetPasswordEmail } from '@/lib/setPasswordEmail'
+import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
+import { describeEmailOutcome, sendSetPasswordEmailFor } from '@/lib/signInEmail'
 import { generateTemporaryPassword } from '@/lib/temporaryPassword'
 
 // ---------------------------------------------------------------------------
@@ -183,12 +184,10 @@ export default function UserFormPanel({
     } else if (!emailLinkAvailable) {
       onNotify?.('success', 'User created.')
     } else {
-      const sent = await sendSetPasswordEmail(createdEmail).then(() => true, () => false)
-      if (sent) {
-        onNotify?.('success', `User created. We've emailed ${createdEmail} a link to set their password (check spam if it doesn't arrive).`)
-      } else {
-        onNotify?.('error', "User created, but the set-password email couldn't be sent. Use 'Send set-password email' to try again.")
-      }
+      // The account was just made by the create above, so the email goes straight out (no ensure step), worded for a new account.
+      const outcome = await sendSetPasswordEmailFor(createdEmail, 'created')
+      const { tone, message } = describeEmailOutcome(outcome, 'in the Users table')
+      onNotify?.(tone, `User created. ${message}`)
     }
   }
 

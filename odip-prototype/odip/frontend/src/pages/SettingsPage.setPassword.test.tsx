@@ -8,8 +8,9 @@ import SettingsPage from './SettingsPage'
 // panel at all, so what became of the set-password email has to be said by the page. The tab, the panel and the toast have their own
 // tests; this one proves they are wired together.
 
-const { mockCreate, sendPasswordResetEmail, settingsData, usersPage } = vi.hoisted(() => ({
+const { mockCreate, mockEnsure, sendPasswordResetEmail, settingsData, usersPage } = vi.hoisted(() => ({
   mockCreate: vi.fn(),
+  mockEnsure: vi.fn(),
   sendPasswordResetEmail: vi.fn(),
   // A stable reference, like a cached query's data: QualificationSettingsTab re-syncs from it on every new identity.
   settingsData: { qualificationWarningDays: 30 },
@@ -45,6 +46,7 @@ vi.mock('@/api/hooks', () => ({
   useAdminTenantsSummary: () => ({ data: [{ id: 'tenant-1', name: 'Sample Support Co' }] }),
   useAdminUsers: () => usersPage,
   useCreateAdminUser: () => ({ mutateAsync: mockCreate, isPending: false }),
+  useEnsureUserSignInAccount: () => ({ mutateAsync: mockEnsure }),
   useUpdateAdminUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useNotificationPreferences: () => ({ data: { rows: [] }, isLoading: false, isError: false }),
   useUpdateNotificationPreferences: () => ({ mutate: vi.fn(), isPending: false }),
@@ -64,6 +66,7 @@ vi.mock('@/lib/firebase', () => ({ auth: { name: 'auth-stub' } }))
 
 beforeEach(() => {
   mockCreate.mockReset().mockResolvedValue(undefined)
+  mockEnsure.mockReset().mockResolvedValue({ firebaseAccount: 'created' })
   sendPasswordResetEmail.mockReset().mockResolvedValue(undefined)
 })
 
@@ -91,7 +94,7 @@ describe('SettingsPage Users tab: creating a user', () => {
     await u.click(screen.getByRole('button', { name: 'Create User' }))
 
     expect(
-      await screen.findByText("User created. We've emailed new.person@example.com a link to set their password (check spam if it doesn't arrive)."),
+      await screen.findByText("User created. We've sent new.person@example.com a link to set their password. It can take a few minutes, so ask them to check spam."),
     ).toBeInTheDocument()
     expect(mockCreate).toHaveBeenCalledWith({
       tenantId: 'tenant-1', firstName: 'New', lastName: 'Person', email: 'new.person@example.com', username: 'newperson', role: 'Coordinator',
@@ -109,8 +112,9 @@ describe('SettingsPage Users tab: Send set-password email', () => {
     await u.click(screen.getByRole('button', { name: 'Send set-password email' }))
 
     expect(
-      await screen.findByText("We've emailed ann@example.com a link to set their password (check spam if it doesn't arrive)."),
+      await screen.findByText("We've sent ann@example.com a link to set their password. It can take a few minutes, so ask them to check spam."),
     ).toBeInTheDocument()
+    expect(mockEnsure).toHaveBeenCalledWith('user-1')
     expect(sendPasswordResetEmail).toHaveBeenCalledWith({ name: 'auth-stub' }, 'ann@example.com')
   })
 
@@ -120,6 +124,8 @@ describe('SettingsPage Users tab: Send set-password email', () => {
 
     await u.click(screen.getByRole('button', { name: 'Send set-password email' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent("The set-password email couldn't be sent to ann@example.com. Try again in a moment.")
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'No link was sent to ann@example.com. Use Send set-password email on their row to try again.',
+    )
   })
 })
