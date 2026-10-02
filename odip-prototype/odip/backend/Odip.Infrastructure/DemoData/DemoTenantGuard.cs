@@ -128,6 +128,17 @@ public sealed class DemoTenantGuard
             }
         }
 
+        // Rows of this save that audit history may describe: the tenant rows above, and the listed non-tenant children whose parent is owned.
+        var touched = new HashSet<Guid>(inSave.Values.SelectMany(ids => ids));
+        foreach (var entry in tracker.Entries())
+        {
+            if (entry.Entity is not ITenantEntity && NonTenantParents.TryGetValue(entry.Entity.GetType(), out var parentOf) && TryGetId(entry, out var childId))
+            {
+                var (kind, parentId) = parentOf(entry.Entity);
+                if (ParentIsOwned(kind, parentId, inSave)) touched.Add(childId);
+            }
+        }
+
         foreach (var entry in tracker.Entries())
         {
             if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted)) continue;
@@ -145,7 +156,7 @@ public sealed class DemoTenantGuard
             {
                 if (entry.State != EntityState.Added)
                     violations.Add($"{label}: audit history is append-only.");
-                else if (!_owned.Contains(audit.EntityId) && !inSave.Values.Any(ids => ids.Contains(audit.EntityId)))
+                else if (!_owned.Contains(audit.EntityId) && !touched.Contains(audit.EntityId))
                     violations.Add($"{label}: it describes {audit.EntityType} {audit.EntityId}, which is not a Demo entity.");
                 continue;
             }
@@ -168,9 +179,9 @@ public sealed class DemoTenantGuard
             }
 
             // A table with no tenant column: only a listed child table, and only under a parent the Demo tenant owns.
-            if (entry.State == EntityState.Added && NonTenantParents.TryGetValue(type, out var parentOf))
+            if (entry.State == EntityState.Added && NonTenantParents.TryGetValue(type, out var childOf))
             {
-                var (kind, parentId) = parentOf(entry.Entity);
+                var (kind, parentId) = childOf(entry.Entity);
                 if (!ParentIsOwned(kind, parentId, inSave))
                     violations.Add($"{label}: it hangs off {kind} {parentId}, which the Demo tenant does not own.");
             }

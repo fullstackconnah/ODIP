@@ -264,6 +264,29 @@ public class DemoTenantGuardTests
     }
 
     [Fact]
+    public async Task AuditRows_AboutANonTenantChildOfAKnownUser_AreFine_ButNotWhenTheChildIsRefused()
+    {
+        var demoUser = Guid.NewGuid();
+        var child = new StaffAvailability
+        {
+            Id = Guid.NewGuid(), UserId = demoUser, StartDateTime = new DateTime(2026, 10, 9), EndDateTime = new DateTime(2026, 10, 9, 23, 59, 59),
+            AvailabilityType = AvailabilityType.Unavailable,
+        };
+        await using (var db = NewDb(NewOptions()))
+        {
+            db.StaffAvailabilities.Add(child);
+            db.AuditLogs.Add(new AuditLog { Id = Guid.NewGuid(), EntityType = nameof(StaffAvailability), EntityId = child.Id, Action = AuditAction.Created, ChangedAt = DateTimeOffset.UtcNow });
+            NewGuard(demoUser).Verify(db.ChangeTracker);
+        }
+
+        await using var refused = NewDb(NewOptions());
+        refused.StaffAvailabilities.Add(child);           // a user the Demo tenant does not own
+        refused.AuditLogs.Add(new AuditLog { Id = Guid.NewGuid(), EntityType = nameof(StaffAvailability), EntityId = child.Id, Action = AuditAction.Created, ChangedAt = DateTimeOffset.UtcNow });
+        var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(refused.ChangeTracker));
+        Assert.Contains(ex.Violations, v => v.StartsWith("AuditLog"));
+    }
+
+    [Fact]
     public async Task AuditRows_AboutAKnownDemoUser_AreFine()
     {
         var demoUser = Guid.NewGuid();
