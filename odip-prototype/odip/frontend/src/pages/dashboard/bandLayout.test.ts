@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { BAND_GRID_CLASS, BAND_PER_ROW, BAND_SPAN_CLASS, BAND_TRACKS, bandSpans, bandTileStyles, rowSizes } from './bandLayout'
 
-// The band can hold from 1 to 9 tiles (only the items that need somebody are tiles), and at every width its rows must be full: no hole in a row, the same
+// The band can hold from 1 to 10 tiles (only the items that need somebody are tiles), and at every width its rows must be full: no hole in a row, the same
 // share for every tile of a row, and the rows as even as whole tiles allow.
-const COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+const COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 describe('rowSizes: how n tiles divide into rows of at most r', () => {
   it.each([
@@ -54,7 +54,7 @@ describe('bandSpans: each tile\'s share of its row, in 60 tracks, at every step'
     expect(spans[6]).toEqual([60, 60, 30, 20, 20]) // the last: in a row of 1, then alone, then 2, 3 and 3
   })
 
-  it('fills every row exactly: the spans of consecutive tiles add up to the 60 tracks of one row, with no hole and no overflow, for 1 to 9 tiles at every step', () => {
+  it('fills every row exactly: the spans of consecutive tiles add up to the 60 tracks of one row, with no hole and no overflow, for 1 to 10 tiles at every step', () => {
     for (const count of COUNTS) {
       const spans = bandSpans(count)
       expect(spans).toHaveLength(count)

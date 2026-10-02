@@ -1,6 +1,6 @@
 // How the needs-attention band deals its tiles into rows: balanced, with no hole in any row, for any number of tiles at any width. Pure and JSX-free.
 //
-// Only the items that need somebody are tiles, so how many there are changes with the day (1 to 9). The band is a size container, so its rows follow its OWN
+// Only the items that need somebody are tiles, so how many there are changes with the day (1 to 10). The band is a size container, so its rows follow its OWN
 // width (the 232px sidebar and the pointer's gutter do not matter): from the narrowest to the widest a row holds up to 1, 2, 3, 4 and 5 tiles, opening at
 // band widths of 36rem, 56rem, 72rem and 96rem (the `@min-[…]` steps of BAND_SPAN_CLASS: 390 and 360 phones get 1, a 768 tablet 2, 1280 gets 3, 1440 gets 4
 // and 1920 gets 5). With n tiles and r to a row the band takes ceil(n / r) rows and deals the tiles out evenly (7 tiles at 4 a row are 4 + 3, not 4 + 3

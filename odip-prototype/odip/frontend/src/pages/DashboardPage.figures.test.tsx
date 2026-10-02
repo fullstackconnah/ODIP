@@ -3,10 +3,11 @@ import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 
-const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeaveQueue, mockUseStaff } = vi.hoisted(() => ({
+const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeaveQueue, mockUsePendingCompletionQueue, mockUseStaff } = vi.hoisted(() => ({
   mockUseParticipantAlertsAggregate: vi.fn(),
   mockUseDashboard: vi.fn(),
   mockUsePendingLeaveQueue: vi.fn(),
+  mockUsePendingCompletionQueue: vi.fn(),
   mockUseStaff: vi.fn(),
 }))
 
@@ -16,6 +17,7 @@ vi.mock('@/api/hooks', () => ({
   useStaff: mockUseStaff,
   useParticipantAlertsAggregate: mockUseParticipantAlertsAggregate,
   usePendingLeaveQueue: mockUsePendingLeaveQueue,
+  usePendingCompletionQueue: mockUsePendingCompletionQueue,
 }))
 
 afterEach(() => {
@@ -26,6 +28,7 @@ afterEach(() => {
 beforeEach(() => {
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
   mockUsePendingLeaveQueue.mockReturnValue({ count: 0, loading: false, error: false })
+  mockUsePendingCompletionQueue.mockReturnValue({ count: 0, loading: false, error: false })
   mockUseStaff.mockReturnValue({ data: [] })
   mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
   mockUseDashboard.mockReturnValue({

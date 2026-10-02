@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveQueue } from '@/api/hooks'
+import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveQueue, usePendingCompletionQueue } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
 import { formatRatio, formatRelative, plural } from '@/lib/format'
 import { credentialIssueCount, staffCredentials } from '@/lib/credentials'
@@ -52,12 +52,13 @@ function DashboardHeader({ fullName, upcomingTrips, activeParticipants, outstand
 }
 
 export default function DashboardPage() {
-  const { canViewAlerts, canApproveLeave, canAccessPage, fullName } = usePermissions()
+  const { canViewAlerts, canApproveLeave, canReviewCompletions, canAccessPage, fullName } = usePermissions()
   const { data, isLoading, isError } = useDashboard()
   const { data: settings } = useSettings()
   const { data: allStaff = [], isLoading: staffLoading, isError: staffError } = useStaff({ isActive: 'true' })
   const { data: alertsAggregate = [], isLoading: alertsLoading, isError: alertsError } = useParticipantAlertsAggregate(canViewAlerts)
   const pendingLeave = usePendingLeaveQueue(canApproveLeave)
+  const pendingCompletions = usePendingCompletionQueue(canReviewCompletions)
 
   const warningDays = settings?.qualificationWarningDays ?? 30
 
@@ -111,14 +112,17 @@ export default function DashboardPage() {
   const criticalParticipantCount = new Set(criticalAlertItems.map((i) => i.participantId)).size
 
   // The needs-attention band: every item the dashboard counts, in a fixed order, handed to the band, which makes a tile of each one that needs somebody and names the rest
-  // in one "All clear" row. An item is left out only by the conditions the dashboard always had: Qualification Issues needs the Qualifications page, the alerts item needs
-  // canViewAlerts, Pending Leave needs canApproveLeave. Every count is the one the KPI row carried; the everyday counts live in the header's summary line. Each line says
-  // what the count means in the server's own terms, and each link goes to the page where it is fixed (a route that exists today).
+  // in one "All clear" row. An item is left out only by what the role can open: Qualification Issues needs the Qualifications page, the alerts item needs canViewAlerts,
+  // Pending Leave needs canApproveLeave and Shift Completions needs canReviewCompletions (the same gates as the nav badge). Every count but Shift Completions is one the KPI
+  // row carried; the everyday counts live in the header's summary line. Each line says what the count means in the server's own terms, and each link goes to the page where
+  // it is fixed (a route that exists today). "Nothing needs you right now" is only as true as this list, so it carries what the nav badges count too (leave AND completions).
   //
-  // The three items computed from their own request never claim "All clear", or show a definite 0, without data: while the request is in flight (`loading`) or after it
+  // The four items computed from their own request never claim "All clear", or show a definite 0, without data: while the request is in flight (`loading`) or after it
   // failed (`error`) the item is an en dash placeholder, never tinted, with no line and no link of its own, and the band is not "all clear" while one is. A false negative
-  // here is worse than a placeholder, since coordinators rely on these items to know whether any staff qualification, participant or leave request needs them.
-  // Qualification Issues counts the staff list; Critical Participant Alerts counts the participant-alerts aggregate; Pending Leave counts the approvals queue.
+  // here is worse than a placeholder, since coordinators rely on these items to know whether any staff qualification, participant, leave request or shift needs them.
+  // Qualification Issues counts the staff list; Critical Participant Alerts counts the participant-alerts aggregate; Pending Leave and Shift Completions count their queues.
+  // (The summary's `conflictCount` is not an item: no page lists or fixes conflicts, and it counts every flagged record regardless of date, including the staff overrides a
+  // coordinator has already acknowledged.)
   const attentionItems: BandItem[] = []
   // The tile links to the Qualifications page, so a role that cannot open it (a SupportWorker) gets no tile rather than one that bounces.
   if (canAccessPage('qualifications')) {
@@ -193,6 +197,19 @@ export default function DashboardPage() {
       to: '/rostering/leave',
       loading: pendingLeave.loading,
       error: pendingLeave.error,
+    })
+  }
+  // The other half of what the Staff & roster badge counts (leave plus completions): without it the band could say nothing needs anybody beside a red badge.
+  if (canReviewCompletions) {
+    attentionItems.push({
+      label: 'Shift Completions',
+      count: pendingCompletions.count,
+      tone: 'warning',
+      detail: 'Submitted shifts waiting for review before they are billed.',
+      action: { label: 'Review completions', to: '/rostering/completions' },
+      to: '/rostering/completions',
+      loading: pendingCompletions.loading,
+      error: pendingCompletions.error,
     })
   }
 

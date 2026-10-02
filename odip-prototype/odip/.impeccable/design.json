@@ -359,7 +359,8 @@
           "Missing Staff (warning; link /schedule)",
           "Open Incidents (warning; link /incidents)",
           "QSC Overdue (danger; link /incidents?qsc=overdue)",
-          "Pending Leave (canApproveLeave only; warning; link /rostering/leave)"
+          "Pending Leave (canApproveLeave only; warning; link /rostering/leave)",
+          "Shift Completions (canReviewCompletions only; warning; link /rostering/completions)"
         ],
         "api": [
           {
@@ -969,7 +970,7 @@
       },
       {
         "name": "The Attention Band Pattern",
-        "body": "The dashboard opts into a band of `StatCard variant=\"attention\"` tiles directly under its display-step greeting and meta row: a fixed order (Qualification Issues, Critical Participant Alerts, Overdue, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents, QSC Overdue, Pending Leave), Qualification Issues only for a role that can open the Qualifications page, the alerts item only with `canViewAlerts` and Pending Leave only with `canApproveLeave`. An item above zero is a tall tile: the display-step figure, the label, one honest line saying what the count means and a link to where it is fixed, filled like a glance segment (danger: error container, warning: warning container) with everything in the on-container ink. Items at zero are one All clear row on Pale Sprout naming them, and when every item is at zero the band is one full-width Pale Sprout field (\"All clear. Nothing needs you right now.\"). An item with no data (still loading, or failed) is a quiet en dash tile, `aria-busy` while loading and a screen-reader-only \"Couldn't load\" after a failure, never named as clear, and the band is not the all-clear field while one exists. Tiles are dealt into balanced rows by the band's own width, up to 1, 2, 3, 4 and 5 a row. The everyday counts (upcoming trips, active participants, outstanding tasks) are one quiet line in the header's meta row. Every other StatCard is unchanged.",
+        "body": "The dashboard opts into a band of `StatCard variant=\"attention\"` tiles directly under its display-step greeting and meta row: a fixed order (Qualification Issues, Critical Participant Alerts, Overdue, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents, QSC Overdue, Pending Leave, Shift Completions), Qualification Issues only for a role that can open the Qualifications page, the alerts item only with `canViewAlerts`, Pending Leave only with `canApproveLeave` and Shift Completions only with `canReviewCompletions` (Pending Leave and Shift Completions are the two queues the Staff & roster badge adds together, so the all-clear never sits beside a badge that disagrees). An item above zero is a tall tile: the display-step figure, the label, one honest line saying what the count means and a link to where it is fixed, filled like a glance segment (danger: error container, warning: warning container) with everything in the on-container ink. Items at zero are one All clear row on Pale Sprout naming them, and when every item is at zero the band is one full-width Pale Sprout field (\"All clear. Nothing needs you right now.\"). An item with no data (still loading, or failed) is a quiet en dash tile, `aria-busy` while loading and a screen-reader-only \"Couldn't load\" after a failure, never named as clear, and the band is not the all-clear field while one exists. Tiles are dealt into balanced rows by the band's own width, up to 1, 2, 3, 4 and 5 a row. The everyday counts (upcoming trips, active participants, outstanding tasks) are one quiet line in the header's meta row. Every other StatCard is unchanged.",
         "section": "components"
       }
     ],

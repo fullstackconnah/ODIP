@@ -614,8 +614,9 @@ terms, and a link to where it is fixed, a route that exists today:
 | Open Incidents | warning | Incidents not yet resolved or closed. | Open incidents, `/incidents` |
 | QSC Overdue | danger | Reportable incidents with no QSC report after 24 hours. | Review QSC reports, `/incidents?qsc=overdue` |
 | Pending Leave (`canApproveLeave`) | warning | Leave and unavailability requests waiting for a decision. | Review leave requests, `/rostering/leave` |
+| Shift Completions (`canReviewCompletions`) | warning | Submitted shifts waiting for review before they are billed. | Review completions, `/rostering/completions` |
 
-Only those three conditions drop an item. The lines are the server's rules in words (`DashboardController.GetSummary`: a trip counts when it starts today or within 60 days; the Qualifications
+Only what the role can open drops an item (the Qualifications page, `canViewAlerts`, `canApproveLeave`, `canReviewCompletions`: the nav's own gates). Pending Leave and Shift Completions are the two queues the Staff & roster badge adds together, so the band never says nothing needs you beside a badge that does. The summary's `conflictCount` is deliberately not an item: no page lists or fixes conflicts, and it counts every flagged record regardless of date, including the staff overrides a coordinator has already acknowledged. The lines are the server's rules in words (`DashboardController.GetSummary`: a trip counts when it starts today or within 60 days; the Qualifications
 page's own warning window; QSC overdue is a reportable incident with no report after 24 hours), and a count of one reads in the singular ("Trip starts", "1 staff member"). A vehicle or a staff
 member is assigned to a trip on the Schedule (the assignments the count reads) and accommodation on the trip's own tab, so that tile opens the Trips list to choose the trip; QSC Overdue and
 Overdue open their lists already filtered to the rule the figure counts.
@@ -629,11 +630,11 @@ Overdue open their lists already filtered to the rule the figure counts.
 - **A zero is a name, not a tile.** The items at zero are named in ONE row after the tiles on Pale Sprout (`TONE.success.solid`, `#bbf37c` with `#0f2000`) with a check: "All clear on Missing Vehicles,
   Open Incidents and QSC Overdue" (the names joined "A, B and C", no serial comma). A zero is never tinted and never a tile, so the band's weight is the day's trouble.
 - **Nothing needs you.** When every item has data and is at zero the band is one full-width Pale Sprout field, a larger check, "All clear. Nothing needs you right now." and, under it, "Checked and at
-  zero:" and every item's name, so the claim can be audited. It is the same green at the same strength as the row, only the whole band.
+  zero:" and every item's name, so the claim can be audited. It is the same green at the same strength as the row, only the whole band. The sentence is only as true as the list, which is why the list carries what the nav badges count.
 - **Loading and failure are not zero.** An item computed from its own request shows an en dash (`–`) in the muted figure style, never a definite 0, while that request is in flight (`aria-busy="true"` and a
   screen-reader-only "Loading") and after it fails (not busy, and a screen-reader-only "Couldn't load"). It is the compact tile (card fill, a link to the page it counts), has no line and no action, is never
   tinted, is not named in the All clear row, and while one exists the band is not the all-clear field: an all-clear is never claimed without data. Qualification Issues (the staff list), Critical Participant
-  Alerts (the participant-alerts aggregate) and Pending Leave (the approvals queue, `usePendingLeaveQueue`: its count is 0 while loading and after a failure) do this.
+  Alerts (the participant-alerts aggregate), Pending Leave (the approvals queue, `usePendingLeaveQueue`) and Shift Completions (the review queue, `usePendingCompletionQueue`) do this: a queue's count is 0 while loading and after a failure, so the hooks say which it is.
 - **Shape.** The band is a size container and its tiles are dealt into balanced rows by ITS width (the 232px sidebar and the pointer's gutter do not matter): up to 1, 2, 3, 4 and 5 tiles a row from band
   widths of 0, 36, 56, 72 and 96rem (a 390 phone gets 1, a 768 tablet 2, 1280 gets 3, 1440 gets 4 and 1920 gets 5). With n tiles and r to a row there are ceil(n / r) rows, the tiles dealt out evenly (7 at 4 a row
   is 4 + 3) and equal in width within a row, so every row is full and none has a hole (`pages/dashboard/bandLayout.ts`: a 60-track grid, each tile spanning 60 / its row length). The 8px between tiles is padding,

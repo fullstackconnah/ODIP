@@ -17,6 +17,7 @@ vi.mock('@/api/hooks', () => ({
   useDashboard: () => ({ data: undefined, isLoading: false, isError: false }),
   useParticipantAlertsAggregate: () => ({ data: [], isLoading: false }),
   usePendingLeaveQueue: () => ({ count: 0, loading: false, error: false }),
+  usePendingCompletionQueue: () => ({ count: 0, loading: false, error: false }),
 }))
 
 // Today is Thu 1 Oct 2026, 03:40 on the wall clock of whatever zone is set. The dates below are offsets from it.
