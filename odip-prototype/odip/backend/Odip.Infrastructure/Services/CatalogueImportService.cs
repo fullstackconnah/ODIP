@@ -149,7 +149,10 @@ public class CatalogueImportService
         }
         foreach (var end in plan.EndDates)
         {
-            end.Item.EffectiveTo = end.EffectiveTo;
+            // A planned end date can land on a row this import also updated: a code listed twice with a gap updates its first version to end where the file says,
+            // while the second version's plan ends every earlier row that reaches its start the day before it. The row keeps the earlier of the two dates; for a
+            // row that was not updated the planner already never lengthens, so this is its planned date.
+            end.Item.EffectiveTo = end.Item.EffectiveTo is { } updatedTo && updatedTo <= end.EffectiveTo ? updatedTo : end.EffectiveTo;
             end.Item.IsActive = false;
         }
 
