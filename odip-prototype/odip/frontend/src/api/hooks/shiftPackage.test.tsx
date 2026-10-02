@@ -167,6 +167,15 @@ describe('shift package hooks — handover', () => {
 })
 
 describe('shift package hooks — recording a dose from the shift', () => {
+  it('useRecordShiftDose refreshes the shift detail when the slot was already recorded (409), so the row stops offering Record', async () => {
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    mockApiPost.mockRejectedValueOnce({ response: { status: 409, data: { code: 'ADMINISTRATION_ALREADY_RECORDED', data: {} } } })
+    const { result } = renderHook(() => useRecordShiftDose(), { wrapper: wrapper(qc) })
+    await expect(result.current.mutateAsync({ shiftId: 'shift-1', medicationId: 'med-1', data: { status: 'Administered', acknowledgeLimitBreach: false } })).rejects.toBeTruthy()
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['portal-shift-detail', 'shift-1'] })
+  })
+
   it('useRecordShiftDose posts the FULL body to /portal/shifts/{id}/medications/{medicationId}/administrations and refreshes the caches', async () => {
     const qc = new QueryClient()
     const spy = vi.spyOn(qc, 'invalidateQueries')
