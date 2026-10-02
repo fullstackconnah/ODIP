@@ -200,6 +200,9 @@ public class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixture>
 
     private async Task<PgEnv> NewEnvAsync(DateTimeOffset now) => new(await _pg.NewDatabaseAsync(), now);
 
+    /// <summary>A snapshot key ("Type|id") whose id is a <see cref="DemoIds"/> id: name-based, version nibble 8.</summary>
+    private static bool IsDemoId(string key) => Guid.TryParse(key[(key.IndexOf('|') + 1)..], out var id) && id.ToString("D")[14] == '8';
+
     // ── T1 ───────────────────────────────────────────────────────────────────
 
     [SkippableFact]
@@ -329,10 +332,13 @@ public class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixture>
         var b = await single.SnapshotAsync();
         foreach (var type in new[] { "Shift", "ShiftPattern", "ShiftCompletion", "LeaveRequest", "RecurringUnavailability", "StaffAvailability", "StaffParticipantCompatibility", "Person", "ParticipantContactRole" })
         {
+            // Only the top-up's rows: their ids are DemoIds (version nibble 8). The old seed makes some rows with random ids (its staff
+            // availability), which differ between two databases that were each seeded on their own.
             Assert.Equal(
-                b.Keys.Where(k => DemoSnapshot.TypeOf(k) == type).OrderBy(k => k, StringComparer.Ordinal).ToList(),
-                a.Keys.Where(k => DemoSnapshot.TypeOf(k) == type).OrderBy(k => k, StringComparer.Ordinal).ToList());
+                b.Keys.Where(k => DemoSnapshot.TypeOf(k) == type && IsDemoId(k)).OrderBy(k => k, StringComparer.Ordinal).ToList(),
+                a.Keys.Where(k => DemoSnapshot.TypeOf(k) == type && IsDemoId(k)).OrderBy(k => k, StringComparer.Ordinal).ToList());
         }
+        Assert.True(a.Keys.Count(k => DemoSnapshot.TypeOf(k) == "Shift" && IsDemoId(k)) > 100);
         Assert.Equal(b.CountOf("BookingTask"), a.CountOf("BookingTask"));
     }
 
