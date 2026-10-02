@@ -3,7 +3,9 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
+using Npgsql;
 using Odip.Api.Controllers;
 using Odip.Api.Serialization;
 using Odip.Application.Common;
@@ -33,12 +35,14 @@ public class ParticipantHubFlowTests
         public ParticipantsController Participants { get; }
         public ParticipantInquiriesController Inquiries { get; }
 
-        public Caller(string store, Guid? tenantId, bool superAdmin = false)
+        public Caller(string store, Guid? tenantId, bool superAdmin = false, IInterceptor? interceptor = null)
         {
             var tenant = new Mock<ICurrentTenant>();
             tenant.SetupGet(x => x.TenantId).Returns(tenantId);
             tenant.SetupGet(x => x.IsSuperAdmin).Returns(superAdmin);
-            Db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(store).Options, tenant.Object);
+            var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(store);
+            if (interceptor != null) options.AddInterceptors(interceptor);
+            Db = new OdipDbContext(options.Options, tenant.Object);
             var http = new DefaultHttpContext
             {
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "coordinator-1")], "Test")),
@@ -247,6 +251,96 @@ public class ParticipantHubFlowTests
         Assert.Equal(legacy.Id, onboarding.ParticipantId);
         Assert.Equal(tenantId, onboarding.TenantId);
         Assert.True(onboarding.ProfileComplete);
+    }
+
+    // ── Two requests for the same row-less participant ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// On the first save that inserts an onboarding row, commits the competing request's row through another context, then fails the way PostgreSQL does
+    /// (the unique index on the participant rejects the second insert). The same simulation as MedicationAdministrationIdempotencyTests.
+    /// </summary>
+    private sealed class OnboardingRowRaceInterceptor(Func<Task> beforeThrow) : SaveChangesInterceptor
+    {
+        public bool Armed { get; set; }
+        private bool _fired;
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var inserting = eventData.Context!.ChangeTracker.Entries<ParticipantOnboarding>().Any(entry => entry.State == EntityState.Added);
+            if (!Armed || _fired || !inserting) return result;
+            _fired = true;
+            await beforeThrow();
+            throw new DbUpdateException("duplicate key value violates unique constraint", new PostgresException(
+                messageText: "duplicate key value violates unique constraint", severity: "ERROR", invariantSeverity: "ERROR",
+                sqlState: PostgresErrorCodes.UniqueViolation, tableName: "ParticipantOnboardings", constraintName: "IX_ParticipantOnboardings_ParticipantId"));
+        }
+    }
+
+    /// <summary>A caller whose first onboarding-row insert loses to a concurrent request that stored the row first. Arm it after seeding.</summary>
+    private static (Caller Caller, OnboardingRowRaceInterceptor Race, Func<Guid, Task> WinnerStores) RacingCaller(Guid tenantId)
+    {
+        var store = Guid.NewGuid().ToString();
+        var participantId = Guid.Empty;
+        var race = new OnboardingRowRaceInterceptor(async () =>
+        {
+            using var other = new Caller(store, tenantId);
+            other.Db.ParticipantOnboardings.Add(new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId });
+            await other.Db.SaveChangesAsync();
+        });
+        return (new Caller(store, tenantId, interceptor: race), race, id => { participantId = id; return Task.CompletedTask; });
+    }
+
+    [Fact]
+    public async Task ValidateProfile_WhenAConcurrentRequestStoredTheRowFirst_RecordsOnTheirRow_InsteadOfAnError()
+    {
+        // Two coordinators validate the same row-less participant within milliseconds: both find no row and both insert; the unique index rejects the second.
+        // That was an unhandled DbUpdateException (a generic 500 the screen showed as is). The row exists by then, so the loser records on it and succeeds.
+        var tenantId = Guid.NewGuid();
+        var (caller, race, winnerStores) = RacingCaller(tenantId);
+        using var _ = caller;
+        var legacy = await SeedAsync(caller.Db, tenantId, "Lena", "Legacy", draft: true, intakeDone: true);
+        legacy.DateOfBirth = new DateOnly(1990, 5, 17);
+        legacy.Gender = Gender.NonBinary;
+        legacy.FundingSource = ParticipantFundingSource.Other;
+        await caller.Db.SaveChangesAsync();
+        await winnerStores(legacy.Id);
+        race.Armed = true;
+
+        var detail = Ok(await caller.Inquiries.ValidateProfile(legacy.Id, CancellationToken.None));
+
+        Assert.True(detail.ProfileComplete);
+        var onboarding = Assert.Single(await caller.Db.ParticipantOnboardings.ToListAsync());
+        Assert.Equal(legacy.Id, onboarding.ParticipantId);
+        Assert.Equal(tenantId, onboarding.TenantId);
+        Assert.True(onboarding.ProfileComplete);
+        Assert.NotNull(onboarding.ProfileCompletedAt);
+    }
+
+    [Fact]
+    public async Task ConfirmServiceNeeds_WhenAConcurrentRequestStoredTheRowFirst_RecordsOnTheirRow_InsteadOfAnError()
+    {
+        var tenantId = Guid.NewGuid();
+        var (caller, race, winnerStores) = RacingCaller(tenantId);
+        using var _ = caller;
+        var legacy = await SeedAsync(caller.Db, tenantId, "Lena", "Legacy", draft: true, intakeDone: true);
+        caller.Db.ServiceAgreementDrafts.Add(new ServiceAgreementDraft
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = legacy.Id, Version = 1,
+            PlanStartDate = new DateOnly(2026, 1, 1), PlanEndDate = new DateOnly(2026, 12, 31),
+            AgreementStartDate = new DateOnly(2026, 2, 1), AgreementEndDate = new DateOnly(2026, 11, 30),
+            Lines = { new ServiceAgreementDraftLine { Id = Guid.NewGuid(), ServiceType = "Community access", Hours = 10, ItemCode = "04_104_0125_6_1", CatalogueVersion = "2026-27", CatalogueEffectiveFrom = new DateOnly(2026, 1, 1), UnitPrice = 70m } },
+        });
+        await caller.Db.SaveChangesAsync();
+        await winnerStores(legacy.Id);
+        race.Armed = true;
+
+        var detail = Ok(await caller.Inquiries.ConfirmServiceNeeds(legacy.Id, CancellationToken.None));
+
+        Assert.True(detail.ServiceTypeConfirmed);
+        var onboarding = Assert.Single(await caller.Db.ParticipantOnboardings.ToListAsync());
+        Assert.Equal(legacy.Id, onboarding.ParticipantId);
+        Assert.True(onboarding.ServiceTypeConfirmed);
     }
 
     // ── The Enquiries tab's feed also carries drafts started without an enquiry ─────────────────────────

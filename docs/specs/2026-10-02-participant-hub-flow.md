@@ -36,7 +36,7 @@ their intake and profile first"), and a participant in onboarding is a draft unt
 |---|---|
 | `GET /inquiries/onboarding-worklist` | Lists participants in onboarding by the rule above. A participant with no onboarding row (intake completed before completion created one; no migration backfilled it) is listed with a blank checklist. Active, archived and open-intake participants are no longer listed. |
 | `GET /inquiries/{id}/onboarding` | Returns the blank checklist for such a participant instead of 404, writing nothing. A participant who is not in onboarding and has no row is still 404. |
-| `POST /inquiries/{id}/onboarding/profile-validation`, `.../service-needs-confirmation` | Store the missing row in the same save as the validation. |
+| `POST /inquiries/{id}/onboarding/profile-validation`, `.../service-needs-confirmation` | Store the missing row in the same save as the validation. If a concurrent request stored it first (the unique index on the participant rejects the second insert), the loser reloads that row and records the step on it, instead of answering 500. |
 | `POST /participants/{id}/complete-profile` | Refuses with 400 ("This participant cannot be activated until their signed service agreement evidence is recorded.", the status endpoint's wording) when the participant is a draft that is not already active and the readiness mode does not allow activation; `IsDraft` stays true. Otherwise as before. |
 | `GET /inquiries` | Also returns drafts with an open intake that no enquiry links: `IsDirectIntake`, `Id` = the participant's id, empty `Source`. The tab lists only open enquiries (New, Draft intake). |
 

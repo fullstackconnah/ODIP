@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -141,9 +142,8 @@ public class ParticipantInquiriesController : ControllerBase
         if (participant == null || onboarding == null) return NotFound(ApiResponse<ParticipantOnboardingDto>.Fail("Onboarding not found"));
         var missing = ProfileMissing(participant);
         if (missing.Count > 0) return BadRequest(ApiResponse<ParticipantOnboardingDto>.Fail(string.Join(" ", missing)));
-        onboarding.RecordProfileValidation(Actor(), DateTime.UtcNow);
-        await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetail(participant, onboarding, ct)));
+        var saved = await RecordAndSaveAsync(participant, onboarding, row => row.RecordProfileValidation(Actor(), DateTime.UtcNow), ct);
+        return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetail(participant, saved, ct)));
     }
 
     // Confirmation is only recorded against an existing draft with dated, catalogue-resolved provisional lines.
@@ -155,9 +155,33 @@ public class ParticipantInquiriesController : ControllerBase
         if (participant == null || onboarding == null) return NotFound(ApiResponse<ParticipantOnboardingDto>.Fail("Onboarding not found"));
         var currentDraft = await CurrentValidDraftAsync(participant, ct);
         if (currentDraft == null) return BadRequest(ApiResponse<ParticipantOnboardingDto>.Fail("Create a current dated provisional service-agreement draft with valid catalogue-priced support lines first."));
-        onboarding.RecordServiceNeedsConfirmation(Actor(), DateTime.UtcNow);
-        await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetail(participant, onboarding, ct)));
+        var saved = await RecordAndSaveAsync(participant, onboarding, row => row.RecordServiceNeedsConfirmation(Actor(), DateTime.UtcNow), ct);
+        return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetail(participant, saved, ct)));
+    }
+
+    /// <summary>
+    /// Records a checklist step and saves it. A participant in onboarding who has no stored row gets one added by <see cref="FindOwnedAsync"/>, and two requests
+    /// can both find none: the unique index on the participant rejects the second insert. That is no error for the caller, because the row exists by then, so the
+    /// request that lost drops its insert, reloads the winner's row, records the step on it and saves once more (its step is not lost). Returns the row that was saved.
+    /// </summary>
+    private async Task<ParticipantOnboarding> RecordAndSaveAsync(Participant participant, ParticipantOnboarding onboarding, Action<ParticipantOnboarding> record, CancellationToken ct)
+    {
+        var inserting = _db.Entry(onboarding).State == EntityState.Added;
+        record(onboarding);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+            return onboarding;
+        }
+        // The only insert in this save is the onboarding row, so a unique violation here is that row losing the race, not any other database failure.
+        catch (DbUpdateException ex) when (inserting && ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            _db.Entry(onboarding).State = EntityState.Detached;
+            var winner = await _db.ParticipantOnboardings.FirstAsync(x => x.ParticipantId == participant.Id && x.TenantId == participant.TenantId, ct);
+            record(winner);
+            await _db.SaveChangesAsync(ct);
+            return winner;
+        }
     }
 
     /// <summary>
