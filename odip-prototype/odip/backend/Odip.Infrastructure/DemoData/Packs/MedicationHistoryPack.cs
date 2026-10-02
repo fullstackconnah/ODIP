@@ -295,8 +295,10 @@ public sealed class MedicationHistoryPack : IDemoPack
 
     private static async Task<List<(Guid Participant, DateTime Start, DateTime End)>> LiveWindowsAsync(DemoRun run, CancellationToken ct)
     {
+        // Every day of the history window, not only the two the live set builds: a live shift of three days ago still owns its day (its as-needed dose,
+        // its closing doses), and a history dose written beside them could fall inside the minimum interval of one.
         var anchors = run.Anchors;
-        var dates = new[] { anchors.D0.AddDays(-1), anchors.D0 };
+        var dates = Enumerable.Range(0, HistoryDays + 1).Select(i => anchors.D0.AddDays(-i)).ToArray();
         var existing = await run.ExistingIdsAsync<Shift>(LiveSetCatalog.ShiftIds(dates), ct);
 
         var windows = new List<(Guid, DateTime, DateTime)>();
