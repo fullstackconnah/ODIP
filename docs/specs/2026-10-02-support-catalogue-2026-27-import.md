@@ -51,8 +51,10 @@ the single valid row and its price for (code, date, National / Remote / VeryRemo
    (https://www.ndis.gov.au/media/8038/download?attachment: sheets Current Support Items and Legacy Support Items).
 3. Read the preview: layout, start date, rows and legacy rows, New / Updated / Unchanged / To end-date, and every warning (rows that
    start after today, codes that will be end-dated, rows whose stored end date is kept).
-4. Keep the proposed version (20 characters at most) and Confirm Import. Verify: about 995 active items, `GRP_COMMUNITY_ACCESS` has ten
-   active items, and a weekday trip or shift prices at 73.58 with `04_104_0125_6_1`.
+4. Keep the proposed version (20 characters at most) and Confirm Import. Only one confirm runs at a time: a second SuperAdmin's confirm
+   waits up to 20 seconds for the first, then refuses with "Another catalogue import is still running"; let the first finish, preview the
+   file again and confirm. Verify: about 995 active items, `GRP_COMMUNITY_ACCESS` has ten active items, and a weekday trip or shift prices
+   at 73.58 with `04_104_0125_6_1`.
 5. If services from before 1 July 2026 are still unclaimed, import the 2025-26 workbook as well: it is added as history and never touches
    the 2026-27 rows. For a later NDIA price update, import the new file the same way.
 

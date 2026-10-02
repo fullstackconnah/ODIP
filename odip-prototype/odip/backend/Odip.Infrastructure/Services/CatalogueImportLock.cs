@@ -13,7 +13,7 @@ namespace Odip.Infrastructure.Services;
 ///
 /// The same pattern as <see cref="ShiftRowLock"/> and the medication slot lock: PostgreSQL only (any other provider, including the in-memory test provider,
 /// has no concurrent transactions and the lock is a no-op), a transaction is opened unless the context is already inside one (then the owner commits), and the
-/// wait is bounded, so an import that cannot get the lock says so instead of hanging. The API registers UseNpgsql without EnableRetryOnFailure, which is what
+/// wait is bounded (20 s, below the driver's command timeout), so an import that cannot get the lock says so instead of hanging. The API registers UseNpgsql without EnableRetryOnFailure, which is what
 /// lets a user-initiated transaction be opened here.
 /// </summary>
 internal sealed class CatalogueImportLock : IAsyncDisposable
@@ -21,7 +21,12 @@ internal sealed class CatalogueImportLock : IAsyncDisposable
     /// <summary>The advisory-lock key every catalogue confirm takes: the ASCII of "ODIPCATL".</summary>
     internal const long Key = 0x4F4449504341544C;
 
-    private static readonly TimeSpan Wait = TimeSpan.FromSeconds(60);
+    /// <summary>
+    /// How long a confirm waits for another to finish. The lock is taken by one SQL command, and Npgsql cancels a command after 30 s by default (nothing here
+    /// sets another), so a longer wait would be cut off by the driver and reach the admin as a raw 500 instead of the refusal below. (The medication slot
+    /// lock also stays well under that 30 s, at 5 s.) An import normally takes seconds.
+    /// </summary>
+    private static readonly TimeSpan Wait = TimeSpan.FromSeconds(20);
 
     private readonly IDbContextTransaction? _owned;
 
