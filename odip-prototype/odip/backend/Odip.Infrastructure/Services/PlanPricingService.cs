@@ -38,11 +38,18 @@ public sealed class PlanPricingService
         });
     }
 
-    /// <summary>Every row whose window touches the period, active or not: an import end-dates a superseded row and its window still prices the dates inside it.</summary>
-    private Task<List<SupportCatalogueItem>> LoadCatalogueAsync(DateOnly from, DateOnly to, CancellationToken ct) =>
-        _db.SupportCatalogueItems.AsNoTracking()
-            .Where(item => item.EffectiveFrom <= to && (item.EffectiveTo == null || item.EffectiveTo >= from))
+    /// <summary>
+    /// Every row whose window touches the period or the day after it, active or not: an import end-dates a superseded row and its window still prices the
+    /// dates inside it. The day after is loaded because an occurrence that starts on the last day can run into it (a Monday 22:00 to Tuesday 02:00 support has a
+    /// part on the Tuesday), and a price change that starts that day must be there to price it. The holidays are loaded to the same day.
+    /// </summary>
+    private Task<List<SupportCatalogueItem>> LoadCatalogueAsync(DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        var last = to.AddDays(1);
+        return _db.SupportCatalogueItems.AsNoTracking()
+            .Where(item => item.EffectiveFrom <= last && (item.EffectiveTo == null || item.EffectiveTo >= from))
             .ToListAsync(ct);
+    }
 
     /// <summary>
     /// The public holidays of the blocks' delivery states for the period and the day after it (an occurrence on the last day can end the next day): the

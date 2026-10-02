@@ -36,15 +36,22 @@ internal static class PlanPricingTestSupport
     /// </summary>
     public static async Task<IReadOnlyList<SupportCatalogueItem>> WithDecemberPriceSetAsync(Func<string, bool> raised, decimal increase = 1m)
     {
+        await using var db = await DecemberDatabaseAsync(raised, increase);
+        return await db.SupportCatalogueItems.AsNoTracking().ToListAsync();
+    }
+
+    /// <summary>The database behind <see cref="WithDecemberPriceSetAsync"/>: the 2026-27 catalogue and then the December price set, imported as a SuperAdmin would. The caller disposes it.</summary>
+    public static async Task<OdipDbContext> DecemberDatabaseAsync(Func<string, bool> raised, decimal increase = 1m)
+    {
         var december1 = new DateOnly(2026, 12, 1);
-        await using var db = CatalogueImportTestSupport.CreateDb();
+        var db = CatalogueImportTestSupport.CreateDb();
         await CatalogueImportTestSupport.ImportAsync(db, CatalogueFixtures.File2026_27);
         var rows = (await CatalogueImportTestSupport.PreviewAsync(db, CatalogueFixtures.File2026_27)).Rows
             .Select(r => raised(r.ItemNumber) && r.PriceNational is not null && (r.EffectiveTo is null || r.EffectiveTo >= december1) ? Raised(r, december1, increase) : r)
             .ToList();
         await CatalogueImportTestSupport.NewImporter(db, CatalogueImportTestSupport.ClockOn(2026, 12, 10))
             .CommitImportAsync(new ConfirmCatalogueImportDto { CatalogueVersion = "2026-27 (2026-12-01)", Rows = rows });
-        return await db.SupportCatalogueItems.AsNoTracking().ToListAsync();
+        return db;
     }
 
     private static CatalogueImportRowDto Raised(CatalogueImportRowDto r, DateOnly from, decimal increase)
