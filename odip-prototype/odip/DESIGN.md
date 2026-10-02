@@ -708,6 +708,16 @@ wall-clock fields, each with its reason: adding a wall-clock field means adding 
 - A wall-clock value is compared with "now" only after the provider's zone is applied (`ProviderLocalTime.LocalToUtc`), the way the MAR decides a dose is overdue.
 - Three traps: `new Date("2026-10-03T08:00:00")` is LOCAL, `new Date("2026-10-03")` is UTC midnight (10:00 in Sydney), and `toISOString()` is always the UTC date.
 
+### Shift package
+
+The support worker's shift screen (`/portal/shifts/:id`) is a "Shift Checklist" in three phases: Before (handover, At a glance in a fixed order, emergency contacts with `tel:` links, then Start), During (a time-grouped list of doses and routines, "As needed" as its own group), End (a checklist that must clear, then a read-only summary and Finish). On tablet and desktop At a glance is pinned beside the checklist.
+
+- Overdue doses rise to the top in the warning tone and nothing else is warning. Danger is for anaphylaxis only. Plain words: "Give by 12:30", "Not given this shift".
+- Every empty At a glance field prints "Not recorded"; a null is never shown as "No".
+- Recording a dose is a sheet, not a page. A failed save keeps every entry and the same idempotency key, so a retry cannot record twice.
+- Times follow "Time on the wire": slots and routines are wall clock; a time typed into a datetime-local control (break edits, time given) is read in the provider zone and sent as a UTC instant with Z.
+- The screen is online-only: offline shows a banner and switches the actions off. Start is refused more than 60 minutes before the rostered start; the server message names when it opens.
+
 ### Modals
 
 `--radius-lg`, 16px padding, 90vh max height with internal scroll.

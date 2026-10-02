@@ -290,6 +290,9 @@ public class PortalController : ControllerBase
     // SHIFT COMPLETION (design spec §2/§3)
     // ══════════════════════════════════════════════════════════════
 
+    /// <summary>How long before the rostered start a worker may tap Start. Earlier taps get 409 SHIFT_START_TOO_EARLY.</summary>
+    public const int EarliestStartLeadMinutes = 60;
+
     /// <summary>
     /// Worker taps Start on one of their own Published shifts. ActualStart/StartedAt are the
     /// server's own DateTime.UtcNow — the client never supplies the "real" timestamp, only an
@@ -336,6 +339,19 @@ public class PortalController : ControllerBase
         // Finish. Finish still recomputes/overwrites VarianceMinutesStart from the final stored
         // ActualStart — unchanged behaviour there.
         var (rosteredStartUtc, _) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, timeZoneId);
+
+        // Early-start guard (PR1 review 4 N1): the manual-start path (Finish with an ActualStart) and
+        // late starts are unaffected; only a tap on Start well before the rostered start is refused.
+        var earliestStartUtc = rosteredStartUtc.AddMinutes(-EarliestStartLeadMinutes);
+        if (now < earliestStartUtc)
+        {
+            var openLocal = TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.SpecifyKind(earliestStartUtc, DateTimeKind.Utc), ProviderLocalTime.ResolveZone(timeZoneId));
+            var openClock = openLocal.ToString("h:mm tt", System.Globalization.CultureInfo.InvariantCulture).ToLowerInvariant();
+            var openDay = openLocal.ToString("ddd d MMM", System.Globalization.CultureInfo.InvariantCulture);
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
+                $"It's too early to start this shift. You can start from {openClock} on {openDay}.", ShiftErrorCodes.ShiftStartTooEarly));
+        }
 
         var completion = new ShiftCompletion
         {

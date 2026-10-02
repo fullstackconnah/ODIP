@@ -191,6 +191,61 @@ public class ShiftCompletionStateMachineTests
         Assert.Equal(auditCountBefore, await db.AuditLogs.CountAsync()); // idempotent replay must not write an audit row (critique M12)
     }
 
+    // Early-start guard (PR1 review 4 N1): Start is refused more than PortalController.EarliestStartLeadMinutes
+    // before the rostered start. Rostered start is provider-local (no ProviderSettings row => Australia/Sydney).
+    private static Shift SeedShiftStartingIn(OdipDbContext db, Guid participantId, Guid staffId, TimeSpan fromNow)
+    {
+        var zone = ProviderLocalTime.ResolveZone(null);
+        var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow.Add(fromNow), zone);
+        return Seed(db, new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, UserId = staffId,
+            ServiceDate = DateOnly.FromDateTime(local), StartTime = new TimeOnly(local.Hour, local.Minute),
+            EndTime = new TimeOnly(23, 59), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, Status = ShiftStatus.Published,
+        });
+    }
+
+    [Fact]
+    public void EarliestStartLeadMinutes_IsSixty() => Assert.Equal(60, PortalController.EarliestStartLeadMinutes);
+
+    [Fact]
+    public async Task StartShift_MoreThanAnHourBeforeRosteredStart_Is409NamingWhenItCanStart()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShiftStartingIn(db, participant.Id, user.Id, TimeSpan.FromMinutes(180));
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.StartShift(shift.Id, new StartShiftDto(), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(conflict.Value);
+        Assert.Equal(ShiftErrorCodes.ShiftStartTooEarly, body.Code);
+        var openAt = shift.StartTime.AddMinutes(-60).ToString("h:mm tt", System.Globalization.CultureInfo.InvariantCulture).ToLowerInvariant();
+        Assert.Contains(openAt, Assert.Single(body.Errors!));
+        Assert.Empty(await db.ShiftCompletions.ToListAsync());
+        Assert.Equal(ShiftStatus.Published, (await db.Shifts.SingleAsync(s => s.Id == shift.Id)).Status);
+    }
+
+    [Theory]
+    [InlineData(50)]
+    [InlineData(0)]
+    [InlineData(-240)]
+    public async Task StartShift_WithinAnHourOrLate_StillStarts(int minutesUntilStart)
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShiftStartingIn(db, participant.Id, user.Id, TimeSpan.FromMinutes(minutesUntilStart));
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.StartShift(shift.Id, new StartShiftDto(), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
     [Theory]
     [InlineData(ShiftStatus.PendingReview, "SHIFT_ALREADY_FINISHED")]
     [InlineData(ShiftStatus.Completed, "SHIFT_ALREADY_COMPLETED")]

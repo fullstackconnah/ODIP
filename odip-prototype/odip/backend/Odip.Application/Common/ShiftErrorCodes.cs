@@ -15,6 +15,7 @@ public static class ShiftErrorCodes
     public const string ShiftNotInProgress = "SHIFT_NOT_IN_PROGRESS";
     public const string ShiftNoteRequired = "SHIFT_NOTE_REQUIRED";
     public const string ShiftActualStartInFuture = "SHIFT_ACTUAL_START_IN_FUTURE";
+    public const string ShiftStartTooEarly = "SHIFT_START_TOO_EARLY";
     public const string ShiftActualStartTooEarly = "SHIFT_ACTUAL_START_TOO_EARLY";
     public const string ShiftNotPendingReview = "SHIFT_NOT_PENDING_REVIEW";
     public const string ShiftReturnReasonRequired = "SHIFT_RETURN_REASON_REQUIRED";
