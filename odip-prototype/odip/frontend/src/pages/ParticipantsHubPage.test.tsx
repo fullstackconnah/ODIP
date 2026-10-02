@@ -223,29 +223,13 @@ describe('ParticipantsHubPage — the URL is the only source of the stage (useTa
   })
 })
 
-// The register's Drafts view is gone: a draft with an open intake is an Enquiries-tab row and a draft with a complete intake is an Onboarding-tab row.
-describe('ParticipantsHubPage — the retired Drafts view', () => {
-  it('sends an old ?view=drafts link to the Enquiries tab, where drafts live now, and drops the retired param', async () => {
+// The register's Drafts view is gone (a draft is an Enquiries row while its intake is open, an Onboarding row once it is complete), but the view was
+// component state, never a URL param: no link ever carried ?view=drafts, so it is an unknown param like any other and gets no special handling.
+describe('ParticipantsHubPage — query params it does not know', () => {
+  it('ignores ?view=, drafts included: the stage is only ever ?tab=, so the default tab opens and the URL is left alone', () => {
     const hub = renderHub('/participants?view=drafts')
 
-    expect(screen.getByRole('tab', { name: 'Enquiries' })).toHaveAttribute('aria-selected', 'true')
-    await waitFor(() => expect(hub.location.current).toBe('/participants?tab=enquiries'))
-  })
-
-  it('does the same when the old link also names a tab', async () => {
-    const hub = renderHub('/participants?tab=active&view=drafts')
-
-    expect(screen.getByRole('tab', { name: 'Enquiries' })).toHaveAttribute('aria-selected', 'true')
-    await waitFor(() => expect(hub.location.current).toBe('/participants?tab=enquiries'))
-  })
-
-  it('keeps other query params on the way, and leaves any other ?view= value alone', async () => {
-    const hub = renderHub('/participants?q=sophie&view=drafts')
-    await waitFor(() => expect(hub.location.current).toBe('/participants?q=sophie&tab=enquiries'))
-    cleanup()
-
-    const other = renderHub('/participants?view=archived')
     expect(screen.getByRole('tab', { name: 'Active participants' })).toHaveAttribute('aria-selected', 'true')
-    expect(other.location.current).toBe('/participants?view=archived')
+    expect(hub.location.current).toBe('/participants?view=drafts')
   })
 })
