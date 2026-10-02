@@ -67,6 +67,9 @@ public class DemoQueryTranslationTests
         yield return Q(nameof(DemoQueries.AdministrationsByIds), db => DemoQueries.AdministrationsByIds(db, Ids), "\"Id\" = ANY (");
         yield return Q(nameof(DemoQueries.RunningBreaksOf), db => DemoQueries.RunningBreaksOf(db, Ids), "\"ShiftCompletionId\" = ANY (", "\"EndedAt\" IS NULL");
         yield return Q(nameof(DemoQueries.NotesOf), db => DemoQueries.NotesOf(db, Ids), "\"ShiftId\" = ANY (");
+        yield return Q(nameof(DemoQueries.IncidentsByIds), db => DemoQueries.IncidentsByIds(db, Ids), "\"Id\" = ANY (");
+        yield return Q(nameof(DemoQueries.WitnessedDosesBetween), db => DemoQueries.WitnessedDosesBetween(db, new DateTime(2026, 10, 1), new DateTime(2026, 10, 3)), "\"WitnessUserId\" IS NOT NULL", "LIKE 'demo-v1:%'", "\"CreatedAt\" >=", "\"CreatedAt\" <");
+        yield return Q(nameof(DemoQueries.SubmittedCompletionsOf), db => DemoQueries.SubmittedCompletionsOf(db, Ids), "\"ShiftId\" = ANY (", "\"IsActive\"", "\"SubmittedAt\" IS NOT NULL");
         yield return Q(nameof(DemoQueries.AgingIncidents), db => DemoQueries.AgingIncidents(db, Ids, new DateTime(2026, 8, 1)), "\"ReportedByUserId\" = ANY (", "\"IsActive\"", "\"CreatedAt\" >=", "\"QscReportingStatus\"");
         yield return Q(nameof(DemoQueries.ClosedCompletions), db => DemoQueries.ClosedCompletions(db, Today), "INNER JOIN", "\"IsActive\"", "\"SubmittedAt\" IS NOT NULL", "\"ServiceDate\" >=", "\"Status\"");
         yield return Q(nameof(DemoQueries.ActiveRoutinesOf), db => DemoQueries.ActiveRoutinesOf(db, Ids), "\"ParticipantId\" = ANY (", "\"IsActive\"");

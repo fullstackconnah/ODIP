@@ -32,6 +32,10 @@ public class DemoSourceScanTests
         new(@"\bIgnoreQueryFilters\b", "it reads every tenant's rows; only the id probe, which must see a collision wherever it is, does",
             "DemoData/DemoQueries.cs"),
         new(@"\bNpgsqlCommand\b|\bDbCommand\b", "a hand-written command is raw SQL; only the advisory lock needs one", "DemoData/DemoTickLock.cs"),
+        // T10 (plan 6): the top-up has no outward effect. Notification rows are inserted directly in a terminal state (NotificationsPack); the raiser,
+        // the dispatcher and the channels are never called, so nothing is ever Pending to be sent and nothing reaches an inbox.
+        new(@"\bINotificationRaiser\b|\bNotificationRaiser\b|\bINotificationChannel\b|\bSmtpEmailChannel\b|\bNotificationDispatch\w*|\bEmailSender\b",
+            "the top-up sends nothing: it writes the terminal notification rows itself and never raises one"),
     };
 
     private static string? FindInfrastructureRoot()

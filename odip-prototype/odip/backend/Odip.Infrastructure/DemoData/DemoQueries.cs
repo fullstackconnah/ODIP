@@ -175,6 +175,19 @@ public static class DemoQueries
                                       && (i.Status == IncidentStatus.Submitted || i.Status == IncidentStatus.UnderReview || i.Status == IncidentStatus.Resolved
                                           || i.QscReportingStatus == QscReportingStatus.Required));
 
+    /// <summary>Read only: these incidents, whichever tenant they belong to by id (the caller passes the Demo tenant's own).</summary>
+    public static IQueryable<IncidentReport> IncidentsByIds(OdipDbContext db, List<Guid> ids) =>
+        db.IncidentReports.AsNoTracking().Where(i => ids.Contains(i.Id));
+
+    /// <summary>Read only: the doses this top-up recorded in a window of instants that have a staff witness (the ones whose witness was sent a request).</summary>
+    public static IQueryable<MedicationAdministration> WitnessedDosesBetween(OdipDbContext db, DateTime fromUtc, DateTime toUtc) =>
+        db.MedicationAdministrations.AsNoTracking()
+            .Where(a => a.WitnessUserId != null && a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:") && a.CreatedAt >= fromUtc && a.CreatedAt < toUtc);
+
+    /// <summary>Read only: the active, submitted completions of these shifts.</summary>
+    public static IQueryable<ShiftCompletion> SubmittedCompletionsOf(OdipDbContext db, List<Guid> shiftIds) =>
+        db.ShiftCompletions.AsNoTracking().Where(c => shiftIds.Contains(c.ShiftId) && c.IsActive && c.SubmittedAt != null);
+
     /// <summary>A closed shift with the active completion the worker submitted for it.</summary>
     public sealed record ClosedPair(ShiftCompletion Completion, Shift Shift);
 

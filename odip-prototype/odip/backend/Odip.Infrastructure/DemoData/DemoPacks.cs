@@ -24,5 +24,6 @@ public static class DemoPacks
         new MedicationHistoryPack(),
         new ShiftPackageHistoryPack(),
         new IncidentsPack(),
+        new NotificationsPack(),
     };
 }

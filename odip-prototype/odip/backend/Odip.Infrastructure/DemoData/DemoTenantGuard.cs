@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
 
 namespace Odip.Infrastructure.DemoData;
@@ -74,6 +75,10 @@ public sealed class DemoTenantGuard
         typeof(ShiftRoutineCheck),
         typeof(HandoverAcknowledgement),
         typeof(MedicationAdministration),
+
+        // What the incident form, the portal and the dose recorder would have sent, written as the terminal rows they end as (PR 2); never Pending.
+        typeof(NotificationOutbox),
+        typeof(NotificationLog),
     };
 
     /// <summary>Non-tenant tables the top-up may add rows to, and which parent each row must hang off.</summary>
