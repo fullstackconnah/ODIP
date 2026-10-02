@@ -15,7 +15,9 @@ namespace Odip.Infrastructure.BackgroundServices;
 ///
 /// It runs after startup and never inside the Program.cs migrate-and-seed retry loop, so readiness is not delayed and a non-transient
 /// failure cannot crash the API at boot: <see cref="ExecuteAsync"/> never throws (a BackgroundService that throws takes the host down in
-/// .NET 8), and a tick that fails is logged and followed by the next one.
+/// .NET 8), and a tick that fails is logged and followed by the next one. The loop itself is guarded too: whatever escapes a wait or a tick
+/// (in practice only a delay Task.Delay cannot take, which the clamped config knobs cannot produce but code-built options can) is logged
+/// at Error and the loop carries on, so the worst a bad value costs is an error line.
 /// </summary>
 public sealed class DemoDataHostedService : BackgroundService
 {
@@ -39,20 +41,30 @@ public sealed class DemoDataHostedService : BackgroundService
 
         _logger.LogInformation("Demo data top-up is On: first tick in {Delay}, then every {Interval}", _options.FirstRunDelay, _options.Interval);
 
-        try
+        var delay = _options.FirstRunDelay;
+        while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(_options.FirstRunDelay, stoppingToken);
-            while (!stoppingToken.IsCancellationRequested)
+            try
             {
+                await Task.Delay(delay, stoppingToken);
                 await TickOnceAsync(stoppingToken);
-                await Task.Delay(_options.Interval, stoppingToken);
+                delay = _options.Interval;
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                // The host is stopping.
+            }
+            catch (Exception ex)
+            {
+                // The next wait is the configured interval when that is a time Task.Delay can take (it was the first-run delay, or the
+                // tick, that failed), otherwise the default one: a failure can never turn into a loop that ticks without waiting.
+                delay = IsUsableWait(_options.Interval) ? _options.Interval : DemoDataOptions.DefaultInterval;
+                _logger.LogError(ex, "The demo data loop failed unexpectedly; it keeps running and waits {Delay} before the next tick", delay);
             }
         }
-        catch (OperationCanceledException)
-        {
-            // The host is stopping.
-        }
     }
+
+    private static bool IsUsableWait(TimeSpan wait) => wait >= TimeSpan.Zero && wait <= DemoDataOptions.MaxInterval;
 
     /// <summary>One tick in its own DI scope. Never throws; returns null when the tick could not be started or the host is stopping.</summary>
     public async Task<DemoTickResult?> TickOnceAsync(CancellationToken ct)
