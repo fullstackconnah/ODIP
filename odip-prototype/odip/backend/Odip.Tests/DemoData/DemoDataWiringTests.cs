@@ -1,0 +1,194 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Odip.Infrastructure.BackgroundServices;
+using Odip.Infrastructure.Data;
+using Odip.Infrastructure.DemoData;
+using Odip.Tests.EarlyAccess;
+using Xunit;
+
+namespace Odip.Tests.DemoData;
+
+/// <summary>
+/// The flag-Off test (TOFF) and the hosted service. With <c>DemoData:Scenarios</c> Off (the default, and what CI and the image build use)
+/// the top-up adds NOTHING to the host: no service, no hosted service, no options object, so startup and every request behave exactly as
+/// they did before this feature. With it On, one maintainer and one hosted service are registered and the service runs a first tick
+/// after a short delay, then on a fixed interval, and a tick that fails never takes the host down.
+/// </summary>
+public class DemoDataWiringTests
+{
+    private static IConfiguration Config(string? scenarios, params (string Key, string Value)[] extra)
+    {
+        var data = new Dictionary<string, string?>();
+        if (scenarios is not null) data[DemoDataOptions.ScenariosKey] = scenarios;
+        foreach (var (key, value) in extra) data[key] = value;
+        return new ConfigurationBuilder().AddInMemoryCollection(data).Build();
+    }
+
+    // ── TOFF: the flag-Off proofs ────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Off")]
+    [InlineData("off")]
+    [InlineData("")]
+    public void Off_AddsNothingToTheHost(string? value)
+    {
+        var services = new ServiceCollection();
+
+        services.AddDemoData(Config(value));
+
+        Assert.Empty(services);
+    }
+
+    [Theory]
+    [InlineData("true")]
+    [InlineData("1")]
+    [InlineData("yes")]
+    [InlineData("Enabled")]
+    public void ATypoIsOff_ButOnlyAHostedLogLineIsAdded_NeverTheMaintainer(string value)
+    {
+        var services = new ServiceCollection();
+
+        services.AddDemoData(Config(value));
+
+        var descriptor = Assert.Single(services);
+        Assert.Equal(typeof(IHostedService), descriptor.ServiceType);
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(DemoDataMaintainer));
+    }
+
+    [Fact]
+    public async Task TheTypoNotice_SaysWhatWasSeen_AndThatItIsTreatedAsOff()
+    {
+        var log = new CapturingLogger<DemoDataConfigNotice>();
+        var options = DemoDataOptions.FromConfiguration(Config("tru"));
+
+        await new DemoDataConfigNotice(options, log).StartAsync(CancellationToken.None);
+
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.Contains("tru", entry.Message);
+        Assert.Contains("Off", entry.Message);
+    }
+
+    [Fact]
+    public void WhenOff_EvenAHostedServiceThatGotRegisteredAnyway_DoesNothing()
+    {
+        var factory = new ThrowingScopeFactory();
+        var service = new DemoDataHostedService(factory, MaintainerFor(new DemoDataOptions()), new DemoDataOptions(), new CapturingLogger<DemoDataHostedService>());
+
+        service.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        Assert.True(service.ExecuteTask is null || service.ExecuteTask.IsCompletedSuccessfully);
+        Assert.Equal(0, factory.Created);
+        service.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    // ── On: what gets registered ─────────────────────────────────────────────
+
+    [Fact]
+    public void On_RegistersOneMaintainer_AndOneHostedService()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(TimeProvider.System);
+
+        services.AddDemoData(Config("On"));
+
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        Assert.NotNull(provider.GetRequiredService<DemoDataMaintainer>());
+        Assert.Single(provider.GetServices<IHostedService>().OfType<DemoDataHostedService>());
+        Assert.True(provider.GetRequiredService<DemoDataOptions>().Enabled);
+    }
+
+    // ── the hosted service's rhythm ──────────────────────────────────────────
+
+    private static DemoDataMaintainer MaintainerFor(DemoDataOptions options, params IDemoPack[] packs) =>
+        new(options, TimeProvider.System, new CapturingLogger<DemoDataMaintainer>(), packs, new InProcessTickLock());
+
+    private static (ServiceProvider Provider, DemoTestEnv Env, List<DateTime> Ticks, DemoDataOptions Options) OnProvider(Action<List<DateTime>>? onTick = null)
+    {
+        var env = DemoTestEnv.At(2026, 10, 2, 0, 30);
+        env.AddTenantAsync().GetAwaiter().GetResult();
+        var ticks = new List<DateTime>();
+        var options = new DemoDataOptions
+        {
+            Scenarios = DemoScenarioMode.On,
+            FirstRunDelay = TimeSpan.FromMilliseconds(40),
+            Interval = TimeSpan.FromMilliseconds(60),
+        };
+        var pack = DemoTestEnv.Pack("tick", (_, _) => { lock (ticks) ticks.Add(DateTime.UtcNow); onTick?.Invoke(ticks); return Task.CompletedTask; });
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(options);
+        services.AddSingleton<DbContextOptions<OdipDbContext>>(env.Options);
+        services.AddSingleton(new DemoDataMaintainer(options, env.Clock, new CapturingLogger<DemoDataMaintainer>(), new[] { pack }, new InProcessTickLock()));
+        services.AddSingleton<IHostedService, DemoDataHostedService>();
+        return (services.BuildServiceProvider(), env, ticks, options);
+    }
+
+    private static async Task<int> WaitForAsync(List<DateTime> ticks, int count, int timeoutMs = 5000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            lock (ticks) if (ticks.Count >= count) return ticks.Count;
+            await Task.Delay(10);
+        }
+        lock (ticks) return ticks.Count;
+    }
+
+    [Fact]
+    public async Task TheHostedService_WaitsBeforeTheFirstTick_ThenTicksOnTheInterval_AndStopsWhenAsked()
+    {
+        var (provider, _, ticks, _) = OnProvider();
+        await using var scopeGuard = provider;
+        var service = provider.GetServices<IHostedService>().OfType<DemoDataHostedService>().Single();
+        var startedAt = DateTime.UtcNow;
+
+        await service.StartAsync(CancellationToken.None);
+        Assert.Empty(ticks);                                   // StartAsync returns at once: readiness never waits for the demo data
+
+        Assert.True(await WaitForAsync(ticks, 3) >= 3);
+        Assert.True(ticks[0] - startedAt >= TimeSpan.FromMilliseconds(30), "the first tick must wait for the first-run delay");
+
+        await service.StopAsync(CancellationToken.None);
+        int count;
+        lock (ticks) count = ticks.Count;
+        await Task.Delay(200);
+        lock (ticks) Assert.Equal(count, ticks.Count);          // stopped: no more ticks
+    }
+
+    [Fact]
+    public async Task ATickThatCannotEvenStart_IsLogged_AndTheNextTickStillHappens()
+    {
+        var log = new CapturingLogger<DemoDataHostedService>();
+        var options = new DemoDataOptions { Scenarios = DemoScenarioMode.On, FirstRunDelay = TimeSpan.Zero, Interval = TimeSpan.FromMilliseconds(30) };
+        var factory = new ThrowingScopeFactory();
+        var service = new DemoDataHostedService(factory, MaintainerFor(options), options, log);
+
+        await service.StartAsync(CancellationToken.None);
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (factory.Created < 3 && DateTime.UtcNow < deadline) await Task.Delay(10);
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.True(factory.Created >= 3, "the service must keep ticking after a failed tick");
+        Assert.True(log.Entries.Count(e => e.Level == LogLevel.Error) >= 3);
+        Assert.True(service.ExecuteTask is { IsFaulted: false });
+    }
+
+    private sealed class ThrowingScopeFactory : IServiceScopeFactory
+    {
+        private int _created;
+        public int Created => Volatile.Read(ref _created);
+
+        public IServiceScope CreateScope()
+        {
+            Interlocked.Increment(ref _created);
+            throw new InvalidOperationException("no scope for you");
+        }
+    }
+}

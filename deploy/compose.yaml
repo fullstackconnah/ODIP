@@ -31,6 +31,9 @@ services:
       # Password-less dev login. LAN-only instances ONLY — never set this on an
       # internet-reachable host or one holding real participant data.
       - DEV_AUTH_ENABLED=${DEV_AUTH_ENABLED:-false}
+      # Demo-data top-up (an hourly job that keeps the Demo tenant's roster and leave current). Off unless the host's .env sets
+      # DEMO_DATA_SCENARIOS=On; CI and the image build never set it. See odip-prototype/odip/backend/Odip.Infrastructure/DemoData.
+      - DemoData__Scenarios=${DEMO_DATA_SCENARIOS:-Off}
     depends_on:
       db:
         condition: service_healthy
