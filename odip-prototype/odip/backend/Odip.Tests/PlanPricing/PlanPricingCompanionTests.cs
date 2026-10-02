@@ -58,6 +58,35 @@ public class PlanPricingCompanionTests
         Assert.Contains(5, travel.Trace.OpenQuestions);
     }
 
+    // ── Review L9: provider travel is claimed for each worker ──
+
+    [Theory]
+    [InlineData(25, 1, 0.8333, 61.31)]    // 25 + 25 = 50 minutes for one worker
+    [InlineData(25, 2, 1.6667, 122.63)]   // 100 minutes for two: floor(73.58 x 100 / 60) = 122.63
+    [InlineData(35, 2, 2.0, 147.16)]      // the 30 minute cap is per eligible worker and per leg: 30 x 2 legs x 2 workers = 120 minutes
+    public void Provider_travel_time_is_claimed_for_every_worker_at_the_rate_of_the_support_item(int minutes, int workers, double hours, double total)
+    {
+        var travel = TravelTime(QuoteOne(WithTravel(Community(b => b with { Workers = workers }), minutes), Mon12Oct));
+
+        Assert.Equal(((decimal)Math.Round(hours, 4), 73.58m, (decimal)total), (travel.Qty, travel.UnitPrice, travel.Total));   // the item's rate is not doubled: the time is
+        if (workers > 1) Assert.Contains($"{workers} workers", travel.Trace.Why);
+    }
+
+    [Fact]
+    public void Two_workers_on_a_shared_trip_are_marked_unconfirmed_even_when_the_travel_rates_are_confirmed()
+    {
+        // Two workers over several participants is the divisor question 5 leaves open (review M8), and travel time is an hourly line like the support itself.
+        var block = WithTravel(Community(b => b with { Workers = 2, ParticipantsPresent = 3 }), 25, sharing: 3);
+
+        var confirmed = TravelTime(QuoteOne(block, Mon12Oct, PlanPricingPolicy.Default with { TravelRatesProvisional = false }));
+        var single = TravelTime(QuoteOne(WithTravel(Community(b => b with { ParticipantsPresent = 3 }), 25, sharing: 3), Mon12Oct, PlanPricingPolicy.Default with { TravelRatesProvisional = false }));
+
+        Assert.Equal((0.5556m, 40.87m), (confirmed.Qty, confirmed.Total));   // 100 minutes shared by 3 = 33.33 minutes: floor(73.58 x 33.33 / 60)
+        Assert.True(confirmed.Provisional);
+        Assert.Contains(5, confirmed.Trace.OpenQuestions);
+        Assert.False(single.Provisional);   // one worker on a shared trip: question 5 is named but the line is as settled as the rates
+    }
+
     [Fact]
     public void Travel_is_provisional_and_names_the_open_question_while_the_rates_are_2025_26_values()
     {

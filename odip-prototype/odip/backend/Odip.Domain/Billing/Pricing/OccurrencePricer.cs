@@ -649,7 +649,8 @@ internal sealed class OccurrencePricer
         var cap = TravelCapMinutes(block.Location);
         var perLeg = cap is { } c ? Math.Min(travel.MinutesEachWay, c) : travel.MinutesEachWay;
         var legs = travel.ReturnToBase ? 2 : 1;
-        var claimable = perLeg * legs;
+        var workers = block.Workers;
+        var claimable = perLeg * legs * workers;   // the cap is per eligible worker (NDIS-CODES 7): each worker travels, so each worker's time is claimed
         var sharing = travel.ParticipantsSharing ?? block.ParticipantsPresent;
         var questions = new List<int>();
         var flags = PlannedLineFlags.None;
@@ -659,6 +660,7 @@ internal sealed class OccurrencePricer
             questions.Add(6);
         }
         if (sharing > 1) questions.Add(5);   // the rate basis for dividing travel time across a group is unclear (NDIS-CODES 6)
+        if (workers > 1 && sharing > 1) flags |= PlannedLineFlags.Provisional;   // two workers over several participants: the divisor question 5 leaves open, on an hourly line
 
         var support = basis.Line;
         var capRule = cap is null ? "travel:no-cap" : $"travel:time-cap-{cap.Value.ToString(CultureInfo.InvariantCulture)}";
@@ -674,7 +676,7 @@ internal sealed class OccurrencePricer
                 Flags = flags | (support.Flags & PlannedLineFlags.HolidayExposure) | (support.Flags & PlannedLineFlags.Review),
                 ShortNoticeCancellationAllowed = false,
                 Trace = TraceOf(occ, rate, new[] { capRule, "travel:same-item-as-support", "price:catalogue-by-service-date" }, questions, support.Trace.HolidayName, sharing,
-                    $"Provider travel on {support.ItemCode}: {travel.MinutesEachWay} minutes each way{(cap is { } k && travel.MinutesEachWay > k ? $" capped at {k}" : string.Empty)}, {(legs == 2 ? "there and back" : "one way")}, {claimable} minutes in all{(sharing > 1 ? $" shared by {sharing} participants" : string.Empty)}{(_policy.TravelRatesProvisional ? "; the time cap and rate are 2025-26 values" : string.Empty)}; {Basis(rate)}."),
+                    $"Provider travel on {support.ItemCode}: {travel.MinutesEachWay} minutes each way{(cap is { } k && travel.MinutesEachWay > k ? $" capped at {k}" : string.Empty)}, {(legs == 2 ? "there and back" : "one way")}, {claimable} minutes in all{(workers > 1 ? $" for {workers} workers" : string.Empty)}{(sharing > 1 ? $" shared by {sharing} participants" : string.Empty)}{(_policy.TravelRatesProvisional ? "; the time cap and rate are 2025-26 values" : string.Empty)}; {Basis(rate)}."),
             });
         }
 
