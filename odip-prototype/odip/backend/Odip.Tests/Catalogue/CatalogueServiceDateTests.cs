@@ -385,6 +385,35 @@ public class CatalogueServiceDateTests
         Assert.Equal(((decimal)price, version), (line.UnitPrice, line.CatalogueVersion));
     }
 
+    [Theory]
+    [InlineData("2026-03-09", 70.23, "2025-26")]
+    [InlineData("2026-03-10", 73.58, "2026-27")]   // the day the previous importer ended one row AND started the next: it is inside both windows, the newer wins
+    [InlineData("2026-03-11", 73.58, "2026-27")]
+    public async Task A_draft_on_a_previous_importers_overlap_day_takes_the_newer_row_not_an_Ambiguous_refusal(string start, double price, string version)
+    {
+        await using var db = CreateDb();
+        var group = await SeedCommunityAccessGroupAsync(db);
+        var day = new DateOnly(2026, 3, 10);
+        db.SupportCatalogueItems.AddRange(
+            LegacyRow(group.Id, "04_104_0125_6_1", ClaimDayType.Weekday, 70.23m, new DateOnly(2025, 7, 1), active: false, to: day, version: "2025-26"),
+            LegacyRow(group.Id, "04_104_0125_6_1", ClaimDayType.Weekday, 73.58m, day, version: "2026-27"));
+        var participant = AddParticipant(db);
+        await db.SaveChangesAsync();
+        var request = new CreateServiceAgreementDraftDto
+        {
+            PlanStartDate = new DateOnly(2026, 1, 1), PlanEndDate = new DateOnly(2026, 12, 31),
+            AgreementStartDate = DateOnly.Parse(start), AgreementEndDate = new DateOnly(2026, 12, 31),
+            State = "VIC", ServiceTypes = ["Community access"], Representative = "Representative",
+            Lines = [new CreateServiceAgreementDraftLineDto { ServiceType = "Community access", ItemCode = "04_104_0125_6_1", Hours = 2m }],
+        };
+
+        var (draft, error) = await new ServiceAgreementDraftService(db).CreateAsync(TenantId, participant.Id, request, "actor", CancellationToken.None);
+
+        Assert.Null(error);
+        var line = Assert.Single(draft!.Lines);
+        Assert.Equal(((decimal)price, version), (line.UnitPrice, line.CatalogueVersion));
+    }
+
     // ── A row withdrawn by hand is used by nothing ────────────────────────────────
 
     [Fact]

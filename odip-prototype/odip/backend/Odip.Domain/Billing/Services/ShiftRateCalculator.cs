@@ -274,10 +274,24 @@ public static class EffectiveCatalogueResolver
     }
 
     /// <summary>
+    /// Of the rows valid on one date for one item, those that tie for the newest version (the latest EffectiveFrom): a single row is the answer, two or more
+    /// start on the same day and cannot be told apart (a catalogue inserted twice), which is what "ambiguous" means. An older row that is still valid beside a
+    /// newer one is shadowed by it, exactly as <see cref="FindForDay"/> treats it: the previous importer end-dated a superseded row on the day it started its
+    /// replacement, so that one day sits in both windows, and an old open-ended row can be left behind. The lookup and the agreement draft both decide with this.
+    /// </summary>
+    public static IReadOnlyList<SupportCatalogueItem> NewestVersion(IReadOnlyCollection<SupportCatalogueItem> validRows)
+    {
+        ArgumentNullException.ThrowIfNull(validRows);
+        if (validRows.Count < 2) return validRows.ToList();
+        var newest = validRows.Max(r => r.EffectiveFrom);
+        return validRows.Where(r => r.EffectiveFrom == newest).ToList();
+    }
+
+    /// <summary>
     /// The date-effective lookup: the single catalogue row for <paramref name="itemCode"/> that is valid on <paramref name="serviceDate"/> (see
-    /// <see cref="IsValidOn"/>), and its price for <paramref name="zone"/>, or a typed failure (none, ambiguous, zone not eligible, not priced). The code is
-    /// matched exactly, registration group included, because the same digits mean different items in different groups. Pure: callers load the rows
-    /// (see <c>FindCatalogueItemAsync</c> for the database path).
+    /// <see cref="IsValidOn"/>; on a day two versions overlap, the newer one, see <see cref="NewestVersion"/>), and its price for <paramref name="zone"/>, or a
+    /// typed failure (none, ambiguous, zone not eligible, not priced). The code is matched exactly, registration group included, because the same digits
+    /// mean different items in different groups. Pure: callers load the rows (see <c>FindCatalogueItemAsync</c> for the database path).
     /// </summary>
     public static CatalogueLookupResult Find(IEnumerable<SupportCatalogueItem> catalogueItems, string itemCode, DateOnly serviceDate, PriceZone zone)
     {
@@ -287,13 +301,13 @@ public static class EffectiveCatalogueResolver
 
         var matches = code.Length == 0
             ? new List<SupportCatalogueItem>()
-            : catalogueItems.Where(item => string.Equals(item.ItemNumber, code, StringComparison.Ordinal) && IsValidOn(item, serviceDate)).ToList();
+            : NewestVersion(catalogueItems.Where(item => string.Equals(item.ItemNumber, code, StringComparison.Ordinal) && IsValidOn(item, serviceDate)).ToList()).ToList();
 
         if (matches.Count == 0)
             return CatalogueLookupResult.Fail(CatalogueLookupFailure.NotFound, null, $"No catalogue row for '{code}' is valid on {date}.");
         if (matches.Count > 1)
             return CatalogueLookupResult.Fail(CatalogueLookupFailure.Ambiguous, null,
-                $"{matches.Count.ToString(CultureInfo.InvariantCulture)} catalogue rows for '{code}' are valid on {date}: the catalogue has overlapping versions of this item.");
+                $"{matches.Count.ToString(CultureInfo.InvariantCulture)} catalogue rows for '{code}' start on the same day and are valid on {date}: the catalogue holds duplicates of this version.");
 
         var item = matches[0];
         if (item.PriceNational is null)
@@ -317,7 +331,7 @@ public enum CatalogueLookupFailure
 {
     /// <summary>No row for the code is valid on the service date (an unknown code, a date before the first catalogue, or after the last row ended).</summary>
     NotFound = 0,
-    /// <summary>More than one row for the code is valid on the service date: overlapping versions, which an import never leaves behind.</summary>
+    /// <summary>Two or more rows for the code start on the same day and are valid on the service date: one version inserted twice, which the next import heals. An older version overlapping a newer one is not ambiguous: the newer wins.</summary>
     Ambiguous = 1,
     /// <summary>One row is valid but lists no price for the zone: the item is not eligible for Remote / Very Remote loading.</summary>
     ZoneNotEligible = 2,

@@ -145,9 +145,9 @@ public class CatalogueLookupTests
     }
 
     [Fact]
-    public void Two_rows_valid_on_the_same_date_are_Ambiguous_and_name_neither()
+    public void Two_rows_that_start_on_the_same_day_and_are_both_valid_are_Ambiguous_and_name_neither()
     {
-        var items = new[] { Row(Jul1_2025, null, 70.23m), Row(Jul1_2026, null, 73.58m) };   // an open-ended older row left behind
+        var items = new[] { Row(Jul1_2026, null, 70.23m), Row(Jul1_2026, null, 73.58m) };   // a catalogue inserted twice: one version, two copies
 
         var result = EffectiveCatalogueResolver.Find(items, Code, new DateOnly(2026, 8, 1), PriceZone.National);
 
@@ -155,6 +155,38 @@ public class CatalogueLookupTests
         Assert.Null(result.Item);
         Assert.Null(result.Price);
         Assert.Contains("2", result.Message);   // says how many
+    }
+
+    [Fact]
+    public void An_older_version_that_is_still_valid_beside_a_newer_one_is_shadowed_by_it()
+    {
+        // An open-ended older row left behind, and the newer version: the newer wins from its first day, as the claim engines pick (FindForDay).
+        var items = new[] { Row(Jul1_2025, null, 70.23m), Row(Jul1_2026, null, 73.58m) };
+
+        Assert.Equal(70.23m, EffectiveCatalogueResolver.Find(items, Code, Jun30_2026, PriceZone.National).Price);
+        var result = EffectiveCatalogueResolver.Find(items, Code, new DateOnly(2026, 8, 1), PriceZone.National);
+        Assert.True(result.Found);
+        Assert.Equal(73.58m, result.Price);
+    }
+
+    [Fact]
+    public async Task On_the_day_a_previous_importer_both_ended_a_row_and_started_the_next_the_newer_row_prices_it()
+    {
+        // The previous importer end-dated the old row on the day it imported the new one and started the new row that same day: the day is inside both windows.
+        var day = new DateOnly(2026, 3, 10);
+        var items = new[] { Row(Jul1_2025, day, 70.23m, active: false), Row(day, null, 73.58m) };
+
+        Assert.Equal(70.23m, EffectiveCatalogueResolver.Find(items, Code, day.AddDays(-1), PriceZone.National).Price);
+        var onTheDay = EffectiveCatalogueResolver.Find(items, Code, day, PriceZone.National);
+        Assert.True(onTheDay.Found);
+        Assert.Equal(73.58m, onTheDay.Price);
+        Assert.Equal(73.58m, EffectiveCatalogueResolver.Find(items, Code, day.AddDays(1), PriceZone.National).Price);
+
+        // and the database path answers the same, because it hands the rows valid on the date to the same function
+        await using var db = CreateDb();
+        db.SupportCatalogueItems.AddRange(items);
+        await db.SaveChangesAsync();
+        Assert.Equal(73.58m, (await db.FindCatalogueItemAsync(Code, day, PriceZone.National)).Price);
     }
 
     [Theory]

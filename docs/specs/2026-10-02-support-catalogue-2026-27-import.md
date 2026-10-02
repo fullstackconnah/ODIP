@@ -32,8 +32,10 @@ lines can pick changes: the day type's row for a standard and an intensive parti
 Saturday price does not split a weekday run) and agreement drafts all pick the row valid on the **service date**
 (`EffectiveCatalogueResolver.IsValidOn`), so importing a December price set does not reprice an unclaimed November service.
 `EffectiveCatalogueResolver.Find` / `FindCatalogueItemAsync` return the single valid row and its price for (code, date, National /
-Remote / VeryRemote) or a typed failure. Claims and drafts stay scoped to `GRP_COMMUNITY_ACCESS`; a draft line can only be a weekday,
-hourly item of that group.
+Remote / VeryRemote) or a typed failure. On a day two versions overlap (the previous importer ended a row on the day it started its
+replacement) the version with the later start wins, in the lookup, the draft and both claim engines alike; only rows that start on the
+same day, a catalogue inserted twice, are ambiguous. Claims and drafts stay scoped to `GRP_COMMUNITY_ACCESS`; a draft line can only be a
+weekday, hourly item of that group.
 
 ## Import rules (history-safe)
 
