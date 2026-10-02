@@ -57,17 +57,23 @@ public enum SignInAccountResult
 /// <inheritdoc cref="IFirebaseUserService"/>
 public class FirebaseUserService : IFirebaseUserService
 {
-    public async Task<string> CreateUserAsync(string email, string displayName, string? password, CancellationToken ct)
+    private readonly IFirebaseAdminGateway _gateway;
+
+    // IFirebaseAdminGateway is intentionally NOT registered in Program.cs: the controllers build this service with `new` when none is injected, and
+    // a unit test hands it a fake gateway that records the calls instead of reaching Firebase.
+    public FirebaseUserService(IFirebaseAdminGateway? gateway = null)
     {
-        var record = await FirebaseAuth.DefaultInstance.CreateUserAsync(BuildCreateUserArgs(email, displayName, password), ct);
-        return record.Uid;
+        _gateway = gateway ?? new FirebaseAdminGateway();
     }
+
+    public Task<string> CreateUserAsync(string email, string displayName, string? password, CancellationToken ct) =>
+        _gateway.CreateUserAsync(BuildCreateUserArgs(email, displayName, password), ct);
 
     public async Task<SignInAccountResult> EnsureSignInAccountAsync(string email, string displayName, CancellationToken ct)
     {
         try
         {
-            await FirebaseAuth.DefaultInstance.GetUserByEmailAsync(email, ct);
+            await _gateway.GetUidByEmailAsync(email, ct);
             return SignInAccountResult.Existing;
         }
         catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.UserNotFound)
@@ -77,7 +83,7 @@ public class FirebaseUserService : IFirebaseUserService
 
         try
         {
-            await FirebaseAuth.DefaultInstance.CreateUserAsync(BuildCreateUserArgs(email, displayName, password: null), ct);
+            await _gateway.CreateUserAsync(BuildCreateUserArgs(email, displayName, password: null), ct);
             return SignInAccountResult.Created;
         }
         catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.EmailAlreadyExists)
@@ -110,10 +116,10 @@ public class FirebaseUserService : IFirebaseUserService
 
     public async Task UpdateUserByEmailAsync(string email, string displayName, bool disabled, CancellationToken ct)
     {
-        var firebaseUser = await FirebaseAuth.DefaultInstance.GetUserByEmailAsync(email, ct);
-        await FirebaseAuth.DefaultInstance.UpdateUserAsync(new UserRecordArgs
+        var uid = await _gateway.GetUidByEmailAsync(email, ct);
+        await _gateway.UpdateUserAsync(new UserRecordArgs
         {
-            Uid = firebaseUser.Uid,
+            Uid = uid,
             DisplayName = displayName,
             Disabled = disabled,
         }, ct);
@@ -123,7 +129,7 @@ public class FirebaseUserService : IFirebaseUserService
     {
         try
         {
-            await FirebaseAuth.DefaultInstance.DeleteUserAsync(uid, ct);
+            await _gateway.DeleteUserAsync(uid, ct);
         }
         catch (FirebaseAuthException)
         {

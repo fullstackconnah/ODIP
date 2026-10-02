@@ -10,13 +10,17 @@ namespace Odip.Tests.Common;
 /// in (AuthController.Exchange refuses it, and nothing sends the person a verification link). The sites that create accounts, and how they
 /// must be wired, are properties of the source, so they are checked there:
 /// every account is created through <c>FirebaseUserService.BuildCreateUserArgs</c> (from <c>CreateUserAsync</c> and
-/// <c>EnsureSignInAccountAsync</c>), the controllers reach Firebase only through <c>IFirebaseUserService</c>, and the one place that builds
-/// <c>UserRecordArgs</c> for an UPDATE (<c>UpdateUserByEmailAsync</c>) never marks an email verified.
+/// <c>EnsureSignInAccountAsync</c>), the controllers reach Firebase only through <c>IFirebaseUserService</c>, the service reaches the Admin SDK only
+/// through <c>IFirebaseAdminGateway</c> (the one file that touches <c>FirebaseAuth.DefaultInstance</c> for accounts), and the one place that builds
+/// <c>UserRecordArgs</c> for an UPDATE (<c>UpdateUserByEmailAsync</c>) never marks an email verified. What the service then DOES with the gateway
+/// is checked by behaviour, in FirebaseUserServiceGatewayTests: this file only guards what a behavioural test cannot see.
 /// </summary>
 public class FirebaseAccountCreationWiringTests
 {
     private static readonly string ApiRoot = Path.Combine(FindBackendRoot(), "Odip.Api");
     private const string ServicePath = "Services/FirebaseUserService.cs";
+    private const string GatewayPath = "Services/FirebaseAdminGateway.cs";
+    private const string TokenVerifierPath = "Services/FirebaseTokenVerifier.cs";
 
     private static string FindBackendRoot()
     {
@@ -34,6 +38,9 @@ public class FirebaseAccountCreationWiringTests
 
     private static string Read(string relativePath) => File.ReadAllText(Path.Combine(ApiRoot, relativePath));
 
+    /// <summary>The source with its // comments removed, so a scan for a call is not fooled by a comment that names it.</summary>
+    private static string WithoutComments(string source) => Regex.Replace(source, "//.*$", "", RegexOptions.Multiline);
+
     /// <summary>Every production source file in Odip.Api as (path relative to the project, text), build output excluded.</summary>
     private static IEnumerable<(string Path, string Text)> ApiSources() =>
         Directory.EnumerateFiles(ApiRoot, "*.cs", SearchOption.AllDirectories)
@@ -50,9 +57,19 @@ public class FirebaseAccountCreationWiringTests
         var start = match.Index;
         var open = source.IndexOf('{', match.Index + match.Length - 1);
         var arrow = source.IndexOf("=>", match.Index, StringComparison.Ordinal);
-        // An expression-bodied member ends at its first "};" (the object initialiser it returns); a block body at its matching brace.
+        // An expression-bodied member ends at its first ";" outside any braces (an object initialiser it returns has its own); a block body at
+        // its matching brace.
         if (arrow >= 0 && (open < 0 || arrow < open))
-            return source[start..(source.IndexOf("};", arrow, StringComparison.Ordinal) + 2)];
+        {
+            var braces = 0;
+            for (var index = arrow; index < source.Length; index++)
+            {
+                if (source[index] == '{') braces++;
+                else if (source[index] == '}') braces--;
+                else if (source[index] == ';' && braces == 0) return source[start..(index + 1)];
+            }
+            throw new InvalidOperationException($"No end to the expression body after {signaturePattern}");
+        }
 
         var depth = 0;
         for (var index = open; index < source.Length; index++)
@@ -63,7 +80,7 @@ public class FirebaseAccountCreationWiringTests
         throw new InvalidOperationException($"Unbalanced braces after {signaturePattern}");
     }
 
-    private static string CreateUserAsyncBody() => MemberBody(@"public async Task<string> CreateUserAsync\(");
+    private static string CreateUserAsyncBody() => MemberBody(@"public Task<string> CreateUserAsync\(");
     private static string EnsureSignInAccountBody() => MemberBody(@"public async Task<SignInAccountResult> EnsureSignInAccountAsync\(");
     private static string BuilderBody() => MemberBody(@"public static UserRecordArgs BuildCreateUserArgs\(");
     private static string UpdateBody() => MemberBody(@"public async Task UpdateUserByEmailAsync\(");
@@ -72,7 +89,7 @@ public class FirebaseAccountCreationWiringTests
     public void The_scan_finds_the_members_it_checks()
     {
         // A guard that matched nothing would pass for the wrong reason.
-        Assert.Contains("return record.Uid", CreateUserAsyncBody());
+        Assert.Contains("_gateway.CreateUserAsync", CreateUserAsyncBody());
         Assert.Contains("SignInAccountResult.Created", EnsureSignInAccountBody());
         Assert.Contains("EmailVerified", BuilderBody());
         Assert.Contains("UpdateUserAsync", UpdateBody());
@@ -85,39 +102,60 @@ public class FirebaseAccountCreationWiringTests
         var create = CreateUserAsyncBody();
         var ensure = EnsureSignInAccountBody();
 
-        Assert.Matches(@"DefaultInstance\.CreateUserAsync\(\s*BuildCreateUserArgs\(", create);
-        Assert.Matches(@"DefaultInstance\.CreateUserAsync\(\s*BuildCreateUserArgs\(", ensure);
+        Assert.Matches(@"_gateway\.CreateUserAsync\(\s*BuildCreateUserArgs\(", create);
+        Assert.Matches(@"_gateway\.CreateUserAsync\(\s*BuildCreateUserArgs\(", ensure);
         Assert.DoesNotContain("UserRecordArgs", create);
         Assert.DoesNotContain("UserRecordArgs", ensure.Replace("BuildCreateUserArgs", ""));
     }
 
     [Fact]
-    public void UserRecordArgs_is_only_ever_built_inside_FirebaseUserService()
+    public void UserRecordArgs_is_only_ever_built_inside_FirebaseUserService_and_only_named_by_the_gateway()
     {
-        var elsewhere = ApiSources()
-            .Where(file => file.Path != ServicePath && file.Text.Contains("UserRecordArgs"))
+        var builtElsewhere = ApiSources()
+            .Where(file => file.Path != ServicePath && Regex.IsMatch(file.Text, @"new\s+UserRecordArgs\b"))
             .Select(file => file.Path)
             .ToList();
+        Assert.True(builtElsewhere.Count == 0,
+            $"UserRecordArgs is built outside FirebaseUserService (so possibly without EmailVerified = true): {string.Join(", ", builtElsewhere)}");
 
-        Assert.True(elsewhere.Count == 0,
-            $"UserRecordArgs is built outside FirebaseUserService (so possibly without EmailVerified = true): {string.Join(", ", elsewhere)}");
+        var namedElsewhere = ApiSources()
+            .Where(file => file.Path != ServicePath && file.Path != GatewayPath && file.Text.Contains("UserRecordArgs"))
+            .Select(file => file.Path)
+            .ToList();
+        Assert.True(namedElsewhere.Count == 0,
+            $"UserRecordArgs is named outside FirebaseUserService and the gateway: {string.Join(", ", namedElsewhere)}");
     }
 
     [Fact]
-    public void Firebase_accounts_are_only_created_through_FirebaseUserService()
+    public void Only_the_gateway_and_the_token_verifier_touch_FirebaseAuth_DefaultInstance()
     {
+        // The Admin SDK's account methods (create, read, update, delete) are reachable only through IFirebaseAdminGateway, so a helper elsewhere
+        // cannot set a password, verify an email or update an account behind the back of FirebaseUserService and its behavioural tests.
         var callers = ApiSources()
-            .Where(file => file.Path != ServicePath && Regex.IsMatch(file.Text, @"FirebaseAuth\.DefaultInstance\s*\.\s*CreateUserAsync"))
+            .Where(file => file.Path != GatewayPath && file.Path != TokenVerifierPath && Regex.IsMatch(WithoutComments(file.Text), @"FirebaseAuth\.DefaultInstance\s*\.\s*\w+"))
             .Select(file => file.Path)
             .ToList();
 
         Assert.True(callers.Count == 0,
-            $"These call FirebaseAuth.DefaultInstance.CreateUserAsync directly instead of IFirebaseUserService: {string.Join(", ", callers)}");
+            $"These use FirebaseAuth.DefaultInstance directly instead of going through IFirebaseAdminGateway: {string.Join(", ", callers)}");
 
-        // And inside the service, every such call takes the builder's args.
-        var calls = Regex.Matches(Read(ServicePath), @"DefaultInstance\.CreateUserAsync\(\s*(\w+)");
+        // The token verifier only verifies a token: it makes no account call.
+        var verifierCalls = Regex.Matches(Read(TokenVerifierPath), @"FirebaseAuth\.DefaultInstance\s*\.\s*(\w+)");
+        Assert.NotEmpty(verifierCalls);
+        Assert.All(verifierCalls.Select(call => call.Groups[1].Value), method => Assert.Equal("VerifyIdTokenAsync", method));
+    }
+
+    [Fact]
+    public void Inside_the_service_every_account_creation_takes_the_builders_args_and_the_gateway_decides_nothing()
+    {
+        var calls = Regex.Matches(Read(ServicePath), @"_gateway\.CreateUserAsync\(\s*(\w+)");
         Assert.Equal(2, calls.Count);
         Assert.All(calls.Select(c => c.Groups[1].Value), first => Assert.Equal("BuildCreateUserArgs", first));
+
+        // The gateway is a pass-through: exactly one SDK create call, handing on the args it was given untouched.
+        var gatewayCreates = Regex.Matches(Read(GatewayPath), @"DefaultInstance\.CreateUserAsync\(\s*(\w+)");
+        Assert.Single(gatewayCreates);
+        Assert.Equal("args", gatewayCreates[0].Groups[1].Value);
     }
 
     [Theory]
