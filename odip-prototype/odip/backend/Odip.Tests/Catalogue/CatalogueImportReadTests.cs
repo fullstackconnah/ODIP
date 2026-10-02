@@ -286,6 +286,32 @@ public class CatalogueImportReadTests
         Assert.Equal(CatalogueClaimFlag.Yes, row.ProviderTravel);
     }
 
+    [Theory]
+    [InlineData("01_026_0115_1_1", 560.90)]      // Assistance In Living Arrangements (Host Family): Quotable, only the ACT column is filled
+    [InlineData("01_027_0115_1_1", 7040.24)]
+    [InlineData("01_046_0115_1_1", 13435.13)]
+    public async Task A_quotable_2025_26_row_with_a_price_in_one_state_column_only_has_no_National_price(string code, double actColumn)
+    {
+        // "ACT $560.90" is an amount to quote against, not a price limit: with seven of the eight columns blank there is no common value to call National.
+        var row = Row(await Preview2025_26(), code);
+
+        Assert.Equal(CatalogueItemType.Quotable, row.CatalogueType);
+        Assert.Null(row.PriceNational);
+        Assert.Null(row.PriceRemote);
+        Assert.Equal((decimal)actColumn, row.PriceLimit_ACT);   // the column the claim screens read is kept as published
+        Assert.Equal(0m, row.PriceLimit_VIC);
+    }
+
+    [Fact]
+    public async Task A_2025_26_row_that_lists_all_eight_states_still_gets_the_common_value_as_its_National_price()
+    {
+        var preview = await Preview2025_26();
+
+        var priced = preview.Rows.Where(r => r.CatalogueType == CatalogueItemType.Priced && r.PriceLimit_VIC > 0m).ToList();
+        Assert.NotEmpty(priced);
+        Assert.All(priced, r => Assert.Equal(r.PriceLimit_VIC, r.PriceNational));
+    }
+
     [Fact]
     public async Task The_2025_26_community_access_rows_are_the_ten_the_old_importer_kept_with_the_same_day_types_and_prices()
     {

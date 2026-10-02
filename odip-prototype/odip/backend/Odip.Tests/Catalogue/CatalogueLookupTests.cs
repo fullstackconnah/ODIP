@@ -219,6 +219,17 @@ public class CatalogueLookupTests
     }
 
     [Fact]
+    public async Task A_2025_26_quotable_item_priced_in_one_state_column_is_NotPriced_not_given_that_column_as_its_price()
+    {
+        await using var db = CreateDb();
+        await ImportAsync(db, CatalogueFixtures.File2025_26Trimmed);
+
+        var result = await db.FindCatalogueItemAsync("01_026_0115_1_1", new DateOnly(2026, 3, 1), PriceZone.National);
+
+        Assert.Equal(CatalogueLookupFailure.NotPriced, result.Failure);
+    }
+
+    [Fact]
     public async Task After_two_versions_no_code_is_ambiguous_on_any_probe_date_in_either_import_order()
     {
         var probes = new[] { new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31), new DateOnly(2026, 6, 30), new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 3), new DateOnly(2026, 10, 2), new DateOnly(2027, 6, 30), new DateOnly(2028, 1, 1) };

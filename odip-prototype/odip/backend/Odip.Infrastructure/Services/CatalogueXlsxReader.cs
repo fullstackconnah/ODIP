@@ -164,6 +164,10 @@ public static class CatalogueXlsxReader
                 continue;
             }
 
+            var typeText = Opt("Type");
+            var type = ReadType(typeText, Opt("Quote"));
+            if (type is null && typeText.Length > 0 && typeText != "0") unknownTypes.Add(typeText);
+
             // Prices. 2026-27 has National / Remote / Very Remote; 2025-26 has eight state columns, Remote and Very Remote. The eight state
             // limits stay on the row because the claim screens still read them: a 2026-27 import fills all eight with the National price.
             decimal? national, remote = Price("Remote"), veryRemote = Price("Very Remote");
@@ -178,8 +182,12 @@ public static class CatalogueXlsxReader
                 var read = States.Select(s => Price(s)).ToArray();
                 for (var i = 0; i < states.Length; i++) states[i] = read[i] ?? 0m;
                 var present = read.Where(p => p is not null).Select(p => p!.Value).ToList();
-                national = present.Count == 0 ? null : present.All(p => p == present[0]) ? present[0] : read[Array.IndexOf(States, "VIC")] ?? present[0];
-                if (present.Count > 0 && !present.All(p => p == present[0]))
+                // National is the common value of the eight state columns. A row that lists only some of them is not a price-limited item: the official 2025-26
+                // file has three Quotable rows with only ACT filled (01_026, 01_027, 01_046), where "ACT $560.90" is an amount to quote against, not a price
+                // limit. So with fewer than eight columns present a National price is derived only for a Priced item.
+                var derive = present.Count > 0 && (present.Count == States.Length || type == CatalogueItemType.Priced);
+                national = !derive ? null : present.All(p => p == present[0]) ? present[0] : read[Array.IndexOf(States, "VIC")] ?? present[0];
+                if (derive && !present.All(p => p == present[0]))
                     warnings.Add($"{code}: the state prices differ; the National price was taken from VIC.");
             }
 
@@ -191,10 +199,6 @@ public static class CatalogueXlsxReader
             var group = CatalogueGroups.For(classification);
             var (outcomeDomain, supportPurpose) = ReadOutcomeAndPurpose(code);
             var unit = Opt("Unit");
-
-            var typeText = Opt("Type");
-            var type = ReadType(typeText, Opt("Quote"));
-            if (type is null && typeText.Length > 0 && typeText != "0") unknownTypes.Add(typeText);
 
             rows.Add(new CatalogueImportRowDto
             {
