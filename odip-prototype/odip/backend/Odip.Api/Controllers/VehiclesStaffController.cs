@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Api.Rostering;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -340,15 +341,22 @@ public class StaffController : ControllerBase
     private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
     // The request's clock: a test fixes it. Every calendar rule uses the PROVIDER's date from it (ProviderTimeZoneResolver.TodayAsync), never the UTC date.
     private readonly TimeProvider _clock;
+    private readonly IFirebaseUserService _firebaseUserService;
+    private readonly ILogger<StaffController>? _logger;
 
+    // IFirebaseUserService is intentionally NOT registered in Program.cs — see AdminUsersController: ActivatorUtilities falls back to the
+    // parameter's default, so production needs no DI change while a unit test injects a mock.
     public StaffController(
         OdipDbContext db, IStaffAvailabilityItemsQuery? availabilityItemsQuery = null,
-        Microsoft.Extensions.Configuration.IConfiguration? config = null, TimeProvider? clock = null)
+        Microsoft.Extensions.Configuration.IConfiguration? config = null, TimeProvider? clock = null,
+        IFirebaseUserService? firebaseUserService = null, ILogger<StaffController>? logger = null)
     {
         _db = db;
         _clock = clock ?? TimeProvider.System;
         _availabilityItemsQuery = availabilityItemsQuery ?? new StaffAvailabilityItemsQuery(db);
         _config = config;
+        _firebaseUserService = firebaseUserService ?? new FirebaseUserService();
+        _logger = logger;
     }
 
     /// <summary>Same default as RosteringController's own VarianceReviewMinutes — kept independent
@@ -394,6 +402,17 @@ public class StaffController : ControllerBase
         if (targetRole == UserRole.SuperAdmin) return "Cannot grant the SuperAdmin role.";
         if (targetRole == UserRole.Admin && !IsInRole("Admin")) return "Only an Admin can assign the Admin role.";
         return null;
+    }
+
+    /// <summary>
+    /// An address on <c>Auth:SuperAdminDomain</c> signs in as SuperAdmin whatever the user's Role (AuthController.Exchange), so only a
+    /// SuperAdmin may enter one. Returns the refusal, or null when <paramref name="normalisedEmail"/> is allowed for this caller.
+    /// </summary>
+    private string? ReservedDomainError(string normalisedEmail)
+    {
+        if (User?.IsInRole("SuperAdmin") ?? false) return null;
+        var domain = SuperAdminDomain.From(_config);
+        return SuperAdminDomain.Covers(normalisedEmail, domain) ? SuperAdminDomain.ReservedMessage(domain) : null;
     }
 
     [HttpGet]
@@ -470,6 +489,9 @@ public class StaffController : ControllerBase
         // Username/Email uniqueness is GLOBAL across tenants (design spec §2/§7) — IgnoreQueryFilters
         // so the check sees every tenant's users, not just the caller's own (matches AdminUsersController).
         var emailLower = EmailIdentity.Normalise(dto.Email);
+        var reservedError = ReservedDomainError(emailLower);
+        if (reservedError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(reservedError));
+
         var emailTaken = await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email.ToLower() == emailLower, ct);
         if (emailTaken) return Conflict(ApiResponse<StaffDetailDto>.Fail("A user with this email already exists."));
 
@@ -533,6 +555,14 @@ public class StaffController : ControllerBase
         if (guardError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(guardError));
 
         var emailLower = EmailIdentity.Normalise(dto.Email);
+        // Only when the address is being CHANGED: an edit to some other field of a row that already holds such an address (the role guardrail
+        // above is what keeps a tenant caller off SuperAdmin accounts) must not start failing because of the address.
+        if (emailLower != EmailIdentity.Normalise(s.Email))
+        {
+            var reservedError = ReservedDomainError(emailLower);
+            if (reservedError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(reservedError));
+        }
+
         var emailTaken = await _db.Users.IgnoreQueryFilters()
             .AnyAsync(u => u.Id != id && u.Email.ToLower() == emailLower, ct);
         if (emailTaken) return Conflict(ApiResponse<StaffDetailDto>.Fail("A user with this email already exists."));
@@ -586,6 +616,49 @@ public class StaffController : ControllerBase
         s.IsActive = false; s.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true, "Staff member archived"));
+    }
+
+    /// <summary>
+    /// Makes sure this staff member has a Firebase sign-in account (creating a verified, passwordless one when there is none) and says
+    /// which, so the browser can then send the set-password email and word it truthfully. Create writes only the user row, so a staff
+    /// member added here has had no account until this runs. An account that already exists is left exactly as it is. Tenant-scoped like
+    /// every other staff write: a row in another tenant is simply not found.
+    /// </summary>
+    [HttpPost("{id:guid}/sign-in-account")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<SignInAccountDto>>> EnsureSignInAccount(Guid id, CancellationToken ct)
+    {
+        var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (s == null) return NotFound(ApiResponse<SignInAccountDto>.Fail("Staff not found"));
+
+        // The same §4.1 guardrail as every other staff write: only a SuperAdmin touches a SuperAdmin account.
+        if (s.Role == UserRole.SuperAdmin && !(User?.IsInRole("SuperAdmin") ?? false))
+            return BadRequest(ApiResponse<SignInAccountDto>.Fail("Cannot edit a SuperAdmin account."));
+
+        if (!s.IsActive)
+            return BadRequest(ApiResponse<SignInAccountDto>.Fail("This staff member is inactive, so they cannot be given a sign-in account."));
+
+        if (string.IsNullOrWhiteSpace(s.Email))
+            return BadRequest(ApiResponse<SignInAccountDto>.Fail("This staff member has no email address."));
+
+        var email = EmailIdentity.Normalise(s.Email);
+        var reservedError = ReservedDomainError(email);
+        if (reservedError != null) return BadRequest(ApiResponse<SignInAccountDto>.Fail(reservedError));
+
+        try
+        {
+            var result = await _firebaseUserService.EnsureSignInAccountAsync(email, s.FullName, ct);
+            return Ok(ApiResponse<SignInAccountDto>.Ok(new SignInAccountDto(
+                result == SignInAccountResult.Created ? FirebaseAccountStatus.Created : FirebaseAccountStatus.Existing)));
+        }
+        catch (Exception ex)
+        {
+            // Deliberately broad, as in AdminUsersController.Create: an unusable service account is not a FirebaseAuthException, and the
+            // same call with no Firebase app configured fails the same way, so it is the same 502.
+            _logger?.LogError(ex, "Failed to ensure a Firebase sign-in account for {Email}", email);
+            return StatusCode(StatusCodes.Status502BadGateway,
+                ApiResponse<SignInAccountDto>.Fail("Unable to set up the staff member's sign-in account. Please try again later."));
+        }
     }
 
     /// <summary>

@@ -34,6 +34,24 @@ public interface IFirebaseUserService
     /// operation, and there is nothing more we can do if it also fails.
     /// </summary>
     Task DeleteUserAsync(string uid, CancellationToken ct);
+
+    /// <summary>
+    /// Makes sure a Firebase sign-in account exists for this address, so a set-password email can be sent to it. When there is none it
+    /// creates one (verified, no password: only the mailbox owner can set one from the emailed link). When there is one it is left
+    /// EXACTLY as it is: not marked verified and its password untouched, because an account that already exists may be someone's own
+    /// sign-up for an address they do not own. Throws on any other failure, as <see cref="CreateUserAsync"/> does.
+    /// </summary>
+    Task<SignInAccountResult> EnsureSignInAccountAsync(string email, string displayName, CancellationToken ct);
+}
+
+/// <summary>What <see cref="IFirebaseUserService.EnsureSignInAccountAsync"/> found or did.</summary>
+public enum SignInAccountResult
+{
+    /// <summary>There was no account; one was created.</summary>
+    Created,
+
+    /// <summary>An account already existed and was left as it was.</summary>
+    Existing,
 }
 
 /// <inheritdoc cref="IFirebaseUserService"/>
@@ -45,10 +63,35 @@ public class FirebaseUserService : IFirebaseUserService
         return record.Uid;
     }
 
+    public async Task<SignInAccountResult> EnsureSignInAccountAsync(string email, string displayName, CancellationToken ct)
+    {
+        try
+        {
+            await FirebaseAuth.DefaultInstance.GetUserByEmailAsync(email, ct);
+            return SignInAccountResult.Existing;
+        }
+        catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.UserNotFound)
+        {
+            // No account yet: fall through and create one.
+        }
+
+        try
+        {
+            await FirebaseAuth.DefaultInstance.CreateUserAsync(BuildCreateUserArgs(email, displayName, password: null), ct);
+            return SignInAccountResult.Created;
+        }
+        catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.EmailAlreadyExists)
+        {
+            // Someone created it between the lookup and the create. Still not ours to change.
+            return SignInAccountResult.Existing;
+        }
+    }
+
     /// <summary>
     /// The Firebase create-user spec for every account the app provisions on someone's behalf: an admin
-    /// creating a user, and the first user of a new tenant. Public and static so it can be unit tested
-    /// without a live Firebase connection — FirebaseAuth.DefaultInstance cannot run offline.
+    /// creating a user, the first user of a new tenant, and <see cref="EnsureSignInAccountAsync"/>. Public and
+    /// static so it can be unit tested without a live Firebase connection — FirebaseAuth.DefaultInstance
+    /// cannot run offline.
     /// </summary>
     public static UserRecordArgs BuildCreateUserArgs(string email, string displayName, string? password) => new()
     {

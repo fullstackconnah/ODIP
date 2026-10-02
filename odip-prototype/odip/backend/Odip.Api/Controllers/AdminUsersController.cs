@@ -386,4 +386,43 @@ public class AdminUsersController : ControllerBase
 
         return Ok(ApiResponse<AdminUserDto>.Ok(ToAdminUserDto(user, user.Tenant?.Name ?? "")));
     }
+
+    // POST api/v1/admin/users/{id}/sign-in-account
+    /// <summary>
+    /// Makes sure this user has a Firebase sign-in account (creating a verified, passwordless one when there is none) and says which, so
+    /// the browser can then send the set-password email and word it truthfully. An account that already exists is left exactly as it is.
+    /// Like <see cref="GetAll"/> it looks past the tenant filter: this is the SuperAdmin's account administration surface.
+    /// </summary>
+    [HttpPost("{id:guid}/sign-in-account")]
+    public async Task<IActionResult> EnsureSignInAccount(Guid id, CancellationToken ct)
+    {
+        var user = await _db.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Id == id, ct);
+
+        if (user is null)
+            return NotFound(ApiResponse<object>.Fail("User not found"));
+
+        if (!user.IsActive)
+            return BadRequest(ApiResponse<object>.Fail("This user is inactive, so they cannot be given a sign-in account."));
+
+        if (string.IsNullOrWhiteSpace(user.Email))
+            return BadRequest(ApiResponse<object>.Fail("This user has no email address."));
+
+        var email = EmailIdentity.Normalise(user.Email);
+        try
+        {
+            var result = await _firebaseUserService.EnsureSignInAccountAsync(email, user.FullName, ct);
+            return Ok(ApiResponse<SignInAccountDto>.Ok(new SignInAccountDto(
+                result == SignInAccountResult.Created ? FirebaseAccountStatus.Created : FirebaseAccountStatus.Existing)));
+        }
+        catch (Exception ex)
+        {
+            // Deliberately broad, as in Create: the failure that matters (a service account Google cannot authenticate) is not a
+            // FirebaseAuthException, and the same call with no Firebase app configured fails the same way, so it is the same 502.
+            _logger.LogError(ex, "Failed to ensure a Firebase sign-in account for {Email}", email);
+            return StatusCode(StatusCodes.Status502BadGateway,
+                ApiResponse<object>.Fail("Unable to set up the user's sign-in account. Please try again later."));
+        }
+    }
 }

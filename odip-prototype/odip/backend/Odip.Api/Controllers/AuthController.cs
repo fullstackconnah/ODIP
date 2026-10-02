@@ -115,7 +115,7 @@ public class AuthController : ControllerBase
         var domain = email.Split('@').Last();
 
         // 2. SuperAdmin path — bypasses tenant resolution
-        var superAdminDomain = _config["Auth:SuperAdminDomain"] ?? "odip.com.au";
+        var superAdminDomain = SuperAdminDomain.From(_config);
         if (domain == superAdminDomain)
         {
             var superAdmin = await _db.Users
