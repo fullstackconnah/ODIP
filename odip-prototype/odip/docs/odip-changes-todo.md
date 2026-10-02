@@ -245,17 +245,18 @@ owner decision (collected under Open Flags at the end).
 
 ### Microsoft 365 SSO
 - [ ] Sign in with Microsoft business accounts via Firebase's Microsoft OAuth provider
-  - Backend needs no changes: `/auth/exchange` verifies a Firebase ID token and maps
-    the email domain to a tenant, and does not care which provider minted the token.
+  - Backend needs no changes: `/auth/exchange` verifies a Firebase ID token and finds
+    the user by email (across tenants), taking the tenant from that user's row, and does
+    not care which provider minted the token.
   - Frontend swaps `signInWithEmailAndPassword` for
     `signInWithPopup(auth, new OAuthProvider('microsoft.com'))`.
   - Needs an Entra ID app registration (free on any M365 business plan) and its
     client ID / secret pasted into the Firebase console's Microsoft provider.
   - Roughly 2-3 hours of code plus about 30 minutes across the two portals.
-  - Chosen over talking to Entra ID directly with MSAL because tenants are keyed on
-    `EmailDomain` — ODIP is built to onboard other NDIS orgs, and the next one may be
-    on Google Workspace. Firebase covers that and non-M365 support workers behind one
-    interface; going direct would make an M365 account mandatory for every user.
+  - Chosen over talking to Entra ID directly with MSAL because ODIP is built to onboard
+    other NDIS orgs, and the next one may be on Google Workspace. Firebase covers that
+    and non-M365 support workers behind one interface; going direct would make an M365
+    account mandatory for every user.
 
 ### Harden the token exchange (do BEFORE Firebase goes live)
 - [x] Require `email_verified` in `AuthController.Exchange` (shipped 2026-08-30, PR #25),
@@ -288,6 +289,12 @@ owner decision (collected under Open Flags at the end).
     on `Auth:SuperAdminDomain` signs in as SuperAdmin whatever the user's role, so the
     staff routes (create, an edit that changes the address, and this one) refuse such an
     address unless the caller is a SuperAdmin.
+  - Any address signs in. The exchange no longer maps the address's domain to a tenant: it
+    finds the one active user with that address (compared lower-case) across tenants and
+    uses that user's tenant. No match, an inactive tenant, and two active rows with the
+    same address all answer the same 401 (the two-row case logs both user ids, so the
+    duplicate can be fixed). `Tenant.EmailDomain` is still stored and unique, but it is not
+    read at sign-in. The SuperAdmin domain keeps its own path.
   - The SSO plan above retires this whole flow. With the email/password provider disabled
     there is no password to set, so the set-password emails, the two sign-in-account
     routes, the temporary-password option and the verified-at-creation rule go with it.

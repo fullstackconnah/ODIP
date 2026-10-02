@@ -131,3 +131,26 @@ describe('TenantFormPanel: the first user\'s password', () => {
     })
   })
 })
+
+describe('TenantFormPanel: the first user\'s address', () => {
+  it('does not say it must be at the tenant\'s domain: staff sign in with any address they own', async () => {
+    const u = await openFirstUser()
+    await u.type(screen.getByLabelText('Email'), 'jane.smith@gmail.com')
+
+    expect(screen.queryByText(/must match the tenant/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Email')).toHaveAccessibleDescription('The address they sign in with. It can be at any domain.')
+  })
+
+  it('sends an address at another domain exactly as typed', async () => {
+    const u = await openFirstUser()
+    await u.type(screen.getByLabelText('First Name'), 'Jane')
+    await u.type(screen.getByLabelText('Last Name'), 'Smith')
+    await u.type(screen.getByLabelText('Email'), 'jane.smith@gmail.com')
+    await u.type(screen.getByLabelText('Username'), 'jane.smith')
+
+    await u.click(createButton())
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1))
+    expect(mockCreate.mock.calls[0][0].initialUser.email).toBe('jane.smith@gmail.com')
+  })
+})

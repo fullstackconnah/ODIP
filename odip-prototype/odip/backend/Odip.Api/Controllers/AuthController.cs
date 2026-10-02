@@ -76,8 +76,8 @@ public class AuthController : ControllerBase
         {
             _loginAttempts.RecordFailure(attemptKey);
             _logger.LogWarning(logMessage, logArgs);
-            // The message is deliberately identical for every cause. Distinguishing
-            // "unknown domain" from "user not found" would confirm which addresses exist.
+            // The message is deliberately identical for every cause. Telling "no such user" from "that address is on
+            // two rows" or "its tenant is inactive" would confirm which addresses exist.
             return Unauthorized(ApiResponse<AuthResponseDto>.Fail("Invalid or expired token"));
         }
 
@@ -154,22 +154,37 @@ public class AuthController : ControllerBase
             }));
         }
 
-        // 3. Standard tenant path
+        // 3. Standard tenant path. Staff sign in with whatever address they own (their own mailbox at a provider such as gmail.com as readily as
+        // the organisation's), so the domain of the address says nothing about the tenant: the tenant is the one on the user's own row. That is
+        // why the lookup crosses tenants (IgnoreQueryFilters; the tenant is what is being found), and why an address that matches more than one
+        // active row is refused instead of guessed at: signing in as the wrong person, in the wrong tenant, is worse than a 401. Take(2) is
+        // enough to tell one from many. Tenant.EmailDomain plays no part in signing in.
+        var matches = await _db.Users
+            .IgnoreQueryFilters()
+            .Where(u => u.Email.ToLower() == email && u.IsActive)
+            .Take(2)
+            .ToListAsync(ct);
+
+        if (matches.Count == 0)
+        {
+            return Rejected("Exchange failed — no active user has this email: {Email}", email);
+        }
+
+        if (matches.Count > 1)
+        {
+            return Rejected(
+                "Exchange failed — email matches more than one active user ({FirstUserId} and {SecondUserId}), so nobody was signed in. " +
+                "Fix the duplicate rows: {Email}", matches[0].Id, matches[1].Id, email);
+        }
+
+        var user = matches[0];
+
         var tenant = await _db.Tenants
-            .FirstOrDefaultAsync(t => t.EmailDomain == domain && t.IsActive, ct);
+            .FirstOrDefaultAsync(t => t.Id == user.TenantId && t.IsActive, ct);
 
         if (tenant is null)
         {
-            return Rejected("Exchange failed — unknown email domain: {Domain}", domain);
-        }
-
-        var user = await _db.Users
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == email && u.TenantId == tenant.Id && u.IsActive, ct);
-
-        if (user is null)
-        {
-            return Rejected("Exchange failed — user not found in tenant: {Email}", email);
+            return Rejected("Exchange failed — the tenant of user {UserId} is missing or inactive: {Email}", user.Id, email);
         }
 
         user.LastLoginAt = DateTime.UtcNow;

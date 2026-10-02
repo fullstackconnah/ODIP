@@ -631,11 +631,12 @@ export default function TenantFormPanel({
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
+                  aria-describedby="tf-user-email-hint"
                   className={inputClass}
                   placeholder="user@domain.com"
                 />
-                <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
-                  Must match the tenant's email domain.
+                <p id="tf-user-email-hint" className="text-xs text-[var(--color-muted-foreground)] mt-1">
+                  The address they sign in with. It can be at any domain.
                 </p>
               </div>
 
