@@ -308,7 +308,8 @@ public sealed record PlanBlock
             else windowMinutes = length;
         }
 
-        if (SleepoverActiveHours < 0m || SleepoverActiveHours * 60m > windowMinutes)
+        // Compared in hours: the request carries any decimal, and decimal.MaxValue times 60 (to compare in minutes) is an OverflowException, a 500 for the whole quote.
+        if (SleepoverActiveHours < 0m || SleepoverActiveHours > windowMinutes / 60m)
             add("active hours during a sleepover must be between 0 and the length of the sleepover.");
     }
 

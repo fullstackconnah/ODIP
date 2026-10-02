@@ -466,6 +466,20 @@ public class PlanPricingRulesTests
     }
 
     [Fact]
+    public void A_block_with_a_decimal_too_big_to_multiply_is_refused_with_its_message_and_the_others_are_priced()
+    {
+        // Verification of fix round 1, N3: decimal.MaxValue active hours threw an OverflowException out of Validate(), so the whole quote was a 500.
+        var huge = Block("huge", PlanSupportType.PersonalCare, DayOfWeek.Friday, T(22), T(6), b => b with { WorkerMaySleep = true, SleepoverActiveHours = decimal.MaxValue });
+
+        var quote = Quote(new[] { Weekday(PlanSupportType.CommunityAccess, id: "good"), huge }, Mon12Oct, Mon12Oct.AddDays(14));
+
+        Assert.Equal(new[] { "good" }, quote.Lines.Select(l => l.BlockId).Distinct());
+        var issue = Assert.Single(quote.Issues);
+        Assert.Equal(("huge", PlanFailureReason.InvalidInput), (issue.BlockId, issue.Reason));
+        Assert.Contains("active hours during a sleepover", issue.Message);
+    }
+
+    [Fact]
     public void A_missing_block_in_the_list_is_an_issue_not_a_crash()
     {
         var quote = Quote(new PlanBlock?[] { Weekday(PlanSupportType.CommunityAccess), null }!, Mon12Oct, Mon12Oct);

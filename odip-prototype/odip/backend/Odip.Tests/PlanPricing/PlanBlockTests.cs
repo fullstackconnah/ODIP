@@ -275,6 +275,71 @@ public class PlanBlockTests
         Assert.Contains(inList.Validate(), m => m.Contains("headcount changes must be a list"));
     }
 
+    // ── Verification of fix round 1, N3: a huge number is a message, never an OverflowException ──
+
+    [Fact]
+    public void A_JSON_decimal_at_the_top_of_the_range_for_the_active_hours_is_a_message_and_not_an_overflow()
+    {
+        // The check multiplied the active hours by 60 to compare them with the window's minutes, and the request carries any decimal System.Text.Json reads: decimal.MaxValue
+        // times 60 threw an OverflowException out of Validate() and the middleware answered 500 for the whole quote.
+        var block = JsonSerializer.Deserialize<PlanBlock>("""{ "id": "b", "supportType": "PersonalCare", "days": ["Friday"], "start": "22:00", "end": "06:00", "workerMaySleep": true, "sleepoverActiveHours": 79228162514264337593543950335, "location": { "state": "NSW" } }""", Options)!;
+
+        Assert.Contains(block.Validate(), m => m.Contains("active hours during a sleepover must be between 0 and the length of the sleepover"));
+    }
+
+    [Fact]
+    public void The_active_hours_are_compared_with_the_sleepover_in_hours_so_the_edges_are_exact()
+    {
+        PlanBlock WithActive(decimal hours) => Valid(b => b with
+        {
+            SupportType = PlanSupportType.PersonalCare, Days = new[] { DayOfWeek.Friday }, Start = new TimeOnly(22, 0), End = new TimeOnly(6, 0), WorkerMaySleep = true, SleepoverActiveHours = hours,
+        });
+
+        Assert.Empty(WithActive(0m).Validate());
+        Assert.Empty(WithActive(8m).Validate());                 // the whole 8 hour night
+        Assert.NotEmpty(WithActive(8.25m).Validate());
+        Assert.NotEmpty(WithActive(-0.25m).Validate());
+        Assert.NotEmpty(WithActive(1_000_000_000_000_000_000_000_000m).Validate());   // 1e24
+        Assert.NotEmpty(WithActive(decimal.MaxValue).Validate());
+        Assert.NotEmpty(WithActive(decimal.MinValue).Validate());
+    }
+
+    [Fact]
+    public void Every_number_in_a_block_can_be_as_large_or_as_small_as_its_type_allows_and_the_answer_is_a_message()
+    {
+        // Every field the request controls, at both ends of its type: the walk through Validate() must never throw, because an exception is a 500 and a logged error with a
+        // stack trace for every other block in the quote.
+        Func<Func<PlanProviderTravel, PlanProviderTravel>, Func<PlanBlock, PlanBlock>> travel = change => b => b with { Travel = change(new PlanProviderTravel { Claim = true }) };
+        Func<Func<PlanActivityTransport, PlanActivityTransport>, Func<PlanBlock, PlanBlock>> transport = change => b => b with { Transport = change(new PlanActivityTransport { Km = 1m }) };
+        Func<int, Func<PlanBlock, PlanBlock>> headcount = people => b => b with { HeadcountChanges = new[] { new PlanHeadcountChange { From = new TimeOnly(11, 0), ParticipantsPresent = people } } };
+        var extremes = new (string Field, Func<PlanBlock, PlanBlock> Change)[]
+        {
+            ("active hours", b => b with { SleepoverActiveHours = decimal.MaxValue }), ("active hours", b => b with { SleepoverActiveHours = decimal.MinValue }),
+            ("workers", b => b with { Workers = int.MaxValue }), ("workers", b => b with { Workers = int.MinValue }),
+            ("participants", b => b with { ParticipantsPresent = int.MaxValue }), ("participants", b => b with { ParticipantsPresent = int.MinValue }),
+            ("travel minutes", travel(t => t with { MinutesEachWay = int.MaxValue })), ("travel minutes", travel(t => t with { MinutesEachWay = int.MinValue })),
+            ("travel km", travel(t => t with { KmEachWay = decimal.MaxValue })), ("travel km", travel(t => t with { KmEachWay = decimal.MinValue })),
+            ("trip sharing", travel(t => t with { ParticipantsSharing = int.MaxValue })), ("trip sharing", travel(t => t with { ParticipantsSharing = int.MinValue })),
+            ("transport km", transport(t => t with { Km = decimal.MaxValue })), ("transport km", transport(t => t with { Km = decimal.MinValue })),
+            ("tolls", transport(t => t with { Tolls = decimal.MaxValue })), ("tolls", transport(t => t with { Tolls = decimal.MinValue })),
+            ("parking", transport(t => t with { Parking = decimal.MaxValue })), ("parking", transport(t => t with { Parking = decimal.MinValue })),
+            ("vehicle sharing", transport(t => t with { ParticipantsSharing = int.MaxValue })), ("vehicle sharing", transport(t => t with { ParticipantsSharing = int.MinValue })),
+            ("nights", b => b with { Accommodation = new PlanAccommodation { Nights = int.MaxValue } }), ("nights", b => b with { Accommodation = new PlanAccommodation { Nights = int.MinValue } }),
+            ("monash level", b => b with { Location = new PlanLocation { State = "NSW", Mm = int.MaxValue } }), ("monash level", b => b with { Location = new PlanLocation { State = "NSW", Mm = int.MinValue } }),
+            ("headcount", headcount(int.MaxValue)), ("headcount", headcount(int.MinValue)),
+            ("start", b => b with { Start = TimeOnly.MaxValue }), ("end", b => b with { End = TimeOnly.MaxValue }),
+            ("window", b => b with { WorkerMaySleep = true, SleepoverWindow = new PlanSleepoverWindow { From = TimeOnly.MaxValue, To = TimeOnly.MinValue } }),
+        };
+
+        foreach (var (field, change) in extremes)
+        {
+            var messages = change(Valid()).Validate();
+
+            Assert.True(messages.Count > 0, $"{field}: an extreme value was accepted");
+            Assert.All(messages, m => Assert.StartsWith("Block 'b1'", m));
+        }
+    }
+
     [Fact]
     public void A_headcount_change_after_midnight_counts_from_the_start_of_an_overnight_block()
     {
