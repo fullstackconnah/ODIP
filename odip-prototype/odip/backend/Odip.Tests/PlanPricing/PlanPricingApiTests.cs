@@ -305,6 +305,8 @@ public class PlanPricingApiTests
     [InlineData("badrole", "approver")]
     [InlineData("negativerate", "rate")]
     [InlineData("hugerate", "rate")]
+    [InlineData("tentimesrate", "rate")]
+    [InlineData("justoverrate", "rate")]
     [InlineData("crossing", "crossing")]
     [InlineData("outings", "group outing")]
     public async Task A_put_that_breaks_a_rule_is_refused_before_anything_is_written(string which, string expected)
@@ -318,6 +320,8 @@ public class PlanPricingApiTests
             "badrole" => new UpdatePlanPricingSettingsDto { ApproverRoles = new List<string> { "Admin", "Staff" } },
             "negativerate" => new UpdatePlanPricingSettingsDto { TravelKmRateStandard = -0.01m },
             "hugerate" => new UpdatePlanPricingSettingsDto { TravelKmRateAccessible = 51m },
+            "tentimesrate" => new UpdatePlanPricingSettingsDto { TravelKmRateStandard = 9.90m },   // review L5: 9.90 typed for 0.99 was accepted, so every kilometre line was ten times
+            "justoverrate" => new UpdatePlanPricingSettingsDto { TravelKmRateAccessible = 5.01m },
             "crossing" => new UpdatePlanPricingSettingsDto { CrossingPolicy = (CrossingPolicy)7 },
             _ => new UpdatePlanPricingSettingsDto { GroupOutings = (GroupOutingFamily)7 },
         };
@@ -326,6 +330,19 @@ public class PlanPricingApiTests
 
         Assert.Contains(expected, message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, await db.PlanPricingSettings.CountAsync());
+    }
+
+    [Fact]
+    public async Task A_kilometre_rate_up_to_5_dollars_is_accepted_and_the_message_names_the_ceiling()
+    {
+        var (db, controller) = await SetUpAsync(TenantA);
+        await using var _ = db;
+
+        var message = BadRequest(await controller.PutSettings(new UpdatePlanPricingSettingsDto { TravelKmRateStandard = 5.01m }, CancellationToken.None));
+        var accepted = Ok(await controller.PutSettings(new UpdatePlanPricingSettingsDto { TravelKmRateStandard = 5m, TravelKmRateAccessible = 4.99m }, CancellationToken.None));
+
+        Assert.Contains("$5", message);
+        Assert.Equal((5m, 4.99m), (accepted.TravelKmRateStandard, accepted.TravelKmRateAccessible));
     }
 
     [Fact]

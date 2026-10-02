@@ -22,7 +22,8 @@ namespace Odip.Api.Controllers;
 public class PlanPricingController : ControllerBase
 {
     private static readonly string[] ApproverRoles = { "Admin", "Coordinator" };
-    private const decimal MaxKmRate = 50m;
+    /// <summary>The most a kilometre may be claimed at: the 2025-26 rates are 0.99 and 2.76, so a figure above this is a slipped decimal point (9.90 for 0.99 made every kilometre line ten times too high).</summary>
+    private const decimal MaxKmRate = 5m;
 
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _tenant;
