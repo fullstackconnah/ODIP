@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -367,6 +368,30 @@ public class CatalogueImportCommitTests
         Assert.Equal(2, preview.ItemsToDeactivate);
         Assert.Contains(preview.Warnings, w => w.Contains("04_212_0125_6_1") && w.Contains("2026-06-30"));
         Assert.DoesNotContain(preview.Warnings, w => w.Contains("04_210_0125_6_1"));
+    }
+
+    [Fact]
+    public async Task Messages_write_dates_the_same_way_under_any_culture()
+    {
+        // The deploy image runs invariant, the dev machine en-AU; a Buddhist-calendar culture would turn 2026 into 2569 in a current-culture rendering.
+        CultureInfo thai;
+        try { thai = new CultureInfo("th-TH"); }
+        catch (CultureNotFoundException) { return; }   // invariant globalization: there is only one culture to render with
+        var original = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = thai;
+        try
+        {
+            await using var db = CreateDb();
+            var group = await SeedCommunityAccessGroupAsync(db);
+            db.SupportCatalogueItems.Add(LegacyRow(group.Id, "04_212_0125_6_1", ClaimDayType.Saturday, 94.91m, new DateOnly(2024, 7, 1)));
+            await db.SaveChangesAsync();
+
+            var preview = await PreviewAsync(db, CatalogueFixtures.File2026_27, ClockOn(2026, 6, 1));
+
+            Assert.Contains(preview.Warnings, w => w.Contains("04_212_0125_6_1") && w.Contains("end-dated 2026-06-30."));
+            Assert.Contains(preview.Warnings, w => w.Contains("starts on 2026-07-01, after today (2026-06-01)"));
+        }
+        finally { CultureInfo.CurrentCulture = original; }
     }
 
     [Fact]

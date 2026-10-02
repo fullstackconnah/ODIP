@@ -47,14 +47,14 @@ public class CatalogueImportService
         var warnings = parsed.Warnings.ToList();
         var withdrawn = plan.EndDates.Where(e => e.Withdrawn).OrderBy(e => e.Item.ItemNumber, StringComparer.Ordinal).ToList();
         foreach (var e in withdrawn.Take(MaxWarningLines))
-            warnings.Add($"Existing item {e.Item.ItemNumber} ({e.Item.Description}) is not in the new catalogue and will be end-dated {e.EffectiveTo:yyyy-MM-dd}.");
+            warnings.Add(FormattableString.Invariant($"Existing item {e.Item.ItemNumber} ({e.Item.Description}) is not in the new catalogue and will be end-dated {e.EffectiveTo:yyyy-MM-dd}."));
         if (withdrawn.Count > MaxWarningLines)
             warnings.Add($"...and {withdrawn.Count - MaxWarningLines} more existing items that are not in the new catalogue will be end-dated.");
         if (plan.FileStart > today)
-            warnings.Add($"This catalogue starts on {plan.FileStart:yyyy-MM-dd}, after today ({today:yyyy-MM-dd}). The claim screens switch to it as soon as you confirm; import it on or after its start date.");
+            warnings.Add(FormattableString.Invariant($"This catalogue starts on {plan.FileStart:yyyy-MM-dd}, after today ({today:yyyy-MM-dd}). The claim screens switch to it as soon as you confirm; import it on or after its start date."));
         var newer = existing.Where(x => CatalogueImportPlanner.HasCatalogueDates(x) && x.EffectiveFrom > plan.FileStart).Select(x => (DateOnly?)x.EffectiveFrom).Min();
         if (newer is { } from)
-            warnings.Add($"This file starts on {plan.FileStart:yyyy-MM-dd}, before catalogue rows already imported (from {from:yyyy-MM-dd}). It is added as history and the newer rows are not changed.");
+            warnings.Add(FormattableString.Invariant($"This file starts on {plan.FileStart:yyyy-MM-dd}, before catalogue rows already imported (from {from:yyyy-MM-dd}). It is added as history and the newer rows are not changed."));
 
         return new CatalogueImportPreviewDto
         {
@@ -205,8 +205,8 @@ public class CatalogueImportService
             var label = row.ItemNumber.Length == 0 ? "(a row with no item number)" : row.ItemNumber;
             if (row.ItemNumber.Length is 0 or > 50) errors.Add($"{label}: the item number must be 1 to 50 characters.");
             else if (row.EffectiveFrom == default) errors.Add($"{label}: the row has no start date (an import uses the catalogue's own dates, never today's).");
-            else if (row.EffectiveTo is { } to && to < row.EffectiveFrom) errors.Add($"{label}: the end date {to:yyyy-MM-dd} is before the start date {row.EffectiveFrom:yyyy-MM-dd}.");
-            else if (!seen.Add((row.ItemNumber, row.EffectiveFrom))) errors.Add($"{label}: appears more than once with the start date {row.EffectiveFrom:yyyy-MM-dd}.");
+            else if (row.EffectiveTo is { } to && to < row.EffectiveFrom) errors.Add(FormattableString.Invariant($"{label}: the end date {to:yyyy-MM-dd} is before the start date {row.EffectiveFrom:yyyy-MM-dd}."));
+            else if (!seen.Add((row.ItemNumber, row.EffectiveFrom))) errors.Add(FormattableString.Invariant($"{label}: appears more than once with the start date {row.EffectiveFrom:yyyy-MM-dd}."));
             else if (row.Description.Length > 500 || row.Unit.Length > 10 || (row.RegistrationGroup?.Length ?? 0) > 4 || row.SourceDocument.Length > 200)
                 errors.Add($"{label}: a text field is longer than the catalogue allows.");
             else if (AnyPriceOutOfRange(row)) errors.Add($"{label}: a price is negative or too large.");

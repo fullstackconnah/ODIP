@@ -149,7 +149,7 @@ public static class CatalogueXlsxReader
             }
             if (end is { } e && e < start)
             {
-                warnings.Add($"Row {r} ({code}) on sheet \"{sheet.Name}\" was skipped: its end date {e:yyyy-MM-dd} is before its start date {start:yyyy-MM-dd}.");
+                warnings.Add(FormattableString.Invariant($"Row {r} ({code}) on sheet \"{sheet.Name}\" was skipped: its end date {e:yyyy-MM-dd} is before its start date {start:yyyy-MM-dd}."));
                 continue;
             }
 
@@ -230,7 +230,7 @@ public static class CatalogueXlsxReader
         foreach (var row in rows)
         {
             if (seen.Add((row.ItemNumber, row.EffectiveFrom))) kept.Add(row);
-            else warnings.Add($"{row.ItemNumber} appears more than once with the start date {row.EffectiveFrom:yyyy-MM-dd}; the first row was kept.");
+            else warnings.Add(FormattableString.Invariant($"{row.ItemNumber} appears more than once with the start date {row.EffectiveFrom:yyyy-MM-dd}; the first row was kept."));
         }
         return kept;
     }
