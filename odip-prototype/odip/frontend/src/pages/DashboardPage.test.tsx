@@ -1,13 +1,14 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { act, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 import { BAND_GRID_CLASS, BAND_SPAN_CLASS, bandSpans } from './dashboard/bandLayout'
 import { TONE } from '@/lib/tone'
 import { restoreZone, setZone } from '@/test/timeZone'
 
-const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeaveQueue, mockUseStaff } = vi.hoisted(() => ({
+const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeaveQueue, mockUseStaff, mockUseSettings } = vi.hoisted(() => ({
   mockUseParticipantAlertsAggregate: vi.fn(),
+  mockUseSettings: vi.fn(),
   mockUseDashboard: vi.fn(),
   mockUsePendingLeaveQueue: vi.fn(),
   mockUseStaff: vi.fn(),
@@ -17,7 +18,7 @@ const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeave
 // falls back to its own built-in empty defaults when useDashboard returns no data.
 vi.mock('@/api/hooks', () => ({
   useDashboard: mockUseDashboard,
-  useSettings: () => ({ data: undefined }),
+  useSettings: mockUseSettings,
   useStaff: mockUseStaff,
   useParticipantAlertsAggregate: mockUseParticipantAlertsAggregate,
   usePendingLeaveQueue: mockUsePendingLeaveQueue,
@@ -41,6 +42,7 @@ afterEach(() => {
 
 beforeEach(() => {
   mockUseDashboard.mockReturnValue({ data: undefined, isLoading: false, isError: false })
+  mockUseSettings.mockReturnValue({ data: undefined })
   mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
   mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0))
   mockUseStaff.mockReturnValue({ data: [] })
@@ -855,12 +857,21 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
     expect(tileFor('Critical Participant Alerts')).toHaveTextContent('across 1 participant.')
   })
 
-  it('states the warning window the Qualifications page uses, not a number of its own', () => {
+  it('states the warning window the Qualifications page uses (30 days unless the settings say otherwise), with the noun agreeing', () => {
     asRole('Coordinator')
     mockUseStaff.mockReturnValue(staffWithOneIssue)
     renderPage()
-
     expect(tileFor('Qualification Issues')).toHaveTextContent('due within 30 days')
+    cleanup()
+
+    mockUseSettings.mockReturnValue({ data: { qualificationWarningDays: 90 } })
+    renderPage()
+    expect(tileFor('Qualification Issues')).toHaveTextContent('due within 90 days')
+    cleanup()
+
+    mockUseSettings.mockReturnValue({ data: { qualificationWarningDays: 1 } })
+    renderPage()
+    expect(tileFor('Qualification Issues')).toHaveTextContent('due within 1 day,')
   })
 })
 
