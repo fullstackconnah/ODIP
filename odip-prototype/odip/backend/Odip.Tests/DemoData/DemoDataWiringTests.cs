@@ -74,16 +74,16 @@ public class DemoDataWiringTests
     }
 
     [Fact]
-    public void WhenOff_EvenAHostedServiceThatGotRegisteredAnyway_DoesNothing()
+    public async Task WhenOff_EvenAHostedServiceThatGotRegisteredAnyway_DoesNothing()
     {
         var factory = new ThrowingScopeFactory();
         var service = new DemoDataHostedService(factory, MaintainerFor(new DemoDataOptions()), new DemoDataOptions(), new CapturingLogger<DemoDataHostedService>());
 
-        service.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+        await service.StartAsync(CancellationToken.None);
 
         Assert.True(service.ExecuteTask is null || service.ExecuteTask.IsCompletedSuccessfully);
         Assert.Equal(0, factory.Created);
-        service.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+        await service.StopAsync(CancellationToken.None);
     }
 
     // ── On: what gets registered ─────────────────────────────────────────────

@@ -84,7 +84,8 @@ internal static class DemoBoardAssertions
         await using var db = env.AdminDb();
         var users = await db.Users.ToDictionaryAsync(u => u.Id);
         var shifts = await db.Shifts.Where(s => s.ServiceDate >= week && s.ServiceDate <= week.AddDays(6)).ToListAsync();
-        var codesByShift = board.Exceptions.GroupBy(e => e.ShiftId).ToDictionary(g => g.Key, g => g.Select(e => e.Finding.Code).ToHashSet());
+        var codesByShift = board.Exceptions.Where(e => e.ShiftId != null).GroupBy(e => e.ShiftId!.Value)
+            .ToDictionary(g => g.Key, g => g.Select(e => e.Finding.Code).ToHashSet());
 
         foreach (var (key, designed) in Designed)
         {
