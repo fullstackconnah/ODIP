@@ -57,7 +57,7 @@ function makeSettings(overrides: Partial<ProviderSettingsDto> = {}): ProviderSet
 let server: ProviderSettingsDto | null
 
 const HELPER_TEXT =
-  'Warn only: staff can roster, book and activate participants who are not fully ready, and the gaps show as warnings. Enforce: participants must be fully ready first.'
+  'Warn only: staff can roster, book and activate participants who are not fully ready, and the gaps show as warnings. Enforce: participants must be fully ready first, including a signed service agreement. Signed agreements cannot be recorded yet, so Enforce would block participants with no way to clear it. Keep Warn only for now.'
 
 function renderProviderSettings() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })

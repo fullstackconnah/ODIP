@@ -411,7 +411,7 @@ function ProviderSettingsTab() {
       <div>
         <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Participant readiness check</h2>
         <p className="text-sm text-[var(--color-muted-foreground)] mb-3">
-          Warn only: staff can roster, book and activate participants who are not fully ready, and the gaps show as warnings. Enforce: participants must be fully ready first.
+          Warn only: staff can roster, book and activate participants who are not fully ready, and the gaps show as warnings. Enforce: participants must be fully ready first, including a signed service agreement. Signed agreements cannot be recorded yet, so Enforce would block participants with no way to clear it. Keep Warn only for now.
         </p>
         <ToggleGroup
           ariaLabel="Participant readiness check"

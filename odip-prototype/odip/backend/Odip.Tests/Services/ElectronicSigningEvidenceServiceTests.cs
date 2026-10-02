@@ -88,6 +88,53 @@ public class ElectronicSigningEvidenceServiceTests
         }
     }
 
+    private static ServiceAgreementDraft AddNewerRevision(OdipDbContext db, Guid tenantId, Participant participant, ServiceAgreementDraft older) =>
+        db.ServiceAgreementDrafts.Add(new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, Version = older.Version + 1, State = "NSW", ParticipantNameSnapshot = "Ada Participant", CreatedBy = "test" }).Entity;
+
+    [Fact]
+    public async Task CreateSnapshot_RejectsDraftWithNewerRevision_BeforeAnySnapshotIsWritten()
+    {
+        var tenantId = Guid.NewGuid(); var (db, _) = CreateDb(tenantId); using (db)
+        {
+            var (participant, draft) = AddDraft(db, tenantId); AddNewerRevision(db, tenantId, participant, draft); await db.SaveChangesAsync();
+            var (snapshot, error) = await new ElectronicSigningEvidenceService(db).CreateSnapshotAsync(tenantId, participant.Id, new() { DraftId = draft.Id, DraftVersion = draft.Version }, CancellationToken.None);
+            Assert.Null(snapshot);
+            Assert.Equal(ElectronicSigningEvidenceService.SupersededDraftError, error);
+            Assert.Empty(db.ElectronicSigningSnapshots.IgnoreQueryFilters());
+        }
+    }
+
+    [Fact]
+    public async Task Submit_RejectsSnapshotOfSupersededDraft_WithoutEvidenceWrites()
+    {
+        var tenantId = Guid.NewGuid(); var (db, _) = CreateDb(tenantId); using (db)
+        {
+            var (participant, draft) = AddDraft(db, tenantId); AddNewerRevision(db, tenantId, participant, draft);
+            var snapshot = db.ElectronicSigningSnapshots.Add(new ElectronicSigningSnapshot
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, DraftId = draft.Id,
+                DraftVersion = draft.Version, DocumentJson = "pre-existing", DocumentHash = "not-checked-before-superseded-gate"
+            }).Entity;
+            await db.SaveChangesAsync();
+            var (evidence, error) = await new ElectronicSigningEvidenceService(db).SubmitAsync(tenantId, participant.Id, snapshot.Id, Attestation(), CancellationToken.None);
+            Assert.Null(evidence);
+            Assert.Equal(ElectronicSigningEvidenceService.SupersededDraftError, error);
+            Assert.Empty(db.ElectronicSigningEvidence.IgnoreQueryFilters());
+        }
+    }
+
+    [Fact]
+    public async Task NewerRevisionOfAnotherParticipant_DoesNotSupersedeThisDraft()
+    {
+        var tenantId = Guid.NewGuid(); var (db, _) = CreateDb(tenantId); using (db)
+        {
+            var (participant, draft) = AddDraft(db, tenantId);
+            var (other, otherDraft) = AddDraft(db, tenantId); AddNewerRevision(db, tenantId, other, otherDraft); await db.SaveChangesAsync();
+            var (_, error) = await new ElectronicSigningEvidenceService(db).CreateSnapshotAsync(tenantId, participant.Id, new() { DraftId = draft.Id, DraftVersion = draft.Version }, CancellationToken.None);
+            Assert.Equal("Electronic signing evidence is unavailable because the selected agreement source is not approved.", error);
+        }
+    }
+
     [Fact]
     public async Task MissingTenantAndNoConfiguredPricing_FailClosedBeforeAnySchedulingOrEvidence()
     {

@@ -14,10 +14,13 @@ public sealed class ElectronicSigningEvidenceService
     private readonly OdipDbContext _db;
     public ElectronicSigningEvidenceService(OdipDbContext db) => _db = db;
 
+    public const string SupersededDraftError = "A newer revision of this agreement draft exists. Create a snapshot from the latest revision instead.";
+
     public async Task<(ElectronicSigningSnapshot? Snapshot, string? Error)> CreateSnapshotAsync(Guid tenantId, Guid participantId, CreateElectronicSigningSnapshotDto request, CancellationToken ct)
     {
         var draft = await _db.ServiceAgreementDrafts.Include(x => x.Lines).SingleOrDefaultAsync(x => x.Id == request.DraftId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (draft == null || draft.Version != request.DraftVersion) return (null, "The selected document version is unavailable or stale.");
+        if (await HasNewerRevisionAsync(tenantId, participantId, draft.Version, ct)) return (null, SupersededDraftError);
         if (!ProvisionalAgreementTemplate.AllowsElectronicSigningEvidence) return (null, "Electronic signing evidence is unavailable because the selected agreement source is not approved.");
         var existing = await _db.ElectronicSigningSnapshots.SingleOrDefaultAsync(x => x.DraftId == draft.Id && x.DraftVersion == draft.Version, ct);
         if (existing != null) return (existing, null);
@@ -32,6 +35,7 @@ public sealed class ElectronicSigningEvidenceService
     {
         var snapshot = await _db.ElectronicSigningSnapshots.Include(x => x.Evidence).SingleOrDefaultAsync(x => x.Id == snapshotId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (snapshot == null) return (null, "Document snapshot not found.");
+        if (await HasNewerRevisionAsync(tenantId, participantId, snapshot.DraftVersion, ct)) return (null, SupersededDraftError);
         if (!ProvisionalAgreementTemplate.AllowsElectronicSigningEvidence) return (null, "Electronic signing evidence is unavailable because the selected agreement source is not approved.");
         if (Hash(snapshot.DocumentJson) != snapshot.DocumentHash) return (null, "Document integrity check failed.");
         if (string.IsNullOrWhiteSpace(request.IdempotencyKey) || string.IsNullOrWhiteSpace(request.SignerName) || string.IsNullOrWhiteSpace(request.SignerCapacity))
@@ -46,5 +50,8 @@ public sealed class ElectronicSigningEvidenceService
         await _db.SaveChangesAsync(ct);
         return (evidence, null);
     }
+    private Task<bool> HasNewerRevisionAsync(Guid tenantId, Guid participantId, int version, CancellationToken ct) =>
+        _db.ServiceAgreementDrafts.AnyAsync(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.Version > version, ct);
+
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 }
