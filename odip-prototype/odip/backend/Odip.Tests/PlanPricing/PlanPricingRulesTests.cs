@@ -64,6 +64,69 @@ public class PlanPricingRulesTests
         Assert.Equal(("04_105_0125_6_1", 34.51m, 207.06m), (community.ItemCode, community.UnitPrice, community.Total));   // same price, the community access Saturday item
     }
 
+    // ── Review M8: two workers for several participants is the case NDIA has not answered ──
+
+    [Fact]
+    public void Two_workers_for_several_participants_are_priced_but_the_line_is_provisional_and_names_question_5()
+    {
+        // Workers = 2 for six participants, Saturday 09:00 to 15:00: floor(103.54 x 2 / 6) = 34.51 an hour, 207.06 each, 1,242.36 across the six. If NDIA reads the
+        // divisor as price / 6 (17.25 an hour) the plan is twice the limit, so the line has to say the reading is unconfirmed (NDIS-CODES 6, question 5 of 11.3).
+        var block = Block("w2", PlanSupportType.GroupActivity, DayOfWeek.Saturday, T(9), T(15), b => b with { Workers = 2, ParticipantsPresent = 6 });
+
+        var quote = QuoteOne(block, Sat17Oct);
+
+        var line = Assert.Single(quote.Lines);
+        Assert.Equal(("04_104_0136_6_1", 6m, 34.51m, 207.06m), Row(line));
+        Assert.True(line.Provisional);
+        Assert.Contains(5, line.Trace.OpenQuestions);
+        Assert.Contains("group:workers-over-participants-unconfirmed", line.Trace.Rules);
+        Assert.Contains(5, quote.OpenQuestions.Select(q => q.Number));
+    }
+
+    [Fact]
+    public void Every_part_of_a_two_worker_group_support_that_crosses_a_band_is_marked()
+    {
+        var block = Block("w2", PlanSupportType.PersonalCare, DayOfWeek.Monday, T(18), T(22), b => b with { Workers = 2, ParticipantsPresent = 2 });
+
+        var quote = QuoteOne(block, Mon12Oct, SplitPolicy);
+
+        Assert.Equal(2, quote.Lines.Count);
+        Assert.All(quote.Lines, l =>
+        {
+            Assert.True(l.Provisional);
+            Assert.Contains(5, l.Trace.OpenQuestions);
+        });
+    }
+
+    [Fact]
+    public void One_worker_for_a_group_and_two_workers_for_one_participant_are_not_marked()
+    {
+        var group = Block("g", PlanSupportType.GroupActivity, DayOfWeek.Saturday, T(9), T(15), b => b with { ParticipantsPresent = 3 });
+        var pair = Block("p", PlanSupportType.PersonalCare, DayOfWeek.Monday, T(9), T(13), b => b with { Workers = 2 });
+
+        foreach (var line in QuoteOne(group, Sat17Oct).Lines.Concat(QuoteOne(pair, Mon12Oct).Lines))
+        {
+            Assert.False(line.Provisional);
+            Assert.DoesNotContain(5, line.Trace.OpenQuestions);
+        }
+    }
+
+    [Fact]
+    public void The_extra_active_hours_of_a_two_worker_group_sleepover_are_marked_like_the_sleepover_line()
+    {
+        var block = Block("s", PlanSupportType.PersonalCare, DayOfWeek.Friday, T(22), T(6), b => b with
+        {
+            Workers = 2, ParticipantsPresent = 2, WorkerMaySleep = true, SleepoverActiveHours = 4m,
+        });
+
+        var quote = QuoteOne(block, Fri16Oct);
+
+        var active = Assert.Single(quote.Lines, l => l.Kind == PlannedLineKind.SleepoverActiveHours);
+        Assert.True(active.Provisional);
+        Assert.Contains(5, active.Trace.OpenQuestions);
+        Assert.True(Assert.Single(quote.Lines, l => l.Kind == PlannedLineKind.Sleepover).Provisional);
+    }
+
     // ── Registration groups ───────────────────────────────────────────────────────
 
     [Theory]

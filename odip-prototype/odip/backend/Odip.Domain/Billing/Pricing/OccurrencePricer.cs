@@ -377,16 +377,29 @@ internal sealed class OccurrencePricer
             flags |= PlannedLineFlags.HolidayExposure;
             if (block.OnPublicHoliday == HolidayDecision.Review) flags |= PlannedLineFlags.Review;
         }
+        var questions = new List<int>();
         if (block.Workers != 1 || participants != 1) rules.Add("group:floor(price*workers/participants)");
+        if (block.Workers > 1 && participants > 1) MarkWorkersOverParticipants(rules, ref flags, questions);
 
         occ.Result.Lines.Add(new PlannedLine
         {
             BlockId = block.Id, Kind = PlannedLineKind.SleepoverActiveHours, ItemCode = choice.Row!.ItemNumber, Unit = "H", Qty = PlanMoney.Hours(minutes),
             UnitPrice = unitPrice, Total = PlanMoney.LineTotal(unitPrice, minutes), ServiceDate = date,
             Band = "Sleepover active hours", DayType = dayType, PaceCategory = PaceOf(choice.Row), Flags = flags, ShortNoticeCancellationAllowed = AllowsCancellation(choice.Row),
-            Trace = TraceOf(occ, choice, rules, Array.Empty<int>(), null, participants,
+            Trace = TraceOf(occ, choice, rules, questions, null, participants,
                 $"Active hours beyond the 2 a sleepover includes, priced at the {BandName(dayType)} rate ({(dayType == ClaimDayType.Saturday && date.DayOfWeek is not DayOfWeek.Saturday ? "Saturday rates apply on a weekday" : "the rate of the day")}) on {Day(date)}; {GroupText(block.Workers, participants)}; {Basis(choice)}."),
         });
+    }
+
+    /// <summary>
+    /// Two workers for several participants is priced floor(price x workers / participants), but the schedule does not say that is how NDIA divides it (NDIS-CODES 6, question 5
+    /// of 11.3): if the divisor is the participants alone the plan is a multiple of the limit. So every hourly line it touches says so instead of looking settled.
+    /// </summary>
+    private static void MarkWorkersOverParticipants(List<string> rules, ref PlannedLineFlags flags, List<int> questions)
+    {
+        rules.Add("group:workers-over-participants-unconfirmed");
+        flags |= PlannedLineFlags.Provisional;
+        questions.Add(5);
     }
 
     private ClaimDayType DayTypeOfDate(Occurrence occ, DateOnly date)
@@ -546,6 +559,7 @@ internal sealed class OccurrencePricer
         }
 
         if (block.Workers != 1 || segment.Participants != 1) rules.Add("group:floor(price*workers/participants)");
+        if (block.Workers > 1 && segment.Participants > 1) MarkWorkersOverParticipants(rules, ref flags, questions);
         if (block.Changes.Count > 0)
         {
             rules.Add("headcount:segment");
