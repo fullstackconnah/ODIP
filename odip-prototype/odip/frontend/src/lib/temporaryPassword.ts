@@ -12,6 +12,13 @@ const ALL = LOWER + UPPER + DIGITS + SYMBOLS
 const LENGTH = 16
 
 /**
+ * The shortest password an admin may TYPE for someone else. An account the app creates is verified from the start, so a typed password is a
+ * working credential on an address that is easy to find, and Firebase's own floor of 6 would let "Welcome1" guard a real person's account.
+ * The server enforces the same number (PasswordPolicy); the generator above always clears it.
+ */
+export const MIN_PASSWORD_LENGTH = 12
+
+/**
  * A uniformly random integer in [0, max). A draw from the uneven tail of the 32-bit range is thrown away and redrawn:
  * folding it in with `%` would make the low values likelier than the high ones.
  */

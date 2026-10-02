@@ -10,7 +10,7 @@ import { SlideOver } from '@/components/SlideOver'
 import type { Notify } from '@/hooks/useToast'
 import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
 import { describeEmailOutcome, sendSetPasswordEmailFor } from '@/lib/signInEmail'
-import { generateTemporaryPassword } from '@/lib/temporaryPassword'
+import { MIN_PASSWORD_LENGTH, generateTemporaryPassword } from '@/lib/temporaryPassword'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -38,9 +38,6 @@ const ROLE_OPTIONS = [
   { value: 'SupportWorker', label: 'Support Worker' },
   { value: 'ReadOnly', label: 'Read Only' },
 ]
-
-// Firebase refuses a shorter password, and the create would then fail with a generic "unable to create the sign-in account".
-const MIN_PASSWORD_LENGTH = 6
 
 // ---------------------------------------------------------------------------
 // Component
@@ -355,7 +352,7 @@ export default function UserFormPanel({
                   aria-describedby={passwordHintId}
                   aria-invalid={passwordTooShort || undefined}
                   className={inputClass}
-                  placeholder="Min 6 characters"
+                  placeholder={`Min ${MIN_PASSWORD_LENGTH} characters`}
                 />
                 <button
                   type="button"
@@ -371,7 +368,7 @@ export default function UserFormPanel({
               >
                 {passwordTooShort
                   ? `Use at least ${MIN_PASSWORD_LENGTH} characters.`
-                  : 'They can sign in with this straight away. Share it with them securely.'}
+                  : `At least ${MIN_PASSWORD_LENGTH} characters. Ask them to change it with Forgot password after they first sign in.`}
               </p>
             </div>
           )}

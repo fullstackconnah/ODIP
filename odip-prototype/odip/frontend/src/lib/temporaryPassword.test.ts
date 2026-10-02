@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { generateTemporaryPassword } from './temporaryPassword'
+import { MIN_PASSWORD_LENGTH, generateTemporaryPassword } from './temporaryPassword'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -16,6 +16,16 @@ function stubCrypto(draws: number[] = []) {
   vi.stubGlobal('crypto', { getRandomValues })
   return getRandomValues
 }
+
+describe('MIN_PASSWORD_LENGTH', () => {
+  it("is 12: a typed password is a live credential, so it is held above Firebase's floor of 6", () => {
+    expect(MIN_PASSWORD_LENGTH).toBe(12)
+  })
+
+  it('is met by every generated password', () => {
+    for (let i = 0; i < 50; i++) expect(generateTemporaryPassword().length).toBeGreaterThanOrEqual(MIN_PASSWORD_LENGTH)
+  })
+})
 
 describe('generateTemporaryPassword', () => {
   it('is at least 14 characters, well over the 6 Firebase insists on', () => {

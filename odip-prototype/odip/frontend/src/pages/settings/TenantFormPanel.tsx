@@ -7,6 +7,7 @@ import {
   useUpdateTenant,
 } from '@/api/hooks/admin'
 import type { TenantSummaryDto, CreateTenantWithSetupDto, UpdateTenantDto } from '@/api/types'
+import { MIN_PASSWORD_LENGTH, generateTemporaryPassword } from '@/lib/temporaryPassword'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -198,7 +199,18 @@ export default function TenantFormPanel({
 
   // ── Derived state ─────────────────────────────────────────────────────────
   const isBusy = createMutation.isPending || updateMutation.isPending
-  const canSubmit = name.trim() !== '' && emailDomain.trim() !== '' && !isBusy
+  // A typed first-user password is a live credential (the account is verified from the start), so it is held to a real minimum.
+  const passwordTooShort = userPassword !== '' && userPassword.length < MIN_PASSWORD_LENGTH
+  const canSubmit = name.trim() !== '' && emailDomain.trim() !== '' && !isBusy && !passwordTooShort
+
+  function handleGenerate() {
+    try {
+      setUserPassword(generateTemporaryPassword())
+      setError(null)
+    } catch {
+      setError("Couldn't generate a password in this browser. Type one instead.")
+    }
+  }
 
   // Unsaved edits: every field as it is now against what the open effect above put there (the tenant's own values in edit
   // mode, blanks in create mode). The two arrays list the fields in the same order. Once the save has gone through (the
@@ -465,8 +477,9 @@ export default function TenantFormPanel({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelClass}>First Name</label>
+                  <label htmlFor="tf-first-name" className={labelClass}>First Name</label>
                   <input
+                    id="tf-first-name"
                     type="text"
                     value={firstName}
                     onChange={e => setFirstName(e.target.value)}
@@ -474,8 +487,9 @@ export default function TenantFormPanel({
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Last Name</label>
+                  <label htmlFor="tf-last-name" className={labelClass}>Last Name</label>
                   <input
+                    id="tf-last-name"
                     type="text"
                     value={lastName}
                     onChange={e => setLastName(e.target.value)}
@@ -485,8 +499,9 @@ export default function TenantFormPanel({
               </div>
 
               <div>
-                <label className={labelClass}>Email</label>
+                <label htmlFor="tf-user-email" className={labelClass}>Email</label>
                 <input
+                  id="tf-user-email"
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
@@ -499,8 +514,9 @@ export default function TenantFormPanel({
               </div>
 
               <div>
-                <label className={labelClass}>Username</label>
+                <label htmlFor="tf-username" className={labelClass}>Username</label>
                 <input
+                  id="tf-username"
                   type="text"
                   value={username}
                   onChange={e => setUsername(e.target.value)}
@@ -520,24 +536,35 @@ export default function TenantFormPanel({
               </div>
 
               <div>
-                <label className={labelClass}>Password</label>
+                <label htmlFor="tf-user-password" className={labelClass}>Password</label>
                 <div className="flex gap-2">
                   <input
+                    id="tf-user-password"
                     type="text"
                     value={userPassword}
                     onChange={e => setUserPassword(e.target.value)}
+                    autoComplete="off"
+                    aria-describedby="tf-user-password-hint"
+                    aria-invalid={passwordTooShort || undefined}
                     className={inputClass}
-                    placeholder="Min 6 characters"
+                    placeholder={`Min ${MIN_PASSWORD_LENGTH} characters`}
                   />
                   <button
                     type="button"
-                    onClick={() => setUserPassword(Math.random().toString(36).slice(-10) + 'A1!')}
+                    onClick={handleGenerate}
                     className="px-3 h-[var(--control-h)] border border-[var(--color-border)] rounded-[var(--radius-sm)] text-xs font-medium hover:bg-[var(--color-accent)] transition-colors whitespace-nowrap"
                   >
                     Generate
                   </button>
                 </div>
-                <p className="text-xs text-[var(--color-muted-foreground)] mt-1">Optional. User will sign in with this password.</p>
+                <p
+                  id="tf-user-password-hint"
+                  className={`text-xs mt-1 ${passwordTooShort ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}
+                >
+                  {passwordTooShort
+                    ? `Use at least ${MIN_PASSWORD_LENGTH} characters.`
+                    : `${userPassword === '' ? 'Optional. ' : ''}At least ${MIN_PASSWORD_LENGTH} characters. Ask them to change it with Forgot password after they first sign in.`}
+                </p>
               </div>
             </div>
           )}

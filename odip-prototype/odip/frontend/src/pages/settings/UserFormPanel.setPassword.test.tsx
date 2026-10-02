@@ -220,26 +220,36 @@ describe('UserFormPanel create: a temporary password instead', () => {
     await fillRequiredFields(u)
 
     await u.click(disclosure())
-    await u.type(screen.getByLabelText('Temporary password'), 'Winter-2026')
+    await u.type(screen.getByLabelText('Temporary password'), 'Winter-2026!')
     await u.click(createButton())
 
     await waitFor(() => expect(onNotify).toHaveBeenCalledWith('success', 'User created with a temporary password.'))
-    expect(mockCreate.mock.calls[0][0]).toEqual(createBody('Winter-2026'))
+    expect(mockCreate.mock.calls[0][0]).toEqual(createBody('Winter-2026!'))
     expect(sendPasswordResetEmail).not.toHaveBeenCalled()
   })
 
-  it('will not create with a password under the 6 characters Firebase needs, and says so', async () => {
+  it('will not create with a password under 12 characters, and says so (a typed password is a live credential: the account is verified)', async () => {
     const { u } = renderCreate()
     await fillRequiredFields(u)
 
     await u.click(disclosure())
-    await u.type(screen.getByLabelText('Temporary password'), 'abcde')
+    await u.type(screen.getByLabelText('Temporary password'), 'abcdefghijk') // 11
     expect(createButton()).toBeDisabled()
-    expect(screen.getByText('Use at least 6 characters.')).toBeInTheDocument()
+    expect(screen.getByText('Use at least 12 characters.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Temporary password')).toHaveAttribute('aria-invalid', 'true')
 
-    await u.type(screen.getByLabelText('Temporary password'), 'f')
+    await u.type(screen.getByLabelText('Temporary password'), 'l') // 12
     expect(createButton()).toBeEnabled()
-    expect(screen.queryByText('Use at least 6 characters.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Use at least 12 characters.')).not.toBeInTheDocument()
+  })
+
+  it('tells the admin the minimum and what to ask the person to do once they have signed in', async () => {
+    const { u } = renderCreate()
+
+    await u.click(disclosure())
+
+    expect(screen.getByText('At least 12 characters. Ask them to change it with Forgot password after they first sign in.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Temporary password')).toHaveAttribute('placeholder', 'Min 12 characters')
   })
 
   it('says so, and leaves the field empty, when the browser has no Web Crypto to generate with', async () => {

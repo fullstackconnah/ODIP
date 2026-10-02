@@ -157,6 +157,13 @@ public class AdminUsersController : ControllerBase
         if (!Enum.TryParse<UserRole>(dto.Role, true, out var role) || role == UserRole.SuperAdmin)
             return BadRequest(ApiResponse<object>.Fail("Invalid role. SuperAdmin cannot be assigned."));
 
+        // A typed password is a live credential (the account is verified from the start), so it is held to PasswordPolicy here, as a 400,
+        // before Firebase is asked anything. Blank means none: the user sets their own from the emailed link.
+        var passwordError = PasswordPolicy.Check(dto.Password);
+        if (passwordError is not null)
+            return BadRequest(ApiResponse<object>.Fail(passwordError));
+        var password = string.IsNullOrEmpty(dto.Password) ? null : dto.Password;
+
         // The address in the one form ODIP stores and compares (see EmailIdentity): the uniqueness check, Firebase and the row all see
         // the same value, so the exchange can find the row from the lower-case address Firebase puts in a token.
         var email = EmailIdentity.Normalise(dto.Email);
@@ -186,7 +193,7 @@ public class AdminUsersController : ControllerBase
         try
         {
             firebaseUid = await _firebaseUserService.CreateUserAsync(
-                email, $"{dto.FirstName} {dto.LastName}", dto.Password, ct);
+                email, $"{dto.FirstName} {dto.LastName}", password, ct);
             createdFirebaseUser = true;
         }
         catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.EmailAlreadyExists)

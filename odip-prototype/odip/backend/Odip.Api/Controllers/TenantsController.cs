@@ -71,10 +71,16 @@ public class TenantsController : ControllerBase
         if (await _db.Tenants.AnyAsync(t => t.EmailDomain == domain))
             return Conflict("A tenant with this email domain already exists");
 
-        // The first user's address is stored and compared in one form (see EmailIdentity), and must be new in any case: the exchange
-        // matches case-insensitively, so two rows differing only in case would be ambiguous.
         if (dto.InitialUser is { } candidate)
         {
+            // A typed password is a live credential (the account is verified from the start), so it is held to PasswordPolicy before anything
+            // is written or sent. Blank means none: the first user sets their own from the emailed link.
+            var passwordError = PasswordPolicy.Check(candidate.Password);
+            if (passwordError is not null)
+                return BadRequest(ApiResponse<object>.Fail(passwordError));
+
+            // The first user's address is stored and compared in one form (see EmailIdentity), and must be new in any case: the exchange
+            // matches case-insensitively, so two rows differing only in case would be ambiguous.
             var candidateEmail = EmailIdentity.Normalise(candidate.Email);
             if (await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email.ToLower() == candidateEmail, ct))
                 return Conflict("A user with this email already exists");
@@ -145,7 +151,8 @@ public class TenantsController : ControllerBase
             try
             {
                 await _firebaseUserService.CreateUserAsync(
-                    EmailIdentity.Normalise(firebaseIu.Email), $"{firebaseIu.FirstName} {firebaseIu.LastName}", firebaseIu.Password, ct);
+                    EmailIdentity.Normalise(firebaseIu.Email), $"{firebaseIu.FirstName} {firebaseIu.LastName}",
+                    string.IsNullOrEmpty(firebaseIu.Password) ? null : firebaseIu.Password, ct);
             }
             catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.EmailAlreadyExists)
             {
