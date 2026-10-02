@@ -299,6 +299,57 @@ public class CatalogueImportCommitTests
         Assert.Equal(CommunityAccessCodes.OrderBy(c => c), rows.Where(r => r.ActivityGroup.GroupCode == "GRP_COMMUNITY_ACCESS" && r.IsActive).Select(r => r.ItemNumber).OrderBy(c => c));
     }
 
+    [Fact]
+    public async Task A_code_of_the_previous_catalogue_that_the_new_one_dropped_ends_the_day_before_the_new_one_starts_even_when_its_legacy_sheet_reaches_back_further()
+    {
+        // The 2025-26 file's Legacy sheet starts on 1 Jul 2024, a year before the catalogue does. A 2024-25 row whose code is not in the 2025-26 file ended on 30 Jun 2025.
+        await using var db = CreateDb();
+        var group = await SeedCommunityAccessGroupAsync(db);
+        var dropped = LegacyRow(group.Id, "04_999_0125_6_1", ClaimDayType.Weekday, 60m, new DateOnly(2024, 7, 1), version: "2024-25");
+        dropped.SourceDocument = "support-catalogue-2024-25.xlsx";   // a dated row: its start date is the catalogue's own
+        db.SupportCatalogueItems.Add(dropped);
+        await db.SaveChangesAsync();
+
+        await ImportAsync(db, CatalogueFixtures.File2025_26Trimmed);
+
+        var row = await db.SupportCatalogueItems.AsNoTracking().SingleAsync(i => i.Id == dropped.Id);
+        Assert.Equal((new DateOnly(2025, 6, 30), false), (row.EffectiveTo, row.IsActive));
+    }
+
+    [Fact]
+    public async Task Importing_the_older_file_again_after_both_are_in_changes_nothing_either()
+    {
+        await using var db = CreateDb();
+        await ImportAsync(db, CatalogueFixtures.File2025_26Trimmed);
+        await ImportAsync(db, CatalogueFixtures.File2026_27);
+        var before = await SnapshotAsync(db);
+
+        var result = await ImportAsync(db, CatalogueFixtures.File2025_26Trimmed);   // its rows were end-dated by the newer file; the file still says open-ended
+
+        Assert.Equal(new CatalogueImportResultDto(0, 0, 281, 0), result);
+        Assert.Equal(before, await SnapshotAsync(db));
+        // in particular the code the newer catalogue dropped is not brought back by the older file that still lists it
+        var retired = await db.SupportCatalogueItems.AsNoTracking().SingleAsync(i => i.ItemNumber == "14_799_0127_8_3");
+        Assert.Equal((Jun30_2026, false), (retired.EffectiveTo, retired.IsActive));
+    }
+
+    [Fact]
+    public async Task A_row_the_previous_importer_wrote_with_the_same_start_date_is_replaced_by_the_catalogues_own_row_not_held_to_its_artifact_end_date()
+    {
+        // The previous importer's "end date" is the day a later import deactivated the row: if both ran on 1 Jul 2026 the stale row ends on its own start date.
+        await using var db = CreateDb();
+        var group = await SeedCommunityAccessGroupAsync(db);
+        var stale = LegacyRow(group.Id, "04_104_0125_6_1", ClaimDayType.Weekday, 70.23m, new DateOnly(2026, 7, 1), active: false, to: new DateOnly(2026, 7, 1));
+        db.SupportCatalogueItems.Add(stale);
+        await db.SaveChangesAsync();
+
+        var result = await ImportAsync(db, CatalogueFixtures.File2026_27);
+
+        Assert.Equal(1, result.Updated);
+        var row = await db.SupportCatalogueItems.AsNoTracking().SingleAsync(i => i.Id == stale.Id);
+        Assert.Equal((73.58m, (DateOnly?)null, true, "support-catalogue-2026-27.xlsx"), (row.PriceNational, row.EffectiveTo, row.IsActive, row.SourceDocument));
+    }
+
     // ── The preview says what the commit will do ──────────────────────────────────
 
     [Fact]

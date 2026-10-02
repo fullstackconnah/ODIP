@@ -31,7 +31,7 @@ internal sealed class ImportPlan
 {
     public required IReadOnlyList<PlannedRow> Rows { get; init; }
     public required IReadOnlyList<PlannedEndDate> EndDates { get; init; }
-    /// <summary>The earliest start date in the file: the day the catalogue takes effect.</summary>
+    /// <summary>The day the catalogue takes effect: the earliest start on the Current sheet (the Legacy sheet can reach back further).</summary>
     public required DateOnly FileStart { get; init; }
 }
 
@@ -44,6 +44,8 @@ internal sealed class ImportPlan
 /// version already in the database is capped at the day before it, so importing an older file later never disturbs the newer rows.</item>
 /// <item>An active row whose code is not in the file at all is end-dated the same way, at the day before the catalogue starts, unless it belongs to a
 /// newer version than the file.</item>
+/// <item>An import only ever shortens a catalogue row it already holds, never lengthens it. So importing an older file again cannot bring back a row a
+/// newer catalogue replaced or dropped, and importing any file twice, in any order, changes nothing.</item>
 /// <item>Rows written before the catalogue carried its own dates have no source document: the importer that wrote them (and the demo seed) stamped the day it
 /// ran, which is not a catalogue date. A real catalogue row for the same code replaces them outright, so one is end-dated even if its stamp is later.</item>
 /// </list>
@@ -57,7 +59,9 @@ internal static class CatalogueImportPlanner
         IReadOnlyDictionary<Guid, string> groupCodeById,
         DateOnly today)
     {
-        var fileStart = incoming.Min(r => r.EffectiveFrom);
+        // The day the catalogue takes effect: the earliest start on the Current sheet. The Legacy sheet can reach back further (the 2025-26 file's starts
+        // on 1 Jul 2024), but those are items of earlier catalogues, not the date the catalogue they sit in began.
+        var fileStart = incoming.Where(r => !r.IsLegacy).Select(r => (DateOnly?)r.EffectiveFrom).Min() ?? incoming.Min(r => r.EffectiveFrom);
         var existingByCode = existing.ToLookup(x => x.ItemNumber, StringComparer.Ordinal);
         var incomingCodes = incoming.Select(r => r.ItemNumber).ToHashSet(StringComparer.Ordinal);
         var ends = new Dictionary<Guid, PlannedEndDate>();
@@ -92,9 +96,15 @@ internal static class CatalogueImportPlanner
 
                 var effectiveTo = row.EffectiveTo;
                 if (nextStart is { } next && (effectiveTo is null || effectiveTo > next.AddDays(-1))) effectiveTo = next.AddDays(-1);
-                var isActive = nextStart is null && (effectiveTo is null || effectiveTo >= today);
 
+                // An import only ever shortens a catalogue row it already holds, never lengthens it: a row end-dated because a newer catalogue replaced or
+                // dropped it must stay ended when an older file that still lists it (open-ended) is imported again, and an inactive row is not brought back.
+                // (A row from before catalogue dates, written by the previous importer, has an end date that is only that importer's "today": replaceable.)
                 var match = dbRows.FirstOrDefault(x => x.EffectiveFrom == row.EffectiveFrom);
+                var held = match is not null && HasCatalogueDates(match) ? match : null;
+                if (held?.EffectiveTo is { } heldTo && (effectiveTo is null || heldTo < effectiveTo)) effectiveTo = heldTo;
+                var isActive = nextStart is null && (effectiveTo is null || effectiveTo >= today) && (held?.IsActive ?? true);
+
                 var action = match is null ? ImportAction.Add : SameContent(match, row, effectiveTo, groupCodeById) ? ImportAction.Unchanged : ImportAction.Update;
                 var previous = match ?? dbRows.Where(x => x.EffectiveFrom < row.EffectiveFrom).OrderByDescending(x => x.EffectiveFrom).FirstOrDefault();
                 var priceChanged = action != ImportAction.Unchanged && previous is not null && (PriceOf(previous) != PriceOf(row) || previous.IsIntensive != row.IsIntensive);
