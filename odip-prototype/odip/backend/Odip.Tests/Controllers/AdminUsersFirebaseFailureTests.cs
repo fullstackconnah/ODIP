@@ -42,8 +42,8 @@ public class AdminUsersFirebaseFailureTests
         return tenant;
     }
 
-    private static AdminUsersController Controller(OdipDbContext db, Mock<IFirebaseUserService> firebase) =>
-        new(db, new Mock<ILogger<AdminUsersController>>().Object, firebase.Object)
+    private static AdminUsersController Controller(OdipDbContext db, Mock<IFirebaseUserService> firebase, ILogger<AdminUsersController>? logger = null) =>
+        new(db, logger ?? new Mock<ILogger<AdminUsersController>>().Object, firebase.Object)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
@@ -75,6 +75,24 @@ public class AdminUsersFirebaseFailureTests
         Assert.Equal(InvalidAddressSentence, Assert.Single(Assert.IsType<ApiResponse<object>>(badRequest.Value).Errors!));
         Assert.Empty(await db.Users.ToListAsync());
         firebase.Verify(f => f.DeleteUserAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_logs_which_tenant_the_refusal_was_for_by_id_and_never_the_address()
+    {
+        // No user exists yet to name, so the tenant it was for is the id there is. The address is personal data and stays out of the log.
+        using var db = SuperAdminDb();
+        var tenant = SeedTenant(db);
+        var logger = new Mock<ILogger<AdminUsersController>>();
+
+        await Controller(db, CreateFailing(FirebaseTestExceptions.InvalidEmail()), logger.Object).Create(NewUser(tenant.Id), CancellationToken.None);
+
+        logger.Verify(l => l.Log(
+            LogLevel.Warning, It.IsAny<EventId>(), It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains(tenant.Id.ToString())),
+            It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+        logger.Verify(l => l.Log(
+            It.IsAny<LogLevel>(), It.IsAny<EventId>(), It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("jane.smith@acme.example.com")),
+            It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Never);
     }
 
     [Theory]

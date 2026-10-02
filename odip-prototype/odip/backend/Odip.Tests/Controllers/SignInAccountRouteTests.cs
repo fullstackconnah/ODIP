@@ -76,6 +76,19 @@ public class SignInAccountRouteTests
             It.Is<It.IsAnyType>((state, _) => fragments.All(fragment => state.ToString()!.Contains(fragment))),
             It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
 
+    /// <summary>One Warning line that names every fragment.</summary>
+    private static void VerifyOneWarningLine<T>(Mock<ILogger<T>> logger, params string[] fragments) =>
+        logger.Verify(l => l.Log(
+            LogLevel.Warning, It.IsAny<EventId>(),
+            It.Is<It.IsAnyType>((state, _) => fragments.All(fragment => state.ToString()!.Contains(fragment))),
+            It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+
+    /// <summary>No line at any level carries this text: an address is personal data, and the logs name people by id.</summary>
+    private static void VerifyNoLineMentions<T>(Mock<ILogger<T>> logger, string text) =>
+        logger.Verify(l => l.Log(
+            It.IsAny<LogLevel>(), It.IsAny<EventId>(), It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains(text)),
+            It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Never);
+
     private static void VerifyNoInformationLine<T>(Mock<ILogger<T>> logger) =>
         logger.Verify(l => l.Log(
             LogLevel.Information, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(),
@@ -193,6 +206,19 @@ public class SignInAccountRouteTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Equal(InvalidAddressSentence, Assert.IsType<ApiResponse<object>>(badRequest.Value).Errors!.Single());
+    }
+
+    [Fact]
+    public async Task AdminUsers_route_logs_who_the_malformed_address_belongs_to_by_id_and_never_the_address()
+    {
+        using var db = AdminDb();
+        var user = await SeedAdminSideUser(db, "sam.staff@acme");
+        var logger = new Mock<ILogger<AdminUsersController>>();
+
+        await AdminController(db, FirebaseThrowing(FirebaseTestExceptions.InvalidEmail()), logger.Object).EnsureSignInAccount(user.Id, CancellationToken.None);
+
+        VerifyOneWarningLine(logger, user.Id.ToString());
+        VerifyNoLineMentions(logger, "sam.staff@acme");
     }
 
     [Theory]
@@ -418,6 +444,19 @@ public class SignInAccountRouteTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Equal(InvalidAddressSentence, Assert.IsType<ApiResponse<SignInAccountDto>>(badRequest.Value).Errors!.Single());
+    }
+
+    [Fact]
+    public async Task Staff_route_logs_who_the_malformed_address_belongs_to_by_id_and_never_the_address()
+    {
+        var (db, tenantId) = StaffDb();
+        var staff = await SeedStaff(db, tenantId, "sam.staff@acme");
+        var logger = new Mock<ILogger<StaffController>>();
+
+        await StaffControllerFor(db, "Admin", FirebaseThrowing(FirebaseTestExceptions.InvalidEmail()), logger.Object).EnsureSignInAccount(staff.Id, CancellationToken.None);
+
+        VerifyOneWarningLine(logger, staff.Id.ToString());
+        VerifyNoLineMentions(logger, "sam.staff@acme");
     }
 
     [Theory]

@@ -20,6 +20,8 @@ public class TenantsController : ControllerBase
     private readonly IFirebaseUserService _firebaseUserService;
     private readonly ILogger<TenantsController>? _logger;
 
+    private const string DomainRequiredMessage = "Email domain is required.";
+
     // IFirebaseUserService is intentionally NOT registered in Program.cs — see AdminUsersController: ActivatorUtilities falls back to
     // the parameter's default, so production needs no DI change while a unit test injects a mock.
     public TenantsController(OdipDbContext db, IFirebaseUserService? firebaseUserService = null, ILogger<TenantsController>? logger = null)
@@ -46,7 +48,11 @@ public class TenantsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateTenantDto dto)
     {
-        var domain = dto.EmailDomain.ToLower();
+        // Stored and compared in one tidied form (see EmailIdentity.NormaliseDomain): an address's own domain never matches a row typed "@acme.com.au".
+        var domain = EmailIdentity.NormaliseDomain(dto.EmailDomain);
+
+        if (domain.Length == 0)
+            return BadRequest(ApiResponse<object>.Fail(DomainRequiredMessage));
 
         if (CommonEmailProviders.Covers(domain))
             return BadRequest(ApiResponse<object>.Fail(CommonEmailProviders.SharedDomainMessage(domain)));
@@ -71,7 +77,10 @@ public class TenantsController : ControllerBase
     [HttpPost("with-setup")]
     public async Task<IActionResult> CreateWithSetup([FromBody] CreateTenantWithSetupDto dto, CancellationToken ct = default)
     {
-        var domain = dto.EmailDomain.ToLower();
+        var domain = EmailIdentity.NormaliseDomain(dto.EmailDomain);
+
+        if (domain.Length == 0)
+            return BadRequest(ApiResponse<object>.Fail(DomainRequiredMessage));
 
         if (CommonEmailProviders.Covers(domain))
             return BadRequest(ApiResponse<object>.Fail(CommonEmailProviders.SharedDomainMessage(domain)));
@@ -200,17 +209,21 @@ public class TenantsController : ControllerBase
         if (tenant is null)
             return NotFound();
 
+        var domain = EmailIdentity.NormaliseDomain(dto.EmailDomain);
+        if (domain.Length == 0)
+            return BadRequest(ApiResponse<object>.Fail(DomainRequiredMessage));
+
         // Only a CHANGE to a shared provider is refused: a row that already holds one stays editable (renamed, switched off), and the domain is
         // simply nobody's own, so it blocks no other tenant's staff (see StaffController.OtherOrganisationAddressErrorAsync).
-        if (tenant.EmailDomain != dto.EmailDomain.ToLower() && CommonEmailProviders.Covers(dto.EmailDomain.ToLower()))
-            return BadRequest(ApiResponse<object>.Fail(CommonEmailProviders.SharedDomainMessage(dto.EmailDomain.ToLower())));
+        var domainChanged = tenant.EmailDomain != domain;
+        if (domainChanged && CommonEmailProviders.Covers(domain))
+            return BadRequest(ApiResponse<object>.Fail(CommonEmailProviders.SharedDomainMessage(domain)));
 
-        if (tenant.EmailDomain != dto.EmailDomain.ToLower() &&
-            await _db.Tenants.AnyAsync(t => t.EmailDomain == dto.EmailDomain.ToLower() && t.Id != id))
+        if (domainChanged && await _db.Tenants.AnyAsync(t => t.EmailDomain == domain && t.Id != id))
             return Conflict("A tenant with this email domain already exists");
 
         tenant.Name = dto.Name;
-        tenant.EmailDomain = dto.EmailDomain.ToLower();
+        tenant.EmailDomain = domain;
         tenant.IsActive = dto.IsActive;
         await _db.SaveChangesAsync();
         return Ok(ApiResponse<TenantDto>.Ok(new TenantDto(tenant.Id, tenant.Name, tenant.EmailDomain, tenant.IsActive, tenant.CreatedAt)));

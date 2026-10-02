@@ -150,4 +150,99 @@ public class TenantEmailDomainTests
         Assert.IsType<OkObjectResult>(result);
         Assert.Equal("acme.example.com", (await db.Tenants.SingleAsync()).EmailDomain);
     }
+
+    // ── The form a domain is stored and compared in ─────────────────────
+    // People type "@acme.com.au" for "acme.com.au", and a stray space or capital is easily pasted in. Stored as typed, such a row never matches an
+    // address's own domain, so its tenant is asked about at its own domain and is not protected from other tenants' staff.
+
+    [Theory]
+    [InlineData("acme.example.com", "acme.example.com")]
+    [InlineData("  Acme.Example.COM ", "acme.example.com")]
+    [InlineData("@acme.example.com", "acme.example.com")]
+    [InlineData(" @Acme.Example.com ", "acme.example.com")]
+    [InlineData("@@acme.example.com", "acme.example.com")]
+    [InlineData("@ acme.example.com", "acme.example.com")]
+    public void A_domain_is_trimmed_stripped_of_a_leading_at_sign_and_lower_cased(string typed, string expected) =>
+        Assert.Equal(expected, EmailIdentity.NormaliseDomain(typed));
+
+    [Theory]
+    [InlineData("  Acme.Example.COM ")]
+    [InlineData("@acme.example.com")]
+    [InlineData(" @Acme.Example.com ")]
+    public async Task Create_stores_the_domain_in_that_form(string typed)
+    {
+        using var db = SuperAdminDb();
+
+        var result = await Controller(db).Create(new CreateTenantDto("Acme Support", typed));
+
+        Assert.IsType<CreatedAtActionResult>(result);
+        Assert.Equal("acme.example.com", (await db.Tenants.SingleAsync()).EmailDomain);
+    }
+
+    [Fact]
+    public async Task Create_with_setup_stores_it_in_that_form_and_so_does_not_ask_about_a_first_user_at_the_domain_that_was_typed_with_an_at_sign()
+    {
+        using var db = SuperAdminDb();
+        var firebase = new Mock<IFirebaseUserService>();
+        firebase.Setup(f => f.CreateUserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync("uid-1");
+        var dto = new CreateTenantWithSetupDto("Brightside Care", "@Brightside.Example.com", null,
+            new CreateInitialUserDto("Jane", "Smith", "jane.smith@brightside.example.com", "jane.smith", "Admin", null));
+
+        var result = await Controller(db, firebase).CreateWithSetup(dto, CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result);
+        Assert.Equal("brightside.example.com", (await db.Tenants.SingleAsync()).EmailDomain);
+    }
+
+    [Fact]
+    public async Task Update_stores_the_domain_in_that_form()
+    {
+        using var db = SuperAdminDb();
+        var tenant = SeedTenant(db, "old.example.com");
+
+        var result = await Controller(db).Update(tenant.Id, new UpdateTenantDto("Acme Support", " @Acme.Example.com ", true));
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal("acme.example.com", (await db.Tenants.SingleAsync()).EmailDomain);
+    }
+
+    [Fact]
+    public async Task Create_treats_a_domain_that_differs_from_an_existing_one_only_in_form_as_the_same_domain()
+    {
+        using var db = SuperAdminDb();
+        SeedTenant(db, "acme.example.com");
+
+        var result = await Controller(db).Create(new CreateTenantDto("Another Acme", "@Acme.Example.com "));
+
+        Assert.IsType<ConflictObjectResult>(result);
+        Assert.Single(await db.Tenants.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(" @Gmail.com ")]
+    [InlineData("@outlook.com")]
+    public async Task A_provider_domain_is_refused_however_it_is_typed(string typed)
+    {
+        using var db = SuperAdminDb();
+
+        var result = await Controller(db).Create(new CreateTenantDto("Acme Support", typed));
+
+        Assert.Equal(SharedProviderMessage(EmailIdentity.NormaliseDomain(typed)), Refusal(result));
+        Assert.Empty(await db.Tenants.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("@")]
+    [InlineData(" @ ")]
+    public async Task A_domain_that_is_nothing_once_tidied_is_refused_at_create_and_update(string typed)
+    {
+        using var db = SuperAdminDb();
+        var tenant = SeedTenant(db, "acme.example.com");
+
+        Assert.Equal("Email domain is required.", Refusal(await Controller(db).Create(new CreateTenantDto("Another", typed))));
+        Assert.Equal("Email domain is required.", Refusal(await Controller(db).Update(tenant.Id, new UpdateTenantDto("Acme Support", typed, true))));
+        Assert.Equal("acme.example.com", (await db.Tenants.SingleAsync()).EmailDomain);
+    }
 }

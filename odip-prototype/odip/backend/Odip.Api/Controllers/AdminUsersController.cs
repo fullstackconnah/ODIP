@@ -211,7 +211,8 @@ public class AdminUsersController : ControllerBase
         {
             // Firebase refused the address itself. Retrying cannot fix that and correcting the address can, so it is the admin's to act on (400), not
             // a fault on our side (502). Nothing was created, in Firebase or in the database.
-            _logger.LogWarning("Firebase refused the address of a new user as invalid: {Email}", email);
+            // The address is personal data and stays out of the log; no user exists yet to name, so it is the tenant the new user was for.
+            _logger.LogWarning("Firebase refused the address of a new user in tenant {TenantId} as invalid", dto.TenantId);
             return BadRequest(ApiResponse<object>.Fail("That doesn't look like a valid email address. Correct it first."));
         }
         catch (Exception ex)
@@ -477,7 +478,7 @@ public class AdminUsersController : ControllerBase
         {
             // Firebase refused the address itself (a legacy row with a typo). Retrying cannot fix that and correcting the address can, so it is the
             // admin's to act on (400), not a fault on our side (502).
-            _logger.LogWarning("Firebase refused the address of user {UserId} as invalid: {Email}", user.Id, email);
+            _logger.LogWarning("Firebase refused the address of user {UserId} as invalid", user.Id);
             return BadRequest(ApiResponse<object>.Fail("That doesn't look like a valid email address. Correct it first."));
         }
         catch (Exception ex)

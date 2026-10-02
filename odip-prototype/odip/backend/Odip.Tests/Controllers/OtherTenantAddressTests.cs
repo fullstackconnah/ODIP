@@ -166,6 +166,20 @@ public class OtherTenantAddressTests
         Assert.IsType<CreatedAtActionResult>(result.Result);
     }
 
+    [Theory]
+    [InlineData("@tenantb.example.org")]
+    [InlineData(" TenantB.Example.org ")]
+    public async Task Staff_create_still_refuses_another_tenants_domain_when_that_tenant_was_stored_untidily(string storedDomain)
+    {
+        // A row written before domains were stored in one form: it must keep protecting its tenant, so the stored side is compared tidied too.
+        using var setup = TwoTenants(otherDomain: storedDomain);
+
+        var result = await StaffAs(setup, "Coordinator").Create(StaffAt("new.hire@tenantb.example.org"), CancellationToken.None);
+
+        AssertRefused(result);
+        Assert.Empty(await setup.Db.Users.ToListAsync());
+    }
+
     // ── A shared provider is nobody's own domain ────────────────────────
     // A tenant whose EmailDomain is a shared mail domain (a SuperAdmin onboarding an organisation whose staff all use Gmail can type gmail.com) must
     // not turn every other tenant's staff at that provider into "another organisation's" addresses: no confirmation gets past that refusal, so only

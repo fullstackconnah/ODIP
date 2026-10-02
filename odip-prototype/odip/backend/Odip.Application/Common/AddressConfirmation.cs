@@ -54,13 +54,13 @@ public static class AddressConfirmation
         if (at < 0 || at == normalisedEmail.Length - 1) return false;
 
         var domain = normalisedEmail[(at + 1)..];
-        var own = tenantEmailDomain?.Trim().ToLowerInvariant();
+        var own = tenantEmailDomain is null ? null : EmailIdentity.NormaliseDomain(tenantEmailDomain);
         if (!string.IsNullOrEmpty(own) && domain == own) return false;
         return !CommonEmailProviders.Covers(domain);
     }
 
     /// <summary>What to ask the admin to check.</summary>
     public static string Message(string normalisedEmail, string? tenantEmailDomain) =>
-        $"{normalisedEmail} is not at {(string.IsNullOrWhiteSpace(tenantEmailDomain) ? "this organisation's domain" : tenantEmailDomain.Trim().ToLowerInvariant())} " +
+        $"{normalisedEmail} is not at {(string.IsNullOrWhiteSpace(tenantEmailDomain) ? "this organisation's domain" : EmailIdentity.NormaliseDomain(tenantEmailDomain))} " +
         "or a common email provider. The sign-in link goes to whoever owns this address. Check it is right.";
 }

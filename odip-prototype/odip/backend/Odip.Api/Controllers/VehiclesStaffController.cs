@@ -367,7 +367,11 @@ public class StaffController : ControllerBase
         var domain = normalisedEmail[(at + 1)..];
         if (CommonEmailProviders.Covers(domain)) return null;
         var own = ownTenantId ?? Guid.Empty;
-        var belongsToAnother = await _db.Tenants.AnyAsync(t => t.EmailDomain == domain && t.Id != own, ct);
+        // Tenants are written with their domain tidied (EmailIdentity.NormaliseDomain), but a row from before that rule may hold " Acme.com" or "@acme.com"
+        // and must keep protecting its tenant, so the stored side is tidied the same way here. There are few tenants, so they are compared in memory
+        // rather than by an expression the database has to translate.
+        var otherDomains = await _db.Tenants.Where(t => t.Id != own).Select(t => t.EmailDomain).ToListAsync(ct);
+        var belongsToAnother = otherDomains.Any(other => EmailIdentity.NormaliseDomain(other) == domain);
         return belongsToAnother ? OtherOrganisationMessage : null;
     }
 
@@ -747,7 +751,7 @@ public class StaffController : ControllerBase
         {
             // Firebase refused the address itself (a legacy row with a typo). Retrying cannot fix that and correcting the address can, so it is the
             // admin's to act on (400), not a fault on our side (502).
-            _logger?.LogWarning("Firebase refused the address of staff member {UserId} as invalid: {Email}", s.Id, email);
+            _logger?.LogWarning("Firebase refused the address of staff member {UserId} as invalid", s.Id);
             return BadRequest(ApiResponse<SignInAccountDto>.Fail("That doesn't look like a valid email address. Correct it first."));
         }
         catch (Exception ex)

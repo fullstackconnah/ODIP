@@ -70,6 +70,15 @@ public class AddressConfirmationTests
         Assert.True(AddressConfirmation.Needed(address, TenantDomain));
     }
 
+    [Theory]
+    [InlineData("@acme.example.com")]
+    [InlineData(" Acme.Example.COM ")]
+    public void An_address_at_the_tenants_own_domain_needs_no_confirmation_even_when_the_domain_on_record_is_untidy(string onRecord)
+    {
+        Assert.False(AddressConfirmation.Needed("jane.smith@acme.example.com", onRecord));
+        Assert.Equal(AddressConfirmation.Message("jane.smith@gmial.com", "acme.example.com"), AddressConfirmation.Message("jane.smith@gmial.com", onRecord));
+    }
+
     [Fact]
     public void With_no_tenant_domain_known_only_the_providers_pass()
     {
