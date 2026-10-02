@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
+using Odip.Infrastructure.Data;
 using Odip.Infrastructure.DemoData;
 using Xunit;
 
@@ -119,20 +121,27 @@ public class DemoTenantIsolationTests
         Assert.Equal(2, await db.StaffAvailabilities.CountAsync(a => foreignUsers.Contains(a.UserId)));
 
         var demoEntityIds = new HashSet<Guid>(demoUsers.Concat(demoAvailability));
-        demoEntityIds.UnionWith(await db.Shifts.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.ShiftCompletions.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.ShiftPatterns.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.LeaveRequests.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.RecurringUnavailabilities.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.StaffParticipantCompatibilities.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.BookingTasks.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.People.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.ParticipantContactRoles.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.ParticipantMedications.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
+        demoEntityIds.UnionWith(DemoTenantEntityIds(db));                      // every row of every tenant table that carries the Demo tenant
         var newAudit = (await db.AuditLogs.ToListAsync()).Where(a => !auditBefore.Contains(a.Id)).ToList();
         Assert.True(newAudit.Count > 100, "the top-up's rows are audited like anyone's");
         Assert.All(newAudit, a => Assert.Contains(a.EntityId, demoEntityIds));
     }
+
+    /// <summary>The ids of every row, of every table that has a tenant column, that belongs to the Demo tenant: audit history may describe any of them.</summary>
+    private static List<Guid> DemoTenantEntityIds(OdipDbContext db)
+    {
+        var ids = new List<Guid>();
+        foreach (var type in db.Model.GetEntityTypes().Select(t => t.ClrType).Where(t => typeof(ITenantEntity).IsAssignableFrom(t) && t.GetProperty("Id")?.PropertyType == typeof(Guid)))
+        {
+            var found = (IEnumerable<Guid>)typeof(DemoTenantIsolationTests).GetMethod(nameof(IdsOf), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+                .MakeGenericMethod(type).Invoke(null, new object[] { db })!;
+            ids.AddRange(found);
+        }
+        return ids;
+    }
+
+    private static List<Guid> IdsOf<T>(OdipDbContext db) where T : class, ITenantEntity =>
+        db.Set<T>().IgnoreQueryFilters().Where(e => e.TenantId == DemoTestEnv.DemoTenantId).Select(e => EF.Property<Guid>(e, "Id")).ToList();
 
     [Fact]
     public async Task T5_WithNoDemoTenant_NothingAtAllIsWritten()

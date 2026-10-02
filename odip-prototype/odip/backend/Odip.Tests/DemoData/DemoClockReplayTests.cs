@@ -84,8 +84,17 @@ public class DemoClockReplayTests
             var (start, end) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, completion.TimeZoneId);
             Assert.Equal(anchors.Provider.Id, completion.TimeZoneId);
             Assert.Equal(ShiftVarianceCalculator.VarianceMinutes(completion.ActualStart, start), completion.VarianceMinutesStart);
-            Assert.Equal(ShiftVarianceCalculator.VarianceMinutes(completion.ActualEnd!.Value, end), completion.VarianceMinutesEnd);
-            Assert.True(completion.SubmittedAt <= anchors.NowUtc, $"{where}: a completion is in the future");
+            Assert.True(completion.StartedAt <= anchors.NowUtc, $"{where}: a completion started in the future");
+            if (completion.ActualEnd is { } actualEnd)
+            {
+                Assert.Equal(ShiftVarianceCalculator.VarianceMinutes(actualEnd, end), completion.VarianceMinutesEnd);
+                Assert.True(completion.SubmittedAt <= anchors.NowUtc, $"{where}: a completion is in the future");
+            }
+            else
+            {
+                Assert.Null(completion.SubmittedAt);                           // a shift in progress (the live set): not finished, so nothing of the end yet
+                Assert.Equal(ShiftStatus.InProgress, byShift[completion.ShiftId].Status);
+            }
         }
 
         // The pending queue always has somebody waiting, and only for dates still ahead.

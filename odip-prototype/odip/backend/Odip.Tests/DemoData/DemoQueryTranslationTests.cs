@@ -30,23 +30,55 @@ public class DemoQueryTranslationTests
     {
         static object[] Q(string name, Func<OdipDbContext, IQueryable> query, params string[] fragments) => new object[] { name, query, fragments };
 
-        yield return Q("existing ids (primary-key probe)", db => DemoQueries.ExistingIds<Shift>(db, Ids.ToArray()), "WHERE s.\"Id\" = ANY (");
-        yield return Q("demo tenant candidates", DemoQueries.DemoTenantCandidates, "\"Name\" =");
-        yield return Q("provider state", DemoQueries.ProviderState, "\"State\"");
-        yield return Q("participants", DemoQueries.Participants, "\"NdisNumber\"", "\"IsDraft\"");
-        yield return Q("users by email", db => DemoQueries.UsersByEmail(db, new List<string> { "a@b.c" }), "\"Email\" = ANY (");
-        yield return Q("compatibility cells of users", db => DemoQueries.CompatibilityCellsOf(db, Ids), "\"UserId\" = ANY (");
-        yield return Q("active emergency contacts", db => DemoQueries.ActiveEmergencyContacts(db, Ids), "\"ParticipantId\" = ANY (", "\"RoleType\" =", "\"Status\" =");
-        yield return Q("patterns by id", db => DemoQueries.PatternsByIds(db, Ids), "\"Id\" = ANY (");
-        yield return Q("open shifts", db => DemoQueries.OpenShifts(db, Today, Ids), "\"ServiceDate\" <=", "\"ShiftPatternId\" IS NULL OR", "\"ShiftPatternId\" = ANY (", "\"Status\"");
-        yield return Q("completions of shifts", db => DemoQueries.CompletionsOf(db, Ids), "\"ShiftId\" = ANY (");
-        yield return Q("lapsed leave", db => DemoQueries.LapsedLeave(db, Today), "\"Status\" =", "\"StartDate\" <");
-        yield return Q("lapsed recurring rules", db => DemoQueries.LapsedRules(db, Today), "\"Status\" =", "\"EffectiveFrom\" <");
-        yield return Q("approved leave not yet over", db => DemoQueries.ApprovedLeaveNotYetOver(db, Today), "\"Status\" =", "\"EndDate\" >=");
-        yield return Q("published shifts of users", db => DemoQueries.PublishedShiftsOf(db, Ids, Today), "\"UserId\" = ANY (", "INNER JOIN (", "FROM \"Participants\"");
-        yield return Q("existing task keys", db => DemoQueries.ExistingTaskKeys(db, new List<string> { "k" }), "\"SourceKey\" = ANY (");
-        yield return Q("open coverage tasks", DemoQueries.OpenCoverageTasks, "\"TaskType\" =", "\"LeaveRequestId\" IS NOT NULL", "\"SourceKey\"");
-        yield return Q("worked shift ids", db => DemoQueries.WorkedShiftIds(db, Ids), "\"Id\" = ANY (");
+        yield return Q(nameof(DemoQueries.ExistingIds), db => DemoQueries.ExistingIds<Shift>(db, Ids.ToArray()), "WHERE s.\"Id\" = ANY (");
+        yield return Q(nameof(DemoQueries.DemoTenantCandidates), DemoQueries.DemoTenantCandidates, "\"Name\" =");
+        yield return Q(nameof(DemoQueries.ProviderState), DemoQueries.ProviderState, "\"State\"");
+        yield return Q(nameof(DemoQueries.Participants), DemoQueries.Participants, "\"NdisNumber\"", "\"IsDraft\"");
+        yield return Q(nameof(DemoQueries.UsersByEmail), db => DemoQueries.UsersByEmail(db, new List<string> { "a@b.c" }), "\"Email\" = ANY (");
+        yield return Q(nameof(DemoQueries.CompatibilityCellsOf), db => DemoQueries.CompatibilityCellsOf(db, Ids), "\"UserId\" = ANY (");
+        yield return Q(nameof(DemoQueries.ActiveEmergencyContacts), db => DemoQueries.ActiveEmergencyContacts(db, Ids), "\"ParticipantId\" = ANY (", "\"RoleType\" =", "\"Status\" =");
+        yield return Q(nameof(DemoQueries.PatternsByIds), db => DemoQueries.PatternsByIds(db, Ids), "\"Id\" = ANY (");
+        yield return Q(nameof(DemoQueries.OpenShifts), db => DemoQueries.OpenShifts(db, Today, Ids), "\"ServiceDate\" <=", "\"ShiftPatternId\" IS NULL OR", "\"ShiftPatternId\" = ANY (", "\"Status\"");
+        yield return Q(nameof(DemoQueries.CompletionsOf), db => DemoQueries.CompletionsOf(db, Ids), "\"ShiftId\" = ANY (");
+        yield return Q(nameof(DemoQueries.LapsedLeave), db => DemoQueries.LapsedLeave(db, Today), "\"Status\" =", "\"StartDate\" <");
+        yield return Q(nameof(DemoQueries.LapsedRules), db => DemoQueries.LapsedRules(db, Today), "\"Status\" =", "\"EffectiveFrom\" <");
+        yield return Q(nameof(DemoQueries.ApprovedLeaveNotYetOver), db => DemoQueries.ApprovedLeaveNotYetOver(db, Today), "\"Status\" =", "\"EndDate\" >=");
+        yield return Q(nameof(DemoQueries.PublishedShiftsOf), db => DemoQueries.PublishedShiftsOf(db, Ids, Today), "\"UserId\" = ANY (", "INNER JOIN (", "FROM \"Participants\"");
+        yield return Q(nameof(DemoQueries.ExistingTaskKeys), db => DemoQueries.ExistingTaskKeys(db, new List<string> { "k" }), "\"SourceKey\" = ANY (");
+        yield return Q(nameof(DemoQueries.OpenCoverageTasks), DemoQueries.OpenCoverageTasks, "\"TaskType\" =", "\"LeaveRequestId\" IS NOT NULL", "\"SourceKey\"");
+        yield return Q(nameof(DemoQueries.WorkedShiftIds), db => DemoQueries.WorkedShiftIds(db, Ids), "\"Id\" = ANY (");
+
+        // PR 2: the live set, the medication chart and the shift package.
+        yield return Q(nameof(DemoQueries.UsersByIds), db => DemoQueries.UsersByIds(db, Ids), "\"Id\" = ANY (");
+        yield return Q(nameof(DemoQueries.WeekShifts), db => DemoQueries.WeekShifts(db, Today, Today.AddDays(6)), "\"ServiceDate\" >=", "\"ServiceDate\" <=");
+        yield return Q(nameof(DemoQueries.CompatibilityLevels), db => DemoQueries.CompatibilityLevels(db, Ids), "\"UserId\" = ANY (");
+        yield return Q(nameof(DemoQueries.HolidaysOf), db => DemoQueries.HolidaysOf(db, "NSW", Today, Today.AddDays(6)), "\"Date\" >=", "\"State\"");
+        yield return Q(nameof(DemoQueries.TripAssignmentsOf), db => DemoQueries.TripAssignmentsOf(db, Ids, Today, Today.AddDays(6)), "\"UserId\" = ANY (", "\"Status\" <>");
+        yield return Q(nameof(DemoQueries.ParticipantsByIds), db => DemoQueries.ParticipantsByIds(db, Ids), "\"Id\" = ANY (");
+        yield return Q(nameof(DemoQueries.ShiftsByIds), db => DemoQueries.ShiftsByIds(db, Ids), "\"Id\" = ANY (");
+        yield return Q(nameof(DemoQueries.ActiveCompletionsOf), db => DemoQueries.ActiveCompletionsOf(db, Ids), "\"ShiftId\" = ANY (", "\"IsActive\"");
+        yield return Q(nameof(DemoQueries.UnfinishedShifts), db => DemoQueries.UnfinishedShifts(db, Today, Ids), "\"ShiftPatternId\" IS NULL", "\"ServiceDate\" <", "\"ParticipantId\" = ANY (", "\"Status\"");
+        yield return Q(nameof(DemoQueries.UnreviewedShifts), db => DemoQueries.UnreviewedShifts(db, Today, Ids), "\"ShiftPatternId\" IS NULL", "\"ServiceDate\" <=", "\"ParticipantId\" = ANY (", "\"Status\" =");
+        yield return Q(nameof(DemoQueries.PendingWitnessDoses), db => DemoQueries.PendingWitnessDoses(db, Ids[0]), "\"ParticipantMedicationId\" =", "\"WitnessStatus\" =", "LIKE 'demo-v1:%'");
+        yield return Q(nameof(DemoQueries.OpenTasksByKeys), db => DemoQueries.OpenTasksByKeys(db, new List<string> { "k" }), "\"SourceKey\" = ANY (", "\"Status\"");
+        yield return Q(nameof(DemoQueries.MedicationsByIds), db => DemoQueries.MedicationsByIds(db, Ids), "\"Id\" = ANY (");
+        yield return Q(nameof(DemoQueries.ActiveMedicationsOf), db => DemoQueries.ActiveMedicationsOf(db, Ids), "\"ParticipantId\" = ANY (", "\"Status\" =");
+        yield return Q(nameof(DemoQueries.RoutinesByIds), db => DemoQueries.RoutinesByIds(db, Ids), "\"Id\" = ANY (");
+        yield return Q(nameof(DemoQueries.AdministrationsByIds), db => DemoQueries.AdministrationsByIds(db, Ids), "\"Id\" = ANY (");
+        yield return Q(nameof(DemoQueries.RunningBreaksOf), db => DemoQueries.RunningBreaksOf(db, Ids), "\"ShiftCompletionId\" = ANY (", "\"EndedAt\" IS NULL");
+        yield return Q(nameof(DemoQueries.NotesOf), db => DemoQueries.NotesOf(db, Ids), "\"ShiftId\" = ANY (");
+        yield return Q(nameof(DemoQueries.PrnDosesAwaitingOutcome), db => DemoQueries.PrnDosesAwaitingOutcome(db, Ids, DateTime.UtcNow), "\"ParticipantMedicationId\" = ANY (", "\"PrnOutcome\" IS NULL", "LIKE 'demo-v1:%'");
+    }
+
+    /// <summary>Every query the catalogue offers is in the list above: a new one that is not translated here is a failed tick nobody saw coming.</summary>
+    [Fact]
+    public void EveryQueryInTheCatalogue_HasAnEntryInTheTranslationList()
+    {
+        var covered = Queries().Select(q => (string)q[0]).ToHashSet();
+        var offered = typeof(DemoQueries).GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(m => typeof(IQueryable).IsAssignableFrom(m.ReturnType)).Select(m => m.Name).Distinct().ToList();
+        Assert.True(offered.Count >= 30, $"only {offered.Count} queries found by reflection");
+        Assert.Empty(offered.Where(name => !covered.Contains(name)));
     }
 
     [Theory]

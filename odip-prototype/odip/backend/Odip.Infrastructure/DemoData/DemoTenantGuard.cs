@@ -67,6 +67,13 @@ public sealed class DemoTenantGuard
         typeof(Person),
         typeof(ParticipantContactRole),
         typeof(ParticipantMedication),
+
+        // The shift package and the medication chart (PR 2).
+        typeof(ShiftBreak),
+        typeof(ShiftNote),
+        typeof(ShiftRoutineCheck),
+        typeof(HandoverAcknowledgement),
+        typeof(MedicationAdministration),
     };
 
     /// <summary>Non-tenant tables the top-up may add rows to, and which parent each row must hang off.</summary>
@@ -87,10 +94,21 @@ public sealed class DemoTenantGuard
                 nameof(User.UpdatedAt),
             },
             [typeof(Shift)] = new HashSet<string> { nameof(Shift.Status), nameof(Shift.UpdatedAt) },
+            // The review stamp, and the finish of a live shift (its completion is made when the worker starts and filled in when they finish).
             [typeof(ShiftCompletion)] = new HashSet<string>
             {
                 nameof(ShiftCompletion.ReviewedByUserId), nameof(ShiftCompletion.ReviewedAt), nameof(ShiftCompletion.ReviewOutcome),
-                nameof(ShiftCompletion.UpdatedAt),
+                nameof(ShiftCompletion.ActualEnd), nameof(ShiftCompletion.SubmittedAt), nameof(ShiftCompletion.VarianceMinutesEnd),
+                nameof(ShiftCompletion.HandoverText), nameof(ShiftCompletion.NothingToHandOver), nameof(ShiftCompletion.NothingToNoteConfirmed),
+                nameof(ShiftCompletion.EndLatitude), nameof(ShiftCompletion.EndLongitude), nameof(ShiftCompletion.UpdatedAt),
+            },
+            // A running break is ended when its shift is finished.
+            [typeof(ShiftBreak)] = new HashSet<string> { nameof(ShiftBreak.EndedAt), nameof(ShiftBreak.EditedAt), nameof(ShiftBreak.UpdatedAt) },
+            // An as-needed dose gets its outcome, and a witness answers, after the record was made.
+            [typeof(MedicationAdministration)] = new HashSet<string>
+            {
+                nameof(MedicationAdministration.PrnOutcome), nameof(MedicationAdministration.PrnOutcomeAt), nameof(MedicationAdministration.WitnessStatus),
+                nameof(MedicationAdministration.WitnessRespondedAt), nameof(MedicationAdministration.UpdatedAt),
             },
             [typeof(LeaveRequest)] = new HashSet<string>
             {

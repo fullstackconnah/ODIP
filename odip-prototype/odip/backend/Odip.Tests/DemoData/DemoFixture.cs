@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.DemoData;
 using Odip.Infrastructure.DemoData.Packs;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Tests.DemoData;
 
@@ -63,10 +65,11 @@ internal static class DemoFixture
     public static Guid ParticipantId(string key) => Guid.Parse(Participants.Single(p => p.Key == key).Id);
 
     /// <summary>
-    /// Adds the Demo tenant (if it is not there yet), the eleven users and the seventeen participants, and (unless told not to) the six old-seed
-    /// medications the stories use. A database the old seed has not touched has none, which is what the "first row of a guarded table" tests need.
+    /// Adds the Demo tenant (if it is not there yet), the eleven users and the seventeen participants, and (unless told not to) the old seed's
+    /// rows the stories rest on: six medications, Sophie's two routines, and one aged shift with one of the old seed's shift notes. A database
+    /// the old seed has not touched has none of them, which is what the "first row of a guarded table" tests need.
     /// </summary>
-    public static async Task SeedPeopleAsync(DemoTestEnv env, bool oldSeedMedications = true)
+    public static async Task SeedPeopleAsync(DemoTestEnv env, bool oldSeed = true)
     {
         await using var probe = env.AdminDb();
         if (!await probe.Tenants.AnyAsync(t => t.Id == DemoTestEnv.DemoTenantId)) await env.AddTenantAsync();
@@ -95,8 +98,71 @@ internal static class DemoFixture
                 IsActive = true, IsHighSupport = p.High, OvernightSupport = p.Overnight, MobilityAidWheelchair = p.Wheelchair, RequiresHoist = p.Hoist,
             });
         }
-        if (oldSeedMedications) foreach (var m in OldSeedMedications()) db.ParticipantMedications.Add(m);
+        if (oldSeed)
+        {
+            foreach (var m in OldSeedMedications()) db.ParticipantMedications.Add(m);
+            foreach (var r in OldSeedRoutines()) db.ParticipantRoutines.Add(r);
+            // A finished, approved shift from before the top-up began: stands in for the old seed's aged shifts, as a closed-out shift like any other.
+            var oldShift = new Shift
+            {
+                Id = OldShiftId, TenantId = DemoTestEnv.DemoTenantId, ParticipantId = ParticipantId("sophie"), UserId = StaffId("james"),
+                ServiceDate = new DateOnly(2026, 8, 20), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Status = ShiftStatus.Completed,
+                CreatedAt = new DateTime(2026, 8, 10, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2026, 8, 24, 0, 0, 0, DateTimeKind.Utc),
+            };
+            db.Shifts.Add(oldShift);
+            var oldCompletion = new ShiftCompletion
+            {
+                Id = OldCompletionId, TenantId = DemoTestEnv.DemoTenantId, ShiftId = oldShift.Id, SubmittedByUserId = StaffId("james"),
+                ReviewedByUserId = StaffId("sarah"), ReviewOutcome = ReviewOutcome.Approved, VarianceMinutesStart = 0, VarianceMinutesEnd = 5,
+                NothingToHandOver = true, NothingToNoteConfirmed = false, IsActive = true,
+            };
+            PlaceOldCompletion(oldCompletion, ProviderTimeZoneResolver.FromState(null));          // no provider settings yet: the resolver's Sydney default
+            db.ShiftCompletions.Add(oldCompletion);
+            db.ShiftNotes.Add(new ShiftNote
+            {
+                Id = Guid.Parse("78000000-0000-0000-0000-000000000001"), TenantId = DemoTestEnv.DemoTenantId, ShiftId = oldShift.Id, AuthorUserId = StaffId("james"),
+                AuthorName = "James O'Brien", Body = "A calm morning. Sophie enjoyed the garden.",
+                CreatedAt = new DateTime(2026, 8, 20, 1, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2026, 8, 20, 1, 0, 0, DateTimeKind.Utc),
+            });
+        }
         await db.SaveChangesAsync();
+    }
+
+    public static readonly Guid OldShiftId = DemoIds.For("fixture", "old-shift");
+    public static readonly Guid OldCompletionId = DemoIds.For("fixture", "old-completion");
+
+    /// <summary>
+    /// Puts the aged completion where a closed-out 09:00-13:00 shift's would be in the given zone: started at 09:00, finished at 13:05 (five minutes
+    /// over), submitted at 13:10 and reviewed the next morning, every instant the conversion of a local wall-clock time. A test that changes the
+    /// provider's state afterwards calls this again (DemoTestEnv.SetProviderStateAsync does), so the row is consistent in every zone.
+    /// </summary>
+    internal static void PlaceOldCompletion(ShiftCompletion completion, ProviderTimeZone provider)
+    {
+        DateTime At(int day, int hour, int minute) =>
+            ProviderLocalTime.LocalToUtc(new DateTime(2026, 8, day, hour, minute, 0, DateTimeKind.Unspecified), provider.Zone);
+
+        completion.TimeZoneId = provider.Id;
+        completion.StartedAt = completion.ActualStart = At(20, 9, 0);
+        completion.ActualEnd = At(20, 13, 5);
+        completion.SubmittedAt = completion.CreatedAt = At(20, 13, 10);
+        completion.ReviewedAt = completion.UpdatedAt = At(21, 10, 0);
+    }
+
+    /// <summary>The two routines the old seed gives Sophie (DbSeeder.cs, 74..01 and 74..02): the live set ticks the morning one.</summary>
+    private static IEnumerable<ParticipantRoutine> OldSeedRoutines()
+    {
+        yield return new ParticipantRoutine
+        {
+            Id = Guid.Parse("74000000-0000-0000-0000-000000000001"), TenantId = DemoTestEnv.DemoTenantId, ParticipantId = ParticipantId("sophie"),
+            Title = "Epilepsy medication window", Description = "Keppra 500mg BD: within 30 minutes of the scheduled time.", Category = RoutineCategory.Medication,
+            Days = ParticipantRoutineDays.All, IsCritical = true, IsActive = true,
+        };
+        yield return new ParticipantRoutine
+        {
+            Id = Guid.Parse("74000000-0000-0000-0000-000000000002"), TenantId = DemoTestEnv.DemoTenantId, ParticipantId = ParticipantId("sophie"),
+            Title = "Morning routine", Description = "Wake gently. Offer a warm drink before getting up.", Category = RoutineCategory.PersonalCare,
+            Days = ParticipantRoutineDays.All, StartTime = new TimeOnly(7, 0), EndTime = new TimeOnly(8, 0), IsCritical = false, IsActive = true,
+        };
     }
 
     private static IEnumerable<ParticipantMedication> OldSeedMedications()

@@ -164,7 +164,7 @@ public class DemoDataMaintainerTests
     public async Task AThrowingPack_IsReported_TheOthersStillRun_AndTheMaintainerDoesNotThrow()
     {
         var env = Env();
-        await DemoFixture.SeedPeopleAsync(env);
+        await DemoFixture.SeedPeopleAsync(env, oldSeed: false);
         var ran = new List<string>();
         var boom = DemoTestEnv.Pack("boom", (run, _) =>
         {
@@ -195,7 +195,7 @@ public class DemoDataMaintainerTests
     public async Task AGuardViolation_WritesNothingFromThatPack_AndIsReportedAsAFailure()
     {
         var env = Env();
-        await DemoFixture.SeedPeopleAsync(env);
+        await DemoFixture.SeedPeopleAsync(env, oldSeed: false);
         var bad = DemoTestEnv.Pack("bad", async (run, ct) =>
         {
             run.Db.Shifts.Add(ShiftFor(run, "fine"));

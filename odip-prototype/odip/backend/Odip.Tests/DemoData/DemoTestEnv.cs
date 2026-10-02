@@ -8,6 +8,7 @@ using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.DemoData;
+using Odip.Infrastructure.Services;
 using Odip.Tests.EarlyAccess;
 using Odip.Tests.Medications;
 
@@ -62,6 +63,9 @@ internal sealed class DemoTestEnv
         {
             Id = Guid.NewGuid(), TenantId = DemoTenantId, State = state, OrganisationName = "Existing Provider", ABN = "00 000 000 000",
         });
+        // The fixture's aged completion was placed in the default (Sydney) zone: move it into this one, so it is a closed-out 09:00-13:05 shift in every zone.
+        var aged = await db.ShiftCompletions.FirstOrDefaultAsync(c => c.Id == DemoFixture.OldCompletionId);
+        if (aged is not null) DemoFixture.PlaceOldCompletion(aged, ProviderTimeZoneResolver.FromState(state));
         await db.SaveChangesAsync();
     }
 

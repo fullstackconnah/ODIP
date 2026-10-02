@@ -181,7 +181,8 @@ public class DemoRosterTests
         var nowUtc = env.Clock.GetUtcNow().UtcDateTime;
 
         await using var db = env.AdminDb();
-        var shifts = await db.Shifts.Where(s => s.Status == ShiftStatus.PendingReview || s.Status == ShiftStatus.Completed).ToListAsync();
+        // The shifts the top-up closed out: the fixture's aged shift stands in for the old seed's and has a note, so its completion is not "nothing to note".
+        var shifts = await db.Shifts.Where(s => (s.Status == ShiftStatus.PendingReview || s.Status == ShiftStatus.Completed) && s.Id != DemoFixture.OldShiftId).ToListAsync();
         var completions = await db.ShiftCompletions.ToDictionaryAsync(c => c.ShiftId);
         var sarah = DemoFixture.StaffId("sarah");
         Assert.NotEmpty(shifts);

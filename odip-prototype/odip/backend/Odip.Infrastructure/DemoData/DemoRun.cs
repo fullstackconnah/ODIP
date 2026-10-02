@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Odip.Domain.Entities;
 using Microsoft.Extensions.Logging;
 using Odip.Infrastructure.Data;
 
@@ -43,6 +44,22 @@ public sealed class DemoRun
 
     public DemoAnchors Anchors { get; }
 
+    private IReadOnlyDictionary<string, User>? _freshStaff;
+
+    /// <summary>
+    /// The staff the stories name (by story key), read from the database NOW. The directory's copies are made before the first pack runs and
+    /// the tracker is cleared after every pack, so a pack that changes a user (the credential fill) leaves the directory's copy as it was: a pack
+    /// that needs a credential or a competency reads the staff here instead. Read once per tick, after the packs that change them.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, User>> FreshStaffAsync(CancellationToken ct)
+    {
+        if (_freshStaff is not null) return _freshStaff;
+
+        var wanted = DemoPeople.StaffEmails.Keys.Select(key => (Key: key, Id: Directory.Staff(key)?.Id)).Where(x => x.Id is not null).ToList();
+        var users = await DemoQueries.UsersByIds(Db, wanted.Select(x => x.Id!.Value).ToList()).ToListAsync(ct);
+        return _freshStaff = wanted.ToDictionary(x => x.Key, x => users.First(u => u.Id == x.Id));
+    }
+
     /// <summary>
     /// The audit stamps of this tick (plan 4.4). Without a stamp an audit row says the row's own CreatedAt / UpdatedAt and the system actor;
     /// <see cref="StampAudit"/> names a time and a scripted person for the next save of one entity.
@@ -72,6 +89,9 @@ public sealed class DemoRun
         var actor = actorUserKey is null ? null : Directory.Staff(actorUserKey);
         Audit.Set(entityId, whenUtc, actor?.Id, actor is null ? null : $"{actor.FirstName} {actor.LastName}".Trim());
     }
+
+    /// <summary>The audit row the next save writes for <paramref name="entityId"/> says <paramref name="whenUtc"/> and that <paramref name="actor"/> did it.</summary>
+    public void StampAudit(Guid entityId, DateTime whenUtc, Odip.Domain.Entities.User actor) => Audit.Set(entityId, whenUtc, actor.Id, actor.FullName);
 
     public void Added(string kind, int count = 1) => Bump(_added, kind, count);
 

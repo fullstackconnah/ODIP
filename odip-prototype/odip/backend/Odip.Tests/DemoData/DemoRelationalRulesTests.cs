@@ -111,7 +111,7 @@ public class DemoRelationalRulesTests
     /// <summary>
     /// InMemory does not enforce unique indexes. After a full run, every unique index the model declares holds across the rows (a duplicate
     /// compatibility cell, a second active completion for a shift, a repeated obligation SourceKey would be rejected by PostgreSQL).
-    /// Partial indexes with the two filter shapes in this model ("IsActive", "X IS NOT NULL") are evaluated; any other filter fails the test
+    /// Partial indexes with the three filter shapes in this model ("IsActive", "X IS NOT NULL", "X IS NULL") are evaluated; any other filter fails the test
     /// loudly so a new one gets a rule here instead of being skipped.
     /// </summary>
     [Fact]
@@ -142,10 +142,12 @@ public class DemoRelationalRulesTests
                 Func<object, bool> applies = _ => true;
                 if (filter is not null)
                 {
-                    var match = System.Text.RegularExpressions.Regex.Match(filter, "^\"(?<name>\\w+)\"( IS NOT NULL)?$");
+                    var match = System.Text.RegularExpressions.Regex.Match(filter, "^\"(?<name>\\w+)\"( IS (?<not>NOT )?NULL)?$");
                     Assert.True(match.Success, $"{entityType.ClrType.Name}: unique index filter '{filter}' has no rule in this test");
                     var column = entityType.GetProperties().Single(p => p.Name == match.Groups["name"].Value).PropertyInfo!;
-                    applies = match.Groups[2].Success ? (row => column.GetValue(row) is not null) : (row => column.GetValue(row) is true);
+                    applies = !match.Groups[2].Success ? (row => column.GetValue(row) is true)
+                        : match.Groups["not"].Success ? (row => column.GetValue(row) is not null)
+                        : (row => column.GetValue(row) is null);
                 }
 
                 var groups = rows.Where(applies)

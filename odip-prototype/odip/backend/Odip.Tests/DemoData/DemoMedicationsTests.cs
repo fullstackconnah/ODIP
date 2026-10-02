@@ -19,7 +19,7 @@ public class DemoMedicationsTests
     private static async Task<DemoTestEnv> EnvWithTheOldSeedsRegisterAsync(bool oldSeedPresent = true)
     {
         var env = DemoTestEnv.At(2026, 10, 2, 0, 30);
-        await DemoFixture.SeedPeopleAsync(env, oldSeedMedications: oldSeedPresent);
+        await DemoFixture.SeedPeopleAsync(env, oldSeed: oldSeedPresent);
         return env;
     }
 
