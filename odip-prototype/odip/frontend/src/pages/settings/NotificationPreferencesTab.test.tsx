@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import NotificationPreferencesTab from './NotificationPreferencesTab'
@@ -112,5 +112,73 @@ describe('NotificationPreferencesTab', () => {
     await user.click(screen.getByRole('button', { name: /save preferences/i }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/unknown event type or channel/i)
+  })
+})
+
+// The button reads "Saved!" for two seconds after a save, then a timer puts the label back. That timer used to be a bare setTimeout: a tab left
+// (or a test finished) inside the two seconds still fired setSaved into a dead tree — and after the test environment was torn down it threw
+// "window is not defined", which fails the run even though every test passed. Only setTimeout/clearTimeout are faked, and the tests click with
+// fireEvent and read the DOM straight away, so nothing here waits on a timer.
+describe('NotificationPreferencesTab — the "Saved!" reset timer', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    mockUseNotificationPreferences.mockReturnValue({ data: makeGrid(), isLoading: false, isError: false })
+    mockMutate.mockImplementation((_payload, opts) => opts?.onSuccess?.(makeGrid()))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const saveButton = () => screen.getByRole('button', { name: /^(Save Preferences|Saved!)$/ })
+  const edit = (label: string) => fireEvent.click(screen.getByLabelText(label))
+  const elapse = (ms: number) => act(() => { vi.advanceTimersByTime(ms) })
+
+  it('leaves nothing pending when the tab unmounts before the two seconds are up', () => {
+    const { unmount } = renderTab()
+
+    edit('Email — Leave request submitted')
+    fireEvent.click(saveButton())
+    expect(saveButton()).toHaveTextContent('Saved!')
+    expect(vi.getTimerCount()).toBe(1)
+
+    elapse(1000)
+    unmount()
+
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('restarts the two seconds when another save starts, so the old reset cannot cut the new "Saved!" short', () => {
+    renderTab()
+
+    edit('Email — Leave request submitted')
+    fireEvent.click(saveButton())
+    elapse(1500)                                          // the first reset is due 500 ms from now
+    edit('Email — Shift assigned')
+    fireEvent.click(saveButton())
+    expect(saveButton()).toHaveTextContent('Saved!')
+
+    elapse(1000)                                          // 2500 ms after the first save: past the old reset, inside the new window
+    expect(saveButton()).toHaveTextContent('Saved!')
+    elapse(1000)                                          // 2500 ms after the second save
+    expect(saveButton()).toHaveTextContent('Save Preferences')
+  })
+
+  it('stops saying "Saved!" as soon as a later save starts, and does not bring it back when that save is rejected', () => {
+    renderTab()
+
+    edit('Email — Leave request submitted')
+    fireEvent.click(saveButton())
+    expect(saveButton()).toHaveTextContent('Saved!')
+
+    mockMutate.mockImplementationOnce((_payload, opts) => {
+      opts?.onError?.({ response: { status: 400, data: { errors: ['Unknown event type or channel.'] } } })
+    })
+    elapse(500)
+    edit('Email — Shift assigned')
+    fireEvent.click(saveButton())
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/unknown event type or channel/i)
+    expect(saveButton()).toHaveTextContent('Save Preferences')
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

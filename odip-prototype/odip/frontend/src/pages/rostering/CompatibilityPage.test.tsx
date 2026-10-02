@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import CompatibilityPage from './CompatibilityPage'
 
@@ -157,5 +157,56 @@ describe('CompatibilityPage — the server\'s refusal reaches the user', () => {
     )
     expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
     expect(screen.queryByText(GENERIC_SAVE_ERROR)).not.toBeInTheDocument()
+  })
+})
+
+// A refused edit leaves a warning icon on its cell for four seconds, one timer per cell. Those timers were bare setTimeouts: one left running past
+// the page fired setFailedKeys into a tree that was gone, and past the end of the test environment it threw "window is not defined", which fails
+// the whole run even though every test passed. Only setTimeout/clearTimeout are faked, and the tests use fireEvent and read the DOM straight away.
+describe('CompatibilityPage — the failed-cell icon timers', () => {
+  const FAILED_ICON = "Couldn't save — try again."
+  const SAM_WITH_ALEX = 'Sam Taylor with Alex Rivera: Allowed'
+  const MORGAN_WITH_JAMIE = 'Morgan Lee with Jamie Chen: Allowed'
+
+  beforeEach(() => {
+    mockUpsertMutate.mockReset()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const refuse = (label: string) => fireEvent.change(screen.getByLabelText(label), { target: { value: 'Preferred' } })
+  const elapse = (ms: number) => act(() => { vi.advanceTimersByTime(ms) })
+
+  it('leaves nothing pending when the page unmounts while icons are still showing', () => {
+    failNextUpsertWith(badRequest(NOT_READY_MESSAGE))
+    failNextUpsertWith(badRequest(NOT_READY_MESSAGE))
+    const { unmount } = render(<CompatibilityPage />)
+
+    refuse(SAM_WITH_ALEX)
+    refuse(MORGAN_WITH_JAMIE)
+    expect(screen.getAllByTitle(FAILED_ICON)).toHaveLength(2)
+    expect(vi.getTimerCount()).toBe(2)
+
+    elapse(1000)
+    unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('gives a cell that is refused again a fresh four seconds, instead of letting its first timer take the icon away early', () => {
+    failNextUpsertWith(badRequest(NOT_READY_MESSAGE))
+    failNextUpsertWith(badRequest(NOT_READY_MESSAGE))
+    render(<CompatibilityPage />)
+
+    refuse(SAM_WITH_ALEX)                       // icon up, first timer due at 4000
+    elapse(3000)
+    refuse(SAM_WITH_ALEX)                       // the same cell refused again, second timer due at 7000
+    expect(vi.getTimerCount()).toBe(1)
+
+    elapse(2000)                                // 5000: past the first timer, inside the second
+    expect(screen.getAllByTitle(FAILED_ICON)).toHaveLength(1)
+    elapse(2000)                                // 7000
+    expect(screen.queryByTitle(FAILED_ICON)).not.toBeInTheDocument()
   })
 })

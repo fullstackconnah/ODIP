@@ -1,17 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import ClaimDetailPage from './ClaimDetailPage'
 import type { ClaimLineItemDto, TripClaimDetailDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
 
-const { mockUseClaim } = vi.hoisted(() => ({
+const { mockUseClaim, mockUpdateClaim } = vi.hoisted(() => ({
   mockUseClaim: vi.fn(),
+  mockUpdateClaim: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
   useClaim: mockUseClaim,
-  useUpdateClaim: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateClaim: () => ({ mutate: mockUpdateClaim, isPending: false }),
   useUpdateClaimLineItem: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
@@ -243,5 +244,34 @@ describe('ClaimDetailPage — failed request vs. missing record (PageState)', ()
     mockUseClaim.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
     renderPage()
     expect(screen.getByRole('status')).toHaveTextContent('Loading claim…')
+  })
+})
+
+// Saving the notes flashes "Saved!" for two seconds, then a timer puts the label back. That timer was a bare setTimeout: left running past the page
+// it fired setSaved into a tree that was gone, and past the end of the test environment it threw "window is not defined", which fails the whole
+// run even though every test passed. The notes are saved twice inside the window because the second save has to cancel the first one's timer,
+// not leave it running beside its own, or that first timer would outlive the page all the same.
+describe('ClaimDetailPage — the "Saved!" reset timer', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    mockUpdateClaim.mockReset()
+  })
+
+  it('leaves nothing pending when the page unmounts inside the two seconds after saving the notes', () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem()]), isLoading: false })
+    mockUpdateClaim.mockImplementation((_vars, opts) => opts?.onSuccess?.())
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const { unmount } = renderPage()
+    const save = () => screen.getByRole('button', { name: /^(Save Notes|Saved!)$/ })
+
+    fireEvent.click(save())
+    expect(save()).toHaveTextContent('Saved!')
+    act(() => { vi.advanceTimersByTime(500) })
+    fireEvent.click(save())
+    expect(mockUpdateClaim).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(1)
+
+    unmount()
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

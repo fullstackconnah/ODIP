@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { useState } from 'react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, RouterProvider, createMemoryRouter } from 'react-router-dom'
 import ParticipantsPage, { ParticipantsTable } from './ParticipantsPage'
@@ -492,13 +493,16 @@ describe('ParticipantsTable: arriving from a completed onboarding', () => {
     return router
   }
 
+  /** The notice is deferred by a timer, so a loaded machine (the Docker image build's test gate) can take longer than the suite's 3 s default (src/test/setup.ts) to show it. */
+  const SLOW = { timeout: 5000 }
+
   /** One macrotask: long enough for anything the page schedules for "a tick after load" to have run. */
   const aTick = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 5)) })
 
   it('confirms who is now active in a polite status message, and highlights that one row only', async () => {
     renderArrival(participantActivatedState('p1', 'Jamie Smith'))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Jamie Smith is now an active participant.')
+    expect(await screen.findByRole('status', {}, SLOW)).toHaveTextContent('Jamie Smith is now an active participant.')
     expect(screen.getByText('Jamie Smith').closest('tr')).toHaveClass(HIGHLIGHT)
     expect(screen.getByText('Avery Lee').closest('tr')).not.toHaveClass(HIGHLIGHT)
   })
@@ -510,15 +514,61 @@ describe('ParticipantsTable: arriving from a completed onboarding', () => {
     expect(screen.getByText('Jamie Smith').closest('tr')).toHaveClass(HIGHLIGHT)
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Jamie Smith is now an active participant.')
+    expect(await screen.findByRole('status', {}, SLOW)).toHaveTextContent('Jamie Smith is now an active participant.')
   })
 
   it('shows it once: the notice is cleared from history state, so a reload does not replay it, while it stays on screen', async () => {
     const router = renderArrival(participantActivatedState('p1', 'Jamie Smith'))
 
-    await waitFor(() => expect(router.state.location.state).toBeNull())
+    await waitFor(() => expect(router.state.location.state).toBeNull(), SLOW)
     expect(router.state.location.pathname + router.state.location.search).toBe('/participants?tab=active')
-    expect(await screen.findByRole('status')).toHaveTextContent(/now an active participant/i)
+    expect(await screen.findByRole('status', {}, SLOW)).toHaveTextContent(/now an active participant/i)
+  })
+
+  it('keeps the confirmation through an unmount and remount before the tick: the history state is cleared only once the notice has been shown', async () => {
+    // The page defers the notice by a timer that its cleanup clears. If the history state were cleared up front, a screen that unmounted before the tick
+    // (a remount for any reason) would find nothing to read when it came back, and the confirmation would be lost for good.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      mockUseParticipants.mockReturnValue({ data: people(), isLoading: false })
+      function Harness() {
+        const [shown, setShown] = useState(true)
+        return (
+          <>
+            <button type="button" onClick={() => setShown(value => !value)}>toggle</button>
+            {shown && <ParticipantsTable />}
+          </>
+        )
+      }
+      const router = createMemoryRouter(
+        [{ path: '/participants', element: <Harness /> }],
+        { initialEntries: [{ pathname: '/participants', search: '?tab=active', state: participantActivatedState('p1', 'Jamie Smith') }] },
+      )
+      // Let the router and every other promise settle without advancing the fake clock, so the page's one-tick timer has NOT fired.
+      const settle = () => act(async () => { for (let turn = 0; turn < 50; turn++) await Promise.resolve() })
+      render(<RouterProvider router={router} />)
+      await settle()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'toggle' }))
+      expect(screen.queryByText('Jamie Smith')).not.toBeInTheDocument()
+      await settle()
+      fireEvent.click(screen.getByRole('button', { name: 'toggle' }))
+      await settle()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(10) })
+      await settle()
+
+      const notices = screen.getAllByRole('status')
+      expect(notices).toHaveLength(1)
+      expect(notices[0]).toHaveTextContent('Jamie Smith is now an active participant.')
+      expect(screen.getByText('Jamie Smith').closest('tr')).toHaveClass(HIGHLIGHT)
+      // Shown once: only now has the arrival left the history, so a reload does not replay it.
+      expect(router.state.location.state).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shows no confirmation and highlights nothing for an ordinary visit, or for unrecognised navigation state', async () => {
