@@ -389,18 +389,9 @@ public sealed class LiveSetPack : IDemoPack
 
         private bool? _oldNotesThere;
 
-        /// <summary>
-        /// Plan 4.5: the old seed guards the shift-notes table with Any() (SeedShiftNotesAsync), so the top-up never writes its FIRST row: it needs
-        /// one of the old seed's own six notes (fixed ids 78..01 to 78..06) to be there already.
-        /// </summary>
-        private async Task<bool> OldSeedNotesThereAsync(CancellationToken ct)
-        {
-            if (_oldNotesThere is { } known) return known;
-            var ids = Enumerable.Range(1, 6).Select(n => Guid.Parse($"78000000-0000-0000-0000-{n:x12}")).ToList();
-            _oldNotesThere = (await _run.ExistingIdsAsync<ShiftNote>(ids, ct)).Count > 0;
-            if (!_oldNotesThere.Value) _run.Skipped("live shift notes", "none of the old seed's shift notes is there, so a note would be the first row of a guarded table");
-            return _oldNotesThere.Value;
-        }
+        /// <summary>Plan 4.5: never the FIRST row of the shift-notes table the old seed guards with Any() (see <see cref="OldSeedChecks"/>); asked once per tick.</summary>
+        private async Task<bool> OldSeedNotesThereAsync(CancellationToken ct) =>
+            _oldNotesThere ??= await OldSeedChecks.ShiftNotesThereAsync(_run, "live shift notes", ct);
 
         private async Task WriteAsync(Live live, List<Event> events, CancellationToken ct)
         {

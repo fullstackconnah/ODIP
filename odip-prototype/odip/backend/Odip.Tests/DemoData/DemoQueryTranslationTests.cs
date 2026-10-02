@@ -67,6 +67,8 @@ public class DemoQueryTranslationTests
         yield return Q(nameof(DemoQueries.AdministrationsByIds), db => DemoQueries.AdministrationsByIds(db, Ids), "\"Id\" = ANY (");
         yield return Q(nameof(DemoQueries.RunningBreaksOf), db => DemoQueries.RunningBreaksOf(db, Ids), "\"ShiftCompletionId\" = ANY (", "\"EndedAt\" IS NULL");
         yield return Q(nameof(DemoQueries.NotesOf), db => DemoQueries.NotesOf(db, Ids), "\"ShiftId\" = ANY (");
+        yield return Q(nameof(DemoQueries.ClosedCompletions), db => DemoQueries.ClosedCompletions(db, Today), "INNER JOIN", "\"IsActive\"", "\"SubmittedAt\" IS NOT NULL", "\"ServiceDate\" >=", "\"Status\"");
+        yield return Q(nameof(DemoQueries.ActiveRoutinesOf), db => DemoQueries.ActiveRoutinesOf(db, Ids), "\"ParticipantId\" = ANY (", "\"IsActive\"");
         yield return Q(nameof(DemoQueries.SlotsRecorded), db => DemoQueries.SlotsRecorded(db, Ids, new DateTime(2026, 9, 25), new DateTime(2026, 10, 3)), "\"ParticipantMedicationId\" = ANY (", "\"ScheduledAt\" >=", "\"ScheduledAt\" <", "\"SupersededByAdministrationId\" IS NULL");
         yield return Q(nameof(DemoQueries.PrnDosesAwaitingOutcome), db => DemoQueries.PrnDosesAwaitingOutcome(db, Ids, DateTime.UtcNow), "\"ParticipantMedicationId\" = ANY (", "\"PrnOutcome\" IS NULL", "LIKE 'demo-v1:%'");
     }
@@ -79,7 +81,8 @@ public class DemoQueryTranslationTests
         var offered = typeof(DemoQueries).GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
             .Where(m => typeof(IQueryable).IsAssignableFrom(m.ReturnType)).Select(m => m.Name).Distinct().ToList();
         Assert.True(offered.Count >= 30, $"only {offered.Count} queries found by reflection");
-        Assert.Empty(offered.Where(name => !covered.Contains(name)));
+        var missing = offered.Where(name => !covered.Contains(name)).ToList();
+        Assert.True(missing.Count == 0, "queries with no translation test: " + string.Join(", ", missing));
     }
 
     [Theory]

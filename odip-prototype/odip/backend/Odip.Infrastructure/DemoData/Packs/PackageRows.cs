@@ -133,6 +133,22 @@ internal static class PackageRows
         };
     }
 
+    /// <summary>
+    /// The one break of a finished shift, between two instants: a break is a stretch of elapsed time after the shift started, so history places it
+    /// by adding minutes to the start instant, never by a wall-clock time that a clock change could move.
+    /// </summary>
+    public static ShiftBreak BreakBetween(DemoRun run, ShiftCompletion completion, User worker, DateTime startedAt, DateTime endedAt) => new()
+    {
+        Id = DemoIds.For("shift-break", completion.Id, "history"),
+        TenantId = run.TenantId,
+        ShiftCompletionId = completion.Id,
+        StartedAt = startedAt,
+        EndedAt = endedAt,
+        CreatedByUserId = worker.Id,
+        CreatedAt = startedAt,
+        UpdatedAt = endedAt,
+    };
+
     /// <summary>A shift note. The flags are what the scanner says of the body, never typed (NOTES-02).</summary>
     public static ShiftNote Note(DemoRun run, Shift shift, User author, DateTime atLocal, string body)
     {

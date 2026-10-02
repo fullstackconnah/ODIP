@@ -166,6 +166,24 @@ public static class DemoQueries
     public static IQueryable<Shift> UnreviewedShifts(OdipDbContext db, DateOnly onOrBefore, List<Guid> participantIds) =>
         db.Shifts.Where(s => s.Status == ShiftStatus.PendingReview && s.ShiftPatternId == null && s.ServiceDate <= onOrBefore && participantIds.Contains(s.ParticipantId));
 
+    /// <summary>A closed shift with the active completion the worker submitted for it.</summary>
+    public sealed record ClosedPair(ShiftCompletion Completion, Shift Shift);
+
+    /// <summary>
+    /// The closed shifts (PendingReview or Completed) from a date on, each with its active submitted completion, read only: the material the shift
+    /// package history decorates. Only shifts that had a worker.
+    /// </summary>
+    public static IQueryable<ClosedPair> ClosedCompletions(OdipDbContext db, DateOnly since) =>
+        from c in db.ShiftCompletions.AsNoTracking()
+        join s in db.Shifts.AsNoTracking() on c.ShiftId equals s.Id
+        where c.IsActive && c.SubmittedAt != null && c.ActualEnd != null && s.UserId != null && s.ServiceDate >= since
+              && (s.Status == ShiftStatus.PendingReview || s.Status == ShiftStatus.Completed)
+        select new ClosedPair(c, s);
+
+    /// <summary>Read only: the active routines of these participants, which the shift package matches against a shift's window.</summary>
+    public static IQueryable<ParticipantRoutine> ActiveRoutinesOf(OdipDbContext db, List<Guid> participantIds) =>
+        db.ParticipantRoutines.AsNoTracking().Where(r => participantIds.Contains(r.ParticipantId) && r.IsActive);
+
     // ── medications, doses and the shift package ──
 
     /// <summary>Read only: a medication is read for its schedule and never changed.</summary>

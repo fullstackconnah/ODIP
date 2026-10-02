@@ -204,7 +204,8 @@ public class DemoClockReplayTests
         var totalDays = growth.Sum(g => g.Days);
         var totalRows = growth.Sum(g => g.Rows);
         Assert.True(totalRows / totalDays < 100, $"{totalRows} rows added over {totalDays:0} days is {totalRows / totalDays:0.0} a day");
-        // A tick after a gap builds at most the week of medication history, the live days and the roster weeks ahead (audit rows included): under a thousand rows.
-        Assert.All(growth, g => Assert.True(g.Rows < 1000, $"one tick added {g.Rows} rows"));
+        // A tick after a gap of a month or more builds every history window at once (four weeks of the shift package, a week of medication), the live
+        // days and the roster weeks ahead, audit rows included: the biggest possible tick, about 1,100 rows here, so under 1,500.
+        Assert.All(growth, g => Assert.True(g.Rows < 1500, $"one tick added {g.Rows} rows"));
     }
 }
