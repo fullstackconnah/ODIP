@@ -192,6 +192,20 @@ public sealed record PlanQuoteRequest
     public IReadOnlyCollection<HolidayCoverage>? HolidayCoverage { get; init; }
     /// <summary>The date of the last holiday override row (the owner-maintained gaps and part-day holidays); the engine says so when the period runs past it. <see cref="DateOnly.MinValue"/> means there are none; null means it was not asked.</summary>
     public DateOnly? HolidayOverridesThrough { get; init; }
+    /// <summary>
+    /// How a delivery state's IANA zone id is turned into a zone: null is the host's tz database. A seam so a host with no tz database can be tested; a lookup that throws
+    /// <see cref="TimeZoneNotFoundException"/> for every id is that host, and every zone is then a fixed +10:00 (see <see cref="PlanTimeBasis"/>).
+    /// </summary>
+    public Func<string, TimeZoneInfo>? ZoneLookup { get; init; }
+}
+
+/// <summary>The clock a quote counted its hours on (<see cref="PlanQuote.TimeBasis"/>).</summary>
+public static class PlanTimeBasis
+{
+    /// <summary>The delivery zones came from the host's tz database: the nights the clocks change are 7 or 9 hours long.</summary>
+    public const string TzDatabase = "tz-database";
+    /// <summary>The host had no tz database, so every zone was a fixed +10:00 with no clock changes: right for AEST, an hour out in AEDT, and a clock-change night is an ordinary night.</summary>
+    public const string FixedOffset = "fixed+10:00";
 }
 
 /// <summary>The result of pricing a set of blocks over a period.</summary>
@@ -205,6 +219,12 @@ public sealed record PlanQuote
     public IReadOnlyList<HolidayOccurrence> HolidayOccurrences { get; init; } = Array.Empty<HolidayOccurrence>();
     public IReadOnlyList<OwnerQuestion> OpenQuestions { get; init; } = Array.Empty<OwnerQuestion>();
     public PlanTotals Totals { get; init; } = new();
+
+    /// <summary>
+    /// The clock the hours were counted on: <see cref="PlanTimeBasis.TzDatabase"/> or <see cref="PlanTimeBasis.FixedOffset"/>. The same request gives the same quote on the same basis; a
+    /// host with no tz database counts the 3 October 2026 Saturday night as 8 hours (one sleepover item) where one with it counts 7 (hourly), so the answer says which it was.
+    /// </summary>
+    public string TimeBasis { get; init; } = string.Empty;
 
     /// <summary>True while anything needs a person: an issue, or a line flagged Review. A plan in this state is not ready to approve.</summary>
     public bool NeedsReview => Issues.Count > 0 || Totals.ReviewLines > 0;

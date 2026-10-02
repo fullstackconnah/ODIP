@@ -67,7 +67,7 @@ public static class PlanPricingEngine
                 string.Create(CultureInfo.InvariantCulture, $"The blocks and period would make about {estimate:N0} lines, more than the {MaxEstimatedLines:N0} one quote prices: shorten the period, price fewer blocks, or use fewer headcount changes."), null);
         else
         {
-            var pricer = new OccurrencePricer(policy, new PlanCatalogue(request.Catalogue ?? Array.Empty<SupportCatalogueItem>()), new HolidayCalendar(request.Holidays ?? Array.Empty<HolidayEntry>()));
+            var pricer = new OccurrencePricer(policy, new PlanCatalogue(request.Catalogue ?? Array.Empty<SupportCatalogueItem>()), new HolidayCalendar(request.Holidays ?? Array.Empty<HolidayEntry>()), request.ZoneLookup);
             var seen = new HashSet<string>(StringComparer.Ordinal);
             var states = new SortedSet<string>(StringComparer.Ordinal);
             var runsPastTheLastDay = false;
@@ -294,9 +294,15 @@ public static class PlanPricingEngine
         return new PlanQuote
         {
             PeriodFrom = request.PeriodFrom, PeriodTo = request.PeriodTo, Lines = lines, Issues = issues, Notices = notices,
-            HolidayOccurrences = holidayOccurrences, OpenQuestions = questions, Totals = totals,
+            HolidayOccurrences = holidayOccurrences, OpenQuestions = questions, Totals = totals, TimeBasis = TimeBasisOf(request.ZoneLookup),
         };
     }
+
+    /// <summary>The clock the quote's hours are counted on: when even the fallback zone is not in the host's tz database every zone is the fixed +10:00.</summary>
+    private static string TimeBasisOf(Func<string, TimeZoneInfo>? lookup) =>
+        ReferenceEquals(ProviderLocalTime.ResolveZone(ProviderLocalTime.FallbackZoneId, lookup ?? TimeZoneInfo.FindSystemTimeZoneById), ProviderLocalTime.LastResortZone)
+            ? PlanTimeBasis.FixedOffset
+            : PlanTimeBasis.TzDatabase;
 
     /// <summary>Issues deduplicated as they arrive: the same reason and text on one block is one issue with a count and the first date it was met.</summary>
     private sealed class IssueLog

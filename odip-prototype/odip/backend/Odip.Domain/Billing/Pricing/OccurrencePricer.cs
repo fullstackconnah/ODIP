@@ -45,15 +45,17 @@ internal sealed class OccurrencePricer
     private readonly PlanPricingPolicy _policy;
     private readonly PlanCatalogue _catalogue;
     private readonly HolidayCalendar _calendar;
+    private readonly Func<string, TimeZoneInfo> _zoneLookup;
     private readonly Dictionary<string, TimeZoneInfo> _zones = new(StringComparer.Ordinal);
     private readonly Dictionary<(DateOnly Date, string State, bool Ignore), IReadOnlyList<DaySpan>> _spans = new();
     private readonly Dictionary<(ItemNeed Need, DateOnly Date, PriceZone Zone), ItemChoice> _choices = new();
 
-    public OccurrencePricer(PlanPricingPolicy policy, PlanCatalogue catalogue, HolidayCalendar calendar)
+    public OccurrencePricer(PlanPricingPolicy policy, PlanCatalogue catalogue, HolidayCalendar calendar, Func<string, TimeZoneInfo>? zoneLookup = null)
     {
         _policy = policy;
         _catalogue = catalogue;
         _calendar = calendar;
+        _zoneLookup = zoneLookup ?? TimeZoneInfo.FindSystemTimeZoneById;
     }
 
     // ── What a block needs from the catalogue ─────────────────────────────────────
@@ -204,7 +206,7 @@ internal sealed class OccurrencePricer
     private TimeZoneInfo ZoneOf(string state)
     {
         if (!_zones.TryGetValue(state, out var zone))
-            _zones[state] = zone = ProviderLocalTime.ResolveZone(StateTimeZoneMap.Resolve(state));
+            _zones[state] = zone = ProviderLocalTime.ResolveZone(StateTimeZoneMap.Resolve(state), _zoneLookup);
         return zone;
     }
 

@@ -361,4 +361,43 @@ public class PlanPricingSleepoverTests
         // Saturday 22:00-24:00 is 2 h; Sunday 00:00-06:00 is 7 elapsed hours because 02:00-03:00 happens twice.
         Assert.Equal(new[] { 2m, 7m }, quote.Lines.Select(l => l.Qty));
     }
+
+    // ── Review L10: the quote says which clock it counted on ──
+
+    [Fact]
+    public void A_quote_names_the_time_basis_the_host_gave_it_the_tz_database_or_the_fixed_plus_10_fallback()
+    {
+        var quote = QuoteOne(Block("any", PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(9), T(13)), Mon12Oct);
+
+        Assert.Equal(ProviderLocalTime.TzDataAvailable ? PlanTimeBasis.TzDatabase : PlanTimeBasis.FixedOffset, quote.TimeBasis);
+        Assert.Equal("tz-database", PlanTimeBasis.TzDatabase);
+        Assert.Equal("fixed+10:00", PlanTimeBasis.FixedOffset);
+    }
+
+    [Fact]
+    public void With_no_tz_database_the_clock_change_night_is_an_ordinary_sleepover_and_the_quote_says_every_zone_was_a_fixed_plus_10()
+    {
+        // The 3 October 2026 Saturday night is 7 elapsed hours in New South Wales (hourly, 874.58) and 8 hours on a clock that never changes (one Each item, 311.79).
+        // The same request used to give either answer depending on the host, and nothing in the answer said which rule applied.
+        var block = Overnight(PlanSupportType.PersonalCare, DayOfWeek.Saturday, T(22), T(6));
+        var request = new PlanQuoteRequest
+        {
+            Blocks = new[] { block }, PeriodFrom = new DateOnly(2026, 10, 3), PeriodTo = new DateOnly(2026, 10, 3),
+            Catalogue = RealCatalogue, ZoneLookup = _ => throw new TimeZoneNotFoundException("no tz database on this host"),
+        };
+
+        var quote = PlanPricingEngine.Quote(request);
+
+        Assert.Equal(PlanTimeBasis.FixedOffset, quote.TimeBasis);
+        Assert.Equal(("01_010_0107_1_1", 1m, 311.79m), (Assert.Single(quote.Lines).ItemCode, quote.Lines[0].Qty, quote.Lines[0].Total));
+        Assert.Empty(quote.Issues);
+    }
+
+    [Fact]
+    public void A_quote_that_prices_nothing_still_names_its_time_basis()
+    {
+        var quote = Quote(Array.Empty<PlanBlock>(), Mon12Oct, Mon12Oct);
+
+        Assert.False(string.IsNullOrEmpty(quote.TimeBasis));
+    }
 }
