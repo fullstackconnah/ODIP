@@ -8,6 +8,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
@@ -344,13 +345,20 @@ public class StaffController : ControllerBase
     private readonly TimeProvider _clock;
     private readonly IFirebaseUserService _firebaseUserService;
     private readonly ILogger<StaffController>? _logger;
+    // The tenant this request writes to (the caller's own, or the one a SuperAdmin is viewing as). Null when there is none: a SuperAdmin
+    // with no tenant selected, and a test that does not care.
+    private readonly ICurrentTenant? _currentTenant;
+
+    /// <summary>The email domain of a tenant, or null when none is given or it cannot be found. Tenants have no query filter, so any tenant is readable.</summary>
+    private async Task<string?> TenantEmailDomainAsync(Guid? tenantId, CancellationToken ct) =>
+        tenantId is null ? null : await _db.Tenants.Where(t => t.Id == tenantId).Select(t => t.EmailDomain).FirstOrDefaultAsync(ct);
 
     // IFirebaseUserService is intentionally NOT registered in Program.cs — see AdminUsersController: ActivatorUtilities falls back to the
     // parameter's default, so production needs no DI change while a unit test injects a mock.
     public StaffController(
         OdipDbContext db, IStaffAvailabilityItemsQuery? availabilityItemsQuery = null,
         Microsoft.Extensions.Configuration.IConfiguration? config = null, TimeProvider? clock = null,
-        IFirebaseUserService? firebaseUserService = null, ILogger<StaffController>? logger = null)
+        IFirebaseUserService? firebaseUserService = null, ILogger<StaffController>? logger = null, ICurrentTenant? currentTenant = null)
     {
         _db = db;
         _clock = clock ?? TimeProvider.System;
@@ -358,6 +366,7 @@ public class StaffController : ControllerBase
         _config = config;
         _firebaseUserService = firebaseUserService ?? new FirebaseUserService();
         _logger = logger;
+        _currentTenant = currentTenant;
     }
 
     /// <summary>Same default as RosteringController's own VarianceReviewMinutes — kept independent
@@ -513,6 +522,12 @@ public class StaffController : ControllerBase
         var emailTaken = await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email.ToLower() == emailLower, ct);
         if (emailTaken) return Conflict(ApiResponse<StaffDetailDto>.Fail("A user with this email already exists."));
 
+        // Any address can sign in, so one at neither the tenant's own domain nor a common provider (a typo, another organisation's) is a live
+        // login for whoever owns it: ask for a confirmation first (see AddressConfirmation).
+        var tenantDomain = await TenantEmailDomainAsync(_currentTenant?.TenantId, ct);
+        if (tenantDomain is not null && !dto.AddressConfirmed && AddressConfirmation.Needed(emailLower, tenantDomain))
+            return BadRequest(ApiResponse<StaffDetailDto>.Fail(AddressConfirmation.Message(emailLower, tenantDomain), AddressConfirmation.Code));
+
         // Collision-safe username handling: reuses the migration's own algorithm (Task 1's
         // StaffUserUnificationMapping.ResolveUsername) rather than duplicating a second,
         // divergent suffixing implementation here.
@@ -577,9 +592,10 @@ public class StaffController : ControllerBase
         if (reservedRowError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(reservedRowError));
 
         var emailLower = EmailIdentity.Normalise(dto.Email);
+        var addressChanged = emailLower != EmailIdentity.Normalise(s.Email);
         // Only when the address is being CHANGED: an edit to some other field of a row that already holds such an address (the role guardrail
         // above is what keeps a tenant caller off SuperAdmin accounts) must not start failing because of the address.
-        if (emailLower != EmailIdentity.Normalise(s.Email))
+        if (addressChanged)
         {
             var reservedError = ReservedDomainError(emailLower);
             if (reservedError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(reservedError));
@@ -588,6 +604,15 @@ public class StaffController : ControllerBase
         var emailTaken = await _db.Users.IgnoreQueryFilters()
             .AnyAsync(u => u.Id != id && u.Email.ToLower() == emailLower, ct);
         if (emailTaken) return Conflict(ApiResponse<StaffDetailDto>.Fail("A user with this email already exists."));
+
+        // A NEW address at neither the tenant's own domain nor a common provider needs a confirmation (see AddressConfirmation). An address the
+        // row already holds never does, so legacy rows stay editable.
+        if (addressChanged && !dto.AddressConfirmed)
+        {
+            var rowTenantDomain = await TenantEmailDomainAsync(s.TenantId, ct);
+            if (rowTenantDomain is not null && AddressConfirmation.Needed(emailLower, rowTenantDomain))
+                return BadRequest(ApiResponse<StaffDetailDto>.Fail(AddressConfirmation.Message(emailLower, rowTenantDomain), AddressConfirmation.Code));
+        }
 
         s.FirstName = dto.FirstName; s.LastName = dto.LastName; s.Position = dto.Position; s.Role = dto.Role;
         s.Email = emailLower; s.Mobile = dto.Mobile; s.Region = dto.Region;

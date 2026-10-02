@@ -183,6 +183,11 @@ public class AdminUsersController : ControllerBase
         if (usernameExists)
             return Conflict(ApiResponse<object>.Fail("A user with this username already exists"));
 
+        // Any address can sign in, so one at neither the tenant's own domain nor a common provider (a typo, another organisation's) is a live
+        // login for whoever owns it. Ask the admin to check it before anything is made (see AddressConfirmation); the screen answers with the flag.
+        if (!dto.AddressConfirmed && AddressConfirmation.Needed(email, tenant.EmailDomain))
+            return BadRequest(ApiResponse<object>.Fail(AddressConfirmation.Message(email, tenant.EmailDomain), AddressConfirmation.Code));
+
         // Create the Firebase Auth account FIRST, before any DB write. This is the fix for a
         // confirmed data-integrity bug: previously the DB row was inserted before the Firebase
         // call, so a Firebase failure (e.g. a bad/placeholder service account raising

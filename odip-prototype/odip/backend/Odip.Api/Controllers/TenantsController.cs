@@ -86,6 +86,11 @@ public class TenantsController : ControllerBase
             var candidateEmail = EmailIdentity.Normalise(candidate.Email);
             if (await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email.ToLower() == candidateEmail, ct))
                 return Conflict("A user with this email already exists");
+
+            // An address at neither the new tenant's own domain nor a common provider is a live login for whoever owns it: ask the admin to check
+            // it before the tenant, the user or an account is made (see AddressConfirmation); the screen answers with the flag.
+            if (!candidate.AddressConfirmed && AddressConfirmation.Needed(candidateEmail, domain))
+                return BadRequest(ApiResponse<object>.Fail(AddressConfirmation.Message(candidateEmail, domain), AddressConfirmation.Code));
         }
 
         await using var transaction = await _db.Database.BeginTransactionAsync();
