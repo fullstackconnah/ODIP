@@ -104,8 +104,8 @@ public class IncidentTimelineTests
         var urgent = IncidentTimeline.For(Story("I-03"), filed, Zone("NSW"));                 // Review, Escalate
         DateTime When(IReadOnlyList<IncidentStep> script, IncidentStepKind kind) => script.Single(s => s.Kind == kind).WhenUtc;
         var byHand = filed.AddHours(3);
-        IncidentReport Incident(IncidentStatus status, DateTime? reviewedAt = null, DateTime? resolvedAt = null, QscReportingStatus qsc = QscReportingStatus.Required, DateTime? reportedAt = null) =>
-            new() { Status = status, ReviewedAt = reviewedAt, ResolvedAt = resolvedAt, QscReportingStatus = qsc, QscReportedAt = reportedAt, CreatedAt = filed, UpdatedAt = filed };
+        IncidentReport Incident(IncidentStatus status, DateTime? reviewedAt = null, DateTime? resolvedAt = null, QscReportingStatus qsc = QscReportingStatus.Required, DateTime? reportedAt = null, DateTime? updatedAt = null) =>
+            new() { Status = status, ReviewedAt = reviewedAt, ResolvedAt = resolvedAt, QscReportingStatus = qsc, QscReportedAt = reportedAt, CreatedAt = filed, UpdatedAt = updatedAt ?? reviewedAt ?? filed };
         bool Pending(IncidentReport incident, IReadOnlyList<IncidentStep> script, IncidentStepKind kind) => IncidentTimeline.IsPending(incident, script.Single(s => s.Kind == kind), script);
 
         // Just filed: it waits for its review, and its report is owed.
@@ -119,6 +119,7 @@ public class IncidentTimelineTests
         Assert.False(Pending(reviewed, full, IncidentStepKind.Close));
         Assert.True(Pending(Incident(IncidentStatus.UnderReview, reviewedAt: When(urgent, IncidentStepKind.Review)), urgent, IncidentStepKind.Escalate));
         Assert.False(Pending(Incident(IncidentStatus.Escalated, reviewedAt: When(urgent, IncidentStepKind.Review)), urgent, IncidentStepKind.Escalate));
+        Assert.False(Pending(Incident(IncidentStatus.UnderReview, reviewedAt: When(urgent, IncidentStepKind.Review), updatedAt: byHand), urgent, IncidentStepKind.Escalate));      // stepped back by somebody since
 
         // Reviewed by somebody else (a time the script never wrote): nothing after it is the script's to make.
         var theirs = Incident(IncidentStatus.UnderReview, reviewedAt: byHand);

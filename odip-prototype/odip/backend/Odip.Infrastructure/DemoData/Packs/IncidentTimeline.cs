@@ -85,8 +85,9 @@ public static class IncidentTimeline
     /// <summary>
     /// Whether a step is still to be made: the incident stands exactly as the script left it before this step (compare-and-set, plan 4.3). The review
     /// is recognised by its own instant, which nobody else would have written, so an incident somebody reviews, resolves or reopens by hand stands
-    /// otherwise and the script leaves it alone from then on; an edit that touches none of these fields does not stop it. A step that is not pending is
-    /// either made already or not the script's to make.
+    /// otherwise and the script leaves it alone from then on; an edit that touches none of these fields does not stop it. The escalation follows the
+    /// review at once, so it also needs the incident untouched since the review: a coordinator who steps an escalated incident back to under review is
+    /// not escalated again. A step that is not pending is either made already or not the script's to make.
     /// </summary>
     public static bool IsPending(IncidentReport incident, IncidentStep step, IReadOnlyList<IncidentStep> script)
     {
@@ -94,7 +95,8 @@ public static class IncidentTimeline
         return step.Kind switch
         {
             IncidentStepKind.Review => incident.Status == IncidentStatus.Submitted && incident.ReviewedAt is null,
-            IncidentStepKind.Escalate => incident.Status == IncidentStatus.UnderReview && incident.ReviewedAt == WhenOf(IncidentStepKind.Review),
+            IncidentStepKind.Escalate => incident.Status == IncidentStatus.UnderReview && incident.ReviewedAt == WhenOf(IncidentStepKind.Review)
+                && incident.UpdatedAt == WhenOf(IncidentStepKind.Review),
             IncidentStepKind.Report => incident.QscReportingStatus == QscReportingStatus.Required && incident.QscReportedAt is null,
             IncidentStepKind.Resolve => incident.Status == IncidentStatus.UnderReview && incident.ReviewedAt == WhenOf(IncidentStepKind.Review) && incident.ResolvedAt is null,
             IncidentStepKind.Close => incident.Status == IncidentStatus.Resolved && incident.ResolvedAt == WhenOf(IncidentStepKind.Resolve),

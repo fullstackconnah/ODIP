@@ -295,6 +295,26 @@ public class DemoIncidentScriptTests
     }
 
     [Fact]
+    public async Task AnEscalatedIncidentACoordinatorStepsBack_IsNotEscalatedAgain()
+    {
+        var env = await TickAsync(FirstRun);
+        var steppedBack = new DateTime(2026, 10, 2, 0, 36, 0, DateTimeKind.Utc);
+        await EditAsync(env, "I-03", i =>
+        {
+            Assert.Equal(IncidentStatus.Escalated, i.Status);
+            i.Status = IncidentStatus.UnderReview;                                                // the review stamp stays, as the app leaves it
+            i.UpdatedAt = steppedBack;
+        });
+
+        await RunAsync(env, Utc("2026-10-02T05:00:00Z"));
+        await RunAsync(env, Utc("2026-10-03T05:00:00Z"));
+
+        var kept = Story(await IncidentsAsync(env), "I-03");
+        Assert.Equal(IncidentStatus.UnderReview, kept.Status);
+        Assert.Equal(steppedBack, kept.UpdatedAt);
+    }
+
+    [Fact]
     public async Task AnIncidentSomebodyReopens_IsNotReviewedAgain()
     {
         var env = await TickAsync(Utc("2026-10-02T00:40:00Z"));                                   // 10:40: the script has reviewed I-01 (10:25)
