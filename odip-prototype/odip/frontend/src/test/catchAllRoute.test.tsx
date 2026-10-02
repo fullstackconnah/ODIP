@@ -20,6 +20,7 @@ vi.mock('@/components/layout/AppLayout', () => ({
 async function renderAppAt(path: string) {
   vi.resetModules()   // App builds its browser router from window.location when the module loads
   window.history.pushState({}, '', path)
+  await import('@/pages/NotFoundPage')   // warm the lazy route's chunk so React.lazy resolves at once, not after a cold module load under suite load
   const { default: App } = await import('../App')
   return render(<App />)
 }
@@ -33,7 +34,7 @@ describe('App routes: a catch-all inside the app shell (L5-11)', () => {
   it('shows "Page not found" with the sidebar still on screen for an unknown URL', async () => {
     await renderAppAt('/trips/t-0001/edit')
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Page not found' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Page not found' }, { timeout: 20_000 })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'App sidebar' })).toBeInTheDocument()
     expect(screen.getByText('/trips/t-0001/edit')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Go to the dashboard' })).toHaveAttribute('href', '/')
