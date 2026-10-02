@@ -30,6 +30,12 @@ type FakeParticipant = {
 type FakeInquiry = { id: string; firstName: string; lastName: string; phone: string | null; source: string; participantId: string | null; createdAt: string }
 
 const INTAKE_DONE_AT = '2026-10-02T03:00:00Z'
+/**
+ * The hand-off confirmations ("Intake complete — X is now in onboarding.", "X is now an active participant.") appear after a wizard's mutation, a navigation
+ * and a page mount, and the activation one after a further timer tick. testing-library's 1000 ms default is too tight for that chain on a loaded machine
+ * (the Docker image build's test gate failed on it once), and the repo sets no global asyncUtilTimeout, so these waits ask for 5 s.
+ */
+const ARRIVAL = { timeout: 5000 }
 const EVIDENCE_REQUIRED = 'This participant cannot be activated until their signed service agreement evidence is recorded.'
 const httpError = (status: number, message: string) =>
   Object.assign(new Error(`Request failed with status code ${status}`), { response: { status, data: { success: false, errors: [message] } } })
@@ -224,7 +230,7 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
 
     // 2. Start intake, then complete it in the wizard: the participant is on the Onboarding tab, with a one-off confirmation.
     await startAndCompleteIntake(user)
-    expect(await screen.findByText('Intake complete — Ada Lovelace is now in onboarding.')).toBeInTheDocument()
+    expect(await screen.findByText('Intake complete — Ada Lovelace is now in onboarding.', {}, ARRIVAL)).toBeInTheDocument()
     expect(tab('Onboarding')).toHaveAttribute('aria-selected', 'true')
     expect(within(await findRow('Ada Lovelace')).getByText('Validate profile essentials')).toBeInTheDocument()
     expect(server.calls).toContain('PUT /participants/p-ada/intake')
@@ -240,7 +246,7 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
     // 4. Complete onboarding: the checklist, then the Profile wizard's Complete Profile. They land on the Active tab, confirmed and highlighted.
     await user.click(tab('Onboarding'))
     await openChecklistAndCompleteProfile(user)
-    expect(await screen.findByText('Ada Lovelace is now an active participant.')).toBeInTheDocument()
+    expect(await screen.findByText('Ada Lovelace is now an active participant.', {}, ARRIVAL)).toBeInTheDocument()
     expect(tab('Active participants')).toHaveAttribute('aria-selected', 'true')
     expect(within(await findRow('Ada Lovelace')).getByText('Active')).toBeInTheDocument()
     expect(screen.getByText('Alex Active')).toBeInTheDocument()
@@ -265,7 +271,7 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
     for (let i = 0; i < 8; i++) await next(user)
     await user.click(await screen.findByRole('button', { name: /complete intake/i }))
 
-    expect(await screen.findByText('Intake complete — Dana Direct is now in onboarding.')).toBeInTheDocument()
+    expect(await screen.findByText('Intake complete — Dana Direct is now in onboarding.', {}, ARRIVAL)).toBeInTheDocument()
     expect(within(await findRow('Dana Direct')).getByText('Validate profile essentials')).toBeInTheDocument()
     // Their intake is done, so nothing of theirs is left on the Enquiries tab, and Ada's enquiry is still open there.
     await user.click(tab('Enquiries'))
@@ -286,11 +292,11 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
     for (let i = 0; i < 8; i++) await next(user)
     await user.click(await screen.findByRole('button', { name: /complete intake/i }))
 
-    expect(await screen.findByText('Intake complete — Priya Preseed is now in onboarding.')).toBeInTheDocument()
+    expect(await screen.findByText('Intake complete — Priya Preseed is now in onboarding.', {}, ARRIVAL)).toBeInTheDocument()
     expect(within(await findRow('Priya Preseed')).getByText('Validate profile essentials')).toBeInTheDocument()
     await openChecklistAndCompleteProfile(user, 'Priya Preseed')
 
-    expect(await screen.findByText('Priya Preseed is now an active participant.')).toBeInTheDocument()
+    expect(await screen.findByText('Priya Preseed is now an active participant.', {}, ARRIVAL)).toBeInTheDocument()
     expect(tab('Active participants')).toHaveAttribute('aria-selected', 'true')
     expect(within(await findRow('Priya Preseed')).getByText('Active')).toBeInTheDocument()
   }, 60_000)
@@ -304,11 +310,11 @@ describe('Participants lifecycle (wire) — readiness in Enforce mode', () => {
     await screen.findByText('Ada Lovelace')
 
     await startAndCompleteIntake(user)
-    await screen.findByText('Intake complete — Ada Lovelace is now in onboarding.')
+    await screen.findByText('Intake complete — Ada Lovelace is now in onboarding.', {}, ARRIVAL)
     await openChecklistAndCompleteProfile(user)
 
     // The wizard shows the server's reason and stays where it is: no hand-off to the Active tab, and not on the record either.
-    expect(await screen.findByRole('alert')).toHaveTextContent(EVIDENCE_REQUIRED)
+    expect(await screen.findByRole('alert', {}, ARRIVAL)).toHaveTextContent(EVIDENCE_REQUIRED)
     expect(router.state.location.pathname).toBe('/participants/p-ada/profile')
     expect(screen.queryByText('Participant detail')).not.toBeInTheDocument()
     expect(mockApiPostRaw).toHaveBeenCalledWith('/participants/p-ada/complete-profile', {})

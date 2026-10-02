@@ -105,10 +105,14 @@ function useParticipantsScreen() {
   const [statusNotice, setStatusNotice] = useState<{ message: string; warnings: string[] } | null>(null)
   useEffect(() => {
     if (!arrival) return
-    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
     // The confirmation is mounted one tick after the page, not with it: a status region that is already in the DOM on first paint is often not
     // announced by a screen reader, while one that appears afterwards is. The highlighted row needs no announcing, so it is there from the start.
-    const timer = window.setTimeout(() => setStatusNotice({ message: `${arrival.name} is now an active participant.`, warnings: [] }), 0)
+    const timer = window.setTimeout(() => {
+      setStatusNotice({ message: `${arrival.name} is now an active participant.`, warnings: [] })
+      // Only now is the arrival taken out of history. If this screen unmounts before the tick the timer is cleared with it, and the state must still be
+      // there for the remount to read: clearing it up front lost the confirmation for good.
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+    }, 0)
     return () => window.clearTimeout(timer)
     // Only the arrival matters: run once for the notice this screen mounted with.
     // eslint-disable-next-line react-hooks/exhaustive-deps
