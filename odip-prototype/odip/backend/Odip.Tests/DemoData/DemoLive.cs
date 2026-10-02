@@ -66,8 +66,15 @@ internal static class DemoLive
         var completion = await db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive);
         var completionId = completion?.Id;
 
+        // The records the live set wrote for this shift: the participant's doses inside its window (a scheduled slot, or an as-needed dose given then).
+        // The medication history writes the rest of the day's slots, by whoever was recorded, and those are not this shift's.
+        var windowStart = At(date, story.Start.Hour, story.Start.Minute);
+        var windowEnd = At(date, story.End.Hour, story.End.Minute);
+        bool InWindow(MedicationAdministration a) => a.ScheduledAt is { } slot
+            ? slot >= windowStart && slot < windowEnd
+            : Local(a.AdministeredAt, state) is { } given && given >= windowStart && given < windowEnd;
         var doses = (await db.MedicationAdministrations.Where(a => a.ParticipantId == shift.ParticipantId).ToListAsync())
-            .Where(a => a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:") && DateOnly.FromDateTime(Local(a.CreatedAt, state)) == date)
+            .Where(a => a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:") && InWindow(a))
             .OrderBy(a => a.CreatedAt).ToList();
         var breaks = await db.ShiftBreaks.Where(b => b.ShiftCompletionId == completionId).OrderBy(b => b.StartedAt).ToListAsync();
         var notes = await db.ShiftNotes.Where(n => n.ShiftId == shift.Id).OrderBy(n => n.CreatedAt).ToListAsync();

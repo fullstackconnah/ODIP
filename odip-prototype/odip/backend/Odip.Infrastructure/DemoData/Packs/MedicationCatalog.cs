@@ -1,3 +1,4 @@
+using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 
 namespace Odip.Infrastructure.DemoData.Packs;
@@ -80,4 +81,18 @@ public static class MedicationCatalog
     };
 
     public static Guid IdOf(string key) => DemoIds.For("medication", key);
+
+    /// <summary>
+    /// The day of the first run, read back from the rows that remember it: each of the nine new medications was started on that day plus its own
+    /// offset, so the first run's D0 is any of them less its offset. Null when none of the nine is on the chart (nothing then needs the anchor).
+    /// </summary>
+    public static DateOnly? FirstRunDay(IEnumerable<ParticipantMedication> chart)
+    {
+        foreach (var medication in chart)
+        {
+            var spec = New.FirstOrDefault(s => IdOf(s.Key) == medication.Id);
+            if (spec is not null) return DateOnly.FromDateTime(medication.StartDate).AddDays(-spec.StartOffset);
+        }
+        return null;
+    }
 }

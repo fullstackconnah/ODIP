@@ -8,6 +8,8 @@ namespace Odip.Infrastructure.DemoData;
 
 public sealed record DemoParticipantRow(Guid Id, string? NdisNumber, string FirstName, string LastName, bool IsActive, bool IsDraft);
 
+public sealed record RecordedSlot(Guid MedicationId, DateTime ScheduledAt);
+
 public sealed record TakenCell(Guid Id, Guid UserId, Guid ParticipantId);
 
 public sealed record ActiveContactRole(Guid Id, Guid ParticipantId);
@@ -141,10 +143,19 @@ public static class DemoQueries
         db.Shifts.Where(s => s.ShiftPatternId == null && (s.Status == ShiftStatus.Published || s.Status == ShiftStatus.InProgress)
                              && s.ServiceDate < before && participantIds.Contains(s.ParticipantId));
 
-    /// <summary>Tracked: a high-risk dose this top-up recorded whose staff witness has not answered yet (the live set's insulin).</summary>
-    public static IQueryable<MedicationAdministration> PendingWitnessDoses(OdipDbContext db, Guid medicationId) =>
-        db.MedicationAdministrations.Where(a => a.ParticipantMedicationId == medicationId && a.WitnessStatus == WitnessStatus.Pending
-                                                && a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:"));
+    /// <summary>Tracked: a high-risk dose this top-up recorded whose staff witness has not answered yet.</summary>
+    public static IQueryable<MedicationAdministration> PendingWitnessDoses(OdipDbContext db) =>
+        db.MedicationAdministrations.Where(a => a.WitnessStatus == WitnessStatus.Pending && a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:"));
+
+    /// <summary>
+    /// The scheduled slots that already have an ACTIVE record (whoever wrote it: the old seed's aged rows, a worker, an earlier tick) in a provider-local
+    /// window, so a slot is never given a second record. A superseded record is history, and its replacement is the active one.
+    /// </summary>
+    public static IQueryable<RecordedSlot> SlotsRecorded(OdipDbContext db, List<Guid> medicationIds, DateTime fromLocal, DateTime toLocal) =>
+        db.MedicationAdministrations.AsNoTracking()
+            .Where(a => medicationIds.Contains(a.ParticipantMedicationId) && a.ScheduledAt != null && a.ScheduledAt >= fromLocal && a.ScheduledAt < toLocal
+                        && a.SupersededByAdministrationId == null)
+            .Select(a => new RecordedSlot(a.ParticipantMedicationId, a.ScheduledAt!.Value));
 
     /// <summary>Tracked: the obligation tasks with these source keys that are still open (a closed task never reopens, so it is not wanted).</summary>
     public static IQueryable<BookingTask> OpenTasksByKeys(OdipDbContext db, List<string> keys) =>

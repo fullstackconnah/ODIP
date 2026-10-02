@@ -60,7 +60,7 @@ public sealed class LiveSetPack : IDemoPack
             await ScriptAsync(run, lives, ct);
         }
         await ApproveOldAsync(run, ct);
-        await ApproveWitnessesAsync(run, ct);
+        await WitnessAnswers.RunAsync(run, ct);
 
         if (run.Db.ChangeTracker.HasChanges()) await run.SaveAsync(ct);
     }
@@ -184,56 +184,6 @@ public sealed class LiveSetPack : IDemoPack
             approved++;
         }
         if (approved > 0) run.Changed("live shifts approved", approved);
-    }
-
-    // ── 4. witnesses ─────────────────────────────────────────────────────────
-
-    /// <summary>The next morning, on the provider's clock: when the witness of a high-risk dose opens their request (it is due the day after).</summary>
-    private static readonly TimeOnly WitnessAnswers = new(8, 30);
-
-    /// <summary>
-    /// The staff witness of the live set's high-risk dose answers it at 08:30 the next day: so the dose a viewer sees given today has a witness
-    /// request waiting (the story, and the alert), and every earlier one is signed off, its obligation task closed as the portal closes it. Only
-    /// a request that is still Pending is answered, and only one this top-up recorded: a witness's own answer, or a coordinator's edit, wins.
-    /// </summary>
-    private static async Task ApproveWitnessesAsync(DemoRun run, CancellationToken ct)
-    {
-        var anchors = run.Anchors;
-        var answers = (await DemoQueries.PendingWitnessDoses(run.Db, MedicationCatalog.InsulinGlargine).ToListAsync(ct))
-            .Where(d => d.WitnessUserId is not null && d.WitnessRequestedAt is not null)
-            .Select(d => (Dose: d, At: AnswerTime(anchors, d)))
-            .Where(x => x.At.AddMinutes(GraceMinutes) <= anchors.NowUtc)
-            .ToList();
-        if (answers.Count == 0) return;
-
-        var staff = await run.FreshStaffAsync(ct);
-        var tasks = (await DemoQueries.OpenTasksByKeys(run.Db, answers.Select(x => $"med-witness:{x.Dose.Id}").ToList()).ToListAsync(ct))
-            .ToDictionary(t => t.SourceKey!);
-        foreach (var (dose, at) in answers)
-        {
-            var witness = staff.Values.FirstOrDefault(u => u.Id == dose.WitnessUserId);
-            if (witness is null) continue;                                          // somebody the stories do not name: not ours to answer for
-
-            var local = ProviderLocalTime.UtcToLocal(at, anchors.Zone);
-            PackageRows.WitnessApproved(run, dose, local);
-            run.StampAudit(dose.Id, dose.WitnessRespondedAt!.Value, witness);
-            if (tasks.TryGetValue($"med-witness:{dose.Id}", out var task))
-            {
-                task.Status = TaskItemStatus.Completed;
-                task.CompletedDate = DateOnly.FromDateTime(local);
-                task.AutoCompletedAt = at;
-                task.UpdatedAt = at;
-                run.StampAudit(task.Id, at, witness);
-            }
-            run.Changed("witness requests answered");
-        }
-        await run.SaveAsync(ct);
-    }
-
-    private static DateTime AnswerTime(DemoAnchors anchors, MedicationAdministration dose)
-    {
-        var requestedLocal = ProviderLocalTime.UtcToLocal(ProviderLocalTime.AsUtc(dose.WitnessRequestedAt!.Value), anchors.Zone);
-        return anchors.LocalToUtc(PackageRows.Local(DateOnly.FromDateTime(requestedLocal).AddDays(1), WitnessAnswers));
     }
 
     // ── the per-shift story ──────────────────────────────────────────────────
@@ -433,23 +383,7 @@ public sealed class LiveSetPack : IDemoPack
 
         private Task AddWitnessTaskAsync(Live live, ParticipantMedication med, MedicationAdministration dose)
         {
-            // The recorder's own obligation task for a pending witness (SourceKey med-witness:{id}), due the provider day after.
-            var due = DateOnly.FromDateTime(PackageRows.Local(live.Date, TimeOnly.MinValue)).AddDays(1);
-            var participant = _run.Directory.AllParticipants.FirstOrDefault(p => p.Id == live.Shift.ParticipantId)?.FullName ?? "a participant";
-            _run.Db.BookingTasks.Add(new BookingTask
-            {
-                Id = DemoIds.For("task", "med-witness", dose.Id),
-                TenantId = _run.TenantId,
-                SourceKey = $"med-witness:{dose.Id}",
-                TaskType = TaskType.MedicationWitness,
-                Title = $"Witness sign-off needed: {med.Name} for {participant}",
-                DueDate = due,
-                LinkTo = "/portal/witness-approvals",
-                MedicationAdministrationId = dose.Id,
-                Status = TaskItemStatus.NotStarted,
-                CreatedAt = dose.CreatedAt,
-                UpdatedAt = dose.CreatedAt,
-            });
+            _run.Db.BookingTasks.Add(PackageRows.WitnessTask(_run, med, dose, live.Date));
             return Task.CompletedTask;
         }
 

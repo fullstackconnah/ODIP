@@ -204,6 +204,7 @@ public class DemoClockReplayTests
         var totalDays = growth.Sum(g => g.Days);
         var totalRows = growth.Sum(g => g.Rows);
         Assert.True(totalRows / totalDays < 100, $"{totalRows} rows added over {totalDays:0} days is {totalRows / totalDays:0.0} a day");
-        Assert.All(growth, g => Assert.True(g.Rows < 800, $"one tick added {g.Rows} rows"));
+        // A tick after a gap builds at most the week of medication history, the live days and the roster weeks ahead (audit rows included): under a thousand rows.
+        Assert.All(growth, g => Assert.True(g.Rows < 1000, $"one tick added {g.Rows} rows"));
     }
 }

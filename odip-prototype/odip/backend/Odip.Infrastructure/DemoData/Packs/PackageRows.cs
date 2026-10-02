@@ -35,10 +35,11 @@ internal static class PackageRows
     /// </summary>
     public static MedicationAdministration Dose(
         DemoRun run, ParticipantMedication med, DateTime? scheduledLocal, MedicationAdministrationStatus status, User recorder, DateTime? givenLocal,
-        DateTime recordedLocal, string? reason = null, string? doseGiven = null, string? notes = null, string? prnReason = null, User? witness = null)
+        DateTime recordedLocal, string? reason = null, string? doseGiven = null, string? notes = null, string? prnReason = null, User? witness = null,
+        Guid? idOverride = null)
     {
         var anchors = run.Anchors;
-        var id = scheduledLocal is { } slot ? DoseId(med.Id, slot) : PrnDoseId(med.Id, givenLocal ?? recordedLocal);
+        var id = idOverride ?? (scheduledLocal is { } slot ? DoseId(med.Id, slot) : PrnDoseId(med.Id, givenLocal ?? recordedLocal));
         var recordedAt = anchors.LocalToUtc(recordedLocal);
         var administeredAt = givenLocal is { } given ? anchors.LocalToUtc(given) : (DateTime?)null;
         var competent = MedicationCompetencyGate.Evaluate(recorder, DateOnly.FromDateTime(recordedLocal)).IsCurrent;
@@ -67,6 +68,29 @@ internal static class PackageRows
             RecordedWithoutCompetency = !competent,
             CreatedAt = recordedAt,
             UpdatedAt = recordedAt,
+        };
+    }
+
+    /// <summary>
+    /// The recorder's own obligation task for a pending staff witness (SourceKey med-witness:{id}), due the provider day after the dose was recorded,
+    /// open until the witness answers (see <see cref="WitnessAnswers"/>).
+    /// </summary>
+    public static BookingTask WitnessTask(DemoRun run, ParticipantMedication med, MedicationAdministration dose, DateOnly recordedOn)
+    {
+        var participant = run.Directory.AllParticipants.FirstOrDefault(p => p.Id == med.ParticipantId)?.FullName ?? "a participant";
+        return new BookingTask
+        {
+            Id = DemoIds.For("task", "med-witness", dose.Id),
+            TenantId = run.TenantId,
+            SourceKey = $"med-witness:{dose.Id}",
+            TaskType = TaskType.MedicationWitness,
+            Title = $"Witness sign-off needed: {med.Name} for {participant}",
+            DueDate = recordedOn.AddDays(1),
+            LinkTo = "/portal/witness-approvals",
+            MedicationAdministrationId = dose.Id,
+            Status = TaskItemStatus.NotStarted,
+            CreatedAt = dose.CreatedAt,
+            UpdatedAt = dose.CreatedAt,
         };
     }
 

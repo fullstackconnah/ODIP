@@ -59,7 +59,7 @@ public class DemoQueryTranslationTests
         yield return Q(nameof(DemoQueries.ActiveCompletionsOf), db => DemoQueries.ActiveCompletionsOf(db, Ids), "\"ShiftId\" = ANY (", "\"IsActive\"");
         yield return Q(nameof(DemoQueries.UnfinishedShifts), db => DemoQueries.UnfinishedShifts(db, Today, Ids), "\"ShiftPatternId\" IS NULL", "\"ServiceDate\" <", "\"ParticipantId\" = ANY (", "\"Status\"");
         yield return Q(nameof(DemoQueries.UnreviewedShifts), db => DemoQueries.UnreviewedShifts(db, Today, Ids), "\"ShiftPatternId\" IS NULL", "\"ServiceDate\" <=", "\"ParticipantId\" = ANY (", "\"Status\" =");
-        yield return Q(nameof(DemoQueries.PendingWitnessDoses), db => DemoQueries.PendingWitnessDoses(db, Ids[0]), "\"ParticipantMedicationId\" =", "\"WitnessStatus\" =", "LIKE 'demo-v1:%'");
+        yield return Q(nameof(DemoQueries.PendingWitnessDoses), db => DemoQueries.PendingWitnessDoses(db), "\"WitnessStatus\" =", "LIKE 'demo-v1:%'");
         yield return Q(nameof(DemoQueries.OpenTasksByKeys), db => DemoQueries.OpenTasksByKeys(db, new List<string> { "k" }), "\"SourceKey\" = ANY (", "\"Status\"");
         yield return Q(nameof(DemoQueries.MedicationsByIds), db => DemoQueries.MedicationsByIds(db, Ids), "\"Id\" = ANY (");
         yield return Q(nameof(DemoQueries.ActiveMedicationsOf), db => DemoQueries.ActiveMedicationsOf(db, Ids), "\"ParticipantId\" = ANY (", "\"Status\" =");
@@ -67,6 +67,7 @@ public class DemoQueryTranslationTests
         yield return Q(nameof(DemoQueries.AdministrationsByIds), db => DemoQueries.AdministrationsByIds(db, Ids), "\"Id\" = ANY (");
         yield return Q(nameof(DemoQueries.RunningBreaksOf), db => DemoQueries.RunningBreaksOf(db, Ids), "\"ShiftCompletionId\" = ANY (", "\"EndedAt\" IS NULL");
         yield return Q(nameof(DemoQueries.NotesOf), db => DemoQueries.NotesOf(db, Ids), "\"ShiftId\" = ANY (");
+        yield return Q(nameof(DemoQueries.SlotsRecorded), db => DemoQueries.SlotsRecorded(db, Ids, new DateTime(2026, 9, 25), new DateTime(2026, 10, 3)), "\"ParticipantMedicationId\" = ANY (", "\"ScheduledAt\" >=", "\"ScheduledAt\" <", "\"SupersededByAdministrationId\" IS NULL");
         yield return Q(nameof(DemoQueries.PrnDosesAwaitingOutcome), db => DemoQueries.PrnDosesAwaitingOutcome(db, Ids, DateTime.UtcNow), "\"ParticipantMedicationId\" = ANY (", "\"PrnOutcome\" IS NULL", "LIKE 'demo-v1:%'");
     }
 

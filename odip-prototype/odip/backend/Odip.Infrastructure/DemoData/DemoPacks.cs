@@ -21,5 +21,6 @@ public static class DemoPacks
         new LeaveCoverageTasksPack(),
         new MedicationsPack(),
         new LiveSetPack(),
+        new MedicationHistoryPack(),
     };
 }
