@@ -422,6 +422,11 @@ public class AdminUsersController : ControllerBase
             return BadRequest(ApiResponse<object>.Fail("This user has no email address."));
 
         var email = EmailIdentity.Normalise(user.Email);
+
+        // An address the app invented for a row that had none (see PlaceholderEmail) can never receive the link, so no account is made for it.
+        if (PlaceholderEmail.Covers(email))
+            return BadRequest(ApiResponse<object>.Fail(PlaceholderEmail.Message(user.FullName)));
+
         try
         {
             var result = await _firebaseUserService.EnsureSignInAccountAsync(email, user.FullName, ct);

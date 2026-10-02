@@ -642,6 +642,11 @@ public class StaffController : ControllerBase
             return BadRequest(ApiResponse<SignInAccountDto>.Fail("This staff member has no email address."));
 
         var email = EmailIdentity.Normalise(s.Email);
+
+        // An address the app invented for a row that had none (see PlaceholderEmail) can never receive the link, so no account is made for it.
+        if (PlaceholderEmail.Covers(email))
+            return BadRequest(ApiResponse<SignInAccountDto>.Fail(PlaceholderEmail.Message(s.FullName)));
+
         var reservedError = ReservedDomainError(email);
         if (reservedError != null) return BadRequest(ApiResponse<SignInAccountDto>.Fail(reservedError));
 

@@ -120,6 +120,36 @@ public class SignInAccountRouteTests
         VerifyNeverEnsured(firebase);
     }
 
+    // The staff/user unification migration gave every staff row with no usable email "{username}@placeholder.local". No mailbox can receive it, so
+    // making a verified account for it and telling the admin "we've sent a link" would be a lie that nothing can ever correct.
+    [Theory]
+    [InlineData("sam.staff@placeholder.local")]
+    [InlineData("Sam.Staff@Placeholder.Local")]
+    [InlineData("  sam.staff@placeholder.local ")]
+    public async Task AdminUsers_route_refuses_a_placeholder_address_without_calling_Firebase(string storedEmail)
+    {
+        using var db = AdminDb();
+        var user = await SeedAdminSideUser(db, storedEmail);
+        var firebase = FirebaseReturning(SignInAccountResult.Created);
+
+        var result = await AdminController(db, firebase).EnsureSignInAccount(user.Id, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Sam Staff has no real email address yet. Add one first.", Assert.IsType<ApiResponse<object>>(badRequest.Value).Errors!.Single());
+        VerifyNeverEnsured(firebase);
+    }
+
+    [Fact]
+    public async Task AdminUsers_route_does_not_mistake_a_look_alike_domain_for_the_placeholder()
+    {
+        using var db = AdminDb();
+        var user = await SeedAdminSideUser(db, "sam.staff@real-placeholder.local");
+
+        var result = await AdminController(db, FirebaseReturning(SignInAccountResult.Created)).EnsureSignInAccount(user.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
     [Fact]
     public async Task AdminUsers_route_is_a_404_for_an_unknown_user()
     {
@@ -250,6 +280,33 @@ public class SignInAccountRouteTests
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
         VerifyNeverEnsured(firebase);
+    }
+
+    [Theory]
+    [InlineData("sam.staff@placeholder.local")]
+    [InlineData("Sam.Staff@Placeholder.Local")]
+    public async Task Staff_route_refuses_a_placeholder_address_without_calling_Firebase(string storedEmail)
+    {
+        var (db, tenantId) = StaffDb();
+        var staff = await SeedStaff(db, tenantId, storedEmail);
+        var firebase = FirebaseReturning(SignInAccountResult.Created);
+
+        var result = await StaffControllerFor(db, "Admin", firebase).EnsureSignInAccount(staff.Id, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal("Sam Staff has no real email address yet. Add one first.", Assert.IsType<ApiResponse<SignInAccountDto>>(badRequest.Value).Errors!.Single());
+        VerifyNeverEnsured(firebase);
+    }
+
+    [Fact]
+    public async Task Staff_route_does_not_mistake_a_look_alike_domain_for_the_placeholder()
+    {
+        var (db, tenantId) = StaffDb();
+        var staff = await SeedStaff(db, tenantId, "sam.staff@real-placeholder.local");
+
+        var result = await StaffControllerFor(db, "Admin", FirebaseReturning(SignInAccountResult.Created)).EnsureSignInAccount(staff.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
     }
 
     [Fact]
