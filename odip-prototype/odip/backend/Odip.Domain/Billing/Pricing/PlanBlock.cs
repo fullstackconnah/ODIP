@@ -116,6 +116,9 @@ public sealed record PlanBlock
 {
     private const int MinutesPerDay = 1440;
 
+    /// <summary>Without a sleepover window the whole block is the sleepover, so a block longer than this must say which part of it is the night (a 24 hour block was one Each item).</summary>
+    private const int MaxSleepoverMinutesWithoutWindow = 12 * 60;
+
     /// <summary>The most headcount changes a block may have: each one cuts every occurrence into another line, so an unbounded list is an unbounded answer.</summary>
     public const int MaxHeadcountChanges = 10;
 
@@ -291,6 +294,8 @@ public sealed record PlanBlock
     {
         if (SleepoverWindow is not null && !WorkerMaySleep) add("a sleepover window needs 'worker may sleep'.");
         if (SleepoverActiveHours != 0m && !WorkerMaySleep) add("active hours during a sleepover need 'worker may sleep'.");
+        if (WorkerMaySleep && SleepoverWindow is null && DurationMinutes > MaxSleepoverMinutesWithoutWindow)
+            add("a block of more than 12 hours where the worker may sleep needs the sleepover window: without one the whole block is the night.");
 
         var windowMinutes = DurationMinutes;
         if (SleepoverWindow is { } window)

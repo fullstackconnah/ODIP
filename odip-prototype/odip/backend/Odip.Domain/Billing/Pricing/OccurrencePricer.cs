@@ -378,8 +378,21 @@ internal sealed class OccurrencePricer
             if (block.OnPublicHoliday == HolidayDecision.Review) flags |= PlannedLineFlags.Review;
         }
         var questions = new List<int>();
-        if (block.Workers != 1 || participants != 1) rules.Add("group:floor(price*workers/participants)");
-        if (block.Workers > 1 && participants > 1) MarkWorkersOverParticipants(rules, ref flags, questions);
+        if (block.Workers != 1 || participants != 1)
+        {
+            // The group divisor on these hours is no more settled than on the Each line above them (NDIS-CODES 4.4): applied, and said so.
+            rules.Add("group:floor(price*workers/participants)");
+            flags |= PlannedLineFlags.Provisional;
+            questions.Add(5);
+        }
+        if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        {
+            // The sleepover starts on a Saturday or a Sunday and runs past midnight, where the rate changes, and the engine does not know when in the night the active
+            // hours are worked: they are priced at the rate of the day it starts, which is low if they fall on the Sunday morning and high if they fall on the Monday.
+            rules.Add("sleepover:active-hours-rate-straddle");
+            flags |= PlannedLineFlags.Provisional;
+            questions.Add(14);
+        }
 
         occ.Result.Lines.Add(new PlannedLine
         {

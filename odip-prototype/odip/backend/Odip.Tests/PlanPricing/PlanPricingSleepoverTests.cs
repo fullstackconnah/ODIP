@@ -158,6 +158,67 @@ public class PlanPricingSleepoverTests
         Assert.Equal(("01_202_0115_1_1", 2m, 103.54m, 207.08m), Row(QuoteOne(sta, Mon12Oct).Lines.Single(l => l.Kind == PlannedLineKind.SleepoverActiveHours)));
     }
 
+    // ── Review L3: active hours that may be worked after midnight, and a group fraction on them ──
+
+    [Theory]
+    [InlineData(DayOfWeek.Saturday, true)]    // Saturday 22:00 to Sunday 06:00: Saturday's rate before midnight, Sunday's (higher) after
+    [InlineData(DayOfWeek.Sunday, true)]      // Sunday to Monday: Sunday's rate before midnight, a weekday's (the Saturday rate, lower) after
+    [InlineData(DayOfWeek.Friday, false)]     // Friday to Saturday: the Saturday rate on both sides of midnight
+    [InlineData(DayOfWeek.Monday, false)]
+    public void Active_hours_of_a_sleepover_that_starts_on_a_Saturday_or_a_Sunday_are_provisional_because_the_rate_changes_at_midnight(DayOfWeek day, bool flagged)
+    {
+        var date = new[] { Mon12Oct, Fri16Oct, Sat17Oct, Sun18Oct }.Single(d => d.DayOfWeek == day);
+        var block = Overnight(PlanSupportType.PersonalCare, day, T(22), T(6), b => b with { SleepoverActiveHours = 4m });
+
+        var quote = QuoteOne(block, date);
+
+        var extra = Assert.Single(quote.Lines, l => l.Kind == PlannedLineKind.SleepoverActiveHours);
+        Assert.Equal(flagged, extra.Provisional);
+        Assert.Equal(flagged, extra.Trace.OpenQuestions.Contains(14));
+        Assert.Equal(flagged, extra.Trace.Rules.Contains("sleepover:active-hours-rate-straddle"));
+        Assert.Equal(flagged, quote.OpenQuestions.Any(q => q.Number == 14));
+        Assert.Equal(day == DayOfWeek.Sunday ? 133.50m : 103.54m, extra.UnitPrice);   // the arithmetic is unchanged: the rate of the day the sleepover starts
+    }
+
+    [Theory]
+    [InlineData(1, 3)]
+    [InlineData(2, 1)]
+    [InlineData(2, 3)]
+    public void A_group_fraction_on_the_active_hours_is_flagged_like_the_sleepover_line_itself(int workers, int participants)
+    {
+        var block = Overnight(PlanSupportType.PersonalCare, DayOfWeek.Monday, T(22), T(6), b => b with
+        {
+            SleepoverActiveHours = 4m, Workers = workers, ParticipantsPresent = participants,
+        });
+
+        var quote = QuoteOne(block, Mon12Oct);
+
+        var sleepover = Assert.Single(quote.Lines, l => l.Kind == PlannedLineKind.Sleepover);
+        var active = Assert.Single(quote.Lines, l => l.Kind == PlannedLineKind.SleepoverActiveHours);
+        Assert.True(sleepover.Provisional);
+        Assert.True(active.Provisional);
+        Assert.Contains(5, active.Trace.OpenQuestions);
+        Assert.Contains("group:floor(price*workers/participants)", active.Trace.Rules);
+        Assert.DoesNotContain(14, active.Trace.OpenQuestions);   // a Monday start does not straddle a change of rate
+    }
+
+    // ── Review L2: a long block needs its window ──
+
+    [Fact]
+    public void A_24_hour_block_where_the_worker_may_sleep_is_refused_until_it_says_which_part_is_the_night()
+    {
+        var day = Overnight(PlanSupportType.PersonalCare, DayOfWeek.Friday, T(6), T(6));   // 06:00 to 06:00
+
+        var refused = QuoteOne(day, Fri16Oct);
+        var windowed = QuoteOne(Window(day, T(22), T(6)), Fri16Oct);
+
+        Assert.Equal(PlanFailureReason.InvalidInput, Assert.Single(refused.Issues).Reason);
+        Assert.Contains("sleepover window", refused.Issues[0].Message);
+        Assert.Empty(refused.Lines.Where(l => l.IsPriced));
+        Assert.Empty(windowed.Issues);
+        Assert.Equal(1, windowed.Lines.Count(l => l.Kind == PlannedLineKind.Sleepover));
+    }
+
     // ── A group and the sleepover ─────────────────────────────────────────────────
 
     [Theory]

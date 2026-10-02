@@ -245,6 +245,7 @@ public static class OwnerQuestions
         new OwnerQuestion(11, "The price update expected after 1 December 2026, differentiated pricing from 1 January 2027, and the provider's registered status."),
         new OwnerQuestion(12, "Plan wording, and the provider's GST status."),
         new OwnerQuestion(13, "Overnight supports on the nights the clocks change: the builder counts elapsed hours for the 8 hour sleepover test, so a window of 8 hours on the clock is 7 hours the night the clocks go forward and is priced hourly (and a 7 hour window is a sleepover the night they go back). The schedule gives no example: which reading does NDIA apply?"),
+        new OwnerQuestion(14, "Active hours of a sleepover that starts on a Saturday or a Sunday: the builder does not know when in the night they are worked, so it prices them at the rate of the day the sleepover starts. Hours worked after midnight may be at the next day's rate (Sunday's is higher than Saturday's, Monday's lower than Sunday's). Say when they are worked, or confirm that the day the sleepover starts decides."),
     };
 
     public static OwnerQuestion Get(int number) => All.Single(q => q.Number == number);

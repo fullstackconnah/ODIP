@@ -169,6 +169,36 @@ public class PlanBlockTests
         Assert.NotEmpty(Valid(b => b with { SleepoverActiveHours = 1m }).Validate());   // no sleepover, so nothing to be active inside
     }
 
+    // ── Review L2: a long block needs its window ──
+
+    [Theory]
+    [InlineData(22, 0, 10, 0, true)]     // 12 hours exactly: the whole block can be the night
+    [InlineData(22, 0, 10, 15, false)]   // 12 hours 15
+    [InlineData(6, 0, 6, 0, false)]      // 24 hours
+    public void A_block_over_12_hours_where_the_worker_may_sleep_needs_the_sleepover_window(int sh, int sm, int eh, int em, bool valid)
+    {
+        // Without a window the whole block is the sleepover, so a 24 hour block was one Each item (311.79 for a day of support) with no issue.
+        var block = Valid(b => b with
+        {
+            SupportType = PlanSupportType.PersonalCare, Days = new[] { DayOfWeek.Friday },
+            Start = new TimeOnly(sh, sm), End = new TimeOnly(eh, em), WorkerMaySleep = true,
+        });
+
+        var messages = block.Validate();
+
+        if (valid) Assert.Empty(messages);
+        else Assert.Contains("needs the sleepover window", Assert.Single(messages));
+    }
+
+    [Fact]
+    public void A_long_block_is_valid_with_its_window_or_when_the_worker_stays_awake()
+    {
+        var day = Valid(b => b with { Days = new[] { DayOfWeek.Friday }, Start = new TimeOnly(6, 0), End = new TimeOnly(6, 0) });
+
+        Assert.Empty(day.Validate());   // 24 hours awake
+        Assert.Empty((day with { WorkerMaySleep = true, SleepoverWindow = new PlanSleepoverWindow { From = new TimeOnly(22, 0), To = new TimeOnly(6, 0) } }).Validate());
+    }
+
     // ── Headcount changes ─────────────────────────────────────────────────────────
 
     [Fact]
