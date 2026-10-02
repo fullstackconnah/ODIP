@@ -99,6 +99,12 @@ public static class AuditedEntities
         // AuditLog with zero-investigative-value noise — their own Status/LastError/SentAt
         // fields already are the purpose-built delivery trail (design spec §1).
         typeof(NotificationPreference),
+
+        // Plan builder pricing (phase B): the registration groups a provider says it holds and its crossing policy decide which items the
+        // builder may price and how much a plan costs, and the holiday overrides decide which days are priced at the public holiday rate (+122%
+        // on a weekday). Who changed either, and when, must be recoverable. Neither holds anything private.
+        typeof(PlanPricingSettings),
+        typeof(PublicHolidayOverride),
     };
 
     private static readonly HashSet<string> ExcludedProperties = new()

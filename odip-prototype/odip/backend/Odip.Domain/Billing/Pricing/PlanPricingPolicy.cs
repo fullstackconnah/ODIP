@@ -1,3 +1,5 @@
+using Odip.Domain.Entities;
+
 namespace Odip.Domain.Billing.Pricing;
 
 /// <summary>How a support that crosses a time-of-day or day-of-week boundary is billed (NDIS-CODES 5.2). Every line records which policy produced it.</summary>
@@ -48,6 +50,29 @@ public sealed record PlanPricingPolicy
     public bool StaUsesHourlyAndAccommodation { get; init; } = true;
     /// <summary>Who may mark an agreement approved (phase D). Stored with the settings; the pricing engine does not read it.</summary>
     public IReadOnlyList<string> ApproverRoles { get; init; } = new[] { "Admin", "Coordinator" };
+
+    /// <summary>The policy of a stored settings row; no row is <see cref="Default"/>. An unknown registration group is dropped, a repeat counts once, and an empty list holds none.</summary>
+    public static PlanPricingPolicy From(PlanPricingSettings? settings)
+    {
+        if (settings is null) return Default;
+
+        static List<string> Split(string? list) =>
+            (list ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.Ordinal).ToList();
+
+        return new PlanPricingPolicy
+        {
+            RegistrationGroupsHeld = Split(settings.RegistrationGroupsHeld).Where(group => AllRegistrationGroups.Contains(group)).ToList(),
+            RegistrationGroupsConfirmed = settings.RegistrationGroupsConfirmed,
+            Crossing = settings.CrossingPolicy,
+            ClaimProviderTravel = settings.ClaimProviderTravel,
+            KmRateStandard = settings.TravelKmRateStandard,
+            KmRateAccessible = settings.TravelKmRateAccessible,
+            TravelRatesProvisional = settings.TravelRatesProvisional,
+            GroupOutings = settings.GroupOutings,
+            StaUsesHourlyAndAccommodation = settings.StaUsesHourlyAndAccommodation,
+            ApproverRoles = Split(settings.ApproverRoles),
+        };
+    }
 
     public bool Holds(string? registrationGroup) =>
         !string.IsNullOrWhiteSpace(registrationGroup) && RegistrationGroupsHeld.Contains(registrationGroup.Trim(), StringComparer.Ordinal);

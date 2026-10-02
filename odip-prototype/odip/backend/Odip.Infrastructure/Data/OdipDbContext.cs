@@ -86,6 +86,8 @@ public class OdipDbContext : DbContext
     public DbSet<SupportCatalogueItem> SupportCatalogueItems => Set<SupportCatalogueItem>();
     public DbSet<ProviderSettings> ProviderSettings => Set<ProviderSettings>();
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
+    public DbSet<PublicHolidayOverride> PublicHolidayOverrides => Set<PublicHolidayOverride>();
+    public DbSet<PlanPricingSettings> PlanPricingSettings => Set<PlanPricingSettings>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     /// <summary>Public landing-page early-access requests. NOT tenant-scoped: see <see cref="Entities.EarlyAccessRequest"/>'s type doc.</summary>
@@ -908,6 +910,44 @@ public class OdipDbContext : DbContext
 
             entity.HasIndex(e => e.Date);
             entity.HasIndex(e => new { e.Date, e.State });
+        });
+
+        // ── PublicHolidayOverride (plan builder phase B) ──────────
+        // The gaps NDIS-CODES 5.3 found in the synced feed, read by the pricing engine after the PublicHoliday rows. Global like PublicHoliday.
+        // The seed rows are inserted by the migration once with fixed ids and are the owner's to maintain after that.
+        modelBuilder.Entity<PublicHolidayOverride>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.State).HasMaxLength(10);
+            entity.Property(e => e.Source).HasMaxLength(200).IsRequired();
+
+            entity.HasIndex(e => new { e.Date, e.State });
+            entity.HasData(PublicHolidayOverrideSeed.All);
+        });
+
+        // ── PlanPricingSettings (plan builder phase B) ────────────
+        // One row per tenant. Every column is NOT NULL with a constant default equal to the owner-approved default, so a row written by an older
+        // build during a rolling deploy reads back as the defaults.
+        modelBuilder.Entity<PlanPricingSettings>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.RegistrationGroupsHeld).HasMaxLength(40).IsRequired().HasDefaultValue(Odip.Domain.Entities.PlanPricingSettings.DefaultRegistrationGroups);
+            entity.Property(e => e.RegistrationGroupsConfirmed).HasDefaultValue(false);
+            entity.Property(e => e.CrossingPolicy).HasDefaultValue(Odip.Domain.Billing.Pricing.CrossingPolicy.Split);
+            entity.Property(e => e.ClaimProviderTravel).HasDefaultValue(true);
+            entity.Property(e => e.TravelKmRateStandard).HasPrecision(8, 2).HasDefaultValue(0.99m);
+            entity.Property(e => e.TravelKmRateAccessible).HasPrecision(8, 2).HasDefaultValue(2.76m);
+            entity.Property(e => e.TravelRatesProvisional).HasDefaultValue(true);
+            entity.Property(e => e.GroupOutings).HasDefaultValue(Odip.Domain.Billing.Pricing.GroupOutingFamily.GroupActivities);
+            entity.Property(e => e.StaUsesHourlyAndAccommodation).HasDefaultValue(true);
+            entity.Property(e => e.ApproverRoles).HasMaxLength(100).IsRequired().HasDefaultValue(Odip.Domain.Entities.PlanPricingSettings.DefaultApproverRoles);
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.TenantId).IsUnique();
         });
 
         // ── AuditLog ─────────────────────────────────────────────
@@ -1863,6 +1903,9 @@ public class OdipDbContext : DbContext
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ProviderSettings>()
             .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<PlanPricingSettings>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         // Tenants table — unique index on EmailDomain
         modelBuilder.Entity<Tenant>()
