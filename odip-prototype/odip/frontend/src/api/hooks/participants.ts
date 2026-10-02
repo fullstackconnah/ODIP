@@ -104,6 +104,8 @@ export function useCreateParticipant() {
       qc.invalidateQueries({ queryKey: ['participants'] })
       // Completing intake on create puts the participant on the onboarding worklist.
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      // A draft saved with its intake open is a direct-intake row in the enquiries feed.
+      qc.invalidateQueries({ queryKey: ['participant-inquiries'] })
     },
   })
 }
