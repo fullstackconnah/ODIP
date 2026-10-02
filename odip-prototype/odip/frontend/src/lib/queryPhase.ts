@@ -17,3 +17,14 @@ export function queryPhase(query: { data?: unknown; isLoading?: boolean; isError
   if (query.data !== undefined) return 'ready'
   return query.isError ? 'error' : 'loading'
 }
+
+/**
+ * Whether a query is still waiting for its first answer: pending (it has no data) and not merely disabled. A request in flight is waiting, and so is one PAUSED
+ * while the browser reports offline (TanStack's default network mode): that one is pending with a fetchStatus of "paused", and `isLoading` (isFetching and
+ * isPending) is false for it, exactly as `isError` and `data` are, so a count or a band built on `isLoading` alone reads it as a settled zero. A disabled query
+ * (`enabled: false`) is pending for good with a fetchStatus of "idle": nobody asked it, so it is not waiting. It only reads what the query says, so a test
+ * double that says `{ isPending: true }` is waiting too.
+ */
+export function awaitsData(query: { isPending?: boolean; fetchStatus?: string }): boolean {
+  return !!query.isPending && query.fetchStatus !== 'idle'
+}

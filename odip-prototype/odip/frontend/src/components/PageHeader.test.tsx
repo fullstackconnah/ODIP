@@ -277,6 +277,57 @@ describe('PageHeader — variant="detail"', () => {
   })
 })
 
+// The dashboard's title is a greeting with the date after it, and the tab keeps naming the page: both are opt-in, so a header that asks for neither is what it was.
+describe('PageHeader — titleNote and documentTitle', () => {
+  afterEach(() => {
+    cleanup()
+    document.title = ''
+  })
+
+  it('puts the note inside the same one h1, after the title, as its own unit in the muted ink', () => {
+    render(<PageHeader variant="detail" title="Good morning, Sarah" titleNote={<time dateTime="2026-10-02">Friday 2 October</time>} />)
+
+    const h1s = screen.getAllByRole('heading', { level: 1 })
+    expect(h1s).toHaveLength(1)
+    expect(h1s[0]).toHaveTextContent('Good morning, Sarah Friday 2 October')
+    expect(h1s[0]).toHaveClass('text-display')
+
+    const title = screen.getByText('Good morning, Sarah')
+    const note = screen.getByText('Friday 2 October').parentElement as HTMLElement
+    expect(title.parentElement).toBe(h1s[0])
+    expect(note.parentElement).toBe(h1s[0])
+    expect(title.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Same size as the title (it inherits the display step: no size class of its own), only quieter, and each part wraps whole.
+    expect(note).toHaveClass('inline-block', 'text-[var(--color-muted-foreground)]')
+    expect(note.className).not.toMatch(/\btext-(?:xs|sm|base|lg|xl|[2-9]xl|display)\b/)
+    expect(title).toHaveClass('inline-block')
+    expect(screen.getByText('Friday 2 October').tagName).toBe('TIME')
+  })
+
+  it('keeps the title exactly as it was, with no wrapper spans, when there is no note', () => {
+    render(<PageHeader variant="detail" title="Sunshine Coast Beach Escape" />)
+
+    const h1 = screen.getByRole('heading', { level: 1 })
+    expect(h1.children).toHaveLength(0)
+    expect(h1.textContent).toBe('Sunshine Coast Beach Escape')
+  })
+
+  it('names the tab by documentTitle when the h1 says something else, and keeps it steady while the h1 changes', () => {
+    const { rerender } = render(<PageHeader variant="detail" title="Good morning, Sarah" documentTitle="Management Dashboard" />)
+    expect(document.title).toBe('Management Dashboard — Odip')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Good morning, Sarah')
+
+    rerender(<PageHeader variant="detail" title="Good afternoon, Sarah" documentTitle="Management Dashboard" />)
+    expect(document.title).toBe('Management Dashboard — Odip')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Good afternoon, Sarah')
+  })
+
+  it('falls back to the title for the tab when documentTitle is not given', () => {
+    render(<PageHeader title="Incident Reports" />)
+    expect(document.title).toBe('Incident Reports — Odip')
+  })
+})
+
 describe('PageHeaderMeta', () => {
   afterEach(cleanup)
 

@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { awaitsData } from '@/lib/queryPhase'
 import { apiGet, apiGetWithDefault, apiPost, apiPut } from '../client'
 import type {
   MyLeaveResponseDto,
@@ -115,9 +116,22 @@ export function useRecurringUnavailabilities(filters: LeaveListFilters = {}, opt
  * gated caller becomes enabled it picks up the already-shared cache entries instead of a fresh
  * fetch. */
 export function usePendingLeaveCount(enabled = true): number {
-  const { data: leave } = useLeaveRequests({ status: 'Pending' }, { enabled })
-  const { data: unavailability } = useRecurringUnavailabilities({ status: 'Pending' }, { enabled })
-  return (leave?.length ?? 0) + (unavailability?.length ?? 0)
+  return usePendingLeaveQueue(enabled).count
+}
+
+/**
+ * The same queue with what its count rests on: `loading` while either request is waiting (in flight, or paused while the browser is offline: `awaitsData`) and
+ * `error` once one has failed, so a caller can tell "nothing is waiting" from "we do not know yet" (a count is 0 in both of those states). The dashboard reads it so it never claims an all-clear on a
+ * leave queue it has not seen. `usePendingLeaveCount` is this hook's count alone.
+ */
+export function usePendingLeaveQueue(enabled = true): { count: number; loading: boolean; error: boolean } {
+  const leave = useLeaveRequests({ status: 'Pending' }, { enabled })
+  const unavailability = useRecurringUnavailabilities({ status: 'Pending' }, { enabled })
+  return {
+    count: (leave.data?.length ?? 0) + (unavailability.data?.length ?? 0),
+    loading: awaitsData(leave) || awaitsData(unavailability),
+    error: leave.isError || unavailability.isError,
+  }
 }
 
 export function useCreateLeaveOnBehalf() {
