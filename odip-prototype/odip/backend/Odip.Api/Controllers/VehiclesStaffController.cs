@@ -620,6 +620,13 @@ public class StaffController : ControllerBase
         // above is what keeps a tenant caller off SuperAdmin accounts) must not start failing because of the address.
         if (addressChanged)
         {
+            // Once a row has signed in its address is a working identity: re-pointing it at another mailbox lets that mailbox's owner ask for the
+            // set-password link and sign in AS this person, with the row's role, history and attribution, and locks the person out. Before the first
+            // sign-in it is only a typo to fix, so that stays open to everyone who may edit staff.
+            if (s.LastLoginAt is not null && !((User?.IsInRole("Admin") ?? false) || (User?.IsInRole("SuperAdmin") ?? false)))
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    ApiResponse<StaffDetailDto>.Fail("Only an Admin can change the address of someone who has already signed in."));
+
             var reservedError = ReservedDomainError(emailLower);
             if (reservedError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(reservedError));
 
@@ -655,6 +662,9 @@ public class StaffController : ControllerBase
         s.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
+        // The address is the whole of this person's sign-in, so a change leaves a trace: who changed whose, never the addresses themselves.
+        if (addressChanged)
+            _logger?.LogInformation("The sign-in address of staff member {TargetUserId} was changed by {ActorUserId}", s.Id, User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown");
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         return Ok(ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
         {

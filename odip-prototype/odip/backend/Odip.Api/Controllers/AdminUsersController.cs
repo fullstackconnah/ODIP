@@ -402,6 +402,10 @@ public class AdminUsersController : ControllerBase
             throw; // handled by ExceptionHandlingMiddleware -> standard 500 ApiResponse envelope
         }
 
+        // The address is the whole of this person's sign-in, so a change leaves a trace: who changed whose, never the addresses themselves.
+        if (email != originalEmail)
+            _logger.LogInformation("The sign-in address of user {TargetUserId} was changed by {ActorUserId}", user.Id, User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown");
+
         return Ok(ApiResponse<AdminUserDto>.Ok(ToAdminUserDto(user, user.Tenant?.Name ?? "")));
     }
 
