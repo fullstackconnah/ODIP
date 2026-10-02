@@ -819,54 +819,6 @@ describe('DataTable — CellText', () => {
   })
 })
 
-describe('DataTable — column priority (dropping columns instead of squeezing them)', () => {
-  type Item = { id: string; a: string; b: string; c: string; d: string; e: string }
-  const items: Item[] = [{ id: '1', a: 'alpha', b: 'bravo', c: 'charlie', d: 'delta', e: 'echo' }]
-  const columns: Column<Item>[] = [
-    { key: 'a', header: 'A' },
-    { key: 'b', header: 'B', priority: 'high' },
-    { key: 'c', header: 'C', priority: 'medium' },
-    { key: 'd', header: 'D', priority: 'low' },
-    { key: 'e', header: 'E', priority: 'lowest' },
-  ]
-
-  it('keeps high (and the default) always, and drops medium below xl, low below 2xl, lowest below 1792px', () => {
-    render(<DataTable data={items} columns={columns} keyField="id" />)
-
-    const headers = screen.getAllByRole('columnheader')
-    const cells = screen.getAllByRole('cell')
-    const hiddenClass: Array<string | null> = [null, null, 'md:max-xl:hidden', 'md:max-2xl:hidden', 'md:max-[1792px]:hidden']
-    hiddenClass.forEach((cls, i) => {
-      for (const el of [headers[i], cells[i]]) {
-        if (cls) expect(el).toHaveClass(cls)
-        else expect(el.className).not.toMatch(/hidden/)
-      }
-    })
-  })
-
-  it('only ever hides from md up, so the mobile card view keeps every field and its data-label', () => {
-    render(<DataTable data={items} columns={columns} keyField="id" />)
-
-    for (const el of [...screen.getAllByRole('columnheader'), ...screen.getAllByRole('cell')]) {
-      expect(el.className).not.toMatch(/(^|\s)(hidden|max-\w+:hidden)(\s|$)/)
-    }
-    // Hidden by CSS only: the cell and its label are still in the DOM for the card view.
-    expect(screen.getByText('delta').closest('td')).toHaveAttribute('data-label', 'D')
-    expect(screen.getByText('echo').closest('td')).toHaveAttribute('data-label', 'E')
-  })
-
-  it('hides an editing cell with its column too, so an edited row never shears against its header', () => {
-    const editable: Column<Item>[] = [
-      { key: 'a', header: 'A' },
-      { key: 'd', header: 'D', priority: 'low', editable: { render: (row, onChange) => <input aria-label="edit-d" defaultValue={row.d} onChange={e => onChange(e.target.value)} /> } },
-    ]
-    render(<DataTable data={items} columns={editable} keyField="id" editingRow="1" onEditChange={vi.fn()} />)
-
-    expect(screen.getByLabelText('edit-d').closest('td')).toHaveClass('md:max-2xl:hidden')
-    expect(screen.getByRole('columnheader', { name: 'D' })).toHaveClass('md:max-2xl:hidden')
-  })
-})
-
 describe('DataTable — minWidth', () => {
   type Item = { id: string; name: string; status: string }
   const items: Item[] = [{ id: '1', name: 'Bianca', status: 'Draft' }]

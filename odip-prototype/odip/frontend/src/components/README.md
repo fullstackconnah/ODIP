@@ -83,12 +83,23 @@ Column shape (`Column<T>`):
   sortable?: boolean
   sortFn?: (a: T, b: T) => number   // overrides the default type-aware comparator
   align?: 'left' | 'center' | 'right'
-  hidden?: boolean
+  hidden?: boolean                  // the caller's own switch (a column a role cannot see); not a breakpoint
+  pin?: 'start' | 'end' | false     // see "The column rule"
+  minWidth?: number | string        // narrowest the column is laid out at (md+)
+  maxWidth?: number | string        // cap for a plain-string cell (ellipsis, full text in `title`); default 24rem
+  wrap?: boolean                    // let the cell wrap (prose); default: rows are exactly --row-h
   editable?: { render: (row: T, onChange: (value: unknown) => void) => ReactNode }
   bulkEditable?: { items: DropdownItem[]; onBulkChange: (selectedIds: string[], value: string) => void }
   className?: string
 }
 ```
+
+**The column rule** (L3-04; DESIGN.md, Tables). A column is never removed at md and up: the old `priority` prop, which hid columns below xl / 2xl / 1792px, is retired
+and ignored (a column hidden by breakpoint is data deleted from the page). Cap text instead (`maxWidth`, `CellText`); a table still wider than its box scrolls
+sideways inside its own box, and two columns stay put while it does: the first labelled column (an unlabelled tick or avatar column and the select-all checkbox
+column are skipped) pins to the start edge, and the column keyed `actions` pins to the end edge. `pin` picks an edge for any column or opts out with `false`.
+A pinned cell is filled opaque, with a hairline, only while content is scrolled under it, so a tinted row keeps its tint at rest. Below md the table is cards and
+nothing is pinned. `src/test/dataTableColumnRule.test.ts` fails a page that passes `priority`.
 
 **States**
 
@@ -662,8 +673,8 @@ component deliberately doesn't have.
 `StatusBadge.tsx` — a small coloured pill for an enum-like status value. Props: `status` (matched case/whitespace-insensitively against
 `STATUS_TONE`, the tone map in `lib/tone.ts`, which spans booking, severity and priority, claims, QSC, plan-type and trip vocabularies), `label`
 (override the displayed text without changing the colour lookup), `tone` (colour the badge with this tone whatever the status word is), `colorMap`
-(per-call overrides for one domain), `pulse`, `className`, `size`. Unrecognised statuses fall back to the warning tone (the amber "awaiting" pair)
-rather than an unstyled default. `size` is `'sm'` (default: the 12px pill every table uses) or `'md'` (13px semibold, 24px tall), the one opt-in
+(per-call overrides for one domain), `pulse`, `className`, `size`. Every status the API sends has a row, and an unrecognised status falls back to the NEUTRAL tone
+(never the amber "awaiting" pair: an unknown word must not claim attention) rather than an unstyled default. `size` is `'sm'` (default: the 12px pill every table uses) or `'md'` (13px semibold, 24px tall), the one opt-in
 step up, for the status that leads a detail header's meta row; the colour is the same at both.
 
 ```tsx
@@ -700,7 +711,8 @@ value is usually a one-line addition there, not a reason to bypass this componen
 | Which tones tint a segment or tile | `attentionOf(tone)`: warning tints the warning container, danger the error container, every other tone is quiet |
 | The older tone words | `toneOf('error' \| 'positive' \| 'negative')`: Callout `error` is `danger`, FactChip `positive` is `success` and `negative` is `danger` |
 
-Adding a status: put it in `STATUS_TONE` (the key is the status lower-cased with no spaces). Do not add a colour, a class string or a hex; if the word means
+Adding a status: put it in `STATUS_TONE` (the key is the status lower-cased with no spaces); `lib/statusToneCoverage.test.ts` fails for a status value or a
+`*Status` enum the API can send that has no row. In progress is `info` (not the accessibility pink). Do not add a colour, a class string or a hex; if the word means
 something else in one domain, give that domain a `colorMap` of tones. **Plan types and other categories are `info`, `accessible` or `neutral`, never `warning`
 or `danger`.** `--color-warning` is a fill, border and ring colour, never text or an icon (2.15:1 on the card): warning text is `TONE.warning.ink`.
 

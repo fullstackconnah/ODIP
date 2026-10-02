@@ -135,13 +135,12 @@ describe('AccommodationTab — column budget', () => {
     expect(address).toHaveClass('truncate', 'md:w-0', 'md:min-w-full')
   })
 
-  it('hides Nights and Ref below 1536px, and caps Ref', () => {
+  // L3-04: Nights and Ref (the booking number a coordinator quotes to a venue) used to be deleted below 1536px.
+  it('keeps Nights and Ref at every width, and caps Ref', () => {
     renderTab([reservation({ confirmationReference: 'CONF-88123' })])
-    expect(screen.getByRole('columnheader', { name: 'Nights' })).toHaveClass('md:max-2xl:hidden')
-    expect(screen.getByRole('columnheader', { name: 'Ref' })).toHaveClass('md:max-2xl:hidden')
     expect(screen.getByText('CONF-88123')).toHaveStyle('--cell-max: 8rem')
-    for (const name of ['Property', 'Status', 'Check-in', 'Check-out', 'Cost', 'Bedrooms / Beds']) {
-      expect(screen.getByRole('columnheader', { name }).className, name).not.toMatch(/max-(xl|2xl)|max-\[1792px\]/)
+    for (const name of ['Property', 'Status', 'Check-in', 'Check-out', 'Nights', 'Cost', 'Bedrooms / Beds', 'Ref']) {
+      expect(screen.getByRole('columnheader', { name }).className, name).not.toMatch(/hidden/)
     }
   })
 })

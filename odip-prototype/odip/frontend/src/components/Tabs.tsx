@@ -40,6 +40,12 @@ export type TabsProps = {
   onChange: (id: string) => void
   /** Accessible name for the tablist. Defaults to "Tabs". */
   ariaLabel?: string
+  /**
+   * Prefix for the ids this strip generates (`${idPrefix}-tab-${id}`, and `${idPrefix}-panel-${id}` for an inline panel). Defaults to a
+   * generated unique one. A page that renders its OWN tabpanel (`panelId`) sets it so that panel can name its tab: `aria-labelledby=
+   * "trip-tab-bookings"` is only true when the strip made that id.
+   */
+  idPrefix?: string
   className?: string
 }
 
@@ -70,8 +76,9 @@ export type TabsProps = {
  *   (`md:flex-wrap`) instead: billing-style 3-tab pages stay on one line and longer strips roll
  *   over onto a second row, exactly as before.
  */
-export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', className }: TabsProps) {
-  const baseId = useId()
+export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, className }: TabsProps) {
+  const generatedId = useId()
+  const baseId = idPrefix ?? generatedId
   const listRef = useRef<HTMLDivElement | null>(null)
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 

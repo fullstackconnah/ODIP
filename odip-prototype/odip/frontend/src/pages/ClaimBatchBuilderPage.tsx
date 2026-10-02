@@ -207,8 +207,8 @@ export default function ClaimBatchBuilderPage() {
 
   // ── Table columns ────────────────────────────────────────────────────────
   // Column budget (density §4): ten columns with an uncapped participant and reference need ~1600px against a ~1006px box at 1280, which
-  // pushed the Findings column off-screen. Both are capped (ellipsis, full text in the tooltip); Stream gives way below 2xl (1536)
-  // and Day Type below 1792.
+  // pushed the Findings column off-screen. Both are capped (ellipsis, full text in the tooltip); Stream and Day Type stay, and the table scrolls in its box
+  // with the first column and the actions pinned (DataTable's column rule).
   const columns: Column<BillableEventDto>[] = [
     {
       key: 'participantName',
@@ -222,7 +222,6 @@ export default function ClaimBatchBuilderPage() {
       key: 'stream',
       header: 'Stream',
       sortable: true,
-      priority: 'low',
       render: e => INCOME_STREAM_LABELS[e.stream] ?? e.stream,
     },
     {
@@ -230,7 +229,7 @@ export default function ClaimBatchBuilderPage() {
       header: 'Support Item',
       className: 'font-mono text-xs text-[var(--color-muted-foreground)]',
     },
-    { key: 'dayType', header: 'Day Type', sortable: true, priority: 'lowest' },
+    { key: 'dayType', header: 'Day Type', sortable: true },
     {
       key: 'supportsDeliveredFrom',
       header: 'Dates',

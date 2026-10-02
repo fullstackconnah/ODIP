@@ -37,18 +37,21 @@ public class User : ITenantEntity
     public string? WorkerScreeningNumber { get; set; }
     public DateOnly? WorkerScreeningExpiryDate { get; set; }
     public string? Notes { get; set; }
-    public bool HasExpiredQualifications
-    {
-        get
-        {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            return (IsFirstAidQualified && FirstAidExpiryDate.HasValue && FirstAidExpiryDate.Value < today)
-                || (IsDriverEligible && DriverLicenceExpiryDate.HasValue && DriverLicenceExpiryDate.Value < today)
-                || (IsManualHandlingCompetent && ManualHandlingExpiryDate.HasValue && ManualHandlingExpiryDate.Value < today)
-                || (IsMedicationCompetent && MedicationCompetencyExpiryDate.HasValue && MedicationCompetencyExpiryDate.Value < today)
-                || (WorkerScreeningExpiryDate.HasValue && WorkerScreeningExpiryDate.Value < today);
-        }
-    }
+
+    /// <summary>
+    /// Whether any ticked credential expired before <paramref name="today"/>. A request handler passes the PROVIDER's calendar date
+    /// (<c>ProviderTimeZoneResolver.TodayAsync</c>): the UTC date is yesterday for the first 10-11 hours of a Sydney day, so a credential
+    /// that expired yesterday was not flagged until mid-morning.
+    /// </summary>
+    public bool HasExpiredQualificationsOn(DateOnly today) =>
+        (IsFirstAidQualified && FirstAidExpiryDate.HasValue && FirstAidExpiryDate.Value < today)
+        || (IsDriverEligible && DriverLicenceExpiryDate.HasValue && DriverLicenceExpiryDate.Value < today)
+        || (IsManualHandlingCompetent && ManualHandlingExpiryDate.HasValue && ManualHandlingExpiryDate.Value < today)
+        || (IsMedicationCompetent && MedicationCompetencyExpiryDate.HasValue && MedicationCompetencyExpiryDate.Value < today)
+        || (WorkerScreeningExpiryDate.HasValue && WorkerScreeningExpiryDate.Value < today);
+
+    /// <summary><see cref="HasExpiredQualificationsOn"/> at the UTC date: only for a caller with no provider zone to hand. A request handler passes the provider's date instead.</summary>
+    public bool HasExpiredQualifications => HasExpiredQualificationsOn(DateOnly.FromDateTime(DateTime.UtcNow));
 
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

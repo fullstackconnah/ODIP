@@ -414,7 +414,9 @@ describe('IncidentsPage — narrow-desktop columns', () => {
     return screen.getAllByRole('columnheader').findIndex(h => h.textContent?.includes(label))
   }
 
-  it('keeps title, severity, status, date and QSC always, and drops the rest by breakpoint (header and cells together)', () => {
+  // L3-04: Participant (below 1280), Type (below 1536), Trip and Reported By (below 1792) used to be deleted by breakpoint; the table now
+  // scrolls in its box with the title and the actions pinned (DataTable's column rule), so every column is on the page at every width.
+  it('keeps every column at every width, header and cells together', () => {
     mockUseIncidents.mockReturnValue({
       data: [baseIncident({ tripInstanceId: 't-1', tripName: 'Beach Trip', involvedParticipantId: 'p-1', involvedParticipantName: 'Sam Lee' })],
       isLoading: false,
@@ -422,21 +424,11 @@ describe('IncidentsPage — narrow-desktop columns', () => {
     renderPage()
 
     const cells = within(screen.getByText('Slip in kitchen').closest('tr') as HTMLElement).getAllByRole('cell')
-    const expected: Record<string, string | null> = {
-      Title: null, Severity: null, Status: null, Date: null, QSC: null,
-      Participant: 'md:max-xl:hidden',
-      Type: 'md:max-2xl:hidden',
-      Trip: 'md:max-[1792px]:hidden',
-      'Reported By': 'md:max-[1792px]:hidden',
-    }
-    for (const [label, hidden] of Object.entries(expected)) {
+    for (const label of ['Title', 'Severity', 'Status', 'Date', 'QSC', 'Participant', 'Type', 'Trip', 'Reported By']) {
       const index = headerIndex(label)
       expect(index, label).toBeGreaterThanOrEqual(0)
       const th = screen.getAllByRole('columnheader')[index]
-      for (const el of [th, cells[index]]) {
-        if (hidden) expect(el, label).toHaveClass(hidden)
-        else expect(el.className, label).not.toMatch(/max-(xl|2xl|\[1792px\]):hidden/)
-      }
+      for (const el of [th, cells[index]]) expect(el.className, label).not.toMatch(/hidden/)
     }
   })
 
@@ -683,5 +675,16 @@ describe('IncidentsPage — flagged notes Age column', () => {
 
     expect(screen.getAllByText('<1h')).toHaveLength(2)
     for (const age of ['5h', '3d']) expect(screen.getByText(age)).toBeInTheDocument()
+  })
+})
+
+// Raw enum labels: the register printed "UnderReview" (the detail page already prints "Under Review").
+describe('IncidentsPage — status labels', () => {
+  it('prints UnderReview as "Under Review", never the raw enum name', () => {
+    mockUseIncidents.mockReturnValue({ data: [baseIncident({ status: 'UnderReview' })], isLoading: false })
+    renderPage()
+
+    expect(screen.getByText('Under Review')).toBeInTheDocument()
+    expect(screen.queryByText('UnderReview')).not.toBeInTheDocument()
   })
 })

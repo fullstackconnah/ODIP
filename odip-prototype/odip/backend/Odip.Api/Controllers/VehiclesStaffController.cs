@@ -10,6 +10,7 @@ using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -143,7 +144,12 @@ public class VehicleAssignmentsController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly RosterConflictService _conflictService = new();
-    public VehicleAssignmentsController(OdipDbContext db) => _db = db;
+    private readonly TimeProvider _clock;
+    public VehicleAssignmentsController(OdipDbContext db, TimeProvider? clock = null)
+    {
+        _db = db;
+        _clock = clock ?? TimeProvider.System;
+    }
 
     /// <summary>
     /// §4.4 same-tenant validation for the driver picker: null is always fine (no driver
@@ -220,7 +226,7 @@ public class VehicleAssignmentsController : ControllerBase
             DriverUserId = dto.DriverStaffId, SeatRequirement = dto.SeatRequirement,
             WheelchairPositionRequirement = dto.WheelchairPositionRequirement,
             PickupTravelNotes = dto.PickupTravelNotes, Comments = dto.Comments,
-            RequestedDate = DateOnly.FromDateTime(DateTime.UtcNow)
+            RequestedDate = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct)
         };
 
         var (overrideReason, codes) = RosterGate.ComputeOverride(findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
@@ -332,12 +338,15 @@ public class StaffController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly IStaffAvailabilityItemsQuery _availabilityItemsQuery;
     private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
+    // The request's clock: a test fixes it. Every calendar rule uses the PROVIDER's date from it (ProviderTimeZoneResolver.TodayAsync), never the UTC date.
+    private readonly TimeProvider _clock;
 
     public StaffController(
         OdipDbContext db, IStaffAvailabilityItemsQuery? availabilityItemsQuery = null,
-        Microsoft.Extensions.Configuration.IConfiguration? config = null)
+        Microsoft.Extensions.Configuration.IConfiguration? config = null, TimeProvider? clock = null)
     {
         _db = db;
+        _clock = clock ?? TimeProvider.System;
         _availabilityItemsQuery = availabilityItemsQuery ?? new StaffAvailabilityItemsQuery(db);
         _config = config;
     }
@@ -346,7 +355,7 @@ public class StaffController : ControllerBase
     /// rather than shared so the two controllers can't accidentally couple on a private property.</summary>
     private int VarianceReviewMinutes => _config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15;
 
-    private static StaffDetailDto ToStaffDetailDto(User s) => new()
+    private static StaffDetailDto ToStaffDetailDto(User s, DateOnly today) => new()
     {
         Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
         FullName = s.FirstName + " " + s.LastName, Username = s.Username,
@@ -361,7 +370,7 @@ public class StaffController : ControllerBase
         MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
         WorkerScreeningNumber = s.WorkerScreeningNumber,
         WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
-        HasExpiredQualifications = s.HasExpiredQualifications
+        HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
     };
 
     /// <summary>
@@ -394,7 +403,7 @@ public class StaffController : ControllerBase
         var query = _db.Users.OrderBy(s => s.LastName).AsQueryable();
         if (isActive.HasValue) query = query.Where(s => s.IsActive == isActive.Value);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var items = await query
             .Select(s => new StaffListDto
             {
@@ -428,6 +437,7 @@ public class StaffController : ControllerBase
         var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<StaffDetailDto>.Fail("Staff not found"));
 
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         return Ok(ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
@@ -443,7 +453,7 @@ public class StaffController : ControllerBase
             MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
             WorkerScreeningNumber = s.WorkerScreeningNumber,
             WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
-            HasExpiredQualifications = s.HasExpiredQualifications
+            HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
         }));
     }
 
@@ -489,6 +499,7 @@ public class StaffController : ControllerBase
         };
         _db.Users.Add(s);
         await _db.SaveChangesAsync(ct);
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         return CreatedAtAction(nameof(GetById), new { id = s.Id }, ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
@@ -504,7 +515,7 @@ public class StaffController : ControllerBase
             MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
             WorkerScreeningNumber = s.WorkerScreeningNumber,
             WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
-            HasExpiredQualifications = s.HasExpiredQualifications
+            HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
         }));
     }
 
@@ -541,6 +552,7 @@ public class StaffController : ControllerBase
         s.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         return Ok(ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
@@ -556,7 +568,7 @@ public class StaffController : ControllerBase
             MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
             WorkerScreeningNumber = s.WorkerScreeningNumber,
             WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
-            HasExpiredQualifications = s.HasExpiredQualifications
+            HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
         }));
     }
 
@@ -588,7 +600,7 @@ public class StaffController : ControllerBase
         var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<StaffOverviewDto>.Fail("Staff not found"));
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var staffIds = new List<Guid> { id };
 
         // Availability: shared with ScheduleController.GetScheduleOverview via
@@ -681,7 +693,7 @@ public class StaffController : ControllerBase
 
         return Ok(ApiResponse<StaffOverviewDto>.Ok(new StaffOverviewDto
         {
-            Staff = ToStaffDetailDto(s),
+            Staff = ToStaffDetailDto(s, today),
             Availability = availability,
             UpcomingShifts = upcomingShifts,
             UpcomingTripAssignments = upcomingTripAssignments,

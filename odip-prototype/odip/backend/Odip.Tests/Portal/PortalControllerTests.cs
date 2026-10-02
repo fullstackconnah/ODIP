@@ -12,6 +12,7 @@ using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Xunit;
+using Odip.Tests.Medications;
 
 namespace Odip.Tests.Portal;
 
@@ -44,11 +45,11 @@ public class PortalControllerTests
     }
 
     /// <summary>Builds a controller whose caller identity resolves to <paramref name="callerUserId"/> via the NameIdentifier claim.</summary>
-    private static PortalController MakeController(OdipDbContext db, ICurrentTenant tenant, Guid callerUserId)
+    private static PortalController MakeController(OdipDbContext db, ICurrentTenant tenant, Guid callerUserId, TimeProvider? clock = null)
     {
         var identity = new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, callerUserId.ToString())], "Test");
-        return new PortalController(db, tenant)
+        return new PortalController(db, tenant, clock: clock)
         {
             ControllerContext = new ControllerContext
             {
@@ -750,7 +751,8 @@ public class PortalControllerTests
         var user = SeedUser(db);
         var participant = SeedParticipant(db);
         var shift = SeedShift(db, participant.Id, user.Id);
-        var controller = MakeController(db, tenant.Object, user.Id);
+        // Sat 3 Oct 08:00 in Sydney, still Fri 2 Oct in UTC: "due tomorrow" is Sun 4 Oct, not Sat 3 Oct.
+        var controller = MakeController(db, tenant.Object, user.Id, FakeClock.AtUtc(2026, 10, 2, 22, 0));
 
         var result = await controller.CreateShiftNote(shift.Id, new CreateShiftNoteDto { Body = "She had a fall near the bathroom this morning." }, CancellationToken.None);
         var noteId = Assert.IsType<ApiResponse<ShiftNoteDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Id;
@@ -760,7 +762,7 @@ public class PortalControllerTests
         Assert.Equal($"flagged-note:{noteId}", task.SourceKey);
         Assert.Equal(noteId, task.ShiftNoteId);
         Assert.Equal(shift.Id, task.ShiftId);
-        Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), task.DueDate);
+        Assert.Equal(new DateOnly(2026, 10, 4), task.DueDate);
         Assert.Equal("/incidents?view=flagged-notes", task.LinkTo);
         Assert.Contains("Falls", task.Title);
     }

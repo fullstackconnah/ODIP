@@ -418,6 +418,11 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+// No tz database in the runtime (an alpine image, a stripped container): the provider's zone falls back to a fixed +10:00, so "today" and local
+// times are right for AEST and an hour out in AEDT. Say so once at startup, so nobody finds out from a wrong due date.
+if (!Odip.Domain.Rostering.ProviderLocalTime.TzDataAvailable)
+    app.Logger.LogWarning("No tz database in this runtime: provider-local dates and times use a fixed +10:00 (an hour out in daylight saving). Install tzdata.");
+
 // ── Migrate + Seed (with retry for transient DB connectivity) ─
 const int maxRetries = 5;
 for (var attempt = 1; attempt <= maxRetries; attempt++)

@@ -12,14 +12,14 @@ import { plural } from '@/lib/format'
 export type ColumnType = 'text' | 'date' | 'currency' | 'boolean' | 'badge' | 'custom'
 
 /**
- * How early a column is dropped when the desktop table runs out of room. Only the table (md+)
- * drops columns; the mobile card view (below md) always keeps every field.
- *  - `'high'` (default): always shown.
- *  - `'medium'`: hidden below xl (1280px).
- *  - `'low'`: hidden below 2xl (1536px).
- *  - `'lowest'`: hidden below 1792px.
+ * @deprecated Retired, and ignored: no column is ever removed at any width (the column rule, below). It used to drop a column below
+ * xl / 2xl / 1792px, which deleted the Overnight and Manual flags, a task's Trip and Type, a reservation's Ref and Nights from the page
+ * (L3-04). Kept only so a call site written before the rule still compiles; delete it from a column when you next touch the file.
  */
 export type ColumnPriority = 'high' | 'medium' | 'low' | 'lowest'
+
+/** Which edge of the scroll box a pinned column holds to (see `pin`). */
+export type ColumnPin = 'start' | 'end'
 
 type ColumnBase<T> = {
   header: string | ReactNode
@@ -42,8 +42,16 @@ type ColumnBase<T> = {
    * itself, see `CellText`.
    */
   maxWidth?: number | string
-  /** Which viewports keep this column (md+); see `ColumnPriority`. Default `'high'`: always. */
+  /** @deprecated Ignored, see `ColumnPriority`. Every column stays on the page at every width. */
   priority?: ColumnPriority
+  /**
+   * The column rule (L3-04): no column is removed at md+; a table wider than its box scrolls sideways inside the box, and two columns stay
+   * on screen while it does, so a row is never anonymous and its actions are never out of reach. By default the FIRST column (the one that
+   * says who the row is; the select-all checkbox column is not counted) pins to the start edge and a column keyed `'actions'` pins to the
+   * end edge. `'start'` / `'end'` choose an edge for any column; `false` opts a column out (a first column that is only a date, say).
+   * A pinned cell is filled opaque only while content is scrolled under it, so a tinted row keeps its tint at rest.
+   */
+  pin?: ColumnPin | false
   /** Let this column's cells wrap onto several lines (prose such as notes). The row then grows past
    * `--row-h`. Default: body cells never wrap, so every row is exactly `--row-h` at any width. */
   wrap?: boolean
@@ -186,17 +194,44 @@ function renderCell<T>(row: T, col: Column<T>, rowIndex: number): ReactNode {
   }
 }
 
-// ── Responsive columns and single-line cells ─────────────────────
+// ── The column rule and single-line cells ────────────────────────
 
-// Tailwind only emits classes it can read as whole literals, so each level is spelled out. Every
-// one starts at `md:`: below 768px `.mobile-card-table` (index.css) turns rows into cards and every
-// field stays. `max-xl` / `max-2xl` are strict (`width < 1280px` / `< 1536px`), so a column is
-// still there at exactly 1280 (medium) or 1536 (low).
-const PRIORITY_HIDDEN_CLASS: Record<ColumnPriority, string> = {
-  high: '',
-  medium: 'md:max-xl:hidden',
-  low: 'md:max-2xl:hidden',
-  lowest: 'md:max-[1792px]:hidden',
+// Below 768px `.mobile-card-table` (index.css) turns rows into cards and every field stays, so nothing here is pinned or scrolled there:
+// every class below starts at `md:`. From md up no column is removed (the old `priority` hiding deleted data, L3-04): the box scrolls and
+// the first and the "actions" column are pinned (`pinOf`). Tailwind only emits classes it can read as whole literals, so each is spelled out.
+const PIN_BASE: Record<ColumnPin, string> = {
+  start: 'md:sticky md:left-0 md:z-[2]',
+  end: 'md:sticky md:right-0 md:z-[2]',
+}
+// A pinned header cell sits one layer above the pinned body cells.
+const PIN_BASE_HEAD: Record<ColumnPin, string> = {
+  start: 'md:sticky md:left-0 md:z-[3]',
+  end: 'md:sticky md:right-0 md:z-[3]',
+}
+// The fill and the hairline of a pinned cell, applied only while content is scrolled under it (`edges`). The fill is a custom property so the
+// row's hover tint (accent at 50% over card, the same mix the row actions use) can switch it: a hovered row shows no seam.
+const PIN_OVER_CONTENT: Record<ColumnPin, string> = {
+  start: 'md:bg-[var(--pin-bg)] md:[--pin-bg:var(--color-card)] md:group-hover/row:[--pin-bg:color-mix(in_srgb,var(--color-accent)_50%,var(--color-card))] md:shadow-[1px_0_0_var(--color-border)]',
+  end: 'md:bg-[var(--pin-bg)] md:[--pin-bg:var(--color-card)] md:group-hover/row:[--pin-bg:color-mix(in_srgb,var(--color-accent)_50%,var(--color-card))] md:shadow-[-1px_0_0_var(--color-border)]',
+}
+// The header row has no hover tint and sits above the body's pinned cells.
+const PIN_OVER_CONTENT_HEAD: Record<ColumnPin, string> = {
+  start: 'md:bg-[var(--color-card)] md:shadow-[1px_0_0_var(--color-border)]',
+  end: 'md:bg-[var(--color-card)] md:shadow-[-1px_0_0_var(--color-border)]',
+}
+
+/**
+ * The edge a column pins to, or undefined: an explicit `pin` wins, a column keyed 'actions' is the end, and the first column that is neither
+ * pinned out nor an unlabelled control column (a tick button has no header text) is the start: the one that says who the row is.
+ */
+function pinsOf<T>(columns: Column<T>[]): Array<ColumnPin | undefined> {
+  const unlabelled = (col: Column<T>) => typeof col.header === 'string' && col.header.trim() === ''
+  const firstData = columns.findIndex(col => col.pin === undefined && col.key !== 'actions' && !unlabelled(col))
+  return columns.map((col, index) => {
+    if (col.pin !== undefined) return col.pin === false ? undefined : col.pin
+    if (col.key === 'actions') return 'end'
+    return index === firstData ? 'start' : undefined
+  })
 }
 
 /** A number is px, a string is passed through as a CSS length. */
@@ -297,6 +332,30 @@ export function DataTable<T>({
     selectAllRef.current.indeterminate = selectedCount > 0 && selectedCount < sortedData.length
   }, [selectedRows, sortedData, keyField, selectable])
 
+  // Which edge of the scroll box has content scrolled under its pinned column: the start edge once scrolled right, the end edge while there
+  // is more to the right. jsdom measures nothing (all zeros), so both stay false there and a pinned cell is only filled in a real browser.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [edges, setEdges] = useState({ start: false, end: false })
+  useEffect(() => {
+    const box = scrollRef.current
+    if (!box) return
+    const measure = () => {
+      const start = box.scrollLeft > 1
+      const end = box.scrollLeft + box.clientWidth < box.scrollWidth - 1
+      setEdges(previous => (previous.start === start && previous.end === end ? previous : { start, end }))
+    }
+    measure()
+    box.addEventListener('scroll', measure, { passive: true })
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    observer?.observe(box)
+    const table = box.querySelector('table')
+    if (table) observer?.observe(table)
+    return () => {
+      box.removeEventListener('scroll', measure)
+      observer?.disconnect()
+    }
+  }, [visibleColumns.length, sortedData.length])
+
   function handleSort(key: string) {
     if (!sortable) return
     const col = columns.find(c => c.key === key)
@@ -329,9 +388,10 @@ export function DataTable<T>({
   //  - cells get --cell-px horizontally, no vertical padding, and `align-middle`, so content is
   //    centred in the row instead of stacking padding on top of it (which is what made rows 43px).
   //  - body cells are `whitespace-nowrap` (unless the column opts in with `wrap`), so a narrower
-  //    window costs a column, not a row height: a plain string is cut with an ellipsis at its cap
-  //    (`maxWidth`, full text in `title`), a custom cell limits itself (`CellText`), and a column
-  //    that is low `priority` is dropped below its breakpoint instead of being squeezed.
+  //    window costs width, not a row height: a plain string is cut with an ellipsis at its cap
+  //    (`maxWidth`, full text in `title`), a custom cell limits itself (`CellText`), and a table that
+  //    is still wider than its box scrolls sideways with the first and the actions column pinned
+  //    (the column rule; no column is ever removed).
   //  - `md:` on the body row, the nowrap, the truncation and the column-width vars: below 768px
   //    `.mobile-card-table` (index.css) turns each <tr> into a padded flex card, where a fixed
   //    height would clip it and text has to be free to wrap inside the card.
@@ -341,8 +401,16 @@ export function DataTable<T>({
   const cellClass = `${cellPaddingX} align-middle`
   // Per-column classes shared by the header and body cells: which viewports keep the column, and
   // its `minWidth` (via a custom property so it, too, only applies from md up).
-  const columnClass = (col: Column<T>) =>
-    `${PRIORITY_HIDDEN_CLASS[col.priority ?? 'high']} ${col.minWidth != null ? 'md:min-w-[var(--col-min)]' : ''}`
+  const columnClass = (col: Column<T>) => (col.minWidth != null ? 'md:min-w-[var(--col-min)]' : '')
+  const pins = pinsOf(visibleColumns)
+  // The classes that hold a column to its edge, and fill it opaque once content is scrolled under it.
+  const pinClass = (colIndex: number, head: boolean) => {
+    const pin = pins[colIndex]
+    if (!pin) return ''
+    const overContent = pin === 'start' ? edges.start : edges.end
+    const fill = overContent ? (head ? PIN_OVER_CONTENT_HEAD[pin] : PIN_OVER_CONTENT[pin]) : ''
+    return `${head ? PIN_BASE_HEAD[pin] : PIN_BASE[pin]} ${fill}`
+  }
   const columnStyle = (col: Column<T>): CSSProperties | undefined =>
     col.minWidth != null ? ({ '--col-min': cssLength(col.minWidth) } as CSSProperties) : undefined
   const bodyRowHeight = compact ? 'md:h-[calc(var(--row-h)-4px)]' : 'md:h-[var(--row-h)]'
@@ -350,7 +418,7 @@ export function DataTable<T>({
   const dividerClass = showVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
 
   return (
-    <div className={className ?? 'relative bg-[var(--color-card)] rounded-md border border-[var(--color-border)] overflow-x-auto'}>
+    <div ref={scrollRef} className={className ?? 'relative bg-[var(--color-card)] rounded-md border border-[var(--color-border)] overflow-x-auto'}>
       {loading && data.length > 0 && (
         <div className="absolute inset-0 bg-[var(--color-card)]/50 flex items-center justify-center z-10 rounded-md">
           <div className="w-5 h-5 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
@@ -384,7 +452,7 @@ export function DataTable<T>({
                 />
               </th>
             )}
-            {visibleColumns.map(col => {
+            {visibleColumns.map((col, colIndex) => {
               const isSortable = sortable && col.sortable
               const isSorted = activeSort?.key === col.key
               const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
@@ -392,7 +460,7 @@ export function DataTable<T>({
               return (
                 <th
                   key={col.key}
-                  className={`${alignClass} ${cellClass} text-xs font-medium text-[var(--color-muted-foreground)] whitespace-nowrap ${columnClass(col)} ${isSortable ? 'cursor-pointer select-none' : ''}`}
+                  className={`${alignClass} ${cellClass} text-xs font-medium text-[var(--color-muted-foreground)] whitespace-nowrap ${columnClass(col)} ${pinClass(colIndex, true)} ${isSortable ? 'cursor-pointer select-none' : ''}`}
                   style={columnStyle(col)}
                   aria-sort={isSortable ? (isSorted ? (activeSort!.direction === 'asc' ? 'ascending' : 'descending') : 'none') : undefined}
                   onClick={isSortable ? () => handleSort(col.key) : undefined}
@@ -489,12 +557,12 @@ export function DataTable<T>({
                       />
                     </td>
                   )}
-                  {visibleColumns.map(col => {
+                  {visibleColumns.map((col, colIndex) => {
                     const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : ''
 
                     if (isEditing && col.editable) {
                       return (
-                        <td key={col.key} className={`${cellClass} ${alignClass} ${columnClass(col)} ${col.className ?? ''}`} style={columnStyle(col)} data-label={typeof col.header === 'string' ? col.header : ''}>
+                        <td key={col.key} className={`${cellClass} ${alignClass} ${columnClass(col)} ${pinClass(colIndex, false)} ${col.className ?? ''}`} style={columnStyle(col)} data-label={typeof col.header === 'string' ? col.header : ''}>
                           {col.editable.render(row, (value) => onEditChange?.(row, col.key, value), { errorId: rowErrorId })}
                         </td>
                       )
@@ -509,7 +577,7 @@ export function DataTable<T>({
                     return (
                       <td
                         key={col.key}
-                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
+                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${pinClass(colIndex, false)} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
                         style={columnStyle(col)}
                         data-label={typeof col.header === 'string' ? col.header : ''}
                       >

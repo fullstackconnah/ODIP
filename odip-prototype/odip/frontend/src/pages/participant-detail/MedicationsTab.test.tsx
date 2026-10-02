@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import MedicationsTab from './MedicationsTab'
 import type { AdministrationDto } from '@/api/types/medications'
+import { TONE } from '@/lib/tone'
 
 const { mockUseParticipantMedications, mockUseParticipantAdministrations, mockNavigate, permissionsOverride } = vi.hoisted(() => ({
   mockUseParticipantMedications: vi.fn(),
@@ -128,5 +129,19 @@ describe('participant-detail/MedicationsTab — loading and failure (PageState)'
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Medications' })).toBeInTheDocument()
+  })
+})
+
+describe('participant-detail/MedicationsTab — administration outcome tones (L3-06)', () => {
+  it('colours a WrongMedication dose danger like Refused and Missed, and every other outcome by its tone', () => {
+    const tones = { Administered: 'success', Refused: 'danger', Withheld: 'warning', Missed: 'danger', WrongMedication: 'danger' } as const
+    mockUseParticipantAdministrations.mockReturnValue({
+      data: Object.keys(tones).map((status, i) => administration({ id: `admin-${i}`, status: status as AdministrationDto['status'] })),
+    })
+    renderTab()
+
+    for (const [status, tone] of Object.entries(tones)) {
+      for (const cls of TONE[tone].solid.split(' ')) expect(screen.getByText(status), `${status} ${cls}`).toHaveClass(cls)
+    }
   })
 })

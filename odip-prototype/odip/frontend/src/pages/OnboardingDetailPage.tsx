@@ -116,7 +116,7 @@ export default function OnboardingDetailPage() {
       <PageHeader
         title={headingTitle}
         subtitle={<Link to={`/participants/${id}`} className="font-medium text-[var(--color-primary)] hover:underline">View participant record</Link>}
-        action={<BackButton to="/participants?tab=onboarding" label="onboarding" />}
+        action={<BackButton to="/participants?tab=onboarding" label="onboarding" history={false} />}
       />
       {/* min(26rem,100%) is what collapses this to one column on a phone (a bare 26rem floor
           overflows a 390px viewport), so the old max-md:grid-cols-1 override is redundant. */}

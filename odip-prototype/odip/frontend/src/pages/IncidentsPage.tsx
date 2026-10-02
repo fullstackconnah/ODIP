@@ -1,6 +1,7 @@
 import { useIncidents, useUpdateIncident, useDeleteIncident, useOverdueQscIncidents, useFlaggedShiftNotes } from '@/api/hooks'
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import type { IncidentListDto, FlaggedShiftNoteDto } from '@/api/types'
+import { INCIDENT_STATUS_LABELS, type IncidentStatus } from '@/api/types/enums'
 import { CellText, DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -251,12 +252,11 @@ export default function IncidentsPage() {
       className: 'font-medium',
       render: (i) => <CellText className="md:max-w-[15rem] 2xl:max-w-[18rem]">{i.title ?? '—'}</CellText>,
     },
-    { key: 'incidentType', header: 'Type', sortable: true, priority: 'low', maxWidth: '9rem' },
+    { key: 'incidentType', header: 'Type', sortable: true, maxWidth: '9rem' },
     {
       key: 'tripName',
       header: 'Trip',
       sortable: true,
-      priority: 'lowest',
       render: (i) => i.tripInstanceId && i.tripName ? (
         <Link
           to={`/trips/${i.tripInstanceId}`}
@@ -270,7 +270,6 @@ export default function IncidentsPage() {
     {
       key: 'involvedParticipantName',
       header: 'Participant',
-      priority: 'medium',
       render: (i) => i.involvedParticipantId && i.involvedParticipantName ? (
         <Link
           to={`/participants/${i.involvedParticipantId}`}
@@ -282,8 +281,8 @@ export default function IncidentsPage() {
       ) : (i.involvedParticipantName ?? '—'),
     },
     { key: 'severity', header: 'Severity', sortable: true, render: (i) => <StatusBadge status={i.severity} /> },
-    { key: 'status', header: 'Status', sortable: true, render: (i) => <StatusBadge status={i.status} /> },
-    { key: 'reportedByName', header: 'Reported By', priority: 'lowest', maxWidth: '9rem' },
+    { key: 'status', header: 'Status', sortable: true, render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
+    { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem' },
     { key: 'incidentDateTime', header: 'Date', type: 'date', sortable: true },
     {
       key: 'qscReportingStatus',

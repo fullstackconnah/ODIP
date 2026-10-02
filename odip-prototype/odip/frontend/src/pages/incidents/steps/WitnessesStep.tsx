@@ -27,13 +27,6 @@ export type WitnessesStepProps = {
 
 type WitnessRow = { existingId?: string; witnessUserId: string | null; witnessName: string }
 
-const WITNESS_STATUS_COLOR_MAP: Record<string, Tone> = {
-  notrequired: 'neutral',
-  pending: 'warning',
-  approved: 'success',
-  declined: 'danger',
-}
-
 // Staff and External are categories of witness, not states: info and neutral.
 const WITNESS_TYPE_COLOR_MAP: Record<string, Tone> = { staff: 'info', external: 'neutral' }
 
@@ -96,7 +89,7 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
         }
         return (
           <div className="flex flex-col gap-1">
-            <StatusBadge status={persisted.witnessStatus} label={WITNESS_STATUS_LABELS[persisted.witnessStatus]} colorMap={WITNESS_STATUS_COLOR_MAP} />
+            <StatusBadge status={persisted.witnessStatus} label={WITNESS_STATUS_LABELS[persisted.witnessStatus]} />
             {persisted.statementText && (
               <span className="text-xs text-[var(--color-muted-foreground)]">{persisted.statementText}</span>
             )}

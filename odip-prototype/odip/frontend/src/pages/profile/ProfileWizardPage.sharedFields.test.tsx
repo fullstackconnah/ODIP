@@ -69,7 +69,7 @@ function renderProfilePage(participant = makeParticipant()) {
 }
 
 async function expectStep(label: string | RegExp) {
-  await within(screen.getByRole('navigation', { name: /intake wizard steps/i })).findByRole('button', { name: label, current: 'step' })
+  await within(screen.getByRole('navigation', { name: /profile wizard steps/i })).findByRole('button', { name: label, current: 'step' })
 }
 
 async function next(user: ReturnType<typeof userEvent.setup>, expectedPatches: number) {

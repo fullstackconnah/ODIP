@@ -77,6 +77,18 @@ describe('CaregiverWizardPage — no session code reachable', () => {
   })
 })
 
+// L5-10: the step rail announced itself as "Intake wizard steps" on every wizard.
+describe('CaregiverWizardPage — the step rail names itself', () => {
+  it('is the caregiver form steps, not the intake', async () => {
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+
+    expect(screen.getByRole('navigation', { name: 'Caregiver form steps' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: /intake/i })).not.toBeInTheDocument()
+  })
+})
+
 describe('CaregiverWizardPage — About You name gate', () => {
   it('blocks navigation to later steps until a name is entered', async () => {
     const user = userEvent.setup()

@@ -1,6 +1,8 @@
 import type { PatchParticipantDto } from './participant-patch'
 
-export type CaregiverSubmissionStatus = 'Draft' | 'Submitted' | 'Accepted' | 'Rejected' | 'Revoked'
+/** Mirrors backend CaregiverSubmissionStatus. An `as const` array so the status-tone guard (lib/statusToneCoverage.test.ts) can walk it. */
+export const CAREGIVER_SUBMISSION_STATUSES = ['Draft', 'Submitted', 'Accepted', 'Rejected', 'Revoked'] as const
+export type CaregiverSubmissionStatus = typeof CAREGIVER_SUBMISSION_STATUSES[number]
 
 /** Mirrors backend CaregiverFormDto. `current` is a caregiver-visible subset of ParticipantDetailDto's JSON. */
 export type CaregiverFormDto = {

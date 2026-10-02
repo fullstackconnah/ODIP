@@ -470,13 +470,13 @@ export default function LeaveApprovalsPage() {
   }
 
   // Column budget (density §4): the Edit / Decline / Approve buttons take ~260px, so with uncapped text columns this table needed ~1170px
-  // against a ~1006px box at 1280 and pushed the buttons off-screen. The text columns are capped (ellipsis, full text in the tooltip)
-  // and Requested (who asked, and when) gives way below 2xl (1536).
+  // against a ~1006px box at 1280 and pushed the buttons off-screen. The text columns are capped (ellipsis, full text in the tooltip);
+  // Requested (who asked, and when) stays, and the buttons stay pinned while the table scrolls in its box (DataTable's column rule).
   const columns: Column<ApprovalRow>[] = [
     { key: 'staff', header: 'Staff', maxWidth: '10rem', render: row => row.data.userFullName },
     { key: 'type', header: 'Type', maxWidth: '8rem', render: rowType },
     { key: 'window', header: 'Dates', maxWidth: '16rem', render: rowWindow },
-    { key: 'requestedAt', header: 'Requested', priority: 'low', maxWidth: '12rem', render: rowRequestedBy },
+    { key: 'requestedAt', header: 'Requested', maxWidth: '12rem', render: rowRequestedBy },
     { key: 'status', header: 'Status', render: row => row.rowKind === 'legacy' ? (
       <StatusBadge status="Record" colorMap={LEGACY_RECORD_COLOR} />
     ) : (

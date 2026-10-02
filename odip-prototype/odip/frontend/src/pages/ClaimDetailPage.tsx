@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom'
 import type { AxiosError } from 'axios'
 import { useClaim, useUpdateClaim, useUpdateClaimLineItem } from '@/api/hooks'
 import type { TripClaimStatus, ClaimLineItemDto } from '@/api/types'
+import { PLAN_TYPE_LABELS, type PlanType } from '@/api/types/enums'
 import { Download, Check, DollarSign, XCircle } from 'lucide-react'
 import { useState } from 'react'
 import { apiClient } from '@/api/client'
@@ -20,13 +21,9 @@ import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 const inputClass = 'w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
 
+/** The API sends the enum name ('AgencyManaged'); this page once mapped a spelling it never sends ('NdiaManaged') and printed the raw name. */
 function planTypeLabel(planType: string) {
-  switch (planType) {
-    case 'NdiaManaged': return 'NDIA Managed'
-    case 'PlanManaged': return 'Plan Managed'
-    case 'SelfManaged': return 'Self Managed'
-    default: return planType
-  }
+  return PLAN_TYPE_LABELS[planType as PlanType] ?? planType
 }
 
 async function downloadFile(url: string, filename: string) {

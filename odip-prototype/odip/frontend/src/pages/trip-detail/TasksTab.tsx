@@ -47,7 +47,7 @@ export default function TasksTab({ tripId, tasks, canWrite }: { tripId: string; 
 
   const columns: Column<TaskDto>[] = [
     // Column budget (density §4), the same as the Tasks page: the text columns are capped (ellipsis, full text in the tooltip) and Type
-    // gives way below 2xl (1536), so Status stays on screen at 1280 whatever the task titles and owners are.
+    // stays: the table scrolls in its box with the first column and the actions pinned (DataTable's column rule).
     {
       key: 'title',
       header: 'Task',
@@ -59,7 +59,6 @@ export default function TasksTab({ tripId, tasks, canWrite }: { tripId: string; 
       key: 'taskType',
       header: 'Type',
       sortable: true,
-      priority: 'low',
       maxWidth: '10rem',
     },
     {

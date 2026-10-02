@@ -100,7 +100,7 @@ export default function ServiceAgreementDraftPage() {
 
     <div role="note" className="rounded-[var(--radius-md)] border border-[var(--color-warning)]/40 bg-[var(--color-warning-container)] p-[var(--card-pad)] text-sm text-[var(--color-on-warning-container)] space-y-2">
       <p><strong>Draft only</strong> — not approved for signing or use. It can't be used to activate the participant, roster shifts, invoice or claim.</p>
-      <p><strong>Participant identifiers stay in the participant record.</strong> NDIS number: {canonicalIdentifiers.ndis}; date of birth: {canonicalIdentifiers.dob}. <Link className="underline font-medium" to={`/participants/${participantId}/profile`}>View or edit participant details</Link>. They are not copied into this draft.</p>
+      <p><strong>Participant identifiers come from the participant record.</strong> NDIS number: {canonicalIdentifiers.ndis}; date of birth: {canonicalIdentifiers.dob}. <Link className="underline font-medium" to={`/participants/${participantId}/profile`}>View or edit participant details</Link>. A snapshot of both is stored with this draft and printed on its PDF, which any signed-in user can open; a later change to the record does not change an existing draft.</p>
     </div>
 
     <form onSubmit={submit} className="flex flex-col gap-[var(--section-gap)]">

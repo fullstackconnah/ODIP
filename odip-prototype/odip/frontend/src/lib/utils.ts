@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import type { AxiosError } from 'axios'
-import { TONE } from './tone'
+import { statusClass } from './tone'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -82,17 +82,13 @@ export function formatDateAu(date: string | null | undefined): string {
 }
 
 /**
- * The pill colour for a booking, task, vehicle or insurance status (the Dropdown pill triggers and a few inline pills): the green, grey, red
- * and amber tones of lib/tone.ts, with amber for any status with no entry here. It is a generic helper whose words mean the same thing across
- * those domains, so it is NOT the trip-status mapping: a trip's status is coloured by `statusClass` (STATUS_TONE), which has a tone for every
- * trip status (Planning, OpenForBookings, WaitlistOnly and InProgress are not amber there).
+ * The pill colour for a booking, task, vehicle or insurance status (the Dropdown pill triggers and a few inline pills). It is `statusClass`:
+ * the one status table of lib/tone.ts, so a word has the same colour here as on a StatusBadge, and a status nobody listed is neutral, never
+ * the amber "awaiting a decision" pair. (It used to keep a four-word table of its own, which sent Enquiry, Held, Waitlist, In progress and
+ * Not started to amber and disagreed with the trip pills.)
  */
 export function getStatusColor(status: string): string {
-  const s = status.toLowerCase()
-  if (['confirmed', 'completed', 'available'].includes(s)) return TONE.success.solid
-  if (['draft', 'proposed', 'none'].includes(s)) return TONE.neutral.solid
-  if (['cancelled', 'unavailable', 'nolongerattending', 'expired', 'overdue', 'conflict'].includes(s)) return TONE.danger.solid
-  return TONE.warning.solid
+  return statusClass(status)
 }
 
 export function formatCurrency(amount: number | null | undefined): string {

@@ -81,7 +81,7 @@ public enum ContactRoleStatus
 public static class ContactRoleRules
 {
     /// <summary>
-    /// Age in whole years as of <paramref name="asOf"/> (defaults to UTC today when omitted) — a
+    /// Age in whole years as of <paramref name="asOf"/> (defaults to the UTC date when omitted: a request handler passes the PROVIDER's date) — a
     /// participant with no recorded <see cref="Entities.Participant.DateOfBirth"/> has an unknown
     /// age, so every age-gated rule below treats a null age as "don't gate" (neither role is
     /// hidden/rejected) rather than guessing — conservative, matching this task's brief for the two
@@ -124,7 +124,7 @@ public static class ContactRoleRules
     /// first place — every rule here is expressed purely in terms of the existing three PlanType
     /// values, which is already the most permissive reading available.
     /// </summary>
-    public static string? Validate(ContactRoleType roleType, PlanType participantPlanType, DateOnly? participantDateOfBirth, bool? registeredProviderFlag)
+    public static string? Validate(ContactRoleType roleType, PlanType participantPlanType, DateOnly? participantDateOfBirth, bool? registeredProviderFlag, DateOnly? asOf = null)
     {
         if (roleType == ContactRoleType.PlanManager && participantPlanType != PlanType.PlanManaged)
             return "Plan Manager contacts are only available for plan-managed participants.";
@@ -134,7 +134,7 @@ public static class ContactRoleRules
             && registeredProviderFlag != true)
             return "Agency-managed participants can only record registered-provider contacts.";
 
-        var age = CalculateAge(participantDateOfBirth);
+        var age = CalculateAge(participantDateOfBirth, asOf);
         if (roleType == ContactRoleType.PlanNominee && age is < 18)
             return "Plan Nominee is not available for a participant under 18 — use Child Representative instead.";
 

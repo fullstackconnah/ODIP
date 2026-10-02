@@ -62,18 +62,19 @@ describe('WizardStepRail', () => {
     expect(screen.getByRole('button', { name: /gamma/i })).toBeDisabled()
   })
 
-  it('still exposes nav aria-label "Intake wizard steps" with orientation="vertical"', () => {
-    render(
-      <WizardStepRail
-        steps={steps}
-        visitedSteps={new Set(['a', 'b'])}
-        currentKey="a"
-        onSelect={vi.fn()}
-        orientation="vertical"
-      />,
-    )
-    const nav = screen.getByRole('navigation', { name: /intake wizard steps/i })
-    expect(nav).toBeInTheDocument()
+  // L5-10: the label was hard-coded "Intake wizard steps", so every wizard announced itself as the intake. A wizard names itself with `ariaLabel`;
+  // the default is still the intake's name (see the prop's note), so the Intake and Profile wizards' own tests keep passing.
+  it('names the nav with the wizard’s own name through ariaLabel, and not "Intake" when it is not the intake', () => {
+    render(<WizardStepRail steps={steps} visitedSteps={new Set(['a'])} currentKey="a" onSelect={vi.fn()} ariaLabel="Incident report steps" />)
+
+    expect(screen.getByRole('navigation', { name: 'Incident report steps' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: /intake/i })).not.toBeInTheDocument()
+  })
+
+  it('still defaults to "Intake wizard steps" with orientation="vertical" too', () => {
+    render(<WizardStepRail steps={steps} visitedSteps={new Set(['a', 'b'])} currentKey="a" onSelect={vi.fn()} orientation="vertical" />)
+
+    expect(screen.getByRole('navigation', { name: /intake wizard steps/i })).toBeInTheDocument()
   })
 
   it('with orientation="vertical" the <ol> carries the vertical layout classes and the buttons keep their step-label accessible name', () => {

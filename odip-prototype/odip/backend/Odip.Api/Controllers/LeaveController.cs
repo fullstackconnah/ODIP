@@ -12,6 +12,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -31,13 +32,16 @@ public class LeaveController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
     private readonly IObligationTaskService _obligationTasks;
+    // The request's clock: a test fixes it. Every calendar rule uses the PROVIDER's date from it (ProviderTimeZoneResolver.TodayAsync), never the UTC date.
+    private readonly TimeProvider _clock;
 
     public LeaveController(
         OdipDbContext db,
         Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
-        IObligationTaskService? obligationTasks = null)
+        IObligationTaskService? obligationTasks = null, TimeProvider? clock = null)
     {
         _db = db;
+        _clock = clock ?? TimeProvider.System;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
     }
@@ -502,7 +506,7 @@ public class LeaveController : ControllerBase
     /// </summary>
     private async Task<(List<RosterFindingDto> Overlaps, List<OverlapShiftDto> OverlapShifts)> FindRecurringOverlapsAsync(RecurringUnavailability rule, CancellationToken ct)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var horizonStart = today > rule.EffectiveFrom ? today : rule.EffectiveFrom;
         var horizonEnd = rule.EffectiveTo ?? today.AddDays(84);
         var occurrences = new RecurringUnavailabilityExpander().Occurrences(rule, horizonStart, horizonEnd).ToHashSet();

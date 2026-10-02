@@ -15,7 +15,6 @@ import { isPastDue } from '@/lib/deadline'
 import { ComplianceFlagChips } from './MedicationBadges'
 import { DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_TYPE_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
 import type { MedicationListDto } from '@/api/types/medications'
-import type { Tone } from '@/lib/tone'
 
 // Matches MedicationsController.GetRegister's own PagingParams.DefaultPageSize (backend house
 // convention: default 50, ceiling 200) — kept in sync manually since paging params cross the API
@@ -28,12 +27,6 @@ const STATUS_ITEMS = [
   { value: 'OnHold', label: 'On hold' },
   { value: 'Ceased', label: 'Ceased' },
 ]
-
-const MED_STATUS_COLOR_MAP: Record<string, Tone> = {
-  active: 'success',
-  onhold: 'warning',
-  ceased: 'danger',
-}
 
 export default function RegisterTab() {
   const { canManageMedications } = usePermissions()
@@ -69,8 +62,9 @@ export default function RegisterTab() {
   const isReviewOverdue = (dateStr: string | null) => isPastDue(dateStr)
 
   // Column budget (density §4): nine columns with an uncapped medication and dose need ~1300px against a ~1006px box at 1280, which
-  // pushed Status off-screen. The three text columns are capped (ellipsis, full text in the tooltip); Type and Support level give way
-  // below 2xl (1536) and Schedule below 1792. The compliance flags wrap in their own cell, so they never widen the table.
+  // pushed Status off-screen. The three text columns are capped (ellipsis, full text in the tooltip); Type, Support level and Schedule
+  // stay, and the table scrolls in its box with the first column and the actions pinned (DataTable's column rule). The compliance flags
+  // wrap in their own cell, so they never widen the table.
   const columns: Column<MedicationListDto>[] = useMemo(() => [
     { key: 'participantName', header: 'Participant', sortable: true, className: 'font-medium', maxWidth: '9rem' },
     {
@@ -99,7 +93,6 @@ export default function RegisterTab() {
     {
       key: 'type',
       header: 'Type',
-      priority: 'low',
       render: m => (
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${m.type === 'Prn' ? 'bg-[var(--color-secondary-container)] text-[var(--color-foreground)]' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'}`}>
           {MEDICATION_TYPE_LABELS[m.type]}
@@ -109,12 +102,11 @@ export default function RegisterTab() {
     {
       key: 'drugSchedule',
       header: 'Schedule',
-      priority: 'lowest',
       render: m => (m.drugSchedule === 'Schedule4' || m.drugSchedule === 'Schedule8')
         ? <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] whitespace-nowrap">{DRUG_SCHEDULE_LABELS[m.drugSchedule]}</span>
         : <span className="text-[var(--color-muted-foreground)]">—</span>,
     },
-    { key: 'supportLevel', header: 'Support level', priority: 'low', render: m => SUPPORT_LEVEL_LABELS[m.supportLevel] },
+    { key: 'supportLevel', header: 'Support level', render: m => SUPPORT_LEVEL_LABELS[m.supportLevel] },
     { key: 'complianceFlags', header: 'Flags', render: m => <ComplianceFlagChips flags={m.complianceFlags} /> },
     {
       key: 'nextReviewDue',
@@ -126,7 +118,7 @@ export default function RegisterTab() {
         </span>
       ),
     },
-    { key: 'status', header: 'Status', sortable: true, render: m => <StatusBadge status={m.status} colorMap={MED_STATUS_COLOR_MAP} /> },
+    { key: 'status', header: 'Status', sortable: true, render: m => <StatusBadge status={m.status} /> },
   ], [])
 
   return (

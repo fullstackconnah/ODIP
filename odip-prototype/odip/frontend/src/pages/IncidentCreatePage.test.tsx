@@ -161,6 +161,16 @@ beforeEach(() => {
   localStorage.clear()
 })
 
+// L5-10: the step rail announced itself as "Intake wizard steps" on every wizard.
+describe('IncidentCreatePage — the step rail names itself', () => {
+  it('is the incident report steps, not the intake', () => {
+    renderCreatePage()
+
+    expect(screen.getByRole('navigation', { name: 'Incident report steps' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: /intake/i })).not.toBeInTheDocument()
+  })
+})
+
 describe('IncidentCreatePage — INC-01 service type / trip linkage', () => {
   it('does not show the Trip dropdown until Service Type is set to Trip', async () => {
     renderCreatePage()

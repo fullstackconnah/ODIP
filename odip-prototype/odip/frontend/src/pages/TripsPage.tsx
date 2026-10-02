@@ -181,7 +181,7 @@ export default function TripsPage() {
       render: (t) => (
         // One line: name, then the muted code (13px, the floor for secondary table text). A
         // stacked name/code cell is two lines and pushes the row past --row-h. The name is cut at
-        // its cap with the code in its tooltip; below 1366px the code itself gives way first.
+        // its cap with the code in its tooltip; below 1366px the code itself gives way first (it is derivable: the full code is in the tooltip).
         <div className="flex min-w-0 items-baseline gap-2">
           <span
             className={`truncate font-semibold text-[var(--color-foreground)] ${NAME_CAP}`}
@@ -249,7 +249,6 @@ export default function TripsPage() {
       key: 'leadCoordinatorName',
       header: 'Lead',
       sortable: true,
-      priority: 'low',
       maxWidth: '10rem',
       render: (t) => t.leadCoordinatorName || '—',
     },

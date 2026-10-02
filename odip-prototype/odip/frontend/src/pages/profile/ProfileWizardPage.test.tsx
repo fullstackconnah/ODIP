@@ -84,7 +84,7 @@ function Tracker(): null {
 }
 
 function stepNav() {
-  return screen.getByRole('navigation', { name: /intake wizard steps/i })
+  return screen.getByRole('navigation', { name: /profile wizard steps/i })
 }
 
 async function expectStep(label: string | RegExp) {
@@ -539,7 +539,7 @@ describe('ProfileWizardPage — wizard shell + history-aware back', () => {
     await expectStep(/key identifiers/i)
     const aside = screen.getByRole('complementary', { name: /wizard steps/i })
     expect(aside).toBeInTheDocument()
-    expect(within(aside).getByRole('navigation', { name: /intake wizard steps/i })).toBeInTheDocument()
+    expect(within(aside).getByRole('navigation', { name: /profile wizard steps/i })).toBeInTheDocument()
     // The form still renders inside the same shell as the rail.
     expect(screen.getByRole('button', { name: /^next$/i })).toBeInTheDocument()
   })

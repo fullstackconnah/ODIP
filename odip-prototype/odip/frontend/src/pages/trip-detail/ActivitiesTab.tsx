@@ -6,6 +6,7 @@ import AddActivityModal from '@/components/AddActivityModal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { TripDayDto, ScheduledActivityDto } from '@/api/types/activities'
+import { statusClass } from '@/lib/tone'
 
 interface ActivitiesTabProps {
   tripId: string
@@ -13,17 +14,6 @@ interface ActivitiesTabProps {
   schedule: TripDayDto[]
   canWrite: boolean
   isReadOnly: boolean
-}
-
-const getActivityStatusColor = (status: string) => {
-  switch (status) {
-    case 'Planned': return 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]'
-    case 'Booked': return 'bg-[#fef3c7] text-[#92400e]'
-    case 'Confirmed': return 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
-    case 'Completed': return 'bg-[var(--color-secondary-container)] text-[#0d1c2e]'
-    case 'Cancelled': return 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
-    default: return 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]'
-  }
 }
 
 export default function ActivitiesTab({ tripId, trip, schedule, canWrite, isReadOnly }: ActivitiesTabProps) {
@@ -108,7 +98,7 @@ export default function ActivitiesTab({ tripId, trip, schedule, canWrite, isRead
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm">{a.title}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${getActivityStatusColor(a.status)}`}>{a.status}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${statusClass(a.status)}`}>{a.status}</span>
                         </div>
                         <div className="flex items-center gap-3 text-xs text-[var(--color-muted-foreground)] mt-0.5">
                           {a.startTime && <span>{a.startTime}{a.endTime && ` – ${a.endTime}`}</span>}

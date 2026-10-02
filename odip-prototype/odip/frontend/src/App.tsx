@@ -63,6 +63,7 @@ const PortalShiftsPage = React.lazy(() => import('@/pages/portal/PortalShiftsPag
 const PortalShiftDetailPage = React.lazy(() => import('@/pages/portal/PortalShiftDetailPage'))
 const PortalWitnessApprovalsPage = React.lazy(() => import('@/pages/portal/PortalWitnessApprovalsPage'))
 const PortalLeavePage = React.lazy(() => import('@/pages/portal/PortalLeavePage'))
+const NotFoundPage = React.lazy(() => import('@/pages/NotFoundPage'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -175,6 +176,8 @@ const router = createBrowserRouter(
         <Route path="/portal/shifts/:id" element={<PrivateRoute page="portal"><PortalShiftDetailPage /></PrivateRoute>} />
         <Route path="/portal/witness-approvals" element={<PrivateRoute page="portal"><PortalWitnessApprovalsPage /></PrivateRoute>} />
         <Route path="/portal/leave" element={<PrivateRoute page="portal-leave"><PortalLeavePage /></PrivateRoute>} />
+        {/* Any other URL: a not-found page inside the shell (L5-11), never React Router's bare default error page. */}
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Route>
   )

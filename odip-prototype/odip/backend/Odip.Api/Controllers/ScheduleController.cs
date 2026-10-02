@@ -8,6 +8,7 @@ using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -19,11 +20,14 @@ public class ScheduleController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly IStaffUnavailabilityQuery _unavailabilityQuery;
     private readonly IStaffAvailabilityItemsQuery _availabilityItemsQuery;
+    // The request's clock: a test fixes it. Every calendar rule uses the PROVIDER's date from it (ProviderTimeZoneResolver.TodayAsync), never the UTC date.
+    private readonly TimeProvider _clock;
 
     public ScheduleController(
-        OdipDbContext db, IStaffUnavailabilityQuery unavailabilityQuery, IStaffAvailabilityItemsQuery availabilityItemsQuery)
+        OdipDbContext db, IStaffUnavailabilityQuery unavailabilityQuery, IStaffAvailabilityItemsQuery availabilityItemsQuery, TimeProvider? clock = null)
     {
         _db = db;
+        _clock = clock ?? TimeProvider.System;
         _unavailabilityQuery = unavailabilityQuery;
         _availabilityItemsQuery = availabilityItemsQuery;
     }
@@ -36,8 +40,9 @@ public class ScheduleController : ControllerBase
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
     {
         // Default window: 3 months back to 12 months forward
-        var windowStart = from ?? DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-3));
-        var windowEnd = to ?? DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(12));
+        var providerToday = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        var windowStart = from ?? providerToday.AddMonths(-3);
+        var windowEnd = to ?? providerToday.AddMonths(12);
 
         // ── 1. Load trips in window ──
         var trips = await _db.TripInstances

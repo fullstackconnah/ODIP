@@ -8,6 +8,7 @@ using Odip.Domain.Enums;
 using Npgsql;
 using Odip.Api.Services;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -16,8 +17,14 @@ namespace Odip.Api.Controllers;
 [Route("api/v1/bookings")]
 public class BookingsController : ControllerBase
 {
+    // The request's clock: a test fixes it. Every calendar rule uses the PROVIDER's date from it (ProviderTimeZoneResolver.TodayAsync), never the UTC date.
     private readonly OdipDbContext _db;
-    public BookingsController(OdipDbContext db) => _db = db;
+    private readonly TimeProvider _clock;
+    public BookingsController(OdipDbContext db, TimeProvider? clock = null)
+    {
+        _db = db;
+        _clock = clock ?? TimeProvider.System;
+    }
 
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<BookingListDto>>>> GetAll(
@@ -122,10 +129,12 @@ public class BookingsController : ControllerBase
         if (!readiness.Allowed)
             return BadRequest(ApiResponse<BookingDetailDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
+        // The provider's calendar date, not the UTC date (which is yesterday for the first 10-11 hours of a Sydney day).
+        var providerToday = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var booking = new ParticipantBooking
         {
             Id = Guid.NewGuid(), TripInstanceId = dto.TripInstanceId, ParticipantId = dto.ParticipantId,
-            BookingStatus = dto.BookingStatus, BookingDate = dto.BookingDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            BookingStatus = dto.BookingStatus, BookingDate = dto.BookingDate ?? providerToday,
             SupportRatioOverride = dto.SupportRatioOverride, NightSupportRequired = dto.NightSupportRequired,
             WheelchairRequired = dto.WheelchairRequired, HighSupportRequired = dto.HighSupportRequired,
             HasRestrictivePracticeFlag = dto.HasRestrictivePracticeFlag, PlanTypeOverride = dto.PlanTypeOverride,
@@ -155,7 +164,7 @@ public class BookingsController : ControllerBase
                     ? TaskItemStatus.Completed : TaskItemStatus.NotStarted,
                 DueDate = trip.StartDate.AddDays(-14),
                 CompletedDate = dto.InsuranceStatus == InsuranceStatus.Confirmed
-                    ? DateOnly.FromDateTime(DateTime.UtcNow) : null,
+                    ? providerToday : null,
             });
         }
 
@@ -223,7 +232,7 @@ public class BookingsController : ControllerBase
             if (insuranceTask != null)
             {
                 insuranceTask.Status = TaskItemStatus.Completed;
-                insuranceTask.CompletedDate = DateOnly.FromDateTime(DateTime.UtcNow);
+                insuranceTask.CompletedDate = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
             }
         }
 

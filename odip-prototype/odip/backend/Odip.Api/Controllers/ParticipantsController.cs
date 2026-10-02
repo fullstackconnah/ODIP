@@ -125,7 +125,7 @@ public class ParticipantsController : ControllerBase
     /// validation filter before this method is ever reached, same as every other DTO field. A
     /// non-draft (IsDraft false) submission hard-fails a personless row exactly as before.
     /// </summary>
-    private static string? ValidateContactRoles(CreateParticipantDto dto)
+    private static string? ValidateContactRoles(CreateParticipantDto dto, DateOnly asOf)
     {
         var seen = new List<(ContactRoleType RoleType, bool IsPrimary, ContactRoleStatus Status)>();
         foreach (var role in dto.ContactRoles)
@@ -136,7 +136,7 @@ public class ParticipantsController : ControllerBase
                 return "Each contact needs either an existing person or a new person's name.";
             }
 
-            var gateError = ContactRoleRules.Validate(role.RoleType, dto.PlanType, dto.DateOfBirth, role.RegisteredProviderFlag);
+            var gateError = ContactRoleRules.Validate(role.RoleType, dto.PlanType, dto.DateOfBirth, role.RegisteredProviderFlag, asOf);
             if (gateError != null) return gateError;
 
             var uniquenessError = ContactRoleRules.ValidateUniqueness(role.RoleType, role.IsPrimary, role.Status, seen);
@@ -349,7 +349,7 @@ public class ParticipantsController : ControllerBase
         if (diagnosesError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(diagnosesError));
 
-        var contactRolesError = ValidateContactRoles(dto);
+        var contactRolesError = ValidateContactRoles(dto, await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct));
         if (contactRolesError != null)
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(contactRolesError));
 
@@ -783,6 +783,7 @@ public class ParticipantsController : ControllerBase
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
         // ── Validate what will be created, before touching the participant ──
+        var providerToday = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var existingRoles = await _db.ParticipantContactRoles.Include(r => r.Person).Where(r => r.ParticipantId == p.Id).ToListAsync(ct);
         var newRoles = new List<CreateParticipantContactRoleDto>();
         var rolesSoFar = existingRoles.Select(r => (r.RoleType, r.IsPrimary, r.Status)).ToList();
@@ -796,7 +797,7 @@ public class ParticipantsController : ControllerBase
             }
             if (existingRoles.Any(r => IsSameContact(r, roleDto)) || newRoles.Any(r => IsSameContact(r, roleDto))) continue;
 
-            var gateError = ContactRoleRules.Validate(roleDto.RoleType, dto.PlanType, dto.DateOfBirth, roleDto.RegisteredProviderFlag);
+            var gateError = ContactRoleRules.Validate(roleDto.RoleType, dto.PlanType, dto.DateOfBirth, roleDto.RegisteredProviderFlag, providerToday);
             if (gateError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(gateError));
             var uniquenessError = ContactRoleRules.ValidateUniqueness(roleDto.RoleType, roleDto.IsPrimary, roleDto.Status, rolesSoFar);
             if (uniquenessError != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(uniquenessError));

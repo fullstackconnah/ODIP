@@ -16,6 +16,10 @@ let tripLoading = false
 let tripFailure: { error?: unknown } | null = null
 const tripRefetch = vi.fn()
 let canWrite = true
+let isAdmin = false
+let isSuperAdmin = false
+// Pages a test denies (canAccessPage returns false for them); cleared before each test.
+const deniedPages = new Set<string>()
 
 const { mockUseTripSchedule, mockUseTripClaims, mockUseTripIncidents } = vi.hoisted(() => ({
   mockUseTripSchedule: vi.fn(() => ({ data: [] })),
@@ -24,7 +28,7 @@ const { mockUseTripSchedule, mockUseTripClaims, mockUseTripIncidents } = vi.hois
 }))
 
 vi.mock('@/lib/permissions', () => ({
-  usePermissions: () => ({ canWrite, canAccessPage: () => true }),
+  usePermissions: () => ({ canWrite, isAdmin, isSuperAdmin, canAccessPage: (page: string) => !deniedPages.has(page) }),
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -39,6 +43,8 @@ vi.mock('@/api/hooks', () => ({
   useTripIncidents: mockUseTripIncidents,
   useParticipants: () => ({ data: [] }),
 }))
+
+vi.mock('@/components/AuditHistoryTab', () => ({ default: () => <div>History panel</div> }))
 
 vi.mock('./trip-detail', () => ({
   OverviewTab: () => <div>Overview panel</div>,
@@ -62,11 +68,14 @@ function renderPage(initialEntry = '/trips/trip-1') {
 }
 
 beforeEach(() => {
+  deniedPages.clear()
   trip = baseTrip
   tripLoading = false
   tripFailure = null
   tripRefetch.mockClear()
   canWrite = true
+  isAdmin = false
+  isSuperAdmin = false
   localStorage.clear()
   mockUseTripSchedule.mockClear()
   mockUseTripClaims.mockClear()
@@ -91,6 +100,27 @@ describe('TripDetailPage — PP-60 URL-synced tabs', () => {
     renderPage('/trips/trip-1?tab=vehicles')
 
     expect(screen.getByText('Vehicles panel')).toBeInTheDocument()
+  })
+})
+
+describe('TripDetailPage — History tab by role (L5-05)', () => {
+  it('shows the History tab to an Admin', () => {
+    isAdmin = true
+    renderPage()
+    expect(screen.getByRole('tab', { name: /history/i })).toBeInTheDocument()
+  })
+
+  it('shows the History tab to a SuperAdmin and opens it from ?tab=history', () => {
+    isSuperAdmin = true
+    renderPage('/trips/trip-1?tab=history')
+    expect(screen.getByRole('tab', { name: /history/i })).toBeInTheDocument()
+    expect(screen.getByText('History panel')).toBeInTheDocument()
+  })
+
+  it('hides the History tab from other roles and falls back to Overview', () => {
+    renderPage('/trips/trip-1?tab=history')
+    expect(screen.queryByRole('tab', { name: /history/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Overview panel')).toBeInTheDocument()
   })
 })
 
@@ -426,5 +456,47 @@ describe('TripDetailPage — Incidents tab', () => {
     await user.click(tab)
     expect(screen.getByText('Incidents panel')).toBeInTheDocument()
     expect(mockUseTripIncidents).toHaveBeenCalledWith('trip-1')
+  })
+})
+
+// L5-05: a ?tab= the role cannot see matched the static key list but showed no tab: nothing selected, an empty body.
+describe('TripDetailPage — a role-gated tab key in the URL', () => {
+  const selectedTab = () => screen.getAllByRole('tab').filter(tab => tab.getAttribute('aria-selected') === 'true')
+
+  it('reads ?tab=incidents as Overview for a role without incident access', () => {
+    deniedPages.add('incidents')
+    renderPage('/trips/trip-1?tab=incidents')
+
+    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Overview/)])
+    expect(screen.queryByRole('tab', { name: /incidents/i })).not.toBeInTheDocument()
+  })
+
+  it('reads ?tab=history as Overview for a role that is not Admin', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    renderPage('/trips/trip-1?tab=history')
+
+    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Overview/)])
+    localStorage.removeItem('odip_user')
+  })
+})
+
+// L5-06: the page's own tabpanel pointed aria-labelledby at "trip-tab-<id>", an id the Tabs primitive stopped generating when it took over
+// the buttons, so the panel had no accessible name and a screen-reader user entered an unnamed region.
+describe('TripDetailPage — the tabpanel is named by its tab', () => {
+  it('has an aria-labelledby that resolves to the selected tab, so the panel is named "Bookings"', () => {
+    renderPage('/trips/trip-1?tab=bookings')
+
+    const panel = screen.getByRole('tabpanel')
+    const labelledBy = panel.getAttribute('aria-labelledby')
+    expect(labelledBy).toBeTruthy()
+    expect(document.getElementById(labelledBy as string)).toBe(screen.getByRole('tab', { selected: true }))
+    expect(panel).toHaveAccessibleName(/^Bookings/)
+  })
+
+  it('points the selected tab aria-controls at the panel that is really there', () => {
+    renderPage('/trips/trip-1?tab=vehicles')
+
+    const selected = screen.getByRole('tab', { selected: true })
+    expect(document.getElementById(selected.getAttribute('aria-controls') as string)).toBe(screen.getByRole('tabpanel'))
   })
 })

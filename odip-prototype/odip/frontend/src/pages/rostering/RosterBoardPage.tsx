@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   DndContext, PointerSensor, KeyboardSensor, useSensor, useSensors, closestCenter,
   type DragEndEvent,
@@ -18,7 +18,7 @@ import {
   WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer,
   type ShiftSlideOverTarget,
 } from './components'
-import { weekStartOf, shiftWeek, daysOfWeek } from './lib/roster'
+import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek } from './lib/roster'
 import { useBoardViewMode } from './lib/useBoardViewMode'
 
 type PendingAssign = { shift: ShiftDto; staffId: string | null; findings: RosterFindingDto[] }
@@ -36,7 +36,16 @@ function allBoardShifts(board: RosterBoardDto | undefined): ShiftDto[] {
 
 export default function RosterBoardPage() {
   const { canWrite } = usePermissions()
-  const [weekStart, setWeekStart] = useState(() => weekStartOf(new Date()))
+  // `?date=` (the server's "Re-cover shift" task link) opens the week that contains it, and a later change of it moves the board there; the toolbar owns the week in between.
+  const [searchParams] = useSearchParams()
+  const dateParam = searchParams.get('date')
+  const [weekStart, setWeekStart] = useState(() => weekStartFromDateParam(dateParam))
+  // React's "adjust state when a prop changes" pattern: compare the param during render, no effect. A missing param never resets the week.
+  const [seenDateParam, setSeenDateParam] = useState(dateParam)
+  if (seenDateParam !== dateParam) {
+    setSeenDateParam(dateParam)
+    if (dateParam !== null) setWeekStart(weekStartFromDateParam(dateParam))
+  }
   const [groupBy, setGroupBy] = useBoardViewMode()
   const [participantFilter, setParticipantFilter] = useState('')
   const [regionFilter, setRegionFilter] = useState('')

@@ -57,6 +57,18 @@ describe('ServiceAgreementDraftPage', () => {
     expect(screen.queryByDisplayValue('430000001')).not.toBeInTheDocument()
   })
 
+  // L1-11: the banner said the identifiers "are not copied into this draft", but the draft stores a snapshot of the NDIS number and the date of
+  // birth and its PDF prints both, readable by every authenticated role. The banner now says what happens.
+  it('says the NDIS number and date of birth ARE snapshotted into the draft and printed on its PDF, not that they are not copied', () => {
+    renderPage()
+
+    const banner = screen.getByText(/Participant identifiers/).closest('p') as HTMLElement
+    expect(banner).toHaveTextContent(/snapshot/i)
+    expect(banner).toHaveTextContent(/PDF/)
+    expect(banner).not.toHaveTextContent(/not copied/i)
+    expect(screen.queryByText(/not copied into this draft/i)).not.toBeInTheDocument()
+  })
+
   it('shows the selected unapproved source version and server-priced line without calling it signed', () => {
     drafts.mockReturnValue([{ id: 'd-1', version: 2, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27', templateDocxSha256: 'docx-hash', templatePdfSha256: 'pdf-hash', state: 'NSW', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', lines: [{ serviceType: 'Daily support', itemCode: 'configured-code', hours: 2, unitPrice: 72.34, catalogueVersion: '2026-07', catalogueEffectiveFrom: '2026-07-01', catalogueEffectiveTo: null }] }])
     render(<MemoryRouter initialEntries={['/participants/p-1/agreement-draft']}><Routes><Route path="/participants/:id/agreement-draft" element={<ServiceAgreementDraftPage />} /></Routes></MemoryRouter>)

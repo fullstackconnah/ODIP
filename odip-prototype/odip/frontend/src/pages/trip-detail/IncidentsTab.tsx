@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu } from '@/lib/utils'
 import type { IncidentListDto } from '@/api/types'
+import { INCIDENT_STATUS_LABELS } from '@/api/types/enums'
 
 export default function IncidentsTab({ incidents }: { incidents: IncidentListDto[] }) {
   if (incidents.length === 0) {
@@ -27,7 +28,7 @@ export default function IncidentsTab({ incidents }: { incidents: IncidentListDto
             {incident.title}
           </span>
           <StatusBadge status={incident.severity} />
-          <StatusBadge status={incident.status} />
+          <StatusBadge status={incident.status} label={INCIDENT_STATUS_LABELS[incident.status] ?? incident.status} />
         </Link>
       ))}
     </div>

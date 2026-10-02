@@ -2,6 +2,13 @@
 export const PLAN_TYPES = ['SelfManaged', 'PlanManaged', 'AgencyManaged'] as const
 export type PlanType = typeof PLAN_TYPES[number]
 
+/** The plan type in words, spelled the way the intake form's Plan Type control spells it. Print this, never the enum name the API sends. */
+export const PLAN_TYPE_LABELS: Record<PlanType, string> = {
+  SelfManaged: 'Self Managed',
+  PlanManaged: 'Plan Managed',
+  AgencyManaged: 'Agency Managed',
+}
+
 // ── Gender (participant identity, INTAKE-05) ────────────
 export const GENDERS = ['Male', 'Female', 'NonBinary', 'PreferNotToSay', 'Other'] as const
 export type Gender = typeof GENDERS[number]
@@ -13,6 +20,18 @@ export type FundingSource = typeof FUNDING_SOURCES[number]
 // ── Support Ratio ───────────────────────────────────────
 export const SUPPORT_RATIOS = ['OneToOne', 'OneToTwo', 'TwoToOne', 'SharedSupport', 'Other', 'OneToThree', 'OneToFour', 'OneToFive'] as const
 export type SupportRatio = typeof SUPPORT_RATIOS[number]
+
+/** The support ratio as people write it ("2:1"), never the enum name ("TwoToOne"). */
+export const SUPPORT_RATIO_LABELS: Record<SupportRatio, string> = {
+  OneToOne: '1:1',
+  OneToTwo: '1:2',
+  TwoToOne: '2:1',
+  SharedSupport: 'Shared Support',
+  Other: 'Other',
+  OneToThree: '1:3',
+  OneToFour: '1:4',
+  OneToFive: '1:5',
+}
 
 // ── Preferred Contact Method ────────────────────────────
 export const PREFERRED_CONTACT_METHODS = ['Email', 'Phone', 'Mobile', 'SMS'] as const

@@ -246,11 +246,58 @@ describe('ShiftChip one-line label', () => {
     expect(screen.queryAllByRole('link')).toHaveLength(0)
   })
 
-  it('is one line at row-h minus 6px, so it grows with the density token under a coarse pointer', () => {
+  it('is at least row-h minus 6px tall, so it grows with the density token under a coarse pointer', () => {
     const shift = makeShift()
     const { container } = renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
-    expect(container.firstElementChild).toHaveClass('h-[calc(var(--row-h)_-_6px)]')
+    expect(container.firstElementChild).toHaveClass('min-h-[calc(var(--row-h)_-_6px)]')
+    // A fixed height would clip the name stacked under the time (below).
+    expect(container.firstElementChild).not.toHaveClass('h-[calc(var(--row-h)_-_6px)]')
+  })
+})
+
+// Landing-spotted: at the board's native width a day column is 123-130px, and the time, the separator, the drag handle and the actions
+// trigger left the name 0-5px: a one-letter link. Below 14rem the name now sits UNDER the time on its own line (the chip grows to two
+// lines); from 14rem it is the one line "time · name" it was. jsdom cannot measure a container query, so the pixel result is covered by the
+// Playwright roster screenshots; what is asserted here is what stays true at every width: the whole name is in the document and reachable, in
+// reading order after the time, with the decoration kept out of what a screen reader announces.
+describe('ShiftChip keeps the name readable in a narrow day column', () => {
+  it('puts the whole name after the time in reading order, as a link whose whole text stays in the document when the visible text is truncated', () => {
+    const shift = makeShift({ participantName: "Jack O'Sullivan", participantId: 'participant-7' })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const time = screen.getByText(formatShiftTimeRange(shift.startTime, shift.endTime))
+    const link = screen.getByRole('link', { name: "Jack O'Sullivan" })
+    expect(link).toHaveTextContent("Jack O'Sullivan")
+    expect(link).toHaveAttribute('href', '/participants/participant-7')
+    expect(time.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('keeps the "·" separator out of the accessibility tree, and the open control announces time and name with a comma', () => {
+    const shift = makeShift({ participantName: 'Grace Palmer' })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(screen.getByText('·')).toHaveAttribute('aria-hidden', 'true')
+    expect(getOpenButton(shift)).toHaveAccessibleName('9am–5pm, Grace Palmer')
+  })
+
+  it('keeps the name, the override mark and the on-leave marker together and apart from the time, so the markers never become a third line', () => {
+    const shift = makeShift({ participantName: 'Grace Palmer', staffId: 'staff-9', staffName: 'Alex Rivera', overrideReason: 'Only cover available', assigneeOnApprovedLeave: true })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const nameRow = screen.getByRole('link', { name: 'Grace Palmer' }).parentElement as HTMLElement
+    expect(nameRow).toContainElement(screen.getByRole('img', { name: /Assigned with an override/ }))
+    expect(nameRow).toContainElement(screen.getByText('On leave'))
+    expect(nameRow).not.toContainElement(screen.getByText(formatShiftTimeRange(shift.startTime, shift.endTime)))
+  })
+
+  it('carries the full name in the link title, so a truncated name can still be read on hover', () => {
+    const shift = makeShift({ participantName: 'Grace Palmer-Hughes' })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const link = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
+    expect(link).toHaveAttribute('title', 'Grace Palmer-Hughes')
+    expect(link).toHaveTextContent('Grace Palmer-Hughes')
   })
 })
 

@@ -11,6 +11,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Xunit;
+using Odip.Tests.Medications;
 
 namespace Odip.Tests.Billing;
 
@@ -262,7 +263,8 @@ public class BillingControllerTests
         var ev = SeedEvent(db, participant.Id, fs.Id, booking.Id, "01_002_0107_1_1",
             totalAmount: 10m, unitPrice: 10m, quantity: 1m, claimReference: "REF-PRODAFILE");
 
-        var controller = new BillingController(db);
+        // The file is dated with the PROVIDER's date; at 12:00 UTC it is the UTC date the expectation below is built from.
+        var controller = new BillingController(db, FakeClock.AtUtcNoonToday());
         var createResult = await controller.CreateClaimBatch(new CreateClaimBatchDto { EventIds = new List<Guid> { ev.Id } }, CancellationToken.None);
         var ok = Assert.IsType<OkObjectResult>(createResult.Result);
         var body = Assert.IsType<ApiResponse<ClaimBatchDetailDto>>(ok.Value);

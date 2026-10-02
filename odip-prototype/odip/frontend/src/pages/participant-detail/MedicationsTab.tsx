@@ -13,23 +13,9 @@ import { MedicationBadges, ComplianceFlagChips } from '../medications'
 import { SUPPORT_LEVEL_LABELS, ROUTE_LABELS, FORM_LABELS } from '@/api/types/medications'
 import type { MedicationListDto, AdministrationDto } from '@/api/types/medications'
 import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/incidentPrefill'
-import type { Tone } from '@/lib/tone'
 import { plural } from '@/lib/format'
 import { isPastDue } from '@/lib/deadline'
 import { localIsoDate } from '@/lib/dateOnly'
-
-const MED_STATUS_COLOR_MAP: Record<string, Tone> = {
-  active: 'success',
-  onhold: 'warning',
-  ceased: 'danger',
-}
-
-const ADMIN_STATUS_COLOR_MAP: Record<string, Tone> = {
-  administered: 'success',
-  refused: 'danger',
-  withheld: 'warning',
-  missed: 'danger',
-}
 
 /** The local calendar date `days` ago ("YYYY-MM-DD"). The UTC date (toISOString) is still yesterday before 10:00 in Sydney. */
 function isoDaysAgo(days: number): string {
@@ -87,7 +73,7 @@ function MedicationCard({ medication }: { medication: MedicationListDto }) {
             {medication.timesOfDay && ` · ${medication.timesOfDay}`}
           </p>
         </div>
-        <StatusBadge status={medication.status} colorMap={MED_STATUS_COLOR_MAP} />
+        <StatusBadge status={medication.status} />
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <MedicationBadges medication={medication} />
@@ -197,7 +183,7 @@ export default function MedicationsTab({ participantId }: { participantId: strin
                   </p>
                 </div>
                 <div className="shrink-0 flex flex-col items-end gap-1">
-                  <StatusBadge status={a.status} colorMap={ADMIN_STATUS_COLOR_MAP} />
+                  <StatusBadge status={a.status} />
                   <IncidentLinkOrAction administration={a} canFile={canCreateIncidents} />
                 </div>
               </div>

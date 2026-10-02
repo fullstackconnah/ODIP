@@ -16,6 +16,13 @@ export type WizardStepRailProps<V> = {
    * once; only its class names flip.
    */
   orientation?: WizardStepRailOrientation
+  /**
+   * Accessible name of the rail's `<nav>`. It was hard-coded "Intake wizard steps", so the Profile wizard, the incident wizard and the caregiver
+   * form all announced themselves as the intake (L5-10): a wizard names itself with this. The default is still "Intake wizard steps" because the
+   * Intake and Profile wizards' own test files query the rail by that name; the Profile wizard should pass "Profile wizard steps" (and the default
+   * should become "Wizard steps") once the branch that owns those two pages has merged.
+   */
+  ariaLabel?: string
 }
 
 /**
@@ -38,6 +45,7 @@ export function WizardStepRail<V>({
   currentKey,
   onSelect,
   orientation = 'auto',
+  ariaLabel = 'Intake wizard steps',
 }: WizardStepRailProps<V>) {
   const currentIndex = steps.findIndex((s) => s.key === currentKey)
   const stepNumber = currentIndex + 1
@@ -119,7 +127,7 @@ export function WizardStepRail<V>({
 
   return (
     <nav
-      aria-label="Intake wizard steps"
+      aria-label={ariaLabel}
       className={navClasses}
     >
       <p className="mb-2 text-sm font-medium text-[var(--color-muted-foreground)]">

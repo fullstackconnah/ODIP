@@ -11,7 +11,13 @@ public class CatalogueImportService
 {
     private readonly OdipDbContext _db;
 
-    public CatalogueImportService(OdipDbContext db) => _db = db;
+    private readonly TimeProvider _clock;
+
+    public CatalogueImportService(OdipDbContext db, TimeProvider? clock = null)
+    {
+        _db = db;
+        _clock = clock ?? TimeProvider.System;
+    }
 
     // Item number prefixes → day type for Category 04 / Reg Group 0125 items
     // Standard access (04_10x) and Intensive/Complex Behaviour (04_45x) — NDIS 2025-26
@@ -89,7 +95,8 @@ public class CatalogueImportService
             .FirstOrDefaultAsync(g => g.GroupCode == "GRP_COMMUNITY_ACCESS", ct)
             ?? throw new InvalidOperationException("GRP_COMMUNITY_ACCESS activity group not found. Seed data may be missing.");
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        // The provider's calendar date: the day the new catalogue takes effect is the one on the provider's wall calendar, not the UTC date.
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
 
         // Deactivate all currently active items for this group
         var existing = await _db.SupportCatalogueItems

@@ -231,18 +231,18 @@ describe('TripsPage — narrow-desktop table', () => {
     expect(destination).toHaveAttribute('title', 'Mount Tamborine QLD · Gold Coast Hinterland')
   })
 
-  it('drops the Lead column below 2xl, header and cell together, and the duration until 1792px', () => {
+  // L3-04: the Lead column used to be deleted below 2xl. It stays (the table scrolls in its box, the DataTable column rule); only the
+  // derivable "(4d)", which is 13px secondary text restating the dates beside it, still gives way until 1792px.
+  it('keeps the Lead column at every width, header and cell together, and the duration until 1792px', () => {
     renderPage()
 
-    expect(screen.getByRole('columnheader', { name: 'Lead' })).toHaveClass('md:max-2xl:hidden')
+    expect(screen.getByRole('columnheader', { name: 'Lead' }).className).not.toMatch(/hidden/)
     const lead = screen.getByText('Alex Rivera')
     expect(lead).toHaveAttribute('title', 'Alex Rivera')
-    expect(lead.closest('td')).toHaveClass('md:max-2xl:hidden')
-    // "(4d)" is 13px secondary text that costs 30px of the Dates column: it returns with the room, at 1792.
+    expect(lead.closest('td')!.className).not.toMatch(/hidden/)
     expect(screen.getByText('(4d)')).toHaveClass('text-[13px]', 'md:max-[1792px]:hidden')
-    // Every other column stays at 1280.
     for (const label of ['Trip', 'Destination', 'Dates', 'Status', 'Pax']) {
-      expect(screen.getByRole('columnheader', { name: label }).className, label).not.toMatch(/max-(xl|2xl)/)
+      expect(screen.getByRole('columnheader', { name: label }).className, label).not.toMatch(/hidden/)
     }
   })
 
@@ -356,7 +356,7 @@ describe('TripsPage — trip status pills use the shared tones', () => {
     ['Planning', 'info'],
     ['OpenForBookings', 'success'],
     ['Confirmed', 'success'],
-    ['InProgress', 'accessible'],
+    ['InProgress', 'info'], // owner decision: in progress is information (blue)
   ] as const)('colours a %s trip with the %s tone in the table and in the cards', (status, tone) => {
     mockUseTrips.mockReturnValue({ data: [trip({ status })], isLoading: false })
     const label = status.replace(/([A-Z])/g, ' $1').trim()

@@ -54,7 +54,7 @@ function renderWizard() {
   return render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>)
 }
 
-const stepNav = () => screen.getByRole('navigation', { name: /intake wizard steps/i })
+const stepNav = () => screen.getByRole('navigation', { name: /profile wizard steps/i })
 const expectStep = (label: RegExp) => within(stepNav()).findByRole('button', { name: label, current: 'step' })
 const next = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: /^next$/i }))
 

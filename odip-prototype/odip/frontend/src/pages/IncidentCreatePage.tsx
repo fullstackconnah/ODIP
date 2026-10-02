@@ -603,6 +603,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         visitedSteps={wizard.visitedSteps}
         currentKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
         onSelect={wizard.goToStep}
+        ariaLabel="Incident report steps"
       />
 
       <form onSubmit={handleSubmit(onSubmit, wizard.handleInvalidSubmit)} noValidate>

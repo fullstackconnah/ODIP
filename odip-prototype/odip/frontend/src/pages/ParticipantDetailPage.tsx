@@ -4,6 +4,7 @@ import {
   useGenerateCaregiverLink, useRevokeCaregiverLink, useCaregiverSubmissions,
 } from '@/api/hooks'
 import type { BookingListDto } from '@/api/types/bookings'
+import { PLAN_TYPE_LABELS, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
 import { DataTable } from '@/components/DataTable'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Tabs } from '@/components/Tabs'
@@ -18,10 +19,11 @@ import { useTabParam } from '@/hooks/useTabParam'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, FileText, CalendarRange } from 'lucide-react'
-import { useState, useSyncExternalStore } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
+import { copyText } from '@/lib/clipboard'
 import {
   MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection,
   ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab, SupportProfileTab, ClaimsTab,
@@ -79,11 +81,18 @@ export default function ParticipantDetailPage() {
   const { canWrite, canViewAlerts, canWriteParticipantDetails, canAccessPage, isAdmin, isSuperAdmin } = usePermissions()
   const { id } = useParams()
   const isMdUp = useIsMdUp()
-  const [tab, setTab] = useTabParam(TAB_KEYS, 'details')
   const canAccessClaims = canAccessPage('claims')
   // Connection map item 12 — the Rostering tab, same canAccessPage gate RosterBoardPage itself
   // uses (see lib/permissions.ts's SUPPORT_WORKER_PAGES — SupportWorker is excluded).
   const canAccessRostering = canAccessPage('rostering')
+  const canSeeHistory = isSuperAdmin || isAdmin
+  // Only the tabs this role can see are valid ?tab= keys (L5-05): a link to History, Claims or Rostering opened by a role without that tab
+  // reads as Details, instead of selecting nothing over an empty body.
+  const tabKeys = useMemo(
+    () => TAB_KEYS.filter(key => (key === 'claims' ? canAccessClaims : key === 'rostering' ? canAccessRostering : key === 'history' ? canSeeHistory : true)),
+    [canAccessClaims, canAccessRostering, canSeeHistory],
+  )
+  const [tab, setTab] = useTabParam(tabKeys, 'details')
   const { data: p, isLoading, isError, error, refetch } = useParticipant(id)
   const { data: bookings = [] } = useParticipantBookings(id)
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
@@ -118,7 +127,7 @@ export default function ParticipantDetailPage() {
                 <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} />
                 {/* What is still missing, as a quiet warning-tone chip beside the status. Informational: nothing on this page is gated on it. */}
                 <ReadinessNote issues={p.readinessIssues} variant="chip" />
-                <span>{p.region || 'No region'} · {p.planType} · Support Ratio: {p.supportRatio}</span>
+                <span>{p.region || 'No region'} · {PLAN_TYPE_LABELS[p.planType] ?? p.planType} · Support Ratio: {SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio}</span>
                 <ServiceStreamBadges value={p.serviceStreams} />
               </div>
             }
@@ -256,7 +265,7 @@ export default function ParticipantDetailPage() {
           { id: 'restrictive-practices', label: 'Restrictive Practices', icon: ShieldAlert },
           ...(canAccessClaims ? [{ id: 'claims' as const, label: 'Claims', icon: FileText }] : []),
           ...(canAccessRostering ? [{ id: 'rostering' as const, label: 'Rostering', icon: CalendarRange }] : []),
-          ...((isSuperAdmin || isAdmin) ? [{ id: 'history' as const, label: 'History' }] : []),
+          ...(canSeeHistory ? [{ id: 'history' as const, label: 'History' }] : []),
         ]}
         active={tab}
         onChange={setTab}
@@ -383,7 +392,7 @@ export default function ParticipantDetailPage() {
         <RosteringTab participantId={id!} />
       )}
 
-      {tab === 'history' && (isSuperAdmin || isAdmin) && p && (
+      {tab === 'history' && canSeeHistory && p && (
         <AuditHistoryTab entityType="Participant" entityId={String(p.id)} />
       )}
     </div>
@@ -540,7 +549,7 @@ function CaregiverLinkControl({ participantId }: { participantId: string }) {
         <div role="status" className="text-xs p-2 rounded bg-[var(--color-accent)] break-all">
           <span>Copy this link now — it won't be shown again. Expires {formatDateAu(issued.expiresAt)}.</span>
           <code className="block mt-1">{issued.url}</code>
-          <button type="button" className="mt-1 underline" onClick={() => navigator.clipboard.writeText(issued.url)}>
+          <button type="button" className="mt-1 underline" onClick={() => { void copyText(issued.url) }}>
             Copy
           </button>
         </div>

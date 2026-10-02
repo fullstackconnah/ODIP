@@ -6,6 +6,7 @@ import { generateItineraryPdf } from './ItineraryPdf'
 import { Dropdown } from './Dropdown'
 import { EmptyState } from './EmptyState'
 import { PageState } from './PageState'
+import { statusClass } from '@/lib/tone'
 
 interface TripAdminData {
   eventTemplateName?: string | null
@@ -58,14 +59,6 @@ function formatDayName(date: string) {
 
 function formatDateLong(date: string) {
   return parseLocalDate(date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-const activityStatusStyle: Record<string, string> = {
-  Planned: 'bg-[var(--color-input)] text-[var(--color-muted-foreground)]',
-  Booked: 'bg-[#fef3c7] text-[#92400e]',
-  Confirmed: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  Completed: 'bg-[var(--color-secondary-container)] text-[#0d1c2e]',
-  Cancelled: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 }
 
 export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
@@ -266,7 +259,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-bold text-sm text-[var(--color-foreground)]">{activity.title}</span>
-                                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${activityStatusStyle[activity.status] || activityStatusStyle.Planned}`}>
+                                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusClass(activity.status)}`}>
                                     {activity.status}
                                   </span>
                                   {activity.category && (
