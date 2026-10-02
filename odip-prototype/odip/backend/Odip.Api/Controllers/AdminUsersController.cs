@@ -157,10 +157,14 @@ public class AdminUsersController : ControllerBase
         if (!Enum.TryParse<UserRole>(dto.Role, true, out var role) || role == UserRole.SuperAdmin)
             return BadRequest(ApiResponse<object>.Fail("Invalid role. SuperAdmin cannot be assigned."));
 
+        // The address in the one form ODIP stores and compares (see EmailIdentity): the uniqueness check, Firebase and the row all see
+        // the same value, so the exchange can find the row from the lower-case address Firebase puts in a token.
+        var email = EmailIdentity.Normalise(dto.Email);
+
         // Validate email uniqueness across all tenants
         var emailExists = await _db.Users
             .IgnoreQueryFilters()
-            .AnyAsync(u => u.Email.ToLower() == dto.Email.ToLower(), ct);
+            .AnyAsync(u => u.Email.ToLower() == email, ct);
         if (emailExists)
             return Conflict(ApiResponse<object>.Fail("A user with this email already exists"));
 
@@ -182,7 +186,7 @@ public class AdminUsersController : ControllerBase
         try
         {
             firebaseUid = await _firebaseUserService.CreateUserAsync(
-                dto.Email, $"{dto.FirstName} {dto.LastName}", dto.Password, ct);
+                email, $"{dto.FirstName} {dto.LastName}", dto.Password, ct);
             createdFirebaseUser = true;
         }
         catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.EmailAlreadyExists)
@@ -196,7 +200,7 @@ public class AdminUsersController : ControllerBase
             // The confirmed failure mode (TokenResponseException from the Google.Apis auth
             // stack when the service account can't be authenticated) is NOT a
             // FirebaseAuthException, so a narrower catch would let it through unhandled again.
-            _logger.LogError(ex, "Failed to create Firebase Auth user for {Email}", dto.Email);
+            _logger.LogError(ex, "Failed to create Firebase Auth user for {Email}", email);
             return StatusCode(StatusCodes.Status502BadGateway,
                 ApiResponse<object>.Fail("Unable to create the user's sign-in account. Please try again later."));
         }
@@ -207,7 +211,7 @@ public class AdminUsersController : ControllerBase
             TenantId = dto.TenantId,
             FirstName = dto.FirstName,
             LastName = dto.LastName,
-            Email = dto.Email,
+            Email = email,
             Username = dto.Username,
             Role = role,
             IsActive = true,
@@ -247,7 +251,7 @@ public class AdminUsersController : ControllerBase
 
             _logger.LogError(ex,
                 "Failed to save new user {Email} after Firebase account creation; compensated by deleting Firebase user {FirebaseUid}",
-                dto.Email, firebaseUid);
+                email, firebaseUid);
             throw; // handled by ExceptionHandlingMiddleware -> standard 500 ApiResponse envelope
         }
 
@@ -271,10 +275,13 @@ public class AdminUsersController : ControllerBase
         if (!Enum.TryParse<UserRole>(dto.Role, true, out var role) || role == UserRole.SuperAdmin)
             return BadRequest(ApiResponse<object>.Fail("Invalid role. SuperAdmin cannot be assigned."));
 
+        // The address in the one form ODIP stores and compares (see EmailIdentity). Saving also repairs a row stored as typed.
+        var email = EmailIdentity.Normalise(dto.Email);
+
         // Validate email uniqueness (excluding current user)
         var emailExists = await _db.Users
             .IgnoreQueryFilters()
-            .AnyAsync(u => u.Email.ToLower() == dto.Email.ToLower() && u.Id != id, ct);
+            .AnyAsync(u => u.Email.ToLower() == email && u.Id != id, ct);
         if (emailExists)
             return Conflict(ApiResponse<object>.Fail("A user with this email already exists"));
 
@@ -289,7 +296,8 @@ public class AdminUsersController : ControllerBase
         // email (Firebase email changes require re-auth and are intentionally not synced — see
         // note below), and the original display name / disabled state are kept so we can revert
         // the Firebase side if the DB save fails after a successful Firebase update.
-        var originalEmail = user.Email;
+        // Normalised for the Firebase lookup: a row stored in another case still finds its account.
+        var originalEmail = EmailIdentity.Normalise(user.Email);
         var originalDisplayName = user.FullName;
         var originalDisabled = !user.IsActive;
 
@@ -326,7 +334,7 @@ public class AdminUsersController : ControllerBase
 
         user.FirstName = dto.FirstName;
         user.LastName = dto.LastName;
-        user.Email = dto.Email;
+        user.Email = email;
         user.Username = dto.Username;
         user.Role = role;
         user.IsActive = dto.IsActive;

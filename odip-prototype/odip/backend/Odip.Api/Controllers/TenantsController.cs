@@ -17,8 +17,15 @@ namespace Odip.Api.Controllers;
 public class TenantsController : ControllerBase
 {
     private readonly OdipDbContext _db;
+    private readonly IFirebaseUserService _firebaseUserService;
 
-    public TenantsController(OdipDbContext db) => _db = db;
+    // IFirebaseUserService is intentionally NOT registered in Program.cs — see AdminUsersController: ActivatorUtilities falls back to
+    // the parameter's default, so production needs no DI change while a unit test injects a mock.
+    public TenantsController(OdipDbContext db, IFirebaseUserService? firebaseUserService = null)
+    {
+        _db = db;
+        _firebaseUserService = firebaseUserService ?? new FirebaseUserService();
+    }
 
     // GET api/v1/admin/tenants
     [HttpGet]
@@ -57,12 +64,21 @@ public class TenantsController : ControllerBase
 
     // POST api/v1/admin/tenants/with-setup
     [HttpPost("with-setup")]
-    public async Task<IActionResult> CreateWithSetup([FromBody] CreateTenantWithSetupDto dto)
+    public async Task<IActionResult> CreateWithSetup([FromBody] CreateTenantWithSetupDto dto, CancellationToken ct = default)
     {
         var domain = dto.EmailDomain.ToLower();
 
         if (await _db.Tenants.AnyAsync(t => t.EmailDomain == domain))
             return Conflict("A tenant with this email domain already exists");
+
+        // The first user's address is stored and compared in one form (see EmailIdentity), and must be new in any case: the exchange
+        // matches case-insensitively, so two rows differing only in case would be ambiguous.
+        if (dto.InitialUser is { } candidate)
+        {
+            var candidateEmail = EmailIdentity.Normalise(candidate.Email);
+            if (await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email.ToLower() == candidateEmail, ct))
+                return Conflict("A user with this email already exists");
+        }
 
         await using var transaction = await _db.Database.BeginTransactionAsync();
 
@@ -110,7 +126,7 @@ public class TenantsController : ControllerBase
                 TenantId = tenant.Id,
                 FirstName = iu.FirstName,
                 LastName = iu.LastName,
-                Email = iu.Email,
+                Email = EmailIdentity.Normalise(iu.Email),
                 Username = iu.Username,
                 Role = role,
                 IsActive = true,
@@ -128,8 +144,8 @@ public class TenantsController : ControllerBase
         {
             try
             {
-                await FirebaseAuth.DefaultInstance.CreateUserAsync(FirebaseUserService.BuildCreateUserArgs(
-                    firebaseIu.Email, $"{firebaseIu.FirstName} {firebaseIu.LastName}", firebaseIu.Password));
+                await _firebaseUserService.CreateUserAsync(
+                    EmailIdentity.Normalise(firebaseIu.Email), $"{firebaseIu.FirstName} {firebaseIu.LastName}", firebaseIu.Password, ct);
             }
             catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.EmailAlreadyExists)
             {

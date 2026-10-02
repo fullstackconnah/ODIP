@@ -469,7 +469,7 @@ public class StaffController : ControllerBase
 
         // Username/Email uniqueness is GLOBAL across tenants (design spec §2/§7) — IgnoreQueryFilters
         // so the check sees every tenant's users, not just the caller's own (matches AdminUsersController).
-        var emailLower = dto.Email.Trim().ToLowerInvariant();
+        var emailLower = EmailIdentity.Normalise(dto.Email);
         var emailTaken = await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email.ToLower() == emailLower, ct);
         if (emailTaken) return Conflict(ApiResponse<StaffDetailDto>.Fail("A user with this email already exists."));
 
@@ -484,7 +484,7 @@ public class StaffController : ControllerBase
         var s = new User
         {
             Id = Guid.NewGuid(), FirstName = dto.FirstName, LastName = dto.LastName,
-            Username = username, Email = dto.Email,
+            Username = username, Email = emailLower,
             Role = dto.Role, Position = dto.Position,
             Mobile = dto.Mobile, Region = dto.Region,
             IsDriverEligible = dto.IsDriverEligible, IsFirstAidQualified = dto.IsFirstAidQualified,
@@ -532,13 +532,13 @@ public class StaffController : ControllerBase
         var guardError = ValidateRoleGuardrails(dto.Role, existingRole: s.Role);
         if (guardError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(guardError));
 
-        var emailLower = dto.Email.Trim().ToLowerInvariant();
+        var emailLower = EmailIdentity.Normalise(dto.Email);
         var emailTaken = await _db.Users.IgnoreQueryFilters()
             .AnyAsync(u => u.Id != id && u.Email.ToLower() == emailLower, ct);
         if (emailTaken) return Conflict(ApiResponse<StaffDetailDto>.Fail("A user with this email already exists."));
 
         s.FirstName = dto.FirstName; s.LastName = dto.LastName; s.Position = dto.Position; s.Role = dto.Role;
-        s.Email = dto.Email; s.Mobile = dto.Mobile; s.Region = dto.Region;
+        s.Email = emailLower; s.Mobile = dto.Mobile; s.Region = dto.Region;
         s.IsDriverEligible = dto.IsDriverEligible; s.IsFirstAidQualified = dto.IsFirstAidQualified;
         s.IsMedicationCompetent = dto.IsMedicationCompetent; s.IsManualHandlingCompetent = dto.IsManualHandlingCompetent;
         s.IsOvernightEligible = dto.IsOvernightEligible; s.IsActive = dto.IsActive;
