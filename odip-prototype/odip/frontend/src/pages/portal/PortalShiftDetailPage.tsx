@@ -21,6 +21,7 @@ import { HandoverSection, GlanceSection, ContactsSection } from './shift/BeforeS
 import { DuringSection } from './shift/DuringSection'
 import { EndSection } from './shift/EndSection'
 import { DoseSheet, type DoseTarget } from './shift/DoseSheet'
+import { loadEndDraft } from './shift/endDraft'
 import { requestGeolocation } from './shift/geolocation'
 import { useOnline } from './shift/useOnline'
 import { Chip, Section } from './shift/ui'
@@ -113,7 +114,8 @@ export default function PortalShiftDetailPage() {
   const startBreak = useStartBreak()
   const endBreak = useEndBreak()
   const [actionError, setActionError] = useState<string | null>(null)
-  const [endOpen, setEndOpen] = useState(false)
+  // A saved End draft means the worker was mid-End (e.g. left to Report incident): open End again.
+  const [endOpen, setEndOpen] = useState(() => !!id && loadEndDraft(id) !== null)
   const [sheet, setSheet] = useState<{ target: DoseTarget; notGiven: boolean } | null>(null)
 
   async function handleStart() {

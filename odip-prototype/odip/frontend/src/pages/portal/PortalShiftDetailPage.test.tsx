@@ -195,6 +195,7 @@ beforeEach(() => {
   mockUsePortalShiftDetail.mockReset()
   mockUseShiftNotes.mockReset().mockReturnValue({ data: [] })
   localStorage.removeItem('odip_user')
+  sessionStorage.clear()
 })
 
 afterEach(() => {
@@ -494,6 +495,20 @@ describe('PortalShiftDetailPage: End', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/your handover is kept/i))
     expect(screen.getByLabelText('Your handover note')).toHaveValue('Keep me')
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+
+  it('restores the End inputs and reopens End after leaving (draft kept in sessionStorage)', () => {
+    sessionStorage.setItem('odip-shift-end-draft:shift-1', JSON.stringify({ handoverText: 'Half written', nothingToNote: true, nothingToHandOver: false, confirmedSig: null }))
+    show(inProgress())
+    expect(screen.getByLabelText('Your handover note')).toHaveValue('Half written')
+    expect(screen.getByLabelText('Nothing to note')).toBeChecked()
+  })
+
+  it('typing a handover saves a draft for this shift', () => {
+    show(inProgress())
+    fireEvent.click(screen.getByRole('button', { name: 'End shift' }))
+    fireEvent.change(screen.getByLabelText('Your handover note'), { target: { value: 'Draft me' } })
+    expect(JSON.parse(sessionStorage.getItem('odip-shift-end-draft:shift-1') ?? '{}').handoverText).toBe('Draft me')
   })
 
   it('offers Report incident, prefilled, for a flagged note', () => {

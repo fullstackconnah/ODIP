@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Check, Circle, Flag } from 'lucide-react'
@@ -12,6 +12,7 @@ import { apiErrorMessages, apiErrorStatus, finishBlockersFromError, hasApiErrorC
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import { breaksSignature, endChecklist } from './checklist'
+import { clearEndDraft, loadEndDraft, saveEndDraft } from './endDraft'
 import { requestGeolocation } from './geolocation'
 import { minutesBetween, providerLocalToUtcInstant, utcInstantToProviderLocal } from './shiftTime'
 import { Section } from './ui'
@@ -142,15 +143,21 @@ export function EndSection({ shift, online, canAct, onRecord }: {
   const qc = useQueryClient()
   const finish = useFinishShift()
   const { data: notes } = useShiftNotes(shift.id)
-  const [confirmedSig, setConfirmedSig] = useState<string | null>(null)
+  const [draft] = useState(() => loadEndDraft(shift.id))
+  const [confirmedSig, setConfirmedSig] = useState<string | null>(draft?.confirmedSig ?? null)
   const sig = breaksSignature(shift.breaks)
   // The tick belongs to the breaks as they were when it was made; any edit, removal or new break drops it.
   const breaksConfirmed = confirmedSig === sig
-  const [nothingToNote, setNothingToNote] = useState(false)
-  const [handoverText, setHandoverText] = useState('')
-  const [nothingToHandOver, setNothingToHandOver] = useState(false)
+  const [nothingToNote, setNothingToNote] = useState(draft?.nothingToNote ?? false)
+  const [handoverText, setHandoverText] = useState(draft?.handoverText ?? '')
+  const [nothingToHandOver, setNothingToHandOver] = useState(draft?.nothingToHandOver ?? false)
   const [blockers, setBlockers] = useState<PortalFinishBlockerDto[]>([])
   const [finishError, setFinishError] = useState<string | null>(null)
+
+  // Keep the inputs so leaving for Report incident and coming back loses nothing.
+  useEffect(() => {
+    saveEndDraft(shift.id, { handoverText, nothingToNote, nothingToHandOver, confirmedSig })
+  }, [shift.id, handoverText, nothingToNote, nothingToHandOver, confirmedSig])
 
   const noteCount = notes?.length ?? 0
   const items = endChecklist({ blockers: shift.finishBlockers, breaksConfirmed, noteCount, nothingToNote, handoverText, nothingToHandOver })
@@ -187,6 +194,7 @@ export function EndSection({ shift, online, canAct, onRecord }: {
           nothingToNote: noteCount === 0 && nothingToNote,
         },
       })
+      clearEndDraft(shift.id)
     } catch (err) {
       const listed = finishBlockersFromError(err)
       if (listed.length) {
