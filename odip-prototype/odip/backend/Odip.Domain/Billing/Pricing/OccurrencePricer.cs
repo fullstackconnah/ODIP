@@ -110,7 +110,7 @@ internal sealed class OccurrencePricer
         var start = date.ToDateTime(block.Start);
         var end = (block.EndsNextDay ? date.AddDays(1) : date).ToDateTime(block.End);
 
-        var headcount = block.HeadcountChanges
+        var headcount = block.Changes
             .Select(c => (At: start.AddMinutes(block.OffsetFromStart(c.From)), c.ParticipantsPresent))
             .OrderBy(c => c.At)
             .ToList();
@@ -386,7 +386,7 @@ internal sealed class OccurrencePricer
         // Crossing policy B: one worker delivers the whole support and the headcount never changes, so the higher of the amounts applies to all
         // of it. Only when every part has an item: a gap is for a person, not for the engine to price around.
         var allPriced = results.All(r => r.Priced is not null);
-        if (crossing && allPriced && _policy.Crossing == CrossingPolicy.HigherOf && block.Workers == 1 && block.HeadcountChanges.Count == 0
+        if (crossing && allPriced && _policy.Crossing == CrossingPolicy.HigherOf && block.Workers == 1 && block.Changes.Count == 0
             && TryMerge(occ, piece, results.Select(r => r.Priced!).ToList()) is { } merged)
         {
             occ.Result.Lines.Add(merged.Line);
@@ -474,7 +474,7 @@ internal sealed class OccurrencePricer
         }
 
         if (block.Workers != 1 || segment.Participants != 1) rules.Add("group:floor(price*workers/participants)");
-        if (block.HeadcountChanges.Count > 0)
+        if (block.Changes.Count > 0)
         {
             rules.Add("headcount:segment");
             flags |= PlannedLineFlags.Provisional;

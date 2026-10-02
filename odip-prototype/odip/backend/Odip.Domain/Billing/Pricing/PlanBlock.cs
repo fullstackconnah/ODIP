@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Serialization;
 using Odip.Domain.Enums;
 
 namespace Odip.Domain.Billing.Pricing;
@@ -166,9 +167,13 @@ public sealed record PlanBlock
 
             var companions = (WorkerMaySleep ? 2 : 0) + (Setting == PlanSetting.Centre ? 1 : 0) + (Travel is { Claim: true } ? 2 : 0)
                 + (Transport is not null ? 1 : 0) + (Accommodation is { Nights: > 0 } ? 2 : 0);
-            return bands + 2 + (HeadcountChanges?.Count ?? 0) + companions;
+            return bands + 2 + Changes.Count + companions;
         }
     }
+
+    /// <summary>The headcount changes with any missing entry left out, and none at all when the list itself is missing: what the engine reads, so a null in the request is a message from <see cref="Validate"/> and never an exception.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<PlanHeadcountChange> Changes => HeadcountChanges?.Where(change => change is not null).ToList() ?? new List<PlanHeadcountChange>();
 
     /// <summary>Derived: the end is on the next day when it is not after the start.</summary>
     public bool EndsNextDay => End <= Start;
@@ -296,16 +301,26 @@ public sealed record PlanBlock
 
     private void ValidateHeadcountChanges(Action<string> add)
     {
-        if (HeadcountChanges is null || HeadcountChanges.Count == 0) return;
+        // A JSON null reaches a non-nullable list as null: a message, never an exception, and the list counts as empty (Changes).
+        if (HeadcountChanges is null)
+        {
+            add("headcount changes must be a list (send an empty list for none).");
+            return;
+        }
 
-        if (HeadcountChanges.Count > MaxHeadcountChanges)
+        if (HeadcountChanges.Any(change => change is null)) add("headcount changes must be a list of changes: an entry is missing.");
+
+        var changes = Changes;
+        if (changes.Count == 0) return;
+
+        if (changes.Count > MaxHeadcountChanges)
         {
             add(string.Create(CultureInfo.InvariantCulture, $"a block can have at most {MaxHeadcountChanges} headcount changes."));
             return;
         }
 
         var offsets = new HashSet<int>();
-        foreach (var change in HeadcountChanges)
+        foreach (var change in changes)
         {
             if (change.ParticipantsPresent is < 1 or > 40) add("participants present after a headcount change must be between 1 and 40.");
             var offset = OffsetFromStart(change.From);

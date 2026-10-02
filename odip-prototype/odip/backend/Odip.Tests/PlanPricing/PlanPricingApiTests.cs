@@ -215,6 +215,22 @@ public class PlanPricingApiTests
     }
 
     [Fact]
+    public async Task A_missing_block_and_a_block_with_a_null_list_are_reported_in_the_quote_not_dropped_and_not_a_server_error()
+    {
+        var (db, controller) = await SetUpAsync(TenantA);
+        await using var _ = db;
+        var nullList = Community("null-list") with { HeadcountChanges = null! };
+        var request = new PlanQuoteRequestDto { Blocks = new List<PlanBlock> { Community(), null!, nullList }, PeriodFrom = Mon12Oct, PeriodTo = Mon12Oct };
+
+        var quote = Ok(await controller.Quote(request, CancellationToken.None));
+
+        Assert.Equal(new[] { "c" }, quote.Lines.Select(l => l.BlockId));
+        Assert.Equal(2, quote.Issues.Count(i => i.Reason == PlanFailureReason.InvalidInput));
+        Assert.Contains(quote.Issues, i => i.Message.Contains("missing"));
+        Assert.Contains(quote.Issues, i => i.BlockId == "null-list" && i.Message.Contains("must be a list"));
+    }
+
+    [Fact]
     public async Task The_quote_travels_as_the_JSON_the_API_sends_names_for_enums_and_whole_dates()
     {
         var (db, controller) = await SetUpAsync(TenantA);

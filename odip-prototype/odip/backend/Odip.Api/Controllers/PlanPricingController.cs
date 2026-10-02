@@ -53,7 +53,7 @@ public class PlanPricingController : ControllerBase
         if (dto.Blocks.Count > PlanPricingEngine.MaxBlocks)
             return BadRequest(ApiResponse<PlanQuote>.Fail($"A quote prices at most {PlanPricingEngine.MaxBlocks} blocks."));
 
-        var quote = await _service.QuoteAsync(tenantId, dto.Blocks.Where(b => b is not null).ToList(), dto.PeriodFrom, dto.PeriodTo, ct);
+        var quote = await _service.QuoteAsync(tenantId, dto.Blocks, dto.PeriodFrom, dto.PeriodTo, ct);
         return Ok(ApiResponse<PlanQuote>.Ok(dto.IncludeLines ? quote : quote with { Lines = Array.Empty<PlannedLine>() }));
     }
 

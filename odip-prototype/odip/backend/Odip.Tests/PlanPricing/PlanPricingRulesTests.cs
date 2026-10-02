@@ -323,6 +323,19 @@ public class PlanPricingRulesTests
     // ── The request ───────────────────────────────────────────────────────────────
 
     [Fact]
+    public void A_block_with_a_missing_headcount_list_is_refused_with_the_message_and_the_others_are_priced()
+    {
+        var noList = Weekday(PlanSupportType.CommunityAccess, id: "no-list") with { HeadcountChanges = null! };
+        var nullEntry = Weekday(PlanSupportType.CommunityAccess, id: "null-entry") with { HeadcountChanges = new PlanHeadcountChange[] { null! } };
+
+        var quote = Quote(new[] { Weekday(PlanSupportType.CommunityAccess, id: "good"), noList, nullEntry }, Mon12Oct, Mon12Oct.AddDays(14));
+
+        Assert.Equal(new[] { "good" }, quote.Lines.Select(l => l.BlockId).Distinct());
+        Assert.Equal(new[] { "no-list", "null-entry" }, quote.Issues.Select(i => i.BlockId));
+        Assert.All(quote.Issues, i => { Assert.Equal(PlanFailureReason.InvalidInput, i.Reason); Assert.Contains("headcount changes must be a list", i.Message); });
+    }
+
+    [Fact]
     public void A_missing_block_in_the_list_is_an_issue_not_a_crash()
     {
         var quote = Quote(new PlanBlock?[] { Weekday(PlanSupportType.CommunityAccess), null }!, Mon12Oct, Mon12Oct);

@@ -220,6 +220,32 @@ public class PlanBlockTests
     }
 
     [Fact]
+    public void A_missing_headcount_list_or_a_missing_entry_in_it_is_a_message_never_an_exception_and_counts_as_no_changes_afterwards()
+    {
+        var noList = Valid(b => b with { HeadcountChanges = null! });
+        var nullEntry = Valid(b => b with { HeadcountChanges = new PlanHeadcountChange?[] { null }! });
+        var mixed = Valid(b => b with { HeadcountChanges = new[] { new PlanHeadcountChange { From = new TimeOnly(11, 0), ParticipantsPresent = 2 }, null! } });
+
+        Assert.Contains(noList.Validate(), m => m.Contains("headcount changes must be a list"));
+        Assert.Contains(nullEntry.Validate(), m => m.Contains("headcount changes must be a list"));
+        Assert.Contains(mixed.Validate(), m => m.Contains("headcount changes must be a list"));
+        Assert.Empty(noList.Changes);
+        Assert.Empty(nullEntry.Changes);
+        Assert.Single(mixed.Changes);
+        Assert.Equal(noList.MaxLinesPerOccurrence, Valid().MaxLinesPerOccurrence);
+    }
+
+    [Fact]
+    public void A_JSON_null_for_the_headcount_list_reads_as_a_block_with_a_message()
+    {
+        var block = JsonSerializer.Deserialize<PlanBlock>("""{ "id": "b", "supportType": "CommunityAccess", "days": ["Monday"], "start": "09:00", "end": "13:00", "headcountChanges": null, "location": { "state": "NSW" } }""", Options)!;
+        var inList = JsonSerializer.Deserialize<PlanBlock>("""{ "id": "b", "supportType": "CommunityAccess", "days": ["Monday"], "start": "09:00", "end": "13:00", "headcountChanges": [null], "location": { "state": "NSW" } }""", Options)!;
+
+        Assert.Contains(block.Validate(), m => m.Contains("headcount changes must be a list"));
+        Assert.Contains(inList.Validate(), m => m.Contains("headcount changes must be a list"));
+    }
+
+    [Fact]
     public void A_headcount_change_after_midnight_counts_from_the_start_of_an_overnight_block()
     {
         var block = Valid(b => b with
