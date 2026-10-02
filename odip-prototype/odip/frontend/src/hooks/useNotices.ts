@@ -9,6 +9,11 @@ export interface Notice {
   /** Who it is about (their name): a notice always says whom, because several can be waiting at once. */
   title: string
   message: string
+  /**
+   * A stable key for whoever it is about (a user's id), when the screen has one: it is how the screen finds that person's control again,
+   * for example to give it focus once their notice is dismissed. The title is for people to read and is no key (two people can share a name).
+   */
+  subject?: string
 }
 
 /** The most notices held at once. */
@@ -44,10 +49,10 @@ export function useNotices(max = MAX_NOTICES) {
   const nextId = useRef(0)
 
   const notify = useCallback(
-    (tone: NoticeTone, title: string, message: string) => {
+    (tone: NoticeTone, title: string, message: string, subject?: string) => {
       // The id is taken here, not inside the updater: an updater must be pure, and React may run it twice.
       const id = nextId.current++
-      setNotices(list => withNotice(list, { id, tone, title, message }, max))
+      setNotices(list => withNotice(list, { id, tone, title, message, subject }, max))
     },
     [max],
   )

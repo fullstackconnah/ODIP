@@ -198,6 +198,18 @@ describe('StaffDetailPage: Send set-password email', () => {
     expect(region().compareDocumentPosition(screen.getByRole('tablist')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('after the only notice is dismissed, focus goes back to the send button that raised it, not to the top of the page', async () => {
+    sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
+    const u = renderPage()
+    await u.click(screen.getByRole('button', { name: SEND }))
+    const dismiss = await within(region()).findByRole('button', { name: 'Dismiss notice about Alex Rivera' })
+
+    await u.click(dismiss)
+
+    expect(within(region()).queryByText(/No link was sent/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: SEND })).toHaveFocus()
+  })
+
   it('an error stays when a later send succeeds, until it is dismissed (a success never removes an error)', async () => {
     sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
     const u = renderPage()

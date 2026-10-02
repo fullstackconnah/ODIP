@@ -81,6 +81,9 @@ export default function StaffDetailPage() {
     notify(tone, overview.staff.fullName, message)
   }
 
+  // Dismissing the last notice hands focus back to the button that raised it.
+  const focusSendButton = () => document.querySelector<HTMLElement>('[data-send-set-password]')
+
   if (isLoading) return <PageState kind="loading" noun="staff member" />
   if (!overview) {
     return isError && !isNotFoundError(error)
@@ -116,6 +119,7 @@ export default function StaffDetailPage() {
                 variant="secondary"
                 size="md"
                 onClick={handleSendSetPasswordEmail}
+                data-send-set-password
                 aria-disabled={sending || undefined}
                 aria-busy={sending || undefined}
                 className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
@@ -133,7 +137,7 @@ export default function StaffDetailPage() {
       />
 
       {/* Notices for the actions above. Always mounted (a live region must exist before its content), and collapsed while empty. */}
-      <NoticesRegion notices={notices} onDismiss={dismiss} className="empty:-mt-[var(--section-gap)]" />
+      <NoticesRegion notices={notices} onDismiss={dismiss} focusAfterDismiss={focusSendButton} className="empty:-mt-[var(--section-gap)]" />
 
       <Tabs
         tabs={[

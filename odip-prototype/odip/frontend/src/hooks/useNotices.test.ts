@@ -58,6 +58,15 @@ describe('useNotices', () => {
     expect(result.current.notices).toEqual([{ id: expect.any(Number), tone: 'success', title: 'Ann One', message: 'We sent ann@example.com a link.' }])
   })
 
+  it('keeps a subject, the stable key of whoever the notice is about, so a screen can find that person\'s control again', () => {
+    const { result } = renderHook(() => useNotices())
+
+    act(() => result.current.notify('success', 'Ann One', 'We sent ann@example.com a link.', 'user-1'))
+    act(() => result.current.notify('success', 'Bob Two', 'We sent bob@example.com a link.'))
+
+    expect(result.current.notices.map(n => n.subject)).toEqual([undefined, 'user-1'])
+  })
+
   it('keeps an error through a later success, and dismiss removes only the notice it is given', () => {
     const { result } = renderHook(() => useNotices())
 

@@ -30,6 +30,7 @@ const authStub = { name: 'auth-stub' }
 const SET = (fullName: string) => `Send set-password email to ${fullName}`
 const RESET = (fullName: string) => `Send password reset email to ${fullName}`
 const ANY_SEND = /^Send (set-password|password reset) email to /
+const EDIT_ANY = /^Edit User Number\d$/
 
 const user = (i: number, isActive = true, lastLoginAt: string | null = null) => ({
   id: `u${i}`, firstName: 'User', lastName: `Number${i}`, fullName: `User Number${i}`, email: `u${i}@example.com.au`, username: `u${i}`,
@@ -207,7 +208,7 @@ describe('UsersTab: Send set-password email', () => {
 
     const row = rowOf('User Number1')
     const send = within(row).getByRole('button', { name: SET('User Number1') })
-    const edit = within(row).getByRole('button', { name: 'Edit user' })
+    const edit = within(row).getByRole('button', { name: 'Edit User Number1' })
 
     for (const button of [send, edit]) {
       // Button, iconOnly: the --control-h-sm square with its 44px tap area, and the shared focus ring.
@@ -221,12 +222,22 @@ describe('UsersTab: Send set-password email', () => {
     expect(send.parentElement).toBe(edit.parentElement)
   })
 
+  it('names the person on every Edit button, as it does on the send button: a table of identical "Edit user" buttons says nothing', () => {
+    renderTab([user(1), user(2)])
+
+    for (const name of ['User Number1', 'User Number2']) {
+      const edit = within(rowOf(name)).getByRole('button', { name: `Edit ${name}` })
+      expect(edit).toHaveAttribute('title', `Edit ${name}`)
+    }
+    expect(screen.queryByRole('button', { name: 'Edit user' })).not.toBeInTheDocument()
+  })
+
   it('is offered for active users only; every user still has Edit', () => {
     renderTab([user(1), user(2, false), user(3)])
 
     expect(screen.getAllByRole('button', { name: ANY_SEND })).toHaveLength(2)
     expect(within(rowOf('User Number2')).queryByRole('button', { name: ANY_SEND })).not.toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Edit user' })).toHaveLength(3)
+    expect(screen.getAllByRole('button', { name: EDIT_ANY })).toHaveLength(3)
   })
 
   it('is not offered at all, and nothing is left broken, where Firebase is not configured (local dev auth)', () => {
@@ -234,7 +245,7 @@ describe('UsersTab: Send set-password email', () => {
     renderTab([user(1), user(2)])
 
     expect(screen.queryByRole('button', { name: ANY_SEND })).not.toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Edit user' })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: EDIT_ANY })).toHaveLength(2)
   })
 })
 
@@ -257,6 +268,33 @@ describe('UsersTab: the notices above the table', () => {
 
     expect(within(region()).queryByText(/No link was sent to u1@example.com.au/)).not.toBeInTheDocument()
     expect(within(region()).getByText(sentTo(2))).toBeInTheDocument()
+  })
+
+  it('after the only notice is dismissed, focus goes back to the send button of the person it was about, not to the top of the page', async () => {
+    sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
+    const u = renderTab([user(1), user(2)])
+    await u.click(sendIn('User Number2'))
+    const dismiss = await within(region()).findByRole('button', { name: 'Dismiss notice about User Number2' })
+
+    await u.click(dismiss)
+
+    expect(within(region()).queryByText(/No link was sent/)).not.toBeInTheDocument()
+    expect(sendIn('User Number2')).toHaveFocus()
+  })
+
+  it('with several notices, dismissing one moves focus to the Dismiss button of the next one', async () => {
+    sendPasswordResetEmail.mockRejectedValue(firebaseError('auth/network-request-failed'))
+    const u = renderTab([user(1), user(2)])
+    await u.click(sendIn('User Number1'))
+    await within(region()).findByText(/No link was sent to u1@example.com.au/)
+    await waitFor(() => expect(isBusy(sendIn('User Number1'))).toBe(false))
+    await u.click(sendIn('User Number2'))
+    await within(region()).findByText(/No link was sent to u2@example.com.au/)
+
+    // Newest first: Number2 above Number1. Dismissing the first hands focus to the second's Dismiss button.
+    await u.click(within(region()).getByRole('button', { name: 'Dismiss notice about User Number2' }))
+
+    expect(within(region()).getByRole('button', { name: 'Dismiss notice about User Number1' })).toHaveFocus()
   })
 
   it('holds at most three, newest first, dropping the oldest success', async () => {

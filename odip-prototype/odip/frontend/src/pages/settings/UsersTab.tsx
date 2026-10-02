@@ -6,7 +6,7 @@ import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
 import { DataTable, RowActions } from '@/components/DataTable'
 import { NoticesRegion } from '@/components/NoticesRegion'
-import { useNotices } from '@/hooks/useNotices'
+import { useNotices, type Notice } from '@/hooks/useNotices'
 import { formatRelative, plural } from '@/lib/format'
 import { canSendSetPasswordEmail, sendActionLabel } from '@/lib/setPasswordEmail'
 import { describeEmailOutcome, ensureAndSendSetPasswordEmail } from '@/lib/signInEmail'
@@ -104,8 +104,13 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
     setSendingId(null)
     // The advice names the button this row really has: "reset" for someone who has signed in before, "set" for someone who never has.
     const { tone, message } = describeEmailOutcome(outcome, `use ${sendActionLabel(target.lastLoginAt)} on their row`)
-    notify(tone, target.fullName, message)
+    // The id is the notice's subject: it is how the region finds this row's send button again once the notice is dismissed.
+    notify(tone, target.fullName, message, target.id)
   }
+
+  // Dismissing the last notice about someone hands focus back to the button that raised it, which is still in their row.
+  const focusSendButtonOf = (dismissed: Notice) =>
+    dismissed.subject ? document.querySelector<HTMLElement>(`[data-send-user="${dismissed.subject}"]`) : null
 
   const inputClass =
     'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
@@ -177,7 +182,7 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
       </div>
 
       {/* Notices for the row actions. Always mounted (a live region must exist before its content), and collapsed while empty. */}
-      <NoticesRegion notices={notices} onDismiss={dismiss} className="empty:mb-0" />
+      <NoticesRegion notices={notices} onDismiss={dismiss} focusAfterDismiss={focusSendButtonOf} className="empty:mb-0" />
 
       {/* Table */}
       <DataTable
@@ -242,6 +247,7 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
                       size="sm"
                       iconOnly
                       onClick={() => handleSendSetPasswordEmail(user)}
+                      data-send-user={user.id}
                       aria-disabled={sendingId !== null || undefined}
                       aria-busy={sendingId === user.id || undefined}
                       className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
@@ -251,7 +257,7 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
                       <Mail className="w-4 h-4" />
                     </Button>
                   )}
-                  <Button variant="ghost" size="sm" iconOnly onClick={() => onEditUser(user)} title="Edit user" aria-label="Edit user">
+                  <Button variant="ghost" size="sm" iconOnly onClick={() => onEditUser(user)} title={`Edit ${user.fullName}`} aria-label={`Edit ${user.fullName}`}>
                     <Pencil className="w-4 h-4" />
                   </Button>
                 </RowActions>
