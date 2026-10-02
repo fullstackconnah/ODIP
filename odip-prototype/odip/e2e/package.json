@@ -1,0 +1,17 @@
+{
+  "name": "odip-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ODIP end-to-end tests (Playwright) against the real API and PostgreSQL",
+  "scripts": {
+    "test": "playwright test",
+    "test:smoke": "playwright test --grep @smoke",
+    "typecheck": "tsc --noEmit -p .",
+    "serve": "node scripts/serve.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "20.19.43",
+    "typescript": "5.9.3"
+  }
+}
