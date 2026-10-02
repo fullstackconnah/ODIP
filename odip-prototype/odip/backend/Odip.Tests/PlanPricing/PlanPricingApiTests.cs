@@ -196,6 +196,8 @@ public class PlanPricingApiTests
         Assert.Contains("blocks", BadRequest(await controller.Quote(new PlanQuoteRequestDto { Blocks = null, PeriodFrom = Mon12Oct, PeriodTo = Mon12Oct }, CancellationToken.None)));
         Assert.Contains("ends before", BadRequest(await controller.Quote(Request(blocks, Mon12Oct, Mon12Oct.AddDays(-1)), CancellationToken.None)));
         Assert.Contains("longer than", BadRequest(await controller.Quote(Request(blocks, Mon12Oct, Mon12Oct.AddDays(PlanPricingEngine.MaxPeriodDays)), CancellationToken.None)));
+        Assert.Contains("2000", BadRequest(await controller.Quote(Request(blocks, new DateOnly(1990, 1, 1), new DateOnly(1990, 1, 31)), CancellationToken.None)));
+        Assert.Contains("2000", BadRequest(await controller.Quote(Request(blocks, new DateOnly(9999, 12, 1), DateOnly.MaxValue), CancellationToken.None)));
         Assert.Contains("at most", BadRequest(await controller.Quote(Request(Enumerable.Range(0, PlanPricingEngine.MaxBlocks + 1).Select(i => Community($"b{i}")), Mon12Oct, Mon12Oct), CancellationToken.None)));
     }
 

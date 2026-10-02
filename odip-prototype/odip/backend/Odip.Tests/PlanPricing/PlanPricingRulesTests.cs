@@ -357,6 +357,35 @@ public class PlanPricingRulesTests
     }
 
     [Fact]
+    public void A_period_outside_the_years_2000_to_2100_is_refused_so_no_date_arithmetic_can_overflow()
+    {
+        var block = Weekday(PlanSupportType.CommunityAccess) with { Days = Enum.GetValues<DayOfWeek>().ToArray() };
+        var early = Quote(new[] { block }, new DateOnly(1999, 12, 30), new DateOnly(2000, 1, 5));
+        var late = Quote(new[] { block }, new DateOnly(2100, 12, 25), new DateOnly(2101, 1, 2));
+        var atTheEdge = Quote(new[] { block }, DateOnly.MaxValue.AddDays(-3), DateOnly.MaxValue);
+
+        foreach (var quote in new[] { early, late, atTheEdge })
+        {
+            Assert.Empty(quote.Lines);
+            Assert.Contains("2000", Assert.Single(quote.Issues).Message);
+        }
+
+        Assert.NotEmpty(Quote(new[] { block }, new DateOnly(2000, 1, 1), new DateOnly(2000, 1, 7)).Lines);
+        Assert.NotEmpty(Quote(new[] { block }, new DateOnly(2100, 12, 25), new DateOnly(2100, 12, 31)).Lines);
+    }
+
+    [Fact]
+    public void A_day_that_is_not_a_day_of_the_week_never_reaches_the_date_arithmetic()
+    {
+        var block = Weekday(PlanSupportType.CommunityAccess) with { Days = new[] { (DayOfWeek)(-3), (DayOfWeek)99, DayOfWeek.Monday } };
+
+        var quote = Quote(new[] { block }, new DateOnly(2000, 1, 1), new DateOnly(2000, 1, 31));
+
+        Assert.Empty(quote.Lines);
+        Assert.Contains(quote.Issues, i => i.Reason == PlanFailureReason.InvalidInput && i.Message.Contains("day of the week"));
+    }
+
+    [Fact]
     public void Too_many_blocks_prices_nothing()
     {
         var blocks = Enumerable.Range(0, PlanPricingEngine.MaxBlocks + 1).Select(i => Weekday(PlanSupportType.CommunityAccess, id: $"b{i}")).ToList();

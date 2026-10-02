@@ -46,6 +46,8 @@ public class PlanPricingController : ControllerBase
         if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<PlanQuote>.Fail(ChooseOrganisation));
         if (dto.Blocks is null) return BadRequest(ApiResponse<PlanQuote>.Fail("The request needs a list of blocks."));
         if (dto.PeriodFrom > dto.PeriodTo) return BadRequest(ApiResponse<PlanQuote>.Fail("The agreement period ends before it starts."));
+        if (dto.PeriodFrom.Year < PlanPricingEngine.FirstYear || dto.PeriodTo.Year > PlanPricingEngine.LastYear)
+            return BadRequest(ApiResponse<PlanQuote>.Fail($"The agreement period must fall between the years {PlanPricingEngine.FirstYear} and {PlanPricingEngine.LastYear}."));
         if (dto.PeriodTo.DayNumber - dto.PeriodFrom.DayNumber + 1 > PlanPricingEngine.MaxPeriodDays)
             return BadRequest(ApiResponse<PlanQuote>.Fail($"The agreement period is longer than {PlanPricingEngine.MaxPeriodDays} days."));
         if (dto.Blocks.Count > PlanPricingEngine.MaxBlocks)

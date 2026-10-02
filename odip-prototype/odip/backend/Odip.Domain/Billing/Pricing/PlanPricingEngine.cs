@@ -18,6 +18,9 @@ public static class PlanPricingEngine
     /// <summary>The most blocks, days and dated occurrences one quote prices, so a request cannot ask for an unbounded amount of work or answer (20,000 is 54 blocks every day for a year).</summary>
     public const int MaxBlocks = 200, MaxPeriodDays = 800, MaxOccurrences = 20_000;
 
+    /// <summary>The years an agreement period may fall in: far inside what date arithmetic can hold, so an occurrence that ends the next day can never overflow.</summary>
+    public const int FirstYear = 2000, LastYear = 2100;
+
     private static readonly ShiftPatternExpander Expander = new();
 
     private static readonly IReadOnlyDictionary<int, string> PaceNames = new Dictionary<int, string>
@@ -46,6 +49,8 @@ public static class PlanPricingEngine
         var blocks = request.Blocks ?? Array.Empty<PlanBlock>();
         if (request.PeriodFrom > request.PeriodTo)
             issues.Add(string.Empty, PlanFailureReason.InvalidInput, "The agreement period ends before it starts.", null);
+        else if (request.PeriodFrom.Year < FirstYear || request.PeriodTo.Year > LastYear)
+            issues.Add(string.Empty, PlanFailureReason.InvalidInput, string.Create(CultureInfo.InvariantCulture, $"The agreement period must fall between the years {FirstYear} and {LastYear}."), null);
         else if (request.PeriodTo.DayNumber - request.PeriodFrom.DayNumber + 1 > MaxPeriodDays)
             issues.Add(string.Empty, PlanFailureReason.InvalidInput, string.Create(CultureInfo.InvariantCulture, $"The agreement period is longer than {MaxPeriodDays} days."), null);
         else if (blocks.Count > MaxBlocks)
@@ -147,7 +152,7 @@ public static class PlanPricingEngine
 
     /// <summary>The dates the block's days fall on inside the period, oldest first. The weekly expansion is the roster's own <see cref="ShiftPatternExpander"/>.</summary>
     private static List<DateOnly> Dates(PlanBlock block, DateOnly from, DateOnly to) =>
-        block.Days.Distinct()
+        block.Days.Where(day => Enum.IsDefined(day)).Distinct()
             .SelectMany(day => Expander.Occurrences(new ShiftPattern { DayOfWeek = day, EffectiveFrom = from, EffectiveTo = to, IsActive = true }, from, to))
             .Distinct()
             .OrderBy(date => date)
