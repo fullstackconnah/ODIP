@@ -57,6 +57,13 @@ public class CatalogueImportService
                 $"{h.ItemNumber}: the file {(h.FileEnd is { } e ? $"ends this row on {e:yyyy-MM-dd}" : "leaves this row open-ended")}, later than the stored {h.StoredEnd:yyyy-MM-dd}; an import never lengthens a row, so {h.StoredEnd:yyyy-MM-dd} was kept."));
         if (held.Count > MaxWarningLines)
             warnings.Add(FormattableString.Invariant($"...and {held.Count - MaxWarningLines} more rows keep an earlier stored end date than the file gives."));
+        // A row an earlier import emptied (its code was left out of a republished file) that this file lists again: it comes back. Say so row by row, so the
+        // repair of a wrong workbook is not mistaken for an unexplained "updated" count.
+        var back = plan.Reopened.OrderBy(r => r.ItemNumber, StringComparer.Ordinal).ToList();
+        foreach (var r in back.Take(MaxWarningLines))
+            warnings.Add(FormattableString.Invariant($"{r.ItemNumber} ({r.Description}) was end-dated by an earlier import that left it out; this file lists it again, so it is reopened from {r.EffectiveFrom:yyyy-MM-dd}."));
+        if (back.Count > MaxWarningLines)
+            warnings.Add(FormattableString.Invariant($"...and {back.Count - MaxWarningLines} more rows end-dated by an earlier import are reopened."));
         // A row that starts after today prices services from its own start date: earlier services keep the row it replaces (claims and agreements read the
         // row valid on the service date). Say so row by row, so a republished file whose changed rows start later is not mistaken for a mistake.
         var later = rows.Where(r => r.EffectiveFrom > today).OrderBy(r => r.EffectiveFrom).ThenBy(r => r.ItemNumber, StringComparer.Ordinal).ToList();

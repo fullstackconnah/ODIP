@@ -343,6 +343,64 @@ public class CatalogueImportCommitTests
         Assert.Equal(CatalogueLookupFailure.NotFound, (await db.FindCatalogueItemAsync(code, new DateOnly(2026, 10, 5), PriceZone.National)).Failure);
     }
 
+    [Theory]
+    [InlineData("04_105_0125_6_1", "2026-07-01", 103.54)]       // starts on the catalogue's first day
+    [InlineData("01_700_0118_1_3_CA2", "2026-07-03", 0)]        // starts a couple of days after it, like four rows of the official file (0: only check that it is found again)
+    public async Task A_code_a_truncated_file_ended_prices_again_when_the_complete_file_is_imported_after_it(string code, string start, double price)
+    {
+        // A wrong or cut-short workbook is confirmed by mistake: the codes it leaves out are end-dated with an empty window. The right file, imported next, must
+        // bring them back; an import never lengthens a row that a newer catalogue shortened, but this window was emptied by the importer itself.
+        await using var db = CreateDb();
+        await SeedCommunityAccessGroupAsync(db);
+        await ImportAsync(db, CatalogueFixtures.File2026_27);
+        await using var truncated = Workbook(CatalogueFixtures.File2026_27, wb => DeleteRows(wb, code));
+        var cut = await PreviewAsync(db, truncated, "truncated.xlsx");
+        await NewImporter(db).CommitImportAsync(new ConfirmCatalogueImportDto { CatalogueVersion = cut.DetectedVersion, Rows = cut.Rows });
+        var probe = new DateOnly(2026, 10, 5);
+        Assert.Equal(CatalogueLookupFailure.NotFound, (await db.FindCatalogueItemAsync(code, probe, PriceZone.National)).Failure);   // the truncated file did end it
+
+        var preview = await PreviewAsync(db, CatalogueFixtures.File2026_27);
+        var result = await NewImporter(db).CommitImportAsync(new ConfirmCatalogueImportDto { CatalogueVersion = preview.DetectedVersion, Rows = preview.Rows });
+
+        Assert.Equal((0, 1016, 0), (preview.ItemsToAdd, preview.ItemsUnchanged, preview.ItemsToDeactivate));
+        var warning = Assert.Single(preview.Warnings);
+        Assert.Contains(code, warning);
+        Assert.Contains("reopened", warning);
+        Assert.DoesNotContain("never lengthens", warning);
+        Assert.Equal(new CatalogueImportResultDto(0, 1, 1016, 0), result);   // the one row is updated in place: no copy is added
+        var rows = (await RowsAsync(db)).Where(r => r.ItemNumber == code).ToList();
+        var row = Assert.Single(rows);
+        Assert.Equal((DateOnly.Parse(start), (DateOnly?)null, true), (row.EffectiveFrom, row.EffectiveTo, row.IsActive));
+        var found = await db.FindCatalogueItemAsync(code, probe, PriceZone.National);
+        Assert.NotEqual(CatalogueLookupFailure.NotFound, found.Failure);   // the row is valid on that date again
+        if (price > 0) Assert.Equal((decimal)price, found.Price);
+
+        var again = await ImportAsync(db, CatalogueFixtures.File2026_27);
+        Assert.Equal(new CatalogueImportResultDto(0, 0, 1017, 0), again);      // and once back, importing again changes nothing
+    }
+
+    [Fact]
+    public async Task A_row_the_importer_emptied_is_not_reopened_while_another_row_of_the_code_covers_its_start()
+    {
+        // Not a state the importer itself produces. The rule being pinned: a file that lists a code again brings back only a code nothing else prices; an
+        // emptied row whose start another row of the code covers is a shadowed copy, and stays ended.
+        await using var db = CreateDb();
+        var group = await SeedCommunityAccessGroupAsync(db);
+        var covering = LegacyRow(group.Id, "04_104_0125_6_1", ClaimDayType.Weekday, 70.23m, new DateOnly(2026, 6, 1));
+        covering.SourceDocument = "support-catalogue-earlier.xlsx";
+        var emptied = LegacyRow(group.Id, "04_104_0125_6_1", ClaimDayType.Weekday, 73.58m, new DateOnly(2026, 7, 1), active: false, to: Jun30_2026);
+        emptied.SourceDocument = "support-catalogue-2026-27.xlsx";
+        db.SupportCatalogueItems.AddRange(covering, emptied);
+        await db.SaveChangesAsync();
+
+        var preview = await PreviewAsync(db, CatalogueFixtures.File2026_27);
+        await NewImporter(db).CommitImportAsync(new ConfirmCatalogueImportDto { CatalogueVersion = preview.DetectedVersion, Rows = preview.Rows });
+
+        Assert.DoesNotContain(preview.Warnings, w => w.Contains("reopened"));
+        var row = await db.SupportCatalogueItems.AsNoTracking().SingleAsync(i => i.Id == emptied.Id);
+        Assert.Equal((new DateOnly(2026, 7, 1), Jun30_2026, false), (row.EffectiveFrom, row.EffectiveTo, row.IsActive));
+    }
+
     [Fact]
     public async Task An_import_heals_a_catalogue_that_was_inserted_twice_by_ending_the_extra_copy_of_every_row()
     {

@@ -1,4 +1,5 @@
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 
 namespace Odip.Infrastructure.Services;
@@ -30,11 +31,15 @@ internal sealed class PlannedEndDate
 /// <summary>A row the file would end LATER than the database holds it: the stored end date is kept (an import never lengthens a row), and the preview says so.</summary>
 internal sealed record HeldEnd(string ItemNumber, DateOnly EffectiveFrom, DateOnly? FileEnd, DateOnly StoredEnd);
 
+/// <summary>A row an earlier import emptied (its code was left out of a republished file) that this file lists again: it is brought back, and the preview says so.</summary>
+internal sealed record ReopenedRow(string ItemNumber, string Description, DateOnly EffectiveFrom);
+
 internal sealed class ImportPlan
 {
     public required IReadOnlyList<PlannedRow> Rows { get; init; }
     public required IReadOnlyList<PlannedEndDate> EndDates { get; init; }
     public required IReadOnlyList<HeldEnd> HeldEnds { get; init; }
+    public required IReadOnlyList<ReopenedRow> Reopened { get; init; }
     /// <summary>The day the catalogue takes effect: the earliest start on the Current sheet (the Legacy sheet can reach back further).</summary>
     public required DateOnly FileStart { get; init; }
 }
@@ -50,7 +55,9 @@ internal sealed class ImportPlan
 /// newer version than the file (it starts after everything the file starts). A row that starts WITH the catalogue and is missing from a republished
 /// workbook was dropped by it: it is end-dated with an empty window (it ends the day before it starts) and counted in the preview.</item>
 /// <item>An import only ever shortens a catalogue row it already holds, never lengthens it. So importing an older file again cannot bring back a row a
-/// newer catalogue replaced or dropped, and importing any file twice, in any order, changes nothing.</item>
+/// newer catalogue replaced or dropped, and importing any file twice, in any order, changes nothing. The one exception is a row the importer itself emptied
+/// (it ends the day before it starts, because a republished file left its code out): a file that lists the code again brings it back, unless another row of
+/// the code covers its start, so a truncated or wrong workbook that was confirmed can be repaired by importing the right one.</item>
 /// <item>Rows written before the catalogue carried its own dates have no source document: the importer that wrote them (and the demo seed) stamped the day it
 /// ran, which is not a catalogue date. A real catalogue row for the same code replaces them outright, so one is end-dated even if its stamp is later.</item>
 /// </list>
@@ -73,6 +80,7 @@ internal static class CatalogueImportPlanner
         var incomingCodes = incoming.Select(r => r.ItemNumber).ToHashSet(StringComparer.Ordinal);
         var ends = new Dictionary<Guid, PlannedEndDate>();
         var heldEnds = new List<HeldEnd>();
+        var reopened = new List<ReopenedRow>();
         var planned = new List<PlannedRow>(incoming.Count);
 
         // Ends a row the day before `newStart`. A window can only shrink, and a row that starts on or after `newStart` is wholly shadowed:
@@ -112,6 +120,13 @@ internal static class CatalogueImportPlanner
                 // one is the match, the lowest Id breaking a tie, so the choice never depends on row order; the extra copies are ended below.
                 var match = dbRows.Where(x => x.EffectiveFrom == row.EffectiveFrom).OrderByDescending(x => x.IsActive).ThenBy(x => x.Id).FirstOrDefault();
                 var held = match is not null && HasCatalogueDates(match) ? match : null;
+                // A window the importer itself emptied (the code was left out of a republished file) is not a row a newer catalogue shortened: when a file lists the
+                // code again and no other row of the code covers its start, the row comes back (the update below gives it the file's end date and makes it active).
+                if (held is not null && IsEmptied(held) && !dbRows.Any(x => !ReferenceEquals(x, held) && EffectiveCatalogueResolver.IsValidOn(x, held.EffectiveFrom)))
+                {
+                    reopened.Add(new ReopenedRow(row.ItemNumber, row.Description, row.EffectiveFrom));
+                    held = null;
+                }
                 if (held?.EffectiveTo is { } heldTo && (effectiveTo is null || heldTo < effectiveTo))
                 {
                     heldEnds.Add(new HeldEnd(row.ItemNumber, row.EffectiveFrom, effectiveTo, heldTo));
@@ -148,11 +163,14 @@ internal static class CatalogueImportPlanner
             EndDate(x, fileStart, withdrawn: true);
         }
 
-        return new ImportPlan { Rows = planned, EndDates = ends.Values.ToList(), HeldEnds = heldEnds, FileStart = fileStart };
+        return new ImportPlan { Rows = planned, EndDates = ends.Values.ToList(), HeldEnds = heldEnds, Reopened = reopened, FileStart = fileStart };
     }
 
     /// <summary>A row the 2026-27 importer wrote: its dates are the catalogue's own. Older rows (and the demo seed) carry no source document.</summary>
     internal static bool HasCatalogueDates(SupportCatalogueItem x) => x.SourceDocument is not null;
+
+    /// <summary>The window holds no date: it ends before it starts, as the importer leaves a row it drops (or an extra copy of one version).</summary>
+    private static bool IsEmptied(SupportCatalogueItem x) => x.EffectiveTo is { } to && to < x.EffectiveFrom;
 
     private static decimal? PriceOf(SupportCatalogueItem x) => x.PriceNational ?? (x.PriceLimit_VIC > 0m ? x.PriceLimit_VIC : null);
     private static decimal? PriceOf(CatalogueImportRowDto r) => r.PriceNational ?? (r.PriceLimit_VIC > 0m ? r.PriceLimit_VIC : null);

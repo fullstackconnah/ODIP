@@ -44,6 +44,10 @@ weekday, hourly item of that group.
   end-dated the same way. Nothing is deleted and no group is deactivated as a whole.
 - Importing a file again changes nothing. An import only ever shortens a row it holds, so an older file cannot bring back what a newer
   catalogue replaced or dropped (the preview says when a file would end a row later than it is stored).
+- One exception, so a wrong workbook can be repaired: a code that a republished file left out is end-dated with an empty window (the row
+  ends the day before it starts). Importing a file that lists the code again reopens that row (the preview names each one, "is
+  reopened"), unless another row of the code covers its start. Rows a newer catalogue superseded or dropped keep their real window and
+  stay ended.
 - One confirm at a time (a PostgreSQL advisory lock); rows duplicated by an earlier double import are healed by the next import.
 - The version is proposed from the file (`2026-27`, or `2026-27 (2026-12-01)` when changed rows start later than the financial year began).
   Preview and confirm are SuperAdmin-only.
