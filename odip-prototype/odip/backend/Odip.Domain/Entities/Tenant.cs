@@ -2,7 +2,8 @@ namespace Odip.Domain.Entities;
 
 /// <summary>
 /// Represents an NDIS service provider organisation.
-/// Email domain is used to resolve the tenant at login.
+/// The email domain does not decide who signs in or into which tenant (the user's own row names the tenant). It is the organisation's usual
+/// address domain: an address elsewhere has to be confirmed by the admin, and a caller from another tenant cannot give their staff one at it.
 /// </summary>
 public class Tenant
 {

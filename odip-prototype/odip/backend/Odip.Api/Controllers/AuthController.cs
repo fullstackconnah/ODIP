@@ -158,10 +158,12 @@ public class AuthController : ControllerBase
         // the organisation's), so the domain of the address says nothing about the tenant: the tenant is the one on the user's own row. That is
         // why the lookup crosses tenants (IgnoreQueryFilters; the tenant is what is being found), and why an address that matches more than one
         // active row is refused instead of guessed at: signing in as the wrong person, in the wrong tenant, is worse than a 401. Take(2) is
-        // enough to tell one from many. Tenant.EmailDomain plays no part in signing in.
+        // enough to tell one from many, and the order makes the two ids the refusal's log line names the same two every time. Tenant.EmailDomain
+        // plays no part in signing in.
         var matches = await _db.Users
             .IgnoreQueryFilters()
             .Where(u => u.Email.ToLower() == email && u.IsActive)
+            .OrderBy(u => u.Id)
             .Take(2)
             .ToListAsync(ct);
 

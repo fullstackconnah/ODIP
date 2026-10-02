@@ -56,11 +56,11 @@ public class AuthControllerExchangeTests
         return tenant;
     }
 
-    private static User SeedUser(OdipDbContext db, Guid tenantId, string storedEmail, UserRole role = UserRole.Coordinator, bool isActive = true)
+    private static User SeedUser(OdipDbContext db, Guid tenantId, string storedEmail, UserRole role = UserRole.Coordinator, bool isActive = true, Guid? id = null)
     {
         var user = new User
         {
-            Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Jane", LastName = "Smith", Username = Guid.NewGuid().ToString("N"),
+            Id = id ?? Guid.NewGuid(), TenantId = tenantId, FirstName = "Jane", LastName = "Smith", Username = Guid.NewGuid().ToString("N"),
             Email = storedEmail, Role = role, IsActive = isActive, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
         };
         db.Users.Add(user);
@@ -282,10 +282,31 @@ public class AuthControllerExchangeTests
         VerifyWarningNaming(logger, mixed.Id, lower.Id);
     }
 
-    private static void VerifyWarningNaming(Mock<ILogger<AuthController>> logger, Guid firstUserId, Guid secondUserId) =>
+    [Fact]
+    public async Task The_ambiguity_line_names_the_two_lowest_ids_whatever_order_the_rows_were_written_in()
+    {
+        // Take(2) is enough to tell one row from many, but without an order the two rows it returns, and so the two ids the line names, are whichever the
+        // database produces first. Written highest, lowest, middle, an unordered query names the first two written. (The order is the provider's own
+        // comparison of ids, which Postgres does not share with the CLR; what this pins is that it is the same two every time.)
+        using var db = CreateDb();
+        var tenant = SeedTenant(db);
+        var ids = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() }.OrderBy(id => id).ToArray();
+        var (lowest, middle, highest) = (ids[0], ids[1], ids[2]);
+        foreach (var id in new[] { highest, lowest, middle })
+            SeedUser(db, tenant.Id, "jane.smith@gmail.com", id: id);
+        var logger = new Mock<ILogger<AuthController>>();
+
+        var result = await Exchange(CreateController(db, "jane.smith@gmail.com", logger: logger.Object));
+
+        Assert.IsType<UnauthorizedObjectResult>(result.Result);
+        VerifyWarningNaming(logger, lowest, middle, butNot: highest);
+    }
+
+    private static void VerifyWarningNaming(Mock<ILogger<AuthController>> logger, Guid firstUserId, Guid secondUserId, Guid? butNot = null) =>
         logger.Verify(l => l.Log(
             LogLevel.Warning, It.IsAny<EventId>(),
-            It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains(firstUserId.ToString()) && state.ToString()!.Contains(secondUserId.ToString())),
+            It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains(firstUserId.ToString()) && state.ToString()!.Contains(secondUserId.ToString())
+                && (butNot == null || !state.ToString()!.Contains(butNot.Value.ToString()))),
             It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
 
     // ── SuperAdmin path ─────────────────────────────────────────────────
