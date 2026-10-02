@@ -149,7 +149,7 @@ describe('ParticipantsHubPage — single PageHeader + tabbed lifecycle', () => {
 // sat in its own row inside the panel, under a generic subtitle that restated the tab labels.
 describe('ParticipantsHubPage — one description line, not two', () => {
   const ACTIVE = 'The operational register — participants you can roster and book.'
-  const ENQUIRIES = 'Lightweight capture of new prospects before intake.'
+  const ENQUIRIES = 'Open enquiries and intakes in progress — start or resume an intake.'
 
   it('shows the active stage\'s description once, as the inline subtitle beside the H1', () => {
     renderHub()
@@ -220,5 +220,32 @@ describe('ParticipantsHubPage — the URL is the only source of the stage (useTa
     expect(hub.location.current).toBe('/participants?q=sophie&tab=onboarding')
     await user.click(screen.getByRole('tab', { name: 'Active participants' }))
     expect(hub.location.current).toBe('/participants?q=sophie')
+  })
+})
+
+// The register's Drafts view is gone: a draft with an open intake is an Enquiries-tab row and a draft with a complete intake is an Onboarding-tab row.
+describe('ParticipantsHubPage — the retired Drafts view', () => {
+  it('sends an old ?view=drafts link to the Enquiries tab, where drafts live now, and drops the retired param', async () => {
+    const hub = renderHub('/participants?view=drafts')
+
+    expect(screen.getByRole('tab', { name: 'Enquiries' })).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(hub.location.current).toBe('/participants?tab=enquiries'))
+  })
+
+  it('does the same when the old link also names a tab', async () => {
+    const hub = renderHub('/participants?tab=active&view=drafts')
+
+    expect(screen.getByRole('tab', { name: 'Enquiries' })).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(hub.location.current).toBe('/participants?tab=enquiries'))
+  })
+
+  it('keeps other query params on the way, and leaves any other ?view= value alone', async () => {
+    const hub = renderHub('/participants?q=sophie&view=drafts')
+    await waitFor(() => expect(hub.location.current).toBe('/participants?q=sophie&tab=enquiries'))
+    cleanup()
+
+    const other = renderHub('/participants?view=archived')
+    expect(screen.getByRole('tab', { name: 'Active participants' })).toHaveAttribute('aria-selected', 'true')
+    expect(other.location.current).toBe('/participants?view=archived')
   })
 })

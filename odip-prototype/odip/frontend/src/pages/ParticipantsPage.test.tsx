@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
-import ParticipantsPage from './ParticipantsPage'
+import { MemoryRouter, Routes, Route, RouterProvider, createMemoryRouter } from 'react-router-dom'
+import ParticipantsPage, { ParticipantsTable } from './ParticipantsPage'
+import { participantActivatedState } from './profile/participantActivated'
 
 const { mockUseParticipants, mockDeleteMutate, mockUpdateMutate, mockStatusMutate, mockRestoreMutate, mockUseParticipantAlertsAggregate } = vi.hoisted(() => ({
   mockUseParticipants: vi.fn(),
@@ -196,16 +197,21 @@ describe('ParticipantsPage — alerts badge column', () => {
 })
 
 describe('ParticipantsPage — operational register stage boundary', () => {
-  it('offers a Drafts view, so a draft that has no onboarding row is listed somewhere, and asks the server only for drafts there (L2-04)', async () => {
-    // This used to assert that there is NO Drafts control "because incomplete records belong to Onboarding". A draft saved from the Intake
-    // wizard has no onboarding row, so it belonged to no tab at all. Drafts that do have a row still appear under Onboarding as well.
+  it('offers only the Active and Archived views: a draft is an Enquiries or an Onboarding row, never a register row', async () => {
+    // L2-04 added a Drafts view here because a draft saved from the Intake wizard had no onboarding row and so belonged to no tab. Drafts now
+    // live on the Enquiries tab (intake open) and the Onboarding tab (intake complete), so the register has two views and never asks for drafts.
     const user = userEvent.setup()
     mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
     renderPage()
 
-    await user.click(screen.getByRole('radio', { name: 'Drafts' }))
+    const views = screen.getByRole('radiogroup', { name: /participant list view/i })
+    expect(within(views).getAllByRole('radio').map(radio => radio.getAttribute('aria-label') ?? radio.textContent)).toEqual(['Active', 'Archived'])
+    expect(screen.queryByRole('radio', { name: 'Drafts' })).not.toBeInTheDocument()
 
-    expect(mockUseParticipants).toHaveBeenLastCalledWith({ isDraft: 'true' })
+    await user.click(screen.getByRole('radio', { name: 'Archived' }))
+
+    expect(mockUseParticipants).toHaveBeenLastCalledWith({ isActive: 'false', isDraft: 'false' })
+    for (const [params] of mockUseParticipants.mock.calls) expect(params).not.toEqual(expect.objectContaining({ isDraft: 'true' }))
   })
 
   it('requests the server-owned operational stage predicate as well as non-drafts', () => {
@@ -467,6 +473,46 @@ describe('ParticipantsPage — Restore from the Archived view', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Restore' }))
 
     expect(screen.getByRole('alert')).toHaveTextContent('Participant not found')
+  })
+})
+
+// Completing onboarding (the Profile wizard's Complete Profile) activates the participant, who leaves the Onboarding tab for this one: the wizard
+// hands over who it was, the same way the Intake wizard hands over to the Onboarding tab.
+describe('ParticipantsTable: arriving from a completed onboarding', () => {
+  const HIGHLIGHT = 'bg-[var(--color-primary)]/10'
+  const people = () => [baseParticipant({ id: 'p1', fullName: 'Jamie Smith' }), baseParticipant({ id: 'p2', fullName: 'Avery Lee' })]
+
+  function renderArrival(state: unknown) {
+    mockUseParticipants.mockReturnValue({ data: people(), isLoading: false })
+    const router = createMemoryRouter(
+      [{ path: '/participants', element: <ParticipantsTable /> }],
+      { initialEntries: [{ pathname: '/participants', search: '?tab=active', state }] },
+    )
+    render(<RouterProvider router={router} />)
+    return router
+  }
+
+  it('confirms who is now active in a polite status message, and highlights that one row only', () => {
+    renderArrival(participantActivatedState('p1', 'Jamie Smith'))
+
+    expect(screen.getByRole('status')).toHaveTextContent('Jamie Smith is now an active participant.')
+    expect(screen.getByText('Jamie Smith').closest('tr')).toHaveClass(HIGHLIGHT)
+    expect(screen.getByText('Avery Lee').closest('tr')).not.toHaveClass(HIGHLIGHT)
+  })
+
+  it('shows it once: the notice is cleared from history state, so a reload does not replay it, while it stays on screen', async () => {
+    const router = renderArrival(participantActivatedState('p1', 'Jamie Smith'))
+
+    await waitFor(() => expect(router.state.location.state).toBeNull())
+    expect(router.state.location.pathname + router.state.location.search).toBe('/participants?tab=active')
+    expect(screen.getByRole('status')).toHaveTextContent(/now an active participant/i)
+  })
+
+  it('shows no confirmation and highlights nothing for an ordinary visit, or for unrecognised navigation state', () => {
+    renderArrival({ participantActivated: { participantId: 42 } })
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    for (const row of screen.getAllByRole('row').slice(1)) expect(row).not.toHaveClass(HIGHLIGHT)
   })
 })
 
