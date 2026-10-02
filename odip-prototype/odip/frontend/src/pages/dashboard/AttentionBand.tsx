@@ -7,6 +7,8 @@ import { BAND_GRID_CLASS, BAND_SPAN_CLASS, bandTileStyles } from './bandLayout'
 /** One thing the dashboard counts for somebody to act on. */
 export type BandItem = {
   label: string
+  /** How the All clear row and field name the item when it is at zero: a noun that reads without its tile ("overdue tasks" for "Overdue"). Defaults to the label. */
+  noun?: string
   count: number
   /** The tone a count above zero takes: danger (the error container) or warning (the warning container). */
   tone: 'danger' | 'warning'
@@ -61,7 +63,7 @@ function Tile({ item }: { item: BandItem }) {
 export function AttentionBand({ items }: { items: BandItem[] }) {
   if (items.length === 0) return null
   const tiles = items.filter((item) => item.loading || item.error || item.count > 0)
-  const clear = items.filter((item) => !item.loading && !item.error && item.count === 0).map((item) => item.label)
+  const clear = items.filter((item) => !item.loading && !item.error && item.count === 0).map((item) => item.noun ?? item.label)
   const styles = bandTileStyles(tiles.length)
 
   return (

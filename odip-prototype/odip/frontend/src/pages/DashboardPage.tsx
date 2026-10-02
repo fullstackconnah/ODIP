@@ -53,7 +53,7 @@ function DashboardHeader({ now, fullName, upcomingTrips, activeParticipants, out
 }
 
 export default function DashboardPage() {
-  const { canViewAlerts, canApproveLeave, canReviewCompletions, canAccessPage, fullName } = usePermissions()
+  const { canViewAlerts, canApproveLeave, canReviewCompletions, canAccessPage, isReadOnly, fullName } = usePermissions()
   // The viewer's clock, ticking every minute. The title reads it, and so does the one figure that depends on the day (the qualification count below), so the page never
   // advertises a new date beside a count that still belongs to yesterday.
   const now = useNow()
@@ -134,6 +134,7 @@ export default function DashboardPage() {
   if (canAccessPage('qualifications')) {
     attentionItems.push({
       label: 'Qualification Issues',
+      noun: 'qualification issues',
       count: qualIssueCount,
       tone: 'danger',
       // The tile counts credential issues; the Qualifications page's tabs count staff ("All Issues (4)"). Say both, so 12 reads against 4.
@@ -147,6 +148,7 @@ export default function DashboardPage() {
   if (canViewAlerts) {
     attentionItems.push({
       label: 'Critical Participant Alerts',
+      noun: 'critical participant alerts',
       count: criticalAlertItems.length,
       tone: 'danger',
       // The tile counts alerts; the Participants table shows one flagged row per participant. Say both, so 3 reads against 2 rows.
@@ -157,38 +159,41 @@ export default function DashboardPage() {
       error: alertsError,
     })
   }
+  // ReadOnly reaches the Schedule but its writes are refused (permissions.ts keeps canWrite for it and the server answers 403), so it is offered the page and not a verb it
+  // cannot use. Both links go to the same page, so they may share a name.
+  const scheduleVerb = (verb: string) => (isReadOnly ? 'Open schedule' : verb)
   attentionItems.push(
     // Opens the Tasks list on its Overdue filter: the same rule the figure counts (TaskOverdue on the server), so the rows match the number.
     {
-      label: 'Overdue', count: d.overdueTaskCount, tone: 'danger',
+      label: 'Overdue', noun: 'overdue tasks', count: d.overdueTaskCount, tone: 'danger',
       detail: 'Tasks past their due date and still open.',
       action: { label: 'Open overdue tasks', to: '/tasks?status=Overdue' },
     },
     // The three "Missing" counts are of the trips the server calls upcoming (they start today or within 60 days). A vehicle or a staff member is assigned to a trip on the
     // Schedule (the same assignments the count reads), and accommodation on the trip's own tab, so that one opens the Trips list to choose the trip.
     {
-      label: 'Missing Accommodation', count: d.tripsMissingAccommodation, tone: 'warning',
+      label: 'Missing Accommodation', noun: 'trips missing accommodation', count: d.tripsMissingAccommodation, tone: 'warning',
       detail: `${tripsStart(d.tripsMissingAccommodation)} within 60 days with no accommodation reserved.`,
       action: { label: 'Open trips', to: '/trips' },
     },
     {
-      label: 'Missing Vehicles', count: d.tripsMissingVehicles, tone: 'warning',
+      label: 'Missing Vehicles', noun: 'trips missing vehicles', count: d.tripsMissingVehicles, tone: 'warning',
       detail: `${tripsStart(d.tripsMissingVehicles)} within 60 days with no vehicle assigned.`,
-      action: { label: 'Assign vehicles', to: '/schedule' },
+      action: { label: scheduleVerb('Assign vehicles'), to: '/schedule' },
     },
     {
-      label: 'Missing Staff', count: d.tripsMissingStaff, tone: 'warning',
+      label: 'Missing Staff', noun: 'trips missing staff', count: d.tripsMissingStaff, tone: 'warning',
       detail: `${tripsStart(d.tripsMissingStaff)} within 60 days with no staff assigned.`,
-      action: { label: 'Assign staff', to: '/schedule' },
+      action: { label: scheduleVerb('Assign staff'), to: '/schedule' },
     },
     {
-      label: 'Open Incidents', count: d.openIncidentCount, tone: 'warning',
+      label: 'Open Incidents', noun: 'open incidents', count: d.openIncidentCount, tone: 'warning',
       detail: 'Incidents not yet resolved or closed.',
       action: { label: 'Open incidents', to: '/incidents' },
     },
     // The Incidents list already has this filter (?qsc=overdue): the same rule the figure counts.
     {
-      label: 'QSC Overdue', count: d.qscOverdueCount, tone: 'danger',
+      label: 'QSC Overdue', noun: 'overdue QSC reports', count: d.qscOverdueCount, tone: 'danger',
       detail: 'Reportable incidents with no QSC report after 24 hours.',
       action: { label: 'Review QSC reports', to: '/incidents?qsc=overdue' },
     },
@@ -196,6 +201,7 @@ export default function DashboardPage() {
   if (canApproveLeave) {
     attentionItems.push({
       label: 'Pending Leave',
+      noun: 'pending leave',
       count: pendingLeave.count,
       tone: 'warning',
       detail: 'Leave and unavailability requests waiting for a decision.',
@@ -209,6 +215,7 @@ export default function DashboardPage() {
   if (canReviewCompletions) {
     attentionItems.push({
       label: 'Shift Completions',
+      noun: 'shift completions',
       count: pendingCompletions.count,
       tone: 'warning',
       detail: 'Submitted shifts waiting for review before they are billed.',

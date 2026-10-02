@@ -258,3 +258,26 @@ describe('AttentionBand — layout', () => {
     expect(band().innerHTML).not.toMatch(/overflow|truncate|line-clamp/)
   })
 })
+
+// A tile label is read inside its tile ("Overdue" over "Tasks past their due date"); the row and the field have no such context, so an item may carry a noun that reads on its own.
+describe('AttentionBand — naming the clear items', () => {
+  it('names a clear item by its noun in the All clear row, and by its label when it has none', () => {
+    renderBand([item('Alpha', 2), item('Overdue', 0, { noun: 'overdue tasks' }), item('Beta', 0)])
+
+    expect(clearRow()).toHaveTextContent('All clear on overdue tasks and Beta')
+    expect(clearRow()!.textContent).not.toMatch(/Overdue/)
+  })
+
+  it('names them by noun in the all-clear field\'s audit line too', () => {
+    renderBand([item('Overdue', 0, { noun: 'overdue tasks' }), item('QSC Overdue', 0, { noun: 'overdue QSC reports' }), item('Beta', 0)])
+
+    expect(screen.getByText('Checked and at zero: overdue tasks, overdue QSC reports and Beta.')).toBeInTheDocument()
+  })
+
+  it('never uses the noun on a tile: the label is what the tile is called', () => {
+    renderBand([item('Overdue', 2, { noun: 'overdue tasks' }), item('Beta', 0)])
+
+    expect(screen.getByRole('group', { name: 'Overdue 2' })).toBeInTheDocument()
+    expect(screen.queryByText('overdue tasks')).not.toBeInTheDocument()
+  })
+})

@@ -254,7 +254,7 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     // The list section is omitted entirely when empty, and a zero is not a tile.
     expect(screen.queryByRole('heading', { name: 'Critical Participant Alerts' })).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: /Critical Participant Alerts/ })).not.toBeInTheDocument()
-    expect(screen.getByText(/^Checked and at zero:.*Critical Participant Alerts/)).toBeInTheDocument()
+    expect(screen.getByText(/^Checked and at zero:.*critical participant alerts/)).toBeInTheDocument()
   })
 
   it('is hidden entirely for a SupportWorker (matches the backend Admin/Coordinator/SuperAdmin gate)', () => {
@@ -307,8 +307,8 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     // The rest of the band IS clear (the useStaff mock's empty list, the zeros of the summary), so it still says so, but it does not name the item whose
     // request is in flight, and the band is not the all-clear field while that item is waiting.
     const row = screen.getByText('All clear', { selector: 'span.font-semibold' }).closest('p') as HTMLElement
-    expect(row).toHaveTextContent('Qualification Issues')
-    expect(row).not.toHaveTextContent('Critical Participant Alerts')
+    expect(row).toHaveTextContent('qualification issues')
+    expect(row).not.toHaveTextContent('critical participant alerts')
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 })
@@ -332,7 +332,7 @@ describe('DashboardPage — Pending Leave card (I-6)', () => {
     renderPage()
 
     expect(screen.queryByRole('group', { name: /Pending Leave/ })).not.toBeInTheDocument()
-    expect(screen.getByText(/^Checked and at zero:.*Pending Leave/)).toBeInTheDocument()
+    expect(screen.getByText(/^Checked and at zero:.*pending leave/)).toBeInTheDocument()
   })
 
   it('does not call the queue clear while it is still loading, or after it failed (its count is 0 in both)', () => {
@@ -343,7 +343,7 @@ describe('DashboardPage — Pending Leave card (I-6)', () => {
     const { unmount } = renderPage()
     expect(screen.getByRole('link', { name: 'Pending Leave Loading' })).toHaveAttribute('href', '/rostering/leave')
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
-    expect(screen.getByText('All clear', { selector: 'span.font-semibold' }).closest('p')).not.toHaveTextContent('Pending Leave')
+    expect(screen.getByText('All clear', { selector: 'span.font-semibold' }).closest('p')).not.toHaveTextContent('pending leave')
     unmount()
 
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { error: true }))
@@ -781,8 +781,8 @@ describe('DashboardPage — a paused request is waiting, not a settled zero', ()
       expect(within(tile).getByText('Loading'), label).toHaveClass('sr-only')
     }
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
-    expect(clearRow()).not.toHaveTextContent('Qualification Issues')
-    expect(clearRow()).not.toHaveTextContent('Critical Participant Alerts')
+    expect(clearRow()).not.toHaveTextContent('qualification issues')
+    expect(clearRow()).not.toHaveTextContent('critical participant alerts')
   })
 
   it('does not call a DISABLED query waiting: nobody asked it, so the role that cannot view alerts sees no placeholder', () => {
@@ -828,7 +828,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
 
     expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => label !== 'Missing Vehicles'))
     expect(screen.queryByRole('group', { name: /Missing Vehicles/ })).not.toBeInTheDocument()
-    expect(clearRow()).toHaveTextContent('All clear on Missing Vehicles')
+    expect(clearRow()).toHaveTextContent('All clear on trips missing vehicles')
   })
 
   it('leaves out the alerts item, Pending Leave, Shift Completions and Qualification Issues for a role without canViewAlerts / canApproveLeave / canReviewCompletions / the Qualifications page', () => {
@@ -1047,7 +1047,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     expect(tileLabels()).toEqual(['Overdue'])
     const row = clearRow()!
     expect(row).toHaveTextContent(
-      'All clear on Qualification Issues, Critical Participant Alerts, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents, QSC Overdue, Pending Leave and Shift Completions',
+      'All clear on qualification issues, critical participant alerts, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue QSC reports, pending leave and shift completions',
     )
     expect(row).toHaveClass('bg-[var(--color-primary-fixed)]', 'text-[var(--color-on-primary-fixed)]')
     expect(screen.getAllByText('All clear')).toHaveLength(1)
@@ -1060,11 +1060,11 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     renderPage()
 
     expect(clearRow()).toHaveTextContent(
-      'All clear on Qualification Issues, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents and QSC Overdue',
+      'All clear on qualification issues, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents and overdue QSC reports',
     )
-    expect(clearRow()).not.toHaveTextContent('Critical Participant Alerts')
-    expect(clearRow()).not.toHaveTextContent('Pending Leave')
-    expect(clearRow()).not.toHaveTextContent('Shift Completions')
+    expect(clearRow()).not.toHaveTextContent('critical participant alerts')
+    expect(clearRow()).not.toHaveTextContent('pending leave')
+    expect(clearRow()).not.toHaveTextContent('shift completions')
   })
 
   it('becomes one full-width Pale Sprout field when everything is zero: "All clear. Nothing needs you right now."', () => {
@@ -1081,7 +1081,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     expect(clearRow()).toBeNull()
     // It names everything it checked, so the claim can be audited.
     expect(screen.getByText(
-      'Checked and at zero: Qualification Issues, Critical Participant Alerts, Overdue, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents, QSC Overdue, Pending Leave and Shift Completions.',
+      'Checked and at zero: qualification issues, critical participant alerts, overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue QSC reports, pending leave and shift completions.',
     )).toBeInTheDocument()
   })
 
@@ -1090,7 +1090,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     renderPage()
 
     expect(screen.getByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
-    expect(screen.getByText('Checked and at zero: Qualification Issues, Overdue, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents and QSC Overdue.')).toBeInTheDocument()
+    expect(screen.getByText('Checked and at zero: qualification issues, overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents and overdue QSC reports.')).toBeInTheDocument()
   })
 
   it('tints nothing when every item is zero: no container fill but the one Pale Sprout field', () => {
@@ -1110,7 +1110,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     rerender(<MemoryRouter><DashboardPage /></MemoryRouter>)
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
     expect(tileLabels()).toEqual(['QSC Overdue'])
-    expect(clearRow()).toHaveTextContent('All clear on Qualification Issues')
+    expect(clearRow()).toHaveTextContent('All clear on qualification issues')
   })
 
   it('draws no All clear row, and no Pale Sprout at all, while every item needs you', () => {
@@ -1154,8 +1154,8 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
     expectPlaceholder(qualification(), { busy: true, say: 'Loading' })
     expect(within(band()).getByRole('link', { name: 'Qualification Issues Loading' })).toHaveAttribute('href', '/qualifications')
     // The rest of the band HAS its data, so it says so, but not for the item that is waiting, and the band is not the all-clear field.
-    expect(clearNames()).not.toMatch(/Qualification Issues/)
-    expect(clearNames()).toMatch(/Critical Participant Alerts/)
+    expect(clearNames()).not.toMatch(/qualification issues/)
+    expect(clearNames()).toMatch(/critical participant alerts/)
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 
@@ -1167,7 +1167,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
 
     expectPlaceholder(qualification(), { busy: false, say: "Couldn't load" })
     expect(within(band()).getByRole('link', { name: "Qualification Issues Couldn't load" })).toHaveAttribute('href', '/qualifications')
-    expect(clearNames()).not.toMatch(/Qualification Issues/)
+    expect(clearNames()).not.toMatch(/qualification issues/)
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 
@@ -1178,8 +1178,8 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
 
     expectPlaceholder(alerts(), { busy: false, say: "Couldn't load" })
     expect(within(band()).getByRole('link', { name: "Critical Participant Alerts Couldn't load" })).toHaveAttribute('href', '/participants')
-    expect(clearNames()).not.toMatch(/Critical Participant Alerts/)
-    expect(clearNames()).toMatch(/Qualification Issues/)
+    expect(clearNames()).not.toMatch(/critical participant alerts/)
+    expect(clearNames()).toMatch(/qualification issues/)
     // No participant alerts section is invented from a failed request.
     expect(screen.queryByRole('heading', { name: 'Critical Participant Alerts' })).not.toBeInTheDocument()
   })
@@ -1192,7 +1192,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
     const first = renderPage()
     expectPlaceholder(leave(), { busy: true, say: 'Loading' })
     expect(within(band()).getByRole('link', { name: 'Pending Leave Loading' })).toHaveAttribute('href', '/rostering/leave')
-    expect(clearNames()).not.toMatch(/Pending Leave/)
+    expect(clearNames()).not.toMatch(/pending leave/)
     first.unmount()
 
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { error: true }))
@@ -1222,7 +1222,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
 
     // The items the summary answered are clear, and the row names only those: not one of the four that are waiting.
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
-    expect(clearNames()).toBe('All clear on Overdue, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents and QSC Overdue')
+    expect(clearNames()).toBe('All clear on overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents and overdue QSC reports')
     expectPlaceholder(qualification(), { busy: true, say: 'Loading' })
     expectPlaceholder(alerts(), { busy: true, say: 'Loading' })
     expectPlaceholder(leave(), { busy: true, say: 'Loading' })
@@ -1239,7 +1239,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
     renderPage()
 
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
-    expect(clearNames()).not.toMatch(/Qualification Issues|Critical Participant Alerts|Pending Leave|Shift Completions/)
+    expect(clearNames()).not.toMatch(/qualification issues|critical participant alerts|pending leave|shift completions/)
     expect(screen.getAllByText("Couldn't load")).toHaveLength(4)
   })
 
@@ -1293,8 +1293,8 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
     expect(tileLabels()).toEqual(['Critical Participant Alerts'])
     expect(alerts()).toHaveAttribute('data-attention', 'error')
     expect(within(alerts()).getByText('1')).toBeInTheDocument()
-    expect(clearNames()).toMatch(/Qualification Issues/)
-    expect(clearNames()).toMatch(/Pending Leave/)
+    expect(clearNames()).toMatch(/qualification issues/)
+    expect(clearNames()).toMatch(/pending leave/)
     expect(within(band()).queryByText("Couldn't load")).not.toBeInTheDocument()
 
     // Later the staff list is refreshed with an expiring credential: the item is a tile, not clear.
@@ -1302,7 +1302,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
     rerender(<MemoryRouter><DashboardPage /></MemoryRouter>)
     expect(qualification()).toHaveAttribute('data-attention', 'error')
     expect(within(qualification()).getByText('1')).toBeInTheDocument()
-    expect(clearNames()).not.toMatch(/Qualification Issues/)
+    expect(clearNames()).not.toMatch(/qualification issues/)
   })
 })
 
@@ -1348,9 +1348,9 @@ describe('DashboardPage — Shift Completions: the band counts what the nav badg
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
     expect(tileLabels()).toEqual(['Shift Completions'])
     expect(clearRow()).toHaveTextContent(
-      'All clear on Qualification Issues, Critical Participant Alerts, Overdue, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents, QSC Overdue and Pending Leave',
+      'All clear on qualification issues, critical participant alerts, overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue QSC reports and pending leave',
     )
-    expect(clearRow()).not.toHaveTextContent('Shift Completions')
+    expect(clearRow()).not.toHaveTextContent('shift completions')
   })
 
   it('names Shift Completions among the items it checked once the queue is empty', () => {
@@ -1359,7 +1359,7 @@ describe('DashboardPage — Shift Completions: the band counts what the nav badg
     renderPage()
 
     expect(screen.getByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
-    expect(screen.getByText(/^Checked and at zero:.*Shift Completions\.$/)).toBeInTheDocument()
+    expect(screen.getByText(/^Checked and at zero:.*shift completions\.$/)).toBeInTheDocument()
   })
 
   it('shows an en dash while the queue loads or after it failed, and never calls the queue clear', () => {
@@ -1372,7 +1372,7 @@ describe('DashboardPage — Shift Completions: the band counts what the nav badg
     expect(loading).toHaveAttribute('aria-busy', 'true')
     expect(loading).not.toHaveAttribute('data-attention')
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
-    expect(clearRow()).not.toHaveTextContent('Shift Completions')
+    expect(clearRow()).not.toHaveTextContent('shift completions')
     first.unmount()
 
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(0, { error: true }))
@@ -1389,6 +1389,82 @@ describe('DashboardPage — Shift Completions: the band counts what the nav badg
 
     const labels = tileLabels()
     expect(labels.slice(-2)).toEqual(['Pending Leave', 'Shift Completions'])
+  })
+})
+
+describe('DashboardPage — the Schedule links say what the role can do', () => {
+  const scheduleLinks = () => ['Missing Vehicles', 'Missing Staff'].map((label) => within(tileFor(label)).getByRole('link'))
+
+  it('offers "Assign vehicles" and "Assign staff" to the roles that can write, both to the Schedule', () => {
+    mockUseDashboard.mockReturnValue(summaryData({ tripsMissingVehicles: 1, tripsMissingStaff: 2 }))
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator']) {
+      asRole(role)
+      const { unmount } = renderPage()
+      expect(scheduleLinks().map((a) => a.textContent), role).toEqual(['Assign vehicles', 'Assign staff'])
+      expect(scheduleLinks().map((a) => a.getAttribute('href')), role).toEqual(['/schedule', '/schedule'])
+      unmount()
+      localStorage.clear()
+    }
+  })
+
+  // ReadOnly reaches the dashboard and the Schedule (permissions.ts keeps canWrite for it, and the server then refuses the write), so a verb it cannot use is a promise the page breaks.
+  it('offers ReadOnly "Open schedule" for both, the same page with no verb it cannot use', () => {
+    asRole('ReadOnly')
+    mockUseDashboard.mockReturnValue(summaryData({ tripsMissingVehicles: 1, tripsMissingStaff: 2 }))
+    renderPage()
+
+    expect(scheduleLinks().map((a) => a.textContent)).toEqual(['Open schedule', 'Open schedule'])
+    expect(scheduleLinks().map((a) => a.getAttribute('href'))).toEqual(['/schedule', '/schedule'])
+    expect(screen.queryByRole('link', { name: /Assign/ })).not.toBeInTheDocument()
+  })
+
+  it('leaves every other link\'s wording alone for ReadOnly', () => {
+    asRole('ReadOnly')
+    mockUseStaff.mockReturnValue(staffWithOneIssue)
+    mockUseDashboard.mockReturnValue(summaryData({ overdueTaskCount: 1, tripsMissingAccommodation: 1, openIncidentCount: 1, qscOverdueCount: 1 }))
+    renderPage()
+
+    expect(within(band()).getAllByRole('link').map((a) => a.textContent)).toEqual([
+      'Review qualifications', 'Open overdue tasks', 'Open trips', 'Open incidents', 'Review QSC reports',
+    ])
+  })
+})
+
+describe('DashboardPage — the All clear row and field name the items by nouns', () => {
+  it('says "overdue tasks" and "overdue QSC reports": the tile labels "Overdue" and "QSC Overdue" read as the same thing once they leave their tiles', () => {
+    asRole('Coordinator')
+    mockUseDashboard.mockReturnValue(summaryData({ tripsMissingStaff: 1 }))
+    renderPage()
+
+    expect(clearRow()).toHaveTextContent('overdue tasks')
+    expect(clearRow()).toHaveTextContent('overdue QSC reports')
+    expect(clearRow()!.textContent).not.toMatch(/Overdue/)
+  })
+
+  it('says the three trip counts are of trips: "trips missing staff", never a bare "missing staff"', () => {
+    asRole('Coordinator')
+    mockUseDashboard.mockReturnValue(summaryData({ overdueTaskCount: 1 }))
+    renderPage()
+
+    expect(clearRow()).toHaveTextContent('trips missing accommodation, trips missing vehicles, trips missing staff')
+    expect(clearRow()!.textContent).not.toMatch(/(?<!trips )missing/)
+  })
+
+  it('uses the same nouns in the all-clear field\'s audit line', () => {
+    asRole('Coordinator')
+    renderPage()
+
+    expect(screen.getByText(/^Checked and at zero: qualification issues, critical participant alerts, overdue tasks, trips missing accommodation/)).toBeInTheDocument()
+    expect(screen.getByText(/overdue QSC reports, pending leave and shift completions\.$/)).toBeInTheDocument()
+  })
+
+  it('leaves the tile labels exactly as they are', () => {
+    showAll()
+    renderPage()
+
+    expect(tileLabels()).toEqual(FULL_ORDER)
+    expect(screen.getByRole('group', { name: 'Overdue 3' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'QSC Overdue 3' })).toBeInTheDocument()
   })
 })
 

@@ -87,8 +87,8 @@ describe('DashboardPage — offline: a paused request is not a settled zero', ()
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
     // The row names only what the summary answered, not one of the four that are waiting.
     const row = screen.getByText('All clear', { selector: 'span.font-semibold' }).closest('p') as HTMLElement
-    expect(row).toHaveTextContent('Overdue')
-    for (const waiting of ['Qualification Issues', 'Critical Participant Alerts', 'Pending Leave', 'Shift Completions']) expect(row).not.toHaveTextContent(waiting)
+    expect(row).toHaveTextContent('overdue tasks')
+    for (const waiting of ['qualification issues', 'critical participant alerts', 'pending leave', 'shift completions']) expect(row).not.toHaveTextContent(waiting)
     expect(apiGet).not.toHaveBeenCalled()
   })
 
