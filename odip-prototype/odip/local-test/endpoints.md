@@ -112,6 +112,12 @@ for role **RO** globally regardless of what's listed below.
 - GET `` — SA, A, C (class-level) — get provider settings
 - PUT `` — SA, A — upsert provider settings (Coordinator excluded here specifically)
 
+## PlanPricingController — `api/v1/plan-pricing` — class: `[Authorize(Roles = "SuperAdmin,Admin,Coordinator")]`
+INTERNAL (plan builder phase B): phase C's builder is the only intended caller; the shapes may change with it. A SuperAdmin must pick an organisation (`X-View-As-Tenant`) first: the settings belong to one tenant.
+- POST `/quote` — SA, A, C — price weekly support blocks over an agreement period (body `blocks`, `periodFrom`, `periodTo`, `includeLines`); uses the caller's tenant's pricing settings, the date-effective catalogue and the delivery states' public holidays (synced rows plus the override table); a block with a mistake is an issue in the answer, an unpriceable request is a 400
+- GET `/settings` — SA, A, C — the tenant's pricing settings (the owner-approved defaults with `isDefault` true until something is stored)
+- PUT `/settings` — SA, A — change pricing settings (only the fields sent change; sending the registration groups confirms them; Coordinator excluded)
+
 ## ScheduleController — `api/v1/schedule` — class: `[Authorize]`
 - GET `` (`?from&to`) — Authenticated — schedule overview
 
