@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import RosterBoardPage from './RosterBoardPage'
 import { makeParticipantBoard, makeParticipantRow, makeShift } from './test-fixtures'
@@ -408,6 +408,17 @@ describe('RosterBoardPage — ?date= opens the week that contains it', () => {
     renderPage('/rostering?date=2026-12-14')
 
     for (const call of mockUseRosterBoard.mock.calls) expect(call[0]).toBe('2026-12-14')
+  })
+
+  it('follows a later change of ?date= on a board that is already open', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const router = createMemoryRouter([{ path: '/rostering', element: <RosterBoardPage /> }], { initialEntries: ['/rostering?date=2026-12-16'] })
+    render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>)
+    expect(mockUseRosterBoard.mock.calls.at(-1)?.[0]).toBe('2026-12-14')
+
+    await act(async () => { await router.navigate('/rostering?date=2027-01-06') })   // a Wednesday: its week starts Mon 4 Jan
+
+    expect(mockUseRosterBoard.mock.calls.at(-1)?.[0]).toBe('2027-01-04')
   })
 
   it('opens the current week when ?date= is missing, malformed or not a real day', () => {

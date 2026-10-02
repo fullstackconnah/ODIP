@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   DndContext, PointerSensor, KeyboardSensor, useSensor, useSensors, closestCenter,
@@ -36,9 +36,13 @@ function allBoardShifts(board: RosterBoardDto | undefined): ShiftDto[] {
 
 export default function RosterBoardPage() {
   const { canWrite } = usePermissions()
-  // `?date=` (the server's "Re-cover shift" task link) opens the week that contains it; read once, then the toolbar owns the week.
+  // `?date=` (the server's "Re-cover shift" task link) opens the week that contains it, and a later change of it moves the board there; the toolbar owns the week in between.
   const [searchParams] = useSearchParams()
-  const [weekStart, setWeekStart] = useState(() => weekStartFromDateParam(searchParams.get('date')))
+  const dateParam = searchParams.get('date')
+  const [weekStart, setWeekStart] = useState(() => weekStartFromDateParam(dateParam))
+  useEffect(() => {
+    if (dateParam !== null) setWeekStart(weekStartFromDateParam(dateParam))
+  }, [dateParam])
   const [groupBy, setGroupBy] = useBoardViewMode()
   const [participantFilter, setParticipantFilter] = useState('')
   const [regionFilter, setRegionFilter] = useState('')
