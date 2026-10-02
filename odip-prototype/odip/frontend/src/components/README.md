@@ -39,7 +39,7 @@ copying it.
 - [Tabs](#tabs) and [useTabParam](#usetabparam) (the active tab in the URL)
 - [ActionButtons](#actionbuttons)
 - [Touch hit areas](#touch-hit-areas) (`TAP_AREA`, `TAP_FLOOR`, `TAP_AREA_LINKS`, `--tap-min`)
-- [useToast](#usetoast) (`hooks/useToast.tsx`: one transient message, a success that clears itself and an error that stays)
+- [NoticesRegion](#noticesregion) (`hooks/useNotices.ts`: what became of a row or detail-page action, kept at the top until dismissed)
 - [ErrorBoundary](#errorboundary)
 - [Picking a picker](#picking-a-picker) (Dropdown vs SearchableSelect vs ToggleGroup)
 
@@ -1051,21 +1051,24 @@ Three more pieces of the same story (all in `tapArea.ts` or built on it):
 
 ---
 
-## useToast
+## NoticesRegion
 
-`hooks/useToast.tsx` is one transient message, floating bottom-right (above the mobile nav below `lg`), for the outcome of something whose surface has already gone: a slide-over that closed on a
-successful create, or a row action that has no panel at all. A success is announced politely (`role="status"`) and clears itself after `TOAST_SUCCESS_MS` (10 seconds). An error is announced
-assertively (`role="alert"`) and stays until it is dismissed, because it asks the person to do something. It draws a `Callout`, so the tones and the ARIA roles are the Callout's.
+`components/NoticesRegion.tsx` with `hooks/useNotices.ts` says what became of an action on a row or on a detail page (a set-password email sent, or not) at the place the person acted, and keeps saying it
+until they dismiss it. The notices are ordinary content, so they add no layer to the z-index table, and nothing floats over the next panel's footer.
 
 ```tsx
-const { toast, notify } = useToast()        // in the page that owns the panels
-<UserFormPanel onNotify={notify} … />        // children call notify('success' | 'error', message)
-{toast}                                      // rendered once
+const { notices, notify, dismiss } = useNotices()
+<NoticesRegion notices={notices} onDismiss={dismiss} className="empty:mb-0" />   // above the table
+notify('error', person.fullName, message)                                      // the title is who it is about
 ```
 
-A newer message replaces the one showing and restarts the clock. `notify` is stable, so it can be passed down as a prop (`Notify` is the exported type) without re-rendering the child. **When not to
-use**: a failure the person must see next to the field that caused it (an inline error, or a `Callout` in the form), or anything they must answer before going on (a `ConfirmDialog`).
-
+- **One persistent live region.** It is `role="status"` (polite), mounted before the first message and empty while idle; what is put into it is announced. A live region created already holding its text
+  is announced unreliably, so only its content comes and goes. Each notice is a `Callout` with `announce={false}` (no role or `aria-live` of its own), so nothing is announced twice.
+- **Rules.** At most 3 are held (`MAX_NOTICES`), newest first. An error stays until it is dismissed, and a success never removes an error: over the cap the oldest *success* goes (with only errors held, a new error
+  replaces the oldest, and a new success is not let in). Each notice names the person, its text breaks (`break-words`), and Dismiss is a `Button iconOnly` named for them.
+- Collapse the empty region with an `empty:` class that cancels the gap around it (`empty:mb-0` in a `space-y` stack, `empty:-mt-[var(--section-gap)]` in a flex column with a `gap`).
+- **When not to use**: the result of a CREATE belongs in the panel's own done state (a `SignInEmailOutcome` Callout and a Done button, as in `UserFormPanel`), which stays open until the person closes it; a failure
+  next to a field is an inline error. (A first version of this was a floating toast; it was dropped because it could cover the next panel's Create button and replaced an unread error with a later success.)
 ---
 
 ## ErrorBoundary

@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import SettingsPage from './SettingsPage'
 
-// The seam between the Users tab, the user panel and the message that outlives a row action: a create keeps its panel open to say what became
-// of the set-password email, and a row action has no panel at all, so the page says it. The tab, the panel and the toast have their own
-// tests; this one proves they are wired together.
+// The seam between the Users tab and the user panel: a create keeps its panel open to say what became of the set-password email, and a row
+// action has no panel at all, so the tab says it in its notices above the table. The tab and the panel have their own tests; this one proves
+// they are wired together inside the page.
 
 const { mockCreate, mockEnsure, sendPasswordResetEmail, settingsData, usersPage } = vi.hoisted(() => ({
   mockCreate: vi.fn(),
@@ -113,7 +113,7 @@ describe('SettingsPage Users tab: creating a user', () => {
 })
 
 describe('SettingsPage Users tab: Send set-password email', () => {
-  it('says, over the page, that the email went', async () => {
+  it('says, in the notices above the table, that the email went', async () => {
     const u = await openUsersTab()
 
     await u.click(screen.getByRole('button', { name: 'Send set-password email' }))
@@ -125,14 +125,14 @@ describe('SettingsPage Users tab: Send set-password email', () => {
     expect(sendPasswordResetEmail).toHaveBeenCalledWith({ name: 'auth-stub' }, 'ann@example.com')
   })
 
-  it('says, as an alert, that it could not be sent', async () => {
+  it('says, in the notices above the table, that it could not be sent', async () => {
     sendPasswordResetEmail.mockRejectedValue(new Error('auth/network-request-failed'))
     const u = await openUsersTab()
 
     await u.click(screen.getByRole('button', { name: 'Send set-password email' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    expect(await within(screen.getByRole('status')).findByText(
       'No link was sent to ann@example.com. To try again, use Send set-password email on their row.',
-    )
+    )).toBeInTheDocument()
   })
 })

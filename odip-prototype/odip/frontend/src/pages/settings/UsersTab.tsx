@@ -4,7 +4,8 @@ import { useAdminUsers, useAdminTenantsSummary, useEnsureUserSignInAccount } fro
 import type { AdminUserDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { DataTable } from '@/components/DataTable'
-import type { Notify } from '@/hooks/useToast'
+import { NoticesRegion } from '@/components/NoticesRegion'
+import { useNotices } from '@/hooks/useNotices'
 import { formatRelative, plural } from '@/lib/format'
 import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
 import { describeEmailOutcome, ensureAndSendSetPasswordEmail } from '@/lib/signInEmail'
@@ -17,8 +18,6 @@ import { parseApiDate } from '@/lib/utils'
 interface UsersTabProps {
   onAddUser: (tenantId?: string) => void
   onEditUser: (user: AdminUserDto) => void
-  /** Where the outcome of "Send set-password email" is said. Without it the email still goes, but nothing reports whether it did. */
-  onNotify?: Notify
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +60,7 @@ function formatRelativeTime(dateStr: string | null): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function UsersTab({ onAddUser, onEditUser, onNotify }: UsersTabProps) {
+export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
   const [tenantId, setTenantId] = useState('')
   const [role, setRole] = useState('')
   const [status, setStatus] = useState('')
@@ -74,6 +73,8 @@ export default function UsersTab({ onAddUser, onEditUser, onNotify }: UsersTabPr
   const emailEnabled = canSendSetPasswordEmail()
 
   const ensureAccount = useEnsureUserSignInAccount()
+  // What became of each "Send set-password email", kept above the table until dismissed: a row action has no panel to say it in.
+  const { notices, notify, dismiss } = useNotices()
   const { data: tenants = [] } = useAdminTenantsSummary()
   const { data: pagedResult, isLoading } = useAdminUsers({
     tenantId: tenantId || undefined,
@@ -99,7 +100,7 @@ export default function UsersTab({ onAddUser, onEditUser, onNotify }: UsersTabPr
     const outcome = await ensureAndSendSetPasswordEmail(target.email, () => ensureAccount.mutateAsync(target.id))
     setSendingId(null)
     const { tone, message } = describeEmailOutcome(outcome, 'use Send set-password email on their row')
-    onNotify?.(tone, message)
+    notify(tone, target.fullName, message)
   }
 
   const inputClass =
@@ -170,6 +171,9 @@ export default function UsersTab({ onAddUser, onEditUser, onNotify }: UsersTabPr
           + Add User
         </button>
       </div>
+
+      {/* Notices for the row actions. Always mounted (a live region must exist before its content), and collapsed while empty. */}
+      <NoticesRegion notices={notices} onDismiss={dismiss} className="empty:mb-0" />
 
       {/* Table */}
       <DataTable

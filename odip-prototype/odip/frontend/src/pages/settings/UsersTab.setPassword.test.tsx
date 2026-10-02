@@ -37,16 +37,21 @@ function renderTab(users: ReturnType<typeof user>[]) {
     data: { items: users, totalCount: users.length, page: 1, pageSize: 20, totalPages: 1, hasNext: false, hasPrevious: false },
     isLoading: false,
   })
-  const onNotify = vi.fn()
-  render(<UsersTab onAddUser={vi.fn()} onEditUser={vi.fn()} onNotify={onNotify} />)
-  return { onNotify, u: userEvent.setup() }
+  render(<UsersTab onAddUser={vi.fn()} onEditUser={vi.fn()} />)
+  return userEvent.setup()
 }
 
 /** The "Send set-password email" button in the row that shows `fullName`. */
-const sendIn = (fullName: string) => within(screen.getByText(fullName).closest('tr')!).getByRole('button', { name: SEND })
+const rowOf = (fullName: string) => within(screen.getByRole('table')).getByText(fullName).closest('tr')!
+const sendIn = (fullName: string) => within(rowOf(fullName)).getByRole('button', { name: SEND })
+
+/** The notices region above the table: one live region, there from the first render. */
+const region = () => screen.getByRole('status')
 
 /** Firebase's own errors carry the reason in `code`. */
 const firebaseError = (code: string) => Object.assign(new Error(`Firebase: Error (${code}).`), { code })
+
+const sentTo = (n: number, verb = 'set') => `We've sent u${n}@example.com.au a link to ${verb} their password. It can take a few minutes, so ask them to check spam.`
 
 beforeEach(() => {
   firebase.auth = authStub
@@ -55,31 +60,35 @@ beforeEach(() => {
 })
 
 describe('UsersTab: Send set-password email', () => {
-  it('makes sure that row\'s user has an account, then asks Firebase to email them a link, and says it was sent', async () => {
-    const { u, onNotify } = renderTab([user(1), user(2)])
+  it('makes sure that row\'s user has an account, then asks Firebase to email them a link, and says so in the notices above the table', async () => {
+    const u = renderTab([user(1), user(2)])
 
     await u.click(sendIn('User Number2'))
 
-    await waitFor(() => expect(onNotify).toHaveBeenCalledWith(
-      'success', "We've sent u2@example.com.au a link to set their password. It can take a few minutes, so ask them to check spam.",
-    ))
+    expect(await within(region()).findByText(sentTo(2))).toBeInTheDocument()
+    expect(within(region()).getByText('User Number2')).toBeInTheDocument()
     expect(mockEnsure).toHaveBeenCalledTimes(1)
     expect(mockEnsure).toHaveBeenCalledWith('u2')
     expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1)
     expect(sendPasswordResetEmail).toHaveBeenCalledWith(authStub, 'u2@example.com.au')
-    expect(onNotify).toHaveBeenCalledTimes(1)
+  })
+
+  it('has its notices region from the first render, empty until something is said', () => {
+    renderTab([user(1)])
+
+    expect(region()).toBeEmptyDOMElement()
   })
 
   it('does not ask Firebase to send until the account has been made sure of', async () => {
     let finishEnsure!: (value: { firebaseAccount: 'created' | 'existing' }) => void
     mockEnsure.mockReturnValue(new Promise(resolve => { finishEnsure = resolve }))
-    const { u, onNotify } = renderTab([user(1)])
+    const u = renderTab([user(1)])
 
     await u.click(sendIn('User Number1'))
 
     await waitFor(() => expect(mockEnsure).toHaveBeenCalledTimes(1))
     expect(sendPasswordResetEmail).not.toHaveBeenCalled()
-    expect(onNotify).not.toHaveBeenCalled()
+    expect(region()).toBeEmptyDOMElement()
 
     finishEnsure({ firebaseAccount: 'created' })
 
@@ -88,50 +97,45 @@ describe('UsersTab: Send set-password email', () => {
 
   it('says "reset" instead of "set" when the account was already there', async () => {
     mockEnsure.mockResolvedValue({ firebaseAccount: 'existing' })
-    const { u, onNotify } = renderTab([user(1)])
+    const u = renderTab([user(1)])
 
     await u.click(sendIn('User Number1'))
 
-    await waitFor(() => expect(onNotify).toHaveBeenCalledWith(
-      'success', "We've sent u1@example.com.au a link to reset their password. It can take a few minutes, so ask them to check spam.",
-    ))
+    expect(await within(region()).findByText(sentTo(1, 'reset'))).toBeInTheDocument()
   })
 
   it('sends nothing, and says why, when the server could not set the account up', async () => {
     mockEnsure.mockRejectedValue({ response: { data: { success: false, errors: ['This user is inactive, so they cannot be given a sign-in account.'] } } })
-    const { u, onNotify } = renderTab([user(1)])
+    const u = renderTab([user(1)])
 
     await u.click(sendIn('User Number1'))
 
-    await waitFor(() => expect(onNotify).toHaveBeenCalledWith(
-      'error', 'No link was sent to u1@example.com.au. This user is inactive, so they cannot be given a sign-in account.',
-    ))
+    expect(await within(region()).findByText('No link was sent to u1@example.com.au. This user is inactive, so they cannot be given a sign-in account.')).toBeInTheDocument()
     expect(sendPasswordResetEmail).not.toHaveBeenCalled()
     await waitFor(() => expect(sendIn('User Number1')).toBeEnabled())
   })
 
   it('says no link was sent, with advice that fits, when Firebase refuses, and a retry then works', async () => {
     sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/too-many-requests'))
-    const { u, onNotify } = renderTab([user(1)])
+    const u = renderTab([user(1)])
 
     await u.click(sendIn('User Number1'))
 
-    await waitFor(() => expect(onNotify).toHaveBeenCalledWith(
-      'error',
+    expect(await within(region()).findByText(
       'No link was sent to u1@example.com.au. Firebase is limiting emails for now. Wait a few minutes, then use Send set-password email on their row.',
-    ))
+    )).toBeInTheDocument()
     await waitFor(() => expect(sendIn('User Number1')).toBeEnabled())
 
     await u.click(sendIn('User Number1'))
 
-    await waitFor(() => expect(onNotify).toHaveBeenLastCalledWith('success', expect.stringContaining("We've sent u1@example.com.au a link")))
+    expect(await within(region()).findByText(sentTo(1))).toBeInTheDocument()
     expect(sendPasswordResetEmail).toHaveBeenCalledTimes(2)
   })
 
   it('is switched off while an email is going out, so a second click cannot send another', async () => {
     let finish!: () => void
     sendPasswordResetEmail.mockReturnValue(new Promise<void>(resolve => { finish = resolve }))
-    const { u, onNotify } = renderTab([user(1), user(2)])
+    const u = renderTab([user(1), user(2)])
 
     await u.click(sendIn('User Number1'))
 
@@ -141,11 +145,11 @@ describe('UsersTab: Send set-password email', () => {
     await u.click(sendIn('User Number1'))
     expect(mockEnsure).toHaveBeenCalledTimes(1)
     expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1)
-    expect(onNotify).not.toHaveBeenCalled()
+    expect(region()).toBeEmptyDOMElement()
 
     finish()
 
-    await waitFor(() => expect(onNotify).toHaveBeenCalledTimes(1))
+    expect(await within(region()).findByText(sentTo(1))).toBeInTheDocument()
     expect(sendIn('User Number1')).toBeEnabled()
     expect(sendIn('User Number2')).toBeEnabled()
   })
@@ -154,7 +158,7 @@ describe('UsersTab: Send set-password email', () => {
     renderTab([user(1), user(2, false), user(3)])
 
     expect(screen.getAllByRole('button', { name: SEND })).toHaveLength(2)
-    expect(within(screen.getByText('User Number2').closest('tr')!).queryByRole('button', { name: SEND })).not.toBeInTheDocument()
+    expect(within(rowOf('User Number2')).queryByRole('button', { name: SEND })).not.toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Edit user' })).toHaveLength(3)
   })
 
@@ -165,18 +169,59 @@ describe('UsersTab: Send set-password email', () => {
     expect(screen.queryByRole('button', { name: SEND })).not.toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Edit user' })).toHaveLength(2)
   })
+})
 
-  it('still sends, and does not break, when no onNotify was given to report the result', async () => {
-    mockUseAdminUsers.mockReturnValue({
-      data: { items: [user(1)], totalCount: 1, page: 1, pageSize: 20, totalPages: 1, hasNext: false, hasPrevious: false },
-      isLoading: false,
-    })
-    const u = userEvent.setup()
-    render(<UsersTab onAddUser={vi.fn()} onEditUser={vi.fn()} />)
+describe('UsersTab: the notices above the table', () => {
+  it('an error is not replaced by a later success: both stay, until the error is dismissed', async () => {
+    sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
+    const u = renderTab([user(1), user(2)])
 
     await u.click(sendIn('User Number1'))
+    expect(await within(region()).findByText(/No link was sent to u1@example.com.au/)).toBeInTheDocument()
+    await waitFor(() => expect(sendIn('User Number2')).toBeEnabled())
 
-    await waitFor(() => expect(sendPasswordResetEmail).toHaveBeenCalledWith(authStub, 'u1@example.com.au'))
+    await u.click(sendIn('User Number2'))
+
+    expect(await within(region()).findByText(sentTo(2))).toBeInTheDocument()
+    // The failure for the first person is still there, unacknowledged.
+    expect(within(region()).getByText(/No link was sent to u1@example.com.au/)).toBeInTheDocument()
+
+    await u.click(within(region()).getByRole('button', { name: 'Dismiss notice about User Number1' }))
+
+    expect(within(region()).queryByText(/No link was sent to u1@example.com.au/)).not.toBeInTheDocument()
+    expect(within(region()).getByText(sentTo(2))).toBeInTheDocument()
+  })
+
+  it('holds at most three, newest first, dropping the oldest success', async () => {
+    const u = renderTab([user(1), user(2), user(3), user(4)])
+
+    for (const n of [1, 2, 3, 4]) {
+      await u.click(sendIn(`User Number${n}`))
+      await within(region()).findByText(sentTo(n))
+      await waitFor(() => expect(sendIn(`User Number${n}`)).toBeEnabled())
+    }
+
+    const titles = within(region()).getAllByText(/^User Number\d$/).map(el => el.textContent)
+    expect(titles).toEqual(['User Number4', 'User Number3', 'User Number2'])
+    expect(within(region()).queryByText(sentTo(1))).not.toBeInTheDocument()
+  })
+
+  it('keeps an old error through three newer successes, because a success never removes one', async () => {
+    sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
+    const u = renderTab([user(1), user(2), user(3), user(4)])
+
+    await u.click(sendIn('User Number1'))
+    await within(region()).findByText(/No link was sent to u1@example.com.au/)
     await waitFor(() => expect(sendIn('User Number1')).toBeEnabled())
+    for (const n of [2, 3, 4]) {
+      await u.click(sendIn(`User Number${n}`))
+      await within(region()).findByText(sentTo(n))
+      await waitFor(() => expect(sendIn(`User Number${n}`)).toBeEnabled())
+    }
+
+    // Three held: the old error, and the two newest successes. The oldest success made room.
+    expect(within(region()).getAllByText(/^User Number\d$/).map(el => el.textContent)).toEqual(['User Number4', 'User Number3', 'User Number1'])
+    expect(within(region()).getByText(/No link was sent to u1@example.com.au/)).toBeInTheDocument()
+    expect(within(region()).queryByText(sentTo(2))).not.toBeInTheDocument()
   })
 })

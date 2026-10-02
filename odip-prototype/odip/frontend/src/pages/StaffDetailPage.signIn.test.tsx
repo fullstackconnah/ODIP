@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import StaffDetailPage from './StaffDetailPage'
@@ -30,6 +30,9 @@ vi.mock('@/lib/firebase', () => ({
 
 const authStub = { name: 'auth-stub' }
 const SEND = 'Send set-password email'
+
+/** The notices region at the top of the page: one live region, there from the first render. */
+const region = () => screen.getByRole('status')
 
 function makeStaff(overrides: Partial<StaffDetailDto> = {}): StaffDetailDto {
   return {
@@ -109,8 +112,9 @@ describe('StaffDetailPage: Send set-password email', () => {
 
     await u.click(screen.getByRole('button', { name: SEND }))
 
-    expect(await screen.findByText("We've sent alex@example.com a link to set their password. It can take a few minutes, so ask them to check spam."))
+    expect(await within(region()).findByText("We've sent alex@example.com a link to set their password. It can take a few minutes, so ask them to check spam."))
       .toBeInTheDocument()
+    expect(within(region()).getByText('Alex Rivera')).toBeInTheDocument()
     expect(mockEnsure).toHaveBeenCalledTimes(1)
     expect(mockEnsure).toHaveBeenCalledWith('staff-1')
     expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1)
@@ -140,7 +144,7 @@ describe('StaffDetailPage: Send set-password email', () => {
 
     await u.click(screen.getByRole('button', { name: SEND }))
 
-    expect(await screen.findByText("We've sent alex@example.com a link to reset their password. It can take a few minutes, so ask them to check spam."))
+    expect(await within(region()).findByText("We've sent alex@example.com a link to reset their password. It can take a few minutes, so ask them to check spam."))
       .toBeInTheDocument()
   })
 
@@ -150,9 +154,9 @@ describe('StaffDetailPage: Send set-password email', () => {
 
     await u.click(screen.getByRole('button', { name: SEND }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    expect(await within(region()).findByText(
       'No link was sent to alex@example.com. This staff member is inactive, so they cannot be given a sign-in account.',
-    )
+    )).toBeInTheDocument()
     expect(sendPasswordResetEmail).not.toHaveBeenCalled()
   })
 
@@ -162,8 +166,37 @@ describe('StaffDetailPage: Send set-password email', () => {
 
     await u.click(screen.getByRole('button', { name: SEND }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    expect(await within(region()).findByText(
       "No link was sent to alex@example.com. That doesn't look like a valid email address. Correct it, then use Send set-password email on this page.",
-    )
+    )).toBeInTheDocument()
+  })
+
+  it('has its notices region from the first render, empty until something is said, and at the TOP of the page', () => {
+    renderPage()
+
+    expect(region()).toBeEmptyDOMElement()
+    // Above the tabs: where the person who acted is already looking, not below the fold.
+    expect(region().compareDocumentPosition(screen.getByRole('tablist')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('an error stays when a later send succeeds, until it is dismissed (a success never removes an error)', async () => {
+    sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
+    const u = renderPage()
+
+    await u.click(screen.getByRole('button', { name: SEND }))
+    expect(await within(region()).findByText(/No link was sent to alex@example.com/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: SEND })).toBeEnabled())
+
+    await u.click(screen.getByRole('button', { name: SEND }))
+
+    expect(await within(region()).findByText(/We've sent alex@example.com a link to set their password/)).toBeInTheDocument()
+    expect(within(region()).getByText(/No link was sent to alex@example.com/)).toBeInTheDocument()
+
+    // Two notices about the same person: dismiss the failure by its own button, and the good news stays.
+    const failure = within(region()).getByText(/No link was sent to alex@example.com/).closest('[data-tone]') as HTMLElement
+    await u.click(within(failure).getByRole('button', { name: 'Dismiss notice about Alex Rivera' }))
+
+    expect(within(region()).queryByText(/No link was sent to alex@example.com/)).not.toBeInTheDocument()
+    expect(within(region()).getByText(/We've sent alex@example.com a link to set their password/)).toBeInTheDocument()
   })
 })

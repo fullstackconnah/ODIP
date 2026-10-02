@@ -5,9 +5,10 @@ import { Tabs } from '@/components/Tabs'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { NoticesRegion } from '@/components/NoticesRegion'
 import { BackButton } from '@/components/BackButton'
 import { useTabParam } from '@/hooks/useTabParam'
-import { useToast } from '@/hooks/useToast'
+import { useNotices } from '@/hooks/useNotices'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { DataTable } from '@/components/DataTable'
@@ -50,7 +51,8 @@ export default function StaffDetailPage() {
   // Firebase sends the email, so without Firebase (local dev auth) the action is not offered rather than offered and broken.
   const canManageSignIn = (isSuperAdmin || isAdmin || isCoordinator) && canSendSetPasswordEmail()
   const ensureAccount = useEnsureStaffSignInAccount()
-  const { toast, notify } = useToast()
+  // What became of each "Send set-password email", kept at the top of the page until dismissed.
+  const { notices, notify, dismiss } = useNotices()
   const [sending, setSending] = useState(false)
 
   const [tab, setTab] = useTabParam(TAB_KEYS, 'availability')
@@ -73,7 +75,7 @@ export default function StaffDetailPage() {
     const outcome = await ensureAndSendSetPasswordEmail(email, () => ensureAccount.mutateAsync(overview.staff.id))
     setSending(false)
     const { tone, message } = describeEmailOutcome(outcome, 'use Send set-password email on this page')
-    notify(tone, message)
+    notify(tone, overview.staff.fullName, message)
   }
 
   if (isLoading) return <PageState kind="loading" noun="staff member" />
@@ -119,6 +121,9 @@ export default function StaffDetailPage() {
           </div>
         }
       />
+
+      {/* Notices for the actions above. Always mounted (a live region must exist before its content), and collapsed while empty. */}
+      <NoticesRegion notices={notices} onDismiss={dismiss} className="empty:-mt-[var(--section-gap)]" />
 
       <Tabs
         tabs={[
@@ -281,8 +286,6 @@ export default function StaffDetailPage() {
           )}
         </Card>
       )}
-
-      {toast}
     </div>
   )
 }
