@@ -103,7 +103,7 @@ public class DemoTenantGuardTests
     [Fact]
     public async Task Rejects_EveryTableTheTopUpHasNoBusinessWriting()
     {
-        // Global tables (no tenant column), a tenant table nobody asked for, and a non-tenant child table with no rule: all refused.
+        // Global tables (no tenant column), a tenant table nobody asked for, and a non-tenant child (an incident) with no reporter the Demo tenant owns: all refused.
         object[] rows =
         {
             new Tenant { Id = Guid.NewGuid(), Name = "Demo 2", EmailDomain = "demo2.example.com" },

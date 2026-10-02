@@ -23,5 +23,6 @@ public static class DemoPacks
         new LiveSetPack(),
         new MedicationHistoryPack(),
         new ShiftPackageHistoryPack(),
+        new IncidentsPack(),
     };
 }

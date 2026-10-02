@@ -92,7 +92,12 @@ public class DemoLiveSetTests
         Assert.Equal(At(Friday, 9, 30), Local(brk.StartedAt));
         Assert.Equal(At(Friday, 9, 45), Local(brk.EndedAt));
 
-        var note = Assert.Single(day.Notes);
+        // Two notes: the slip the incident story files from at 09:41 (the first day only; the scanner flags it Falls and Injury), and the day's own at 10:05.
+        Assert.Equal(2, day.Notes.Count);
+        var slip = day.Notes[0];
+        Assert.Equal(At(Friday, 9, 41), Local(slip.CreatedAt));
+        Assert.Equal(ShiftNoteFlagCategory.Falls | ShiftNoteFlagCategory.Injury, slip.FlaggedCategories);
+        var note = day.Notes[1];
         Assert.Equal(At(Friday, 10, 5), Local(note.CreatedAt));
         Assert.Equal(day.Worker.Id, note.AuthorUserId);
         Assert.Equal(ShiftNoteFlagCategory.None, note.FlaggedCategories);

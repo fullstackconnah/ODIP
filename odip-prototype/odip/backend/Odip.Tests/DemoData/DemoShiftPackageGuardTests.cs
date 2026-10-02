@@ -107,6 +107,134 @@ public class DemoShiftPackageGuardTests
         Assert.Contains(nameof(MedicationAdministration.ParticipantId), ex.Message);
     }
 
+    // ── incidents: no tenant column, so the reporter is what makes one the Demo tenant's ──
+
+    private static IncidentReport Incident(Guid reporter, Guid? participant = null) => new()
+    {
+        Id = Guid.NewGuid(), ReportedByUserId = reporter, InvolvedParticipantId = participant, IncidentType = IncidentType.Injury, Severity = IncidentSeverity.Low, Status = IncidentStatus.Submitted,
+        Title = "A graze", Description = "A graze on the knee.", IncidentDateTime = new DateTime(2026, 10, 1, 10, 0, 0), CreatedAt = new DateTime(2026, 10, 1, 0, 30, 0, DateTimeKind.Utc),
+        UpdatedAt = new DateTime(2026, 10, 1, 0, 30, 0, DateTimeKind.Utc),
+    };
+
+    [Fact]
+    public async Task AnIncident_IsAcceptedForAnOwnedReporter_AndRefusedForAnyoneElse()
+    {
+        await using var ok = NewDb(NewOptions());
+        ok.IncidentReports.Add(Incident(OwnedUser, OwnedParticipant));
+        NewGuard().Verify(ok.ChangeTracker);
+
+        await using var bad = NewDb(NewOptions());
+        bad.IncidentReports.Add(Incident(Guid.NewGuid()));
+        var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(bad.ChangeTracker));
+        Assert.Contains(nameof(IncidentReport), ex.Message);
+    }
+
+    [Fact]
+    public async Task AnIncidentAboutAParticipantOfAnotherTenant_IsRefused_EvenWithAnOwnedReporter()
+    {
+        await using var db = NewDb(NewOptions());
+        db.IncidentReports.Add(Incident(OwnedUser, Guid.NewGuid()));
+
+        var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(db.ChangeTracker));
+        Assert.Contains(nameof(IncidentReport.InvolvedParticipantId), ex.Message);
+    }
+
+    [Fact]
+    public async Task AnInjuryAndAWitness_AreAcceptedUnderAnIncidentOfTheSameSave_AndRefusedUnderOneThatIsNot()
+    {
+        var incident = Incident(OwnedUser);
+        await using var ok = NewDb(NewOptions());
+        ok.IncidentReports.Add(incident);
+        ok.IncidentInjuries.Add(new IncidentInjury { Id = Guid.NewGuid(), IncidentReportId = incident.Id, Region = BodyRegion.LeftKnee, InjuryType = InjuryType.Abrasion, Description = "Grazed." });
+        ok.IncidentWitnesses.Add(new IncidentWitness { Id = Guid.NewGuid(), IncidentReportId = incident.Id, WitnessUserId = OwnedUser, WitnessName = "A worker", WitnessStatus = WitnessStatus.Pending });
+        NewGuard().Verify(ok.ChangeTracker);
+
+        await using var orphan = NewDb(NewOptions());
+        orphan.IncidentInjuries.Add(new IncidentInjury { Id = Guid.NewGuid(), IncidentReportId = Guid.NewGuid(), Region = BodyRegion.LeftKnee, InjuryType = InjuryType.Abrasion, Description = "Grazed." });
+        Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(orphan.ChangeTracker));
+        await using var orphanWitness = NewDb(NewOptions());
+        orphanWitness.IncidentWitnesses.Add(new IncidentWitness { Id = Guid.NewGuid(), IncidentReportId = Guid.NewGuid(), WitnessName = "A bystander", WitnessStatus = WitnessStatus.NotRequired });
+        Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(orphanWitness.ChangeTracker));
+    }
+
+    [Fact]
+    public async Task AWitnessWhoIsAUserTheDemoTenantDoesNotOwn_IsRefused()
+    {
+        var incident = Incident(OwnedUser);
+        await using var db = NewDb(NewOptions());
+        db.IncidentReports.Add(incident);
+        db.IncidentWitnesses.Add(new IncidentWitness { Id = Guid.NewGuid(), IncidentReportId = incident.Id, WitnessUserId = Guid.NewGuid(), WitnessName = "Somebody", WitnessStatus = WitnessStatus.Pending });
+
+        var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(db.ChangeTracker));
+        Assert.Contains(nameof(IncidentWitness.WitnessUserId), ex.Message);
+    }
+
+    [Theory]
+    [InlineData(nameof(IncidentReport.Status))]
+    [InlineData(nameof(IncidentReport.ReviewedAt))]
+    [InlineData(nameof(IncidentReport.ResolvedAt))]
+    [InlineData(nameof(IncidentReport.QscReportedAt))]
+    [InlineData(nameof(IncidentReport.QscReportingStatus))]
+    [InlineData(nameof(IncidentReport.UpdatedAt))]
+    public async Task AnIncident_MayBeReviewedResolvedAndReported(string property)
+    {
+        var incident = Incident(OwnedUser, OwnedParticipant);
+        await using var db = await DbWithAsync(NewOptions(), incident);
+        var tracked = await db.IncidentReports.SingleAsync(i => i.Id == incident.Id);
+
+        switch (property)
+        {
+            case nameof(IncidentReport.Status): tracked.Status = IncidentStatus.UnderReview; break;
+            case nameof(IncidentReport.ReviewedAt): tracked.ReviewedAt = DateTime.UtcNow; break;
+            case nameof(IncidentReport.ResolvedAt): tracked.ResolvedAt = DateTime.UtcNow; break;
+            case nameof(IncidentReport.QscReportedAt): tracked.QscReportedAt = DateTime.UtcNow; break;
+            case nameof(IncidentReport.QscReportingStatus): tracked.QscReportingStatus = QscReportingStatus.ReportedWithin24h; break;
+            default: tracked.UpdatedAt = DateTime.UtcNow; break;
+        }
+
+        NewGuard().Verify(db.ChangeTracker);
+    }
+
+    [Theory]
+    [InlineData(nameof(IncidentReport.Title))]
+    [InlineData(nameof(IncidentReport.Description))]
+    [InlineData(nameof(IncidentReport.Severity))]
+    [InlineData(nameof(IncidentReport.IncidentType))]
+    [InlineData(nameof(IncidentReport.InvolvedParticipantId))]
+    [InlineData(nameof(IncidentReport.CreatedAt))]
+    [InlineData(nameof(IncidentReport.ShiftId))]
+    public async Task AnIncident_NeverHasWhatHappenedHowSeriousOrWhoItWasAboutRewritten(string property)
+    {
+        var incident = Incident(OwnedUser, OwnedParticipant);
+        await using var db = await DbWithAsync(NewOptions(), incident);
+        var tracked = await db.IncidentReports.SingleAsync(i => i.Id == incident.Id);
+
+        switch (property)
+        {
+            case nameof(IncidentReport.Title): tracked.Title = "Another"; break;
+            case nameof(IncidentReport.Description): tracked.Description = "Another account."; break;
+            case nameof(IncidentReport.Severity): tracked.Severity = IncidentSeverity.Critical; break;
+            case nameof(IncidentReport.IncidentType): tracked.IncidentType = IncidentType.Death; break;
+            case nameof(IncidentReport.InvolvedParticipantId): tracked.InvolvedParticipantId = Guid.NewGuid(); break;
+            case nameof(IncidentReport.CreatedAt): tracked.CreatedAt = DateTime.UtcNow; break;
+            default: tracked.ShiftId = Guid.NewGuid(); break;
+        }
+
+        var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(db.ChangeTracker));
+        Assert.Contains(property, ex.Message);
+    }
+
+    [Fact]
+    public async Task AnIncidentOfAReporterTheDemoTenantDoesNotOwn_CannotBeAged()
+    {
+        var foreign = Incident(Guid.NewGuid());
+        await using var db = await DbWithAsync(NewOptions(), foreign);
+        (await db.IncidentReports.SingleAsync(i => i.Id == foreign.Id)).Status = IncidentStatus.Closed;
+
+        var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(db.ChangeTracker));
+        Assert.Contains(nameof(IncidentReport), ex.Message);
+    }
+
     // ── an existing row changes only what its day needs ──
 
     [Theory]

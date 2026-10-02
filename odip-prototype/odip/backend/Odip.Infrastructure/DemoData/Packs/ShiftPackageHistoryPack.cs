@@ -185,27 +185,9 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
     /// <summary>The coordinator's follow-up the app raises for a flagged note, closed because the author acknowledged the flags (as the portal closes it).</summary>
     private static void AddFollowUp(DemoRun run, ShiftNote note, User worker, ShiftCompletion completion)
     {
-        var categories = string.Join(", ", ShiftNoteKeywordVocabulary.ToCategoryNames(note.FlaggedCategories));
-        var noteDate = DateOnly.FromDateTime(Local(run, note.CreatedAt));
-        var acknowledged = ProviderLocalTime.AsUtc(note.FlagsAcknowledgedAt!.Value);
-        run.Db.BookingTasks.Add(new BookingTask
-        {
-            Id = DemoIds.For("task", "flagged-note", note.Id),
-            TenantId = run.TenantId,
-            SourceKey = $"flagged-note:{note.Id}",
-            TaskType = TaskType.FlaggedNoteFollowUp,
-            Title = $"Flagged shift note ({categories}) — decide whether an incident is needed",
-            DueDate = noteDate.AddDays(1),
-            LinkTo = "/incidents?view=flagged-notes",
-            ShiftNoteId = note.Id,
-            ShiftId = note.ShiftId,
-            Status = TaskItemStatus.Completed,
-            CompletedDate = DateOnly.FromDateTime(Local(run, acknowledged)),
-            AutoCompletedAt = acknowledged,
-            CreatedAt = note.CreatedAt,
-            UpdatedAt = acknowledged,
-        });
-        run.StampAudit(DemoIds.For("task", "flagged-note", note.Id), note.CreatedAt, worker);
+        var task = PackageRows.FlaggedNoteTask(run, note, DateOnly.FromDateTime(Local(run, note.CreatedAt)), ProviderLocalTime.AsUtc(note.FlagsAcknowledgedAt!.Value));
+        run.Db.BookingTasks.Add(task);
+        run.StampAudit(task.Id, note.CreatedAt, worker);
     }
 
     // ── routine ticks ──

@@ -167,6 +167,41 @@ internal static class PackageRows
         };
     }
 
+    /// <summary>
+    /// The coordinator's follow-up the app raises for a flagged shift note (SourceKey flagged-note:{id}, due the provider day after the note): open until
+    /// somebody files an incident from the note or its author acknowledges the flags, then Completed the way the obligation service completes it.
+    /// </summary>
+    public static BookingTask FlaggedNoteTask(DemoRun run, ShiftNote note, DateOnly noteDate, DateTime? closedAtUtc = null)
+    {
+        var categories = string.Join(", ", ShiftNoteKeywordVocabulary.ToCategoryNames(note.FlaggedCategories));
+        var task = new BookingTask
+        {
+            Id = DemoIds.For("task", "flagged-note", note.Id),
+            TenantId = run.TenantId,
+            SourceKey = $"flagged-note:{note.Id}",
+            TaskType = TaskType.FlaggedNoteFollowUp,
+            Title = $"Flagged shift note ({categories}) — decide whether an incident is needed",
+            DueDate = noteDate.AddDays(1),
+            LinkTo = "/incidents?view=flagged-notes",
+            ShiftNoteId = note.Id,
+            ShiftId = note.ShiftId,
+            Status = TaskItemStatus.NotStarted,
+            CreatedAt = note.CreatedAt,
+            UpdatedAt = note.CreatedAt,
+        };
+        if (closedAtUtc is { } closed) CloseTask(run, task, closed);
+        return task;
+    }
+
+    /// <summary>An obligation task completed by the system at an instant: Completed, the provider's date, the instant (as the obligation service stamps it).</summary>
+    public static void CloseTask(DemoRun run, BookingTask task, DateTime atUtc)
+    {
+        task.Status = TaskItemStatus.Completed;
+        task.CompletedDate = DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(ProviderLocalTime.AsUtc(atUtc), run.Anchors.Zone));
+        task.AutoCompletedAt = atUtc;
+        task.UpdatedAt = atUtc;
+    }
+
     /// <summary>A routine ticked on the shift's completion, with the snapshot the review needs (the occurrence's local time and the routine's title as it was).</summary>
     public static ShiftRoutineCheck Tick(
         DemoRun run, ShiftCompletion completion, ParticipantRoutine routine, DateTime? occursAtLocal, User worker, DateTime checkedLocal)

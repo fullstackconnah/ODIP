@@ -166,6 +166,15 @@ public static class DemoQueries
     public static IQueryable<Shift> UnreviewedShifts(OdipDbContext db, DateOnly onOrBefore, List<Guid> participantIds) =>
         db.Shifts.Where(s => s.Status == ShiftStatus.PendingReview && s.ShiftPatternId == null && s.ServiceDate <= onOrBefore && participantIds.Contains(s.ParticipantId));
 
+    /// <summary>
+    /// Tracked: the incidents reported by these users since an instant that are still moving (not resolved and closed, or waiting for their report
+    /// to the Commission). An incident has no tenant column, so the reporters, who are the Demo tenant's own, are what scopes it.
+    /// </summary>
+    public static IQueryable<IncidentReport> AgingIncidents(OdipDbContext db, List<Guid> reporterIds, DateTime sinceUtc) =>
+        db.IncidentReports.Where(i => i.IsActive && reporterIds.Contains(i.ReportedByUserId) && i.CreatedAt >= sinceUtc
+                                      && (i.Status == IncidentStatus.Submitted || i.Status == IncidentStatus.UnderReview || i.Status == IncidentStatus.Resolved
+                                          || i.QscReportingStatus == QscReportingStatus.Required));
+
     /// <summary>A closed shift with the active completion the worker submitted for it.</summary>
     public sealed record ClosedPair(ShiftCompletion Completion, Shift Shift);
 

@@ -81,6 +81,12 @@ public sealed class DemoTenantGuard
         new Dictionary<Type, Func<object, (DemoParentKind, Guid)>>
         {
             [typeof(StaffAvailability)] = row => (DemoParentKind.User, ((StaffAvailability)row).UserId),
+
+            // Incidents have no tenant column: an incident belongs to the Demo tenant through the user who reported it, its injuries and witnesses
+            // through the incident (which must be one this save adds or a tracked one of a Demo reporter).
+            [typeof(IncidentReport)] = row => (DemoParentKind.User, ((IncidentReport)row).ReportedByUserId),
+            [typeof(IncidentInjury)] = row => (DemoParentKind.Incident, ((IncidentInjury)row).IncidentReportId),
+            [typeof(IncidentWitness)] = row => (DemoParentKind.Incident, ((IncidentWitness)row).IncidentReportId),
         };
 
     /// <summary>The only columns the top-up may change on an existing row (plan 4.3: all compare-and-set, forward-only).</summary>
@@ -109,6 +115,14 @@ public sealed class DemoTenantGuard
             {
                 nameof(MedicationAdministration.PrnOutcome), nameof(MedicationAdministration.PrnOutcomeAt), nameof(MedicationAdministration.WitnessStatus),
                 nameof(MedicationAdministration.WitnessRespondedAt), nameof(MedicationAdministration.UpdatedAt),
+            },
+            // An incident ages: it is reviewed, resolved and closed, and its report to the Commission is made (never what happened, who was
+            // involved, how serious it was or what was found).
+            [typeof(IncidentReport)] = new HashSet<string>
+            {
+                nameof(IncidentReport.Status), nameof(IncidentReport.ReviewedByUserId), nameof(IncidentReport.ReviewedAt), nameof(IncidentReport.ReviewNotes),
+                nameof(IncidentReport.CorrectiveActions), nameof(IncidentReport.ResolvedAt), nameof(IncidentReport.QscReportingStatus),
+                nameof(IncidentReport.QscReportedAt), nameof(IncidentReport.QscReferenceNumber), nameof(IncidentReport.UpdatedAt),
             },
             [typeof(LeaveRequest)] = new HashSet<string>
             {
@@ -151,14 +165,23 @@ public sealed class DemoTenantGuard
             }
         }
 
-        // Rows of this save that audit history may describe: the tenant rows above, and the listed non-tenant children whose parent is owned.
+        // Rows of this save that audit history may describe: the tenant rows above, and the listed non-tenant children whose parent is owned. Two
+        // passes, so a child of an incident (an injury, a witness) finds its incident whatever order the entries come in.
         var touched = new HashSet<Guid>(inSave.Values.SelectMany(ids => ids));
-        foreach (var entry in tracker.Entries())
+        foreach (var pass in new[] { false, true })
         {
-            if (entry.Entity is not ITenantEntity && NonTenantParents.TryGetValue(entry.Entity.GetType(), out var parentOf) && TryGetId(entry, out var childId))
+            foreach (var entry in tracker.Entries())
             {
+                var entryType = entry.Entity.GetType();
+                if (entry.Entity is ITenantEntity || !NonTenantParents.TryGetValue(entryType, out var parentOf) || !TryGetId(entry, out var childId)) continue;
+
                 var (kind, parentId) = parentOf(entry.Entity);
-                if (ParentIsOwned(kind, parentId, inSave)) touched.Add(childId);
+                if ((kind == DemoParentKind.Incident) != pass) continue;
+                if (!ParentIsOwned(kind, parentId, inSave)) continue;
+
+                touched.Add(childId);
+                if (!inSave.TryGetValue(entryType, out var set)) inSave[entryType] = set = new HashSet<Guid>();
+                set.Add(childId);
             }
         }
 
@@ -203,12 +226,14 @@ public sealed class DemoTenantGuard
                 continue;
             }
 
-            // A table with no tenant column: only a listed child table, and only under a parent the Demo tenant owns.
-            if (entry.State == EntityState.Added && NonTenantParents.TryGetValue(type, out var childOf))
+            // A table with no tenant column: only a listed child table, and only under a parent the Demo tenant owns. An existing row of such a
+            // table may change only if it is on the modifiable list too (an incident ages), and then in those columns only.
+            if (NonTenantParents.TryGetValue(type, out var childOf) && (entry.State == EntityState.Added || ModifiableProperties.ContainsKey(type)))
             {
                 var (kind, parentId) = childOf(entry.Entity);
                 if (!ParentIsOwned(kind, parentId, inSave))
                     violations.Add($"{label}: it hangs off {kind} {parentId}, which the Demo tenant does not own.");
+                if (entry.State == EntityState.Modified) VerifyModification(entry, type, label, violations);
             }
             else
             {
@@ -276,7 +301,7 @@ public sealed class DemoTenantGuard
         {
             DemoParentKind.User => _owned.Users,
             DemoParentKind.Participant => _owned.Participants,
-            _ => new HashSet<Guid>(),
+            _ => new HashSet<Guid>(),                                   // an incident is owned only by being in this save, through its reporter
         };
         if (owned.Contains(parentId)) return true;
 
@@ -284,6 +309,7 @@ public sealed class DemoTenantGuard
         {
             DemoParentKind.User => typeof(User),
             DemoParentKind.Participant => typeof(Participant),
+            DemoParentKind.Incident => typeof(IncidentReport),
             _ => null,
         };
         return parentType is not null && inSave.TryGetValue(parentType, out var ids) && ids.Contains(parentId);
@@ -317,6 +343,7 @@ public enum DemoParentKind
 {
     User,
     Participant,
+    Incident,
 }
 
 /// <summary>
