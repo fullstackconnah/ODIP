@@ -150,6 +150,35 @@ public class PlanPricingStorageTests
     }
 
     [Fact]
+    public void Each_seed_row_keeps_the_literal_id_the_migration_inserted_it_with_whatever_rows_are_added_around_it()
+    {
+        // Review L11: ids built from the order the rows are added in would renumber every row after one inserted mid-list, and HasData would then rewrite rows the owner has
+        // edited since. Each row is pinned to its id here, and the ids are the ones the migration's InsertData wrote.
+        var expected = new (string Suffix, string Row)[]
+        {
+            ("01", "2026-12-26 ACT Boxing Day"), ("02", "2026-12-26 NSW Boxing Day"), ("03", "2026-12-26 NT Boxing Day"), ("04", "2026-12-26 QLD Boxing Day"),
+            ("05", "2026-12-26 VIC Boxing Day"), ("06", "2026-12-26 WA Boxing Day"), ("07", "2026-12-26 SA Proclamation Day holiday"),
+            ("08", "2027-04-25 ACT Extra public holiday for Anzac Day"), ("09", "2027-04-25 NSW Anzac Day"), ("10", "2027-04-25 WA Anzac Day"),
+            ("11", "2026-12-24 NT Christmas Eve from 19:00"), ("12", "2026-12-31 NT New Year's Eve from 19:00"), ("13", "2026-12-24 QLD Christmas Eve from 18:00"),
+            ("14", "2026-12-24 SA Christmas Eve from 19:00"), ("15", "2026-12-31 SA New Year's Eve from 19:00"),
+        };
+
+        var seeded = PublicHolidayOverrideSeed.All.ToDictionary(o => o.Id, o => string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"{o.Date:yyyy-MM-dd} {o.State} {o.Name}{(o.StartTime is { } from ? $" from {from:HH:mm}" : string.Empty)}"));
+
+        // Rows may be added later (with their own new ids); none of these may move or change.
+        Assert.True(seeded.Count >= expected.Length);
+        foreach (var (suffix, row) in expected)
+            Assert.Equal(row, seeded[new Guid($"5eed0000-0000-4000-8000-0000000000{suffix}")]);
+
+        var insert = Assert.Single(TheMigration().UpOperations.OfType<InsertDataOperation>());
+        var idColumn = Array.IndexOf(insert.Columns, "Id");
+        var inserted = Enumerable.Range(0, insert.Values.GetLength(0)).Select(row => (Guid)insert.Values[row, idColumn]!).ToList();
+        Assert.Equal(expected.Length, inserted.Count);
+        Assert.All(inserted, id => Assert.Contains(id, seeded.Keys));
+    }
+
+    [Fact]
     public async Task A_new_database_holds_the_seed_rows_in_the_override_table()
     {
         await using var db = CreateDb();
