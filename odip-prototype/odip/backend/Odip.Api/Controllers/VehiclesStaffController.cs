@@ -415,6 +415,23 @@ public class StaffController : ControllerBase
         return SuperAdminDomain.Covers(normalisedEmail, domain) ? SuperAdminDomain.ReservedMessage(domain) : null;
     }
 
+    /// <summary>
+    /// A row that already holds an address on <c>Auth:SuperAdminDomain</c> is a SuperAdmin session whatever its Role, whenever it is active
+    /// (AuthController.Exchange). Archiving a row only sets IsActive = false and never touches Firebase, so a tenant caller who could bring one
+    /// back to life, or change its role, would hand a platform session to whoever still owns that mailbox. Returns the refusal, or null: for a
+    /// SuperAdmin, for a row not on that domain, and for any change that only takes capability away or touches other fields (the carve-out in
+    /// <see cref="Update"/> that keeps legacy rows editable).
+    /// </summary>
+    private string? ReservedRowChangeError(User row, bool becomesActive, UserRole newRole)
+    {
+        if (User?.IsInRole("SuperAdmin") ?? false) return null;
+        var domain = SuperAdminDomain.From(_config);
+        if (!SuperAdminDomain.Covers(EmailIdentity.Normalise(row.Email), domain)) return null;
+        var reactivating = !row.IsActive && becomesActive;
+        var changingRole = newRole != row.Role;
+        return reactivating || changingRole ? SuperAdminDomain.ReservedRowMessage(domain) : null;
+    }
+
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<StaffListDto>>>> GetAll(
         [FromQuery] bool? isActive, CancellationToken ct)
@@ -553,6 +570,10 @@ public class StaffController : ControllerBase
 
         var guardError = ValidateRoleGuardrails(dto.Role, existingRole: s.Role);
         if (guardError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(guardError));
+
+        // A row already on the SuperAdmin domain may not be brought back to life, or have its role changed, by a tenant caller.
+        var reservedRowError = ReservedRowChangeError(s, becomesActive: dto.IsActive, newRole: dto.Role);
+        if (reservedRowError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(reservedRowError));
 
         var emailLower = EmailIdentity.Normalise(dto.Email);
         // Only when the address is being CHANGED: an edit to some other field of a row that already holds such an address (the role guardrail

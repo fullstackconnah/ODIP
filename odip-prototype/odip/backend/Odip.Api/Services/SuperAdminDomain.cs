@@ -19,4 +19,8 @@ public static class SuperAdminDomain
 
     /// <summary>The refusal shown to a caller who may not use an address on <paramref name="domain"/>.</summary>
     public static string ReservedMessage(string domain) => $"Addresses at {domain} are reserved for platform administrators.";
+
+    /// <summary>The refusal shown to a caller who may not reactivate, or change the role of, a row that already holds an address on <paramref name="domain"/>.</summary>
+    public static string ReservedRowMessage(string domain) =>
+        $"Accounts at {domain} are reserved for platform administrators, so only a SuperAdmin can reactivate one or change its role.";
 }

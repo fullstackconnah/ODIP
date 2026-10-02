@@ -480,6 +480,101 @@ public class SignInAccountRouteTests
         Assert.Equal("sam.staff@acme.example.com", (await db.Users.SingleAsync()).Email);
     }
 
+    // An address on the SuperAdmin domain is a SuperAdmin session whatever the row's Role (AuthController.Exchange). Archiving a row only sets
+    // IsActive = false and never touches Firebase, so a tenant caller who could bring such a row back to life, or change its role, would hand a
+    // platform session to whoever still owns that mailbox.
+    private const string ReservedRowRefusal = "Accounts at platform.example.com are reserved for platform administrators, so only a SuperAdmin can reactivate one or change its role.";
+
+    private static UpdateStaffDto UpdateOf(string email, UserRole role, bool isActive) => new()
+    {
+        FirstName = "Sam", LastName = "Staff", Email = email, Role = role, Position = Position.SupportWorker, IsActive = isActive,
+    };
+
+    [Theory]
+    [InlineData("legacy@platform.example.com")]
+    [InlineData("Legacy@Platform.Example.com")]
+    public async Task Staff_update_refuses_reactivating_an_archived_row_on_the_SuperAdmin_domain_for_a_tenant_caller(string storedEmail)
+    {
+        var (db, tenantId) = StaffDb();
+        var staff = await SeedStaff(db, tenantId, storedEmail, isActive: false);
+
+        var refused = await StaffControllerFor(db, "Coordinator", new Mock<IFirebaseUserService>())
+            .Update(staff.Id, UpdateOf(storedEmail, UserRole.SupportWorker, isActive: true), CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(refused.Result);
+        Assert.Equal(ReservedRowRefusal, Assert.IsType<ApiResponse<StaffDetailDto>>(badRequest.Value).Errors!.Single());
+        Assert.False((await db.Users.SingleAsync()).IsActive);
+    }
+
+    [Fact]
+    public async Task Staff_update_lets_a_SuperAdmin_reactivate_such_a_row()
+    {
+        var (db, tenantId) = StaffDb();
+        var staff = await SeedStaff(db, tenantId, "legacy@platform.example.com", isActive: false);
+
+        var result = await StaffControllerFor(db, "SuperAdmin", new Mock<IFirebaseUserService>())
+            .Update(staff.Id, UpdateOf("legacy@platform.example.com", UserRole.SupportWorker, isActive: true), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.True((await db.Users.SingleAsync()).IsActive);
+    }
+
+    [Fact]
+    public async Task Staff_update_refuses_any_role_change_on_a_row_on_the_SuperAdmin_domain_for_a_tenant_caller()
+    {
+        var (db, tenantId) = StaffDb();
+        var staff = await SeedStaff(db, tenantId, "legacy@platform.example.com", role: UserRole.SupportWorker);
+
+        var refused = await StaffControllerFor(db, "Admin", new Mock<IFirebaseUserService>())
+            .Update(staff.Id, UpdateOf("legacy@platform.example.com", UserRole.Coordinator, isActive: true), CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(refused.Result);
+        Assert.Equal(ReservedRowRefusal, Assert.IsType<ApiResponse<StaffDetailDto>>(badRequest.Value).Errors!.Single());
+        Assert.Equal(UserRole.SupportWorker, (await db.Users.SingleAsync()).Role);
+    }
+
+    [Fact]
+    public async Task Staff_update_lets_a_SuperAdmin_change_the_role_of_such_a_row()
+    {
+        var (db, tenantId) = StaffDb();
+        var staff = await SeedStaff(db, tenantId, "legacy@platform.example.com", role: UserRole.SupportWorker);
+
+        var result = await StaffControllerFor(db, "SuperAdmin", new Mock<IFirebaseUserService>())
+            .Update(staff.Id, UpdateOf("legacy@platform.example.com", UserRole.Coordinator, isActive: true), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(UserRole.Coordinator, (await db.Users.SingleAsync()).Role);
+    }
+
+    [Fact]
+    public async Task Staff_update_still_lets_a_tenant_caller_deactivate_such_a_row()
+    {
+        var (db, tenantId) = StaffDb();
+        var staff = await SeedStaff(db, tenantId, "legacy@platform.example.com");
+
+        var archived = await StaffControllerFor(db, "Admin", new Mock<IFirebaseUserService>())
+            .Update(staff.Id, UpdateOf("legacy@platform.example.com", UserRole.SupportWorker, isActive: false), CancellationToken.None);
+
+        // Taking capability away is always safe, and it is how a legacy row on that domain gets switched off.
+        Assert.IsType<OkObjectResult>(archived.Result);
+        Assert.False((await db.Users.SingleAsync()).IsActive);
+    }
+
+    [Fact]
+    public async Task Staff_update_leaves_reactivation_and_role_changes_open_for_a_row_that_is_not_on_the_SuperAdmin_domain()
+    {
+        var (db, tenantId) = StaffDb();
+        var staff = await SeedStaff(db, tenantId, "sam.staff@acme.example.com", isActive: false, role: UserRole.SupportWorker);
+
+        var result = await StaffControllerFor(db, "Admin", new Mock<IFirebaseUserService>())
+            .Update(staff.Id, UpdateOf("sam.staff@acme.example.com", UserRole.Coordinator, isActive: true), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var row = await db.Users.SingleAsync();
+        Assert.True(row.IsActive);
+        Assert.Equal(UserRole.Coordinator, row.Role);
+    }
+
     [Fact]
     public async Task Staff_update_does_not_start_failing_for_a_row_that_already_holds_such_an_address_when_the_address_is_unchanged()
     {
