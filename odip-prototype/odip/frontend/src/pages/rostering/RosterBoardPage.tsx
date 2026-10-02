@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   DndContext, PointerSensor, KeyboardSensor, useSensor, useSensors, closestCenter,
@@ -40,9 +40,12 @@ export default function RosterBoardPage() {
   const [searchParams] = useSearchParams()
   const dateParam = searchParams.get('date')
   const [weekStart, setWeekStart] = useState(() => weekStartFromDateParam(dateParam))
-  useEffect(() => {
+  // React's "adjust state when a prop changes" pattern: compare the param during render, no effect. A missing param never resets the week.
+  const [seenDateParam, setSeenDateParam] = useState(dateParam)
+  if (seenDateParam !== dateParam) {
+    setSeenDateParam(dateParam)
     if (dateParam !== null) setWeekStart(weekStartFromDateParam(dateParam))
-  }, [dateParam])
+  }
   const [groupBy, setGroupBy] = useBoardViewMode()
   const [participantFilter, setParticipantFilter] = useState('')
   const [regionFilter, setRegionFilter] = useState('')
