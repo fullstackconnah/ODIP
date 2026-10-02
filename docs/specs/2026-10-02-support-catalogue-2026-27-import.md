@@ -1,6 +1,6 @@
 # Support catalogue 2026-27: data model, import rules and the admin runbook
 
-**Status:** implemented on `feat/catalogue-2026-27` (plan builder, phase A). **Date:** 2026-10-02.
+**Status:** shipped (plan builder, phase A, PR #181) with the phase A.1 follow-ups. **Date:** 2026-10-02, updated 2026-10-03.
 
 ## Why
 
@@ -53,7 +53,7 @@ weekday, hourly item of that group.
 - One exception, so a wrong workbook can be repaired: a code that a republished file left out is end-dated with an empty window (the row
   ends the day before it starts). Importing a file that lists the code again reopens that row (the preview names each one, "is
   reopened"), unless another row of the code covers its start. Rows a newer catalogue superseded or dropped keep their real window and
-  stay ended.
+  stay ended. What this does and does not repair is spelled out under "Repairing a wrong import".
 - One confirm at a time (a PostgreSQL advisory lock); rows duplicated by an earlier double import are healed by the next import.
 - The version is proposed from the file (`2026-27`, or `2026-27 (2026-12-01)` when changed rows start later than the financial year began).
   Preview and confirm are SuperAdmin-only.
@@ -71,6 +71,36 @@ weekday, hourly item of that group.
    at 73.58 with `04_104_0125_6_1`.
 5. If services from before 1 July 2026 are still unclaimed, import the 2025-26 workbook as well: it is added as history and never touches
    the 2026-27 rows. For a later NDIA price update, import the new file the same way.
+6. If the wrong file was confirmed, read "Repairing a wrong import" below before importing anything else: importing the right file
+   repairs some mistakes and cannot repair others.
+
+## Repairing a wrong import
+
+An import never lengthens a row's window, so a second import repairs only what the first one broke in a way it can undo.
+
+**Importing the right file repairs:**
+
+- A truncated or wrong workbook that starts on the **same dates** as the rows it replaced (a cut-down copy of the right file, a file with
+  codes missing). Every code it left out was end-dated with an empty window (the row ends the day before it starts). Import the complete
+  right file: each such code is reopened in place, and the preview names it ("is reopened").
+- Rows an earlier import left open-ended and current although a newer catalogue dropped their code (the 2025-26 codes the 2026-27
+  catalogue dropped): import the older file again and it ends them (see "Import rules").
+- A catalogue inserted twice by two simultaneous confirms: the next import ends the extra copy of every row.
+
+**Importing the right file does not repair:**
+
+- A wrong file that starts **later** than the rows it replaced, for example a changes-only workbook that starts on 1 December and was
+  confirmed by mistake. Every code it left out had its 1 July row end-dated on 30 November with a real window, and the codes it did list
+  were restarted. The complete file imported next finds each of those rows held (the preview says "an import never lengthens a row", ten
+  lines and a count) and reopens none. Undoing it is a database edit by a developer: set the end date back to open and the row to
+  current on the rows that were ended the day before the wrong file started, and only where no newer row of the same code exists; then
+  import the right file, which should report every row unchanged.
+- An end date that needs to be later than the stored one (see "Known limits").
+
+**Take care with an older workbook of the same start date.** Two files that start on the same date cannot be told apart. If NDIA drops a
+code in a republished workbook with the same start dates (its row is end-dated with an empty window), importing the older workbook later
+reopens that code, open-ended and current, because the older file also lists it. The preview shows each such code as one "is reopened"
+line (ten lines, then a count): read them before confirming.
 
 ## Do not roll back below this release after importing
 
@@ -81,7 +111,9 @@ backward compatible: roll forward, or restore the database from before the impor
 
 ## Known limits
 
-- An import never lengthens a stored row's window; extending an end date needs a deliberate edit.
+- An import never lengthens a stored row's window; extending an end date needs a deliberate edit. The same rule means a wrong file that
+  starts later than the rows it replaced cannot be undone by importing the right one, and an older workbook with the same start dates can
+  reopen a code that a newer one dropped ("Repairing a wrong import").
 - The Support Catalogue list is unpaginated (about 865 KB of JSON for 995 items) and shows a Weekday badge on items that have no day
   band; both move to the plan builder's catalogue work.
 - A service dated before every catalogue row that covers it (for example before 1 July 2026 with only the 2026-27 file imported) is left
