@@ -142,7 +142,7 @@ describe('describeEmailOutcome', () => {
     ['account', 'This staff member is inactive, so they cannot be given a sign-in account.', `No link was sent to ${EMAIL}. This staff member is inactive, so they cannot be given a sign-in account.`],
     ['account', undefined, `No link was sent to ${EMAIL}. We couldn't set up a sign-in account for them.`],
   ] as const)('a %s failure (%s) is an error that says no link was sent', (reason, detail, message) => {
-    expect(describeEmailOutcome(failed(reason, detail), retry)).toEqual({ tone: 'error', message })
+    expect(describeEmailOutcome(failed(reason, detail), retry)).toEqual({ tone: 'danger', message })
   })
 
   it('uses the retry phrase it is given, so a screen with its own Send again button says that instead', () => {

@@ -130,12 +130,31 @@ describe('StaffDetailPage: Send set-password email', () => {
 
     await waitFor(() => expect(mockEnsure).toHaveBeenCalledTimes(1))
     expect(sendPasswordResetEmail).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: SEND })).toBeDisabled()
+    expect(screen.getByRole('button', { name: SEND })).toHaveAttribute('aria-disabled', 'true')
 
     finishEnsure({ firebaseAccount: 'created' })
 
     await waitFor(() => expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(screen.getByRole('button', { name: SEND })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: SEND })).not.toHaveAttribute('aria-disabled'))
+  })
+
+  it('is switched off with aria-disabled, not `disabled`, while it sends: keyboard focus stays on the button, and a second click sends nothing more', async () => {
+    sendPasswordResetEmail.mockReturnValue(new Promise<void>(() => {}))
+    const u = renderPage()
+
+    await u.click(screen.getByRole('button', { name: SEND }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: SEND })).toHaveAttribute('aria-disabled', 'true'))
+    const send = screen.getByRole('button', { name: SEND })
+    expect(send).not.toBeDisabled()
+    expect(send).toHaveAttribute('aria-busy', 'true')
+    expect(send).toHaveClass('aria-disabled:opacity-50', 'aria-disabled:cursor-not-allowed')
+    expect(send).toHaveFocus()
+
+    await u.click(send)
+
+    expect(mockEnsure).toHaveBeenCalledTimes(1)
+    expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1)
   })
 
   it('says "reset" when the account was already there', async () => {
@@ -185,7 +204,7 @@ describe('StaffDetailPage: Send set-password email', () => {
 
     await u.click(screen.getByRole('button', { name: SEND }))
     expect(await within(region()).findByText(/No link was sent to alex@example.com/)).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('button', { name: SEND })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: SEND })).not.toHaveAttribute('aria-disabled'))
 
     await u.click(screen.getByRole('button', { name: SEND }))
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { canSendSetPasswordEmail, sendSetPasswordEmail } from './setPasswordEmail'
+import { canSendSetPasswordEmail, sendActionLabel, sendSetPasswordEmail } from './setPasswordEmail'
 
 const { sendPasswordResetEmail, firebase } = vi.hoisted(() => ({
   sendPasswordResetEmail: vi.fn(),
@@ -53,5 +53,19 @@ describe('sendSetPasswordEmail', () => {
     sendPasswordResetEmail.mockRejectedValue(new Error('auth/too-many-requests'))
 
     await expect(sendSetPasswordEmail('ann@example.com')).rejects.toThrow('auth/too-many-requests')
+  })
+})
+
+describe('sendActionLabel', () => {
+  it('says "set" for someone who has never signed in: they are being given a first password', () => {
+    expect(sendActionLabel(null)).toBe('Send set-password email')
+  })
+
+  it('says "reset" for anyone who has signed in: they already had one', () => {
+    expect(sendActionLabel('2026-09-01T00:00:00Z')).toBe('Send password reset email')
+  })
+
+  it('reads a missing last-login (an older response without the field) as never signed in', () => {
+    expect(sendActionLabel(undefined)).toBe('Send set-password email')
   })
 })

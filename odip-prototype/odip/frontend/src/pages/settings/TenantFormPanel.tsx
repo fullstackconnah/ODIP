@@ -675,13 +675,9 @@ export default function TenantFormPanel({
                     className={inputClass}
                     placeholder={`Min ${MIN_PASSWORD_LENGTH} characters`}
                   />
-                  <button
-                    type="button"
-                    onClick={handleGenerate}
-                    className="px-3 h-[var(--control-h)] border border-[var(--color-border)] rounded-[var(--radius-sm)] text-xs font-medium hover:bg-[var(--color-accent)] transition-colors whitespace-nowrap"
-                  >
+                  <Button variant="secondary" size="md" onClick={handleGenerate} className="shrink-0">
                     Generate
-                  </button>
+                  </Button>
                 </div>
                 <p
                   id="tf-user-password-hint"

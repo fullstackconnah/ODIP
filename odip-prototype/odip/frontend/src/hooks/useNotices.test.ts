@@ -11,11 +11,11 @@ describe('withNotice', () => {
   })
 
   it('a success never removes an error: an error, then a success, leaves both', () => {
-    const afterError = withNotice([], notice(1, 'error'))
+    const afterError = withNotice([], notice(1, 'danger'))
     const afterSuccess = withNotice(afterError, notice(2, 'success'))
 
     expect(ids(afterSuccess)).toEqual([2, 1])
-    expect(afterSuccess.find(n => n.id === 1)?.tone).toBe('error')
+    expect(afterSuccess.find(n => n.id === 1)?.tone).toBe('danger')
   })
 
   it('holds at most three, so the cap is 3', () => {
@@ -28,16 +28,16 @@ describe('withNotice', () => {
 
   it('over the cap, the oldest SUCCESS goes first, even when an older error is waiting', () => {
     // newest first: success 4, error 3 (old), success 2... then a new success arrives
-    const full = [notice(4, 'success'), notice(3, 'error'), notice(2, 'success')]
+    const full = [notice(4, 'success'), notice(3, 'danger'), notice(2, 'success')]
 
     expect(ids(withNotice(full, notice(5, 'success')))).toEqual([5, 4, 3])
-    expect(ids(withNotice(full, notice(5, 'error')))).toEqual([5, 4, 3])
+    expect(ids(withNotice(full, notice(5, 'danger')))).toEqual([5, 4, 3])
   })
 
   it('with only errors held, a new error replaces the oldest, and a new success is not let in to push one out', () => {
-    const errors = [notice(3, 'error'), notice(2, 'error'), notice(1, 'error')]
+    const errors = [notice(3, 'danger'), notice(2, 'danger'), notice(1, 'danger')]
 
-    expect(ids(withNotice(errors, notice(4, 'error')))).toEqual([4, 3, 2])
+    expect(ids(withNotice(errors, notice(4, 'danger')))).toEqual([4, 3, 2])
     expect(ids(withNotice(errors, notice(4, 'success')))).toEqual([3, 2, 1])
   })
 
@@ -61,12 +61,12 @@ describe('useNotices', () => {
   it('keeps an error through a later success, and dismiss removes only the notice it is given', () => {
     const { result } = renderHook(() => useNotices())
 
-    act(() => result.current.notify('error', 'Ann One', 'No link was sent to ann@example.com.'))
+    act(() => result.current.notify('danger', 'Ann One', 'No link was sent to ann@example.com.'))
     act(() => result.current.notify('success', 'Bob Two', 'We sent bob@example.com a link.'))
 
     expect(result.current.notices.map(n => n.title)).toEqual(['Bob Two', 'Ann One'])
 
-    const error = result.current.notices.find(n => n.tone === 'error')!
+    const error = result.current.notices.find(n => n.tone === 'danger')!
     act(() => result.current.dismiss(error.id))
 
     expect(result.current.notices.map(n => n.title)).toEqual(['Bob Two'])

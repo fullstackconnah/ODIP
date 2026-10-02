@@ -46,6 +46,14 @@ const password = () => screen.getByLabelText('Password') as HTMLInputElement
 const createButton = () => screen.getByRole('button', { name: 'Create Tenant' })
 
 describe('TenantFormPanel: the first user\'s password', () => {
+  it('draws Generate as a Button, so it carries the shared focus ring and the height of the field beside it', async () => {
+    await openFirstUser()
+
+    expect(screen.getByRole('button', { name: 'Generate' })).toHaveClass(
+      'focus:ring-[var(--color-ring)]', 'h-[var(--control-h)]', 'border', 'bg-[var(--color-card)]',
+    )
+  })
+
   it('generates with crypto.getRandomValues (14+ characters), never Math.random', async () => {
     const realCrypto = globalThis.crypto
     const getRandomValues = vi.fn((buffer: Uint32Array) => realCrypto.getRandomValues(buffer))

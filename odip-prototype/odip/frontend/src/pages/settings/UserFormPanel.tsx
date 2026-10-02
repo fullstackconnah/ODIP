@@ -407,14 +407,10 @@ export default function UserFormPanel({
               We&apos;ll email {email.trim() || 'the user'} a link to set their password.
             </p>
           )}
-          <button
-            type="button"
-            aria-expanded={tempPasswordOpen}
-            onClick={toggleTempPassword}
-            className="text-xs font-medium text-[var(--color-primary)] hover:underline"
-          >
+          {/* -ml-3 cancels the Button's own padding, so the words line up with the text above and the hover wash sits in the panel's margin. */}
+          <Button variant="ghost" size="sm" aria-expanded={tempPasswordOpen} onClick={toggleTempPassword} className="-ml-3">
             Set a temporary password instead
-          </button>
+          </Button>
           {tempPasswordOpen && (
             <div>
               <label htmlFor="uf-password" className={labelClass}>Temporary password</label>
@@ -430,13 +426,9 @@ export default function UserFormPanel({
                   className={inputClass}
                   placeholder={`Min ${MIN_PASSWORD_LENGTH} characters`}
                 />
-                <button
-                  type="button"
-                  onClick={handleGenerate}
-                  className="px-3 h-[var(--control-h)] border border-[var(--color-border)] rounded-[var(--radius-sm)] text-xs font-medium hover:bg-[var(--color-accent)] transition-colors whitespace-nowrap"
-                >
+                <Button variant="secondary" size="md" onClick={handleGenerate} className="shrink-0">
                   Generate
-                </button>
+                </Button>
               </div>
               <p
                 id={passwordHintId}

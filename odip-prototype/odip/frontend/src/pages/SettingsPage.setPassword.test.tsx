@@ -116,7 +116,7 @@ describe('SettingsPage Users tab: Send set-password email', () => {
   it('says, in the notices above the table, that the email went', async () => {
     const u = await openUsersTab()
 
-    await u.click(screen.getByRole('button', { name: 'Send set-password email' }))
+    await u.click(screen.getByRole('button', { name: 'Send set-password email to Ann One' }))
 
     expect(
       await screen.findByText("We've sent ann@example.com a link to set their password. It can take a few minutes, so ask them to check spam."),
@@ -129,7 +129,7 @@ describe('SettingsPage Users tab: Send set-password email', () => {
     sendPasswordResetEmail.mockRejectedValue(new Error('auth/network-request-failed'))
     const u = await openUsersTab()
 
-    await u.click(screen.getByRole('button', { name: 'Send set-password email' }))
+    await u.click(screen.getByRole('button', { name: 'Send set-password email to Ann One' }))
 
     expect(await within(screen.getByRole('status')).findByText(
       'No link was sent to ann@example.com. To try again, use Send set-password email on their row.',

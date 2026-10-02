@@ -224,6 +224,20 @@ describe('UserFormPanel create: a temporary password instead', () => {
     expect(mockCreate.mock.calls[0][0].password).toBeUndefined()
   })
 
+  it('draws the disclosure and Generate as Buttons, so both carry the shared focus ring and control heights', async () => {
+    const { u } = renderCreate()
+
+    // Ghost, small: a quiet control that opens the section. (It used to be a bare text link with no focus ring.)
+    expect(disclosure()).toHaveClass('focus:ring-[var(--color-ring)]', 'h-[var(--control-h-sm)]', 'hover:bg-[var(--color-accent)]')
+
+    await u.click(disclosure())
+
+    // Secondary, regular size: the height of the field it sits beside.
+    expect(screen.getByRole('button', { name: 'Generate' })).toHaveClass(
+      'focus:ring-[var(--color-ring)]', 'h-[var(--control-h)]', 'border', 'bg-[var(--color-card)]',
+    )
+  })
+
   it('generates with crypto.getRandomValues (14+ characters, never Math.random), sends it with the create, and emails nothing', async () => {
     const realCrypto = globalThis.crypto
     const getRandomValues = vi.fn((buffer: Uint32Array) => realCrypto.getRandomValues(buffer))

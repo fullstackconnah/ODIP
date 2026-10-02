@@ -69,6 +69,9 @@ export default function StaffDetailPage() {
   // The server makes sure the account exists first (staff added through the staff form have none), then Firebase is asked to send the link;
   // what is said afterwards follows what actually happened in those two steps (lib/signInEmail.ts).
   async function handleSendSetPasswordEmail() {
+    // The button says "busy" with aria-disabled, not `disabled` (that can drop keyboard focus on the button just activated), so a click
+    // still arrives while a send is under way: this is what refuses it.
+    if (sending) return
     const email = overview?.staff.email
     if (!overview || !email) return
     setSending(true)
@@ -109,7 +112,14 @@ export default function StaffDetailPage() {
               </Button>
             )}
             {canManageSignIn && staff.isActive && !!staff.email && (
-              <Button variant="secondary" size="md" onClick={handleSendSetPasswordEmail} disabled={sending} aria-busy={sending || undefined}>
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={handleSendSetPasswordEmail}
+                aria-disabled={sending || undefined}
+                aria-busy={sending || undefined}
+                className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+              >
                 <Mail className="w-4 h-4" /> Send set-password email
               </Button>
             )}

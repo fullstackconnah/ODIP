@@ -25,11 +25,15 @@ vi.mock('@/lib/firebase', () => ({
 }))
 
 const authStub = { name: 'auth-stub' }
-const SEND = 'Send set-password email'
+// The row action says what it will do to whom. Someone who has never signed in is being given a first password ("set"); anyone who
+// has is getting a reset. Every row has its own button, so the person's name is part of the name.
+const SET = (fullName: string) => `Send set-password email to ${fullName}`
+const RESET = (fullName: string) => `Send password reset email to ${fullName}`
+const ANY_SEND = /^Send (set-password|password reset) email to /
 
-const user = (i: number, isActive = true) => ({
+const user = (i: number, isActive = true, lastLoginAt: string | null = null) => ({
   id: `u${i}`, firstName: 'User', lastName: `Number${i}`, fullName: `User Number${i}`, email: `u${i}@example.com.au`, username: `u${i}`,
-  role: 'Coordinator', tenantId: 't1', tenantName: 'Sample Support Co', isActive, createdAt: '2026-01-01T00:00:00Z', lastLoginAt: null,
+  role: 'Coordinator', tenantId: 't1', tenantName: 'Sample Support Co', isActive, createdAt: '2026-01-01T00:00:00Z', lastLoginAt,
 })
 
 function renderTab(users: ReturnType<typeof user>[]) {
@@ -41,9 +45,12 @@ function renderTab(users: ReturnType<typeof user>[]) {
   return userEvent.setup()
 }
 
-/** The "Send set-password email" button in the row that shows `fullName`. */
+/** The send button in the row that shows `fullName`, whichever wording it carries. */
 const rowOf = (fullName: string) => within(screen.getByRole('table')).getByText(fullName).closest('tr')!
-const sendIn = (fullName: string) => within(rowOf(fullName)).getByRole('button', { name: SEND })
+const sendIn = (fullName: string) => within(rowOf(fullName)).getByRole('button', { name: ANY_SEND })
+
+/** A send is under way: every send button says so with aria-disabled (never `disabled`, which can drop keyboard focus). */
+const isBusy = (button: HTMLElement) => button.getAttribute('aria-disabled') === 'true'
 
 /** The notices region above the table: one live region, there from the first render. */
 const region = () => screen.getByRole('status')
@@ -112,7 +119,7 @@ describe('UsersTab: Send set-password email', () => {
 
     expect(await within(region()).findByText('No link was sent to u1@example.com.au. This user is inactive, so they cannot be given a sign-in account.')).toBeInTheDocument()
     expect(sendPasswordResetEmail).not.toHaveBeenCalled()
-    await waitFor(() => expect(sendIn('User Number1')).toBeEnabled())
+    await waitFor(() => expect(isBusy(sendIn('User Number1'))).toBe(false))
   })
 
   it('says no link was sent, with advice that fits, when Firebase refuses, and a retry then works', async () => {
@@ -124,7 +131,7 @@ describe('UsersTab: Send set-password email', () => {
     expect(await within(region()).findByText(
       'No link was sent to u1@example.com.au. Firebase is limiting emails for now. Wait a few minutes, then use Send set-password email on their row.',
     )).toBeInTheDocument()
-    await waitFor(() => expect(sendIn('User Number1')).toBeEnabled())
+    await waitFor(() => expect(isBusy(sendIn('User Number1'))).toBe(false))
 
     await u.click(sendIn('User Number1'))
 
@@ -139,10 +146,13 @@ describe('UsersTab: Send set-password email', () => {
 
     await u.click(sendIn('User Number1'))
 
-    await waitFor(() => expect(sendIn('User Number1')).toBeDisabled())
+    await waitFor(() => expect(isBusy(sendIn('User Number1'))).toBe(true))
     expect(sendIn('User Number1')).toHaveAttribute('aria-busy', 'true')
-    expect(sendIn('User Number2')).toBeDisabled()
+    expect(isBusy(sendIn('User Number2'))).toBe(true)
+    expect(sendIn('User Number2')).not.toHaveAttribute('aria-busy')
+    // The click still arrives (aria-disabled does not stop events), so it is the guard in the handler that holds it back.
     await u.click(sendIn('User Number1'))
+    await u.click(sendIn('User Number2'))
     expect(mockEnsure).toHaveBeenCalledTimes(1)
     expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1)
     expect(region()).toBeEmptyDOMElement()
@@ -150,15 +160,72 @@ describe('UsersTab: Send set-password email', () => {
     finish()
 
     expect(await within(region()).findByText(sentTo(1))).toBeInTheDocument()
-    expect(sendIn('User Number1')).toBeEnabled()
-    expect(sendIn('User Number2')).toBeEnabled()
+    expect(isBusy(sendIn('User Number1'))).toBe(false)
+    expect(isBusy(sendIn('User Number2'))).toBe(false)
+    expect(sendIn('User Number1')).not.toHaveAttribute('aria-busy')
+  })
+
+  it('is switched off with aria-disabled, not `disabled`, so the button that was clicked keeps keyboard focus while it sends', async () => {
+    sendPasswordResetEmail.mockReturnValue(new Promise<void>(() => {}))
+    const u = renderTab([user(1), user(2)])
+
+    await u.click(sendIn('User Number1'))
+
+    await waitFor(() => expect(isBusy(sendIn('User Number1'))).toBe(true))
+    for (const name of ['User Number1', 'User Number2']) {
+      expect(sendIn(name)).not.toBeDisabled()
+      expect(sendIn(name)).toHaveClass('aria-disabled:opacity-50', 'aria-disabled:cursor-not-allowed')
+    }
+    expect(sendIn('User Number1')).toHaveFocus()
+  })
+
+  it('is labelled with the person it will email, and by their history: "set" for someone who has never signed in, "reset" for someone who has', () => {
+    renderTab([user(1), user(2, true, '2026-09-01T00:00:00Z')])
+
+    const first = within(rowOf('User Number1')).getByRole('button', { name: SET('User Number1') })
+    const second = within(rowOf('User Number2')).getByRole('button', { name: RESET('User Number2') })
+    // An icon-only control: the same words are its tooltip, so a mouse user is told what it does too.
+    expect(first).toHaveAttribute('title', SET('User Number1'))
+    expect(second).toHaveAttribute('title', RESET('User Number2'))
+    expect(within(rowOf('User Number1')).queryByRole('button', { name: /password reset email/ })).not.toBeInTheDocument()
+    expect(within(rowOf('User Number2')).queryByRole('button', { name: /set-password email/ })).not.toBeInTheDocument()
+  })
+
+  it('points a failure at the button that row really has: "Send password reset email" for someone who has signed in', async () => {
+    sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/too-many-requests'))
+    const u = renderTab([user(1, true, '2026-09-01T00:00:00Z')])
+
+    await u.click(sendIn('User Number1'))
+
+    expect(await within(region()).findByText(
+      'No link was sent to u1@example.com.au. Firebase is limiting emails for now. Wait a few minutes, then use Send password reset email on their row.',
+    )).toBeInTheDocument()
+  })
+
+  it('puts the row actions in a RowActions cluster, as icon-only ghost Buttons: shown on row hover or focus, 24px squares with a touch-sized hit area', () => {
+    renderTab([user(1)])
+
+    const row = rowOf('User Number1')
+    const send = within(row).getByRole('button', { name: SET('User Number1') })
+    const edit = within(row).getByRole('button', { name: 'Edit user' })
+
+    for (const button of [send, edit]) {
+      // Button, iconOnly: the --control-h-sm square with its 44px tap area, and the shared focus ring.
+      expect(button).toHaveClass('w-[var(--control-h-sm)]', 'h-[var(--control-h-sm)]', 'before:min-h-[var(--tap-min)]', 'focus:ring-[var(--color-ring)]')
+      // Button, ghost: muted at rest, accent wash on hover.
+      expect(button).toHaveClass('hover:bg-[var(--color-accent)]')
+      // RowActions: opacity-only reveal keyed to the row, with the touch gap.
+      expect(button.parentElement).toHaveClass('group-hover/row:opacity-100', 'pointer-coarse:gap-2')
+    }
+    // Both live in the same cluster, so they share its spacing instead of each hand-rolling a gap.
+    expect(send.parentElement).toBe(edit.parentElement)
   })
 
   it('is offered for active users only; every user still has Edit', () => {
     renderTab([user(1), user(2, false), user(3)])
 
-    expect(screen.getAllByRole('button', { name: SEND })).toHaveLength(2)
-    expect(within(rowOf('User Number2')).queryByRole('button', { name: SEND })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: ANY_SEND })).toHaveLength(2)
+    expect(within(rowOf('User Number2')).queryByRole('button', { name: ANY_SEND })).not.toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Edit user' })).toHaveLength(3)
   })
 
@@ -166,7 +233,7 @@ describe('UsersTab: Send set-password email', () => {
     firebase.auth = null
     renderTab([user(1), user(2)])
 
-    expect(screen.queryByRole('button', { name: SEND })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: ANY_SEND })).not.toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Edit user' })).toHaveLength(2)
   })
 })
@@ -178,7 +245,7 @@ describe('UsersTab: the notices above the table', () => {
 
     await u.click(sendIn('User Number1'))
     expect(await within(region()).findByText(/No link was sent to u1@example.com.au/)).toBeInTheDocument()
-    await waitFor(() => expect(sendIn('User Number2')).toBeEnabled())
+    await waitFor(() => expect(isBusy(sendIn('User Number2'))).toBe(false))
 
     await u.click(sendIn('User Number2'))
 
@@ -198,7 +265,7 @@ describe('UsersTab: the notices above the table', () => {
     for (const n of [1, 2, 3, 4]) {
       await u.click(sendIn(`User Number${n}`))
       await within(region()).findByText(sentTo(n))
-      await waitFor(() => expect(sendIn(`User Number${n}`)).toBeEnabled())
+      await waitFor(() => expect(isBusy(sendIn(`User Number${n}`))).toBe(false))
     }
 
     const titles = within(region()).getAllByText(/^User Number\d$/).map(el => el.textContent)
@@ -212,11 +279,11 @@ describe('UsersTab: the notices above the table', () => {
 
     await u.click(sendIn('User Number1'))
     await within(region()).findByText(/No link was sent to u1@example.com.au/)
-    await waitFor(() => expect(sendIn('User Number1')).toBeEnabled())
+    await waitFor(() => expect(isBusy(sendIn('User Number1'))).toBe(false))
     for (const n of [2, 3, 4]) {
       await u.click(sendIn(`User Number${n}`))
       await within(region()).findByText(sentTo(n))
-      await waitFor(() => expect(sendIn(`User Number${n}`)).toBeEnabled())
+      await waitFor(() => expect(isBusy(sendIn(`User Number${n}`))).toBe(false))
     }
 
     // Three held: the old error, and the two newest successes. The oldest success made room.

@@ -6,7 +6,7 @@ import type { Notice } from '@/hooks/useNotices'
 
 const notices: Notice[] = [
   { id: 2, tone: 'success', title: 'Bob Two', message: "We've sent bob@example.com a link to set their password." },
-  { id: 1, tone: 'error', title: 'Ann One', message: 'No link was sent to ann@example.com. To try again, use Send set-password email on their row.' },
+  { id: 1, tone: 'danger', title: 'Ann One', message: 'No link was sent to ann@example.com. To try again, use Send set-password email on their row.' },
 ]
 
 describe('NoticesRegion', () => {
@@ -68,7 +68,7 @@ describe('NoticesRegion', () => {
   it('marks a failure so it is not mistaken for good news', () => {
     render(<NoticesRegion notices={notices} onDismiss={vi.fn()} />)
 
-    expect(screen.getByText('Ann One').closest('[data-tone]')).toHaveAttribute('data-tone', 'error')
+    expect(screen.getByText('Ann One').closest('[data-tone]')).toHaveAttribute('data-tone', 'danger')
     expect(screen.getByText('Bob Two').closest('[data-tone]')).toHaveAttribute('data-tone', 'success')
   })
 })

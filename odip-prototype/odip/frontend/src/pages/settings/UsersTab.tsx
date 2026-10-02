@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { Search, Pencil, Mail } from 'lucide-react'
 import { useAdminUsers, useAdminTenantsSummary, useEnsureUserSignInAccount } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
+import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
-import { DataTable } from '@/components/DataTable'
+import { DataTable, RowActions } from '@/components/DataTable'
 import { NoticesRegion } from '@/components/NoticesRegion'
 import { useNotices } from '@/hooks/useNotices'
 import { formatRelative, plural } from '@/lib/format'
-import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
+import { canSendSetPasswordEmail, sendActionLabel } from '@/lib/setPasswordEmail'
 import { describeEmailOutcome, ensureAndSendSetPasswordEmail } from '@/lib/signInEmail'
 import { parseApiDate } from '@/lib/utils'
 
@@ -66,8 +67,9 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
   const [status, setStatus] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
-  // The user whose set-password email is going out. One at a time: a second click on a busy button would only send a duplicate, and
-  // Firebase limits how many reset emails it will send.
+  // The user whose set-password email is going out. One at a time: a second click would only send a duplicate, and Firebase limits how many
+  // reset emails it will send. The buttons say "busy" with aria-disabled and handleSendSetPasswordEmail refuses the click: `disabled` on the
+  // button that was just activated can drop keyboard focus in some browsers.
   const [sendingId, setSendingId] = useState<string | null>(null)
   // Firebase sends the email, so without Firebase (local dev auth) the action is not offered rather than offered and broken.
   const emailEnabled = canSendSetPasswordEmail()
@@ -96,10 +98,12 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
   // The server makes sure the account exists first (a user can have a row and no Firebase account), then Firebase is asked to send the link;
   // what is said afterwards follows what actually happened in those two steps (lib/signInEmail.ts).
   async function handleSendSetPasswordEmail(target: AdminUserDto) {
+    if (sendingId !== null) return
     setSendingId(target.id)
     const outcome = await ensureAndSendSetPasswordEmail(target.email, () => ensureAccount.mutateAsync(target.id))
     setSendingId(null)
-    const { tone, message } = describeEmailOutcome(outcome, 'use Send set-password email on their row')
+    // The advice names the button this row really has: "reset" for someone who has signed in before, "set" for someone who never has.
+    const { tone, message } = describeEmailOutcome(outcome, `use ${sendActionLabel(target.lastLoginAt)} on their row`)
     notify(tone, target.fullName, message)
   }
 
@@ -227,30 +231,32 @@ export default function UsersTab({ onAddUser, onEditUser }: UsersTabProps) {
             key: 'actions',
             header: '',
             align: 'right',
-            render: (user: AdminUserDto) => (
-              <div className="flex items-center justify-end gap-1">
-                {emailEnabled && user.isActive && (
-                  <button
-                    onClick={() => handleSendSetPasswordEmail(user)}
-                    disabled={sendingId !== null}
-                    aria-busy={sendingId === user.id || undefined}
-                    className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    title="Send set-password email"
-                    aria-label="Send set-password email"
-                  >
-                    <Mail className="w-4 h-4 text-[var(--color-muted-foreground)]" />
-                  </button>
-                )}
-                <button
-                  onClick={() => onEditUser(user)}
-                  className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] transition-colors"
-                  title="Edit user"
-                  aria-label="Edit user"
-                >
-                  <Pencil className="w-4 h-4 text-[var(--color-muted-foreground)]" />
-                </button>
-              </div>
-            ),
+            render: (user: AdminUserDto) => {
+              // Every row has its own, so the name says whom it emails, and the wording follows their history.
+              const sendLabel = `${sendActionLabel(user.lastLoginAt)} to ${user.fullName}`
+              return (
+                <RowActions>
+                  {emailEnabled && user.isActive && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      iconOnly
+                      onClick={() => handleSendSetPasswordEmail(user)}
+                      aria-disabled={sendingId !== null || undefined}
+                      aria-busy={sendingId === user.id || undefined}
+                      className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+                      title={sendLabel}
+                      aria-label={sendLabel}
+                    >
+                      <Mail className="w-4 h-4" />
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" iconOnly onClick={() => onEditUser(user)} title="Edit user" aria-label="Edit user">
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                </RowActions>
+              )
+            },
           },
         ]}
       />

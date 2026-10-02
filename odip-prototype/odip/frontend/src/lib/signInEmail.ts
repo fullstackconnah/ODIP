@@ -62,7 +62,7 @@ export function sendSetPasswordEmailFor(email: string, account: AccountState): P
  * first. `retry` is what the person does to try again, as an imperative that follows "then" and "To try again,": the control THIS screen
  * offers ("use Send set-password email on their row", "use Send again").
  */
-export function describeEmailOutcome(outcome: EmailOutcome, retry: string): { tone: 'success' | 'error'; message: string } {
+export function describeEmailOutcome(outcome: EmailOutcome, retry: string): { tone: 'success' | 'danger'; message: string } {
   const { email } = outcome
   if (outcome.ok) {
     const verb = outcome.account === 'created' ? 'set' : 'reset'
@@ -72,14 +72,14 @@ export function describeEmailOutcome(outcome: EmailOutcome, retry: string): { to
   const noLink = `No link was sent to ${email}.`
   switch (outcome.reason) {
     case 'account':
-      return { tone: 'error', message: `${noLink} ${outcome.detail ?? "We couldn't set up a sign-in account for them."}` }
+      return { tone: 'danger', message: `${noLink} ${outcome.detail ?? "We couldn't set up a sign-in account for them."}` }
     case 'too-many-requests':
-      return { tone: 'error', message: `${noLink} Firebase is limiting emails for now. Wait a few minutes, then ${retry}.` }
+      return { tone: 'danger', message: `${noLink} Firebase is limiting emails for now. Wait a few minutes, then ${retry}.` }
     case 'invalid-email':
-      return { tone: 'error', message: `${noLink} That doesn't look like a valid email address. Correct it, then ${retry}.` }
+      return { tone: 'danger', message: `${noLink} That doesn't look like a valid email address. Correct it, then ${retry}.` }
     case 'network':
-      return { tone: 'error', message: `${noLink} We couldn't reach Firebase. Check your connection, then ${retry}.` }
+      return { tone: 'danger', message: `${noLink} We couldn't reach Firebase. Check your connection, then ${retry}.` }
     case 'other':
-      return { tone: 'error', message: `${noLink} To try again, ${retry}.` }
+      return { tone: 'danger', message: `${noLink} To try again, ${retry}.` }
   }
 }
