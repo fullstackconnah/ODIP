@@ -66,22 +66,24 @@ public static class PlanPricingEngine
                     continue;
                 }
 
-                if (!seen.Add(block.Id ?? string.Empty))
+                // A block's id is a string the client chose and may be missing: every issue and total below is keyed on one that is never null.
+                var id = block.Id ?? string.Empty;
+                if (!seen.Add(id))
                 {
-                    issues.Add(block.Id ?? string.Empty, PlanFailureReason.InvalidInput, $"Block '{block.Id}': another block has the same id; ids must be unique in a quote.", null);
+                    issues.Add(id, PlanFailureReason.InvalidInput, $"Block '{id}': another block has the same id; ids must be unique in a quote.", null);
                     continue;
                 }
 
                 var messages = block.Validate();
                 if (messages.Count > 0)
                 {
-                    foreach (var message in messages) issues.Add(block.Id ?? string.Empty, PlanFailureReason.InvalidInput, message, null);
+                    foreach (var message in messages) issues.Add(id, PlanFailureReason.InvalidInput, message, null);
                     continue;
                 }
 
                 if (Refuse(block, policy) is { } refusal)
                 {
-                    issues.Add(block.Id, refusal.Reason, refusal.Message, null);
+                    issues.Add(id, refusal.Reason, refusal.Message, null);
                     continue;
                 }
 
@@ -91,14 +93,14 @@ public static class PlanPricingEngine
                 foreach (var date in Dates(block, request.PeriodFrom, request.PeriodTo))
                 {
                     var result = pricer.Price(block, date);
-                    foreach (var (reason, message) in result.Issues) issues.Add(block.Id, reason, message, date);
+                    foreach (var (reason, message) in result.Issues) issues.Add(id, reason, message, date);
 
                     if (result.Holiday is { } holiday)
                     {
                         var state = holiday.State ?? block.Location.State.Trim().ToUpperInvariant();
                         if (result.Skipped)
                         {
-                            holidayOccurrences.Add(new HolidayOccurrence(block.Id, date, holiday.Name, state, block.OnPublicHoliday, true, null, null, null));
+                            holidayOccurrences.Add(new HolidayOccurrence(id, date, holiday.Name, state, block.OnPublicHoliday, true, null, null, null));
                             skipped++;
                             continue;
                         }
@@ -106,7 +108,7 @@ public static class PlanPricingEngine
                         // What the same support costs on an ordinary day: the exposure the plan carries because of the holiday.
                         var atHoliday = result.PricedTotal;
                         var atOrdinary = pricer.Price(block, date, ignoreHolidays: true).PricedTotal;
-                        holidayOccurrences.Add(new HolidayOccurrence(block.Id, date, holiday.Name, state, block.OnPublicHoliday, false, atHoliday, atOrdinary, atHoliday - atOrdinary));
+                        holidayOccurrences.Add(new HolidayOccurrence(id, date, holiday.Name, state, block.OnPublicHoliday, false, atHoliday, atOrdinary, atHoliday - atOrdinary));
                     }
 
                     occurrences++;
@@ -115,7 +117,7 @@ public static class PlanPricingEngine
 
                 lines.AddRange(blockLines);
                 var priced = blockLines.Where(l => l.IsPriced).ToList();
-                blockTotals.Add(new BlockTotal(block.Id, priced.Sum(l => l.Total), SupportHours(priced), occurrences, skipped));
+                blockTotals.Add(new BlockTotal(id, priced.Sum(l => l.Total), SupportHours(priced), occurrences, skipped));
             }
         }
 

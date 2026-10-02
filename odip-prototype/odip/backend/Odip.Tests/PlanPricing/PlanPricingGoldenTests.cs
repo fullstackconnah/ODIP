@@ -103,7 +103,7 @@ public class PlanPricingGoldenTests
             // The part that has an item is priced; the part that has none is a line with no code, no price and the Review flag.
             var priced = Assert.Single(Priced(quote));
             Assert.Equal((eveningCode, 2m, (decimal)evening, (decimal)eveningTotal), Row(priced));
-            var night = Assert.Single(quote.Lines.Where(l => !l.IsPriced));
+            var night = Assert.Single(quote.Lines, l => !l.IsPriced);
             Assert.Null(night.ItemCode);
             Assert.Equal(PlanFailureReason.NoItem, night.Unpriced);
             Assert.True(night.Review);
@@ -129,7 +129,7 @@ public class PlanPricingGoldenTests
         var quote = QuoteOne(block, Mon12Oct);
 
         Assert.Equal(new[] { ("04_104_0125_6_1", 2m, 73.58m, 147.16m) }, quote.Lines.Where(l => l.IsPriced).Select(Row));
-        Assert.Equal(PlanFailureReason.NoItem, Assert.Single(quote.Lines.Where(l => !l.IsPriced)).Unpriced);
+        Assert.Equal(PlanFailureReason.NoItem, Assert.Single(quote.Lines, l => !l.IsPriced).Unpriced);
     }
 
     // ── Example 5: a public holiday on a recurring Monday ─────────────────────────
@@ -227,7 +227,7 @@ public class PlanPricingGoldenTests
     {
         var quote = QuoteOne(Overnight(b => b with { SleepoverActiveHours = 4m }), Fri16Oct, SplitPolicy);
 
-        var extra = Assert.Single(quote.Lines.Where(l => l.Kind == PlannedLineKind.SleepoverActiveHours));
+        var extra = Assert.Single(quote.Lines, l => l.Kind == PlannedLineKind.SleepoverActiveHours);
         Assert.Equal((AscSaturday, 2m, 103.54m, 207.08m), Row(extra));
         Assert.Equal(1005.29m + 207.08m, quote.Totals.Amount);
         // Two active hours or fewer are inside the sleepover item.
@@ -466,7 +466,7 @@ public class PlanPricingGoldenTests
             ("mon-wed", Mon12Oct, "04_104_0125_6_1", 4m, 73.58m, 294.32m),
             ("mon-wed", Mon12Oct.AddDays(2), "04_104_0125_6_1", 4m, 73.58m, 294.32m),
             ("sat", Sat17Oct, "04_104_0136_6_1", 6m, 34.51m, 207.06m),
-        }, week.Lines.Select(l => (l.BlockId, l.ServiceDate, l.ItemCode, l.Qty, l.UnitPrice, l.Total)));
+        }, week.Lines.Select(l => (l.BlockId, l.ServiceDate, l.ItemCode!, l.Qty, l.UnitPrice, l.Total)));
         var totals = week.Totals.ByBlock.ToDictionary(b => b.BlockId);
         Assert.Equal((588.64m, 8m), (totals["mon-wed"].Amount, totals["mon-wed"].SupportHours));
         Assert.Equal((207.06m, 6m), (totals["sat"].Amount, totals["sat"].SupportHours));

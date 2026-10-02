@@ -22,7 +22,7 @@ public class PlanPricingCompanionTests
             Travel = new PlanProviderTravel { Claim = true, MinutesEachWay = minutes, ReturnToBase = back, ParticipantsSharing = sharing, KmEachWay = km },
         };
 
-    private static PlannedLine TravelTime(PlanQuote quote) => Assert.Single(quote.Lines.Where(l => l.Kind == PlannedLineKind.ProviderTravelTime));
+    private static PlannedLine TravelTime(PlanQuote quote) => Assert.Single(quote.Lines, l => l.Kind == PlannedLineKind.ProviderTravelTime);
 
     // ── Provider travel time ──────────────────────────────────────────────────────
 
@@ -120,7 +120,7 @@ public class PlanPricingCompanionTests
 
         // No minutes were given, so there is no time line; 10 km each way and back at $0.99 is $19.80, in dollars at $1.00.
         Assert.DoesNotContain(quote.Lines, l => l.Kind == PlannedLineKind.ProviderTravelTime);
-        var km = Assert.Single(quote.Lines.Where(l => l.Kind == PlannedLineKind.ProviderTravelCosts));
+        var km = Assert.Single(quote.Lines, l => l.Kind == PlannedLineKind.ProviderTravelCosts);
         Assert.Equal((code, 19.80m, 1.00m, 19.80m), Row(km));
         Assert.Equal((category, "E", true), (km.PaceCategory, km.Unit, km.Provisional));
     }
@@ -151,7 +151,7 @@ public class PlanPricingCompanionTests
             Intensity = intensity, Transport = new PlanActivityTransport { Km = 20m },
         });
 
-        var transport = Assert.Single(QuoteOne(block, Mon12Oct).Lines.Where(l => l.Kind == PlannedLineKind.ActivityTransport));
+        var transport = Assert.Single(QuoteOne(block, Mon12Oct).Lines, l => l.Kind == PlannedLineKind.ActivityTransport);
 
         Assert.Equal((code, 19.80m, 1.00m, 19.80m), Row(transport));
         Assert.Equal(4, transport.PaceCategory);
@@ -200,7 +200,7 @@ public class PlanPricingCompanionTests
     {
         var block = Block("cc", type, DayOfWeek.Saturday, T(9), T(15), b => b with { Setting = PlanSetting.Centre, Intensity = intensity, ParticipantsPresent = 3 });
 
-        var line = Assert.Single(QuoteOne(block, Sat17Oct).Lines.Where(l => l.Kind == PlannedLineKind.CentreCapital));
+        var line = Assert.Single(QuoteOne(block, Sat17Oct).Lines, l => l.Kind == PlannedLineKind.CentreCapital);
 
         Assert.Equal((code, 6m, 2.71m, 16.26m), Row(line));   // 6 hours at $2.71, whatever the ratio
         Assert.Equal((4, "H"), (line.PaceCategory, line.Unit));
@@ -232,7 +232,7 @@ public class PlanPricingCompanionTests
     {
         var block = Block("cc", PlanSupportType.GroupActivity, DayOfWeek.Monday, T(18), T(22), b => b with { Setting = PlanSetting.Centre });
 
-        var line = Assert.Single(QuoteOne(block, Mon12Oct).Lines.Where(l => l.Kind == PlannedLineKind.CentreCapital));
+        var line = Assert.Single(QuoteOne(block, Mon12Oct).Lines, l => l.Kind == PlannedLineKind.CentreCapital);
 
         Assert.Equal((4m, 10.84m), (line.Qty, line.Total));
     }
@@ -247,7 +247,7 @@ public class PlanPricingCompanionTests
     {
         var block = Sta(b => b with { Accommodation = new PlanAccommodation { Nights = 2 }, ParticipantsPresent = 3 });
 
-        var line = Assert.Single(QuoteOne(block, Fri16Oct).Lines.Where(l => l.Kind == PlannedLineKind.ParticipantAccommodation));
+        var line = Assert.Single(QuoteOne(block, Fri16Oct).Lines, l => l.Kind == PlannedLineKind.ParticipantAccommodation);
 
         Assert.Equal(("01_250_0115_1_1", 2m, 162.85m, 325.70m), Row(line));
         Assert.Equal(("D", 1), (line.Unit, line.PaceCategory));

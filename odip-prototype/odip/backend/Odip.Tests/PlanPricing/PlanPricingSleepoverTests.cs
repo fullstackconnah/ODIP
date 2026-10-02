@@ -113,7 +113,7 @@ public class PlanPricingSleepoverTests
         var quote = QuoteOne(block, Fri16Oct);
 
         Assert.Equal(new[] { (daytime, 3m, 73.58m, 220.74m), (evening, 2m, 81.07m, 162.14m), (saturday, 3m, 103.54m, 310.62m) }, quote.Lines.Where(l => l.IsPriced).Select(Row));
-        var night = Assert.Single(quote.Lines.Where(l => !l.IsPriced));
+        var night = Assert.Single(quote.Lines, l => !l.IsPriced);
         Assert.Equal((PlannedLineKind.Sleepover, PlanFailureReason.SleepoverNotAvailable, true), (night.Kind, night.Unpriced, night.Review));
         Assert.Equal(new[] { Fri16Oct, Sat17Oct }, new[] { night.ServiceDate, night.EndDate!.Value });
         Assert.Equal(PlanFailureReason.SleepoverNotAvailable, Assert.Single(quote.Issues).Reason);
@@ -131,7 +131,7 @@ public class PlanPricingSleepoverTests
         var date = new[] { Mon12Oct, Sat17Oct, Sun18Oct }.Single(d => d.DayOfWeek == day);
         var block = Overnight(PlanSupportType.PersonalCare, day, T(22), T(6), b => b with { SleepoverActiveHours = 3m });
 
-        var extra = Assert.Single(QuoteOne(block, date).Lines.Where(l => l.Kind == PlannedLineKind.SleepoverActiveHours));
+        var extra = Assert.Single(QuoteOne(block, date).Lines, l => l.Kind == PlannedLineKind.SleepoverActiveHours);
 
         Assert.Equal((code, 1m, (decimal)rate, (decimal)rate), Row(extra));
     }

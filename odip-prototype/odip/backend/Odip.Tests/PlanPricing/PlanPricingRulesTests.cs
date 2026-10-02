@@ -126,7 +126,7 @@ public class PlanPricingRulesTests
         var quote = QuoteOne(block, Fri16Oct, Without("0107"));
 
         Assert.Equal(new[] { ("01_400_0104_1_1", 3m, 79.60m, 238.80m), ("01_401_0104_1_1", 2m, 87.70m, 175.40m), ("01_402_0104_1_1", 3m, 112.01m, 336.03m) }, quote.Lines.Where(l => l.IsPriced).Select(Row));
-        var night = Assert.Single(quote.Lines.Where(l => !l.IsPriced));
+        var night = Assert.Single(quote.Lines, l => !l.IsPriced);
         Assert.Equal((PlannedLineKind.Sleepover, PlanFailureReason.RegistrationGroupNotHeld), (night.Kind, night.Unpriced));
         Assert.Contains("0107", night.Trace.Why);
     }
