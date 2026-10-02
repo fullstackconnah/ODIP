@@ -9,9 +9,8 @@ import {
   apiErrorMessages, apiErrorStatus, existingAdministrationFromError, hasApiErrorCode, isCompetencyError, isDoseTimeError,
 } from '@/lib/shiftPackageErrors'
 import { SHIFT_PACKAGE_ERROR_CODES } from '@/api/types'
-import { datetimeInputNow } from '@/lib/wallClock'
 import { clockLabel } from './checklist'
-import { providerLocalToUtcInstant } from './shiftTime'
+import { providerLocalToUtcInstant, utcInstantToProviderLocal } from './shiftTime'
 import type { CreateAdministrationDto, MedicationAdministrationStatus, PortalDoseSlotDto, PortalPrnDto, PortalShiftDetailDto } from '@/api/types'
 
 /** What the sheet is recording: a scheduled slot, or an "as needed" dose. */
@@ -59,7 +58,7 @@ function DoseSheetBody({ open, onClose, shift, target, initialOutcome = 'Adminis
   const [idempotencyKey] = useState(() => newCompletionRequestId())
   const [outcome, setOutcome] = useState<Outcome>(initialOutcome)
   const [reason, setReason] = useState('')
-  const [givenAt, setGivenAt] = useState(() => datetimeInputNow(new Date()))
+  const [givenAt, setGivenAt] = useState(() => utcInstantToProviderLocal(new Date().toISOString(), shift.timeZoneId))
   const [doseGiven, setDoseGiven] = useState('')
   const [witnessId, setWitnessId] = useState('')
   const [prnReason, setPrnReason] = useState('')

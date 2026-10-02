@@ -78,6 +78,19 @@ describe('DoseSheet: Given', () => {
   })
 })
 
+describe('DoseSheet: default time given', () => {
+  it('is now in the PROVIDER zone, not the device zone (provider UTC+14, which is no device zone)', async () => {
+    open(slot(), { shift: { ...shift, timeZoneId: 'Pacific/Kiritimati' } })
+    const input = screen.getByLabelText('Time given') as HTMLInputElement
+    const expected = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Pacific/Kiritimati', dateStyle: 'short', timeStyle: 'short' }).format(new Date()).replace(' ', 'T')
+    expect(input.value).toBe(expected)
+    fireEvent.click(screen.getByRole('button', { name: 'Record: Given' }))
+    await waitFor(() => expect(h.record).toHaveBeenCalled())
+    const sent = new Date(h.record.mock.calls[0][0].data.administeredAt).getTime()
+    expect(Math.abs(sent - Date.now())).toBeLessThan(2 * 60_000)
+  })
+})
+
 describe('DoseSheet: not given', () => {
   it.each([['Refused', 'Refused'], ['Withheld', 'Withheld']])('%s needs a reason and sends no administeredAt', async (label, status) => {
     open(slot())
