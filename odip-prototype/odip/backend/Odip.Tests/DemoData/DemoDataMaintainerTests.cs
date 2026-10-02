@@ -25,9 +25,10 @@ public class DemoDataMaintainerTests
             return Task.CompletedTask;
         });
 
+    /// <summary>A shift for the first Demo participant: the guard now insists that what a new row points at belongs to the Demo tenant (L4).</summary>
     private static Shift ShiftFor(DemoRun run, string key) => new()
     {
-        Id = DemoIds.For("shift", "test", key), TenantId = run.TenantId, ParticipantId = Guid.NewGuid(), ServiceDate = run.Anchors.D0.AddDays(3),
+        Id = DemoIds.For("shift", "test", key), TenantId = run.TenantId, ParticipantId = run.Directory.AllParticipants[0].Id, ServiceDate = run.Anchors.D0.AddDays(3),
         StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Status = ShiftStatus.Published,
     };
 
@@ -163,7 +164,7 @@ public class DemoDataMaintainerTests
     public async Task AThrowingPack_IsReported_TheOthersStillRun_AndTheMaintainerDoesNotThrow()
     {
         var env = Env();
-        await env.AddTenantAsync();
+        await DemoFixture.SeedPeopleAsync(env);
         var ran = new List<string>();
         var boom = DemoTestEnv.Pack("boom", (run, _) =>
         {
@@ -194,7 +195,7 @@ public class DemoDataMaintainerTests
     public async Task AGuardViolation_WritesNothingFromThatPack_AndIsReportedAsAFailure()
     {
         var env = Env();
-        await env.AddTenantAsync();
+        await DemoFixture.SeedPeopleAsync(env);
         var bad = DemoTestEnv.Pack("bad", async (run, ct) =>
         {
             run.Db.Shifts.Add(ShiftFor(run, "fine"));
@@ -208,14 +209,14 @@ public class DemoDataMaintainerTests
         Assert.Contains("guard", failure.Message, StringComparison.OrdinalIgnoreCase);
         await using var db = env.AdminDb();
         Assert.Equal(0, await db.Shifts.CountAsync());
-        Assert.Equal(0, await db.Participants.CountAsync());
+        Assert.False(await db.Participants.AnyAsync(p => p.FirstName == "Not"));       // the people the fixture seeded are all that is there
     }
 
     [Fact]
     public async Task AFailedPack_LeavesNoTrackedStateBehindForTheNextPack()
     {
         var env = Env();
-        await env.AddTenantAsync();
+        await DemoFixture.SeedPeopleAsync(env);
         var trackedInNext = -1;
         var boom = DemoTestEnv.Pack("boom", (run, _) => { run.Db.Shifts.Add(ShiftFor(run, "x")); throw new InvalidOperationException("no"); });
         var next = DemoTestEnv.Pack("next", (run, _) => { trackedInNext = run.Db.ChangeTracker.Entries().Count(); return Task.CompletedTask; });

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
@@ -41,6 +42,9 @@ public sealed class DemoOwnedIds
 ///    holidays, early-access requests) can never be written and a stray child row can never point at another tenant's parent;
 ///  - an existing row may change only the columns on <see cref="ModifiableProperties"/>: credential dates on a user (never identity,
 ///    email, role or flags), a status on a shift or leave request, the review stamp on a completion;
+///  - a row being added may only point at users and participants the Demo tenant owns (review finding L4): its own TenantId is stamped by
+///    the context and proves nothing about the row it points at, so a pack that copied a person's id from another tenant's data would
+///    otherwise write a Demo row pointing at somebody else's person;
 ///  - nothing is ever deleted;
 ///  - audit rows (which the audit interceptor writes by itself) may only describe entities of this save or ones the Demo tenant owns.
 ///
@@ -161,6 +165,8 @@ public sealed class DemoTenantGuard
                 continue;
             }
 
+            if (entry.State == EntityState.Added) VerifyReferences(entry, label, inSave, violations);
+
             if (entry.Entity is ITenantEntity tenantEntity)
             {
                 if (tenantEntity.TenantId != _demoTenantId)
@@ -192,6 +198,42 @@ public sealed class DemoTenantGuard
         }
 
         if (violations.Count > 0) throw new DemoGuardViolationException(violations);
+    }
+
+    /// <summary>
+    /// The users and participants a new row points at must be ones the Demo tenant owns: loaded from its own tenant-filtered directory, or
+    /// added in this save. A reference is any foreign key to a user or a participant, and any plain Guid column that is a person by its
+    /// name (<c>...UserId</c>, <c>...StaffId</c>, <c>...ParticipantId</c>): the model keeps many of those without a constraint (who requested,
+    /// recorded or decided), and a constraint would not know about tenants anyway. An empty reference (an unfilled shift) points at nobody.
+    /// Other kinds of row are not checked here: they come out of queries that only see Demo rows, and are Demo rows themselves.
+    /// </summary>
+    private void VerifyReferences(EntityEntry entry, string label, Dictionary<Type, HashSet<Guid>> inSave, List<string> violations)
+    {
+        foreach (var property in entry.Properties)
+        {
+            var kind = ReferenceKind(property.Metadata);
+            if (kind is null) continue;
+            if (property.CurrentValue is not Guid value || value == Guid.Empty) continue;
+            if (!ParentIsOwned(kind.Value, value, inSave))
+                violations.Add($"{label}: {property.Metadata.Name} points at {kind} {value}, which the Demo tenant does not own.");
+        }
+    }
+
+    private static DemoParentKind? ReferenceKind(IReadOnlyProperty property)
+    {
+        if (property.ClrType != typeof(Guid) && property.ClrType != typeof(Guid?)) return null;
+
+        foreach (var foreignKey in property.GetContainingForeignKeys())
+        {
+            var principal = foreignKey.PrincipalEntityType.ClrType;
+            if (principal == typeof(User)) return DemoParentKind.User;
+            if (principal == typeof(Participant)) return DemoParentKind.Participant;
+        }
+
+        var name = property.Name;
+        if (name.EndsWith("UserId", StringComparison.Ordinal) || name.EndsWith("StaffId", StringComparison.Ordinal)) return DemoParentKind.User;
+        if (name.EndsWith("ParticipantId", StringComparison.Ordinal)) return DemoParentKind.Participant;
+        return null;
     }
 
     private static void VerifyModification(EntityEntry entry, Type type, string label, List<string> violations)

@@ -23,6 +23,9 @@ public class DemoTenantGuardTests
     private static readonly Guid DemoTenant = Guid.Parse("b0000000-0000-0000-0000-000000000001");
     private static readonly Guid OtherTenant = Guid.Parse("a0000000-0000-0000-0000-000000000001");
 
+    /// <summary>A participant the Demo tenant owns, which every guard here is told about unless a test says otherwise (review L4).</summary>
+    private static readonly Guid OwnedParticipant = Guid.Parse("d1000000-0000-0000-0000-0000000000f1");
+
     private static DbContextOptions<OdipDbContext> NewOptions(params IInterceptor[] interceptors) =>
         new DbContextOptionsBuilder<OdipDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -41,6 +44,7 @@ public class DemoTenantGuardTests
     {
         var owned = new DemoOwnedIds();
         foreach (var id in knownUsers) owned.Users.Add(id);
+        owned.Participants.Add(OwnedParticipant);
         return new DemoTenantGuard(DemoTenant, owned);
     }
 
@@ -52,7 +56,7 @@ public class DemoTenantGuardTests
 
     private static Shift NewShift(Guid? tenantId = null) => new()
     {
-        Id = Guid.NewGuid(), TenantId = tenantId ?? DemoTenant, ParticipantId = Guid.NewGuid(), ServiceDate = new DateOnly(2026, 10, 5),
+        Id = Guid.NewGuid(), TenantId = tenantId ?? DemoTenant, ParticipantId = OwnedParticipant, ServiceDate = new DateOnly(2026, 10, 5),
         StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Status = ShiftStatus.Published,
     };
 
@@ -339,5 +343,81 @@ public class DemoTenantGuardTests
         var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(db.ChangeTracker));
 
         Assert.Equal(3, ex.Violations.Count);
+    }
+
+    // ── review L4: a new row may only point at people the Demo tenant owns ───────────────────────────────────
+    // A row's own TenantId is stamped by the context, so it proves nothing about the row it POINTS at: a pack that copied a participant,
+    // user or vehicle id from another tenant's data would still write a Demo row, now pointing at somebody else's person.
+
+    [Fact]
+    public async Task Rejects_ARowThatPointsAtAParticipantTheDemoTenantDoesNotOwn()
+    {
+        await using var db = NewDb(NewOptions());
+        var shift = NewShift();
+        shift.ParticipantId = Guid.NewGuid();                           // another tenant's participant, or one made up
+
+        db.Shifts.Add(shift);
+
+        var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(db.ChangeTracker));
+        Assert.Contains(nameof(Shift.ParticipantId), ex.Message);
+        Assert.Contains("Participant", ex.Message);
+    }
+
+    [Fact]
+    public async Task Rejects_ARowThatPointsAtAUserTheDemoTenantDoesNotOwn()
+    {
+        await using var db = NewDb(NewOptions());
+        var shift = NewShift();
+        shift.UserId = Guid.NewGuid();
+
+        db.Shifts.Add(shift);
+
+        var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(db.ChangeTracker));
+        Assert.Contains(nameof(Shift.UserId), ex.Message);
+    }
+
+    [Fact]
+    public async Task Rejects_EveryUnownedUserReferenceOfARow_NotJustTheFirst()
+    {
+        await using var db = NewDb(NewOptions());
+        var worker = Guid.NewGuid();
+        db.LeaveRequests.Add(new LeaveRequest
+        {
+            Id = Guid.NewGuid(), TenantId = DemoTenant, UserId = worker, RequestedByUserId = Guid.NewGuid(), DecidedByUserId = Guid.NewGuid(),
+            StartDate = new DateOnly(2026, 10, 7), EndDate = new DateOnly(2026, 10, 8),
+        });
+
+        var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard(worker).Verify(db.ChangeTracker));
+        Assert.Contains(nameof(LeaveRequest.RequestedByUserId), ex.Message);
+        Assert.Contains(nameof(LeaveRequest.DecidedByUserId), ex.Message);
+        Assert.DoesNotContain(worker.ToString(), ex.Message);              // the one the Demo tenant owns is not reported
+    }
+
+    [Fact]
+    public async Task Passes_ARowThatPointsAtOwnedPeople_AndAnEmptyReferenceIsNotAReference()
+    {
+        await using var db = NewDb(NewOptions());
+        var worker = Guid.NewGuid();
+        var filled = NewShift();
+        filled.UserId = worker;
+        db.Shifts.Add(filled);
+        db.Shifts.Add(NewShift());                                      // unfilled: UserId stays null
+
+        NewGuard(worker).Verify(db.ChangeTracker);
+    }
+
+    [Fact]
+    public async Task APeopleReferenceIsOnlyCheckedOnARowBeingAdded_NotOnAnEditOfOneTheTopUpAlreadyWrote()
+    {
+        var options = NewOptions();
+        var shift = NewShift();
+        shift.UserId = Guid.NewGuid();                                  // written earlier, by something that is no longer in the directory
+        await using var db = await DbWithAsync(options, shift);
+        var tracked = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
+
+        tracked.Status = ShiftStatus.PendingReview;
+        tracked.UpdatedAt = DateTime.UtcNow;
+
+        NewGuard().Verify(db.ChangeTracker);
     }
 }
