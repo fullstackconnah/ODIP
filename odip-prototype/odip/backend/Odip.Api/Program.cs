@@ -165,6 +165,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftClaimGenerationServ
 builder.Services.AddScoped<Odip.Infrastructure.Services.BprCsvService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.InvoiceService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.CatalogueImportService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.PlanPricingService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ServiceAgreementDraftService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ElectronicSigningEvidenceService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.DemoJourneySimulationService>();
