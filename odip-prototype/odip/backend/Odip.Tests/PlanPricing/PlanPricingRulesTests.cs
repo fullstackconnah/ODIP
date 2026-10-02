@@ -298,6 +298,47 @@ public class PlanPricingRulesTests
         Assert.Equal(new[] { ("01_011_0107_1_1", 2m, 147.16m, 294.32m), ("01_015_0107_1_1", 2m, 162.14m, 324.28m) }, QuoteOne(twoWorkers, Mon12Oct, HigherOfPolicy).Lines.Select(Row));
     }
 
+    [Theory]
+    [InlineData(CrossingPolicy.Split)]
+    [InlineData(CrossingPolicy.HigherOf)]
+    public void A_split_for_a_headcount_change_alone_is_not_a_crossing_and_is_not_labelled_as_one(CrossingPolicy crossing)
+    {
+        // Review L6: Saturday 09:00 to 15:00 with the headcount 3 and then 2 is one band cut in two because the number of participants changes, not a support that
+        // crosses a band. It carried the rule crossing:A and the policy "A" (and crossing:B-not-applicable under policy B), which is the "why" a coordinator reads.
+        var block = Block("e8", PlanSupportType.GroupActivity, DayOfWeek.Saturday, T(9), T(15), b => b with
+        {
+            ParticipantsPresent = 3, HeadcountChanges = new[] { new PlanHeadcountChange { From = T(12), ParticipantsPresent = 2 } },
+        });
+
+        var quote = QuoteOne(block, Sat17Oct, PlanPricingPolicy.Default with { Crossing = crossing });
+
+        Assert.Equal(2, quote.Lines.Count);
+        Assert.All(quote.Lines, l =>
+        {
+            Assert.Null(l.Trace.Policy);
+            Assert.DoesNotContain(l.Trace.Rules, r => r.StartsWith("crossing:", StringComparison.Ordinal));
+            Assert.Contains("headcount:segment", l.Trace.Rules);
+        });
+    }
+
+    [Fact]
+    public void A_support_that_crosses_a_band_and_changes_headcount_is_still_a_crossing()
+    {
+        var block = Block("c", PlanSupportType.PersonalCare, DayOfWeek.Monday, T(18), T(22), b => b with
+        {
+            ParticipantsPresent = 2, HeadcountChanges = new[] { new PlanHeadcountChange { From = T(21), ParticipantsPresent = 1 } },
+        });
+
+        var quote = QuoteOne(block, Mon12Oct, SplitPolicy);
+
+        Assert.Equal(3, quote.Lines.Count);   // 18:00-20:00, 20:00-21:00, 21:00-22:00
+        Assert.All(quote.Lines, l =>
+        {
+            Assert.Equal("A", l.Trace.Policy);
+            Assert.Contains("crossing:A", l.Trace.Rules);
+        });
+    }
+
     [Fact]
     public void Policy_B_leaves_a_support_that_does_not_cross_a_boundary_as_it_is_and_does_not_mark_it()
     {

@@ -457,7 +457,8 @@ internal sealed class OccurrencePricer
     {
         var block = occ.Block;
         var segments = Split(occ, piece.Start, piece.End);
-        var crossing = segments.Count > 1;
+        // A crossing is a support that runs across the boundary of a price band: more than one day span. A headcount change cuts a band in two without crossing anything.
+        var crossing = segments.Select(s => s.Span).Distinct(ReferenceEqualityComparer.Instance).Count() > 1;
         var results = new List<(Segment Segment, Priced? Priced, PlannedLine? Unpriced, string? IssueText)>();
 
         foreach (var segment in segments)
