@@ -1,4 +1,5 @@
 using Odip.Domain.Billing.Pricing;
+using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Services;
 using Xunit;
@@ -32,5 +33,51 @@ public class PlanPricingServiceTests
         Assert.Equal(new[] { monday, monday.AddDays(1) }, last.Select(l => l.ServiceDate));
         Assert.DoesNotContain(quote.Lines, l => !l.IsPriced);
         Assert.Empty(quote.Issues);
+    }
+
+    // ── Review M4: the service says what the holiday calendar covers ──────────────
+
+    [Fact]
+    public async Task The_service_reports_the_years_with_no_holiday_rows_for_the_state_and_where_the_overrides_end()
+    {
+        await using var db = Odip.Tests.Catalogue.CatalogueImportTestSupport.CreateDb();
+        await db.Database.EnsureCreatedAsync();   // the seeded overrides run to 25 April 2027
+        db.PublicHolidays.Add(new PublicHoliday { Id = Guid.NewGuid(), Date = new DateOnly(2027, 10, 4), Name = "Labour Day", State = "NSW" });
+        await db.SaveChangesAsync();
+        var block = Block("x", PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(9), T(13));
+
+        var quote = await new PlanPricingService(db).QuoteAsync(Tenant, new[] { block }, new DateOnly(2027, 7, 1), new DateOnly(2028, 6, 30));
+
+        var calendar = Assert.Single(quote.Notices, n => n.Code == "holiday-calendar-missing");
+        Assert.Contains("NSW 2028", calendar.Message);
+        Assert.DoesNotContain("NSW 2027", calendar.Message);        // 2027 has a row
+        Assert.Contains("2027-04-25", Assert.Single(quote.Notices, n => n.Code == "holiday-overrides-end").Message);
+    }
+
+    [Fact]
+    public async Task A_national_row_and_a_period_inside_the_overrides_leave_the_service_with_no_holiday_notice()
+    {
+        await using var db = Odip.Tests.Catalogue.CatalogueImportTestSupport.CreateDb();
+        await db.Database.EnsureCreatedAsync();
+        db.PublicHolidays.Add(new PublicHoliday { Id = Guid.NewGuid(), Date = new DateOnly(2026, 12, 25), Name = "Christmas Day", State = null });
+        await db.SaveChangesAsync();
+        var block = Block("x", PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(9), T(13));
+
+        var quote = await new PlanPricingService(db).QuoteAsync(Tenant, new[] { block }, new DateOnly(2026, 10, 1), new DateOnly(2026, 12, 31));
+
+        Assert.DoesNotContain(quote.Notices, n => n.Code is "holiday-calendar-missing" or "holiday-overrides-end");
+    }
+
+    [Fact]
+    public async Task With_no_override_rows_at_all_the_service_says_there_are_none()
+    {
+        await using var db = Odip.Tests.Catalogue.CatalogueImportTestSupport.CreateDb();   // not created through the model: no seed
+        db.PublicHolidays.Add(new PublicHoliday { Id = Guid.NewGuid(), Date = new DateOnly(2026, 12, 25), Name = "Christmas Day", State = null });
+        await db.SaveChangesAsync();
+        var block = Block("x", PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(9), T(13));
+
+        var quote = await new PlanPricingService(db).QuoteAsync(Tenant, new[] { block }, new DateOnly(2026, 10, 1), new DateOnly(2026, 12, 31));
+
+        Assert.Contains("no public holiday overrides", Assert.Single(quote.Notices, n => n.Code == "holiday-overrides-end").Message);
     }
 }

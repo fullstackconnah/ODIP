@@ -31,10 +31,13 @@ public sealed class PlanPricingService
         var priceable = to >= from && to.DayNumber - from.DayNumber + 1 <= PlanPricingEngine.MaxPeriodDays;
         var catalogue = priceable ? await LoadCatalogueAsync(from, to, ct) : new List<SupportCatalogueItem>();
         var holidays = priceable ? await LoadHolidaysAsync(blocks, from, to, ct) : new List<HolidayEntry>();
+        List<HolidayCoverage>? coverage = priceable ? await LoadCoverageAsync(from, to, ct) : null;
+        DateOnly? overridesThrough = priceable ? await LoadOverridesThroughAsync(ct) : null;
 
         return PlanPricingEngine.Quote(new PlanQuoteRequest
         {
             Blocks = blocks, PeriodFrom = from, PeriodTo = to, Policy = policy, Catalogue = catalogue, Holidays = holidays,
+            HolidayCoverage = coverage, HolidayOverridesThrough = overridesThrough,
         });
     }
 
@@ -50,6 +53,26 @@ public sealed class PlanPricingService
             .Where(item => item.EffectiveFrom <= last && (item.EffectiveTo == null || item.EffectiveTo >= from))
             .ToListAsync(ct);
     }
+
+    /// <summary>
+    /// The (state, year) pairs the synced calendar has any row for, over the years the period reaches (and the day after it), so the engine can say when a year
+    /// has none: the feed syncs this year and the next only, and a period that runs past it would otherwise price every holiday as an ordinary day.
+    /// </summary>
+    private async Task<List<HolidayCoverage>> LoadCoverageAsync(DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        var first = new DateOnly(from.Year, 1, 1);
+        var last = new DateOnly(to.AddDays(1).Year, 12, 31);
+        var rows = await _db.PublicHolidays.AsNoTracking()
+            .Where(h => h.Date >= first && h.Date <= last)
+            .Select(h => new { h.Date, h.State })
+            .Distinct()
+            .ToListAsync(ct);
+        return rows.Select(r => new HolidayCoverage(r.State, r.Date.Year)).Distinct().ToList();
+    }
+
+    /// <summary>The date of the last override row, or <see cref="DateOnly.MinValue"/> when there are none.</summary>
+    private async Task<DateOnly> LoadOverridesThroughAsync(CancellationToken ct) =>
+        await _db.PublicHolidayOverrides.AsNoTracking().MaxAsync(o => (DateOnly?)o.Date, ct) ?? DateOnly.MinValue;
 
     /// <summary>
     /// The public holidays of the blocks' delivery states for the period and the day after it (an occurrence on the last day can end the next day): the

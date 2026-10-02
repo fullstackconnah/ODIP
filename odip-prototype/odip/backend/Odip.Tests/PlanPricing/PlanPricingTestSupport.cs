@@ -93,13 +93,15 @@ internal static class PlanPricingTestSupport
 
     /// <summary>Prices blocks over a period against the real 2026-27 catalogue (or the one given), with the default provider settings unless a policy is given.</summary>
     public static PlanQuote Quote(IEnumerable<PlanBlock> blocks, DateOnly from, DateOnly to, PlanPricingPolicy? policy = null,
-        IEnumerable<HolidayEntry>? holidays = null, IReadOnlyCollection<SupportCatalogueItem>? catalogue = null) =>
+        IEnumerable<HolidayEntry>? holidays = null, IReadOnlyCollection<SupportCatalogueItem>? catalogue = null,
+        IReadOnlyCollection<HolidayCoverage>? holidayCoverage = null, DateOnly? overridesThrough = null) =>
         PlanPricingEngine.Quote(new PlanQuoteRequest
         {
             Blocks = blocks.ToList(), PeriodFrom = from, PeriodTo = to,
             Policy = policy ?? PlanPricingPolicy.Default,
             Catalogue = catalogue ?? RealCatalogue,
             Holidays = holidays?.ToList() ?? new List<HolidayEntry>(),
+            HolidayCoverage = holidayCoverage, HolidayOverridesThrough = overridesThrough,
         });
 
     /// <summary>One block on one day.</summary>

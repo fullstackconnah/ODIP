@@ -12,6 +12,9 @@ public sealed record HolidayEntry(DateOnly Date, string? State, string Name, Tim
     public bool IsWholeDay => From is null && To is null;
 }
 
+/// <summary>A (state, year) the synced holiday calendar has rows for: <see cref="State"/> null covers every state.</summary>
+public sealed record HolidayCoverage(string? State, int Year);
+
 /// <summary>The holidays of every state for a quote. <see cref="On"/> answers for one delivery state on one date.</summary>
 public sealed class HolidayCalendar
 {

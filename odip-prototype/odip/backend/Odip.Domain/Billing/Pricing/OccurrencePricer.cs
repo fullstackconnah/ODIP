@@ -95,6 +95,10 @@ internal sealed class OccurrencePricer
         public bool ReviewAll { get; set; }
         /// <summary>The clocks change inside the overnight window and that decides whether it is a sleepover: every line is Provisional and for review, and says question 13.</summary>
         public bool ClockChange { get; set; }
+        /// <summary>A named date (26 December, 25 April) with no calendar row, and the block says Charge: it is priced as a whole-day public holiday.</summary>
+        public HolidayEntry? AssumedHoliday { get; set; }
+        /// <summary>A named date with no calendar row and nobody has decided: priced as an ordinary day, every line for review and says question 8.</summary>
+        public bool NamedDateReview { get; set; }
         /// <summary>The priced hourly support lines with their catalogue rows, which the companion lines are priced against.</summary>
         public List<(PlannedLine Line, ItemChoice Choice)> Support { get; } = new();
         public PriceZone PriceZone => Block.Location.Zone;
@@ -121,6 +125,24 @@ internal sealed class OccurrencePricer
         if (!ignoreHolidays)
         {
             occ.Result.Holiday = FirstHoliday(occ, start, end);
+            // The pricing schedule names 26 December and 25 April as public holidays, but a state's calendar can leave the day out (a weekend, a substitute
+            // day): with no row for the state on it the engine does not guess. Undecided it is priced as an ordinary day and flagged; Charge prices it as a
+            // whole-day public holiday and Skip drops the occurrence, as for any other holiday.
+            if (occ.Result.Holiday is null && NamedDateWithoutRow(occ) is { } named)
+            {
+                if (block.OnPublicHoliday == HolidayDecision.Review)
+                {
+                    occ.NamedDateReview = true;
+                    occ.Result.Issues.Add((PlanFailureReason.NamedDateNotInCalendar,
+                        $"Block '{block.Id}': a day in this block falls on 26 December or 25 April, which the pricing schedule names as public holidays, but the holiday calendar has no row for {state} on it. It is priced as an ordinary day for review: choose Charge to price it as a public holiday or Skip to drop it, or ask the owner to add the day to the overrides."));
+                }
+                else
+                {
+                    occ.Result.Holiday = named;
+                    if (block.OnPublicHoliday == HolidayDecision.Charge) occ.AssumedHoliday = named;
+                }
+            }
+
             if (occ.Result.Holiday is not null && block.OnPublicHoliday == HolidayDecision.Skip)
             {
                 occ.Result.Skipped = true;
@@ -152,17 +174,26 @@ internal sealed class OccurrencePricer
         AddActivityTransport(occ);
         AddAccommodation(occ);
 
-        if (occ.ReviewAll || occ.ClockChange)
+        if (occ.ReviewAll || occ.ClockChange || occ.NamedDateReview)
             for (var i = 0; i < occ.Result.Lines.Count; i++)
             {
                 var line = occ.Result.Lines[i];
-                occ.Result.Lines[i] = occ.ClockChange
-                    ? line with
-                    {
-                        Flags = line.Flags | PlannedLineFlags.Review | PlannedLineFlags.Provisional,
-                        Trace = line.Trace with { Rules = line.Trace.Rules.Append("clock-change:sleepover-reading").ToList(), OpenQuestions = line.Trace.OpenQuestions.Append(13).Distinct().OrderBy(q => q).ToList() },
-                    }
-                    : line with { Flags = line.Flags | PlannedLineFlags.Review };
+                var rules = line.Trace.Rules.ToList();
+                var questions = line.Trace.OpenQuestions.ToList();
+                var flags = line.Flags | PlannedLineFlags.Review;
+                if (occ.ClockChange)
+                {
+                    flags |= PlannedLineFlags.Provisional;
+                    rules.Add("clock-change:sleepover-reading");
+                    questions.Add(13);
+                }
+                if (occ.NamedDateReview)
+                {
+                    rules.Add("holiday:named-date-no-calendar-row");
+                    questions.Add(8);
+                }
+
+                occ.Result.Lines[i] = line with { Flags = flags, Trace = line.Trace with { Rules = rules, OpenQuestions = questions.Distinct().OrderBy(q => q).ToList() } };
             }
 
         return occ.Result;
@@ -197,6 +228,25 @@ internal sealed class OccurrencePricer
             foreach (var span in Spans(DateOnly.FromDateTime(day), occ.State, false))
                 if (span.IsHoliday && day.AddMinutes(span.FromMinute) < to && day.AddMinutes(span.ToMinute) > from)
                     return span.Holiday;
+        return null;
+    }
+
+    /// <summary>The bands of a date for this occurrence: the calendar's, except a named date the block has said to charge, which is a whole-day public holiday.</summary>
+    private IReadOnlyList<DaySpan> SpansOf(Occurrence occ, DateOnly date) =>
+        occ.AssumedHoliday is { } assumed && assumed.Date == date ? DayBands.For(date, new[] { assumed }) : Spans(date, occ.State, occ.IgnoreHolidays);
+
+    private const string NamedDateSource = "named date: pricing schedule Part 4, no row in the holiday calendar";
+
+    /// <summary>The first day of the occurrence that is 26 December or 25 April, when the calendar holds no row for the state on it (not even a part-day one).</summary>
+    private HolidayEntry? NamedDateWithoutRow(Occurrence occ)
+    {
+        for (var day = occ.Start.Date; day <= LastDay(occ.End); day = day.AddDays(1))
+        {
+            var date = DateOnly.FromDateTime(day);
+            var name = (date.Month, date.Day) switch { (12, 26) => "Boxing Day", (4, 25) => "Anzac Day", _ => null };
+            if (name is not null && _calendar.On(date, occ.State).Count == 0) return new HolidayEntry(date, occ.State, name, null, null, NamedDateSource);
+        }
+
         return null;
     }
 
@@ -341,7 +391,7 @@ internal sealed class OccurrencePricer
 
     private ClaimDayType DayTypeOfDate(Occurrence occ, DateOnly date)
     {
-        var spans = Spans(date, occ.State, occ.IgnoreHolidays);
+        var spans = SpansOf(occ, date);
         if (spans.Any(s => s.IsHoliday && s.Holiday!.IsWholeDay)) return ClaimDayType.PublicHoliday;
         return date.DayOfWeek switch { DayOfWeek.Saturday => ClaimDayType.Saturday, DayOfWeek.Sunday => ClaimDayType.Sunday, _ => ClaimDayType.Weekday };
     }
@@ -353,7 +403,7 @@ internal sealed class OccurrencePricer
         var segments = new List<Segment>();
         for (var day = from.Date; day <= LastDay(to); day = day.AddDays(1))
         {
-            foreach (var span in Spans(DateOnly.FromDateTime(day), occ.State, occ.IgnoreHolidays))
+            foreach (var span in SpansOf(occ, DateOnly.FromDateTime(day)))
             {
                 var lo = Max(day.AddMinutes(span.FromMinute), from);
                 var hi = Min(day.AddMinutes(span.ToMinute), to);
@@ -484,7 +534,8 @@ internal sealed class OccurrencePricer
         {
             flags |= PlannedLineFlags.HolidayExposure;
             if (block.OnPublicHoliday == HolidayDecision.Review) flags |= PlannedLineFlags.Review;
-            if (span.Holiday!.IsWholeDay) rules.Add("holiday:state-calendar");
+            if (span.Holiday!.Source == NamedDateSource) rules.Add("holiday:named-date");
+            else if (span.Holiday.IsWholeDay) rules.Add("holiday:state-calendar");
             else
             {
                 // The research assumes the public holiday rate applies only inside the declared hours (NDIS-CODES 5.3): applied, and said so.

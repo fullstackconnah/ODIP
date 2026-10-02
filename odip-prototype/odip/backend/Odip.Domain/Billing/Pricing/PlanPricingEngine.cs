@@ -69,6 +69,8 @@ public static class PlanPricingEngine
         {
             var pricer = new OccurrencePricer(policy, new PlanCatalogue(request.Catalogue ?? Array.Empty<SupportCatalogueItem>()), new HolidayCalendar(request.Holidays ?? Array.Empty<HolidayEntry>()));
             var seen = new HashSet<string>(StringComparer.Ordinal);
+            var states = new SortedSet<string>(StringComparer.Ordinal);
+            var runsPastTheLastDay = false;
 
             foreach (var block in blocks)
             {
@@ -98,6 +100,9 @@ public static class PlanPricingEngine
                     issues.Add(id, refusal.Reason, refusal.Message, null);
                     continue;
                 }
+
+                states.Add(block.Location.State.Trim().ToUpperInvariant());
+                runsPastTheLastDay |= block.EndsNextDay && block.Days.Contains(request.PeriodTo.DayOfWeek);
 
                 var occurrences = 0;
                 var skipped = 0;
@@ -131,9 +136,40 @@ public static class PlanPricingEngine
                 var priced = blockLines.Where(l => l.IsPriced).ToList();
                 blockTotals.Add(new BlockTotal(id, priced.Sum(l => l.Total), SupportHours(priced), occurrences, skipped));
             }
+
+            AddHolidayNotices(notices, request, states, runsPastTheLastDay);
         }
 
         return Assemble(request, lines, issues.ToList(), notices, holidayOccurrences, blockTotals);
+    }
+
+    /// <summary>
+    /// Says so when the holiday calendar cannot be trusted for the period: a year with no rows for a delivery state (the feed stops, or has not synced), or a period
+    /// that runs past the last override row. Without rows the engine prices a holiday as an ordinary day, and that is a quiet error of 122% on a weekday.
+    /// </summary>
+    private static void AddHolidayNotices(List<PlanNotice> notices, PlanQuoteRequest request, IReadOnlyCollection<string> states, bool runsPastTheLastDay)
+    {
+        if (states.Count == 0) return;
+
+        if (request.HolidayCoverage is { } coverage)
+        {
+            var lastYear = runsPastTheLastDay ? request.PeriodTo.AddDays(1).Year : request.PeriodTo.Year;   // an occurrence on the last day can end on the next
+            var missing = new List<string>();
+            foreach (var state in states)
+                for (var year = request.PeriodFrom.Year; year <= lastYear; year++)
+                    if (!coverage.Any(c => c.Year == year && (c.State is null || string.Equals(c.State.Trim(), state, StringComparison.OrdinalIgnoreCase))))
+                        missing.Add(string.Create(CultureInfo.InvariantCulture, $"{state} {year}"));
+
+            if (missing.Count > 0)
+                notices.Add(new PlanNotice("holiday-calendar-missing",
+                    $"The public holiday calendar has no rows for {string.Join(", ", missing)}: holidays in those years are priced as ordinary days until the calendar is synced or the days are added.", 8));
+        }
+
+        if (request.HolidayOverridesThrough is { } through && request.PeriodTo > through)
+            notices.Add(new PlanNotice("holiday-overrides-end",
+                through == DateOnly.MinValue
+                    ? "There are no public holiday overrides stored: a part-day holiday, or Boxing Day or Anzac Day on a weekend, that the synced calendar leaves out is priced as an ordinary day."
+                    : string.Create(CultureInfo.InvariantCulture, $"The public holiday overrides (the gaps in the synced calendar and the part-day holidays) run to {through:yyyy-MM-dd} and this period runs to {request.PeriodTo:yyyy-MM-dd}: a part-day holiday, or Boxing Day or Anzac Day on a weekend, after that date may be missing and is priced as an ordinary day."), 8));
     }
 
     // ── Refusing a block ──────────────────────────────────────────────────────────

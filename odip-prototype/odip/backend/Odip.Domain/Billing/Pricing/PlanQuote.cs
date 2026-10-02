@@ -69,6 +69,8 @@ public enum PlanFailureReason
     TravelNotClaimable = 13,
     /// <summary>The clocks change inside an overnight window, so it is shorter or longer in elapsed hours than on the clock and whether it is a sleepover depends on how the 8 hours are counted (the engine counts elapsed hours).</summary>
     SleepoverClockChange = 14,
+    /// <summary>26 December or 25 April, which the pricing schedule names as public holidays, falls in the period and the holiday calendar has no row for the state on that date: priced as an ordinary day and left for a person (Charge prices it as a holiday, Skip drops it).</summary>
+    NamedDateNotInCalendar = 15,
 }
 
 /// <summary>Why a line is priced the way it is: the rules applied, the catalogue row and the dates it was priced from, and the group arithmetic.</summary>
@@ -181,6 +183,13 @@ public sealed record PlanQuoteRequest
     public IReadOnlyCollection<SupportCatalogueItem> Catalogue { get; init; } = Array.Empty<SupportCatalogueItem>();
     /// <summary>The synced public holidays and the override rows, as one list.</summary>
     public IReadOnlyCollection<HolidayEntry> Holidays { get; init; } = Array.Empty<HolidayEntry>();
+    /// <summary>
+    /// The (state, year) pairs the holiday list is known to cover (a year the feed has synced for that state, or for every state). The engine says so when the
+    /// period reaches a year of a delivery state that is not here; null means it was not asked, and nothing is said.
+    /// </summary>
+    public IReadOnlyCollection<HolidayCoverage>? HolidayCoverage { get; init; }
+    /// <summary>The date of the last holiday override row (the owner-maintained gaps and part-day holidays); the engine says so when the period runs past it. <see cref="DateOnly.MinValue"/> means there are none; null means it was not asked.</summary>
+    public DateOnly? HolidayOverridesThrough { get; init; }
 }
 
 /// <summary>The result of pricing a set of blocks over a period.</summary>

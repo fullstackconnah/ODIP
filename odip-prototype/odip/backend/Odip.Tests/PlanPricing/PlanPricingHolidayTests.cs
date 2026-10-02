@@ -182,4 +182,148 @@ public class PlanPricingHolidayTests
 
         Assert.Equal(("01_012_0107_1_1", 4m, 163.46m, 653.84m), Row(Assert.Single(quote.Lines)));
     }
+
+    // ── Review M4: is the calendar there at all? ──────────────────────────────────
+
+    private static PlanQuote Notices(PlanBlock block, DateOnly from, DateOnly to, IReadOnlyCollection<HolidayCoverage>? coverage, DateOnly? overridesThrough) =>
+        Quote(new[] { block }, from, to, holidayCoverage: coverage, overridesThrough: overridesThrough);
+
+    [Fact]
+    public void A_period_that_reaches_a_year_with_no_holiday_rows_for_the_delivery_state_says_so()
+    {
+        var coverage = new[] { new HolidayCoverage("NSW", 2026), new HolidayCoverage("VIC", 2027) };
+
+        var quote = Notices(Community(), new DateOnly(2026, 12, 1), new DateOnly(2027, 2, 28), coverage, null);
+
+        var notice = Assert.Single(quote.Notices, n => n.Code == "holiday-calendar-missing");
+        Assert.Equal(8, notice.OpenQuestion);
+        Assert.Contains("NSW 2027", notice.Message);
+        Assert.DoesNotContain("NSW 2026", notice.Message);      // 2026 is covered
+        Assert.Contains(quote.OpenQuestions, q => q.Number == 8);
+        Assert.False(quote.NeedsReview);                        // a notice does not block approval
+    }
+
+    [Fact]
+    public void A_national_row_covers_every_state_and_a_period_inside_covered_years_says_nothing()
+    {
+        var qld = Community() with { Location = new PlanLocation { State = "QLD" } };
+
+        var covered = Notices(qld, new DateOnly(2026, 10, 1), new DateOnly(2026, 12, 20), new[] { new HolidayCoverage(null, 2026) }, null);
+        var other = Notices(qld, new DateOnly(2026, 10, 1), new DateOnly(2026, 12, 20), new[] { new HolidayCoverage("NSW", 2026) }, null);
+        var unknown = Notices(qld, new DateOnly(2026, 10, 1), new DateOnly(2026, 12, 20), null, null);
+
+        Assert.DoesNotContain(covered.Notices, n => n.Code == "holiday-calendar-missing");
+        Assert.Contains("QLD 2026", Assert.Single(other.Notices, n => n.Code == "holiday-calendar-missing").Message);
+        Assert.DoesNotContain(unknown.Notices, n => n.Code == "holiday-calendar-missing");        // coverage not supplied: no check
+    }
+
+    [Fact]
+    public void The_day_after_the_last_day_counts_because_an_occurrence_can_run_into_it()
+    {
+        var block = Block("x", PlanSupportType.PersonalCare, DayOfWeek.Thursday, T(22), T(2));
+
+        var quote = Notices(block, new DateOnly(2026, 12, 1), new DateOnly(2026, 12, 31), new[] { new HolidayCoverage("NSW", 2026) }, null);
+
+        Assert.Contains("NSW 2027", Assert.Single(quote.Notices, n => n.Code == "holiday-calendar-missing").Message);   // Thursday 31 December 22:00 ends on 1 January 2027
+    }
+
+    [Fact]
+    public void A_period_that_runs_past_the_last_override_row_says_so_and_no_rows_at_all_says_that()
+    {
+        var covered = new[] { new HolidayCoverage("NSW", 2027), new HolidayCoverage("NSW", 2028) };
+
+        var past = Notices(Community(), new DateOnly(2027, 7, 1), new DateOnly(2028, 6, 30), covered, new DateOnly(2027, 4, 25));
+        var inside = Notices(Community(), new DateOnly(2027, 1, 1), new DateOnly(2027, 4, 25), covered, new DateOnly(2027, 4, 25));
+        var none = Notices(Community(), new DateOnly(2027, 7, 1), new DateOnly(2027, 7, 31), covered, DateOnly.MinValue);
+
+        var notice = Assert.Single(past.Notices, n => n.Code == "holiday-overrides-end");
+        Assert.Equal(8, notice.OpenQuestion);
+        Assert.Contains("2027-04-25", notice.Message);
+        Assert.DoesNotContain(inside.Notices, n => n.Code == "holiday-overrides-end");
+        Assert.Contains("no public holiday overrides", Assert.Single(none.Notices, n => n.Code == "holiday-overrides-end").Message);
+    }
+
+    // ── Review M4: the named dates ────────────────────────────────────────────────
+
+    private static PlanBlock Personal(DayOfWeek day, string state, HolidayDecision decision = HolidayDecision.Review) =>
+        Block("named", PlanSupportType.PersonalCare, day, T(9), T(13), b => b with { Location = new PlanLocation { State = state }, OnPublicHoliday = decision });
+
+    [Fact]
+    public void Boxing_Day_with_no_calendar_row_is_priced_as_an_ordinary_day_and_flagged_for_review_never_guessed()
+    {
+        // Saturday 26 December 2026 in Tasmania: the state's own list has Monday 28 December, and the schedule names 26 December as a public holiday.
+        var quote = QuoteOne(Personal(DayOfWeek.Saturday, "TAS"), new DateOnly(2026, 12, 26));
+
+        var line = Assert.Single(quote.Lines);
+        Assert.Equal(("01_013_0107_1_1", 4m, 103.54m, 414.16m), Row(line));                      // the Saturday rate, as it was before this round
+        Assert.True(line.Review);
+        Assert.False(line.HolidayExposure);
+        Assert.Contains(8, line.Trace.OpenQuestions);
+        var issue = Assert.Single(quote.Issues);
+        Assert.Equal((PlanFailureReason.NamedDateNotInCalendar, "named"), (issue.Reason, issue.BlockId));
+        Assert.Contains("26 December", issue.Message);
+        Assert.Empty(quote.HolidayOccurrences);
+        Assert.True(quote.NeedsReview);
+    }
+
+    [Fact]
+    public void Anzac_Day_on_a_Sunday_with_no_calendar_row_is_flagged_and_Charge_prices_the_holiday_rate_and_Skip_drops_it()
+    {
+        var anzac = new DateOnly(2027, 4, 25);   // a Sunday; Queensland observes Monday 26 April
+
+        var review = QuoteOne(Personal(DayOfWeek.Sunday, "QLD"), anzac);
+        var charge = QuoteOne(Personal(DayOfWeek.Sunday, "QLD", HolidayDecision.Charge), anzac);
+        var skip = QuoteOne(Personal(DayOfWeek.Sunday, "QLD", HolidayDecision.Skip), anzac);
+
+        Assert.Equal(("01_014_0107_1_1", 534.00m, true), (review.Lines[0].ItemCode!, review.Lines[0].Total, review.Lines[0].Review));
+        var line = Assert.Single(charge.Lines);
+        Assert.Equal(("01_012_0107_1_1", 4m, 163.46m, 653.84m), Row(line));                       // decided: the public holiday rate
+        Assert.Equal(PlannedLineFlags.HolidayExposure, line.Flags);
+        Assert.Equal("Anzac Day", line.Trace.HolidayName);
+        var occurrence = Assert.Single(charge.HolidayOccurrences);
+        Assert.Equal(("Anzac Day", 653.84m, 534.00m, 119.84m), (occurrence.HolidayName, occurrence.AtHolidayRates, occurrence.AtOrdinaryRates, occurrence.Uplift));
+        Assert.Empty(charge.Issues);
+        Assert.Empty(skip.Lines);
+        Assert.True(Assert.Single(skip.HolidayOccurrences).Skipped);
+    }
+
+    [Fact]
+    public void A_calendar_row_for_the_state_on_the_date_means_the_named_date_needs_no_flag_and_another_states_row_does_not_count()
+    {
+        var date = new DateOnly(2026, 12, 26);
+
+        var own = QuoteOne(Personal(DayOfWeek.Saturday, "NSW", HolidayDecision.Charge), date, holidays: new[] { Whole(date, "NSW", "Boxing Day") });
+        var other = QuoteOne(Personal(DayOfWeek.Saturday, "TAS"), date, holidays: new[] { Whole(date, "NSW", "Boxing Day") });
+        var national = QuoteOne(Personal(DayOfWeek.Saturday, "TAS"), date, holidays: new[] { Whole(date, null, "Boxing Day") });
+
+        Assert.Empty(own.Issues);
+        Assert.Equal("Boxing Day", own.Lines[0].Trace.HolidayName);
+        Assert.Contains(other.Issues, i => i.Reason == PlanFailureReason.NamedDateNotInCalendar);
+        Assert.DoesNotContain(national.Issues, i => i.Reason == PlanFailureReason.NamedDateNotInCalendar);
+    }
+
+    [Fact]
+    public void The_named_date_is_met_by_a_support_that_runs_into_it_and_only_26_December_and_25_April_are_named()
+    {
+        var night = Block("night", PlanSupportType.PersonalCare, DayOfWeek.Friday, T(22), T(2), b => b with { Location = new PlanLocation { State = "TAS" } });
+
+        var intoBoxingDay = QuoteOne(night, new DateOnly(2026, 12, 25));                                                   // Friday 25 December 22:00 to Saturday 26 December 02:00
+        var christmasOnly = QuoteOne(night with { Days = new[] { DayOfWeek.Thursday } }, new DateOnly(2026, 12, 24));    // ends on the 25th: not named here
+        var newYear = QuoteOne(Personal(DayOfWeek.Friday, "TAS"), new DateOnly(2027, 1, 1));
+
+        Assert.Contains(intoBoxingDay.Issues, i => i.Reason == PlanFailureReason.NamedDateNotInCalendar);
+        Assert.DoesNotContain(christmasOnly.Issues, i => i.Reason == PlanFailureReason.NamedDateNotInCalendar);
+        Assert.DoesNotContain(newYear.Issues, i => i.Reason == PlanFailureReason.NamedDateNotInCalendar);
+    }
+
+    [Fact]
+    public void The_same_named_date_across_months_of_one_block_is_one_issue_with_a_count()
+    {
+        var everyDay = Block("daily", PlanSupportType.PersonalCare, DayOfWeek.Monday, T(9), T(13), b => b with { Days = Enum.GetValues<DayOfWeek>().ToArray() });
+
+        var quote = Quote(new[] { everyDay }, new DateOnly(2026, 12, 20), new DateOnly(2027, 5, 1));
+
+        var issue = Assert.Single(quote.Issues);       // 26 December 2026 and 25 April 2027, one issue
+        Assert.Equal((PlanFailureReason.NamedDateNotInCalendar, 2, new DateOnly(2026, 12, 26)), (issue.Reason, issue.Count, issue.FirstDate));
+    }
 }
