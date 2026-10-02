@@ -207,15 +207,23 @@ public class AdminUsersController : ControllerBase
             // User already exists in Firebase — that's OK, they'll be able to sign in.
             // We didn't create anything, so there's nothing to compensate for.
         }
+        catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex))
+        {
+            // Firebase refused the address itself. Retrying cannot fix that and correcting the address can, so it is the admin's to act on (400), not
+            // a fault on our side (502). Nothing was created, in Firebase or in the database.
+            _logger.LogWarning("Firebase refused the address of a new user as invalid: {Email}", email);
+            return BadRequest(ApiResponse<object>.Fail("That doesn't look like a valid email address. Correct it first."));
+        }
         catch (Exception ex)
         {
             // Deliberately broad: this scope wraps only the single external Firebase call.
             // The confirmed failure mode (TokenResponseException from the Google.Apis auth
             // stack when the service account can't be authenticated) is NOT a
             // FirebaseAuthException, so a narrower catch would let it through unhandled again.
+            // The line says where to turn rather than promising a retry will help: an unusable service account stays unusable.
             _logger.LogError(ex, "Failed to create Firebase Auth user for {Email}", email);
             return StatusCode(StatusCodes.Status502BadGateway,
-                ApiResponse<object>.Fail("Unable to create the user's sign-in account. Please try again later."));
+                ApiResponse<object>.Fail("Unable to create the user's sign-in account. If it keeps happening, ask whoever runs the Firebase project."));
         }
 
         var user = new User
@@ -339,15 +347,29 @@ public class AdminUsersController : ControllerBase
             // Firebase user may not exist if they were created before this feature — skip.
             // Nothing was changed in Firebase, so there's nothing to compensate for.
         }
+        catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex) && email != originalEmail)
+        {
+            // The sync looks the account up by the ORIGINAL address, and Firebase refuses it as malformed, so no account can exist for it. This edit
+            // is CHANGING that address: refusing here would make exactly the edit that fixes it impossible. Skip the sync (there is nothing to
+            // sync) and save the correction; the corrected address gets its account from the sign-in-account route.
+            _logger.LogWarning("Skipping the Firebase sync of user {UserId}: its stored address is not one Firebase accepts, and this edit changes it", user.Id);
+        }
+        catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex))
+        {
+            // The stored address is malformed and this edit leaves it as it is: retrying cannot fix that, correcting the address can.
+            _logger.LogWarning("Firebase refused the stored address of user {UserId} as invalid", user.Id);
+            return BadRequest(ApiResponse<object>.Fail("That doesn't look like a valid email address. Correct it first."));
+        }
         catch (Exception ex)
         {
             // Deliberately broad: this scope wraps only the single external Firebase call.
             // The confirmed failure mode (TokenResponseException from the Google.Apis auth
             // stack) is NOT a FirebaseAuthException, so a narrower catch would let it through
             // unhandled again, as it did before this fix.
+            // The line says where to turn rather than promising a retry will help: an unusable service account stays unusable.
             _logger.LogError(ex, "Failed to sync user {Email} to Firebase Auth", originalEmail);
             return StatusCode(StatusCodes.Status502BadGateway,
-                ApiResponse<object>.Fail("Unable to sync the user's sign-in account. Please try again later."));
+                ApiResponse<object>.Fail("Unable to sync the user's sign-in account. If it keeps happening, ask whoever runs the Firebase project."));
         }
 
         user.FirstName = dto.FirstName;
