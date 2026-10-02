@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 // Every URL comes from the environment so the same suite can later point at another host.
 export default defineConfig({
   testDir: './tests',
+  globalSetup: './global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
