@@ -5,11 +5,18 @@ namespace Odip.Infrastructure.DemoData.Packs;
 
 /// <summary>
 /// Staff credentials (decision D1, plan 2.2). Every Demo user's credential dates were NULL, so every roster check on any worker fired
-/// WSC_MISSING and the Qualifications screen showed every flagged credential as an issue. This fills only the columns that are NULL, on the
-/// ten existing staff the plan names, once: offsets are days from the date of the first fill and the dates never move afterwards. Healthy
-/// staff get dates one to two years out so the demo does not rot soon; the near ones age into "expired" on purpose (that is the story).
-/// A flag that is not ticked gets no date, and Jade's worker screening stays empty on purpose (the WSC_MISSING story). Identity, email,
-/// role and flags are never touched (the guard refuses it).
+/// WSC_MISSING and the Qualifications screen showed every flagged credential as an issue. This fills the ten existing staff the plan names
+/// ONCE (review decision M1): a person is filled only while EVERY column the plan covers for them is NULL, and then all of those columns
+/// are filled together (a flagged one only if its flag is ticked), with offsets in days from the date of that fill. From then on the person
+/// is left alone, so a date an owner edits is never overwritten and a credential a presenter clears, to show a missing-credential finding,
+/// stays cleared: the columns are never refilled one by one, and the dates never move afterwards. Healthy staff get dates one to two years
+/// out so the demo does not rot soon; the near ones age into "expired" on purpose (that is the story). A flag that is not ticked gets no
+/// date. Identity, email, role and flags are never touched (the guard refuses it).
+///
+/// Jade has no worker screening planned (the WSC_MISSING story: her screening stays empty on purpose), so the columns that decide whether
+/// she is untouched are her other four; a screening somebody gives her does not count as started. The edge of "all NULL": no marker is
+/// kept, so a person whose every covered column is cleared at once looks untouched and is filled again on the next tick. To keep a gap
+/// in a person's credentials, leave one covered column of theirs set. The runbook must say this and not "empty columns are refilled".
 ///
 /// Afterwards the Qualifications tile shows 8 credentials on 6 staff: Rachel (manual handling), Brendan (driver licence), Emily (first
 /// aid expired), Daniel (screening and medication), Priya (first aid due, medication expired), Lachlan (screening lapses in two days).
@@ -52,28 +59,33 @@ public sealed class StaffCredentialsPack : IDemoPack
                 continue;
             }
 
+            // Filled once: a person who already has any column the plan covers (filled by an earlier tick, or typed or kept by an owner)
+            // is left exactly as they are, so a credential cleared on purpose stays cleared.
+            if (!IsUntouched(plan, user)) continue;
+
             var before = filled;
             if (plan.Screening is { } screening)
             {
-                if (user.WorkerScreeningNumber is null) { user.WorkerScreeningNumber = screeningNumber; filled++; }
-                if (user.WorkerScreeningExpiryDate is null) { user.WorkerScreeningExpiryDate = Date(run, screening); filled++; }
+                user.WorkerScreeningNumber = screeningNumber;
+                user.WorkerScreeningExpiryDate = Date(run, screening);
+                filled += 2;
             }
-            if (plan.FirstAid is { } firstAid && user.IsFirstAidQualified && user.FirstAidExpiryDate is null)
+            if (plan.FirstAid is { } firstAid && user.IsFirstAidQualified)
             {
                 user.FirstAidExpiryDate = Date(run, firstAid);
                 filled++;
             }
-            if (plan.Driver is { } driver && user.IsDriverEligible && user.DriverLicenceExpiryDate is null)
+            if (plan.Driver is { } driver && user.IsDriverEligible)
             {
                 user.DriverLicenceExpiryDate = Date(run, driver);
                 filled++;
             }
-            if (plan.ManualHandling is { } manualHandling && user.IsManualHandlingCompetent && user.ManualHandlingExpiryDate is null)
+            if (plan.ManualHandling is { } manualHandling && user.IsManualHandlingCompetent)
             {
                 user.ManualHandlingExpiryDate = Date(run, manualHandling);
                 filled++;
             }
-            if (plan.Medication is { } medication && user.IsMedicationCompetent && user.MedicationCompetencyExpiryDate is null)
+            if (plan.Medication is { } medication && user.IsMedicationCompetent)
             {
                 user.MedicationCompetencyExpiryDate = Date(run, medication);
                 filled++;
@@ -85,6 +97,17 @@ public sealed class StaffCredentialsPack : IDemoPack
         await run.SaveAsync(ct);
         run.Changed("credential columns", filled);
     }
+
+    /// <summary>
+    /// True while every column the plan covers for this person is NULL. A column counts whether or not its flag is ticked (a date typed under
+    /// an un-ticked flag is somebody's), and a column the plan does not cover (Jade's screening) never counts.
+    /// </summary>
+    private static bool IsUntouched(Plan plan, User user) =>
+        (plan.Screening is null || (user.WorkerScreeningNumber is null && user.WorkerScreeningExpiryDate is null))
+        && (plan.FirstAid is null || user.FirstAidExpiryDate is null)
+        && (plan.Driver is null || user.DriverLicenceExpiryDate is null)
+        && (plan.ManualHandling is null || user.ManualHandlingExpiryDate is null)
+        && (plan.Medication is null || user.MedicationCompetencyExpiryDate is null);
 
     /// <summary>Credential dates are calendar dates in the provider's own calendar: offset from provider-local today, never the UTC date.</summary>
     private static DateOnly Date(DemoRun run, int offsetDays) => run.Anchors.D0.AddDays(offsetDays);

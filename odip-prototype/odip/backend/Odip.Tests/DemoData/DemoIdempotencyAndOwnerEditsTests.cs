@@ -293,4 +293,41 @@ public class DemoIdempotencyAndOwnerEditsTests
         Assert.Equal(ownersDate, (await check.Users.SingleAsync(u => u.Id == DemoFixture.StaffId("james"))).FirstAidExpiryDate);
         Assert.Equal("0412 345 999", (await check.ParticipantContactRoles.Include(r => r.Person).SingleAsync(r => r.Id == contactRole)).Person!.Mobile);
     }
+
+    // Review M1: the credentials are filled ONCE, so clearing one (to show a missing-credential finding) is a human edit that survives too.
+    private static async Task<Dictionary<Guid, string>> CredentialColumnsAsync(DemoTestEnv env)
+    {
+        await using var db = env.AdminDb();
+        return (await db.Users.ToListAsync()).ToDictionary(u => u.Id, u =>
+            $"{u.WorkerScreeningNumber}|{u.WorkerScreeningExpiryDate:O}|{u.FirstAidExpiryDate:O}|{u.DriverLicenceExpiryDate:O}|" +
+            $"{u.ManualHandlingExpiryDate:O}|{u.MedicationCompetencyExpiryDate:O}");
+    }
+
+    [Fact]
+    public async Task T12_ACredentialThePresenterCleared_StaysClearedOnLaterTicks_AndNothingElseAboutThatPersonMoves()
+    {
+        var env = await NewEnvAsync();
+        await TickAsync(env);
+        await using (var db = env.AdminDb())
+        {
+            // Daniel's screening expiry and Emily's first-aid date, as a presenter would to show a missing credential; and one of the
+            // four columns Jade's rule covers (she has no screening planned).
+            (await db.Users.SingleAsync(u => u.Id == DemoFixture.StaffId("daniel"))).WorkerScreeningExpiryDate = null;
+            (await db.Users.SingleAsync(u => u.Id == DemoFixture.StaffId("emily"))).FirstAidExpiryDate = null;
+            (await db.Users.SingleAsync(u => u.Id == DemoFixture.StaffId("jade"))).DriverLicenceExpiryDate = null;
+            await db.SaveChangesAsync();
+        }
+        var cleared = await CredentialColumnsAsync(env);
+
+        env.Clock.Set(new DateTimeOffset(2026, 11, 20, 0, 30, 0, TimeSpan.Zero));
+        await TickAsync(env);
+        env.Clock.Set(new DateTimeOffset(2026, 11, 21, 0, 30, 0, TimeSpan.Zero));
+        await TickAsync(env);
+
+        await using var check = env.AdminDb();
+        Assert.Null((await check.Users.SingleAsync(u => u.Id == DemoFixture.StaffId("daniel"))).WorkerScreeningExpiryDate);
+        Assert.Null((await check.Users.SingleAsync(u => u.Id == DemoFixture.StaffId("emily"))).FirstAidExpiryDate);
+        Assert.Null((await check.Users.SingleAsync(u => u.Id == DemoFixture.StaffId("jade"))).DriverLicenceExpiryDate);
+        Assert.Equal(cleared, await CredentialColumnsAsync(env));        // and no other credential column of anyone moved or was refilled
+    }
 }

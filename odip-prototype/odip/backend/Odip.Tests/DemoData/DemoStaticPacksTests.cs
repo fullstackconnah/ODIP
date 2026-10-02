@@ -147,8 +147,10 @@ public class DemoStaticPacksTests
         Assert.All(users, u => Assert.Equal(before[u.Id], Snapshot(u)));
     }
 
+    // Filled ONCE (review M1): a person is filled only while every column the plan covers for them is NULL. Anyone who already has one
+    // of those columns set, whoever set it, is left exactly as they are, so nothing is overwritten and nothing is refilled one by one.
     [Fact]
-    public async Task Credentials_FillOnlyNullColumns_AnExistingDateIsNeverOverwritten()
+    public async Task Credentials_APersonWithAnyPlannedColumnAlreadySet_IsLeftExactlyAsTheyAre()
     {
         var env = await EnvWithPeopleAsync();
         var ownersDate = new DateOnly(2031, 3, 4);
@@ -166,8 +168,61 @@ public class DemoStaticPacksTests
         var after = await check.Users.SingleAsync(u => u.Id == DemoFixture.StaffId("emily"));
         Assert.Equal(ownersDate, after.FirstAidExpiryDate);
         Assert.Equal("OWNER-123", after.WorkerScreeningNumber);
-        Assert.Equal(D0.AddDays(200), after.WorkerScreeningExpiryDate);   // the empty columns were still filled
-        Assert.Equal(D0.AddDays(150), after.DriverLicenceExpiryDate);
+        Assert.Null(after.WorkerScreeningExpiryDate);                     // the empty columns stay empty: she is already started
+        Assert.Null(after.DriverLicenceExpiryDate);
+        Assert.Null(after.ManualHandlingExpiryDate);
+        var james = await check.Users.SingleAsync(u => u.Id == DemoFixture.StaffId("james"));
+        Assert.Equal(D0.AddDays(200), james.FirstAidExpiryDate);          // everybody else is still filled
+    }
+
+    // Jade has no worker screening planned (the WSC_MISSING story), so the columns that decide whether she is untouched are her other four.
+    [Fact]
+    public async Task Credentials_JadesRuleCoversHerOtherFourColumns_AScreeningTheOwnerGaveHerDoesNotCountAsStarted()
+    {
+        var env = await EnvWithPeopleAsync();
+        var screeningExpiry = new DateOnly(2030, 1, 2);
+        await using (var db = env.AdminDb())
+        {
+            var jade = await db.Users.SingleAsync(u => u.Id == DemoFixture.StaffId("jade"));
+            jade.WorkerScreeningNumber = "OWNER-JADE";
+            jade.WorkerScreeningExpiryDate = screeningExpiry;
+            await db.SaveChangesAsync();
+        }
+
+        await env.RunAsync(new IDemoPack[] { new StaffCredentialsPack() });
+
+        await using var check = env.AdminDb();
+        var after = await check.Users.SingleAsync(u => u.Id == DemoFixture.StaffId("jade"));
+        Assert.Equal("OWNER-JADE", after.WorkerScreeningNumber);
+        Assert.Equal(screeningExpiry, after.WorkerScreeningExpiryDate);
+        Assert.Equal(new DateOnly?[] { screeningExpiry, D0.AddDays(150), D0.AddDays(350), D0.AddDays(150), D0.AddDays(250) }, Dates(after));
+    }
+
+    // The known edge of "all NULL" (no marker is kept): wiping a person completely is indistinguishable from never having filled them.
+    // The runbook says to leave one covered column set to keep a gap.
+    [Fact]
+    public async Task Credentials_APersonWhoseEveryPlannedColumnWasClearedAtOnce_ReadsAsNew_AndIsFilledAgain()
+    {
+        var env = await EnvWithPeopleAsync();
+        await env.RunAsync(new IDemoPack[] { new StaffCredentialsPack() });
+        await using (var db = env.AdminDb())
+        {
+            var daniel = await db.Users.SingleAsync(u => u.Id == DemoFixture.StaffId("daniel"));
+            daniel.WorkerScreeningNumber = null;
+            daniel.WorkerScreeningExpiryDate = null;
+            daniel.FirstAidExpiryDate = null;
+            daniel.MedicationCompetencyExpiryDate = null;               // the only four columns the plan covers for Daniel
+            await db.SaveChangesAsync();
+        }
+
+        env.Clock.Set(new DateTimeOffset(2026, 11, 20, 0, 30, 0, TimeSpan.Zero));       // Fri 20 Nov 11:30 AEDT
+        await env.RunAsync(new IDemoPack[] { new StaffCredentialsPack() });
+
+        await using var check = env.AdminDb();
+        var after = await check.Users.SingleAsync(u => u.Id == DemoFixture.StaffId("daniel"));
+        var refilledOn = new DateOnly(2026, 11, 20);
+        Assert.Matches(@"^WS-DEMO-\d{4}$", after.WorkerScreeningNumber);
+        Assert.Equal(new DateOnly?[] { refilledOn.AddDays(20), refilledOn.AddDays(60), null, null, refilledOn.AddDays(10) }, Dates(after));
     }
 
     [Fact]
