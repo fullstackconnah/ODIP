@@ -474,6 +474,7 @@ export default function ProfileWizardPage() {
       <WizardShell
         rail={
           <WizardStepRail
+            ariaLabel="Profile wizard steps"
             steps={WIZARD_STEPS_FOR_RAIL}
             visitedSteps={wizard.visitedSteps}
             currentKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
