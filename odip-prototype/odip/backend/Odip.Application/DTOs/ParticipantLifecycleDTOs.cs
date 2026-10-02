@@ -13,12 +13,18 @@ public record ParticipantInquiryDto
     public string Source { get; init; } = string.Empty;
     public string? Provenance { get; init; }
     public DateTime CreatedAt { get; init; }
-    // The linked participant's lifecycle state, so the Enquiries tab can say where a converted enquiry
-    // has got to ("Draft intake", "Intake complete", ...) instead of offering "Resume intake" forever.
-    // All three are null while the enquiry has no participant.
+    // The linked participant's lifecycle state, so the Enquiries tab can tell an open enquiry ("New": no participant; "Draft intake":
+    // intake started, not complete) from one that has moved on, which it does not list: intake complete (the Onboarding tab) or finalised
+    // (Active participants). All three are null while the enquiry has no participant.
     public bool? ParticipantIsDraft { get; init; }
     public bool? ParticipantIsActive { get; init; }
     public DateTime? ParticipantIntakeCompletedAt { get; init; }
+    /// <summary>
+    /// True for a row that is not an enquiry: a draft participant whose intake was started in the Intake wizard (/participants/new) with no
+    /// enquiry behind it. It rides in this feed so the Enquiries tab shows every intake in progress; its <see cref="Id"/> is the participant's,
+    /// there is no enquiry record to edit, and <see cref="Source"/> is empty.
+    /// </summary>
+    public bool IsDirectIntake { get; init; }
 }
 
 /// <summary>

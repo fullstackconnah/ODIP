@@ -6,7 +6,8 @@ import { FactChip, type FactBarAttention, type FactBarSegment, type FactChipTone
 /**
  * The attention tint a badge tone asks for, or `undefined` for a quiet segment. The tint is the tone's own family:
  * `warning` (pending, time-bound: Waitlist) -> the warning-container, `negative` (action needed, outstanding) ->
- * the error-container. `positive` and `neutral` never tint: an all-clear is the lime chip, never a fill. The mapping is
+ * the error-container. `positive` and `neutral` never tint a segment: on a glance segment an all-clear is the lime chip, never a fill (the dashboard's attention band has its
+ * own all-clear surface, a Pale Sprout row and field: DESIGN.md "Attention band"). The mapping is
  * `attentionOf` in lib/tone.ts (The Attention Tint Rule); this only resolves the chip's older tone words first.
  *
  * Kept out of FactBar.tsx because that file exports components, and react-refresh wants component files to export

@@ -1,5 +1,5 @@
 import { useEventTemplates, useActivities, useSettings, useUpdateSettings, useProviderSettings, useUpsertProviderSettings, useSupportCatalogue, usePublicHolidays, useCreatePublicHoliday, useDeletePublicHoliday, useSyncHolidays } from '@/api/hooks'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
 import { LayoutTemplate, Pencil, X } from 'lucide-react'
@@ -14,7 +14,7 @@ import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import TemplateFormPanel from '@/components/TemplateFormPanel'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
-import type { MedicationCompetencyMode, EventTemplateDto, ActivityDto, ProviderSettingsDto, ParticipantReadinessMode, UpsertProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
+import type { MedicationCompetencyMode, EventTemplateDto, ActivityDto, ProviderSettingsDto, ParticipantReadinessMode, UpsertProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueFileFormat, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
 import type { AxiosError } from 'axios'
 import TenantsTab from '@/pages/settings/TenantsTab'
 import TenantFormPanel from '@/pages/settings/TenantFormPanel'
@@ -36,6 +36,14 @@ function QualificationSettingsTab() {
   const [warningDays, setWarningDays] = useState<number>(30)
   const [initialWarningDays, setInitialWarningDays] = useState<number | null>(null)
   const [saved, setSaved] = useState(false)
+  // "Saved!" puts the label back after two seconds. The timer is kept so a newer save can replace it and leaving the tab can cancel it: left
+  // running it fires setSaved into a tree that is gone.
+  const savedResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (settings) {
@@ -52,7 +60,8 @@ function QualificationSettingsTab() {
       onSuccess: () => {
         setInitialWarningDays(warningDays)
         setSaved(true)
-        setTimeout(() => setSaved(false), 2000)
+        if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
+        savedResetTimer.current = setTimeout(() => setSaved(false), 2000)
       },
     })
   }
@@ -314,6 +323,14 @@ function ProviderSettingsTab() {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
+  // "Saved!" puts the label back after two seconds. The timer is kept so a newer save can replace it and leaving the tab can cancel it: left
+  // running it fires setSaved into a tree that is gone.
+  const savedResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
+    }
+  }, [])
   // The readiness check is kept out of `form` on purpose. `serverMode` is the server's current value (an org with no settings row yet is
   // Warn); `modePick` is what the user chose on the control, with the server value they chose it against. Only a deliberate pick that
   // differs from the server is ever sent. A pick is good only while the server still holds the value it was made against: once that
@@ -354,7 +371,11 @@ function ProviderSettingsTab() {
     const payload = body as UpsertProviderSettingsDto
     if (modeChanged) payload.participantReadinessMode = shownMode
     upsert.mutate(payload, {
-      onSuccess: () => { setLoadedMode(chosenMode); setDirty(false); setSaved(true); setTimeout(() => setSaved(false), 2000) },
+      onSuccess: () => {
+        setLoadedMode(chosenMode); setDirty(false); setSaved(true)
+        if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
+        savedResetTimer.current = setTimeout(() => setSaved(false), 2000)
+      },
       onError: (err: unknown) => {
         const status = (err as AxiosError)?.response?.status
         if (status === 403) setError('Admin role is required to update provider settings. Ask an Admin to make this change.')
@@ -464,6 +485,11 @@ function ProviderSettingsTab() {
   )
 }
 
+/** What the uploaded workbook's header row showed: the 2026-27 layout (zone prices) or the 2025-26 one (a column per state). */
+function catalogueFormatLabel(format: CatalogueFileFormat): string {
+  return format === 'StateColumns' ? 'One price per state (2025-26 layout)' : 'National / Remote / Very Remote prices (2026-27 layout)'
+}
+
 function SupportCatalogueTab() {
   const { data: groups = [] } = useSupportCatalogue()
   const [importing, setImporting] = useState(false)
@@ -502,8 +528,8 @@ function SupportCatalogueTab() {
       setVersion(data.data?.detectedVersion || '')
       setPreviewStep('preview')
     } catch (err: unknown) {
-      const axiosErr = err as AxiosError<{ message?: string }>
-      setImportError(axiosErr?.response?.data?.message || 'Upload failed')
+      // The API explains a refusal in errors[0] (ApiResponse.Fail); the old `data.message` read always fell back to the generic text.
+      setImportError(extractErrorMessage(err, 'Upload failed'))
     } finally {
       setUploading(false)
     }
@@ -520,8 +546,7 @@ function SupportCatalogueTab() {
       setPreview(null)
       setImporting(false)
     } catch (err: unknown) {
-      const axiosErr = err as AxiosError<{ message?: string }>
-      setImportError(axiosErr?.response?.data?.message || 'Confirm failed')
+      setImportError(extractErrorMessage(err, 'Confirm failed'))
     } finally {
       setConfirming(false)
     }
@@ -532,7 +557,7 @@ function SupportCatalogueTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-semibold text-[var(--color-foreground)]">Support Catalogue</h2>
-          <p className="text-sm text-[var(--color-muted-foreground)]">NDIS price limits for Category 04 — Group Access.</p>
+          <p className="text-sm text-[var(--color-muted-foreground)]">NDIS price limits, every support item in the catalogue.</p>
         </div>
         <Button size="md" onClick={() => { setImporting(true); setPreviewStep('upload'); setImportError(null) }}>
           Import Catalogue
@@ -599,10 +624,15 @@ function SupportCatalogueTab() {
 
             {previewStep === 'preview' && preview && (
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="text-sm text-[var(--color-muted-foreground)]">
+                  <p>{preview.sourceDocument} — {catalogueFormatLabel(preview.detectedFormat)}</p>
+                  <p>Starts {formatDateAu(preview.effectiveFrom)} · {(preview.rows ?? []).length} rows, {preview.legacyItems} legacy</p>
+                </div>
+                <div className="grid grid-cols-4 gap-3 text-center">
                   <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">New items</p><p className="text-xl font-bold text-[var(--color-primary)]">{preview.itemsToAdd}</p></div>
                   <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">Updated</p><p className="text-xl font-bold text-[var(--color-warning)]">{(preview.rows ?? []).filter((r: CatalogueImportRowDto) => r.priceChanged).length}</p></div>
-                  <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">To deactivate</p><p className="text-xl font-bold text-[var(--color-destructive)]">{preview.itemsToDeactivate}</p></div>
+                  <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">Unchanged</p><p className="text-xl font-bold text-[var(--color-foreground)]">{preview.itemsUnchanged}</p></div>
+                  <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">To end-date</p><p className="text-xl font-bold text-[var(--color-destructive)]">{preview.itemsToDeactivate}</p></div>
                 </div>
                 {(preview.warnings ?? []).length > 0 && (
                   <div className="bg-[var(--color-warning-container)] rounded-[var(--radius-md)] p-[var(--card-pad)] text-xs text-[var(--color-on-warning-container)] space-y-1">
@@ -642,6 +672,14 @@ function PublicHolidaysTab() {
   const [syncFromYear, setSyncFromYear] = useState<number | undefined>(undefined)
   const [syncToYear, setSyncToYear] = useState<number | undefined>(undefined)
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null)
+  // A sync's result line goes away by itself after four seconds. The timer is kept so the next sync can cancel it (it would take the new line down
+  // early) and leaving the tab can cancel it: left running it fires setSyncMessage into a tree that is gone.
+  const syncMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (syncMessageTimer.current) clearTimeout(syncMessageTimer.current)
+    }
+  }, [])
 
   const inputClass = 'px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
@@ -652,6 +690,7 @@ function PublicHolidaysTab() {
   }
 
   function handleSync() {
+    if (syncMessageTimer.current) clearTimeout(syncMessageTimer.current)
     setSyncMessage(null)
     syncHolidays.mutate(
       { fromYear: syncFromYear, toYear: syncToYear },
@@ -659,7 +698,7 @@ function PublicHolidaysTab() {
         onSuccess: (result) => {
           const errSuffix = result.errors?.length > 0 ? ` (${plural(result.errors.length, 'error')} — check server logs)` : ''
           setSyncMessage({ type: result.errors?.length > 0 ? 'warning' : 'success', text: `Sync complete: ${result.holidaysAdded} added, ${result.holidaysUpdated} updated${errSuffix}` })
-          setTimeout(() => setSyncMessage(null), 4000)
+          syncMessageTimer.current = setTimeout(() => setSyncMessage(null), 4000)
         },
         onError: (error: Error) => {
           const err = error as AxiosError<{ message?: string }>

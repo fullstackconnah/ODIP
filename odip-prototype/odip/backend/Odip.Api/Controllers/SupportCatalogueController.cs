@@ -43,15 +43,21 @@ public class SupportCatalogueController : ControllerBase
                 PriceLimit_WA = i.PriceLimit_WA,
                 PriceLimit_Remote = i.PriceLimit_Remote,
                 PriceLimit_VeryRemote = i.PriceLimit_VeryRemote,
-                CatalogueVersion = i.CatalogueVersion, EffectiveFrom = i.EffectiveFrom, IsActive = i.IsActive
+                CatalogueVersion = i.CatalogueVersion, EffectiveFrom = i.EffectiveFrom, EffectiveTo = i.EffectiveTo, IsActive = i.IsActive,
+                RegistrationGroup = i.RegistrationGroup, SupportCategoryNumber = i.SupportCategoryNumber, PaceSupportCategoryNumber = i.PaceSupportCategoryNumber,
+                OutcomeDomain = i.OutcomeDomain, SupportPurpose = i.SupportPurpose, CatalogueType = i.CatalogueType,
+                NonFaceToFace = i.NonFaceToFace, ProviderTravel = i.ProviderTravel, ShortNoticeCancellation = i.ShortNoticeCancellation,
+                NdiaRequestedReports = i.NdiaRequestedReports, IrregularSil = i.IrregularSil, IsLegacy = i.IsLegacy,
+                PriceNational = i.PriceNational, PriceRemote = i.PriceRemote, PriceVeryRemote = i.PriceVeryRemote, SourceDocument = i.SourceDocument
             }).ToList()
         }).ToList();
 
         return Ok(ApiResponse<List<SupportActivityGroupDto>>.Ok(result));
     }
 
+    // SuperAdmin only, like the Settings tab: the catalogue is global (a group or an item carries no tenant) and an import end-dates rows for every tenant.
     [HttpPost("import/preview")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<ApiResponse<CatalogueImportPreviewDto>>> PreviewImport(
         IFormFile file, [FromServices] CatalogueImportService importer, CancellationToken ct)
     {
@@ -64,7 +70,7 @@ public class SupportCatalogueController : ControllerBase
         try
         {
             await using var stream = file.OpenReadStream();
-            var preview = await importer.PreviewImportAsync(stream, ct);
+            var preview = await importer.PreviewImportAsync(stream, file.FileName, ct);
             return Ok(ApiResponse<CatalogueImportPreviewDto>.Ok(preview));
         }
         catch (InvalidOperationException ex)
@@ -74,7 +80,7 @@ public class SupportCatalogueController : ControllerBase
     }
 
     [HttpPost("import/confirm")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> ConfirmImport(
         [FromBody] ConfirmCatalogueImportDto dto, [FromServices] CatalogueImportService importer, CancellationToken ct)
     {
@@ -83,8 +89,10 @@ public class SupportCatalogueController : ControllerBase
 
         try
         {
-            await importer.CommitImportAsync(dto, ct);
-            return Ok(ApiResponse<bool>.Ok(true, $"Imported {dto.Rows.Count} items for catalogue version {dto.CatalogueVersion}."));
+            var result = await importer.CommitImportAsync(dto, ct);
+            return Ok(ApiResponse<bool>.Ok(true,
+                $"Imported {dto.Rows.Count} items for catalogue version {dto.CatalogueVersion}: {result.Added} added, {result.Updated} updated, " +
+                $"{result.Unchanged} unchanged, {result.EndDated} existing items end-dated."));
         }
         catch (InvalidOperationException ex)
         {

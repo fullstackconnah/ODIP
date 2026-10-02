@@ -3670,6 +3670,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid>("ActivityGroupId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("CatalogueType")
+                        .HasColumnType("integer");
+
                     b.Property<string>("CatalogueVersion")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -3689,16 +3692,34 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly?>("EffectiveTo")
                         .HasColumnType("date");
 
+                    b.Property<int?>("IrregularSil")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsIntensive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsLegacy")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ItemNumber")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<int?>("NdiaRequestedReports")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("NonFaceToFace")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("OutcomeDomain")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PaceSupportCategoryNumber")
+                        .HasColumnType("integer");
 
                     b.Property<decimal>("PriceLimit_ACT")
                         .HasPrecision(18, 2)
@@ -3739,6 +3760,38 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<decimal>("PriceLimit_WA")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("PriceNational")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("PriceRemote")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("PriceVeryRemote")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int?>("ProviderTravel")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RegistrationGroup")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<int?>("ShortNoticeCancellation")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourceDocument")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("SupportCategoryNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SupportPurpose")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Unit")
                         .IsRequired()

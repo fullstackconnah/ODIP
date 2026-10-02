@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Catalogue;
+using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Infrastructure.Data;
 
@@ -22,10 +24,18 @@ public sealed class ServiceAgreementDraftService
         var lines = new List<ServiceAgreementDraftLine>();
         foreach (var requested in request.Lines)
         {
-            var candidates = await _db.SupportCatalogueItems
-                .Where(x => x.ItemNumber == requested.ItemCode && x.IsActive && x.DayType == Odip.Domain.Enums.ClaimDayType.Weekday
-                    && x.EffectiveFrom <= effectiveDate && (x.EffectiveTo == null || x.EffectiveTo >= effectiveDate))
+            // A line is hours at a WEEKDAY price, so only a per-hour weekday item can be quoted. The catalogue now holds every item, and the importer
+            // stores an item the classifier does not band by day as Weekday: sleepovers and accommodation nights are Each / Day, but a hundred hourly
+            // Evening, Night, Saturday, Sunday and Public Holiday items of other families (SIL, ICBS, nurses...) would pass the Weekday and hourly tests and
+            // quote "weekday" lines at their holiday rates. The draft stays scoped to the community access group, the set it always accepted.
+            var valid = await _db.SupportCatalogueItems
+                .Where(x => x.ItemNumber == requested.ItemCode && x.ActivityGroup.GroupCode == CatalogueGroups.CommunityAccessGroupCode
+                    && x.DayType == Odip.Domain.Enums.ClaimDayType.Weekday && x.Unit == "H")
+                .Where(EffectiveCatalogueResolver.ValidOn(effectiveDate))   // valid on the agreement's start date, not "current": see EffectiveCatalogueResolver.IsValidOn
                 .ToListAsync(ct);
+            // On a day two versions overlap (the previous importer ended a row on the day it started its replacement) the newer wins, as the claim engines
+            // and the lookup pick; only rows that start on the same day, duplicates of one version, are ambiguous.
+            var candidates = EffectiveCatalogueResolver.NewestVersion(valid);
             if (candidates.Count != 1) return (null, candidates.Count == 0
                 ? $"No active effective weekday catalogue price exists for {requested.ItemCode}."
                 : $"Ambiguous active effective catalogue prices exist for {requested.ItemCode}.");

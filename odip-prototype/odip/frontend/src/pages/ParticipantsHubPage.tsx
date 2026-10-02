@@ -10,7 +10,11 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useTabParam } from '@/hooks/useTabParam'
 import { usePermissions } from '@/lib/permissions'
 
-/** Canonical order for the lifecycle-stage tabs. */
+/**
+ * Canonical order for the lifecycle-stage tabs. A participant is on one: an open enquiry or an intake in progress (Enquiries), a draft with the
+ * intake complete (Onboarding), or finalised (Active participants, with its Archived view). Completing the intake moves them from the first to the
+ * second, and completing the profile (which activates them, readiness allowing) to the third.
+ */
 type TabId = 'enquiries' | 'onboarding' | 'active'
 
 const TABS: { id: TabId; label: string; title: string; description: string }[] = [
@@ -18,13 +22,13 @@ const TABS: { id: TabId; label: string; title: string; description: string }[] =
     id: 'enquiries',
     label: 'Enquiries',
     title: 'Enquiries',
-    description: 'Lightweight capture of new prospects before intake.',
+    description: 'Open enquiries and intakes in progress — start or resume an intake.',
   },
   {
     id: 'onboarding',
     label: 'Onboarding',
     title: 'Onboarding',
-    description: 'Worklist of participants mid-onboarding — gate progress and blockers.',
+    description: 'Intake complete, not yet active — gate progress and what is still missing.',
   },
   {
     id: 'active',

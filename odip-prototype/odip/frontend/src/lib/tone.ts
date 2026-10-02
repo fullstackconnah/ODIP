@@ -94,7 +94,8 @@ export const ON_TINT: Partial<Record<Tone, string>> = {
 
 /**
  * Which tones ask for attention, and the container they fill with (The Attention Tint Rule): a warning tone fills with the
- * warning container, a danger tone with the error container. Every other tone is quiet: an all-clear is a chip, never a fill.
+ * warning container, a danger tone with the error container. Every other tone is quiet: on a glance segment or a compact tile an all-clear is a chip, never a fill
+ * (the dashboard's all-clear row and field are the one whole-surface exception, in Pale Sprout: DESIGN.md "Attention band").
  */
 export type Attention = 'warning' | 'error'
 

@@ -183,13 +183,22 @@ public class ClaimGenerationService
             .ToListAsync(ct))
             .ToHashSet();
 
-        // Load catalogue items
+        // Load catalogue items: every row of the group, history included. Each stretch of days is priced by the rows valid on ITS dates
+        // (EffectiveCatalogueResolver.IsValidOn), so an import that end-dates a row (a December price set) cannot reprice a trip that ended before it.
         var catalogueItems = await _db.SupportCatalogueItems
-            .Where(i => i.ActivityGroupId == activityGroupId && i.IsActive)
+            .Where(i => i.ActivityGroupId == activityGroupId)
             .ToListAsync(ct);
 
         if (!catalogueItems.Any())
             throw new InvalidOperationException("No support catalogue items found. Please import the NDIS Support Catalogue in Settings before generating claims.");
+
+        // A trip dated wholly before the earliest catalogue row (a June trip with only the 2026-27 file imported) has no row to price from on any day. Say so:
+        // returning no lines would save an empty Draft claim, and the "active claim already exists" check would then block the trip until someone deleted it.
+        // A trip that only partly precedes the catalogue is still claimed for the days that have a row.
+        var tripDates = trip.TripDays.Select(d => d.Date).ToList();
+        if (tripDates.Count > 0 && !tripDates.Any(date => catalogueItems.Any(i => EffectiveCatalogueResolver.IsValidOn(i, date))))
+            throw new InvalidOperationException(FormattableString.Invariant(
+                $"No catalogue row covers this trip's dates ({trip.StartDate:dd/MM/yyyy} to {tripEnd:dd/MM/yyyy}). Import the catalogue for that period first."));
 
         var confirmedStaffCount = trip.StaffAssignments.Count(s => s.Status == AssignmentStatus.Confirmed);
         var gstCode = settings.GSTRegistered ? GSTCode.P1 : GSTCode.P2;
@@ -204,7 +213,7 @@ public class ClaimGenerationService
             ConfirmedParticipantCount = confirmedBookings.Count
         };
 
-        var dayGroups = GroupDaysByType(trip.TripDays.OrderBy(d => d.Date).ToList(), publicHolidays);
+        var dayGroups = GroupDaysByType(trip.TripDays.OrderBy(d => d.Date).ToList(), publicHolidays, (date, dayType) => PriceEpochOn(catalogueItems, dayType, date));
         var tripFirstDate = trip.StartDate;
         var tripLastDate = tripEnd;
         var eveningThreshold = new TimeOnly(20, 0);
@@ -223,7 +232,7 @@ public class ClaimGenerationService
                 if (group.DayType != ClaimDayType.Weekday)
                 {
                     // Non-weekday: single line item
-                    var catItem = FindCatalogueItem(catalogueItems, group.DayType, isIntensive);
+                    var catItem = FindCatalogueItem(catalogueItems, group.DayType, isIntensive, group.From);
                     if (catItem == null) continue;
 
                     var hours = group.DayCount * activeHoursPerDay;
@@ -289,7 +298,7 @@ public class ClaimGenerationService
                     // Create weekday daytime line item
                     if (totalDaytimeHours > 0)
                     {
-                        var catItem = FindCatalogueItem(catalogueItems, ClaimDayType.Weekday, isIntensive);
+                        var catItem = FindCatalogueItem(catalogueItems, ClaimDayType.Weekday, isIntensive, group.From);
                         if (catItem != null)
                         {
                             var unitPrice = GetPriceForState(catItem, state);
@@ -311,7 +320,7 @@ public class ClaimGenerationService
                     // Create weekday evening line item
                     if (totalEveningHours > 0)
                     {
-                        var catItem = FindCatalogueItem(catalogueItems, ClaimDayType.WeekdayEvening, isIntensive);
+                        var catItem = FindCatalogueItem(catalogueItems, ClaimDayType.WeekdayEvening, isIntensive, group.From);
                         if (catItem != null)
                         {
                             var unitPrice = GetPriceForState(catItem, state);
@@ -338,11 +347,23 @@ public class ClaimGenerationService
 
     // ─── Helpers ────────────────────────────────────────────────────────
 
+    /// <summary>The row to price a stretch of days from: the one valid on its first day (every day of a group picks the same rows, see <see cref="PriceEpochOn"/>).</summary>
     private static SupportCatalogueItem? FindCatalogueItem(
-        List<SupportCatalogueItem> items, ClaimDayType dayType, bool isIntensive)
+        List<SupportCatalogueItem> items, ClaimDayType dayType, bool isIntensive, DateOnly serviceDate) =>
+        EffectiveCatalogueResolver.FindForDay(items, dayType, isIntensive, serviceDate);
+
+    /// <summary>
+    /// The rows a stretch of days can be priced from on <paramref name="date"/>, as one string: what <see cref="FindCatalogueItem"/> returns for the day type, for a
+    /// standard and for an intensive participant (a trip can hold both), and for a weekday also the evening row (the first and last day's hours after 20:00 are
+    /// priced from it). Two consecutive same-type days with the same epoch are priced by the same rows and stay one line; a stretch that crosses a change in
+    /// one of those rows would otherwise be one line at one price, so it is split there. A change to a row none of its lines can read (the Saturday price,
+    /// for a weekday run) does not split it.
+    /// </summary>
+    private static string PriceEpochOn(List<SupportCatalogueItem> items, ClaimDayType dayType, DateOnly date)
     {
-        return items.FirstOrDefault(i => i.DayType == dayType && i.IsIntensive == isIntensive)
-            ?? items.FirstOrDefault(i => i.DayType == dayType);
+        var dayTypes = dayType == ClaimDayType.Weekday ? new[] { ClaimDayType.Weekday, ClaimDayType.WeekdayEvening } : new[] { dayType };
+        return string.Join(",", dayTypes.SelectMany(t => new[] { false, true },
+            (t, intensive) => FindCatalogueItem(items, t, intensive, date)?.Id.ToString("N") ?? "-"));
     }
 
     private static string BuildClaimReference(TripInstance trip)
@@ -353,7 +374,7 @@ public class ClaimGenerationService
         return raw.Length > 50 ? raw[..50] : raw;
     }
 
-    private static List<DayGroup> GroupDaysByType(List<TripDay> days, HashSet<DateOnly> publicHolidays)
+    private static List<DayGroup> GroupDaysByType(List<TripDay> days, HashSet<DateOnly> publicHolidays, Func<DateOnly, ClaimDayType, string> priceEpochOf)
     {
         var result = new List<DayGroup>();
         DayGroup? current = null;
@@ -361,10 +382,11 @@ public class ClaimGenerationService
         foreach (var day in days)
         {
             var dayType = DayTypeResolver.Resolve(day.Date, day.IsPublicHoliday || publicHolidays.Contains(day.Date));
+            var epoch = priceEpochOf(day.Date, dayType);
 
-            if (current == null || current.DayType != dayType || current.To.AddDays(1) != day.Date)
+            if (current == null || current.DayType != dayType || current.To.AddDays(1) != day.Date || current.PriceEpoch != epoch)
             {
-                current = new DayGroup { DayType = dayType, From = day.Date, To = day.Date, DayCount = 1 };
+                current = new DayGroup { DayType = dayType, From = day.Date, To = day.Date, DayCount = 1, PriceEpoch = epoch };
                 result.Add(current);
             }
             else
@@ -423,5 +445,7 @@ public class ClaimGenerationService
         public DateOnly From { get; set; }
         public DateOnly To { get; set; }
         public int DayCount { get; set; }
+        /// <summary>The rows the group's lines can be priced from, the same on every day of the group (see <see cref="ClaimGenerationService.PriceEpochOn"/>).</summary>
+        public string PriceEpoch { get; set; } = string.Empty;
     }
 }

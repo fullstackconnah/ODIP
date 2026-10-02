@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   useNotificationPreferences,
   useUpdateNotificationPreferences,
@@ -41,6 +41,15 @@ export default function NotificationPreferencesTab() {
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
 
+  // "Saved!" puts the label back after two seconds. The timer is kept so it can be cancelled: a reset that outlives the tab fires setSaved into a
+  // tree that is gone, and one left over from an earlier save would cut a later "Saved!" short.
+  const savedResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
+    }
+  }, [])
+
   // Adjusting state during render (React's documented pattern for "derive state from a prop the
   // first time it arrives") rather than a useEffect — avoids the extra render-then-effect
   // round trip and the react-hooks/set-state-in-effect lint rule, same technique
@@ -67,6 +76,9 @@ export default function NotificationPreferencesTab() {
   function handleSave() {
     if (!emailPrefs) return
     setError(null)
+    // A new save ends the last "Saved!" at once; cancelling its reset here also means a rejected save is not left showing it.
+    if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
+    setSaved(false)
     const payload: UpdateNotificationPreferenceDto[] = Object.entries(emailPrefs).map(([eventType, enabled]) => ({
       eventType,
       channel: 'Email',
@@ -78,7 +90,7 @@ export default function NotificationPreferencesTab() {
         setEmailPrefs(state)
         setInitialPrefs(state)
         setSaved(true)
-        setTimeout(() => setSaved(false), 2000)
+        savedResetTimer.current = setTimeout(() => setSaved(false), 2000)
       },
       onError: err => {
         setError(extractErrorMessage(err, 'Failed to save preferences. Please try again.'))

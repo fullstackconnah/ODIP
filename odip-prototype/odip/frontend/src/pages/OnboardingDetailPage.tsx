@@ -62,16 +62,16 @@ export default function OnboardingDetailPage() {
   const recommended = !d.intakeComplete
     ? {
         label: 'Complete intake',
-        reason: 'Complete the saved draft intake. Completing intake does not activate the participant.',
+        reason: 'Complete the saved draft intake. Completing intake puts the participant in onboarding; completing their profile activates them.',
         action: <Button to={`/participants/${id}/intake`}>Complete intake</Button>,
       }
     : !d.profileComplete
       ? {
-          label: 'Validate saved profile',
-          reason: 'Checks the saved profile is complete before marking this step done.',
+          label: 'Validate profile data',
+          reason: 'Checks the saved profile has a name, date of birth, gender and (for NDIS-funded participants) an NDIS number before marking this step done.',
           action: (
             <div className="flex flex-wrap items-center gap-3">
-              <Button disabled={profile.isPending} onClick={() => profile.mutate()}>Validate saved profile</Button>
+              <Button disabled={profile.isPending} onClick={() => profile.mutate()}>Validate profile data</Button>
               <Button variant="secondary" to={`/participants/${id}/profile`}>Edit profile</Button>
             </div>
           ),
@@ -107,6 +107,10 @@ export default function OnboardingDetailPage() {
     { label: 'Schedule review', state: 'Blocked', context: 'Shows the proposed schedule only — no shifts are created.', fixRoute: canAccessPage('rostering') ? { to: '/rostering/patterns', label: 'Open shift patterns' } : undefined },
   ]
   const completedGateCount = gates.filter(gate => gate.state === 'Complete').length
+  // Finishing onboarding is the Profile wizard's Complete Profile: it finalises the participant, and when the organisation's readiness rule allows it they
+  // become active and move to Active participants. It is offered whenever the participant is a draft with the intake complete, whichever gate is open: the
+  // gate actions above only edit or validate data, and "Edit profile" disappears once the profile gate is complete, which left nothing that ends onboarding.
+  const canCompleteProfile = canManageParticipantLifecycle && d.intakeComplete && participant?.isDraft === true
   // The onboarding checklist is reached from the Participants hub's Onboarding tab. Honour real
   // in-app history when the user got here via a non-hub route, and otherwise fall back to the
   // hub's Onboarding tab so the user always lands on the right stage.
@@ -137,7 +141,10 @@ export default function OnboardingDetailPage() {
           </div>
         </section>
       </div>
-      <p className="text-sm text-[var(--color-muted-foreground)]">Completing these steps doesn't activate the participant or allow bookings, rostering, invoicing or claims.</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-sm text-[var(--color-muted-foreground)]">Completing the participant's profile finishes onboarding: they move to Active participants once your organisation's readiness rule allows it. What is still missing is listed below.</p>
+        {canCompleteProfile && <Button to={`/participants/${id}/profile`}>Complete profile</Button>}
+      </div>
     </div>
 
     {profile.error || services.error ? (

@@ -5,6 +5,16 @@ export type PageHeaderVariant = 'default' | 'detail'
 
 export type PageHeaderProps = {
   title: string
+  /**
+   * A second phrase of the title inside the same `h1`, in the muted ink at the same size: the dashboard's date after its greeting
+   * ("Good morning, Sarah  Friday 2 October"). The two parts wrap as units, so a narrow screen breaks between them and never inside the date.
+   */
+  titleNote?: ReactNode
+  /**
+   * What the tab and the history call this page when the `h1` says something else: the dashboard's `h1` is a greeting that changes with the
+   * hour, while the tab stays "Management Dashboard". Defaults to `title`.
+   */
+  documentTitle?: string
   subtitle?: string | ReactNode
   action?: ReactNode
   children?: ReactNode
@@ -23,8 +33,8 @@ const H1_CLASS: Record<PageHeaderVariant, string> = {
   detail: 'text-display text-balance max-md:min-w-0 max-md:break-words',
 }
 
-export function PageHeader({ title, subtitle, action, children, variant = 'default' }: PageHeaderProps) {
-  useDocumentTitle(title)
+export function PageHeader({ title, titleNote, documentTitle, subtitle, action, children, variant = 'default' }: PageHeaderProps) {
+  useDocumentTitle(documentTitle ?? title)
   const detail = variant === 'detail'
   // A string subtitle sits inline after the title on the same baseline row; a richer ReactNode
   // subtitle (e.g. a meta row of chips) keeps its own line below the title/action row. The detail variant always
@@ -42,7 +52,16 @@ export function PageHeader({ title, subtitle, action, children, variant = 'defau
           instead of shrinking it. From md up none of that applies: the h1 keeps its min-content width, so
           a tight row truncates the subtitle rather than breaking the title mid-word, exactly as before. */}
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 md:flex-nowrap">
-        <h1 className={H1_CLASS[variant]}>{title}</h1>
+        <h1 className={H1_CLASS[variant]}>
+          {titleNote ? (
+            <>
+              <span className="mr-2 inline-block">{title}</span>{' '}
+              <span className="inline-block text-[var(--color-muted-foreground)]">{titleNote}</span>
+            </>
+          ) : (
+            title
+          )}
+        </h1>
         {inlineSubtitle && subtitle && (
           <span className="text-[13px] text-[var(--color-muted-foreground)] md:truncate">{subtitle}</span>
         )}

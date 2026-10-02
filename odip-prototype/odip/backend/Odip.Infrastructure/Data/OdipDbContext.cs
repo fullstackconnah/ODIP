@@ -856,6 +856,11 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.PriceLimit_WA).HasPrecision(18, 2);
             entity.Property(e => e.PriceLimit_Remote).HasPrecision(18, 2);
             entity.Property(e => e.PriceLimit_VeryRemote).HasPrecision(18, 2);
+            entity.Property(e => e.PriceNational).HasPrecision(18, 2);
+            entity.Property(e => e.PriceRemote).HasPrecision(18, 2);
+            entity.Property(e => e.PriceVeryRemote).HasPrecision(18, 2);
+            entity.Property(e => e.RegistrationGroup).HasMaxLength(4);
+            entity.Property(e => e.SourceDocument).HasMaxLength(200);
 
             entity.HasOne(e => e.ActivityGroup)
                 .WithMany(g => g.Items)

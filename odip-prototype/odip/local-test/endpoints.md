@@ -76,8 +76,8 @@ for role **RO** globally regardless of what's listed below.
 
 ## SupportCatalogueController — `api/v1/support-catalogue` — class: `[Authorize]`
 - GET `` — Authenticated — list support activity groups/catalogue
-- POST `/import/preview` — A, SA — preview a catalogue CSV/file import (file upload)
-- POST `/import/confirm` — A, SA — confirm/apply a previewed catalogue import
+- POST `/import/preview` — SA — preview an NDIA support catalogue .xlsx (2026-27 or 2025-26 layout; file upload); changes nothing
+- POST `/import/confirm` — SA — apply the previewed rows (history-safe: rows a newer catalogue replaces or drops are end-dated, never deleted)
 
 ## TasksController — `api/v1/tasks` — class: `[Authorize]`
 - GET `` (filters: tripId, status, dueThisWeek, ownerId) — Authenticated — list booking tasks
