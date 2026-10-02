@@ -386,9 +386,9 @@ public sealed class IncidentsPack : IDemoPack
             var script = IncidentTimeline.For(story, incident.CreatedAt, c.A.Zone);
             foreach (var step in script)
             {
-                if (!IncidentTimeline.IsPending(incident, step, script)) continue;                      // made already, or somebody else has taken the incident on
-                if (!c.Due(step.WhenUtc)) break;                                       // still to come, and so is everything after it
-                await ApplyAsync(c, incident, story, step, reviewer, ct);               // one step, one save: its own audit entry, at its own time
+                if (!IncidentTimeline.IsPending(incident, step, script)) continue;       // made already, or somebody else has taken the incident on
+                if (!c.Due(step.WhenUtc)) break;                                         // still to come, and so is everything after it
+                await ApplyAsync(c, incident, story, step, reviewer, ct);                // one step, one save: its own audit entry, at its own time
             }
         }
     }
@@ -444,15 +444,15 @@ public sealed class IncidentsPack : IDemoPack
     {
         if (story is null || !IncidentCatalog.ToldAfter.TryGetValue(story.Key, out var told)) return;
         var created = c.Local(incident.CreatedAt);
-        if (told.FamilyMinutes is { } family)
+        if (told.FamilyMinutes is { } familyMinutes)
         {
             incident.FamilyNotified = true;
-            incident.FamilyNotifiedAt = created.AddMinutes(family);
+            incident.FamilyNotifiedAt = created.AddMinutes(familyMinutes);
         }
-        if (told.CoordinatorMinutes is { } coordinator)
+        if (told.CoordinatorMinutes is { } coordinatorMinutes)
         {
             incident.SupportCoordinatorNotified = true;
-            incident.SupportCoordinatorNotifiedAt = created.AddMinutes(coordinator);
+            incident.SupportCoordinatorNotifiedAt = created.AddMinutes(coordinatorMinutes);
         }
     }
 }

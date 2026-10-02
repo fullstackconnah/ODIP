@@ -291,7 +291,7 @@ public class DemoIncidentScriptTests
         Assert.Equal(byHand, kept.ReviewedAt);
         Assert.Equal(byHand, kept.UpdatedAt);
         Assert.Null(kept.ResolvedAt);
-        Assert.Empty((await HistoryAsync(env, kept.Id)).Where(h => h.Action == AuditAction.Updated && h.ChangedByName == "Sarah Mitchell"));
+        Assert.DoesNotContain(await HistoryAsync(env, kept.Id), h => h.Action == AuditAction.Updated && h.ChangedByName == "Sarah Mitchell");
     }
 
     [Fact]
@@ -310,7 +310,7 @@ public class DemoIncidentScriptTests
         var kept = Story(await IncidentsAsync(env), "I-01");
         Assert.Equal(IncidentStatus.Submitted, kept.Status);
         Assert.Equal(reopened, kept.UpdatedAt);
-        Assert.Single((await HistoryAsync(env, kept.Id)).Where(h => h.Action == AuditAction.Updated && h.ChangedByName == "Sarah Mitchell"));      // the one review, and no second
+        Assert.Single(await HistoryAsync(env, kept.Id), h => h.Action == AuditAction.Updated && h.ChangedByName == "Sarah Mitchell");      // the one review, and no second
     }
 
     [Theory]
