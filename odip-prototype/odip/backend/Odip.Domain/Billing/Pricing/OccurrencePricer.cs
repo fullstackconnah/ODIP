@@ -212,7 +212,19 @@ internal sealed class OccurrencePricer
 
     /// <summary>Elapsed minutes between two wall-clock readings in the delivery zone: an hour is added or lost on the two nights a year the clocks change.</summary>
     private static int RealMinutes(DateTime from, DateTime to, TimeZoneInfo zone) =>
-        (int)Math.Round((ProviderLocalTime.LocalToUtc(to, zone) - ProviderLocalTime.LocalToUtc(from, zone)).TotalMinutes);
+        (int)Math.Round((Instant(to, zone) - Instant(from, zone)).TotalMinutes);
+
+    /// <summary>
+    /// The UTC instant of a wall-clock reading. A reading that does not exist (inside the hour the clocks skip going forward) is the instant the clocks jump, the first
+    /// moment that exists after it, so every boundary falls on one line that only moves forward. <see cref="ProviderLocalTime.LocalToUtc"/> pushes such a reading an hour
+    /// on, which puts 02:30 after 03:00 and gives the support between the two a negative length.
+    /// </summary>
+    private static DateTime Instant(DateTime wall, TimeZoneInfo zone)
+    {
+        var local = DateTime.SpecifyKind(wall, DateTimeKind.Unspecified);
+        while (zone.IsInvalidTime(local)) local = local.AddMinutes(1);
+        return ProviderLocalTime.LocalToUtc(local, zone);
+    }
 
     private IReadOnlyList<DaySpan> Spans(DateOnly date, string state, bool ignoreHolidays)
     {
@@ -441,7 +453,9 @@ internal sealed class OccurrencePricer
                 var cursor = lo;
                 foreach (var cut in cuts)
                 {
-                    segments.Add(new Segment(cursor, cut, span, ParticipantsAt(occ, cursor), RealMinutes(cursor, cut, occ.Zone), (int)(cut - cursor).TotalMinutes));
+                    // A part that lies wholly inside the hour the clocks skip takes no time at all: there is nothing in it to claim.
+                    var elapsed = RealMinutes(cursor, cut, occ.Zone);
+                    if (elapsed > 0) segments.Add(new Segment(cursor, cut, span, ParticipantsAt(occ, cursor), elapsed, (int)(cut - cursor).TotalMinutes));
                     cursor = cut;
                 }
             }
@@ -459,6 +473,14 @@ internal sealed class OccurrencePricer
     {
         var block = occ.Block;
         var segments = Split(occ, piece.Start, piece.End);
+        if (segments.Count == 0)
+        {
+            // The whole support lies inside the hour the clocks skip going forward: the clock never shows it and there is no elapsed time in it. Said, not dropped without a word.
+            occ.Result.Issues.Add((PlanFailureReason.SupportInSkippedHour,
+                $"Block '{block.Id}': on the night the clocks go forward the support from {Clock(piece.Start)} to {Clock(piece.End)} falls wholly in the hour they skip, so it has no time to price. Move it, or confirm it is not delivered that night."));
+            return;
+        }
+
         // A crossing is a support that runs across the boundary of a price band: more than one day span. A headcount change cuts a band in two without crossing anything.
         var crossing = segments.Select(s => s.Span).Distinct(ReferenceEqualityComparer.Instance).Count() > 1;
         var results = new List<(Segment Segment, Priced? Priced, PlannedLine? Unpriced, string? IssueText)>();

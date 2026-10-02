@@ -583,7 +583,8 @@ public class PlanPricingRulesTests
     {
         // 200 blocks, one weekday each, over 800 days: about 23,000 occurrences and as many lines. The blocks are fifteen minutes at different times of day,
         // so none overlaps another and the estimate (a few lines an occurrence) stays well under the ceiling.
-        var blocks = Enumerable.Range(0, 200).Select(i => Block($"w{i}", PlanSupportType.PersonalCare, (DayOfWeek)(i % 7), T(0).AddMinutes(i / 7 * 30), T(0).AddMinutes(i / 7 * 30 + 15))).ToList();
+        // They start at 03:00 and go on from there, so none lies in the hour the clocks skip on the two spring nights in the period.
+        var blocks = Enumerable.Range(0, 200).Select(i => Block($"w{i}", PlanSupportType.PersonalCare, (DayOfWeek)(i % 7), T(3).AddMinutes(i / 7 * 30), T(3).AddMinutes(i / 7 * 30 + 15))).ToList();
         var from = Mon12Oct;
         var to = Mon12Oct.AddDays(PlanPricingEngine.MaxPeriodDays - 1);
         var expected = blocks.Sum(b => Enumerable.Range(0, PlanPricingEngine.MaxPeriodDays).Count(d => from.AddDays(d).DayOfWeek == b.Days[0]));

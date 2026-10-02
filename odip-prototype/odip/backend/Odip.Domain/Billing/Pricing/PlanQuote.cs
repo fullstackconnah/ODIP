@@ -73,6 +73,8 @@ public enum PlanFailureReason
     NamedDateNotInCalendar = 15,
     /// <summary>Two blocks of the quote are on at the same time on the same date, so the same participant's time would be priced twice. Two workers at once are one block with Workers = 2.</summary>
     BlocksOverlap = 16,
+    /// <summary>The whole support falls in the hour the clocks skip on the night they go forward, so there is no elapsed time in it to price.</summary>
+    SupportInSkippedHour = 17,
 }
 
 /// <summary>Why a line is priced the way it is: the rules applied, the catalogue row and the dates it was priced from, and the group arithmetic.</summary>

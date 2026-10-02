@@ -362,6 +362,49 @@ public class PlanPricingSleepoverTests
         Assert.Equal(new[] { 2m, 7m }, quote.Lines.Select(l => l.Qty));
     }
 
+    [SkippableFact]
+    public void Two_boundaries_either_side_of_the_hour_the_clocks_skip_never_make_a_line_with_a_negative_length()
+    {
+        // Review L7 (a property over the widened generator found it, seed 82): a headcount change at 02:30 and another at 03:00 on the night the clocks go forward
+        // (02:00 jumps to 03:00 in NSW, so 02:30 does not exist). The conversion pushed 02:30 an hour on, after 03:00, and the support between the two came out as
+        // -30 minutes: a line of -0.5 hours and a negative total.
+        Skip.IfNot(ProviderLocalTime.TzDataAvailable, "needs the Australia/Sydney time zone");
+        var block = Block("skip", PlanSupportType.PersonalCare, DayOfWeek.Saturday, T(22), T(6), b => b with
+        {
+            ParticipantsPresent = 2,
+            HeadcountChanges = new[]
+            {
+                new PlanHeadcountChange { From = T(2, 30), ParticipantsPresent = 3 },
+                new PlanHeadcountChange { From = T(3, 0), ParticipantsPresent = 1 },
+            },
+        });
+
+        var quote = QuoteOne(block, new DateOnly(2026, 10, 3), SplitPolicy);
+
+        // 22:00 to 06:00 is 7 elapsed hours. The wall clock never shows 02:30, so the part of the support from 00:00 to 02:30 ends where the clocks jump (2 elapsed hours) and
+        // the 30 minutes up to 03:00 are not a part at all.
+        Assert.All(quote.Lines, l => Assert.True(l.Qty > 0m && l.Total > 0m, $"{l.StartTime}-{l.EndTime}: {l.Qty} h, {l.Total}"));
+        Assert.Equal(new[] { 2m, 2m, 3m }, quote.Lines.Select(l => l.Qty));
+        Assert.Equal(7m, quote.Lines.Sum(l => l.Qty));
+    }
+
+    [SkippableFact]
+    public void A_support_wholly_inside_the_hour_the_clocks_skip_has_no_time_to_price_and_says_so_instead_of_vanishing()
+    {
+        Skip.IfNot(ProviderLocalTime.TzDataAvailable, "needs the Australia/Sydney time zone");
+        var block = Block("skipped", PlanSupportType.PersonalCare, DayOfWeek.Sunday, T(2, 15), T(2, 45));
+
+        var forward = QuoteOne(block, new DateOnly(2026, 10, 4));   // 02:00 jumps to 03:00 that morning
+        var ordinary = QuoteOne(block, Sun18Oct);
+
+        Assert.Empty(forward.Lines);
+        var issue = Assert.Single(forward.Issues);
+        Assert.Equal((PlanFailureReason.SupportInSkippedHour, "skipped"), (issue.Reason, issue.BlockId));
+        Assert.True(forward.NeedsReview);
+        Assert.Equal(0.5m, Assert.Single(ordinary.Lines).Qty);   // any other Sunday it is half an hour
+        Assert.Empty(ordinary.Issues);
+    }
+
     // ── Review L10: the quote says which clock it counted on ──
 
     [Fact]
