@@ -122,14 +122,16 @@ public sealed class DemoDataMaintainer
         // 2. The working context: tenant-scoped (query filters on, TenantId stamped), with the guard attached after the audit interceptor.
         var tenantId = demo[0].Id;
         var owned = new DemoOwnedIds();
+        var stamps = new DemoAuditStamps();
         var guarded = new DbContextOptionsBuilder<OdipDbContext>(dbOptions)
-            .AddInterceptors(new DemoGuardInterceptor(new DemoTenantGuard(tenantId, owned)))
+            .AddInterceptors(new DemoAuditStampInterceptor(stamps), new DemoGuardInterceptor(new DemoTenantGuard(tenantId, owned)))
             .Options;
         await using var db = new OdipDbContext(guarded, new ScopedTenantOverride { TenantId = tenantId, IsSuperAdmin = false });
 
         // 3. The provider clock (the same lookup the app's own date rules use) and the day-roll cadence.
         var state = await DemoQueries.ProviderState(db).FirstOrDefaultAsync(ct);
         var anchors = DemoAnchors.Create(_clock.GetUtcNow().UtcDateTime, state);
+        stamps.NowUtc = anchors.NowUtc;
         if (anchors.NowLocal.Hour < QuietHoursEndLocal && _lastRunLocalDate == anchors.D0)
         {
             return new DemoTickResult { Status = DemoTickStatus.QuietHours, Anchors = anchors, Elapsed = Stopwatch.GetElapsedTime(started) };
@@ -145,7 +147,7 @@ public sealed class DemoDataMaintainer
 
         var directory = await DemoDirectory.LoadAsync(db, ct);
         directory.FillOwned(owned);
-        var run = new DemoRun(db, anchors, tenantId, directory, _clock, _logger);
+        var run = new DemoRun(db, anchors, tenantId, directory, _clock, _logger, stamps);
 
         var failures = new List<DemoPackFailure>();
         foreach (var pack in _packs)

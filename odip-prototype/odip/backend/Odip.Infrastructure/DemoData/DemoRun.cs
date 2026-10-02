@@ -26,8 +26,10 @@ public sealed class DemoRun
     private readonly Dictionary<string, int> _changed = new();
     private readonly List<string> _skipped = new();
 
-    internal DemoRun(OdipDbContext db, DemoAnchors anchors, Guid tenantId, DemoDirectory directory, TimeProvider clock, ILogger logger)
+    internal DemoRun(OdipDbContext db, DemoAnchors anchors, Guid tenantId, DemoDirectory directory, TimeProvider clock, ILogger logger,
+        DemoAuditStamps? stamps = null)
     {
+        Audit = stamps ?? new DemoAuditStamps { NowUtc = anchors.NowUtc };
         Db = db;
         Clock = clock;
         Anchors = anchors;
@@ -40,6 +42,12 @@ public sealed class DemoRun
     public OdipDbContext Db { get; }
 
     public DemoAnchors Anchors { get; }
+
+    /// <summary>
+    /// The audit stamps of this tick (plan 4.4). Without a stamp an audit row says the row's own CreatedAt / UpdatedAt and the system actor;
+    /// <see cref="StampAudit"/> names a time and a scripted person for the next save of one entity.
+    /// </summary>
+    public DemoAuditStamps Audit { get; }
 
     public Guid TenantId { get; }
 
@@ -54,6 +62,16 @@ public sealed class DemoRun
 
     /// <summary>Set by the maintainer before each pack runs, so counts are filed under the pack that produced them.</summary>
     internal string CurrentPack { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The audit row the next save writes for <paramref name="entityId"/> will say <paramref name="whenUtc"/> and, when given, that the demo user
+    /// <paramref name="actorUserKey"/> (a story key such as "sarah") made the change; with no key, the system actor.
+    /// </summary>
+    public void StampAudit(Guid entityId, DateTime whenUtc, string? actorUserKey = null)
+    {
+        var actor = actorUserKey is null ? null : Directory.Staff(actorUserKey);
+        Audit.Set(entityId, whenUtc, actor?.Id, actor is null ? null : $"{actor.FirstName} {actor.LastName}".Trim());
+    }
 
     public void Added(string kind, int count = 1) => Bump(_added, kind, count);
 
