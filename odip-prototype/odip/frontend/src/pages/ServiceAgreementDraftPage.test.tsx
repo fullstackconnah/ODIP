@@ -54,6 +54,8 @@ describe('ServiceAgreementDraftPage', () => {
       state: 'NSW', serviceTypes: ['Daily support'], representative: 'A. Representative', lines: [{ serviceType: 'Daily support', itemCode: 'configured-code', hours: 2.5 }],
     } }, expect.objectContaining({ onError: expect.any(Function) }))
     expect(screen.getByText(/NDIS number: Recorded on participant/)).toBeInTheDocument()
+    expect(screen.getByText(/copied into each draft when it is created/i)).toBeInTheDocument()
+    expect(screen.queryByText(/not copied into this draft/i)).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('430000001')).not.toBeInTheDocument()
   })
 
