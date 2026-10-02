@@ -41,3 +41,8 @@ frontend/node_modules/
 
 # ── Root-level Node artifacts (claude-flow / other tooling) ──────────────────
 node_modules/
+
+# ── E2E (Playwright) artifacts ───────────────────────────────────────────────
+e2e/node_modules/
+e2e/test-results/
+e2e/playwright-report/
