@@ -4,7 +4,9 @@ namespace Odip.Application.DTOs;
 
 /// <summary>
 /// Internal: the plan builder's quote request (phase C is its only caller). The blocks are the engine's own input model; the settings and the
-/// catalogue and holidays are the caller's tenant's, read on the server, so the client never sends a price or a policy.
+/// catalogue and holidays are the caller's tenant's, read on the server, so the client never sends a price or a policy. In the answer every line's
+/// <c>total</c> is authoritative: add up and claim totals, not quantity x unit price (the quantity is rounded to 4 decimal places, so the product can be a
+/// cent out), and claim hours as hours and minutes.
 /// </summary>
 public record PlanQuoteRequestDto
 {

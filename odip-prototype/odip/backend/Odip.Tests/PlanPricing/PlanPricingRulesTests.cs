@@ -667,6 +667,20 @@ public class PlanPricingRulesTests
     // ── Totals, order and the cancellation ceiling ────────────────────────────────
 
     [Fact]
+    public void A_lines_total_is_the_floor_of_the_unit_price_times_the_minutes_and_not_the_rounded_quantity_times_the_unit_price()
+    {
+        // Review L4: 40 minutes at 73.58 is 0.6667 hours, and 0.6667 x 73.58 = 49.0558 would round to 49.06. The line is 49.05, which is what the documented
+        // "Total is authoritative" means: the quantity is for display and a claim is made as 0:40.
+        var block = Block("short", PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(9), T(9, 40));
+
+        var line = Assert.Single(QuoteOne(block, Mon12Oct).Lines);
+
+        Assert.Equal(("04_104_0125_6_1", 0.6667m, 73.58m, 49.05m), Row(line));
+        Assert.True(line.Qty * line.UnitPrice > line.Total);
+        Assert.Equal(49.06m, Math.Round(line.Qty * line.UnitPrice, 2));
+    }
+
+    [Fact]
     public void Totals_add_up_by_category_and_by_block_and_the_open_questions_are_the_ones_the_lines_name()
     {
         var community = Weekday(PlanSupportType.CommunityAccess, id: "community") with { Travel = new PlanProviderTravel { Claim = true, MinutesEachWay = 20, ReturnToBase = true } };

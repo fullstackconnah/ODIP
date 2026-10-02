@@ -110,8 +110,17 @@ public sealed record PlannedLine
     public string? ItemCode { get; init; }
     /// <summary>H hour, E each, D day.</summary>
     public string Unit { get; init; } = "H";
+    /// <summary>
+    /// The quantity in the line's unit, rounded to 4 decimal places (40 minutes is 0.6667 hours). It is for display: claim hours as hours and minutes (0:40), and never
+    /// multiply it by <see cref="UnitPrice"/>, which can come to a cent or so more than the line's price (0.6667 x 73.58 = 49.0558). <see cref="Total"/> is authoritative.
+    /// </summary>
     public decimal Qty { get; init; }
+    /// <summary>The price for one unit: the catalogue maximum for the item, zone and service date, times workers over participants present, floored to the cent.</summary>
     public decimal UnitPrice { get; init; }
+    /// <summary>
+    /// What the line may claim, and the only figure to add up or claim: the unit price times the elapsed minutes over 60, floored to the cent (an Each or dollar line is its
+    /// own total), so it can never be above the legal maximum. It is not <see cref="Qty"/> times <see cref="UnitPrice"/>, which the 4 decimal places of Qty make a cent out.
+    /// </summary>
     public decimal Total { get; init; }
     /// <summary>The date the support starts, in the delivery state: the catalogue row valid on it prices the line.</summary>
     public DateOnly ServiceDate { get; init; }
