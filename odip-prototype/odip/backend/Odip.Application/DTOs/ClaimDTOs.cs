@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using Odip.Domain.Enums;
 
 namespace Odip.Application.DTOs;
@@ -262,7 +263,27 @@ public record SupportCatalogueItemDto
     public decimal PriceLimit_VeryRemote { get; init; }
     public string CatalogueVersion { get; init; } = string.Empty;
     public DateOnly EffectiveFrom { get; init; }
+    public DateOnly? EffectiveTo { get; init; }
     public bool IsActive { get; init; }
+
+    // What the 2026-27 catalogue holds (all null on a row imported before it). The zone prices are the truth; the PriceLimit_* above
+    // are the 2025-26 shape the claim screens still read.
+    public string? RegistrationGroup { get; init; }
+    public int? SupportCategoryNumber { get; init; }
+    public int? PaceSupportCategoryNumber { get; init; }
+    public int? OutcomeDomain { get; init; }
+    public int? SupportPurpose { get; init; }
+    public CatalogueItemType? CatalogueType { get; init; }
+    public CatalogueClaimFlag? NonFaceToFace { get; init; }
+    public CatalogueClaimFlag? ProviderTravel { get; init; }
+    public CatalogueClaimFlag? ShortNoticeCancellation { get; init; }
+    public CatalogueClaimFlag? NdiaRequestedReports { get; init; }
+    public CatalogueClaimFlag? IrregularSil { get; init; }
+    public bool IsLegacy { get; init; }
+    public decimal? PriceNational { get; init; }
+    public decimal? PriceRemote { get; init; }
+    public decimal? PriceVeryRemote { get; init; }
+    public string? SourceDocument { get; init; }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -293,31 +314,93 @@ public record CreatePublicHolidayDto
 
 public record CatalogueImportPreviewDto
 {
+    /// <summary>Proposed from the file's own start dates (for example "2026-27"); the admin confirms or edits it.</summary>
     public string DetectedVersion { get; init; } = string.Empty;
+    /// <summary>The price layout the header row showed: National / Remote / Very Remote (2026-27) or one column per state (2025-26).</summary>
+    public CatalogueFileFormat DetectedFormat { get; init; }
+    /// <summary>The uploaded file's name; stored on every imported row.</summary>
+    public string SourceDocument { get; init; } = string.Empty;
+    /// <summary>The earliest start date in the file: the day the catalogue takes effect.</summary>
+    public DateOnly? EffectiveFrom { get; init; }
+    /// <summary>Rows that will be inserted (a code with no row for that start date yet).</summary>
     public int ItemsToAdd { get; init; }
+    /// <summary>Rows already in the database exactly as the file has them: nothing will change.</summary>
+    public int ItemsUnchanged { get; init; }
+    /// <summary>Rows on the file's Legacy sheet.</summary>
+    public int LegacyItems { get; init; }
+    /// <summary>Existing rows this import end-dates (never deletes): superseded by a newer version, or no longer in the catalogue.</summary>
     public int ItemsToDeactivate { get; init; }
     public List<CatalogueImportRowDto> Rows { get; init; } = new();
     public List<string> Warnings { get; init; } = new();
 }
 
+/// <remarks>
+/// The confirm step posts every row back, so a default (false, 0) is left out of the JSON: it reads back as the same default. About 1,000 rows then fit
+/// well inside the 1 MB a reverse proxy commonly allows for a request body.
+/// </remarks>
 public record CatalogueImportRowDto
 {
     public string ItemNumber { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
+    /// <summary>From the code classification map; Weekday for items that are not banded by day (see <see cref="Family"/>).</summary>
     public ClaimDayType DayType { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool IsIntensive { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public decimal PriceLimit_ACT { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public decimal PriceLimit_NSW { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public decimal PriceLimit_NT { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public decimal PriceLimit_QLD { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public decimal PriceLimit_SA { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public decimal PriceLimit_TAS { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public decimal PriceLimit_VIC { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public decimal PriceLimit_WA { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public decimal PriceLimit_Remote { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public decimal PriceLimit_VeryRemote { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool IsNew { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool PriceChanged { get; init; }
+
+    // What the file holds. The server recomputes DayType, IsIntensive, Family and GroupCode from the item number on confirm, so a posted row
+    // cannot file itself under another family.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsUnchanged { get; init; }
+    public string Unit { get; init; } = "H";
+    public string? RegistrationGroup { get; init; }
+    public int? SupportCategoryNumber { get; init; }
+    public int? PaceSupportCategoryNumber { get; init; }
+    public int? OutcomeDomain { get; init; }
+    public int? SupportPurpose { get; init; }
+    public CatalogueItemType? CatalogueType { get; init; }
+    public CatalogueClaimFlag? NonFaceToFace { get; init; }
+    public CatalogueClaimFlag? ProviderTravel { get; init; }
+    public CatalogueClaimFlag? ShortNoticeCancellation { get; init; }
+    public CatalogueClaimFlag? NdiaRequestedReports { get; init; }
+    public CatalogueClaimFlag? IrregularSil { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsLegacy { get; init; }
+    /// <summary>The row's own start date from the file. Required: an import never stamps "today".</summary>
+    public DateOnly EffectiveFrom { get; init; }
+    /// <summary>The row's own end date; null = open-ended (99991231 in the file).</summary>
+    public DateOnly? EffectiveTo { get; init; }
+    public decimal? PriceNational { get; init; }
+    public decimal? PriceRemote { get; init; }
+    public decimal? PriceVeryRemote { get; init; }
+    public string SourceDocument { get; init; } = string.Empty;
+    /// <summary>The support family from the classification map (an informational name; "Other" for items the map does not name).</summary>
+    public string Family { get; init; } = string.Empty;
+    /// <summary>The activity group the row will be filed under.</summary>
+    public string GroupCode { get; init; } = string.Empty;
 }
 
 public record ConfirmCatalogueImportDto
@@ -326,3 +409,6 @@ public record ConfirmCatalogueImportDto
     public string CatalogueVersion { get; init; } = string.Empty;
     public List<CatalogueImportRowDto> Rows { get; init; } = new();
 }
+
+/// <summary>What a confirmed import did to the catalogue.</summary>
+public record CatalogueImportResultDto(int Added, int Updated, int Unchanged, int EndDated);

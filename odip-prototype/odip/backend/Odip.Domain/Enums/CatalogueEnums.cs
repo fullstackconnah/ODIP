@@ -48,6 +48,15 @@ public enum SupportFamily
     Other = 9
 }
 
+/// <summary>The price layout of a support catalogue workbook, told apart by its header row.</summary>
+public enum CatalogueFileFormat
+{
+    /// <summary>2026-27: National, Remote and Very Remote price columns.</summary>
+    NationalRemote = 0,
+    /// <summary>2025-26: one price column per state (ACT, NSW, NT, QLD, SA, TAS, VIC, WA) plus Remote and Very Remote. The eight are identical on every row.</summary>
+    StateColumns = 1
+}
+
 /// <summary>The intensity of an hourly support item. Not applicable (null) to sleepover, accommodation, travel, transport and centre items.</summary>
 public enum SupportIntensity
 {
