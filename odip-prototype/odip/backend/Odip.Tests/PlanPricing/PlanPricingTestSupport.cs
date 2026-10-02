@@ -40,7 +40,7 @@ internal static class PlanPricingTestSupport
         await using var db = CatalogueImportTestSupport.CreateDb();
         await CatalogueImportTestSupport.ImportAsync(db, CatalogueFixtures.File2026_27);
         var rows = (await CatalogueImportTestSupport.PreviewAsync(db, CatalogueFixtures.File2026_27)).Rows
-            .Select(r => raised(r.ItemNumber) && r.PriceNational is not null ? Raised(r, december1, increase) : r)
+            .Select(r => raised(r.ItemNumber) && r.PriceNational is not null && (r.EffectiveTo is null || r.EffectiveTo >= december1) ? Raised(r, december1, increase) : r)
             .ToList();
         await CatalogueImportTestSupport.NewImporter(db, CatalogueImportTestSupport.ClockOn(2026, 12, 10))
             .CommitImportAsync(new ConfirmCatalogueImportDto { CatalogueVersion = "2026-27 (2026-12-01)", Rows = rows });
@@ -103,7 +103,7 @@ internal static class PlanPricingTestSupport
     public static PlanPricingPolicy HigherOfPolicy => PlanPricingPolicy.Default with { Crossing = CrossingPolicy.HigherOf };
 
     /// <summary>A line as a comparable tuple: code, quantity, unit price, total.</summary>
-    public static (string? Code, decimal Qty, decimal UnitPrice, decimal Total) Row(PlannedLine l) => (l.ItemCode, l.Qty, l.UnitPrice, l.Total);
+    public static (string Code, decimal Qty, decimal UnitPrice, decimal Total) Row(PlannedLine l) => (l.ItemCode!, l.Qty, l.UnitPrice, l.Total);
 
     public static IEnumerable<PlannedLine> Priced(PlanQuote quote) => quote.Lines.Where(l => l.IsPriced);
 

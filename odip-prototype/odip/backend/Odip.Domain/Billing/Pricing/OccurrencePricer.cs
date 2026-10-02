@@ -386,28 +386,11 @@ internal sealed class OccurrencePricer
         // Crossing policy B: one worker delivers the whole support and the headcount never changes, so the higher of the amounts applies to all
         // of it. Only when every part has an item: a gap is for a person, not for the engine to price around.
         var allPriced = results.All(r => r.Priced is not null);
-        if (crossing && allPriced && _policy.Crossing == CrossingPolicy.HigherOf && block.Workers == 1 && block.HeadcountChanges.Count == 0)
+        if (crossing && allPriced && _policy.Crossing == CrossingPolicy.HigherOf && block.Workers == 1 && block.HeadcountChanges.Count == 0
+            && TryMerge(occ, piece, results.Select(r => r.Priced!).ToList()) is { } merged)
         {
-            var best = results.Select(r => r.Priced!).OrderByDescending(p => p.UnitPrice).First();
-            var minutes = results.Sum(r => r.Segment.Minutes);
-            var flags = results.Aggregate(PlannedLineFlags.None, (all, r) => all | r.Priced!.Line.Flags);
-            var questions = results.SelectMany(r => r.Priced!.Line.Trace.OpenQuestions).Distinct().OrderBy(q => q).ToList();
-            var rules = best.Line.Trace.Rules.Where(r => !r.StartsWith("crossing:", StringComparison.Ordinal)).Append("crossing:B").ToList();
-            var parts = string.Join(" and ", results.Select(r => $"{r.Priced!.Line.Band} at ${Money(r.Priced.UnitPrice)}"));
-            var merged = best.Line with
-            {
-                Qty = PlanMoney.Hours(minutes), Total = PlanMoney.LineTotal(best.UnitPrice, minutes),
-                ServiceDate = DateOnly.FromDateTime(piece.Start),
-                StartTime = TimeOnly.FromDateTime(piece.Start), EndDate = DateOnly.FromDateTime(piece.End), EndTime = TimeOnly.FromDateTime(piece.End),
-                Flags = flags,
-                Trace = best.Line.Trace with
-                {
-                    Rules = rules, Policy = "B", OpenQuestions = questions,
-                    Why = $"Crossing policy B: one worker delivers the whole support from {Clock(piece.Start)} on {Day(DateOnly.FromDateTime(piece.Start))} to {Clock(piece.End)}, so the higher of its parts ({parts}) applies to all of it: {best.Line.Band}; {Basis(best.Choice)}.",
-                },
-            };
-            occ.Result.Lines.Add(merged);
-            occ.Support.Add((merged, best.Choice));
+            occ.Result.Lines.Add(merged.Line);
+            occ.Support.Add(merged);
             return;
         }
 
@@ -428,6 +411,43 @@ internal sealed class OccurrencePricer
                 AddUnpriced(occ, unpriced!, issueText!);
             }
         }
+    }
+
+    /// <summary>
+    /// Crossing policy B: one support delivered by one worker is priced at the higher of its parts and claimed on ONE service date, the day it starts, so
+    /// every part is priced from the catalogue row valid on that date. That is the rule that stops a later price import changing a support that started
+    /// before it. Null when a part cannot be priced at that date: the parts then stay split and a person decides.
+    /// </summary>
+    private (PlannedLine Line, ItemChoice Choice)? TryMerge(Occurrence occ, Piece piece, IReadOnlyList<Priced> parts)
+    {
+        var block = occ.Block;
+        var startDate = DateOnly.FromDateTime(piece.Start);
+        var atStart = new List<(Priced Part, ItemChoice Choice, decimal Unit)>();
+        foreach (var part in parts)
+        {
+            var choice = Choose(SupportNeed(block, part.Segment.Span.DayType), startDate, occ.PriceZone);
+            if (!choice.Found || !UnitIs(choice, "H")) return null;
+            atStart.Add((part, choice, PlanMoney.GroupPrice(choice.Price, block.Workers, part.Segment.Participants)));
+        }
+
+        var best = atStart.OrderByDescending(p => p.Unit).First();
+        var minutes = parts.Sum(p => p.Segment.Minutes);
+        var flags = parts.Aggregate(PlannedLineFlags.None, (all, p) => all | p.Line.Flags);
+        var questions = parts.SelectMany(p => p.Line.Trace.OpenQuestions).Distinct().OrderBy(q => q).ToList();
+        var line = SegmentLine(occ, best.Part.Segment, best.Choice, best.Unit, crossing: false);
+        var summary = string.Join(" and ", atStart.Select(p => $"{p.Part.Segment.Span.Band} at ${Money(p.Unit)}"));
+        var merged = line with
+        {
+            Qty = PlanMoney.Hours(minutes), Total = PlanMoney.LineTotal(best.Unit, minutes), ServiceDate = startDate,
+            StartTime = TimeOnly.FromDateTime(piece.Start), EndDate = DateOnly.FromDateTime(piece.End), EndTime = TimeOnly.FromDateTime(piece.End),
+            Flags = flags,
+            Trace = line.Trace with
+            {
+                Rules = line.Trace.Rules.Append("crossing:B").ToList(), Policy = "B", OpenQuestions = questions,
+                Why = $"Crossing policy B: one worker delivers the whole support from {Clock(piece.Start)} to {Clock(piece.End)} starting {Day(startDate)}, so the higher of its parts ({summary}, as priced on its service date) applies to all of it: {best.Part.Segment.Span.Band}; {Basis(best.Choice)}.",
+            },
+        };
+        return (merged, best.Choice);
     }
 
     private PlannedLine SegmentLine(Occurrence occ, Segment segment, ItemChoice choice, decimal unitPrice, bool crossing)
@@ -515,9 +535,14 @@ internal sealed class OccurrencePricer
             occ.Result.Issues.Add((PlanFailureReason.TravelNotClaimable, $"Block '{block.Id}': there is no priced support hour to claim provider travel against."));
             return;
         }
-        if (basis.Choice.Row!.ProviderTravel != CatalogueClaimFlag.Yes)
+
+        // The travel is claimed on the occurrence's own date at the rate of the primary support's item: the band of its first support hour, priced from
+        // the row valid on THAT date (the first support hour can fall after midnight, in a later price version, and a later import must not change it).
+        var rate = Choose(SupportNeed(block, basis.Line.DayType!.Value), occ.Date, occ.PriceZone);
+        if (!rate.Found || !UnitIs(rate, "H")) rate = basis.Choice;
+        if (rate.Row!.ProviderTravel != CatalogueClaimFlag.Yes)
         {
-            occ.Result.Issues.Add((PlanFailureReason.TravelNotClaimable, $"Block '{block.Id}': {basis.Choice.Row.ItemNumber} does not allow provider travel."));
+            occ.Result.Issues.Add((PlanFailureReason.TravelNotClaimable, $"Block '{block.Id}': {rate.Row.ItemNumber} does not allow provider travel."));
             return;
         }
 
@@ -543,24 +568,24 @@ internal sealed class OccurrencePricer
             occ.Result.Lines.Add(new PlannedLine
             {
                 BlockId = block.Id, Kind = PlannedLineKind.ProviderTravelTime, ItemCode = support.ItemCode, Unit = "H",
-                Qty = Math.Round(qtyMinutes / 60m, 4, MidpointRounding.AwayFromZero), UnitPrice = basis.Choice.Price,
-                Total = PlanMoney.FloorToCent(basis.Choice.Price * qtyMinutes / 60m), ServiceDate = occ.Date,
+                Qty = Math.Round(qtyMinutes / 60m, 4, MidpointRounding.AwayFromZero), UnitPrice = rate.Price,
+                Total = PlanMoney.FloorToCent(rate.Price * qtyMinutes / 60m), ServiceDate = occ.Date,
                 Band = "Provider travel", DayType = support.DayType, PaceCategory = support.PaceCategory,
                 Flags = flags | (support.Flags & PlannedLineFlags.HolidayExposure) | (support.Flags & PlannedLineFlags.Review),
                 ShortNoticeCancellationAllowed = false,
-                Trace = TraceOf(occ, basis.Choice, new[] { capRule, "travel:same-item-as-support", "price:catalogue-by-service-date" }, questions, support.Trace.HolidayName, sharing,
-                    $"Provider travel on {support.ItemCode}: {travel.MinutesEachWay} minutes each way{(cap is { } k && travel.MinutesEachWay > k ? $" capped at {k}" : string.Empty)}, {(legs == 2 ? "there and back" : "one way")}, {claimable} minutes in all{(sharing > 1 ? $" shared by {sharing} participants" : string.Empty)}; the time cap and rate are 2025-26 values; {Basis(basis.Choice)}."),
+                Trace = TraceOf(occ, rate, new[] { capRule, "travel:same-item-as-support", "price:catalogue-by-service-date" }, questions, support.Trace.HolidayName, sharing,
+                    $"Provider travel on {support.ItemCode}: {travel.MinutesEachWay} minutes each way{(cap is { } k && travel.MinutesEachWay > k ? $" capped at {k}" : string.Empty)}, {(legs == 2 ? "there and back" : "one way")}, {claimable} minutes in all{(sharing > 1 ? $" shared by {sharing} participants" : string.Empty)}{(_policy.TravelRatesProvisional ? "; the time cap and rate are 2025-26 values" : string.Empty)}; {Basis(rate)}."),
             });
         }
 
         if (travel.KmEachWay > 0m)
         {
-            var need = new ItemNeed(SupportFamily.ProviderTravel, null, null, basis.Choice.Row.RegistrationGroup ?? RegistrationGroupOf(block, _policy),
-                CategoryPrefix: basis.Choice.Row.ItemNumber.Split('_')[0]);
+            var need = new ItemNeed(SupportFamily.ProviderTravel, null, null, rate.Row.RegistrationGroup ?? RegistrationGroupOf(block, _policy),
+                CategoryPrefix: rate.Row.ItemNumber.Split('_')[0]);
             var dollars = PlanMoney.FloorToCent(travel.KmEachWay * legs * _policy.KmRateStandard / sharing);
             AddDollarLine(occ, need, PlannedLineKind.ProviderTravelCosts, "Provider travel costs", dollars, flags & PlannedLineFlags.Provisional, questions,
                 new[] { "travel:km", "price:catalogue-by-service-date" },
-                $"Provider travel kilometres: {Number(travel.KmEachWay)} km {(legs == 2 ? "each way" : "one way")} at ${Money(_policy.KmRateStandard)} a kilometre{(sharing > 1 ? $", shared by {sharing} participants" : string.Empty)}, claimed in dollars on the non-labour item; the rate is a 2025-26 value");
+                $"Provider travel kilometres: {Number(travel.KmEachWay)} km {(legs == 2 ? "each way" : "one way")} at ${Money(_policy.KmRateStandard)} a kilometre{(sharing > 1 ? $", shared by {sharing} participants" : string.Empty)}, claimed in dollars on the non-labour item{(_policy.TravelRatesProvisional ? "; the rate is a 2025-26 value" : string.Empty)}");
         }
     }
 
@@ -704,7 +729,7 @@ internal sealed class OccurrencePricer
 
     private PlannedLineTrace TraceOf(Occurrence occ, ItemChoice choice, IReadOnlyList<string> rules, IReadOnlyList<int> questions, string? holidayName, int participants, string why, string? policy = null) => new()
     {
-        Rules = rules, Why = why, CatalogueVersion = choice.Row!.CatalogueVersion, PriceBasisFrom = choice.Row.EffectiveFrom, PriceBasisTo = choice.Row.EffectiveTo,
+        Rules = rules, Why = why, CatalogueVersion = choice.Row!.CatalogueVersion, PriceBasisFrom = choice.Row.EffectiveFrom,
         SourceDocument = choice.Row.SourceDocument, Zone = occ.PriceZone, MaximumUnitPrice = choice.Price, Workers = occ.Block.Workers, ParticipantsPresent = participants,
         Policy = policy, HolidayName = holidayName, OpenQuestions = questions.Distinct().OrderBy(q => q).ToList(),
     };

@@ -116,7 +116,7 @@ public sealed class PlanCatalogue
         if (valid.Count == 0)
             return ItemChoice.Fail(PlanFailureReason.CatalogueNotFound, $"No catalogue row for {need.Describe()} is valid on {date}. Import the catalogue for that period.");
 
-        var codes = EffectiveCatalogueResolver.NewestVersion(valid).Select(row => row.ItemNumber.Trim()).Distinct(StringComparer.Ordinal).ToList();
+        var codes = EffectiveCatalogueResolver.NewestVersion(valid).Select(row => row.ItemNumber.Trim()).Distinct(StringComparer.Ordinal).OrderBy(c => c, StringComparer.Ordinal).ToList();
         if (codes.Count > 1)
             return ItemChoice.Fail(PlanFailureReason.CatalogueAmbiguous, $"{codes.Count.ToString(CultureInfo.InvariantCulture)} different catalogue items ({string.Join(", ", codes)}) are valid on {date} for {need.Describe()}.");
 

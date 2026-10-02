@@ -77,9 +77,8 @@ public sealed record PlannedLineTrace
     /// <summary>One sentence in words: the band, the date, the zone, the group and the price basis.</summary>
     public string Why { get; init; } = string.Empty;
     public string? CatalogueVersion { get; init; }
-    /// <summary>The start of the catalogue row that priced the line: the price basis date.</summary>
+    /// <summary>The start of the catalogue row that priced the line: the price basis date. The end of the row is left out on purpose: a later import end-dates the row, and a line for an earlier service date must not change.</summary>
     public DateOnly? PriceBasisFrom { get; init; }
-    public DateOnly? PriceBasisTo { get; init; }
     public string? SourceDocument { get; init; }
     public PriceZone Zone { get; init; }
     /// <summary>The catalogue maximum for (item, zone, service date), before the group fraction.</summary>
