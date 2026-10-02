@@ -247,8 +247,8 @@ public class DemoDataMaintainerTests
         var env = Env();
         await env.AddTenantAsync();
         var shared = new InProcessTickLock();
-        var inside = new TaskCompletionSource();
-        var release = new TaskCompletionSource();
+        var inside = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var blocker = DemoTestEnv.Pack("blocker", async (_, _) => { inside.SetResult(); await release.Task; });
         var ran = new List<string>();
 
