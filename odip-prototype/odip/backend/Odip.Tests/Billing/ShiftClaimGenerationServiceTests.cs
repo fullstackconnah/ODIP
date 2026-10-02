@@ -70,6 +70,14 @@ public class ShiftClaimGenerationServiceTests
         return settings;
     }
 
+    /// <summary>
+    /// The shift engine prices from the community access group (the catalogue now holds other families too), so its items live in a real one: an item
+    /// always has a group in production, the FK just isn't enforced by InMemory.
+    /// </summary>
+    private static SupportActivityGroup CommunityAccessGroup(OdipDbContext db) =>
+        db.SupportActivityGroups.Local.FirstOrDefault(g => g.GroupCode == "GRP_COMMUNITY_ACCESS")
+        ?? db.SupportActivityGroups.Add(new SupportActivityGroup { Id = Guid.NewGuid(), GroupCode = "GRP_COMMUNITY_ACCESS", DisplayName = "Community Access", SupportCategory = 4 }).Entity;
+
     private static SupportCatalogueItem SeedCatalogueItem(
         OdipDbContext db, ClaimDayType dayType, bool isIntensive,
         decimal vicPrice = 50m, decimal nswPrice = 55m)
@@ -77,7 +85,7 @@ public class ShiftClaimGenerationServiceTests
         var item = new SupportCatalogueItem
         {
             Id = Guid.NewGuid(),
-            ActivityGroupId = Guid.NewGuid(),
+            ActivityGroupId = CommunityAccessGroup(db).Id,
             ItemNumber = $"04_{dayType}_{(isIntensive ? "INT" : "STD")}",
             Description = $"Test item {dayType}",
             DayType = dayType,

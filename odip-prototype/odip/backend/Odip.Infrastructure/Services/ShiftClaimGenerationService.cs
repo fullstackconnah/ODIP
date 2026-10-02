@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Catalogue;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -141,8 +142,12 @@ public class ShiftClaimGenerationService
             .ToListAsync(ct))
             .ToHashSet();
 
+        // Only the community access group is priced from here. It is the only group that existed when this engine picked "the first active item for the
+        // day type", and the catalogue now also holds personal care, sleepover, STA, travel and every other family: an item of those must never be
+        // "the first Weekday item" (ClaimGenerationService is already scoped to one group). GRP_COMMUNITY_ACCESS holds exactly the RG 0125 standard
+        // and ICBS items, one active row per day type and intensity.
         var catalogueItems = await _db.SupportCatalogueItems
-            .Where(i => i.IsActive)
+            .Where(i => i.IsActive && i.ActivityGroup.GroupCode == CatalogueGroups.CommunityAccessGroupCode)
             .ToListAsync(ct);
 
         var lineItems = new List<ShiftLineCalc>();

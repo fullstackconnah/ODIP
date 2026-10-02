@@ -405,9 +405,12 @@ public class ClaimsControllerTests
             Id = Guid.NewGuid(), TenantId = tenantId, RegistrationNumber = "PR1", ABN = "1", OrganisationName = "Org",
             Address = "1 St", State = "VIC",
         });
+        // The shift engine prices from the community access group, so the item lives in a real one (an item always has a group; the FK is not enforced by InMemory).
+        var group = new SupportActivityGroup { Id = Guid.NewGuid(), GroupCode = "GRP_COMMUNITY_ACCESS", DisplayName = "Community Access", SupportCategory = 4 };
+        db.SupportActivityGroups.Add(group);
         db.SupportCatalogueItems.Add(new SupportCatalogueItem
         {
-            Id = Guid.NewGuid(), ActivityGroupId = Guid.NewGuid(), ItemNumber = "04_WD", Description = "Weekday",
+            Id = Guid.NewGuid(), ActivityGroupId = group.Id, ItemNumber = "04_WD", Description = "Weekday",
             DayType = ClaimDayType.Weekday, IsIntensive = false, PriceLimit_VIC = 40m, CatalogueVersion = "24-25",
             EffectiveFrom = new DateOnly(2024, 7, 1), IsActive = true,
         });
