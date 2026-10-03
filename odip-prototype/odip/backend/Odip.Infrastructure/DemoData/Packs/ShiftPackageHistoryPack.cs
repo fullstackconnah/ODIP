@@ -95,10 +95,13 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
 
         // Only what is not there yet. A person's own acknowledgement or tick has a random id, but the app allows one acknowledgement per reader and handover and one
         // tick per completion, routine and occurrence, so those two are looked up by that key (which finds the pack's own row too): a second row for the key is
-        // refused by the database and rolls the pack back for good (PR 2 review H1).
+        // refused by the database and rolls the pack back for good (PR 2 review H1). A tick is looked up by its id as well: the id is a function of the completion
+        // and the routine alone, so a routine the coordinator moves to another time changes the occurrence (the key) of a tick that is already there, and asking
+        // only by key would insert its id a second time (independent review B1). An acknowledgement's id IS its key.
         var have = new HashSet<Guid>();
         have.UnionWith(await run.ExistingIdsAsync<ShiftBreak>(breaks.Select(b => b.Row.Id), ct));
         have.UnionWith(await run.ExistingIdsAsync<ShiftNote>(notes.Select(n => n.Row.Id), ct));
+        have.UnionWith(await run.ExistingIdsAsync<ShiftRoutineCheck>(ticks.Select(t => t.Row.Id), ct));
         var ackReaders = acks.Select(a => a.Row.UserId).Distinct().ToList();
         var ackKeys = (await run.ChunkedAsync(acks.Select(a => a.Row.SourceCompletionId), sources => DemoQueries.HandoverAcksOf(run.Db, sources, ackReaders), ct))
             .Select(k => (k.SourceCompletionId, k.UserId)).ToHashSet();
@@ -112,7 +115,7 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
             run.StampAudit(row.Id, row.CreatedAt, worker);
             added++;
         }
-        foreach (var (row, worker) in ticks.Where(t => !tickKeys.Contains((t.Row.ShiftCompletionId, t.Row.ParticipantRoutineId, t.Row.ScheduledAt))))
+        foreach (var (row, worker) in ticks.Where(t => !have.Contains(t.Row.Id) && !tickKeys.Contains((t.Row.ShiftCompletionId, t.Row.ParticipantRoutineId, t.Row.ScheduledAt))))
         {
             run.Db.ShiftRoutineChecks.Add(row);
             run.StampAudit(row.Id, row.CheckedAt, worker);

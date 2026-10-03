@@ -375,6 +375,62 @@ public class DemoShiftPackageHistoryTests
         Assert.NotEqual(DemoIds.For("shift-routine-check", completion, routine), tick.Id);
     }
 
+    /// <summary>
+    /// Independent review B1: a tick's id is a function of the completion and the routine, its natural key also holds the occurrence, and the two are not one to
+    /// one. A coordinator who moves a routine to another time (the routines controller edits it in place) changes the occurrence every closed shift would be
+    /// ticked at, so a pack that asks only "is there a tick under this key?" tries to insert a row whose id is already there, and fails on every tick after.
+    /// </summary>
+    [Fact]
+    public async Task ARoutineTheCoordinatorMovedAfterItsTicksWereWritten_DoesNotMakeThePackWriteThemAgain()
+    {
+        var env = new DemoTestEnv(Friday1030);
+        await DemoFixture.SeedPeopleAsync(env);
+        await env.SetProviderStateAsync("NSW");
+        // Sophie's morning routine falls at 07:00, the start of a 07:00 shift: twenty such closed shifts, so the history ticks it (four in five) at 07:00.
+        var zone = Zone();
+        await using (var db = env.AdminDb())
+        {
+            for (var i = 0; i < 20; i++)
+            {
+                var date = Friday.AddDays(-2 - i);
+                var shiftId = DemoIds.For("fixture", "moved-routine", i);
+                var start = ProviderLocalTime.LocalToUtc(At(date, 7, 2), zone);
+                var end = ProviderLocalTime.LocalToUtc(At(date, 13, 3), zone);
+                db.Shifts.Add(new Shift
+                {
+                    Id = shiftId, TenantId = DemoTestEnv.DemoTenantId, ParticipantId = DemoFixture.ParticipantId("sophie"), UserId = DemoFixture.StaffId("james"), ServiceDate = date,
+                    StartTime = new TimeOnly(7, 0), EndTime = new TimeOnly(13, 0), Status = ShiftStatus.Completed,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                });
+                db.ShiftCompletions.Add(new ShiftCompletion
+                {
+                    Id = DemoIds.For("shift-completion", shiftId), TenantId = DemoTestEnv.DemoTenantId, ShiftId = shiftId, ActualStart = start, ActualEnd = end, StartedAt = start,
+                    SubmittedAt = end.AddMinutes(6), TimeZoneId = zone.Id, SubmittedByUserId = DemoFixture.StaffId("james"), NothingToNoteConfirmed = true, IsActive = true,
+                    ReviewOutcome = ReviewOutcome.Approved, ReviewedByUserId = DemoFixture.StaffId("sarah"), ReviewedAt = end.AddDays(1), CreatedAt = end.AddMinutes(6), UpdatedAt = end.AddDays(1),
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+        await RunAsync(env, Friday1030);
+        Guid routineId;
+        await using (var db = env.AdminDb())
+        {
+            var timed = (await db.ShiftRoutineChecks.ToListAsync()).Where(t => t.ScheduledAt is { Hour: 7, Minute: 0 }).ToList();
+            Assert.True(timed.Count > 5, $"only {timed.Count} timed ticks were written");
+            routineId = timed[0].ParticipantRoutineId;
+            var routine = await db.ParticipantRoutines.SingleAsync(r => r.Id == routineId);
+            routine.StartTime = routine.StartTime!.Value.AddMinutes(15);                          // the coordinator moves 07:00 to 07:15: every window has another occurrence
+            routine.EndTime = routine.EndTime?.AddMinutes(15);
+            await db.SaveChangesAsync();
+        }
+
+        await RunAsync(env, Friday1030.AddMinutes(5));                                             // must run clean: a duplicate key here fails the pack for good
+
+        await using var check = env.AdminDb();
+        var ticks = await check.ShiftRoutineChecks.Where(t => t.ParticipantRoutineId == routineId).ToListAsync();
+        Assert.All(ticks.GroupBy(t => t.ShiftCompletionId), g => Assert.Single(g));                // one tick per completion and routine, as written
+    }
+
     [Fact]
     public async Task AWorkerWhoGivesTheirOwnHandoverToThemselvesAWeekLater_ReadsNothing()
     {
