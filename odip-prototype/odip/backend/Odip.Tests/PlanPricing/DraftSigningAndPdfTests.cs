@@ -1,9 +1,11 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Infrastructure.Services;
+using UglyToad.PdfPig;
 using Xunit;
 using static Odip.Tests.PlanPricing.PlanPricingTestSupport;
 
@@ -149,7 +151,7 @@ public class DraftSigningAndPdfTests
 
         Assert.Equal(new[]
         {
-            "186 shifts have a part that is not priced, so that part is not in any total.",
+            "At least 186 shifts have a part that is not priced, so that part is not in any total.",      // one block, two issues: its largest is the figure, and the other may touch shifts it does not (review N10)
             "15 public holiday shifts are priced at the holiday rate and still need a decision by a person before this agreement is approved.",
             "Some lines use provisional rates that are not yet confirmed.",
         }, caveats);
@@ -172,9 +174,24 @@ public class DraftSigningAndPdfTests
         Assert.Equal(13, DraftPricingCaveats.ShiftsNotPriced(DraftJson.ReadQuote(draft.PricingJson!)!));     // 10 (the larger of block 1's two) + 3
         Assert.Equal(new[]
         {
-            "13 shifts have a part that is not priced, so that part is not in any total.",
+            "At least 13 shifts have a part that is not priced, so that part is not in any total.",      // block 1 has two issues, so its 10 is the largest and not the count
             "1 public holiday shift is priced at the holiday rate and still needs a decision by a person before this agreement is approved.",
         }, caveats);
+    }
+
+    // Code review N10: "186 shifts have a part that is not priced" was printed as the count for a block that counts its largest issue, which is a lower bound.
+    [Fact]
+    public void The_count_is_exact_when_every_block_has_one_issue_and_at_least_when_a_block_has_several()
+    {
+        var exact = BlockBuilt(issues: new[] { Issue(PlanFailureReason.NoItem, 10), Issue(PlanFailureReason.NoItem, 3, "b2") });
+        var lowerBound = BlockBuilt(issues: new[] { Issue(PlanFailureReason.NoItem, 10), Issue(PlanFailureReason.CatalogueNotFound, 10) });
+        var refusalAndOne = BlockBuilt(issues: new[] { Issue(PlanFailureReason.RegistrationGroupNotHeld, 1), Issue(PlanFailureReason.NoItem, 2) });
+
+        Assert.False(DraftPricingCaveats.NotPricedIsLowerBound(DraftJson.ReadQuote(exact.PricingJson!)!));
+        Assert.Equal("13 shifts have a part that is not priced, so that part is not in any total.", Assert.Single(DraftPricingCaveats.For(exact)));
+        Assert.True(DraftPricingCaveats.NotPricedIsLowerBound(DraftJson.ReadQuote(lowerBound.PricingJson!)!));
+        Assert.Equal("At least 10 shifts have a part that is not priced, so that part is not in any total.", Assert.Single(DraftPricingCaveats.For(lowerBound)));
+        Assert.False(DraftPricingCaveats.NotPricedIsLowerBound(DraftJson.ReadQuote(refusalAndOne.PricingJson!)!));        // a refusal is not a part left out
     }
 
     [Fact]
@@ -210,5 +227,40 @@ public class DraftSigningAndPdfTests
         var pdf = ServiceAgreementDraftPdfRenderer.Render(BlockBuilt(totals: new PlanTotals { Amount = 588.64m, SupportHours = 8, LineCount = 2, UnpricedLines = 5, ReviewLines = 3, ProvisionalLines = 2 }));
 
         Assert.StartsWith("%PDF-", Encoding.ASCII.GetString(pdf, 0, 5));
+    }
+
+    /// <summary>
+    /// The words on every page of a PDF, in reading order, reduced to what survives text extraction. The font draws "fi", "ft" and "ti" as ligature glyphs, which come back as a ligature character
+    /// or a NUL ("shi s"), so what is compared is the text with every character that is not a letter or a digit, and the letters that can be part of a ligature (f, t, i), taken out of both sides.
+    /// </summary>
+    private static string Skeleton(string text) => Regex.Replace(text, @"[^a-z0-9]|[fti]", string.Empty, RegexOptions.IgnoreCase);
+
+    private static string TextOf(byte[] pdf)
+    {
+        using var document = PdfDocument.Open(pdf);
+        return Skeleton(string.Join(" ", document.GetPages().SelectMany(page => page.GetWords()).Select(word => word.Text)));
+    }
+
+    // Code review N14: the PDF is what a family reads, and nothing pinned that it prints the caveats: the test above reads the first five bytes. Dropping the section would have passed.
+    [Fact]
+    public void The_pdf_prints_what_the_total_leaves_out_under_it_and_says_nothing_of_it_when_nothing_is_left_out()
+    {
+        var caveated = BlockBuilt(
+            totals: new PlanTotals { Amount = 588.64m, SupportHours = 8, LineCount = 2, UnpricedLines = 372, ReviewLines = 219, ProvisionalLines = 468 },
+            issues: new[] { Issue(PlanFailureReason.NoItem, 186), Issue(PlanFailureReason.CatalogueNotFound, 186) },
+            holidays: Enumerable.Range(0, 15).Select(day => Holiday(HolidayDecision.Review, day: day)).ToList());
+
+        var text = TextOf(ServiceAgreementDraftPdfRenderer.Render(caveated));
+
+        Assert.Contains(Skeleton("Read before relying on these totals"), text);
+        var caveats = DraftPricingCaveats.For(caveated);
+        Assert.Equal(3, caveats.Count);
+        foreach (var caveat in caveats) Assert.Contains(Skeleton(caveat), text);
+        Assert.Contains(Skeleton("At least 186 shifts have a part that is not priced, so that part is not in any total."), text);
+        Assert.True(text.IndexOf(Skeleton("Total of the priced lines"), StringComparison.Ordinal) < text.IndexOf(Skeleton("Read before relying on these totals"), StringComparison.Ordinal), "the caveats come after the total they are about");
+
+        var clean = TextOf(ServiceAgreementDraftPdfRenderer.Render(BlockBuilt()));
+        Assert.DoesNotContain(Skeleton("Read before relying on these totals"), clean);
+        Assert.Contains(Skeleton("Total of the priced lines"), clean);
     }
 }

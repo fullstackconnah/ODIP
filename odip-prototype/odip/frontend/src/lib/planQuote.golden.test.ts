@@ -31,7 +31,8 @@ describe("grouping and counting issues from the engine's own quotes", () => {
     expect(groupIssues(issues).map(issue => [issue.reason, issue.count])).toEqual([['TransportNotAvailable', 10], ['AccommodationNotAvailable', 10]])
     expect(groupByReason(issues)).toHaveLength(2)
     expect(shiftsNotPriced(issues)).toBe(10)
-    expect(totalsCaption(golden.twoIssuesSameShifts)).toEqual({ text: '10 shifts with a part not priced', notFullyPriced: true })
+    // Ten, and "at least": the quote does not say that the two issues touch the same shifts, only how many each touches, so the figure is a lower bound and not the count (review N10).
+    expect(totalsCaption(golden.twoIssuesSameShifts)).toEqual({ text: 'at least 10 shifts with a part not priced', notFullyPriced: true })
   })
 
   it('says the dawn block has ten shifts with a part not priced, and that its transport rests on a provisional rate', () => {

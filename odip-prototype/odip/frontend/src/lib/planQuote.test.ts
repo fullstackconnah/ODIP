@@ -9,8 +9,8 @@ const BACKEND = resolve(__dirname, '../../../backend')
 const PRICING = resolve(BACKEND, 'Odip.Domain/Billing/Pricing')
 const hasBackend = existsSync(PRICING)
 import {
-  CATEGORY_SHORT, NO_FIGURE, REASON_COPY, addDays, bandLabel, categoryLabel, compareBudget, conflictVersionOf, describeQuoteError, describeSaveError, formatServiceDate, friendlyMessage, groupLines,
-  groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, periodProblem, periodPrompt, planBudgetFor, pricedNothing, quantityLabel, questionShort, referenceWeek, refusals, ruleWords, shiftsNotPriced, totalsCaption,
+  CATEGORY_SHORT, NO_FIGURE, REASON_COPY, addDays, asSentence, bandLabel, categoryLabel, compareBudget, conflictVersionOf, describeQuoteError, describeSaveError, formatServiceDate, friendlyMessage, groupLines,
+  groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, periodProblem, periodPrompt, planBudgetFor, pricedNothing, quantityLabel, questionShort, referenceWeek, refusals, ruleWords, shiftsNotPriced, shiftsNotPricedAtLeast, totalsCaption,
 } from './planQuote'
 
 const line = (changes: Partial<PlannedLine>): PlannedLine => ({
@@ -274,6 +274,29 @@ describe('what is left out of a plan\'s totals', () => {
 
     expect(shiftsNotPriced(issues)).toBe(24 + 13)
     expect(shiftsNotPriced([])).toBe(0)
+  })
+
+  // Code review N10: a block with two issues counts its largest, and the others may touch shifts that one did not: a lower bound, which "186 shifts" printed as the count.
+  it('says a count is at least that when a block has more than one issue, and exact when every block has one', () => {
+    expect(shiftsNotPricedAtLeast([issue('b1', 'NoItem', 24)])).toBe(false)
+    expect(shiftsNotPricedAtLeast([issue('b1', 'NoItem', 24), issue('b2', 'CatalogueNotFound', 13)])).toBe(false)      // two blocks, one issue each: both exact
+    expect(shiftsNotPricedAtLeast([issue('b1', 'NoItem', 24), issue('b1', 'CatalogueNotFound', 24)])).toBe(true)
+    expect(shiftsNotPricedAtLeast([issue('b1', 'NoItem', 24), { ...issue('b1', 'NoItem', 7), message: 'another message' }])).toBe(true)
+    expect(shiftsNotPricedAtLeast([issue('b1', 'RegistrationGroupNotHeld', 1), issue('b1', 'NoItem', 2)])).toBe(false)     // a refusal is not a part left out
+    expect(shiftsNotPricedAtLeast([])).toBe(false)
+  })
+
+  it('prints "at least" in the caption when the count is a lower bound, and the plain count when it is exact', () => {
+    expect(totalsCaption(answer({ issues: [issue('b1', 'NoItem', 186), issue('b1', 'CatalogueNotFound', 186)] })).text).toBe('at least 186 shifts with a part not priced')
+    expect(totalsCaption(answer({ issues: [issue('b1', 'NoItem', 1), issue('b1', 'CatalogueNotFound', 1)] })).text).toBe('at least 1 shift with a part not priced')
+    expect(totalsCaption(answer({ issues: [issue('b1', 'NoItem', 186)] })).text).toBe('186 shifts with a part not priced')
+  })
+
+  it('writes the caption with a capital where it starts a line', () => {
+    expect(asSentence('at least 10 shifts with a part not priced')).toBe('At least 10 shifts with a part not priced')
+    expect(asSentence('some lines use provisional rates')).toBe('Some lines use provisional rates')
+    expect(asSentence('186 shifts with a part not priced')).toBe('186 shifts with a part not priced')
+    expect(asSentence('')).toBe('')
   })
 
   it('does not count a refusal, a flag that is only for review, or an overlap as a part that was not priced', () => {

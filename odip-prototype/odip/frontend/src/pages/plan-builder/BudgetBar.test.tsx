@@ -128,7 +128,7 @@ describe('BudgetBar', () => {
     it('counts the shifts with a part not priced, once, never the lines (shifts times items) the engine counts', () => {
       ready({ budget: withIssues(issue('NoItem', 186), issue('CatalogueNotFound', 186), issue('CatalogueNotFound', 40, 'b2')) })
 
-      expect(screen.getByText('226 shifts with a part not priced.')).toBeInTheDocument()
+      expect(screen.getByText('At least 226 shifts with a part not priced.')).toBeInTheDocument()      // block 1 has two issues, so its 186 is the largest and not the count
       expect(screen.queryByText(/372|219/)).not.toBeInTheDocument()
     })
 

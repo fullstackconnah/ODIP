@@ -380,7 +380,7 @@ describe('ServiceAgreementDraftPage: starting from the newest revision', () => {
     const card = screen.getByText('Version 5').closest('article') as HTMLElement
     expect(within(card).getAllByText(/No catalogue prices for part of the agreement:/)).toHaveLength(1)
     expect(within(card).getByText(/No catalogue prices for part of the agreement: No catalogue row for Community access, Weekday Daytime is valid for part of the period\. Import the catalogue for that period\. \(3 shifts, from Thu 1 Jul 2027\)/)).toBeInTheDocument()
-    expect(within(card).getByText(/As priced when it was saved: 3 shifts with a part not priced/)).toBeInTheDocument()
+    expect(within(card).getByText(/As priced when it was saved: at least 3 shifts with a part not priced/)).toBeInTheDocument()      // two issues in the block, one for each item
   })
 
   // Review F17: this test was titled for the unsaved message and never asserted it (removing the only block leaves an empty plan, which is not dirty).

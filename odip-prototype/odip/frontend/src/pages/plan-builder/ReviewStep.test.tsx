@@ -546,6 +546,13 @@ describe('ReviewStep and what is not priced', () => {
     state.current = { data: blockQuote({ issues: [gap, { ...gap, message: 'Block \'b1\': no item for Weekday Evening.' }] }), isLoading: false, isError: false }
     setUp()
 
+    expect(screen.getByText('At least 24 shifts with a part not priced · 1 public holiday shift to decide.')).toBeInTheDocument()     // two issues in the block: 24 is the larger, not the count
+  })
+
+  it('says it exactly when the block has one issue: the shifts it was met on are the shifts', () => {
+    state.current = { data: blockQuote({ issues: [gap] }), isLoading: false, isError: false }
+    setUp()
+
     expect(screen.getByText('24 shifts with a part not priced · 1 public holiday shift to decide.')).toBeInTheDocument()
   })
 })

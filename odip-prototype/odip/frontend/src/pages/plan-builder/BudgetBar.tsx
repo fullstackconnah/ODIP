@@ -4,7 +4,7 @@ import type { PlanBudget } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { TONE } from '@/lib/tone'
 import { formatHours } from '@/lib/planBlocks'
-import { NO_FIGURE, categoryLabel, compareBudget, describeQuoteError, pricedNothing, totalsCaption } from '@/lib/planQuote'
+import { NO_FIGURE, asSentence, categoryLabel, compareBudget, describeQuoteError, pricedNothing, totalsCaption } from '@/lib/planQuote'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 
@@ -154,7 +154,7 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
                       </ul>
                     )}
                   </div>
-                  {caption.text && <p className={`mt-0.5 text-[13px] ${notFullyPriced ? TONE.warning.ink : 'text-[var(--color-muted-foreground)]'}`}>{caption.text}.</p>}
+                  {caption.text && <p className={`mt-0.5 text-[13px] ${notFullyPriced ? TONE.warning.ink : 'text-[var(--color-muted-foreground)]'}`}>{asSentence(caption.text)}.</p>}
                 </div>
 
                 {planBudgetUnreadable || comparison.status === 'unknown' ? (

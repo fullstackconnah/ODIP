@@ -10,7 +10,7 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { TONE } from '@/lib/tone'
 import { PLAN_STEPS, formatHours, type BlockProblem, type PlanStepKey } from '@/lib/planBlocks'
 import {
-  KIND_LABEL, NO_FIGURE, bandLabel, describeQuoteError, formatServiceDate, friendlyMessage, groupLines, periodProblem, periodPrompt, questionShort, quantityLabel, referenceWeek, ruleWords, totalsCaption, type LineGroup, type ReferenceWeek,
+  KIND_LABEL, NO_FIGURE, asSentence, bandLabel, describeQuoteError, formatServiceDate, friendlyMessage, groupLines, periodProblem, periodPrompt, questionShort, quantityLabel, referenceWeek, ruleWords, totalsCaption, type LineGroup, type ReferenceWeek,
 } from '@/lib/planQuote'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
@@ -260,7 +260,7 @@ export function ReviewStep({ entry, quoted, others, position, from, to, week, pl
                       : <><span className="font-medium">{formatHours(weeklyHours.priced)} h and {formatCurrency(weeklyTotal)} in an ordinary week</span>{weeklyHours.unpriced > 0 && <span className={TONE.warning.ink}> · {formatHours(weeklyHours.unpriced)} h not priced</span>}{'.'}</>
                     : <span className="text-[var(--color-muted-foreground)]">The agreement is shorter than a week, so there is no weekly figure.</span>}
                 </p>
-                {caption?.text && <p className={`text-[13px] ${caption.notFullyPriced ? TONE.warning.ink : 'text-[var(--color-muted-foreground)]'}`}>{caption.text}.</p>}
+                {caption?.text && <p className={`text-[13px] ${caption.notFullyPriced ? TONE.warning.ink : 'text-[var(--color-muted-foreground)]'}`}>{asSentence(caption.text)}.</p>}
               </div>
             )}
             {/* Always in the page, hidden until a line's Why opens it, so that aria-controls on every Why resolves. */}

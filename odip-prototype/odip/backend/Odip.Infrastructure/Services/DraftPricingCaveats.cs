@@ -32,7 +32,7 @@ public static class DraftPricingCaveats
         var caveats = new List<string>();
         var notPriced = ShiftsNotPriced(quote);
         if (notPriced > 0)
-            caveats.Add(string.Create(CultureInfo.InvariantCulture, $"{Shifts(notPriced)} {(notPriced == 1 ? "has" : "have")} a part that is not priced, so that part is not in any total."));
+            caveats.Add(string.Create(CultureInfo.InvariantCulture, $"{(NotPricedIsLowerBound(quote) ? "At least " : string.Empty)}{Shifts(notPriced)} {(notPriced == 1 ? "has" : "have")} a part that is not priced, so that part is not in any total."));
         var holidays = quote.HolidayOccurrences.Count(occurrence => occurrence.Decision == HolidayDecision.Review && !occurrence.Skipped);
         if (holidays > 0)
             caveats.Add(string.Create(CultureInfo.InvariantCulture, $"{(holidays == 1 ? "1 public holiday shift is" : $"{holidays} public holiday shifts are")} priced at the holiday rate and still need{(holidays == 1 ? "s" : string.Empty)} a decision by a person before this agreement is approved."));
@@ -43,10 +43,18 @@ public static class DraftPricingCaveats
 
     /// <summary>
     /// How many shifts have a part that is not priced. A shift can be short of several things (one issue each, counting the same shifts), so a block counts its largest, and the blocks add up: a figure
-    /// that is never more than the truth.
+    /// that is never more than the truth (see <see cref="NotPricedIsLowerBound"/> for when it is less).
     /// </summary>
     public static int ShiftsNotPriced(PlanQuote quote) =>
         quote.Issues.Where(issue => LeftOut.Contains(issue.Reason)).GroupBy(issue => issue.BlockId).Sum(block => block.Max(issue => issue.Count));
+
+    /// <summary>
+    /// Whether <see cref="ShiftsNotPriced"/> is a lower bound and not the count. A block with one such issue counts exactly the shifts it was met on. A block with several (two items missing, or two gaps in the
+    /// catalogue) counts its largest, and the others may touch shifts that one did not, so "186 shifts" printed as the count overstated what is known: it is "at least 186". The same rule as the screen's
+    /// (frontend <c>shiftsNotPricedAtLeast</c>).
+    /// </summary>
+    public static bool NotPricedIsLowerBound(PlanQuote quote) =>
+        quote.Issues.Where(issue => LeftOut.Contains(issue.Reason)).GroupBy(issue => issue.BlockId).Any(block => block.Count() > 1);
 
     private static string Shifts(int count) => count == 1 ? "1 shift" : string.Create(CultureInfo.InvariantCulture, $"{count} shifts");
 }

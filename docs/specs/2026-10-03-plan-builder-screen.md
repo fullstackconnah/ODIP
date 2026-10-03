@@ -48,8 +48,14 @@ a week, the cost for the period by budget category, and the plan budget when the
 agreement, added up: the sources keep their category as free text, so only the total is compared, never a category). Over the plan budget is a warning that says by how much and
 that the draft can still be saved. The figures are the largest thing in the bar, over the plan budget is a warning-tinted cell, and a total that leaves work out says so beside the figure, in
 shifts ("186 shifts with a part not priced · 1 block cannot be priced · 15 public holiday shifts to decide · some lines use provisional rates"; a block short of two items is not counted
-twice). Below 1280px the bar is one line with Details (it was a third of a tablet's screen), "Not fully priced" and "Over budget" chips beside it, and, while the plan has changes nobody
-has saved, "Not saved" with a Save: Add to plan does not save, and the save row is a long scroll below the blocks. A quote error and its Try again are outside Details, where a phone sees them.
+twice, and a block with more than one such gap counts its largest, so the figure reads "at least 186 shifts": a lower bound is not printed as the count; the PDF says the same, "At least 186 shifts
+have a part that is not priced"). A plan that prices to nothing shows an en dash for its figures, not $0.00, and says there is nothing to compare the plan budget with. With the agreement's dates
+not typed, no day, or an end before the start, the bar says so ("Enter the agreement dates to price the plan", "The agreement ends before it starts") and is not busy; nothing of the answer for
+the dates before is shown. Below 1280px the bar is one line with Details (it was a third of a tablet's screen), "Not fully priced" and "Over budget" chips beside it, and, while the plan has changes nobody
+has saved, "Not saved" with a Save: Add to plan does not save, and the save row is a long scroll below the blocks. What a save said is drawn with the bar, docked in the overview and through every
+step of a block, so a Save pressed from the stepper is answered where the person is looking: the problems found, the server's refusal, a newer version somebody else saved (with Load and Keep editing),
+and "Saved as version N" in the bar's one polite status. The bar has no other live region but a visually hidden "Over the plan budget." that changes only when the plan crosses its budget. The sentence
+that the draft can still be saved is left out while a block is refused. A quote error and its Try again are outside Details, where a phone sees them.
 
 "An ordinary week" is the first whole week counted from the agreement's start in which no block meets a public holiday, else the first seven days; there is none when the agreement
 is shorter than a week. The budget is two quotes, one after the other because the week needs the period's holiday dates: the period without lines, then that week. A quote is

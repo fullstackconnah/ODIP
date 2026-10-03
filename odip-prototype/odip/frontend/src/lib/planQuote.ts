@@ -351,20 +351,37 @@ export function shiftsNotPriced(issues: readonly PlanIssue[]): number {
 }
 
 /**
+ * Whether `shiftsNotPriced` is a lower bound and not the count. A block with one issue counts exactly the shifts it was met on. A block with several (two items missing, or two gaps in the
+ * catalogue) counts its largest, and the others may touch shifts that one did not: the figure is then "at least", and printing it as exact overstated what is known (review N10).
+ */
+export function shiftsNotPricedAtLeast(issues: readonly PlanIssue[]): boolean {
+  const perBlock = new Map<string, number>()
+  for (const issue of issues) {
+    if (LEFT_OUT.has(issue.reason)) perBlock.set(issue.blockId, (perBlock.get(issue.blockId) ?? 0) + 1)
+  }
+  return [...perBlock.values()].some(count => count > 1)
+}
+
+/**
  * What the figures beside it leave out or cannot yet say, in one line, in shifts with their nouns: "186 shifts with a part not priced · 1 block cannot be priced · 15 public holiday
- * shifts to decide · some lines use provisional rates". Nothing for what is not so. `notFullyPriced` is true when anything is missing from the totals (a part not priced, or a block
- * that cannot be priced at all): a total that leaves work out has to say so beside the figure.
+ * shifts to decide · some lines use provisional rates", and "at least 186 shifts..." when the count is a lower bound (`shiftsNotPricedAtLeast`). Nothing for what is not so. `notFullyPriced`
+ * is true when anything is missing from the totals (a part not priced, or a block that cannot be priced at all): a total that leaves work out has to say so beside the figure.
  */
 export function totalsCaption(answer: Pick<PlanQuote, 'issues' | 'holidayOccurrences' | 'totals'>): { text: string; notFullyPriced: boolean } {
   const notPriced = shiftsNotPriced(answer.issues)
   const refused = new Set(refusals(answer.issues).map(issue => issue.blockId)).size
   const holidays = answer.holidayOccurrences.filter(occurrence => occurrence.decision === 'Review' && !occurrence.skipped).length
   const parts: string[] = []
-  if (notPriced > 0) parts.push(`${plural(notPriced, 'shift')} with a part not priced`)
+  if (notPriced > 0) parts.push(`${shiftsNotPricedAtLeast(answer.issues) ? 'at least ' : ''}${plural(notPriced, 'shift')} with a part not priced`)
   if (refused > 0) parts.push(`${plural(refused, 'block')} cannot be priced`)
   if (holidays > 0) parts.push(`${plural(holidays, 'public holiday shift')} to decide`)
   if (answer.totals.provisionalLines > 0) parts.push('some lines use provisional rates')
   return { text: parts.join(' · '), notFullyPriced: notPriced > 0 || refused > 0 }
+}
+
+/** A caption stands on a line of its own in the bar and in Review, so what it starts with has a capital there ("At least 10 shifts...", "Some lines use provisional rates"). */
+export function asSentence(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
 /**

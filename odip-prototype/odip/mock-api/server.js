@@ -2152,15 +2152,20 @@ function draftDto(participantId, version, body, quoteResult, lines) {
 }
 
 // What the real server adds to every revision: its counts, what it came to, and what a reader must not miss (the PDF's sentences), in shifts: a block counts its largest issue and the blocks add up
-// (DraftPricingCaveats.cs), the engine's counts of lines being shifts times items.
+// (DraftPricingCaveats.cs), the engine's counts of lines being shifts times items. A block with more than one such issue makes the figure a lower bound: "At least 186 shifts ...".
 const LEFT_OUT = new Set(['NoItem', 'CatalogueNotFound', 'CatalogueAmbiguous', 'ZoneNotEligible', 'CatalogueNotPriced', 'UnexpectedUnit', 'SleepoverNotAvailable', 'TransportNotAvailable', 'AccommodationNotAvailable', 'TravelNotClaimable', 'SupportInSkippedHour'])
 function draftSummaryFields(quoteResult, lines, blockCount) {
   const caveats = []
   if (quoteResult) {
     const perBlock = new Map()
-    for (const issue of quoteResult.issues || []) if (LEFT_OUT.has(issue.reason)) perBlock.set(issue.blockId, Math.max(perBlock.get(issue.blockId) || 0, issue.count))
+    const issuesOf = new Map()
+    for (const issue of quoteResult.issues || []) if (LEFT_OUT.has(issue.reason)) {
+      perBlock.set(issue.blockId, Math.max(perBlock.get(issue.blockId) || 0, issue.count))
+      issuesOf.set(issue.blockId, (issuesOf.get(issue.blockId) || 0) + 1)
+    }
     const notPriced = [...perBlock.values()].reduce((sum, count) => sum + count, 0)
-    if (notPriced > 0) caveats.push(`${notPriced === 1 ? '1 shift has' : `${notPriced} shifts have`} a part that is not priced, so that part is not in any total.`)
+    const atLeast = [...issuesOf.values()].some((count) => count > 1)
+    if (notPriced > 0) caveats.push(`${atLeast ? 'At least ' : ''}${notPriced === 1 ? '1 shift has' : `${notPriced} shifts have`} a part that is not priced, so that part is not in any total.`)
     const holidays = (quoteResult.holidayOccurrences || []).filter((occurrence) => occurrence.decision === 'Review' && !occurrence.skipped).length
     if (holidays > 0) caveats.push(`${holidays === 1 ? '1 public holiday shift is' : `${holidays} public holiday shifts are`} priced at the holiday rate and still need${holidays === 1 ? 's' : ''} a decision by a person before this agreement is approved.`)
     if (quoteResult.totals && quoteResult.totals.provisionalLines > 0) caveats.push('Some lines use provisional rates that are not yet confirmed.')
