@@ -38,7 +38,7 @@ public class DemoIdleTickTests
         }
         var twoMonths = await IdleQueriesAsync(env, first.AddDays(60));
 
-        // About 76 on this clock (82 before an event whose row is already there by id stopped asking for it by key too): ~22 for the roster packs of PR 1 and ~54 for
+        // About 77 on this clock (82 before an event whose row is already there by id stopped asking for it by key too): ~22 for the roster packs of PR 1 and ~55 for
         // the live set (a handover source for each shift in progress), the medication chart, the shift package and the incidents.
         // The budget is a tripwire for a query that runs per row (hundreds), not a design limit: the 500 ms of the Postgres test is the one that matters.
         Assert.InRange(dayOld, 40, 90);
