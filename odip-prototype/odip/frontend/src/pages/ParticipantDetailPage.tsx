@@ -82,6 +82,8 @@ export default function ParticipantDetailPage() {
   const { id } = useParams()
   const isMdUp = useIsMdUp()
   const canAccessClaims = canAccessPage('claims')
+  // The agreement draft carries money: only the roles the API admits to its GETs are offered it (ReadOnly satisfies canWrite, and would only meet a 403).
+  const canOpenAgreementDraft = canAccessPage('agreement-drafts')
   // Connection map item 12 — the Rostering tab, same canAccessPage gate RosterBoardPage itself
   // uses (see lib/permissions.ts's SUPPORT_WORKER_PAGES — SupportWorker is excluded).
   const canAccessRostering = canAccessPage('rostering')
@@ -193,7 +195,7 @@ export default function ParticipantDetailPage() {
                         </p>
                       )}
                     </div>
-                    {canWrite && (
+                    {canOpenAgreementDraft && (
                       <Button to={`/participants/${id}/agreement-draft`} variant="secondary" size="md">
                         <FileText className="w-4 h-4" /> Agreement draft
                       </Button>
@@ -205,7 +207,7 @@ export default function ParticipantDetailPage() {
                   <DocumentsMenu
                     participantId={id!}
                     fullName={p.fullName}
-                    canWrite={canWrite}
+                    canOpenAgreementDraft={canOpenAgreementDraft}
                     intake={downloadIntakeForm}
                     profile={downloadParticipantProfile}
                     overview={downloadClientOverview}
@@ -437,11 +439,11 @@ type PdfDownload = {
  * per-button error lines collapse into one shared `role="alert"` under the trigger.
  */
 function DocumentsMenu({
-  participantId, fullName, canWrite, intake, profile, overview,
+  participantId, fullName, canOpenAgreementDraft, intake, profile, overview,
 }: {
   participantId: string
   fullName: string
-  canWrite: boolean
+  canOpenAgreementDraft: boolean
   intake: PdfDownload
   profile: PdfDownload
   overview: PdfDownload
@@ -462,7 +464,7 @@ function DocumentsMenu({
       icon: <span className={MENU_ITEM_ICON}><Download className="w-4 h-4" /></span>,
       disabled: d.mutation.isPending,
     })),
-    ...(canWrite ? [{ value: 'agreement', label: 'Agreement draft', icon: <span className={MENU_ITEM_ICON}><FileText className="w-4 h-4" /></span> }] : []),
+    ...(canOpenAgreementDraft ? [{ value: 'agreement', label: 'Agreement draft', icon: <span className={MENU_ITEM_ICON}><FileText className="w-4 h-4" /></span> }] : []),
   ]
 
   const onSelect = (value: string) => {

@@ -101,7 +101,7 @@ and the approver roles. Saves send only what changed, so a stale form cannot und
 ## States
 
 Empty (the templates), loading and "pricing the plan…", an error with Try again, a catalogue missing for part of the period (explained, with who can import it), refusals by their
-typed reason, a plan nobody but a reader may see (the blocks and the saved versions, no figures: a reader cannot ask the engine anything), save errors in the server's words with the
+typed reason, a plan nobody but a reader may see (a role that may open the page but not change it; the page keeps that mode as a guard, though today the roles that may open it are the ones that may change it: see Known limits), save errors in the server's words with the
 plan and what was typed kept, a busy server (429) and a too-large plan (413) in plain words, and the 60,000-line limit in Review.
 
 ## Layout, keyboard and screen readers
@@ -128,9 +128,11 @@ screens, no horizontal overflow, nothing cut off, the whole flow with the keyboa
 ## Known limits and open questions
 
 - Two things the brief asked for that the screen does not do, and why: **Move** for a holiday shift (the engine has no such decision; change the block's days), and a holiday choice **for each
-  occurrence group** (the engine has one per block). A reader's access to figures is unchanged: `GET` on the drafts is open to every signed-in role and returns unit prices, totals and the
-  pricing answer, as the unit prices already were; whether readers may see money is a decision for the owner (open). `Lines` is still accepted on save for old callers until phase D
-  requires blocks at approval.
+  occurrence group** (the engine has one per block). **Who may see an agreement draft (decided):** it carries money (unit prices, totals, the pricing answer, the PDF), and money is never
+  visible to SupportWorker or ReadOnly, so the list, the one-revision GET and the PDF GET are admitted to Admin, Coordinator and SuperAdmin like the writes (a test holds every GET on the
+  controller to that). The page is the `agreement-drafts` page key, which ReadOnly is refused like Billing and Claims and SupportWorker's allow-list does not name; the participant page and the
+  onboarding gate offer the link only to the roles that may open it. (ReadOnly satisfies `canWrite`, so the route used to admit it and the page would now only meet a 403.) The page's read-only
+  mode is therefore a guard no role reaches today. `Lines` is still accepted on save for old callers; phase D will refuse to approve a draft that has them ("Rebuild it from blocks to approve it").
 - The settings tab is the ninth on the Settings page, which wraps at 1440px and leaves the last tab alone on a second row: the page's tab bar, not this tab, is what would change.
 - What a Review issue stops, and who approves: phase D. Today an issue, a flag or an over-budget plan stops nothing; only an engine refusal holds a save back.
 - The plan budget is compared as a total. The funding sources keep their budget category as free text, so a category by category comparison needs the data to change first.

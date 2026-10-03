@@ -865,6 +865,35 @@ describe('ParticipantDetailPage — Documents menu below md', () => {
     expect(screen.getByRole('link', { name: /^edit$/i })).toHaveAttribute('href', '/participants/participant-1/profile')
   })
 
+  // Round 1b (review F18, decided): an agreement draft carries money, which is never visible to ReadOnly or SupportWorker (the API refuses them its GETs). ReadOnly satisfies canWrite, so it was offered the page.
+  it.each(['ReadOnly', 'SupportWorker'])('does not offer Agreement draft to %s, in the menu or as a button, and still offers the PDFs', async role => {
+    const user = userEvent.setup()
+    setUserRole(role)
+    const menu = renderAt('participant-1')
+    await user.click(screen.getByRole('button', { name: 'Documents' }))
+    expect(screen.getByRole('option', { name: 'Intake Form PDF' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Agreement draft' })).not.toBeInTheDocument()
+    menu.unmount()
+
+    stubMatchMedia(true)
+    renderAt('participant-1')
+    expect(screen.getByRole('button', { name: /intake form pdf/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /agreement draft/i })).not.toBeInTheDocument()
+  })
+
+  it.each(['SuperAdmin', 'Admin', 'Coordinator'])('offers Agreement draft to %s, in the menu and as a button', async role => {
+    const user = userEvent.setup()
+    setUserRole(role)
+    const menu = renderAt('participant-1')
+    await user.click(screen.getByRole('button', { name: 'Documents' }))
+    expect(screen.getByRole('option', { name: 'Agreement draft' })).toBeInTheDocument()
+    menu.unmount()
+
+    stubMatchMedia(true)
+    renderAt('participant-1')
+    expect(screen.getByRole('link', { name: /agreement draft/i })).toHaveAttribute('href', '/participants/participant-1/agreement-draft')
+  })
+
   it('lists the three PDFs and Agreement draft when the menu opens', async () => {
     const user = userEvent.setup()
     renderAt('participant-1')
