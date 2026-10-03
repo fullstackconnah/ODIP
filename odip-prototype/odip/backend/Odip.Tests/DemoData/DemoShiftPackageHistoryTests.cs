@@ -342,8 +342,8 @@ public class DemoShiftPackageHistoryTests
         await using var check = env.AdminDb();
         var ticks = await check.ShiftRoutineChecks.ToListAsync();
         var breaks = await check.ShiftBreaks.ToListAsync();
-        Assert.Empty(ticks.Where(t => manual.Contains(t.ShiftCompletionId)));
-        Assert.Empty(breaks.Where(b => manual.Contains(b.ShiftCompletionId)));
+        Assert.DoesNotContain(ticks, t => manual.Contains(t.ShiftCompletionId));
+        Assert.DoesNotContain(breaks, b => manual.Contains(b.ShiftCompletionId));
         Assert.True(ticks.Count(t => !manual.Contains(t.ShiftCompletionId) && t.CheckedAt > DateTime.MinValue) > 10, "the completions that were started got no ticks, so the test could not see the defect");
         Assert.True(breaks.Count(b => !manual.Contains(b.ShiftCompletionId)) > 5, "the completions that were started got no breaks, so the test could not see the defect");
     }
