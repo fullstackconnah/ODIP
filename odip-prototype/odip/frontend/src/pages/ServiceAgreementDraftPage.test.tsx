@@ -892,6 +892,63 @@ describe('ServiceAgreementDraftPage: a second coordinator, and a block in progre
     expect(screen.queryByText(/saved by somebody else/)).not.toBeInTheDocument()
   })
 
+  // Review F4 and code review N2: a block being built is not in the plan until "Add to plan", so nothing used to say it would be lost. The first test below filled the details and added a block before it
+  // built the second one, so the plan was already unsaved and the dialog came from useUnsavedChangesWarning(dirty) alone: reverting the fix passed it. These start from a plan that is exactly as it was
+  // saved, so the block in progress is the only thing there is to lose.
+  describe('a block in progress, from a plan that is as it was saved', () => {
+    const asSaved = () => draft({ version: 4, state: 'NSW', representative: 'R. Tran', agreementStartDate: '2026-10-01', agreementEndDate: '2027-03-31', blocks: [draftBlock(mondayWednesday('b1'))], pricing: quote() })
+    const open = async () => {
+      drafts.mockReturnValue({ data: [asSaved()], isLoading: false, isError: false, refetch: vi.fn() })
+      renderPage()
+      const user = userEvent.setup()
+      expect(screen.queryByText('Not saved')).not.toBeInTheDocument()      // the plan is not changed: dirty is false, whatever the stepper does
+      await user.click(screen.getByRole('button', { name: 'Edit times of block 1' }))
+      return user
+    }
+    const leave = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('link', { name: /Back to participant/i }))
+
+    it('asks before leaving once the block being edited has been changed, though nothing in the plan has, and keeps it on keep editing', async () => {
+      const user = await open()
+      await user.click(screen.getByRole('button', { name: 'Friday' }))      // changed, and not saved to the plan: no Save block
+
+      await leave(user)
+
+      expect(screen.getByText('Leave without saving?')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+      expect(screen.getByRole('heading', { name: 'Edit block 1' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Friday' })).toHaveAttribute('aria-pressed', 'true')      // and the change is still there
+    })
+
+    it('does not ask when the block being edited has not been changed', async () => {
+      const user = await open()
+
+      await leave(user)
+
+      expect(screen.queryByText('Leave without saving?')).not.toBeInTheDocument()
+    })
+
+    it('does not ask when the change was put back, because the block is then as it began', async () => {
+      const user = await open()
+      await user.click(screen.getByRole('button', { name: 'Friday' }))
+      await user.click(screen.getByRole('button', { name: 'Friday' }))
+
+      await leave(user)
+
+      expect(screen.queryByText('Leave without saving?')).not.toBeInTheDocument()
+    })
+
+    it('does not ask when the change was discarded', async () => {
+      const user = await open()
+      await user.click(screen.getByRole('button', { name: 'Friday' }))
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
+      await user.click(within(screen.getByRole('alertdialog', { name: 'Discard this block?' })).getByRole('button', { name: 'Discard' }))
+
+      await leave(user)
+
+      expect(screen.queryByText('Leave without saving?')).not.toBeInTheDocument()
+    })
+  })
+
   // Review F4: a block being built is not in the plan until "Add to plan", so nothing used to say it would be lost.
   it('asks before leaving once the block in progress has been changed, and keeps it when the person says keep editing', async () => {
     renderPage()
@@ -909,7 +966,7 @@ describe('ServiceAgreementDraftPage: a second coordinator, and a block in progre
     expect(screen.getByRole('heading', { name: 'Days and times' })).toBeInTheDocument()   // still in the stepper, on the same step
   })
 
-  it('does not ask when the block in progress is exactly as its template made it, or when the person has cancelled it', async () => {
+  it('does not ask when the block being added is exactly as its template made it', async () => {
     renderPage()
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: /Community access weekdays/ }))   // as the template made it: nothing to lose
