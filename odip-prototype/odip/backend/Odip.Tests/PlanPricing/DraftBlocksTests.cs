@@ -480,6 +480,70 @@ public class DraftBlocksTests
         Assert.Equal(string.Empty, newest.Blocks[1].Block.Id);                  // empty, and flagged
     }
 
+    // ── Stored lines against a re-quote, by value (the comparison DraftBlocksPostgresTests makes; CI found numeric(12,2) reading 8 hours back as 8.00) ──
+
+    private static ServiceAgreementDraftLine LineOf(decimal hours, decimal total = 588.64m, string item = "04_104_0125_6_1", string band = "Weekday Daytime") => new()
+    {
+        BlockKey = "b1", ItemCode = item, Band = band, Unit = "H", UnitPrice = 73.58m, Hours = hours, Total = total, Occurrences = 2, Flags = 0, CatalogueVersion = "2026-27", CatalogueEffectiveFrom = new DateOnly(2026, 7, 1),
+    };
+
+    [Fact]
+    public void Lines_that_differ_only_in_the_scale_of_a_decimal_are_the_same_lines_though_their_JSON_is_not()
+    {
+        var read = new[] { LineOf(8.00m, 588.64m) };                // what numeric(12,2) and numeric(14,2) hand back
+        var fresh = new[] { LineOf(8m, 588.640m) };                 // what the engine has just produced
+
+        Assert.NotEqual(JsonSerializer.Serialize(read[0].Hours), JsonSerializer.Serialize(fresh[0].Hours));     // why comparing the serialised lines failed on Postgres
+        AssertSameLinesByValue(read, fresh);
+    }
+
+    // The Postgres test's own scenario (the brief's block and a Saturday outing over a week) through the same two-decimal columns, modelled: each stored number at exactly two places, which is what numeric(12,2)
+    // and numeric(14,2) hand back. The lines are the engine's real ones; if any held a third decimal place, the column would round it and this would fail, as the Postgres test would.
+    [Fact]
+    public void The_engines_lines_for_two_blocks_come_back_from_two_decimal_columns_equal_in_value()
+    {
+        var blocks = new[] { MonWed(), Block("sat", PlanSupportType.GroupActivity, DayOfWeek.Saturday, T(9), T(15), b => b with { ParticipantsPresent = 3 }) };
+        var fresh = ServiceAgreementDraftService.GroupLines(Quote(blocks, new DateOnly(2026, 10, 12), new DateOnly(2026, 10, 18)), blocks).ToList();
+
+        static decimal TwoPlaces(decimal value) => decimal.Parse(value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture);
+        var read = fresh.Select(l => new ServiceAgreementDraftLine
+        {
+            ServiceType = l.ServiceType, BlockKey = l.BlockKey, Band = l.Band, ItemCode = l.ItemCode, Unit = l.Unit, UnitPrice = TwoPlaces(l.UnitPrice), Hours = TwoPlaces(l.Hours),
+            Total = l.Total is { } total ? TwoPlaces(total) : null, Occurrences = l.Occurrences, Flags = l.Flags, CatalogueVersion = l.CatalogueVersion, CatalogueEffectiveFrom = l.CatalogueEffectiveFrom,
+        }).ToList();
+
+        Assert.Equal(new[] { "b1", "sat" }, fresh.Select(l => l.BlockKey).Distinct());
+        Assert.Contains(read, l => l.Hours.ToString(System.Globalization.CultureInfo.InvariantCulture) == "8.00");      // the stored side reads 8.00, as Postgres hands it back ...
+        AssertSameLinesByValue(read, fresh);                                                                           // ... and the lines are the same lines
+    }
+
+    [Fact]
+    public void A_value_the_column_would_round_still_differs_and_the_failure_names_the_line_and_the_field()
+    {
+        var stored = new[] { LineOf(8m), LineOf(0.33m, item: "04_102_0125_6_1") };
+        var fresh = new[] { LineOf(8m), LineOf(0.333m, item: "04_102_0125_6_1") };     // numeric(12,2) stores 0.33; the engine never meant 0.33
+
+        var failure = Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertSameLinesByValue(stored, fresh));
+
+        Assert.Contains("line 1 (b1 04_102_0125_6_1), Hours: stored 0.33, re-quoted 0.333", failure.Message);
+    }
+
+    [Fact]
+    public void A_field_that_is_not_a_number_is_compared_exactly_and_named_too()
+    {
+        var failure = Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertSameLinesByValue(new[] { LineOf(8m) }, new[] { LineOf(8m, band: "Saturday") }));
+
+        Assert.Contains("line 0 (b1 04_104_0125_6_1), Band: stored Weekday Daytime, re-quoted Saturday", failure.Message);
+    }
+
+    [Fact]
+    public void A_line_that_is_missing_is_said_with_both_counts()
+    {
+        var failure = Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertSameLinesByValue(new[] { LineOf(8m) }, new[] { LineOf(8m), LineOf(6m) }));
+
+        Assert.Contains("1 lines stored, 2 from the re-quote", failure.Message);
+    }
+
     // ── The list: the newest revision in full, the older ones as summaries (review F12) ──
 
     private static async Task<List<ServiceAgreementDraftDto>> ListedAsync(ServiceAgreementDraftsController controller, Guid participantId) =>

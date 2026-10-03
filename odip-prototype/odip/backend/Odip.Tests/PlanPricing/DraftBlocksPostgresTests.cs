@@ -119,9 +119,8 @@ public class DraftBlocksPostgresTests : IClassFixture<PostgresFixture>
 
         var quote = await new PlanPricingService(read).QuoteAsync(tenantId, stored, draft.AgreementStartDate, draft.AgreementEndDate);
 
-        static object Shape(ServiceAgreementDraftLine l) => new { l.BlockKey, l.ItemCode, l.Band, l.Unit, l.UnitPrice, l.Hours, l.Total, l.Occurrences, l.Flags, l.CatalogueVersion, l.CatalogueEffectiveFrom };
-        static string Written(ServiceAgreementDraftLine l) => System.Text.Json.JsonSerializer.Serialize(Shape(l));
-        Assert.Equal(draft.Lines.OrderBy(l => l.Position).Select(Written).ToList(), ServiceAgreementDraftService.GroupLines(quote, stored).Select(Written).ToList());
+        // By value, not by JSON text: the stored columns are numeric(12,2) and numeric(14,2), so 8 hours reads back as 8.00, the same number as the 8 a fresh quote has (see AssertSameLinesByValue).
+        AssertSameLinesByValue(draft.Lines.OrderBy(l => l.Position).ToList(), ServiceAgreementDraftService.GroupLines(quote, stored).ToList());
     }
 
     [SkippableFact]
