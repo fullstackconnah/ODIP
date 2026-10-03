@@ -79,7 +79,7 @@ public sealed class DemoDataMaintainer
         _options = options;
         _clock = clock;
         _logger = logger;
-        _packs = (packs ?? DemoPacks.Default()).ToList();
+        _packs = (packs ?? DemoPacks.Default()).Where(pack => options.Allows(pack.Name)).ToList();           // DemoData:Packs: a pack left off never runs
         _tickLock = tickLock ?? new PostgresAdvisoryTickLock();
     }
 

@@ -12,12 +12,15 @@ public enum DemoScenarioMode { Off, On }
 /// (<see cref="FirstRunDelaySecondsKey"/> to 0-3600, <see cref="IntervalMinutesKey"/> to 1-1440): Task.Delay throws above about 49.7 days,
 /// and a hosted service that throws stops the host, so a typo in a knob must never be able to take the API down. Anything that is not a
 /// whole number falls back to the default.
+///
+/// <c>DemoData:Packs</c> is an allow-list of pack names (see <see cref="Packs"/>): empty, the default, is every pack, so nothing changes until it is set.
 /// </summary>
 public sealed class DemoDataOptions
 {
     public const string ScenariosKey = "DemoData:Scenarios";
     public const string FirstRunDelaySecondsKey = "DemoData:FirstRunDelaySeconds";
     public const string IntervalMinutesKey = "DemoData:IntervalMinutes";
+    public const string PacksKey = "DemoData:Packs";
 
     public const int MinFirstRunDelaySeconds = 0;
     public const int MaxFirstRunDelaySeconds = 3600;
@@ -34,13 +37,24 @@ public sealed class DemoDataOptions
 
     public bool Enabled => Scenarios == DemoScenarioMode.On;
 
+    /// <summary>
+    /// <c>DemoData:Packs</c>: the packs that may run, by name (<see cref="DemoPacks.Names"/>), comma-separated, in any case ("live-set, incidents"). Empty, the default, is every
+    /// pack. It exists so a new pack can ship Off: a pack writes into a live tenant every hour and nothing it writes is ever deleted, so the host lists every pack but the
+    /// new one, the new code deploys dark, and a later change of the list brings it up (or <c>DemoData:Scenarios</c> Off stops the lot). A name that is not a pack matches
+    /// nothing and is reported through <see cref="Warning"/>: an allow-list with a typo in it is a pack that quietly stays off.
+    /// </summary>
+    public IReadOnlyList<string> Packs { get; init; } = Array.Empty<string>();
+
+    /// <summary>True when the pack may run: the list is empty (every pack), or it names the pack.</summary>
+    public bool Allows(string pack) => Packs.Count == 0 || Packs.Contains(pack, StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Wait after the host starts before the first tick (the "startup run"): readiness never waits for it.</summary>
     public TimeSpan FirstRunDelay { get; init; } = DefaultFirstRunDelay;
 
     /// <summary>Gap between ticks.</summary>
     public TimeSpan Interval { get; init; } = DefaultInterval;
 
-    /// <summary>Set when the flag held something that is neither On nor Off. Log it once at startup.</summary>
+    /// <summary>Set when the flag held something that is neither On nor Off, or the pack list named something that is not a pack. Log it once at startup.</summary>
     public string? Warning { get; init; }
 
     public static DemoDataOptions FromConfiguration(IConfiguration configuration)
@@ -51,9 +65,25 @@ public sealed class DemoDataOptions
             ? $"{ScenariosKey} is '{value}', which is neither On nor Off: treated as Off."
             : null;
 
+        var packs = (configuration[PacksKey] ?? string.Empty)
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(name => name.ToLowerInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var unknown = packs.Where(name => !DemoPacks.Names.Contains(name, StringComparer.Ordinal)).ToList();
+        if (unknown.Count > 0)
+        {
+            var named = string.Join(", ", unknown.Select(name => $"'{name}'"));
+            var packsWarning = $"{PacksKey} names {named}, which {(unknown.Count == 1 ? "is" : "are")} not a pack and match{(unknown.Count == 1 ? "es" : "")} nothing"
+                + (unknown.Count == packs.Count ? ", so no pack will run" : string.Empty)
+                + $" (the packs are {string.Join(", ", DemoPacks.Names)}).";
+            warning = warning is null ? packsWarning : warning + " " + packsWarning;
+        }
+
         return new DemoDataOptions
         {
             Scenarios = on ? DemoScenarioMode.On : DemoScenarioMode.Off,
+            Packs = packs,
             FirstRunDelay = TimeSpan.FromSeconds(ReadInt(configuration, FirstRunDelaySecondsKey, (int)DefaultFirstRunDelay.TotalSeconds,
                 MinFirstRunDelaySeconds, MaxFirstRunDelaySeconds)),
             Interval = TimeSpan.FromMinutes(ReadInt(configuration, IntervalMinutesKey, (int)DefaultInterval.TotalMinutes,

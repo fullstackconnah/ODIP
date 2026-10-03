@@ -35,7 +35,7 @@ public static class DemoDataServiceCollectionExtensions
     }
 }
 
-/// <summary>Logs, once at startup, that <c>DemoData:Scenarios</c> held something that is neither On nor Off and is being treated as Off.</summary>
+/// <summary>Logs, once at startup, that <c>DemoData:Scenarios</c> held something that is neither On nor Off and is being treated as Off, or that <c>DemoData:Packs</c> named something that is not a pack.</summary>
 public sealed class DemoDataConfigNotice : IHostedService
 {
     private readonly DemoDataOptions _options;

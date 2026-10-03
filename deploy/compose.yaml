@@ -34,6 +34,9 @@ services:
       # Demo-data top-up (an hourly job that keeps the Demo tenant's roster and leave current). Off unless the host's .env sets
       # DEMO_DATA_SCENARIOS=On; CI and the image build never set it. See odip-prototype/odip/backend/Odip.Infrastructure/DemoData.
       - DemoData__Scenarios=${DEMO_DATA_SCENARIOS:-Off}
+      # Which packs of the top-up may run, comma-separated by name; empty is all of them. A new pack ships Off by listing every pack but it
+      # here, and is brought up later by editing the list. See docs/runbooks/demo-data.md.
+      - DemoData__Packs=${DEMO_DATA_PACKS:-}
     depends_on:
       db:
         condition: service_healthy

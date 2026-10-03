@@ -9,6 +9,9 @@ namespace Odip.Infrastructure.DemoData;
 /// </summary>
 public static class DemoPacks
 {
+    /// <summary>The name of every pack in <see cref="Default"/>, in order: what <c>DemoData:Packs</c> may list.</summary>
+    public static IReadOnlyList<string> Names { get; } = Default().Select(p => p.Name).ToArray();
+
     public static IReadOnlyList<IDemoPack> Default() => new IDemoPack[]
     {
         new ProviderSettingsPack(),

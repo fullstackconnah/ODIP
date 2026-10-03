@@ -39,7 +39,8 @@ public sealed class DemoDataHostedService : BackgroundService
     {
         if (!_options.Enabled) return;
 
-        _logger.LogInformation("Demo data top-up is On: first tick in {Delay}, then every {Interval}", _options.FirstRunDelay, _options.Interval);
+        _logger.LogInformation("Demo data top-up is On: first tick in {Delay}, then every {Interval}; packs: {Packs}", _options.FirstRunDelay, _options.Interval,
+            _options.Packs.Count == 0 ? "all" : string.Join(", ", _options.Packs));
 
         var delay = _options.FirstRunDelay;
         while (!stoppingToken.IsCancellationRequested)
