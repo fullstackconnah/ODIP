@@ -205,6 +205,38 @@ describe('PlanBuilder with a plan', () => {
   })
 })
 
+describe('PlanBuilder and where focus goes', () => {
+  it('moves focus into the stepper, to the heading of the first step, when a template card opens it: the card is gone with the overview', async () => {
+    const user = userEvent.setup()
+    render(<Page />)
+
+    await user.click(screen.getByRole('button', { name: /Community access weekdays/ }))
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Days and times' })).toHaveFocus()
+  })
+
+  it('moves focus into the stepper when an edit chip opens it, and back to "Support plan" when the block is saved or the stepper is cancelled', async () => {
+    const user = userEvent.setup()
+    render(<Page initial={twoBlocks()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit travel and transport of block 1' }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Travel and transport' })).toHaveFocus()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('heading', { name: 'Support plan' })).toHaveFocus()
+
+    await user.click(screen.getByRole('button', { name: 'Edit times of block 2' }))
+    await user.click(screen.getByRole('button', { name: 'Save block' }))
+    expect(screen.getByRole('heading', { name: 'Support plan' })).toHaveFocus()
+  })
+
+  it('does not take focus from a person who has not changed the view: nothing is focused when the page loads', () => {
+    render(<Page initial={twoBlocks()} />)
+    expect(screen.getByRole('heading', { name: 'Support plan' })).not.toHaveFocus()
+    expect(document.body).toHaveFocus()
+  })
+})
+
 describe('PlanBuilder and the budget', () => {
   it('prices the plan as it would be saved: the agreement period, every complete block, stamped with the agreement\'s state and zone', async () => {
     render(<Page initial={twoBlocks()} />)

@@ -99,7 +99,7 @@ function groupOf(block, settings) {
 
 // ── The quote ────────────────────────────────────────────────────────────────
 
-function spans(block, iso, holiday) {
+function spans(block, iso, ignoreHolidays) {
   // The block's occurrence cut at 06:00, 20:00 and midnight (a weekday), or whole calendar days (Saturday, Sunday, a holiday).
   const start = minutesOf(block.start)
   const end = start + durationOf(block)
@@ -110,7 +110,7 @@ function spans(block, iso, holiday) {
     const dateIso = fromDay(toDay(iso) + dayOffset)
     const minuteOfDay = at % 1440
     const weekday = weekdayOf(dateIso)
-    const isHoliday = !!holidayOn(dateIso)
+    const isHoliday = !ignoreHolidays && !!holidayOn(dateIso)
     let edge, band
     if (isHoliday) { band = 'Public Holiday'; edge = 1440 }
     else if (weekday === 'Saturday') { band = 'Saturday'; edge = 1440 }
@@ -289,9 +289,9 @@ function quote(request, settings) {
         questions.add(8)
         const holidayLines = occurrenceLines.filter((line) => line.holidayExposure && line.kind === 'Support')
         const atHoliday = round2(holidayLines.reduce((sum, line) => sum + line.total, 0))
-        const ordinary = round2(parts.filter((part) => part.holiday).reduce((sum, part) => {
-          const ordinaryBand = (weekdayOf(part.date) === 'Saturday' || weekdayOf(part.date) === 'Sunday') ? weekdayOf(part.date) : (part.from % 1440 < 360 ? 'Weekday Night' : part.from % 1440 < 1200 ? 'Weekday Daytime' : 'Weekday Evening')
-          const item = itemFor(block.supportType, ordinaryBand, block.intensity)
+        // The same occurrence on an ordinary day: cut at 06:00, 20:00 and midnight as a weekday (or whole days) as if no holiday fell on it.
+        const ordinary = round2(spans(block, iso, true).reduce((sum, part) => {
+          const item = itemFor(block.supportType, part.band, block.intensity)
           return sum + (item ? floorCents(floorCents(item[1] * block.workers / block.participantsPresent) * part.minutes / 60) : 0)
         }, 0))
         holidayOccurrences.push({ blockId: block.id, date: holidayPart.date, holidayName: holidayPart.holiday, state: block.location.state, decision: block.onPublicHoliday, skipped: false, atHolidayRates: atHoliday, atOrdinaryRates: ordinary, uplift: round2(atHoliday - ordinary) })

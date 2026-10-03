@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Plus } from 'lucide-react'
 import type { AgreementState, DraftBlock, PlanPriceZone } from '@/api/types'
 import { useFundingSources, usePlanBudget, usePlanPricingSettings } from '@/api/hooks'
@@ -52,6 +52,8 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
   const [session, setSession] = useState<Session | null>(null)
   const [nextSession, setNextSession] = useState(1)
   const [discarding, setDiscarding] = useState(false)
+  const sectionRef = useRef<HTMLElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
   const canQuote = !readOnly
   const settings = usePlanPricingSettings(canQuote).data
   const funding = useFundingSources({ participantId })
@@ -105,12 +107,27 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
 
   const title = session ? (session.mode === 'new' ? 'Add a block' : `Edit block ${(session.index ?? 0) + 1}`) : 'Support plan'
 
+  // The control that opened the stepper (a template card, an edit chip, Add block) or that closed it (Add to plan, Cancel) is gone with the view it was in, and focus would fall to the
+  // top of the page: a keyboard user would have to Tab in again from there and a screen reader would say nothing. So when the view changes and focus has been lost, it goes to the
+  // first step's heading, or, back in the overview, to "Support plan". A control that still has focus keeps it.
+  const viewKey = session?.id ?? 0
+  const seenView = useRef(viewKey)
+  useEffect(() => {
+    if (seenView.current === viewKey) return
+    seenView.current = viewKey
+    const root = sectionRef.current
+    const active = document.activeElement
+    if (active && active !== document.body && root?.contains(active)) return
+    const target = root?.querySelector<HTMLElement>('form h2') ?? headingRef.current
+    target?.focus({ preventScroll: true })
+  }, [viewKey])
+
   return (
     // scroll-mb: a control the keyboard moves focus to is scrolled clear of the budget bar (and, on a phone, the bottom nav) docked beneath it, never behind them.
-    <section aria-labelledby="plan-heading" className="flex flex-col gap-[var(--section-gap)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] [&_input]:scroll-mt-20 [&_input]:scroll-mb-40 [&_select]:scroll-mt-20 [&_select]:scroll-mb-40 [&_button]:scroll-mt-20 [&_button]:scroll-mb-40">
+    <section ref={sectionRef} aria-labelledby="plan-heading" className="flex flex-col gap-[var(--section-gap)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] [&_input]:scroll-mt-20 [&_input]:scroll-mb-40 [&_select]:scroll-mt-20 [&_select]:scroll-mb-40 [&_button]:scroll-mt-20 [&_button]:scroll-mb-40">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 id="plan-heading" className="font-semibold">{title}</h2>
+          <h2 id="plan-heading" ref={headingRef} tabIndex={-1} className="font-semibold focus:outline-none">{title}</h2>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             {session ? (session.hasBlock ? describeBlock(session.entry.block) : 'Choose where the block starts. Nothing changes in the plan until you add it.')
               : readOnly ? (readOnlyNote ?? 'The plan this draft was priced from.') : 'Each block is one weekly routine. Prices come from the NDIS catalogue on the date of each shift, and the agreement is only ever what the blocks say.'}

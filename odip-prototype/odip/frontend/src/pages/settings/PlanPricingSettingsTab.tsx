@@ -141,8 +141,8 @@ export default function PlanPricingSettingsTab() {
         <h2 id="pricing-travel-heading" className="font-semibold">Provider travel</h2>
         <CheckboxField label="Claim provider travel" hint="Off, no block is priced with a travel line, whatever it asks for." checked={current.claimProviderTravel} onChange={event => edit({ claimProviderTravel: event.target.checked })} />
         <div className={formGrid}>
-          <NumberField label="Standard vehicle, $ a kilometre" className={span.short} value={current.travelKmRateStandard} min={0} max={MAX_KM_RATE} step={0.01} inputMode="decimal" error={rateError(current.travelKmRateStandard)} onChange={value => edit({ travelKmRateStandard: value })} />
-          <NumberField label="Accessible vehicle or bus, $ a kilometre" className={span.short} value={current.travelKmRateAccessible} min={0} max={MAX_KM_RATE} step={0.01} inputMode="decimal" error={rateError(current.travelKmRateAccessible)} onChange={value => edit({ travelKmRateAccessible: value })} />
+          <NumberField label="Standard vehicle, $ a kilometre" className={span.medium} value={current.travelKmRateStandard} min={0} max={MAX_KM_RATE} step={0.01} inputMode="decimal" error={rateError(current.travelKmRateStandard)} onChange={value => edit({ travelKmRateStandard: value })} />
+          <NumberField label="Accessible vehicle or bus, $ a kilometre" className={span.medium} value={current.travelKmRateAccessible} min={0} max={MAX_KM_RATE} step={0.01} inputMode="decimal" error={rateError(current.travelKmRateAccessible)} onChange={value => edit({ travelKmRateAccessible: value })} />
         </div>
         <CheckboxField label="These rates are provisional" hint="NDIA has not published 2026-27 per-kilometre rates or travel time caps, so the 2025-26 values are used. While this is on, every line that uses them says Provisional." checked={current.travelRatesProvisional} onChange={event => edit({ travelRatesProvisional: event.target.checked })} />
       </section>
