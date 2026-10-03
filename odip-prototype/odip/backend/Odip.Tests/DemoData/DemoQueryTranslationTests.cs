@@ -40,6 +40,7 @@ public class DemoQueryTranslationTests
         yield return Q(nameof(DemoQueries.PatternsByIds), db => DemoQueries.PatternsByIds(db, Ids), "\"Id\" = ANY (");
         yield return Q(nameof(DemoQueries.OpenShifts), db => DemoQueries.OpenShifts(db, Today, Ids), "\"ServiceDate\" <=", "\"ShiftPatternId\" IS NULL OR", "\"ShiftPatternId\" = ANY (", "\"Status\"");
         yield return Q(nameof(DemoQueries.PatternDatesOf), db => DemoQueries.PatternDatesOf(db, Ids, Today, Today.AddDays(27)), "\"ShiftPatternId\" IS NOT NULL", "\"ShiftPatternId\" = ANY (", "\"ServiceDate\" >=", "\"ServiceDate\" <=");
+        yield return Q(nameof(DemoQueries.PreferredStaffOf), db => DemoQueries.PreferredStaffOf(db, Ids), "\"PreferredUserId\"", "\"Id\" = ANY (");
         yield return Q(nameof(DemoQueries.CompletionsOf), db => DemoQueries.CompletionsOf(db, Ids), "\"ShiftId\" = ANY (");
         yield return Q(nameof(DemoQueries.LapsedLeave), db => DemoQueries.LapsedLeave(db, Today), "\"Status\" =", "\"StartDate\" <");
         yield return Q(nameof(DemoQueries.LapsedRules), db => DemoQueries.LapsedRules(db, Today), "\"Status\" =", "\"EffectiveFrom\" <");

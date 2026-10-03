@@ -11,7 +11,8 @@ namespace Odip.Infrastructure.DemoData.Packs;
 /// only show in the matrix. Absence of a cell means Allowed.
 ///
 /// A cell the owner already has for a pair (the table is unique on tenant, user and participant) is left exactly as it is, even when it
-/// disagrees with the one here: a human's explicit judgement, "Excluded" most of all, is never overwritten.
+/// disagrees with the one here: a human's explicit judgement, "Excluded" most of all, is never overwritten. The auto-linked cell is not put back once the participant's
+/// preferred staff member is somebody else: the app removes it then (StaffCompatibilityLinkService), and the matrix would hold two auto-linked Preferred cells for one pick.
 /// </summary>
 public sealed class CompatibilityPack : IDemoPack
 {
@@ -68,6 +69,15 @@ public sealed class CompatibilityPack : IDemoPack
         var takenPairs = taken.Select(t => (t.UserId, t.ParticipantId)).ToHashSet();
 
         var missing = expected.Where(e => !takenIds.Contains(e.Id) && !takenPairs.Contains((e.UserId, e.ParticipantId))).ToList();
+
+        // The app removes an auto-linked cell when the participant's preferred staff moves to somebody else; it is not put back beside a pick that points elsewhere (third
+        // independent review Q6). A participant with no pick at all is as the demo starts: the cell is there without one.
+        if (missing.Any(m => m.AutoLinked))
+        {
+            var picks = (await DemoQueries.PreferredStaffOf(run.Db, missing.Where(m => m.AutoLinked).Select(m => m.ParticipantId).Distinct().ToList()).ToListAsync(ct))
+                .ToDictionary(p => p.ParticipantId, p => p.UserId);
+            missing = missing.Where(m => !m.AutoLinked || picks.GetValueOrDefault(m.ParticipantId) is not { } pick || pick == m.UserId).ToList();
+        }
         if (missing.Count == 0) return;
 
         run.Db.StaffParticipantCompatibilities.AddRange(missing);

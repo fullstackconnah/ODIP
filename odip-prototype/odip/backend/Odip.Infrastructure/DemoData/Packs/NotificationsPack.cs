@@ -20,6 +20,10 @@ namespace Odip.Infrastructure.DemoData.Packs;
 /// They belong to the first days only, like the rows of any static story: a dose or a shift of a later day raises nothing here, so the tab does not
 /// grow as the demo ages. Time (plan 2.0): every instant is the triggering event's own plus seconds, so a row is written only once the last of them
 /// has passed (a Sent row's send, a Failed row's last attempt).
+///
+/// Known, left as it is (third independent review Q7): the rows are addressed to today's recipients, so a coordinator added after the first run is sent "incident reported" and
+/// "shift ready for review" rows dated before they existed. Keeping them out means comparing the user's creation time with the events', which the test fixtures cannot support
+/// (their users are stamped with the real clock and the tests run on a fixed one in the past); the rows only show in that coordinator's own Admin notifications tab.
 /// </summary>
 public sealed class NotificationsPack : IDemoPack
 {

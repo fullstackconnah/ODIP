@@ -265,7 +265,9 @@ public sealed class LiveSetPack : IDemoPack
             var variance = StartVariance(live);
             var actualStartLocal = startLocal.AddMinutes(variance);
 
-            // Start: the worker taps Start (rostered start plus the story's variance).
+            // Start: the worker taps Start (rostered start plus the story's variance). Known (third independent review Q2): a shift a coordinator cancelled and un-cancelled after
+            // its scripted start is worked as if it had never been cancelled, so its start and the events before the un-cancel are dated inside the cancellation. It takes two
+            // edits within one day, and what is wrong is the dates of the rows.
             if (shift.Status == ShiftStatus.Published)
             {
                 if (!Due(actualStartLocal)) return;
@@ -572,7 +574,9 @@ public sealed class LiveSetPack : IDemoPack
 
             var submittedLocal = ProviderLocalTime.UtcToLocal(submittedAt, _a.Zone);
 
-            // A break still running is ended (and marked as adjusted, as an edit would): the running break is a Finish blocker.
+            // A break still running is ended (and marked as adjusted, as an edit would): the running break is a Finish blocker. Known (third independent review Q3): the shift
+            // stays InProgress in the database from the scripted finish to the tick that closes it (up to an hour), so a dose, a tick or a note a person records in that gap is
+            // dated after the Finish, and a break they start there is ended before it began.
             await DemoQueries.RunningBreaksOf(_run.Db, new List<Guid> { completion.Id }).ToListAsync(ct);          // attaches the saved ones
             var running = Pending<ShiftBreak>().Where(b => b.ShiftCompletionId == completion.Id && b.EndedAt == null).ToList();   // and the ones just added
             foreach (var b in running)

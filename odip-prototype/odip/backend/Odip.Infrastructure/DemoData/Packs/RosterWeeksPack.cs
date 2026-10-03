@@ -18,6 +18,9 @@ namespace Odip.Infrastructure.DemoData.Packs;
 ///     Published after it ended.
 ///  5. Shifts created by an earlier tick are moved forward the same way (see <see cref="MoveForwardAsync"/>), each one only from the state
 ///     the top-up left it in.
+/// Known, left as it is (third independent review Q8): the window starts a fortnight back and the patterns are read as they stand, so re-activating the paused pattern, moving a
+/// pattern's day or its start earlier makes up to two weeks of past shifts at the next tick, born worked and approved and dated before the edit that caused them; and a past
+/// shift the owner cancelled and then deleted comes back worked, like any deleted row (rule 3).
 /// Times are provider-local wall clock typed as given; every instant goes through <see cref="DemoAnchors.LocalToUtc(DateTime)"/>.
 /// </summary>
 public sealed class RosterWeeksPack : IDemoPack

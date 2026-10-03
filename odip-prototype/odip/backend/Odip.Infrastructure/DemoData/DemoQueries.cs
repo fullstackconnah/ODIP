@@ -77,6 +77,12 @@ public static class DemoQueries
                         && (s.Status == ShiftStatus.Published || s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.PendingReview))
             .Where(s => s.ShiftPatternId == null || patternIds.Contains(s.ShiftPatternId.Value));
 
+    public sealed record PreferredStaff(Guid ParticipantId, Guid? UserId);
+
+    /// <summary>Read only: whom these participants have picked as their preferred staff member, if anyone.</summary>
+    public static IQueryable<PreferredStaff> PreferredStaffOf(OdipDbContext db, List<Guid> participantIds) =>
+        db.Participants.AsNoTracking().Where(p => participantIds.Contains(p.Id)).Select(p => new PreferredStaff(p.Id, p.PreferredUserId));
+
     public sealed record PatternDate(Guid PatternId, DateOnly ServiceDate);
 
     /// <summary>

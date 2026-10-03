@@ -259,6 +259,8 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
     private static void AcknowledgementsOf(DemoRun run, List<DemoQueries.ClosedPair> closed, List<HandoverSource> sources, List<DemoQueries.ShiftState> unfinishedLive,
         IReadOnlyDictionary<string, User> staff, List<(HandoverAcknowledgement, User)> acks)
     {
+        // Known (third independent review Q4): for two overlapping shifts of one worker and participant that pick the same handover, the first tick to see the pair decides which of
+        // them the read is written for (the earlier-closing one at hourly ticks, the earlier-starting one after a gap); it needs an overlap a coordinator allowed with an override.
         var written = new HashSet<Guid>();                                                                  // an acknowledgement's id is its handover and reader, whatever the reader's shift
         foreach (var reader in closed.OrderBy(p => p.Shift.ServiceDate).ThenBy(p => p.Shift.StartTime))
         {
