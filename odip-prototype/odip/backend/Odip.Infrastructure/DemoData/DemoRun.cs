@@ -174,12 +174,21 @@ public sealed class DemoRun
         }
         catch (Exception ex)
         {
-            if (savepoint is not null)
+            try
             {
-                await transaction!.RollbackToSavepointAsync(savepoint, ct);
-                await transaction.ReleaseSavepointAsync(savepoint, ct);                  // rolling back keeps the savepoint defined: pop it, so the next piece starts level
+                if (savepoint is not null)
+                {
+                    await transaction!.RollbackToSavepointAsync(savepoint, ct);
+                    await transaction.ReleaseSavepointAsync(savepoint, ct);              // rolling back keeps the savepoint defined: pop it, so the next piece starts level
+                }
+                await ForgetUnsavedAndReloadAsync(ct);
             }
-            await ForgetUnsavedAndReloadAsync(ct);
+            catch (Exception undoing) when (undoing is not OperationCanceledException)
+            {
+                // The piece failed and could not be put back (a broken connection, say): the pack goes down with both reasons, the piece's own first, so the log still says
+                // what went wrong in it (the first review's N3).
+                throw new AggregateException($"live piece '{unit}' failed and could not be undone", ex, undoing);
+            }
             _added.Clear();
             _changed.Clear();
             foreach (var (key, count) in added) _added[key] = count;                     // the counts say what is written, not what was undone

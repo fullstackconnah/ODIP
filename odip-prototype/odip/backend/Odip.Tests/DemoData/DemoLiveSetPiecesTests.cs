@@ -87,6 +87,8 @@ public class DemoLiveSetPiecesTests
 
         var failure = Assert.Single(result.Failures);
         Assert.StartsWith("live-set: live-morning 2026-10-02", failure.Pack, StringComparison.Ordinal);                                   // named by pack and piece
+        // The tick's summary line counts it among the failures, and a second line says that it is a piece of a pack that committed (the first review's N6).
+        Assert.Contains(env.Log.Entries, e => e.Message.Contains("1 of those failures are pieces of a pack that committed", StringComparison.Ordinal));
         Assert.False(failure.Conflict);
         Assert.True(refuses.Refusals >= 1);
 

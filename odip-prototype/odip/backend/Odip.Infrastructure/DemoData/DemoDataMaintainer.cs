@@ -335,6 +335,12 @@ public sealed class DemoDataMaintainer
             result.RowsAdded.Values.Sum(), result.RowsChanged.Values.Sum(), result.SkippedStories.Count, result.Failures.Count,
             (long)result.Elapsed.TotalMilliseconds);
 
+        // A piece of a pack that committed (a live shift undone and tried again next tick) counts among the "packs failed" above; say how many of them are.
+        var pieces = result.Failures.Count(f => f.Pack.Contains(": ", StringComparison.Ordinal));
+        if (pieces > 0)
+            _logger.LogInformation("Demo data: {Pieces} of those failures are pieces of a pack that committed (undone, and tried again at the next tick): {Names}",
+                pieces, string.Join("; ", result.Failures.Where(f => f.Pack.Contains(": ", StringComparison.Ordinal)).Select(f => f.Pack)));
+
         if (result.SkippedStories.Count > 0)
             _logger.LogInformation("Demo data: skipped stories: {Stories}", string.Join("; ", result.SkippedStories));
     }
