@@ -214,6 +214,11 @@ builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odi
 builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odip.Infrastructure.Notifications.SmsChannel>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.NotificationDispatchBackgroundService>();
 
+// ── Roster top-up (plan builder phase D) ──────────────────────────
+// Keeps RosterTopUp:HorizonDays (56) days of open shifts generated for the patterns an approved agreement made, once for each organisation's provider day. RosterTopUp:Enabled (default true)
+// switches it off; hand-made and demo patterns are never touched. Reads the clock the rest of the API reads (TimeProvider.System, registered above).
+builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.RosterTopUpBackgroundService>();
+
 // ── Public early-access form (landing page) ──────────────────────
 // EarlyAccessService stores the request; EarlyAccessNotifier is the opt-in operator email (needs BOTH
 // EarlyAccess:NotifyEmail and Notifications:Smtp:Host — by default nothing is sent). One singleton instance
