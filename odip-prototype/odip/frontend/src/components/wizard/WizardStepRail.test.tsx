@@ -16,6 +16,19 @@ describe('WizardStepRail', () => {
     expect(within(nav).getByRole('button', { name: /alpha/i, current: 'step' })).toBeInTheDocument()
   })
 
+  // The state classes were an object inside an array that was joined into a string, so the fills never reached the DOM ("[object Object]") and the current step looked
+  // like every other: only aria-current said where you were.
+  it('fills the current step, tints the completed ones and leaves the rest plain, in the class list itself', () => {
+    render(<WizardStepRail steps={steps} visitedSteps={new Set(['a', 'b', 'c'])} currentKey="b" onSelect={vi.fn()} />)
+
+    const [alpha, beta, gamma] = screen.getAllByRole('button')
+    expect(beta.className).toContain('bg-[var(--color-primary)] text-white')
+    expect(alpha.className).toContain('bg-[var(--color-primary)]/10')
+    expect(alpha.className).toContain('text-[var(--color-primary)]')
+    expect(gamma.className).toContain('bg-[var(--color-accent)]')
+    for (const pill of [alpha, beta, gamma]) expect(pill.className).not.toContain('[object Object]')
+  })
+
   it('disables a pill whose key is not in visitedSteps', () => {
     render(<WizardStepRail steps={steps} visitedSteps={new Set(['a'])} currentKey="a" onSelect={vi.fn()} />)
     expect(screen.getByRole('button', { name: /gamma/i })).toBeDisabled()

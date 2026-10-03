@@ -1,4 +1,5 @@
 import { Check } from 'lucide-react'
+import clsx from 'clsx'
 import type { WizardStepDef } from './types'
 
 export type WizardStepRailOrientation = 'auto' | 'vertical' | 'horizontal'
@@ -87,24 +88,22 @@ export function WizardStepRail<V>({
           'lg:flex-col lg:items-stretch lg:w-full lg:gap-0',
         ].join(' ')
 
+  // clsx, not `[...].join(' ')`: the state classes are an object, and an object in an array joined into a string is "[object Object]", so the current and the completed
+  // step were never given their fill (only `aria-current` said which step it was). The fix is the rail's own: the classes were always meant to apply.
   const buttonClasses = (isCurrent: boolean, isCompleted: boolean, isClickable: boolean) =>
-    [
+    clsx(
       'flex items-center gap-2 px-3 py-1.5 min-h-[var(--control-h)] rounded-full text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]',
       // In vertical mode the button should be full-width, text-left, and use a square-ish radius
       // so it reads as a list item rather than a pill. The lg: vertical variant applies the same
       // shape without locking the mobile/tablet horizontal mode.
-      forceVertical || isVerticalAtLg
-        ? 'lg:w-full lg:justify-start lg:rounded-lg lg:text-left'
-        : '',
+      (forceVertical || isVerticalAtLg) && 'lg:w-full lg:justify-start lg:rounded-lg lg:text-left',
       {
         'bg-[var(--color-primary)] text-white': isCurrent,
         'bg-[var(--color-primary)]/10 text-[var(--color-primary)]': isCompleted && !isCurrent,
         'bg-[var(--color-accent)] text-[var(--color-muted-foreground)]': !isCurrent && !isCompleted,
       },
       !isClickable ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
-    ]
-      .filter(Boolean)
-      .join(' ')
+    )
 
   const renderConnector = (idx: number) => {
     if (idx >= steps.length - 1) return null

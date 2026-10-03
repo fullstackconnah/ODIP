@@ -29,6 +29,8 @@ import { useNotices } from '@/hooks/useNotices'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { plural } from '@/lib/format'
+import { useTabParam } from '@/hooks/useTabParam'
+import PlanPricingSettingsTab from '@/pages/settings/PlanPricingSettingsTab'
 
 function QualificationSettingsTab() {
   const { data: settings } = useSettings()
@@ -115,7 +117,6 @@ function AppearanceSettingsTab() {
 }
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<'templates' | 'activities' | 'qualifications' | 'appearance' | 'provider' | 'catalogue' | 'holidays' | 'tenants' | 'users' | 'notifications' | 'notifications-admin'>('templates')
   const { data: templates = [], isLoading: templatesLoading } = useEventTemplates()
   const [panelOpen, setPanelOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<EventTemplateDto | undefined>(undefined)
@@ -126,7 +127,7 @@ export default function SettingsPage() {
   const templatesEmpty = !templatesLoading && activeTemplates.length === 0
   const openNewTemplate = () => { setEditingTemplate(undefined); setPanelOpen(true) }
 
-  const { isSuperAdmin, canManageNotifications } = usePermissions()
+  const { isSuperAdmin, isAdmin, canManageNotifications } = usePermissions()
 
   const [tenantPanelOpen, setTenantPanelOpen] = useState(false)
   const [editingTenant, setEditingTenant] = useState<TenantSummaryDto | undefined>()
@@ -144,6 +145,8 @@ export default function SettingsPage() {
     { key: 'qualifications' as const, label: 'Qualification Warnings' },
     { key: 'appearance' as const, label: 'Appearance' },
     { key: 'provider' as const, label: 'Provider Settings' },
+    // The pricing engine's own answers (registration groups, crossing policy, travel rates): the provider's to set, so Admins and SuperAdmins only.
+    { key: 'pricing' as const, label: 'Plan Pricing', hidden: !(isAdmin || isSuperAdmin) },
     { key: 'catalogue' as const, label: 'Support Catalogue', superAdminOnly: true },
     // Everyone reads the calendar (it prices their plans and claims); only a SuperAdmin changes it, so the tab is read-only for the rest.
     { key: 'holidays' as const, label: 'Public Holidays' },
@@ -153,6 +156,8 @@ export default function SettingsPage() {
     { key: 'notifications-admin' as const, label: 'Failed Sends', hidden: !canManageNotifications },
   ]
   const tabs = allTabs.filter(t => (!t.superAdminOnly || isSuperAdmin) && !t.hidden)
+  // The active tab lives in the URL (?tab=pricing), so a link, a reload and the plan builder's "Confirm in Settings" all land on it; a tab this user cannot see reads as the first.
+  const [tab, setTab] = useTabParam(tabs.map(t => t.key), 'templates')
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
@@ -164,7 +169,7 @@ export default function SettingsPage() {
       <Tabs
         tabs={tabs.map(t => ({ id: t.key, label: t.label }))}
         active={tab}
-        onChange={(key) => { setTab(key as typeof tab); if (key !== 'tenants') setTenantDetail(undefined) }}
+        onChange={(key) => { setTab(key); if (key !== 'tenants') setTenantDetail(undefined) }}
         ariaLabel="Settings sections"
       />
 
@@ -259,6 +264,7 @@ export default function SettingsPage() {
       {tab === 'qualifications' && <QualificationSettingsTab />}
       {tab === 'appearance' && <AppearanceSettingsTab />}
       {tab === 'provider' && <ProviderSettingsTab />}
+      {tab === 'pricing' && <PlanPricingSettingsTab />}
       {tab === 'catalogue' && <SupportCatalogueTab />}
       {tab === 'holidays' && <PublicHolidaysTab canEdit={isSuperAdmin} />}
       {tab === 'notifications' && <NotificationPreferencesTab />}
