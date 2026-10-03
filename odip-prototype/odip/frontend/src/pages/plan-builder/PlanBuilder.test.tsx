@@ -29,12 +29,12 @@ const source = (changes: Partial<FundingSourceDto> = {}): FundingSourceDto => ({
 })
 
 /** The plan belongs to the page; this is the smallest page. */
-function Page({ initial = [] as DraftBlock[], readOnly = false, onPlan, footer, unsaved }: { initial?: DraftBlock[]; readOnly?: boolean; onPlan?: (entries: DraftBlock[]) => void; footer?: React.ComponentProps<typeof PlanBuilder>['footer']; unsaved?: React.ComponentProps<typeof PlanBuilder>['unsaved'] }) {
+function Page({ initial = [] as DraftBlock[], readOnly = false, onPlan, footer, unsaved, from = '2026-10-01', to = '2027-06-30' }: { initial?: DraftBlock[]; readOnly?: boolean; onPlan?: (entries: DraftBlock[]) => void; footer?: React.ComponentProps<typeof PlanBuilder>['footer']; unsaved?: React.ComponentProps<typeof PlanBuilder>['unsaved']; from?: string; to?: string }) {
   const [entries, setEntries] = useState(initial)
   return (
     <MemoryRouter>
       <PlanBuilder
-        participantId="p-1" state="NSW" zone="National" from="2026-10-01" to="2027-06-30" entries={entries}
+        participantId="p-1" state="NSW" zone="National" from={from} to={to} entries={entries}
         onChange={next => { setEntries(next); onPlan?.(next) }} readOnly={readOnly} footer={footer ?? <button type="button">Save draft</button>} unsaved={unsaved}
       />
     </MemoryRouter>
@@ -396,6 +396,60 @@ describe('PlanBuilder and the budget', () => {
 })
 
 // Design review 6: "Add to plan" does not save, and the save row is a long scroll below the blocks, so on a phone the bar says the plan is not saved and saves from there.
+// Code review N1: with no dates, a date that is no day, or an end before the start, the budget query is off. The bar said "Pricing the plan…" (and was busy) with nothing in flight, and the screen kept showing
+// the answer for the dates it had before (the query keeps the previous answer): totals that were not the plan's.
+describe('PlanBuilder and dates the plan cannot be priced over', () => {
+  const idle = (note: string) => {
+    const bar = screen.getByRole('region', { name: 'Running budget' })
+    expect(bar).toHaveAttribute('aria-busy', 'false')
+    expect(within(bar).getAllByText(new RegExp(note))).toHaveLength(2)
+    expect(within(bar).queryByText(/Pricing the plan/)).not.toBeInTheDocument()
+    expect(bar).not.toHaveTextContent('$')
+  }
+
+  it.each([
+    ['no dates', '', ''],
+    ['no end date', '2026-10-01', ''],
+    ['a date that is no day', '2026-10-01', '2027-02-30'],
+    ['a year of five digits', '20267-01-01', '2027-06-30'],
+  ])('says to enter the dates, as idle and not busy, for %s, and shows no figure from the dates it had before', (_name, from, to) => {
+    render(<Page initial={twoBlocks()} from={from} to={to} />)
+
+    idle('Enter the agreement dates to price the plan')
+    const rows = screen.getAllByRole('row').slice(1)
+    for (const row of rows) expect(row).not.toHaveTextContent('$')    // the overview shows the en dash of a figure nobody has, not the totals of the dates before
+  })
+
+  it('says an agreement that ends before it starts in its own words, comparing the days and not the text', () => {
+    render(<Page initial={twoBlocks()} from="2027-06-30" to="2026-10-01" />)
+
+    idle('The agreement ends before it starts, so the plan cannot be priced')
+  })
+
+  it('does not take a refusal from the dates before for this plan, so Save is not held back by an answer that is not about this plan', () => {
+    const refusal: PlanIssue = { blockId: 'b1', reason: 'RegistrationGroupNotHeld', message: "Block 'b1': needs registration group 0125.", count: 1 }
+    budgetState.current = { data: { ...budgetOf('b1'), period: quote({ ...budgetOf('b1').period, issues: [refusal] }) }, isError: false, isFetching: false }
+    const footer = vi.fn(() => <span>save row</span>)
+    render(<Page initial={twoBlocks()} footer={footer} from="" to="" />)
+
+    expect(footer).toHaveBeenCalledWith({ refused: [] })
+  })
+
+  it('prices as before once the dates are there', () => {
+    render(<Page initial={twoBlocks()} />)
+
+    const bar = screen.getByRole('region', { name: 'Running budget' })
+    expect(bar).toHaveTextContent('$30,610.28')
+    expect(bar).not.toHaveTextContent('Enter the agreement dates')
+  })
+
+  it('says nothing about dates when there is no block to price: it asks for a block first', () => {
+    render(<Page initial={[draftBlock({ ...mondayWednesday('b1'), days: [] })]} from="" to="" />)
+
+    expect(screen.getByRole('region', { name: 'Running budget' })).toHaveTextContent('Add a block to see the budget')
+  })
+})
+
 describe('PlanBuilder and a plan that is not saved', () => {
   it('says Not saved on the budget bar, with a Save beside it that saves, and says nothing when there is nothing to save', async () => {
     const user = userEvent.setup()

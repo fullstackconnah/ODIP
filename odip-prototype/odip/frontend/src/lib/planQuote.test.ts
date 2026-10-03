@@ -10,7 +10,7 @@ const PRICING = resolve(BACKEND, 'Odip.Domain/Billing/Pricing')
 const hasBackend = existsSync(PRICING)
 import {
   CATEGORY_SHORT, NO_FIGURE, REASON_COPY, addDays, bandLabel, categoryLabel, compareBudget, conflictVersionOf, describeQuoteError, describeSaveError, formatServiceDate, friendlyMessage, groupLines,
-  groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, planBudgetFor, quantityLabel, questionShort, referenceWeek, refusals, ruleWords, shiftsNotPriced, totalsCaption,
+  groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, periodProblem, periodPrompt, planBudgetFor, pricedNothing, quantityLabel, questionShort, referenceWeek, refusals, ruleWords, shiftsNotPriced, totalsCaption,
 } from './planQuote'
 
 const line = (changes: Partial<PlannedLine>): PlannedLine => ({
@@ -36,6 +36,40 @@ describe('dates', () => {
     for (const bad of ['', '20261-10-05', '1999-12-31', '2101-01-01', '2026-02-30', '2027-02-29', '2026-13-01', '26-10-05', '2026-10-05T00:00:00', 'abc']) expect(isPricingDate(bad), bad).toBe(false)
     expect(isPricingDate(undefined)).toBe(false)
     expect(isPricingDate(null)).toBe(false)
+  })
+})
+
+// Code review N1: the dates the plan is priced over. Review compared the two as text, so a year of five digits was a period; nothing was asked, and nothing said so.
+describe('the agreement period', () => {
+  it('has no problem when both dates are days the engine prices and the end is not before the start', () => {
+    expect(periodProblem('2026-10-01', '2027-06-30')).toBeNull()
+    expect(periodProblem('2026-10-01', '2026-10-01')).toBeNull()      // one day is a period
+  })
+
+  it('is blank when a date is not typed', () => {
+    expect(periodProblem('', '2027-06-30')).toBe('blank')
+    expect(periodProblem('2026-10-01', '')).toBe('blank')
+    expect(periodProblem('', '')).toBe('blank')
+  })
+
+  it('is invalid for a date that is no day, or a year outside the engine range, and reads a five digit year as invalid and not as later than everything', () => {
+    expect(periodProblem('20267-01-01', '2027-06-30')).toBe('invalid')       // as text it is "later" than 2027-06-30, and as a period it would have been accepted
+    expect(periodProblem('2026-10-01', '2027-02-30')).toBe('invalid')
+    expect(periodProblem('1999-12-31', '2027-06-30')).toBe('invalid')
+    expect(periodProblem('2026-10-01', '2101-01-01')).toBe('invalid')
+    expect(periodProblem('2026-10-01T00:00:00', '2027-06-30')).toBe('invalid')
+  })
+
+  it('is reversed when the end is before the start, by the days', () => {
+    expect(periodProblem('2027-06-30', '2026-10-01')).toBe('reversed')
+    expect(periodProblem('2026-10-02', '2026-10-01')).toBe('reversed')
+  })
+
+  it('says what is missing in the words of the thing being priced, and an agreement that ends before it starts in its own', () => {
+    expect(periodPrompt('blank', 'the plan')).toBe('Enter the agreement dates to price the plan')
+    expect(periodPrompt('invalid', 'this block')).toBe('Enter the agreement dates to price this block')
+    expect(periodPrompt('reversed', 'the plan')).toBe('The agreement ends before it starts, so the plan cannot be priced')
+    expect(periodPrompt('reversed', 'this block')).toBe('The agreement ends before it starts, so this block cannot be priced')
   })
 })
 
@@ -274,6 +308,21 @@ describe('what is left out of a plan\'s totals', () => {
 
 // The engine keeps ONE issue for each block, reason and message, with the shifts it met it on (the message has no date: "Either is free of dates, so one gap in fifty weeks is one issue").
 // The same shift can carry several items, one message each, so two issues of one reason in one block count the same shifts, and merging them takes the larger count, not the sum.
+// Code review N6 and design D8: a plan that prices to nothing is shown with en dashes, not $0.00.
+describe('a quote that priced nothing', () => {
+  const totals = (changes: Partial<PlanQuote['totals']>): PlanQuote['totals'] => ({ amount: 0, supportHours: 0, lineCount: 0, unpricedLines: 0, reviewLines: 0, provisionalLines: 0, holidayOccurrences: 0, holidayUplift: 0, byCategory: [], byBlock: [], ...changes })
+
+  it('is nothing priced when no line has a price: all of them are unpriced, or there are none', () => {
+    expect(pricedNothing({ totals: totals({ lineCount: 6, unpricedLines: 6 }) })).toBe(true)
+    expect(pricedNothing({ totals: totals({}) })).toBe(true)                     // every block refused: no line at all
+  })
+
+  it('is not nothing as soon as one line is priced, however many are not', () => {
+    expect(pricedNothing({ totals: totals({ amount: 73.58, lineCount: 6, unpricedLines: 5 }) })).toBe(false)
+    expect(pricedNothing({ totals: totals({ amount: 30610.28, lineCount: 208 }) })).toBe(false)
+  })
+})
+
 describe('issues read as one thing, not one per item', () => {
   const gap = (blockId: string, item: string, count: number, firstDate?: string): PlanIssue => ({
     blockId, reason: 'CatalogueNotFound', message: `No catalogue row for ${item} is valid for part of the period. Import the catalogue for that period.`, count, ...(firstDate ? { firstDate } : {}),

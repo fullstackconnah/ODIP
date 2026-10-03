@@ -4,7 +4,7 @@ import type { PlanBudget } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { TONE } from '@/lib/tone'
 import { formatHours } from '@/lib/planBlocks'
-import { categoryLabel, compareBudget, describeQuoteError, totalsCaption } from '@/lib/planQuote'
+import { NO_FIGURE, categoryLabel, compareBudget, describeQuoteError, pricedNothing, totalsCaption } from '@/lib/planQuote'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 
@@ -14,6 +14,11 @@ type BudgetBarProps = {
   budget?: PlanBudget
   /** A newer answer is on its way while the last one is still shown. */
   refreshing?: boolean
+  /**
+   * Why there is nothing to price when it is not for want of a block: the agreement's dates are not there, are no day, or end before they start. Said in the one line and in Details, as idle: nothing is
+   * in flight, so it is not "pricing" and the bar is not busy.
+   */
+  idleNote?: string
   error?: unknown
   onRetry?: () => void
   /** The participant's plan budget as the funding sources record it (null when none does). */
@@ -52,7 +57,7 @@ const CHIP = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
  * totals stand alone and say so. A total that leaves work out says so beside the figure, in shifts, and a chip says it on the one-line form. Below 1280px it is one line and a Details
  * toggle (the full bar is a third of a tablet's screen). Every figure is the pricing engine's, for the plan as it would be saved.
  */
-export function BudgetBar({ status, budget, refreshing = false, error, onRetry, planBudget, planBudgetUnreadable = false, incompleteBlocks = 0, blocked = false, unsaved, notice, saved = null }: BudgetBarProps) {
+export function BudgetBar({ status, budget, refreshing = false, idleNote, error, onRetry, planBudget, planBudgetUnreadable = false, incompleteBlocks = 0, blocked = false, unsaved, notice, saved = null }: BudgetBarProps) {
   const [open, setOpen] = useState(false)
   const period = budget?.period
   const weekly = budget?.weekly ?? null
@@ -61,10 +66,15 @@ export function BudgetBar({ status, budget, refreshing = false, error, onRetry, 
   const caption = period ? totalsCaption(period) : { text: '', notFullyPriced: false }
   const notFullyPriced = status === 'ready' && caption.notFullyPriced
   const failure = status === 'error' ? describeQuoteError(error) : null
+  // A plan that prices to nothing has no total to show: $0.00 would read as a price, and the whole plan budget as left (review N6).
+  const nothingPriced = status === 'ready' && !!period && pricedNothing(period)
+  const updating = status === 'ready' && refreshing
 
   const oneLine = status === 'ready' && period
-    ? `${weekly ? `${formatHours(weekly.totals.supportHours)} h · ${formatCurrency(weekly.totals.amount)} a week · ` : ''}${formatCurrency(period.totals.amount)} in all`
-    : status === 'loading' ? 'Pricing the plan…' : 'Add a block to see the budget'
+    ? nothingPriced
+      ? `${weekly ? `${NO_FIGURE} h · ${NO_FIGURE} a week · ` : ''}${NO_FIGURE} in all`
+      : `${weekly ? `${formatHours(weekly.totals.supportHours)} h · ${formatCurrency(weekly.totals.amount)} a week · ` : ''}${formatCurrency(period.totals.amount)} in all`
+    : status === 'loading' ? 'Pricing the plan…' : idleNote ?? 'Add a block to see the budget'
 
   return (
     <div className="sticky bottom-[var(--mobile-nav-h)] z-30 -mx-[var(--card-pad)] -mb-[var(--card-pad)] border-t border-[var(--color-border)] bg-[var(--color-card)] px-[var(--card-pad)] py-2 lg:bottom-0">
@@ -76,7 +86,7 @@ export function BudgetBar({ status, budget, refreshing = false, error, onRetry, 
         {saved && <p className="mb-2 text-sm font-medium">{saved}</p>}
         <p className="sr-only">{over ? 'Over the plan budget.' : ''}</p>
       </div>
-      <section aria-label="Running budget" aria-busy={status === 'loading'}>
+      <section aria-label="Running budget" aria-busy={status === 'loading' || updating}>
         {/* A plan that could not be priced says so wherever it is read, on a phone too: not inside the Details a phone keeps shut. */}
         {failure && (
           <div role="alert" className="flex flex-wrap items-center gap-3 text-sm">
@@ -88,7 +98,13 @@ export function BudgetBar({ status, budget, refreshing = false, error, onRetry, 
         {status !== 'error' && (
           <div className="flex items-center justify-between gap-3 xl:hidden">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium tabular-nums">{oneLine}</p>
+              <p className="text-sm font-medium tabular-nums">
+                {oneLine}
+                {/* The one line is all a tablet reads, so what makes it provisional is in it: a newer answer on its way, and the blocks the figure leaves out. */}
+                {status === 'ready' && (updating || incompleteBlocks > 0) && (
+                  <span className="font-normal text-[var(--color-muted-foreground)]">{updating && ' · updating…'}{incompleteBlocks > 0 && ` · ${plural(incompleteBlocks, 'block')} left out`}</span>
+                )}
+              </p>
               {(unsaved || over || notFullyPriced) && (
                 <p className="mt-1 flex flex-wrap items-center gap-1.5">
                   {unsaved && (
@@ -110,7 +126,7 @@ export function BudgetBar({ status, budget, refreshing = false, error, onRetry, 
 
         {status !== 'error' && (
           <div id="plan-budget-details" className={`${open ? 'mt-2 grid max-xl:max-h-[45vh] max-xl:overflow-y-auto' : 'hidden'} grid-cols-1 gap-x-6 gap-y-3 xl:mt-0 xl:grid xl:grid-cols-[minmax(11rem,auto)_1fr_minmax(14rem,auto)]`}>
-            {status === 'idle' && <p className="text-sm text-[var(--color-muted-foreground)] xl:col-span-3">Add a block to see the weekly hours and cost, and what the agreement comes to.</p>}
+            {status === 'idle' && <p className="text-sm text-[var(--color-muted-foreground)] xl:col-span-3">{idleNote ? `${idleNote}. The dates are in Draft details, above the plan.` : 'Add a block to see the weekly hours and cost, and what the agreement comes to.'}</p>}
 
             {status === 'loading' && <p className="text-sm text-[var(--color-muted-foreground)] xl:col-span-3">Pricing the plan…</p>}
 
@@ -119,7 +135,7 @@ export function BudgetBar({ status, budget, refreshing = false, error, onRetry, 
                 <div>
                   <p className={LABEL}>An ordinary week</p>
                   {weekly ? (
-                    <p className={HEADLINE}>{formatHours(weekly.totals.supportHours)} h <span className="font-normal text-[var(--color-muted-foreground)]">·</span> {formatCurrency(weekly.totals.amount)}</p>
+                    <p className={HEADLINE}>{nothingPriced ? NO_FIGURE : formatHours(weekly.totals.supportHours)} h <span className="font-normal text-[var(--color-muted-foreground)]">·</span> {nothingPriced ? NO_FIGURE : formatCurrency(weekly.totals.amount)}</p>
                   ) : (
                     <p className="text-sm text-[var(--color-muted-foreground)]">The agreement is shorter than a week.</p>
                   )}
@@ -129,7 +145,7 @@ export function BudgetBar({ status, budget, refreshing = false, error, onRetry, 
                   {/* "updating…" is text, not a live region: it would speak on every recalculation while somebody types. aria-busy on the bar carries it for a screen reader. */}
                   <p className={LABEL}>The agreement period{refreshing && <span> · updating…</span>}</p>
                   <div className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
-                    <p className={HEADLINE}>{formatCurrency(period.totals.amount)} <span className="text-[13px] font-normal text-[var(--color-muted-foreground)]">{formatHours(period.totals.supportHours)} h of support</span></p>
+                    <p className={HEADLINE}>{nothingPriced ? NO_FIGURE : formatCurrency(period.totals.amount)}{!nothingPriced && <> <span className="text-[13px] font-normal text-[var(--color-muted-foreground)]">{formatHours(period.totals.supportHours)} h of support</span></>}</p>
                     {period.totals.byCategory.length > 0 && (
                       <ul className="flex flex-wrap gap-x-4 gap-y-0.5 text-[13px] tabular-nums" aria-label="By budget category">
                         {period.totals.byCategory.map(category => (
@@ -150,8 +166,10 @@ export function BudgetBar({ status, budget, refreshing = false, error, onRetry, 
                   // Over the plan budget is the thing to act on: the cell takes the warning tint, and the sentence is text at 13px, not a pill.
                   <div className={over ? `rounded-[var(--radius-md)] p-2 ${TONE.warning.solid}` : ''}>
                     <p className={over ? 'text-xs' : LABEL}>Plan budget</p>
-                    <p className={HEADLINE}>{formatCurrency(comparison.budget ?? 0)} <span className={`text-[13px] font-normal ${over ? '' : 'text-[var(--color-muted-foreground)]'}`}>{comparison.percent}% used</span></p>
-                    {over ? (
+                    <p className={HEADLINE}>{formatCurrency(comparison.budget ?? 0)}{!nothingPriced && <> <span className={`text-[13px] font-normal ${over ? '' : 'text-[var(--color-muted-foreground)]'}`}>{comparison.percent}% used</span></>}</p>
+                    {nothingPriced ? (
+                      <p className={`mt-0.5 ${NOTE}`}>Nothing is priced yet, so there is nothing to compare with it.</p>
+                    ) : over ? (
                       <p className="mt-0.5 flex items-start gap-1 text-[13px]"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span>Over the plan budget by {formatCurrency(Math.abs(comparison.remaining ?? 0))}.{blocked ? '' : ' You can still save the draft.'}</span></p>
                     ) : (
                       <p className={`mt-0.5 ${NOTE}`}>{formatCurrency(comparison.remaining ?? 0)} left{planBudget && planBudget.count > 1 ? `, across ${plural(planBudget.count, 'funding source')}` : ''}.</p>

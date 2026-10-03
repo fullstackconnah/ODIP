@@ -113,7 +113,7 @@ describe('BudgetBar', () => {
     expect(screen.getByText('The agreement is shorter than a week.')).toBeInTheDocument()
     expect(screen.getByText('2 public holiday shifts to decide · some lines use provisional rates.')).toBeInTheDocument()
     expect(screen.getByText('1 block left out of these figures until it is complete.')).toBeInTheDocument()
-    expect(screen.getByText(/updating…/)).toBeInTheDocument()
+    expect(screen.getAllByText(/updating…/)).toHaveLength(2)   // in the one line, and in Details
     expect(screen.queryByText('Not fully priced')).not.toBeInTheDocument()   // a decision still to make is not work left out
   })
 
@@ -122,7 +122,7 @@ describe('BudgetBar', () => {
     const issue = (reason: PlanIssue['reason'], count: number, blockId = 'b1'): PlanIssue => ({ blockId, reason, message: `${reason} ${blockId}`, count, firstDate: '2026-10-13' })
     const withIssues = (...issues: PlanIssue[]): PlanBudget => {
       const base = budget()
-      return { ...base, period: { ...base.period, issues, totals: { ...base.period.totals, unpricedLines: 372, reviewLines: 219, provisionalLines: 0 } } }
+      return { ...base, period: { ...base.period, issues, totals: { ...base.period.totals, lineCount: 744, unpricedLines: 372, reviewLines: 219, provisionalLines: 0 } } }
     }
 
     it('counts the shifts with a part not priced, once, never the lines (shifts times items) the engine counts', () => {
@@ -248,9 +248,107 @@ describe('BudgetBar', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('A box in the plan is empty or is not a number.')
   })
 
-  it('shows a plan that prices to nothing as exactly that, with no categories to list', () => {
-    ready({ budget: { period: { ...budget().period, totals: emptyTotals() }, weekly: null, week: null } })
-    expect(screen.getAllByText(/\$0\.00/).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('list', { name: 'By budget category' })).not.toBeInTheDocument()
+  // Code review N6 and design D8: a plan that prices to nothing printed "0 h · $0.00 a week", "$0.00" and the whole plan budget as left, beside a chip that said it was not fully priced. An en dash is the figure
+  // of something that is not known; the overview, Review and the PDF already say it so.
+  describe('a plan that prices to nothing', () => {
+    const issue: PlanIssue = { blockId: 'b1', reason: 'RegistrationGroupNotHeld', message: "Block 'b1': needs registration group 0125.", count: 1 }
+    const nothing = (): PlanBudget => {
+      const base = budget()
+      return { ...base, period: { ...base.period, issues: [issue], totals: { ...emptyTotals() } }, weekly: { ...base.weekly!, totals: emptyTotals() } }
+    }
+
+    it('shows an en dash for every headline, no $0.00, and no categories to list', () => {
+      ready({ budget: nothing() })
+
+      const bar = screen.getByRole('region', { name: 'Running budget' })
+      expect(bar).not.toHaveTextContent('$0.00')
+      expect(screen.getByText('An ordinary week').nextElementSibling).toHaveTextContent('– h · –')
+      expect(screen.getByText('The agreement period').nextElementSibling).toHaveTextContent(/^–/)
+      expect(screen.queryByRole('list', { name: 'By budget category' })).not.toBeInTheDocument()
+    })
+
+    it('says so in the one line a tablet reads', () => {
+      ready({ budget: nothing() })
+
+      expect(screen.getByText('– h · – a week · – in all')).toBeInTheDocument()
+      expect(screen.getByText('– h · – a week · – in all').parentElement).toHaveTextContent('Not fully priced')
+    })
+
+    it('does not say any of the plan budget is left, or how much of it is used, and says there is nothing to compare', () => {
+      ready({ budget: nothing(), planBudget: { total: 20000, count: 1 } })
+
+      expect(screen.getByText('Plan budget').nextElementSibling).toHaveTextContent('$20,000.00')
+      expect(screen.queryByText(/left/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/% used/)).not.toBeInTheDocument()
+      expect(screen.getByText('Nothing is priced yet, so there is nothing to compare with it.')).toBeInTheDocument()
+      expect(screen.queryByText('Over budget')).not.toBeInTheDocument()
+    })
+
+    it('is the same when every line is there and not one has a price, and when the agreement is shorter than a week', () => {
+      const base = budget()
+      ready({ budget: { period: { ...base.period, totals: { ...emptyTotals(), lineCount: 6, unpricedLines: 6 } }, weekly: null, week: null } })
+
+      expect(screen.getByText('– in all')).toBeInTheDocument()
+      expect(screen.getByRole('region', { name: 'Running budget' })).not.toHaveTextContent('$0.00')
+      expect(screen.getByText('The agreement is shorter than a week.')).toBeInTheDocument()
+    })
+
+    it('still prints a priced plan as money, whatever it leaves out', () => {
+      const base = budget()
+      ready({ budget: { ...base, period: { ...base.period, totals: { ...base.period.totals, lineCount: 208, unpricedLines: 100 } } } })
+
+      expect(screen.getByText('8 h · $588.64 a week · $30,610.28 in all')).toBeInTheDocument()
+    })
+  })
+
+  // Code review N1: with no dates (or a date that is no day, or an end before the start) the query is off, nothing is in flight, and the bar said "Pricing the plan…" and was busy for as long as it took the
+  // person to find the date boxes.
+  describe('a plan with no dates to price it over', () => {
+    const note = 'Enter the agreement dates to price the plan'
+
+    it('says what is missing, as idle: not "Pricing the plan…", not busy, and no figure', () => {
+      render(<BudgetBar status="idle" idleNote={note} planBudget={{ total: 40000, count: 1 }} />)
+
+      const bar = screen.getByRole('region', { name: 'Running budget' })
+      expect(bar).toHaveAttribute('aria-busy', 'false')
+      expect(screen.getAllByText(new RegExp(note))).toHaveLength(2) // the one line, and Details
+      expect(within(bar).queryByText(/Pricing the plan/)).not.toBeInTheDocument()
+      expect(bar).not.toHaveTextContent('$')
+      expect(screen.queryByText('Add a block to see the budget')).not.toBeInTheDocument()
+    })
+
+    it('says an agreement that ends before it starts in its own words', () => {
+      render(<BudgetBar status="idle" idleNote="The agreement ends before it starts, so the plan cannot be priced" planBudget={null} />)
+
+      expect(screen.getByText('The agreement ends before it starts, so the plan cannot be priced')).toBeInTheDocument()
+      expect(screen.getByRole('region', { name: 'Running budget' })).toHaveAttribute('aria-busy', 'false')
+    })
+  })
+
+  // Code review N5: the one line a tablet reads (everything below 1280px) held the previous plan's total with no cue that a newer one was on its way, and the left-out count was inside the Details.
+  describe('the one line, while the figure is provisional', () => {
+    it('says it is updating, and busy, while a newer answer is on its way, and not otherwise', () => {
+      const { rerender } = ready({ refreshing: true })
+      const line = screen.getByText('8 h · $588.64 a week · $30,610.28 in all').parentElement as HTMLElement
+      expect(line).toHaveTextContent('· updating…')
+      expect(screen.getByRole('region', { name: 'Running budget' })).toHaveAttribute('aria-busy', 'true')
+
+      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} />)
+      expect(screen.getByText('8 h · $588.64 a week · $30,610.28 in all').parentElement).not.toHaveTextContent('updating')
+      expect(screen.getByRole('region', { name: 'Running budget' })).toHaveAttribute('aria-busy', 'false')
+    })
+
+    it('says how many blocks it leaves out, in the one line', () => {
+      ready({ incompleteBlocks: 2 })
+
+      expect(screen.getByText('8 h · $588.64 a week · $30,610.28 in all').parentElement).toHaveTextContent('· 2 blocks left out')
+    })
+
+    it('is quiet when the figure is the answer', () => {
+      ready()
+
+      const line = screen.getByText('8 h · $588.64 a week · $30,610.28 in all').parentElement as HTMLElement
+      expect(line).not.toHaveTextContent(/updating|left out/)
+    })
   })
 })

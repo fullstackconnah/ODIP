@@ -6,7 +6,7 @@ import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { blockProblems, describeBlock, duplicateBlock, nextBlockId, normaliseBlock, stampLocation, type PlanStepKey } from '@/lib/planBlocks'
-import { planBudgetFor, refusals } from '@/lib/planQuote'
+import { periodProblem, periodPrompt, planBudgetFor, refusals } from '@/lib/planQuote'
 import { templateByKey, type PlanTemplate } from '@/lib/planTemplates'
 import { BudgetBar } from './BudgetBar'
 import { PlanOverview } from './PlanOverview'
@@ -96,10 +96,14 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
   const settled = useDebouncedValue(blocksNow.quoted)
   const settling = JSON.stringify(settled) !== JSON.stringify(blocksNow.quoted)
   const budget = usePlanBudget(settled, from, to, canQuote && settled.length > 0)
-  // Nothing to price only when no block is complete; a block just added is "pricing" through the pause before the quote is asked for, never "add a block".
-  const status = !canQuote || blocksNow.quoted.length === 0 ? 'idle' : budget.data ? 'ready' : budget.isError ? 'error' : 'loading'
+  // Dates that cannot be priced over (not typed, no day, an end before the start) are asked of nobody: the query is off for them, and with it off nothing is "pricing" and nothing on the screen may be the
+  // answer for the dates there were before (the query keeps the previous answer while a new one is on its way, and keeps it when none will come). The bar says what is missing instead (review N1).
+  const dates = periodProblem(from, to)
+  const answer = dates === null && blocksNow.quoted.length > 0 ? budget.data : undefined
+  // Nothing to price only when no block is complete or the dates are not there; a block just added is "pricing" through the pause before the quote is asked for, never "add a block".
+  const status = !canQuote || blocksNow.quoted.length === 0 || dates !== null ? 'idle' : answer ? 'ready' : budget.isError ? 'error' : 'loading'
   const planBudget = planBudgetFor(funding.data, from, to)
-  const planIssues = budget.data?.period.issues ?? []
+  const planIssues = answer?.period.issues ?? []
 
   const open = (next: Omit<Session, 'id' | 'began'>) => {
     setSession({ ...next, id: nextSession, began: JSON.stringify(next.entry) })
@@ -198,14 +202,14 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
           to={to}
           state={state}
           zone={zone}
-          week={budget.data?.week ?? null}
+          week={answer?.week ?? null}
           planIssues={planIssues}
         />
       ) : (
         <PlanOverview
           entries={entries}
           readOnly={readOnly}
-          budget={budget.data}
+          budget={answer}
           budgetStatus={status}
           issues={planIssues}
           state={state}
@@ -221,8 +225,9 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
       {!readOnly && (entries.length > 0 || session !== null) && (
         <BudgetBar
           status={status}
-          budget={budget.data}
-          refreshing={settling || (budget.isFetching && !!budget.data)}
+          budget={answer}
+          idleNote={canQuote && blocksNow.quoted.length > 0 && dates !== null ? periodPrompt(dates, 'the plan') : undefined}
+          refreshing={settling || (budget.isFetching && !!answer)}
           error={budget.error}
           onRetry={() => { void budget.refetch() }}
           planBudget={planBudget}

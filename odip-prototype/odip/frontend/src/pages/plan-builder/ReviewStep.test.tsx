@@ -351,6 +351,45 @@ describe('ReviewStep states', () => {
     expect(requested).toHaveBeenCalledWith(null, '', '', false)
   })
 
+  // Code review N1: the dates were compared as text, so "20267-01-01" was a period (nothing was shown: not the prompt, not a spinner, not an error), and the query keeps the answer it had for the dates before.
+  describe('dates it cannot price over', () => {
+    const stale = () => { state.current = { data: blockQuote(), isLoading: false, isError: false, error: null, isPlaceholderData: true } }
+
+    it.each([
+      ['a year of five digits', '20267-01-01', '2027-06-30'],
+      ['a date that is no day', '2026-10-01', '2027-02-30'],
+      ['no end date', '2026-10-01', ''],
+    ])('asks for the dates for %s, and shows nothing of the answer for the dates there were before, nor says it is updating', (_name, from, to) => {
+      stale()
+      setUp({ from, to })
+
+      expect(screen.getByText('Enter the agreement dates to price this block')).toBeInTheDocument()
+      expect(requested).toHaveBeenCalledWith(null, from, to, false)
+      expect(screen.queryByRole('table')).not.toBeInTheDocument()
+      expect(screen.queryByText(/updating/i)).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Lines this block produces' })).not.toBeInTheDocument()
+    })
+
+    it('says an agreement that ends before it starts in its own words, and not that the dates are missing', () => {
+      stale()
+      setUp({ from: '2027-06-30', to: '2026-10-01' })
+
+      expect(screen.getByText('The agreement ends before it starts, so this block cannot be priced')).toBeInTheDocument()
+      expect(screen.getByText(/the end date has to be on or after the start date/)).toBeInTheDocument()
+      expect(screen.queryByText(/Enter the agreement dates/)).not.toBeInTheDocument()
+      expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    })
+
+    it('does not show the answer for the block as it was while the block cannot be priced', () => {
+      stale()
+      setUp({ entry: draftBlock(mondayWednesday('b1', { days: [] })) })
+
+      expect(screen.getByText('This block cannot be priced yet')).toBeInTheDocument()
+      expect(screen.queryByRole('table')).not.toBeInTheDocument()
+      expect(screen.queryByText(/updating/i)).not.toBeInTheDocument()
+    })
+  })
+
   it('draws the block on the week beside the others, in the strong colour', () => {
     setUp({ others: [mondayWednesday('b2', { days: ['Saturday'] })] })
 

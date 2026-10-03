@@ -41,6 +41,24 @@ export function isPricingDate(value: string | null | undefined): boolean {
   return year >= PRICING_FIRST_YEAR && year <= PRICING_LAST_YEAR
 }
 
+export type PeriodProblem = 'blank' | 'invalid' | 'reversed'
+
+/**
+ * What is wrong with the agreement's dates, or null when the plan can be priced over them: a date that is not typed (`blank`), one that is typed and is no day the engine prices (`invalid`: a
+ * year of five digits, 30 February), and an end before the start (`reversed`), compared as days and not as text. Nothing is asked of the engine for any of them, so the screen has to say
+ * so itself: it used to say "Pricing the plan..." with nothing in flight, or show the answer for the dates it had before (review N1).
+ */
+export function periodProblem(from: string, to: string): PeriodProblem | null {
+  if (!from || !to) return 'blank'
+  if (!isPricingDate(from) || !isPricingDate(to)) return 'invalid'
+  return (parseDateOnly(from) as number) > (parseDateOnly(to) as number) ? 'reversed' : null
+}
+
+/** What to tell a person whose plan cannot be priced for want of its dates. `subject`: "the plan" in the budget bar, "this block" in Review. */
+export function periodPrompt(problem: PeriodProblem, subject: 'the plan' | 'this block'): string {
+  return problem === 'reversed' ? `The agreement ends before it starts, so ${subject} cannot be priced` : `Enter the agreement dates to price ${subject}`
+}
+
 // ── "A week" ──────────────────────────────────────────────────────────────────
 
 export interface ReferenceWeek { from: string; to: string }
@@ -347,6 +365,14 @@ export function totalsCaption(answer: Pick<PlanQuote, 'issues' | 'holidayOccurre
   if (holidays > 0) parts.push(`${plural(holidays, 'public holiday shift')} to decide`)
   if (answer.totals.provisionalLines > 0) parts.push('some lines use provisional rates')
   return { text: parts.join(' · '), notFullyPriced: notPriced > 0 || refused > 0 }
+}
+
+/**
+ * The answer priced nothing: not one line has a price (each is missing one, or the engine refused every block, or there is no shift in the period). A total of $0.00 beside that would read as a
+ * price, and "all of the plan budget is left" as a fact, and neither is: the screen shows an en dash (review N6).
+ */
+export function pricedNothing(answer: Pick<PlanQuote, 'totals'>): boolean {
+  return answer.totals.lineCount - answer.totals.unpricedLines <= 0
 }
 
 /** Which block an issue is about, in the coordinator's words: its position and readable line, never its id. */

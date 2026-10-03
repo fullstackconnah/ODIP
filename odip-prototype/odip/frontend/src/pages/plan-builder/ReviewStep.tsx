@@ -10,7 +10,7 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { TONE } from '@/lib/tone'
 import { PLAN_STEPS, formatHours, type BlockProblem, type PlanStepKey } from '@/lib/planBlocks'
 import {
-  KIND_LABEL, NO_FIGURE, bandLabel, describeQuoteError, formatServiceDate, groupLines, questionShort, quantityLabel, referenceWeek, ruleWords, totalsCaption, type LineGroup, type ReferenceWeek,
+  KIND_LABEL, NO_FIGURE, bandLabel, describeQuoteError, formatServiceDate, groupLines, periodProblem, periodPrompt, questionShort, quantityLabel, referenceWeek, ruleWords, totalsCaption, type LineGroup, type ReferenceWeek,
 } from '@/lib/planQuote'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
@@ -147,12 +147,14 @@ function weeklyHoursOf(groups: readonly LineGroup[]): { priced: number; unpriced
  * Review issues are for the approval to stop.
  */
 export function ReviewStep({ entry, quoted, others, position, from, to, week, planIssues, problems, onChange, onGoTo }: ReviewStepProps) {
-  const hasPeriod = !!from && !!to && from <= to
-  const quoteable = problems.length === 0 && hasPeriod
+  // The dates, as days: typed, real, and the end not before the start. Compared as text a year of five digits was a period, and Review showed neither the prompt nor a spinner nor an error (review N1).
+  const dates = periodProblem(from, to)
+  const quoteable = problems.length === 0 && dates === null
   const quote = usePlanBlockQuote(quoteable ? quoted : null, from, to, quoteable)
   const [whyKey, setWhyKey] = useState<string | null>(null)
   const panel = useRef<HTMLElement>(null)
-  const data: PlanQuote | undefined = quote.data
+  // The query keeps the previous answer while a new one is asked for, and keeps it when none will be (the dates or the block can no longer be asked about): that is not an answer to what is on screen.
+  const data: PlanQuote | undefined = quoteable ? quote.data : undefined
 
   const ordinaryWeek = useMemo(
     () => week ?? (data ? referenceWeek(from, to, data.holidayOccurrences.map(occurrence => occurrence.date)) : null),
@@ -178,7 +180,7 @@ export function ReviewStep({ entry, quoted, others, position, from, to, week, pl
   const caption = data ? totalsCaption(data) : null
   // The lines on screen are the previous block's while a newer answer is on its way (after "Skip the shift", say): they are dimmed and said to be updating, and a screen reader is told once,
   // politely, because it follows a choice the person made and not typing.
-  const updating = quote.isPlaceholderData === true
+  const updating = quoteable && quote.isPlaceholderData === true
 
   // The reasoning opens under the table, which on a phone is below the last card: so opening it moves the view and focus there, and it has a Close that goes back to the line it was opened for.
   useEffect(() => { if (whyKey !== null) panel.current?.focus() }, [whyKey])
@@ -194,9 +196,11 @@ export function ReviewStep({ entry, quoted, others, position, from, to, week, pl
     <div className="flex flex-col gap-[var(--section-gap)]">
       <WeekStrip blocks={allBlocks} highlightId={quoted.id} />
 
-      {problems.length === 0 && !hasPeriod && (
-        <Callout tone="info" className="max-w-prose" title="Enter the agreement dates to price this block">
-          Prices come from the catalogue on the date of each shift, so the agreement needs a start and an end date (in Draft details, above the plan).
+      {problems.length === 0 && dates !== null && (
+        <Callout tone="info" className="max-w-prose" title={periodPrompt(dates, 'this block')}>
+          {dates === 'reversed'
+            ? 'Prices come from the catalogue on the date of each shift, so the end date has to be on or after the start date (in Draft details, above the plan).'
+            : 'Prices come from the catalogue on the date of each shift, so the agreement needs a start and an end date, each a real day with a four digit year (in Draft details, above the plan).'}
         </Callout>
       )}
 
