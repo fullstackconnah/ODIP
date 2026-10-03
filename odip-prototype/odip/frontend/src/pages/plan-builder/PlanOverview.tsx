@@ -7,7 +7,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { TONE } from '@/lib/tone'
 import { describeBlock, type PlanStepKey } from '@/lib/planBlocks'
-import { REASON_COPY, isRefusal } from '@/lib/planQuote'
+import { REASON_COPY, groupByReason, isRefusal } from '@/lib/planQuote'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 import type { PlanTemplate } from '@/lib/planTemplates'
@@ -67,7 +67,7 @@ export function PlanOverview({ entries, readOnly = false, budget, budgetStatus, 
     )
   }
 
-  const rows: Row[] = entries.map((entry, index) => ({ key: entry.block.id, index, entry, issues: issues.filter(issue => issue.blockId === entry.block.id) }))
+  const rows: Row[] = entries.map((entry, index) => ({ key: entry.block.id, index, entry, issues: groupByReason(issues.filter(issue => issue.blockId === entry.block.id)) }))
   const planLevel = issues.filter(issue => !blocks.some(block => block.id === issue.blockId))
   const weeklyOf = (id: string) => budget?.weekly?.totals.byBlock.find(total => total.blockId === id)
   const periodOf = (id: string) => budget?.period.totals.byBlock.find(total => total.blockId === id)
@@ -76,7 +76,7 @@ export function PlanOverview({ entries, readOnly = false, budget, budgetStatus, 
 
   const columns: Column<Row>[] = [
     {
-      key: 'block', header: 'Block', wrap: true, minWidth: '20rem',
+      key: 'block', header: 'Block', wrap: true, minWidth: '14rem',
       render: row => {
         const { block, requirements } = row.entry
         const asks = [requirements.workerGender === 'Female' ? 'Female worker' : requirements.workerGender === 'Male' ? 'Male worker' : null, requirements.driver ? 'Driver' : null, ...requirements.skills.map(skill => (skill === 'FirstAid' ? 'First aid' : skill === 'MedicationCompetent' ? 'Medication competent' : 'Manual handling'))].filter(Boolean)
@@ -95,32 +95,34 @@ export function PlanOverview({ entries, readOnly = false, budget, budgetStatus, 
       },
     },
     {
-      key: 'weekly', header: 'An ordinary week', align: 'right', minWidth: '9rem',
+      key: 'weekly', header: 'An ordinary week', align: 'right', minWidth: '7rem',
       render: row => {
         const weekly = weeklyOf(row.entry.block.id)
         return <span className="tabular-nums">{weekly ? `${formatHours(weekly.supportHours)} h · ${formatCurrency(weekly.amount)}` : figure(null)}</span>
       },
     },
     {
-      key: 'period', header: 'The agreement', align: 'right', minWidth: '7rem',
+      key: 'period', header: 'The agreement', align: 'right', minWidth: '6rem',
       render: row => {
         const period = periodOf(row.entry.block.id)
         return <span className="tabular-nums">{period ? formatCurrency(period.amount) : figure(null)}</span>
       },
     },
     {
-      key: 'actions', header: '', minWidth: readOnly ? undefined : '27rem',
+      key: 'actions', header: '', minWidth: readOnly ? undefined : '13rem', className: readOnly ? undefined : 'xl:min-w-[28rem]',
       render: row => readOnly ? null : (
-        <div className="flex items-center justify-end gap-2">
-          <div role="group" aria-label={`Edit block ${row.index + 1}`} className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-2 md:justify-end">
+          <div role="group" aria-label={`Edit block ${row.index + 1}`} className="flex flex-wrap items-center gap-1.5">
             {EDIT_CHIPS.map(chip => (
               <Button key={chip.step} variant="secondary" size="sm" aria-label={`Edit ${chip.name} of block ${row.index + 1}`} onClick={() => onEdit(row.index, chip.step)}>{chip.label}</Button>
             ))}
           </div>
-          <Button variant="ghost" size="sm" aria-label={`Duplicate block ${row.index + 1}`} onClick={() => onDuplicate(row.index)}><Copy className="h-3.5 w-3.5" aria-hidden="true" />Duplicate</Button>
-          <RowActions>
-            <Button variant="ghost-danger" size="sm" iconOnly aria-label={`Remove block ${row.index + 1}`} title="Remove" onClick={() => setRemoving(row.index)}><Trash2 className="h-4 w-4" /></Button>
-          </RowActions>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" aria-label={`Duplicate block ${row.index + 1}`} onClick={() => onDuplicate(row.index)}><Copy className="h-3.5 w-3.5" aria-hidden="true" />Duplicate</Button>
+            <RowActions>
+              <Button variant="ghost-danger" size="sm" iconOnly aria-label={`Remove block ${row.index + 1}`} title="Remove" onClick={() => setRemoving(row.index)}><Trash2 className="h-4 w-4" /></Button>
+            </RowActions>
+          </div>
         </div>
       ),
     },
@@ -131,7 +133,7 @@ export function PlanOverview({ entries, readOnly = false, budget, budgetStatus, 
       <PlanNotices notices={budget?.period.notices ?? []} />
       {planLevel.length > 0 && <IssueList issues={planLevel} blocks={blocks} />}
       <WeekStrip blocks={blocks} className="max-w-3xl" />
-      <DataTable data={rows} keyField="key" columns={columns} emptyMessage="No blocks yet." className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)]" />
+      <DataTable data={rows} keyField="key" columns={columns} emptyMessage="No blocks yet." />
       {footer}
       <ConfirmDialog
         open={removing !== null}

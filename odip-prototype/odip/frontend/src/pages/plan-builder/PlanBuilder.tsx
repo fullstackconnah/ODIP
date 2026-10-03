@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Plus } from 'lucide-react'
-import type { AgreementState, DraftBlock, PlanPriceZone } from '@/api/types'
+import type { AgreementState, DraftBlock, PlanIssue, PlanPriceZone } from '@/api/types'
 import { useFundingSources, usePlanBudget, usePlanPricingSettings } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { blockProblems, describeBlock, duplicateBlock, nextBlockId, normaliseBlock, stampLocation, type PlanStepKey } from '@/lib/planBlocks'
-import { planBudgetFor } from '@/lib/planQuote'
+import { planBudgetFor, refusals } from '@/lib/planQuote'
 import { templateByKey, type PlanTemplate } from '@/lib/planTemplates'
 import { BudgetBar } from './BudgetBar'
 import { PlanOverview } from './PlanOverview'
@@ -39,8 +39,11 @@ type PlanBuilderProps = {
   /** The plan cannot be changed (a person who only reads drafts, or a revision somebody has approved). */
   readOnly?: boolean
   readOnlyNote?: string
-  /** The save row, drawn under the list. */
-  footer?: ReactNode
+  /**
+   * The save row, drawn under the list. Given as a function it is told what the pricing engine refused (a block it cannot price, a registration group the provider does not hold):
+   * a plan with a refusal cannot be saved, and the row can say so before the server does.
+   */
+  footer?: ReactNode | ((state: { refused: readonly PlanIssue[] }) => ReactNode)
 }
 
 /**
@@ -151,6 +154,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
           onSave={save}
           settings={settings}
           others={entries.filter((_, index) => index !== session.index).map(entry => entry.block)}
+          position={session.mode === 'edit' && session.index !== null ? session.index : entries.length}
           from={from}
           to={to}
           state={state}
@@ -171,7 +175,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
           onEdit={edit}
           onDuplicate={duplicate}
           onRemove={remove}
-          footer={footer}
+          footer={typeof footer === 'function' ? footer({ refused: refusals(planIssues) }) : footer}
         />
       )}
 

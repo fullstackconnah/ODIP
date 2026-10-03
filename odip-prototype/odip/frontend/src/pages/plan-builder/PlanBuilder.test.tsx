@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import * as React from 'react'
 import { useState } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import type { DraftBlock, FundingSourceDto, PlanIssue } from '@/api/types'
 import { budgetOf, draftBlock, mondayWednesday, quote, settings as makeSettings } from '@/test/fixtures/planPricing'
 import { PlanBuilder } from './PlanBuilder'
 
-const { budgetCall, budgetState, fundingState, settingsState } = vi.hoisted(() => ({
+const { blockQuoteState, budgetCall, budgetState, fundingState, settingsState } = vi.hoisted(() => ({
+  blockQuoteState: { current: undefined as unknown },
   budgetCall: vi.fn(),
   budgetState: { current: {} as Record<string, unknown> },
   fundingState: { current: { data: [] as unknown[], isError: false } },
@@ -18,7 +20,7 @@ vi.mock('@/api/hooks', () => ({
   usePlanPricingSettings: () => settingsState.current,
   useFundingSources: () => fundingState.current,
   usePlanBudget: (blocks: unknown[], from: string, to: string, enabled: boolean) => { budgetCall(blocks, from, to, enabled); return { ...budgetState.current, refetch: vi.fn() } },
-  usePlanBlockQuote: () => ({ data: quote(), isLoading: false, isError: false, refetch: vi.fn() }),
+  usePlanBlockQuote: () => ({ data: blockQuoteState.current ?? quote(), isLoading: false, isError: false, refetch: vi.fn() }),
 }))
 
 const source = (changes: Partial<FundingSourceDto> = {}): FundingSourceDto => ({
@@ -27,13 +29,13 @@ const source = (changes: Partial<FundingSourceDto> = {}): FundingSourceDto => ({
 })
 
 /** The plan belongs to the page; this is the smallest page. */
-function Page({ initial = [] as DraftBlock[], readOnly = false, onPlan }: { initial?: DraftBlock[]; readOnly?: boolean; onPlan?: (entries: DraftBlock[]) => void }) {
+function Page({ initial = [] as DraftBlock[], readOnly = false, onPlan, footer }: { initial?: DraftBlock[]; readOnly?: boolean; onPlan?: (entries: DraftBlock[]) => void; footer?: React.ComponentProps<typeof PlanBuilder>['footer'] }) {
   const [entries, setEntries] = useState(initial)
   return (
     <MemoryRouter>
       <PlanBuilder
         participantId="p-1" state="NSW" zone="National" from="2026-10-01" to="2027-06-30" entries={entries}
-        onChange={next => { setEntries(next); onPlan?.(next) }} readOnly={readOnly} footer={<button type="button">Save draft</button>}
+        onChange={next => { setEntries(next); onPlan?.(next) }} readOnly={readOnly} footer={footer ?? <button type="button">Save draft</button>}
       />
     </MemoryRouter>
   )
@@ -42,6 +44,7 @@ function Page({ initial = [] as DraftBlock[], readOnly = false, onPlan }: { init
 beforeEach(() => {
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
   budgetCall.mockReset()
+  blockQuoteState.current = undefined
   budgetState.current = { data: { ...budgetOf('b1') }, isError: false, isFetching: false, error: null }
   fundingState.current = { data: [source()], isError: false }
   settingsState.current = { data: makeSettings() }
@@ -194,6 +197,19 @@ describe('PlanBuilder with a plan', () => {
     expect(next[2].block.supportType).toBe('PersonalCare')
   })
 
+  it('names the blocks in a Review message by the places they have in the plan, whichever block is open', async () => {
+    const user = userEvent.setup()
+    blockQuoteState.current = quote({ issues: [{ blockId: 'b2', reason: 'BlocksOverlap', message: "Blocks 'b1' and 'b2' are on at the same time on the same day. Block 'b2' is the second.", count: 2, firstDate: '2026-10-12' }] })
+    render(<Page initial={twoBlocks()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit prices of block 2' }))
+    expect(within(screen.getByRole('region', { name: 'To look at' })).getByText(/Blocks 1 and 2 are on at the same time on the same day\. Block 2 is the second\./)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: 'Edit prices of block 1' }))
+    expect(within(screen.getByRole('region', { name: 'To look at' })).getByText(/Blocks 1 and 2 are on at the same time on the same day\. Block 2 is the second\./)).toBeInTheDocument()
+  })
+
   it('draws the save row under the list only when the overview is showing', async () => {
     const user = userEvent.setup()
     render(<Page initial={twoBlocks()} />)
@@ -304,6 +320,28 @@ describe('PlanBuilder and the budget', () => {
     render(<Page initial={twoBlocks()} />)
 
     expect(screen.getByText('Part of this block has no price item, 4 shifts')).toBeInTheDocument()
+  })
+})
+
+describe('PlanBuilder and what the engine refused', () => {
+  const refusal: PlanIssue = { blockId: 'b2', reason: 'RegistrationGroupNotHeld', message: "Block 'b2': GroupActivity needs registration group 0136, which the provider does not hold.", count: 1 }
+  const review: PlanIssue = { blockId: 'b1', reason: 'NoItem', message: "Block 'b1': no item.", count: 4 }
+
+  it('tells the save row which issues are refusals, so it can hold Save back before the server has to', () => {
+    budgetState.current = { data: { ...budgetOf('b1'), period: quote({ ...budgetOf('b1').period, issues: [review, refusal] }) }, isError: false, isFetching: false }
+    const footer = vi.fn(() => <span>save row</span>)
+    render(<Page initial={twoBlocks()} footer={footer} />)
+
+    expect(footer).toHaveBeenCalledWith({ refused: [refusal] })     // a Review flag is not a refusal
+    expect(screen.getByText('save row')).toBeInTheDocument()
+  })
+
+  it('tells it nothing was refused when only Review flags were found', () => {
+    budgetState.current = { data: { ...budgetOf('b1'), period: quote({ ...budgetOf('b1').period, issues: [review] }) }, isError: false, isFetching: false }
+    const footer = vi.fn(() => <span>save row</span>)
+    render(<Page initial={twoBlocks()} footer={footer} />)
+
+    expect(footer).toHaveBeenCalledWith({ refused: [] })
   })
 })
 

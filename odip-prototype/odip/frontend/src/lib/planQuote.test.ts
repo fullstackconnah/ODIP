@@ -1,11 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { FundingSourceDto, PlannedLine, PlanBlock, PlanFailureReason } from '@/api/types'
+import type { FundingSourceDto, PlannedLine, PlanBlock, PlanFailureReason, PlanIssue } from '@/api/types'
 import { emptyBlock } from './planBlocks'
 import {
   CATEGORY_SHORT, REASON_COPY, addDays, agreementWeeks, bandLabel, categoryLabel, compareBudget, describeQuoteError, describeSaveError, flagSummary, formatServiceDate, friendlyMessage, groupLines,
-  isRefusal, parseFlags, planBudgetFor, quantityLabel, questionShort, referenceWeek, refusals, ruleWords,
+  groupByReason, groupIssues, isRefusal, issueWhere, parseFlags, planBudgetFor, quantityLabel, questionShort, referenceWeek, refusals, ruleWords,
 } from './planQuote'
 
 const line = (changes: Partial<PlannedLine>): PlannedLine => ({
@@ -185,10 +185,78 @@ describe('what each refusal means', () => {
     expect(friendlyMessage("Block 'zz': a thing", blocks)).toBe("Block 'zz': a thing")
   })
 
+  it('does the same for the pair in an overlap, in the engine\'s own words', () => {
+    const blocks: PlanBlock[] = [emptyBlock('b7', 'NSW'), emptyBlock('b9', 'NSW'), emptyBlock('b12', 'NSW')]
+    expect(friendlyMessage("Blocks 'b9' and 'b12' are on at the same time on the same day, so the same participant's time would be priced twice.", blocks))
+      .toBe("Blocks 2 and 3 are on at the same time on the same day, so the same participant's time would be priced twice.")
+    expect(friendlyMessage("Blocks 'b7' and 'gone' are on at the same time.", blocks)).toBe("Blocks 'b7' and 'gone' are on at the same time.")
+  })
+
   it('counts what is flagged in a plan', () => {
     expect(flagSummary({ reviewLines: 2, provisionalLines: 3, unpricedLines: 1 })).toBe('1 line not priced, 2 lines to review, 3 provisional')
     expect(flagSummary({ reviewLines: 1, provisionalLines: 0, unpricedLines: 0 })).toBe('1 line to review')
     expect(flagSummary({ reviewLines: 0, provisionalLines: 0, unpricedLines: 0 })).toBe('')
+  })
+})
+
+describe('issues read as one thing, not one per date', () => {
+  const gap = (blockId: string, date: string, count = 1, item = 'Community access'): PlanIssue => ({
+    blockId, reason: 'CatalogueNotFound', message: `No catalogue row for ${item} is valid on ${date}. Import the catalogue for that period.`, count, firstDate: date,
+  })
+
+  it('adds a catalogue gap met on a hundred dates up to one issue, with the message and the date of the earliest', () => {
+    const dates = Array.from({ length: 100 }, (_, i) => addDays('2027-07-01', i))
+    // The engine gives them in date order here, but the earliest is the earliest wherever it comes.
+    const grouped = groupIssues([...dates.slice(50), ...dates.slice(0, 50)].map(date => gap('b1', date)))
+
+    expect(grouped).toHaveLength(1)
+    expect(grouped[0]).toEqual({ blockId: 'b1', reason: 'CatalogueNotFound', message: 'No catalogue row for Community access is valid on 2027-07-01. Import the catalogue for that period.', count: 100, firstDate: '2027-07-01' })
+  })
+
+  it('keeps one issue for each block, and the blocks in the order they came', () => {
+    const grouped = groupIssues([gap('b2', '2027-07-03'), gap('b1', '2027-07-02'), gap('b2', '2027-07-01'), gap('b1', '2027-07-09', 2)])
+
+    expect(grouped.map(issue => [issue.blockId, issue.count, issue.firstDate])).toEqual([['b2', 2, '2027-07-01'], ['b1', 3, '2027-07-02']])
+  })
+
+  it('does not run two different problems together: a rule broken in two fields, or a block that overlaps two others', () => {
+    const invalid = (message: string): PlanIssue => ({ blockId: 'b1', reason: 'InvalidInput', message, count: 1 })
+    const overlap = (other: string): PlanIssue => ({ blockId: 'b1', reason: 'BlocksOverlap', message: `Block 'b1' and Block '${other}' are on at the same time.`, count: 4, firstDate: '2026-10-12' })
+
+    expect(groupIssues([invalid('Pick a day.'), invalid('The end is before the start.'), invalid('Pick a day.')]).map(issue => [issue.message, issue.count])).toEqual([['Pick a day.', 2], ['The end is before the start.', 1]])
+    expect(groupIssues([overlap('b2'), overlap('b3'), overlap('b2')]).map(issue => [issue.message, issue.count])).toEqual([["Block 'b1' and Block 'b2' are on at the same time.", 8], ["Block 'b1' and Block 'b3' are on at the same time.", 4]])
+  })
+
+  it('keeps an issue with no date as it is, and takes the date from whichever issue has one', () => {
+    const undated: PlanIssue = { blockId: 'b1', reason: 'NamedDateNotInCalendar', message: 'a day in this block', count: 2 }
+
+    expect(groupIssues([undated])).toEqual([undated])
+    expect(groupIssues([undated, { ...undated, firstDate: '2026-12-26', count: 1 }])).toEqual([{ ...undated, count: 3, firstDate: '2026-12-26' }])
+  })
+
+  it('does not change what it is given', () => {
+    const given = [gap('b1', '2027-07-02'), gap('b1', '2027-07-01')]
+    const copy = JSON.parse(JSON.stringify(given))
+
+    groupIssues(given)
+    groupByReason(given)
+    expect(given).toEqual(copy)
+  })
+
+  it('has a way to say only the reason once for a block, whatever the messages said', () => {
+    const grouped = groupByReason([
+      gap('b1', '2027-07-01', 1, 'Community access'), gap('b1', '2027-07-02', 1, 'Group activities'),
+      { blockId: 'b1', reason: 'BlocksOverlap', message: 'with b2', count: 2 }, { blockId: 'b1', reason: 'BlocksOverlap', message: 'with b3', count: 1 },
+    ])
+
+    expect(grouped.map(issue => [issue.reason, issue.count])).toEqual([['CatalogueNotFound', 2], ['BlocksOverlap', 3]])
+  })
+
+  it('says where an issue was met in words: how many shifts and the first day, or only the day', () => {
+    expect(issueWhere({ blockId: 'b1', reason: 'NoItem', message: 'm', count: 24, firstDate: '2026-10-13' })).toBe('24 shifts, the first on Tue 13 Oct 2026')
+    expect(issueWhere({ blockId: 'b1', reason: 'NoItem', message: 'm', count: 1, firstDate: '2026-10-13' })).toBe('Tue 13 Oct 2026')
+    expect(issueWhere({ blockId: 'b1', reason: 'NoItem', message: 'm', count: 3 })).toBe('3 shifts')
+    expect(issueWhere({ blockId: 'b1', reason: 'NoItem', message: 'm', count: 1 })).toBe('')
   })
 })
 

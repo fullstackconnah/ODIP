@@ -113,6 +113,16 @@ describe('PlanOverview with blocks', () => {
     expect(screen.getByRole('list', { name: 'Things to look at' })).toHaveTextContent('The agreement period must fall between the years 2000 and 2100.')
   })
 
+  it('says a catalogue gap once for a block however many dates it meets, with the number of shifts', () => {
+    const gap = (blockId: string, date: string): PlanIssue => ({ blockId, reason: 'CatalogueNotFound', message: `No catalogue row for Community access is valid on ${date}. Import the catalogue for that period.`, count: 1, firstDate: date })
+    const dates = Array.from({ length: 30 }, (_, i) => `2027-07-${String(i + 1).padStart(2, '0')}`)
+    setUp({ issues: [...dates.map(date => gap('b1', date)), gap('b2', '2027-07-05'), gap('b2', '2027-07-06')] })
+
+    expect(screen.getAllByText(/No catalogue prices for part of the agreement/)).toHaveLength(2)    // one under each block, not one a date
+    expect(screen.getByText('No catalogue prices for part of the agreement, 30 shifts')).toBeInTheDocument()
+    expect(screen.getByText('No catalogue prices for part of the agreement, 2 shifts')).toBeInTheDocument()
+  })
+
   it('says which registration groups are unconfirmed, with the way to confirm them for an Admin, and a quieter line for the holiday overrides', () => {
     const withNotices = budget()
     withNotices.period = quote({

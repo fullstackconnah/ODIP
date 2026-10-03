@@ -251,11 +251,49 @@ export function refusals(issues: readonly PlanIssue[]): PlanIssue[] {
   return issues.filter(issue => isRefusal(issue.reason))
 }
 
-/** The engine names a block by the id the screen gave it ("Block 'b2'"); a coordinator knows it by its place in the plan ("Block 2"). */
+/** Reasons whose message says which thing is wrong (a field, a pair of blocks), so two of them are two problems. The rest repeat for every date, item or hour they meet. */
+const ONE_PER_MESSAGE = new Set<PlanFailureReason>(['InvalidInput', 'BlocksOverlap'])
+
+function mergeIssues(issues: readonly PlanIssue[], keyOf: (issue: PlanIssue) => string): PlanIssue[] {
+  const merged = new Map<string, PlanIssue>()
+  for (const issue of issues) {
+    const key = keyOf(issue)
+    const seen = merged.get(key)
+    if (!seen) { merged.set(key, issue); continue }
+    const earlier = !!issue.firstDate && (!seen.firstDate || issue.firstDate < seen.firstDate)
+    merged.set(key, { ...(earlier ? issue : seen), count: seen.count + issue.count })
+  }
+  return [...merged.values()]
+}
+
+/**
+ * The engine keeps one issue per message, and a message that names a date makes one per date: a catalogue that stops in the middle of a year is a hundred issues. A person reads
+ * them as one: the shifts added up, with the message and the date of the earliest.
+ */
+export function groupIssues(issues: readonly PlanIssue[]): PlanIssue[] {
+  return mergeIssues(issues, issue => `${issue.blockId}|${issue.reason}|${ONE_PER_MESSAGE.has(issue.reason) ? issue.message : ''}`)
+}
+
+/** One entry for each block and reason whatever the message says, for a line that shows only the reason's title. */
+export function groupByReason(issues: readonly PlanIssue[]): PlanIssue[] {
+  return mergeIssues(issues, issue => `${issue.blockId}|${issue.reason}`)
+}
+
+/** Where an issue was met, in words: "24 shifts, the first on Tue 13 Oct 2026", or just the day when it was met once. */
+export function issueWhere(issue: PlanIssue): string {
+  if (issue.count > 1) return `${plural(issue.count, 'shift')}${issue.firstDate ? `, the first on ${formatServiceDate(issue.firstDate)}` : ''}`
+  return issue.firstDate ? formatServiceDate(issue.firstDate) : ''
+}
+
+/**
+ * The engine names a block by the id the screen gave it ("Block 'b2'", and for an overlap "Blocks 'b1' and 'b2'"); a coordinator knows it by its place in the plan ("Block 2",
+ * "Blocks 1 and 2"). An id that is not in the plan is left as the engine wrote it.
+ */
 export function friendlyMessage(message: string, blocks: readonly PlanBlock[]): string {
-  let text = message
-  blocks.forEach((block, index) => { text = text.split(`Block '${block.id}'`).join(`Block ${index + 1}`) })
-  return text
+  const place = (id: string) => blocks.findIndex(block => block.id === id) + 1
+  return message
+    .replace(/Blocks '([^']+)' and '([^']+)'/g, (whole, first: string, second: string) => (place(first) > 0 && place(second) > 0 ? `Blocks ${place(first)} and ${place(second)}` : whole))
+    .replace(/Block '([^']+)'/g, (whole, id: string) => (place(id) > 0 ? `Block ${place(id)}` : whole))
 }
 
 /** A short count of what is flagged across a plan: "2 lines to review, 3 provisional". */

@@ -219,6 +219,35 @@ describe('ServiceAgreementDraftPage: saving a plan built from blocks', () => {
   })
 })
 
+describe('ServiceAgreementDraftPage: a plan the engine cannot price', () => {
+  const planWith = (issue: object) => {
+    drafts.mockReturnValue({ data: [draft({ version: 4, blocks: [draftBlock(mondayWednesday('b1'))], pricing: quote() })], isLoading: false, isError: false, refetch: vi.fn() })
+    budget.mockReturnValue({ data: { ...budgetOf('b1'), period: quote({ ...budgetOf('b1').period, issues: [issue as never] }) }, isError: false, isFetching: false, error: null, refetch: vi.fn() })
+  }
+
+  it('says which blocks cannot be priced and holds Save back, instead of sending a plan the server will refuse', async () => {
+    planWith({ blockId: 'b1', reason: 'RegistrationGroupNotHeld', message: "Block 'b1': needs registration group 0125, which the provider does not hold.", count: 1 })
+    renderPage()
+    const user = userEvent.setup()
+
+    expect(screen.getByText('1 block cannot be priced')).toBeInTheDocument()
+    expect(screen.getByText(/so this plan cannot be saved until it is fixed/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(createMutate).not.toHaveBeenCalled()
+  })
+
+  it('saves a plan that only has Review flags: they block nothing', async () => {
+    planWith({ blockId: 'b1', reason: 'NoItem', message: "Block 'b1': no item.", count: 12, firstDate: '2026-10-13' })
+    renderPage()
+    const user = userEvent.setup()
+
+    expect(screen.queryByText(/cannot be priced/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(createMutate).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('ServiceAgreementDraftPage: starting from the newest revision', () => {
   const block: DraftBlock = draftBlock(mondayWednesday('b1', { location: { state: 'QLD', zone: 'Remote' }, transport: { km: 20, vehicle: 'Standard', tolls: 0, parking: 0 } }), { workerGender: 'Female', driver: true, skills: ['FirstAid'] })
   const pricing: PlanQuote = quote({ totals: { ...quote().totals, amount: 30610.28, holidayOccurrences: 1, reviewLines: 2, provisionalLines: 5 }, issues: [{ blockId: 'b1', reason: 'NoItem', message: "Block 'b1': no item for Weekday Night.", count: 3, firstDate: '2026-10-13' }] })
@@ -226,7 +255,7 @@ describe('ServiceAgreementDraftPage: starting from the newest revision', () => {
     lines: [{ ...legacyLine, serviceType: 'Community access', itemCode: '04_104_0125_6_1', hours: 8, unitPrice: 73.58, total: 588.64, blockId: 'b1', band: 'Weekday Daytime', occurrences: 2, flags: 'None', catalogueVersion: '2026-27' }] })
 
   it('loads its details and blocks into the builder, so a new version is a change to the last one', () => {
-    drafts.mockReturnValue({ data: [priced, draft({ version: 3 })], isLoading: false, isError: false, refetch: vi.fn() })
+    drafts.mockReturnValue({ data: [priced, draft({ id: 'd-3', version: 3 })], isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
 
     expect(screen.getByLabelText('State')).toHaveValue('QLD')
@@ -263,9 +292,20 @@ describe('ServiceAgreementDraftPage: starting from the newest revision', () => {
     expect(within(card).getAllByText('$588.64')).toHaveLength(2)    // the line's total, and the total of the lines
     expect(within(card).getByText('8 h')).toBeInTheDocument()
     expect(within(card).getByText(/2 lines to review, 5 provisional/)).toBeInTheDocument()
-    expect(within(card).getByText(/Part of this block has no price item: Block 1: no item for Weekday Night\. \(from Tue 13 Oct 2026\)/)).toBeInTheDocument()
+    expect(within(card).getByText(/Part of this block has no price item: Block 1: no item for Weekday Night\. \(3 shifts, from Tue 13 Oct 2026\)/)).toBeInTheDocument()
     expect(within(card).getByText(/over the agreement, including 1 public holiday shift/)).toBeInTheDocument()
     expect(within(card).queryByText('Typed by hand')).not.toBeInTheDocument()
+  })
+
+  it('reads a saved catalogue gap as one line with the shifts it touched, not a line for every date', () => {
+    const gap = (date: string) => ({ blockId: 'b1', reason: 'CatalogueNotFound' as const, message: `No catalogue row for Community access is valid on ${date}.`, count: 1, firstDate: date })
+    const gapped = draft({ ...priced, version: 5, pricing: quote({ ...pricing, issues: ['2027-07-03', '2027-07-01', '2027-07-02'].map(gap) }) })
+    drafts.mockReturnValue({ data: [gapped], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    const card = screen.getByText('Version 5').closest('article') as HTMLElement
+    expect(within(card).getAllByText(/No catalogue prices for part of the agreement:/)).toHaveLength(1)
+    expect(within(card).getByText(/No catalogue prices for part of the agreement: No catalogue row for Community access is valid on 2027-07-01\. \(3 shifts, from Thu 1 Jul 2027\)/)).toBeInTheDocument()
   })
 
   it('is not dirty until the plan changes, and says so once it has', async () => {

@@ -31,13 +31,13 @@ const blockQuote = (changes: Partial<PlanQuote> = {}): PlanQuote => quote({
   ...changes,
 })
 
-function setUp(props: { entry?: DraftBlock; others?: PlanBlock[]; week?: typeof WEEK | null; planIssues?: PlanIssue[]; from?: string; to?: string; onChange?: (entry: DraftBlock) => void; onGoTo?: (step: string) => void } = {}) {
+function setUp(props: { entry?: DraftBlock; others?: PlanBlock[]; position?: number; week?: typeof WEEK | null; planIssues?: PlanIssue[]; from?: string; to?: string; onChange?: (entry: DraftBlock) => void; onGoTo?: (step: string) => void } = {}) {
   const entry = props.entry ?? draftBlock()
   const handlers = { onChange: props.onChange ?? vi.fn(), onGoTo: props.onGoTo ?? vi.fn() }
   render(
     <MemoryRouter>
       <ReviewStep
-        entry={entry} quoted={entry.block} others={props.others ?? []} from={props.from ?? '2026-10-01'} to={props.to ?? '2027-06-30'} week={props.week === undefined ? WEEK : props.week}
+        entry={entry} quoted={entry.block} others={props.others ?? []} position={props.position} from={props.from ?? '2026-10-01'} to={props.to ?? '2027-06-30'} week={props.week === undefined ? WEEK : props.week}
         planIssues={props.planIssues ?? []} problems={blockProblems(entry.block)} onChange={handlers.onChange} onGoTo={handlers.onGoTo as never}
       />
     </MemoryRouter>,
@@ -201,12 +201,41 @@ describe('ReviewStep what needs a person', () => {
     expect(onGoTo).toHaveBeenCalledWith('times')
   })
 
+  it('lists a catalogue gap once, not once for every date it meets, with the shifts it touches and the first of them', () => {
+    const issues: PlanIssue[] = Array.from({ length: 40 }, (_, i) => {
+      const date = new Date(Date.UTC(2027, 6, 1 + i)).toISOString().slice(0, 10)
+      return { blockId: 'b1', reason: 'CatalogueNotFound', message: `No catalogue row for Community access is valid on ${date}. Import the catalogue for that period.`, count: 1, firstDate: date }
+    })
+    state.current = { data: blockQuote({ issues }), isLoading: false, isError: false }
+    setUp()
+
+    const section = screen.getByRole('region', { name: 'To look at' })
+    expect(within(section).getAllByText('No catalogue prices for part of the agreement')).toHaveLength(1)
+    expect(section).toHaveTextContent('40 shifts, the first on Thu 1 Jul 2027')
+  })
+
   it('adds what the whole plan said about this block (an overlap needs the other blocks to be seen), once', () => {
     const overlap: PlanIssue = { blockId: 'b1', reason: 'BlocksOverlap', message: "Block 'b1' and Block 'b2' are on at the same time.", count: 3 }
     state.current = { data: blockQuote({ issues: [overlap] }), isLoading: false, isError: false }
     setUp({ planIssues: [overlap, { ...overlap, blockId: 'b9' }] })
 
     expect(within(screen.getByRole('region', { name: 'To look at' })).getAllByText('Two blocks are on at the same time')).toHaveLength(1)
+  })
+
+  it('names the blocks by their places in the plan: the block being reviewed is where it sits, not after the others', () => {
+    const overlap: PlanIssue = { blockId: 'b1', reason: 'BlocksOverlap', message: "Blocks 'b1' and 'b3' are on at the same time on the same day. Block 'b1' is the first.", count: 3, firstDate: '2026-10-12' }
+    state.current = { data: blockQuote({ issues: [overlap] }), isLoading: false, isError: false }
+    setUp({ others: [mondayWednesday('b2', { days: ['Saturday'] }), mondayWednesday('b3')], position: 0 })
+
+    expect(within(screen.getByRole('region', { name: 'To look at' })).getByText(/Blocks 1 and 3 are on at the same time on the same day\. Block 1 is the first\./)).toBeInTheDocument()
+  })
+
+  it('puts a block that is being added last, so the others keep the numbers the overview gave them', () => {
+    const overlap: PlanIssue = { blockId: 'b3', reason: 'BlocksOverlap', message: "Blocks 'b1' and 'b3' are on at the same time on the same day.", count: 1 }
+    state.current = { data: blockQuote({ issues: [overlap] }), isLoading: false, isError: false }
+    setUp({ entry: draftBlock(mondayWednesday('b3')), others: [mondayWednesday('b1'), mondayWednesday('b2', { days: ['Saturday'] })] })
+
+    expect(within(screen.getByRole('region', { name: 'To look at' })).getByText(/Blocks 1 and 3 are on at the same time on the same day\./)).toBeInTheDocument()
   })
 
   it('calls a refusal an error, not a warning', () => {

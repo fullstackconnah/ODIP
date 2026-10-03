@@ -31,6 +31,8 @@ type PlanStepperProps = {
   settings?: PlanPricingSettingsDto
   /** The plan's other blocks. */
   others: readonly PlanBlock[]
+  /** This block's place among them, counted from 0 (the end for a block being added). */
+  position?: number
   from: string
   to: string
   state: AgreementState
@@ -44,7 +46,7 @@ type PlanStepperProps = {
  * times" line on a phone) is every step once a block exists; Back and Next move one at a time, and Enter in a field is Next. A step's problems appear next to its fields once
  * somebody tries to leave it, and the block cannot be added until it has none. The block is only ever a copy: Cancel leaves the plan as it was.
  */
-export function PlanStepper({ mode, entry, templateKey, hasBlock, step, onStepChange, onChange, onChooseTemplate, onCancel, onSave, settings, others, from, to, state, zone, week, planIssues }: PlanStepperProps) {
+export function PlanStepper({ mode, entry, templateKey, hasBlock, step, onStepChange, onChange, onChooseTemplate, onCancel, onSave, settings, others, position, from, to, state, zone, week, planIssues }: PlanStepperProps) {
   const [attempted, setAttempted] = useState<ReadonlySet<PlanStepKey>>(() => new Set())
   const stepIndex = PLAN_STEPS.findIndex(candidate => candidate.key === step)
   const current = PLAN_STEPS[stepIndex]
@@ -86,7 +88,7 @@ export function PlanStepper({ mode, entry, templateKey, hasBlock, step, onStepCh
       case 'times': return <TimesStep entry={entry} onChange={change} problems={shown} settings={settings} />
       case 'requirements': return <RequirementsStep entry={entry} onChange={change} problems={shown} settings={settings} />
       case 'travel': return <TravelStep entry={entry} onChange={change} problems={shown} settings={settings} />
-      default: return <ReviewStep entry={entry} quoted={quoted} others={others} from={from} to={to} week={week} planIssues={planIssues} problems={problems} onChange={change} onGoTo={go} />
+      default: return <ReviewStep entry={entry} quoted={quoted} others={others} position={position} from={from} to={to} week={week} planIssues={planIssues} problems={problems} onChange={change} onGoTo={go} />
     }
   })()
 

@@ -34,6 +34,8 @@ type ReviewStepProps = {
   quoted: PlanBlock
   /** The plan's other blocks, drawn beside this one. */
   others: readonly PlanBlock[]
+  /** This block's place in the plan, counted from 0 (the end when it is a block being added): a message names the blocks by their places, "Block 2", as the overview does. */
+  position?: number
   from: string
   to: string
   /** The ordinary week the plan's weekly figures are for (null for an agreement shorter than a week). */
@@ -54,15 +56,15 @@ function stepLabel(step: PlanStepKey): string {
 function lineColumns(whyKey: string | null, onWhy: (key: string) => void): Column<LineGroup>[] {
   return [
     {
-      key: 'itemCode', header: 'Code', minWidth: '11rem',
+      key: 'itemCode', header: 'Code', minWidth: '9rem',
       render: group => group.itemCode ? <span className="font-mono text-[13px] tabular-nums">{group.itemCode}</span> : <span className="text-[var(--color-muted-foreground)]">No item</span>,
     },
-    { key: 'band', header: 'Band', minWidth: '10rem', render: group => group.kind === 'Support' ? bandLabel(group.band) : KIND_LABEL[group.kind] },
+    { key: 'band', header: 'Band', minWidth: '9rem', render: group => group.kind === 'Support' ? bandLabel(group.band) : KIND_LABEL[group.kind] },
     { key: 'weeklyQty', header: 'Hours a week', align: 'right', render: group => group.weeklyQty === null || group.weeklyQty === 0 ? '—' : quantityLabel(group.kind, group.unit, group.weeklyQty) },
     { key: 'unitPrice', header: 'Unit price', align: 'right', render: group => group.unpriced ? '—' : formatCurrency(group.unitPrice) },
     { key: 'weeklyTotal', header: 'A week', align: 'right', render: group => group.weeklyTotal === null || group.weeklyTotal === 0 ? '—' : formatCurrency(group.weeklyTotal) },
     {
-      key: 'periodTotal', header: 'Agreement period', align: 'right', wrap: true,
+      key: 'periodTotal', header: 'The agreement', align: 'right', wrap: true,
       render: group => <span className="flex flex-col items-end leading-tight"><span className="tabular-nums">{formatCurrency(group.periodTotal)}</span><span className="text-xs text-[var(--color-muted-foreground)]">{plural(group.occurrences, 'shift')}</span></span>,
     },
     { key: 'flags', header: 'Flags', wrap: true, render: group => <FlagBadges flags={group.sample.flags} unpriced={group.unpriced !== undefined} /> },
@@ -123,7 +125,7 @@ function weeklyHoursOf(groups: readonly LineGroup[]): number | null {
  * in a week and over the agreement), the public holidays it meets with the choice of what to do about them, and anything a person has to look at, each beside what to do.
  * Every number is the pricing engine's; a line's "Why" opens the rules and the catalogue row behind it. Nothing here blocks anything: Review issues are for the approval to stop.
  */
-export function ReviewStep({ entry, quoted, others, from, to, week, planIssues, problems, onChange, onGoTo }: ReviewStepProps) {
+export function ReviewStep({ entry, quoted, others, position, from, to, week, planIssues, problems, onChange, onGoTo }: ReviewStepProps) {
   const hasPeriod = !!from && !!to && from <= to
   const quoteable = problems.length === 0 && hasPeriod
   const quote = usePlanBlockQuote(quoteable ? quoted : null, from, to, quoteable)
@@ -131,7 +133,10 @@ export function ReviewStep({ entry, quoted, others, from, to, week, planIssues, 
   const data: PlanQuote | undefined = quote.data
 
   const groups = useMemo(() => (data ? groupLines(data.lines, week) : []), [data, week])
-  const allBlocks = useMemo(() => [...others, quoted], [others, quoted])
+  const allBlocks = useMemo(() => {
+    const at = Math.min(Math.max(position ?? others.length, 0), others.length)
+    return [...others.slice(0, at), quoted, ...others.slice(at)]
+  }, [others, quoted, position])
   const issues = useMemo(() => {
     const own = data?.issues ?? []
     const extra = planIssues.filter(issue => issue.blockId === quoted.id && !own.some(known => known.reason === issue.reason && known.message === issue.message))

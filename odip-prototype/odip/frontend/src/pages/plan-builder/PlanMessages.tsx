@@ -3,8 +3,7 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { StatusBadge } from '@/components/StatusBadge'
 import { PLAN_STEPS } from '@/lib/planBlocks'
-import { REASON_COPY, formatServiceDate, friendlyMessage, parseFlags } from '@/lib/planQuote'
-import { plural } from '@/lib/format'
+import { REASON_COPY, friendlyMessage, groupIssues, issueWhere, parseFlags } from '@/lib/planQuote'
 import { usePermissions } from '@/lib/permissions'
 import type { PlanStepKey } from '@/lib/planBlocks'
 
@@ -54,15 +53,18 @@ type IssueListProps = {
   onFix?: (blockId: string, step: PlanStepKey) => void
 }
 
-/** Each thing a person has to look at, as a plain sentence next to what to do about it. A refusal is an error (nothing is priced from the block); the rest are warnings. */
+/**
+ * Each thing a person has to look at, as a plain sentence next to what to do about it. A refusal is an error (nothing is priced from the block); the rest are warnings. The same
+ * thing met on many dates is one entry with the number of shifts it touches.
+ */
 export function IssueList({ issues, blocks, onFix }: IssueListProps) {
   if (issues.length === 0) return null
   return (
     <ul className="flex flex-col gap-2" aria-label="Things to look at">
-      {issues.map(issue => {
+      {groupIssues(issues).map(issue => {
         const copy = REASON_COPY[issue.reason]
         const step = copy?.step
-        const where = issue.count > 1 ? `${plural(issue.count, 'shift')}${issue.firstDate ? `, the first on ${formatServiceDate(issue.firstDate)}` : ''}` : issue.firstDate ? formatServiceDate(issue.firstDate) : ''
+        const where = issueWhere(issue)
         return (
           <li key={`${issue.blockId}-${issue.reason}-${issue.message}`}>
             <Callout tone={copy?.refusal ? 'error' : 'warning'} title={copy?.title ?? 'Needs a look'}

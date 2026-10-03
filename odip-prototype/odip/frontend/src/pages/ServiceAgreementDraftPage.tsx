@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { FileText, Loader2 } from 'lucide-react'
 import { useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useParticipant, useServiceAgreementDrafts } from '@/api/hooks'
-import type { AgreementState, CreateServiceAgreementDraftDto, DraftBlock, PlanPriceZone } from '@/api/types'
+import type { AgreementState, CreateServiceAgreementDraftDto, DraftBlock, PlanIssue, PlanPriceZone } from '@/api/types'
 import { BackButton } from '@/components/BackButton'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { PageState } from '@/components/PageState'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { formGrid, span } from '@/lib/formGrid'
+import { plural } from '@/lib/format'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
 import { SUPPORT_LABEL, blockProblems, normaliseBlock, stampLocation } from '@/lib/planBlocks'
@@ -113,7 +114,7 @@ export default function ServiceAgreementDraftPage() {
     })
   }
 
-  const saveRow = canEdit ? (
+  const saveRow = ({ refused }: { refused: readonly PlanIssue[] }) => canEdit ? (
     <div className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-3">
       {problems.length > 0 && (
         <Callout tone="warning" title="Fix these before saving">
@@ -125,8 +126,13 @@ export default function ServiceAgreementDraftPage() {
           <ul className="list-disc pl-5">{failure.messages.map(message => <li key={message}>{message}</li>)}</ul>
         </Callout>
       )}
+      {refused.length > 0 && (
+        <Callout tone="error" title={`${plural(new Set(refused.map(issue => issue.blockId)).size, 'block')} cannot be priced`}>
+          The pricing engine priced nothing from {new Set(refused.map(issue => issue.blockId)).size === 1 ? 'a block' : 'some blocks'} (marked above), so this plan cannot be saved until {new Set(refused.map(issue => issue.blockId)).size === 1 ? 'it is' : 'they are'} fixed.
+        </Callout>
+      )}
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={save} disabled={create.isPending}>{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}{create.isPending ? 'Saving draft…' : 'Save draft'}</Button>
+        <Button onClick={save} disabled={create.isPending || refused.length > 0}>{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}{create.isPending ? 'Saving draft…' : 'Save draft'}</Button>
         <p role="status" className="text-sm text-[var(--color-muted-foreground)]">
           {savedVersion !== null ? `Saved as version ${savedVersion}. ` : dirty ? 'You have unsaved changes. ' : ''}Every save is a new version: earlier versions never change.
         </p>

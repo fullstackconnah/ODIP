@@ -6,7 +6,7 @@ import { Callout } from '@/components/Callout'
 import { DataTable, type Column } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { describeBlock, formatHours } from '@/lib/planBlocks'
-import { REASON_COPY, bandLabel, flagSummary, formatServiceDate, friendlyMessage, isRefusal } from '@/lib/planQuote'
+import { REASON_COPY, bandLabel, flagSummary, formatServiceDate, friendlyMessage, groupIssues, isRefusal } from '@/lib/planQuote'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 import ElectronicSigningEvidencePanel from '@/pages/ElectronicSigningEvidencePanel'
@@ -84,7 +84,7 @@ export function RevisionCard({ participantId, draft, onDownload, downloading }: 
   const lines = draft.lines.map((line, index) => ({ ...line, key: `${line.itemCode}-${index}` }))
   const pricing = draft.pricing
   const blocks = draft.blocks.map((entry: DraftBlock) => entry.block)
-  const issues = pricing?.issues ?? []
+  const issues = groupIssues(pricing?.issues ?? [])
   const total = lines.reduce((sum, line) => sum + line.total, 0)
 
   return <article className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] flex flex-col gap-[var(--field-gap-y)]">
@@ -123,9 +123,10 @@ export function RevisionCard({ participantId, draft, onDownload, downloading }: 
         {flagSummary(pricing.totals) && <p className="text-[var(--color-muted-foreground)]">As priced when it was saved: {flagSummary(pricing.totals)}.</p>}
         {issues.length > 0 && (
           <ul className="flex flex-col gap-0.5">
-            {issues.map(issue => (
-              <li key={`${issue.blockId}-${issue.reason}-${issue.message}`} className="flex items-start gap-1.5"><StatusBadge tone={isRefusal(issue.reason) ? 'danger' : 'warning'} label={isRefusal(issue.reason) ? 'Fix' : 'Review'} /><span>{REASON_COPY[issue.reason]?.title}: {friendlyMessage(issue.message, blocks)}{issue.firstDate ? ` (from ${formatServiceDate(issue.firstDate)})` : ''}</span></li>
-            ))}
+            {issues.map(issue => {
+              const where = [issue.count > 1 ? plural(issue.count, 'shift') : '', issue.firstDate ? `from ${formatServiceDate(issue.firstDate)}` : ''].filter(Boolean).join(', ')
+              return <li key={`${issue.blockId}-${issue.reason}-${issue.message}`} className="flex items-start gap-1.5"><StatusBadge tone={isRefusal(issue.reason) ? 'danger' : 'warning'} label={isRefusal(issue.reason) ? 'Fix' : 'Review'} /><span>{REASON_COPY[issue.reason]?.title}: {friendlyMessage(issue.message, blocks)}{where ? ` (${where})` : ''}</span></li>
+            })}
           </ul>
         )}
       </div>
