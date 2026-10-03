@@ -35,7 +35,7 @@ Set in the stack's `.env` on the host; `deploy/compose.yaml` passes them to the 
 | Setting | Variable | Default | Effect |
 |---|---|---|---|
 | `DemoData:Scenarios` | `DEMO_DATA_SCENARIOS` | `Off` | Only the exact word `On` switches the top-up on. Anything else is Off and is reported once in the startup log. |
-| `DemoData:Packs` | `DEMO_DATA_PACKS` | empty | The packs that may run, by name, comma-separated, any case. Empty is every pack. A name that is not a pack matches nothing and is reported in the startup log. |
+| `DemoData:Packs` | `DEMO_DATA_PACKS` | empty | The packs that may run, by name, any case. Only a comma separates names: a space or a semicolon does not, so `roster-weeks medications` is one name that is not a pack. Empty is every pack, and so is a value that is set but names no pack (only commas or spaces), which the startup log reports as a Warning. A name that is not a pack and matches nothing leaves that pack off, and the startup log says so in a Warning beside the `Demo data top-up is On` line: it names each such entry and lists the packs that will run and the packs that stay off. |
 | `DemoData:FirstRunDelaySeconds` | none | 30 | Wait after the host starts before the first tick (0 to 3600). |
 | `DemoData:IntervalMinutes` | none | 60 | Gap between ticks (1 to 1440). |
 
@@ -65,13 +65,54 @@ what `DEMO_DATA_PACKS` takes.
 
 A pack writes into a live tenant every hour and nothing it writes is ever deleted, so a new pack should be able to deploy without running.
 
-1. In the host's `.env`, set `DEMO_DATA_PACKS` to every pack that already runs, comma-separated, and leave out the new one. Deploy as usual.
-   The startup log line `Demo data top-up is On: ...; packs: ...` lists what will run.
-2. Check the first tick's log line. When the new pack's rows are wanted, add its name to the list and run `docker compose up -d`, or empty the
-   variable to run everything.
-3. A name that is mistyped matches nothing, so that pack stays off, and the startup log says which name is not a pack.
+1. In the host's `.env`, set `DEMO_DATA_PACKS` to every pack that already runs, comma-separated, and leave out the new one. Do it before the deploy and read the value
+   back: the deploy leaves `.env` alone, and a variable that is not there means every pack at the first tick of the new build. Deploy as usual.
+   The startup log line `Demo data top-up is On: ...; packs that will run, 8 of 14: ...` lists the packs that will run, read from the list and in the order the code runs
+   them (not the order they were typed): check that it names exactly the packs you meant, because a pack that is not in it is off.
+2. Read the Warning the startup log puts beside that line, if there is one. A name in the list that is not a pack matches nothing, so the pack it was meant for stays off:
+   the warning names each such entry and lists the packs that will run and the packs that stay off, so `roster-week` mistyped for `roster-weeks` shows up as a typo, with
+   `roster-weeks` among those that stay off. There is no warning when every name is a pack. A value that is set but names no pack (a stray comma, a space) means every pack,
+   and the warning says that; an unset or empty variable means every pack with no warning, so read the line after any edit of the variable.
+3. Check the first tick's log line. When the new pack's rows are wanted, add its name to the list and run `docker compose up -d` (the options are read once, so this
+   restarts the API), or empty the variable to run everything, which also switches on every pack added later.
 
 To stop everything, set `DEMO_DATA_SCENARIOS=Off` (nothing is removed).
+
+## Enabling the PR 2 packs
+
+The six packs PR 2 adds are `medications`, `live-set`, `medication-history`, `shift-package-history`, `incidents` and `notifications`. They write into the live Demo
+tenant every hour and nothing they write is ever deleted, so they are enabled once, on purpose, through the list described above (the eight PR 1 packs are the first eight
+names in the table).
+
+1. **Census first.** The packs skip a story whose people or rows are missing, so check that they are there before enabling: exactly one active tenant named `Demo` on
+   `demo.odip.com.au`; the ten staff the packs name, by email (`DemoPeople.StaffEmails`); the seventeen participants they name, by NDIS number
+   (`DemoPeople.ParticipantNdisNumbers`); the old seed's medications (`medications` skips itself when none is there); at least one of the old seed's shift notes
+   (`78000000-0000-0000-0000-00000000000{1..6}`: without one the note stories skip); the old seed's morning routine `74000000-0000-0000-0000-000000000002`; and a provider
+   settings row. Read the latest hourly line too: `Demo data tick for ... (tz database: present)`. If it says `MISSING, fixed +10:00` the provider's zone has fallen back
+   to a fixed offset and the clock-change logic of these packs would write the wrong instants: do not enable until the host has its time zone data. Then run these three
+   read-only checks and expect no rows (a status is a plain integer: 0 Pending, 1 Approved, 2 Declined, 3 Cancelled):
+
+   ```
+   SELECT "UserId", "LeaveType", "StartDate", "EndDate", count(*), array_agg("Id") FROM "LeaveRequests"
+     WHERE "Status" IN (0, 1) GROUP BY 1, 2, 3, 4 HAVING count(*) > 1;
+   SELECT "UserId", "DayOfWeek", "StartTime", "EndTime", "EffectiveFrom", "EffectiveTo", count(*), array_agg("Id") FROM "RecurringUnavailabilities"
+     WHERE "Status" IN (0, 1) GROUP BY 1, 2, 3, 4, 5, 6 HAVING count(*) > 1;
+   SELECT "ShiftPatternId", "ServiceDate", count(*), array_agg("Id") FROM "Shifts"
+     WHERE "ShiftPatternId" IS NOT NULL GROUP BY 1, 2 HAVING count(*) > 1;
+   ```
+
+   A row is a pair or a date the app would not have made, one of them written by the top-up (an id with `8` as the 15th character of its text form): a coordinator can
+   cancel it in the app, which takes it out of the key; nothing is deleted.
+2. **Which.** Enable the six together, or `medications` and `live-set` first. `medication-history` before `live-set` records today's live doses itself and removes the live
+   set's deliberately open one; `live-set` without `medications` writes no doses; `incidents` needs the live morning shift (one story hangs a note off it) and the
+   medications (one story is a dose).
+3. **When.** In Sydney daytime, about 06:30 to 21:30. The live set casts its shifts only between 06:00 and 23:00 on the provider's clock, and a tick outside those hours lets
+   `medication-history` record the doses already due in the live windows of today and yesterday itself: nothing is written twice, but the live story loses those doses and
+   there is nothing live to watch. Never on the night of a clock change (the first Sunday of October and of April, around 02:00). Take a backup immediately before
+   enabling: removing what the packs write is the purge below or a restore.
+4. **Restart.** Changing the list is a change of `.env` and `docker compose up -d`, which restarts the API (the options are read once): expect a short gap.
+5. **Afterwards**, read the startup line (it must list the packs you meant) and the first tick's summary: `0 packs failed`; the `skipped stories` line (a story whose
+   people or rows are missing is skipped and named); `(tz database: present)`; and, for a day, any `duplicate key` or `conflicted on` in the API log.
 
 ## Clearing it out
 
