@@ -274,16 +274,18 @@ describe('PlanStepper Days and times step', () => {
   it('says so, once, when new times take the sleepover off the block, and stops saying it when the person turns it on again', async () => {
     const user = userEvent.setup()
     render(<Harness initial={draftBlock(mondayWednesday('b1', { supportType: 'PersonalCare', days: ['Friday'], start: '22:00:00', end: '06:00:00', workerMaySleep: true, sleepoverActiveHours: 1 }))} />)
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    const region = screen.getByRole('status')
+    expect(region).toBeEmptyDOMElement()                                                     // in the page before there is anything to say, so that what is put into it is announced (review N9)
 
     fireEvent.change(screen.getByLabelText('Ends'), { target: { value: '03:00' } })
 
-    expect(screen.getByRole('status')).toHaveTextContent('The sleepover was taken off this block')
-    expect(screen.getByRole('status')).toHaveTextContent('Change the times back and turn it on again to keep it.')
+    expect(screen.getByRole('status')).toBe(region)                                          // the same node, filled in place
+    expect(region).toHaveTextContent('The sleepover was taken off this block')
+    expect(region).toHaveTextContent('Change the times back and turn it on again to keep it.')
     fireEvent.change(screen.getByLabelText('Ends'), { target: { value: '06:00' } })
-    expect(screen.getByRole('status')).toBeInTheDocument()                                  // the times are back, the sleepover is not: still said
+    expect(region).toHaveTextContent('The sleepover was taken off this block')                // the times are back, the sleepover is not: still said
     await user.click(screen.getByRole('checkbox', { name: /A worker may sleep/ }))
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(region).toBeEmptyDOMElement()
   })
 
   it('says nothing when the person turns the sleepover off themselves', async () => {
@@ -293,7 +295,7 @@ describe('PlanStepper Days and times step', () => {
     await user.click(screen.getByRole('checkbox', { name: /A worker may sleep/ }))
 
     expect(screen.getByRole('checkbox', { name: /A worker may sleep/ })).not.toBeChecked()
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
   })
 
   it('asks for the sleeping window once a block is longer than 12 hours, filled in from 22:00 to 06:00', async () => {

@@ -289,7 +289,7 @@ describe('ReviewStep states', () => {
     state.current = { data: undefined, isLoading: true, isError: false }
     setUp()
 
-    expect(screen.getByRole('status')).toHaveTextContent('Pricing this block…')
+    expect(screen.getByText('Pricing this block…').closest('[role="status"]')).not.toBeNull()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
@@ -453,8 +453,53 @@ describe('ReviewStep in the order a coordinator needs it', () => {
     setUp()
 
     expect(screen.queryByText(/updating/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('status').textContent).toBe('')
     expect(linesTable().closest('.opacity-60')).toBeNull()
+  })
+
+  // Code review N9: only the table was dimmed; the block's total, the week, the caption, "To look at" and the holidays stayed at full strength while the answer was the previous block's.
+  describe('while the answer on screen is the previous one', () => {
+    const stale = () => {
+      state.current = { data: blockQuote({ issues: [gap] }), isLoading: false, isError: false, isFetching: true, isPlaceholderData: true }
+    }
+    const dimmed = (element: Element) => element.closest('.opacity-60') !== null
+
+    it('dims every figure it holds: the lines, the block\'s total, the week, the caption, what to look at and the holidays', () => {
+      stale()
+      setUp()
+
+      expect(dimmed(linesTable())).toBe(true)
+      expect(dimmed(screen.getByText(/over the agreement/))).toBe(true)
+      expect(dimmed(screen.getByText(/in an ordinary week/))).toBe(true)
+      expect(dimmed(screen.getByRole('list', { name: 'Things to look at' }))).toBe(true)
+      expect(dimmed(screen.getByRole('region', { name: 'Public holidays' }))).toBe(true)
+    })
+
+    it('dims nothing once the answer is this block\'s', () => {
+      state.current = { data: blockQuote({ issues: [gap] }), isLoading: false, isError: false, isFetching: false, isPlaceholderData: false }
+      setUp()
+
+      expect(document.querySelector('.opacity-60')).toBeNull()
+    })
+
+    it('has the polite status in the page before it is filled, and fills that one, so that the change is announced', () => {
+      state.current = { data: blockQuote(), isLoading: false, isError: false, isFetching: false, isPlaceholderData: false }
+      const entry = draftBlock()
+      const view = (props: object) => (
+        <MemoryRouter>
+          <ReviewStep entry={entry} quoted={entry.block} others={[]} from="2026-10-01" to="2027-06-30" week={WEEK} planIssues={[]} problems={[]} onChange={vi.fn()} onGoTo={vi.fn()} {...props} />
+        </MemoryRouter>
+      )
+      const { rerender } = render(view({}))
+      const region = screen.getByRole('status')
+      expect(region.textContent).toBe('')
+
+      state.current = { data: blockQuote(), isLoading: false, isError: false, isFetching: true, isPlaceholderData: true }
+      rerender(view({}))
+
+      expect(screen.getByRole('status')).toBe(region)             // the same node, filled in place and not inserted already holding its text
+      expect(region).toHaveTextContent('Updating prices')
+    })
   })
 })
 
@@ -570,11 +615,13 @@ describe('ReviewStep holidays as a decision with its dates under it', () => {
     expect(screen.getByText('Dates and what each adds (1)').closest('details')).toHaveAttribute('open')
   })
 
-  it('says it is one choice for the block, that there is no choice to move a shift, and what to do instead', () => {
+  // Code review N10: "to move one, change the block's days" suggested a single holiday shift can be moved; changing the days moves that day in every week.
+  it('says it is one choice for the block, that a single shift cannot be moved, and what changing the days does instead', () => {
     setUp()
 
     const hint = screen.getByText(/one choice for every shift of the block that falls on a public holiday/)
-    expect(hint).toHaveTextContent('There is no choice to move a shift to another day: to move one, change the block\'s days under Days and times.')
+    expect(hint).toHaveTextContent('A single shift cannot be moved to another day: changing the block\'s days under Days and times moves that day in every week.')
+    expect(hint).not.toHaveTextContent('to move one')
   })
 })
 
@@ -610,6 +657,20 @@ describe('ReviewStep on quotes the engine wrote', () => {
 
     const panel = screen.getByRole('region', { name: 'Why this price' })
     expect(panel).toHaveTextContent('Weekday Daytime (Mon-Fri 06:00-20:00) on Mon 5 Oct 2026, 06:00 to 08:00')
+    expect(panel).not.toHaveTextContent(/\d{4}-\d{2}-\d{2}/)
+  })
+
+  // Design review D6: the Why panel printed the sentence as it was given, so an ISO date ("on 2026-10-01 ... row from 2026-07-01") sat two lines above "Wed 1 Jul 2026".
+  it('writes the dates in a line\'s reasoning the way the rest of the screen does, whatever form they arrive in', async () => {
+    const user = userEvent.setup()
+    const priced = line({ trace: { ...line().trace, why: 'Weekday Daytime on 2026-10-01, 09:00 to 13:00; price from catalogue 2026-27 (row from 2026-07-01).' } })
+    state.current = { data: blockQuote({ lines: [priced] }), isLoading: false, isError: false }
+    setUp()
+
+    await user.click(screen.getAllByRole('button', { name: /^Why /i })[0])
+
+    const panel = screen.getByRole('region', { name: 'Why this price' })
+    expect(panel).toHaveTextContent('Weekday Daytime on Thu 1 Oct 2026, 09:00 to 13:00; price from catalogue 2026-27 (row from Wed 1 Jul 2026).')
     expect(panel).not.toHaveTextContent(/\d{4}-\d{2}-\d{2}/)
   })
 

@@ -10,7 +10,7 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { TONE } from '@/lib/tone'
 import { PLAN_STEPS, formatHours, type BlockProblem, type PlanStepKey } from '@/lib/planBlocks'
 import {
-  KIND_LABEL, NO_FIGURE, bandLabel, describeQuoteError, formatServiceDate, groupLines, periodProblem, periodPrompt, questionShort, quantityLabel, referenceWeek, ruleWords, totalsCaption, type LineGroup, type ReferenceWeek,
+  KIND_LABEL, NO_FIGURE, bandLabel, describeQuoteError, formatServiceDate, friendlyMessage, groupLines, periodProblem, periodPrompt, questionShort, quantityLabel, referenceWeek, ruleWords, totalsCaption, type LineGroup, type ReferenceWeek,
 } from '@/lib/planQuote'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
@@ -96,7 +96,7 @@ function WhyContent({ group, onClose }: { group: LineGroup; onClose: () => void 
   return (
     <>
       <div className="flex items-start justify-between gap-3">
-        <p><span className="font-medium">{group.itemCode ?? 'No item'}</span>, {bandOf(group)}: {trace.why}</p>
+        <p><span className="font-medium">{group.itemCode ?? 'No item'}</span>, {bandOf(group)}: {friendlyMessage(trace.why, [])}</p>
         <Button variant="ghost" size="sm" className="shrink-0" onClick={onClose}>Close</Button>
       </div>
       <ul className="list-disc pl-5 text-[13px]">
@@ -178,8 +178,8 @@ export function ReviewStep({ entry, quoted, others, position, from, to, week, pl
   const uplift = holidays.reduce((sum, occurrence) => sum + (occurrence.uplift ?? 0), 0)
   const failure = quote.isError ? describeQuoteError(quote.error) : null
   const caption = data ? totalsCaption(data) : null
-  // The lines on screen are the previous block's while a newer answer is on its way (after "Skip the shift", say): they are dimmed and said to be updating, and a screen reader is told once,
-  // politely, because it follows a choice the person made and not typing.
+  // The lines on screen are the previous block's while a newer answer is on its way (after "Skip the shift", say): everything the answer holds is dimmed (the lines, the block's total and the week, what
+  // to look at, the holidays) and said to be updating, and a screen reader is told once, politely, because it follows a choice the person made and not typing.
   const updating = quoteable && quote.isPlaceholderData === true
 
   // The reasoning opens under the table, which on a phone is below the last card: so opening it moves the view and focus there, and it has a Close that goes back to the line it was opened for.
@@ -228,8 +228,11 @@ export function ReviewStep({ entry, quoted, others, position, from, to, week, pl
         </Callout>
       )}
 
+      {/* In the page from the start, so that what is put into it is announced: a status that is inserted already holding its text is not reliably spoken (review N9). */}
+      <p role="status" className="sr-only">{updating ? 'Updating prices' : ''}</p>
+
       {data && (
-        <>
+        <div className={`flex flex-col gap-[var(--section-gap)] transition-opacity${updating ? ' opacity-60' : ''}`} aria-busy={updating}>
           {issues.length > 0 && (
             <section className="flex flex-col gap-2" aria-labelledby="plan-issues-heading">
               <h4 id="plan-issues-heading" className="text-sm font-semibold">To look at</h4>
@@ -239,13 +242,10 @@ export function ReviewStep({ entry, quoted, others, position, from, to, week, pl
 
           <section className="flex flex-col gap-2" aria-labelledby="plan-lines-heading" aria-busy={updating}>
             <h4 id="plan-lines-heading" className="text-sm font-semibold">Lines this block produces{updating && <span aria-hidden="true" className="font-normal text-[var(--color-muted-foreground)]"> · updating…</span>}</h4>
-            {updating && <p role="status" className="sr-only">Updating prices</p>}
             {groups.length === 0 ? (
               <p className="text-sm text-[var(--color-muted-foreground)]">Nothing is priced from this block, so it adds no lines to the agreement.</p>
             ) : (
-              <div className={updating ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
-                <DataTable data={groups} keyField="key" columns={lineColumns(whyKey, toggleWhy)} emptyMessage="No lines." />
-              </div>
+              <DataTable data={groups} keyField="key" columns={lineColumns(whyKey, toggleWhy)} emptyMessage="No lines." />
             )}
             {groups.length > 0 && (
               <div className="flex flex-col gap-0.5 text-sm tabular-nums">
@@ -280,7 +280,7 @@ export function ReviewStep({ entry, quoted, others, position, from, to, week, pl
               </FormField>
               <p className="max-w-prose text-[13px] text-[var(--color-muted-foreground)]" aria-live="polite">{DECISION_WORDS[entry.block.onPublicHoliday]}</p>
               <p className="max-w-prose text-[13px] text-[var(--color-muted-foreground)]">
-                This is one choice for every shift of the block that falls on a public holiday. There is no choice to move a shift to another day: to move one, change the block&apos;s days under {stepLabel('times')}.
+                This is one choice for every shift of the block that falls on a public holiday. A single shift cannot be moved to another day: changing the block&apos;s days under {stepLabel('times')} moves that day in every week.
               </p>
               {/* The dates are the detail, and nine of them are as long as the rest of the step: shut unless there are one or two. */}
               <details open={holidays.length <= 2} className="text-sm">
@@ -302,7 +302,7 @@ export function ReviewStep({ entry, quoted, others, position, from, to, week, pl
               </ul>
             </details>
           )}
-        </>
+        </div>
       )}
     </div>
   )

@@ -94,12 +94,15 @@ export function PlanStepper({ mode, entry, templateKey, hasBlock, step, onStepCh
         )
       case 'times':
         return (
-          <div className="flex flex-col gap-[var(--section-gap)]">
-            {droppedSleepover && (
-              <p role="status" className="max-w-prose text-[13px] text-[var(--color-muted-foreground)]">
-                The sleepover was taken off this block: with these times it is no longer one (a sleepover is 8 hours or more across midnight). Change the times back and turn it on again to keep it.
-              </p>
-            )}
+          <div>
+            {/* In the page before it is filled, and filled in place: a status that is inserted already holding its text is not reliably spoken (review N9). */}
+            <div role="status">
+              {droppedSleepover && (
+                <p className="mb-[var(--section-gap)] max-w-prose text-[13px] text-[var(--color-muted-foreground)]">
+                  The sleepover was taken off this block: with these times it is no longer one (a sleepover is 8 hours or more across midnight). Change the times back and turn it on again to keep it.
+                </p>
+              )}
+            </div>
             <TimesStep entry={entry} onChange={change} problems={shown} settings={settings} />
           </div>
         )
