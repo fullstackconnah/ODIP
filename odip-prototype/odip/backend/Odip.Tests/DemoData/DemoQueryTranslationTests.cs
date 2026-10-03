@@ -78,7 +78,7 @@ public class DemoQueryTranslationTests
         yield return Q(nameof(DemoQueries.ShiftStatesOf), db => DemoQueries.ShiftStatesOf(db, Ids), "\"Id\" = ANY (", "\"Status\"");
         yield return Q(nameof(DemoQueries.ActiveRoutinesOf), db => DemoQueries.ActiveRoutinesOf(db, Ids), "\"ParticipantId\" = ANY (", "\"IsActive\"");
         yield return Q(nameof(DemoQueries.SlotsRecorded), db => DemoQueries.SlotsRecorded(db, Ids, new DateTime(2026, 9, 25), new DateTime(2026, 10, 3)), "\"ParticipantMedicationId\" = ANY (", "\"ScheduledAt\" >=", "\"ScheduledAt\" <", "\"SupersededByAdministrationId\" IS NULL");
-        yield return Q(nameof(DemoQueries.PrnDosesAwaitingOutcome), db => DemoQueries.PrnDosesAwaitingOutcome(db, Ids, DateTime.UtcNow), "\"ParticipantMedicationId\" = ANY (", "\"PrnOutcome\" IS NULL", "LIKE 'demo-v1:%'");
+        yield return Q(nameof(DemoQueries.PrnDosesAwaitingOutcome), db => DemoQueries.PrnDosesAwaitingOutcome(db, Ids, DateTime.UtcNow.AddHours(-6), DateTime.UtcNow), "\"ParticipantMedicationId\" = ANY (", "\"PrnOutcome\" IS NULL", "\"AdministeredAt\" <", "LIKE 'demo-v1:%'");
     }
 
     /// <summary>Every query the catalogue offers is in the list above: a new one that is not translated here is a failed tick nobody saw coming.</summary>

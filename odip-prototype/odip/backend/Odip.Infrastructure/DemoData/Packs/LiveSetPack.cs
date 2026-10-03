@@ -333,6 +333,9 @@ public sealed class LiveSetPack : IDemoPack
 
             if (story == LiveSetCatalog.Morning)
             {
+                // The occurrence is the old seed's own 07:00. A presenter who moves the routine in the portal and ticks it there makes a tick for the moved
+                // occurrence, and this one for 07:00 is then a second tick of the completion and routine that no index refuses (the history pack takes its
+                // occurrences from the portal's matcher; the live set's is fixed, as its script is). Known, and harmless: the tick card shows both.
                 if (_routines.FirstOrDefault(r => r.Id == MorningRoutine) is { } routine && At(live, 7, 40) > actualStartLocal)
                 {
                     var tick = PackageRows.Tick(_run, completion, routine, At(live, 7, 0), worker, At(live, 7, 40));
@@ -589,10 +592,11 @@ public sealed class LiveSetPack : IDemoPack
             if (prnIds.Count > 0)
             {
                 var from = _a.LocalToUtc(windowStart);
-                await DemoQueries.PrnDosesAwaitingOutcome(_run.Db, prnIds, from).ToListAsync(ct);          // attaches the saved ones
+                var until = _a.LocalToUtc(windowEnd);                                                      // this shift's doses, not a later day's that a healed piece meets
+                await DemoQueries.PrnDosesAwaitingOutcome(_run.Db, prnIds, from, until).ToListAsync(ct);   // attaches the saved ones
                 var pending = Pending<MedicationAdministration>()
                     .Where(a => prnIds.Contains(a.ParticipantMedicationId) && a.Status == MedicationAdministrationStatus.Administered && a.PrnOutcome == null
-                                && a.AdministeredAt >= from && a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:", StringComparison.Ordinal))
+                                && a.AdministeredAt >= from && a.AdministeredAt < until && a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:", StringComparison.Ordinal))
                     .ToList();
                 foreach (var dose in pending)
                     PackageRows.PrnOutcome(_run, dose, "Settled within the hour with rest and a drink.", submittedLocal.AddMinutes(-4));

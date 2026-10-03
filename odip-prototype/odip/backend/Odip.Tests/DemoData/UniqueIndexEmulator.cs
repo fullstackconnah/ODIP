@@ -24,6 +24,10 @@ namespace Odip.Tests.DemoData;
 /// would on the server.
 ///
 /// It reads the stored rows through a second context on the same database, because a query on the context that is saving would be a second operation on it.
+///
+/// What it does not model (independent review E1 to E3): primary keys (InMemory refuses a repeated one itself, as an ArgumentException rather than a PostgresException
+/// 23505, so the maintainer would classify it as a plain failure), CHECK constraints, foreign keys and varchar lengths; timestamps are keyed by .NET ticks where PostgreSQL
+/// keeps microseconds; and two rows that swap unique values in one save are accepted, which PostgreSQL refuses (EF cannot order the cycle). The demo does none of those.
 /// </summary>
 internal sealed class UniqueIndexEmulator : SaveChangesInterceptor
 {

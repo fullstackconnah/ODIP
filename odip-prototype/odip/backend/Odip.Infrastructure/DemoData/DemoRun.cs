@@ -189,6 +189,12 @@ public sealed class DemoRun
         }
     }
 
+    /// <summary>
+    /// Puts the tracker back to what the database now holds. Added rows are detached first (a failed save leaves them Added, and the rows saved inside the piece are
+    /// read again and found gone). This assumes a piece saves once after its start: a row that was reloaded to "gone" while a tracked row still pointed at it on a
+    /// required or SetNull foreign key would be fixed up by EF (an exception, or a null written by the next save). A piece that saves in several steps must remember
+    /// what it added and changed and undo those, dependents first (independent review N4).
+    /// </summary>
     private async Task ForgetUnsavedAndReloadAsync(CancellationToken ct)
     {
         foreach (var entry in Db.ChangeTracker.Entries().ToList())

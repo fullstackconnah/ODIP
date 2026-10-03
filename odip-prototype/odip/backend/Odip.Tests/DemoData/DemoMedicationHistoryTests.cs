@@ -109,6 +109,34 @@ public class DemoMedicationHistoryTests
         Assert.Single(await check.MedicationAdministrations.Where(a => a.ParticipantMedicationId == MedicationCatalog.InsulinGlargine && a.ScheduledAt == At(Friday, 8, 0)).ToListAsync());
     }
 
+    /// <summary>
+    /// Independent review N1: L2 counted a window while its shift was not Cancelled or Draft, but the live set works a shift only when its worker is one of the people
+    /// the stories name. A presenter who gives Harrison's shift to somebody else, or takes the worker off it, leaves it Published for good and worked by nobody, so its
+    /// window must fall to the history as a cancelled one does.
+    /// </summary>
+    [Fact]
+    public async Task ASlotInsideTheWindowOfAShiftNobodyWillWork_IsRecordedByTheHistory_WhetherItWasGivenToSomebodyElseOrLeftWithoutAWorker()
+    {
+        var env = await TickAsync(new DateTimeOffset(2026, 10, 1, 20, 30, 0, TimeSpan.Zero));              // Fri 06:30 AEST: cast, nobody has started
+        await using (var db = env.AdminDb())
+        {
+            (await db.Shifts.SingleAsync(s => s.Id == LiveSetCatalog.ShiftId(LiveSetCatalog.Insulin, Friday))).UserId = Guid.Parse("b2000000-0000-0000-0000-000000000004");   // not one of the people the stories name
+            (await db.Shifts.SingleAsync(s => s.Id == LiveSetCatalog.ShiftId(LiveSetCatalog.Morning, Friday))).UserId = null;                                                  // nobody
+            await db.SaveChangesAsync();
+        }
+
+        await RunAsync(env, Friday1030);
+
+        await using var check = env.AdminDb();
+        foreach (var (medication, hour) in new[] { (MedicationCatalog.InsulinGlargine, 8), (MedicationCatalog.Levetiracetam, 8) })
+        {
+            var only = Assert.Single(await check.MedicationAdministrations.Where(a => a.ParticipantMedicationId == medication && a.ScheduledAt == At(Friday, hour, 0)).ToListAsync());
+            Assert.StartsWith("demo-v1:", only.IdempotencyKey, StringComparison.Ordinal);
+        }
+        Assert.Equal(ShiftStatus.Published, (await check.Shifts.SingleAsync(s => s.Id == LiveSetCatalog.ShiftId(LiveSetCatalog.Insulin, Friday))).Status);     // the live set left both alone
+        Assert.False(await check.ShiftCompletions.AnyAsync(c => c.ShiftId == LiveSetCatalog.ShiftId(LiveSetCatalog.Insulin, Friday) || c.ShiftId == LiveSetCatalog.ShiftId(LiveSetCatalog.Morning, Friday)));
+    }
+
     // ── the plan's mix ──
 
     [Fact]

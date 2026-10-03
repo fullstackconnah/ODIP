@@ -218,11 +218,14 @@ public static class DemoQueries
         where participantIds.Contains(s.ParticipantId) && c.IsActive && c.SubmittedAt != null && s.ServiceDate >= since
         select new HandoverSource(c.Id, s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, c.SubmittedAt!.Value, c.HandoverText, c.NothingToHandOver, s.UserId);
 
-    public sealed record ShiftState(Guid Id, ShiftStatus Status);
+    public sealed record ShiftState(Guid Id, ShiftStatus Status, Guid? UserId);
 
-    /// <summary>Read only: the status of those of these shifts that exist, so a live window is counted only while its shift is being worked (PR 2 review L2).</summary>
+    /// <summary>
+    /// Read only: the status and the worker of those of these shifts that exist, so a live window is counted only while the live set works its shift (PR 2 review L2:
+    /// not a cancelled or draft one; independent review N1: nor one with nobody on it, or somebody the stories do not name, which the live set leaves alone).
+    /// </summary>
     public static IQueryable<ShiftState> ShiftStatesOf(OdipDbContext db, List<Guid> ids) =>
-        db.Shifts.AsNoTracking().Where(s => ids.Contains(s.Id)).Select(s => new ShiftState(s.Id, s.Status));
+        db.Shifts.AsNoTracking().Where(s => ids.Contains(s.Id)).Select(s => new ShiftState(s.Id, s.Status, s.UserId));
 
     /// <summary>Read only: the active routines of these participants, which the shift package matches against a shift's window.</summary>
     public static IQueryable<ParticipantRoutine> ActiveRoutinesOf(OdipDbContext db, List<Guid> participantIds) =>
@@ -244,10 +247,14 @@ public static class DemoQueries
     public static IQueryable<MedicationAdministration> AdministrationsByIds(OdipDbContext db, List<Guid> ids) =>
         db.MedicationAdministrations.Where(a => ids.Contains(a.Id));
 
-    /// <summary>Tracked: as-needed doses this top-up recorded at or after <paramref name="sinceUtc"/> that have no outcome yet (written when the shift is finished).</summary>
-    public static IQueryable<MedicationAdministration> PrnDosesAwaitingOutcome(OdipDbContext db, List<Guid> medicationIds, DateTime sinceUtc) =>
+    /// <summary>
+    /// Tracked: as-needed doses this top-up gave in a shift's window (from <paramref name="sinceUtc"/> up to, not including, <paramref name="untilUtc"/>) that have no outcome
+    /// yet (written when the shift is finished). The upper bound matters now that every live shift is its own piece: yesterday's can heal after today's has given a dose,
+    /// and its close must not give today's dose an outcome dated before it was given (independent review N2).
+    /// </summary>
+    public static IQueryable<MedicationAdministration> PrnDosesAwaitingOutcome(OdipDbContext db, List<Guid> medicationIds, DateTime sinceUtc, DateTime untilUtc) =>
         db.MedicationAdministrations.Where(a => medicationIds.Contains(a.ParticipantMedicationId) && a.Status == MedicationAdministrationStatus.Administered
-                                                && a.PrnOutcome == null && a.AdministeredAt != null && a.AdministeredAt >= sinceUtc
+                                                && a.PrnOutcome == null && a.AdministeredAt != null && a.AdministeredAt >= sinceUtc && a.AdministeredAt < untilUtc
                                                 && a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:"));
 
     /// <summary>

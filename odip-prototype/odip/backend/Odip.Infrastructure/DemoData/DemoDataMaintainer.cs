@@ -303,7 +303,10 @@ public sealed class DemoDataMaintainer
         }
     }
 
-    /// <summary>What the database said about a conflict (its message and the key that was taken), which the exception around it does not repeat.</summary>
+    /// <summary>
+    /// What the database said about a conflict, which the exception around it does not repeat: its message (which names the constraint) and, only when the connection
+    /// string says Include Error Detail, the key that was taken (Npgsql leaves the detail out otherwise, as the production connection string does).
+    /// </summary>
     private static string DatabaseText(Exception ex)
     {
         for (Exception? e = ex; e is not null; e = e.InnerException)

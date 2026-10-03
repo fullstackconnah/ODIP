@@ -44,6 +44,37 @@ public class DemoLiveSetPiecesTests
         }
     }
 
+    /// <summary>
+    /// Independent review N2: with every live shift its own piece, yesterday's can fail on every tick until after today's has written its as-needed dose, and heal
+    /// later. Its close gives an outcome to the as-needed doses with none, and the query had no upper bound, so today's dose got an outcome dated yesterday afternoon,
+    /// before the dose was given.
+    /// </summary>
+    [Fact]
+    public async Task AHealedShiftOfYesterday_DoesNotGiveTodaysAsNeededDoseAnOutcomeDatedBeforeItWasGiven()
+    {
+        var env = new DemoTestEnv(Utc("2026-10-01T20:30:00Z"));
+        await DemoFixture.SeedPeopleAsync(env);
+        await env.SetProviderStateAsync("NSW");
+        var refuses = new RefusesNote(LiveSetCatalog.MorningNote(Friday.AddDays(-1)));                 // Thursday's note of Sophie's morning cannot be saved
+        var faulty = new DbContextOptionsBuilder<OdipDbContext>(env.Options).AddInterceptors(refuses).Options;
+        foreach (var tick in new[] { "2026-10-01T20:30:00Z", "2026-10-02T00:30:00Z" })                 // Fri 06:30 and 10:30: Thursday's piece fails each time, Friday's runs
+        {
+            env.Clock.Set(Utc(tick));
+            await env.Maintainer(DemoPacks.Default()).RunAsync(faulty, CancellationToken.None);
+        }
+        Assert.True(refuses.Refusals >= 1);
+
+        await RunAsync(env, Utc("2026-10-02T00:35:00Z"));                                              // the fault is gone: Thursday's shift is finished now, Friday's is still running
+
+        await using var db = env.AdminDb();
+        var doses = (await db.MedicationAdministrations.Where(a => a.ParticipantMedicationId == MedicationCatalog.Paracetamol && a.ScheduledAt == null).ToListAsync())
+            .Where(a => a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:", StringComparison.Ordinal)).ToList();
+        var thursdays = Assert.Single(doses, d => DateOnly.FromDateTime(Local(d.AdministeredAt!.Value)) == Friday.AddDays(-1));
+        var fridays = Assert.Single(doses, d => DateOnly.FromDateTime(Local(d.AdministeredAt!.Value)) == Friday);
+        Assert.False(string.IsNullOrWhiteSpace(thursdays.PrnOutcome));                                 // the healed shift gave its own dose its outcome
+        Assert.True(fridays.PrnOutcome is null || fridays.PrnOutcomeAt >= fridays.AdministeredAt, $"today's dose was given {fridays.AdministeredAt:O} and its outcome is dated {fridays.PrnOutcomeAt:O}");
+    }
+
     [Fact]
     public async Task OneLiveShiftThatCannotBeWritten_IsReportedByName_AndTheOtherShiftsAndPacksCarryOn_AndTheNextTickHealsIt()
     {

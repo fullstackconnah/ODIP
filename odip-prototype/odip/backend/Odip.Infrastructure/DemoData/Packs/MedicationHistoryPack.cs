@@ -88,7 +88,7 @@ public sealed class MedicationHistoryPack : IDemoPack
 
         var recorded = (await DemoQueries.SlotsRecorded(run.Db, chart.Select(m => m.Id).ToList(), from, to).ToListAsync(ct))
             .Select(s => (s.MedicationId, s.ScheduledAt)).ToHashSet();
-        var live = await LiveWindowsAsync(run, ct);
+        var live = await LiveWindowsAsync(run, staff, ct);
 
         var doses = new List<(MedicationAdministration Dose, ParticipantMedication Med, User Recorder, bool Witnessed)>();
         void Add(MedicationAdministration dose, ParticipantMedication med, User recorder, bool witnessed) => doses.Add((dose, med, recorder, witnessed));
@@ -293,23 +293,26 @@ public sealed class MedicationHistoryPack : IDemoPack
 
     // ── the live set's windows ──
 
-    private static async Task<List<(Guid Participant, DateTime Start, DateTime End)>> LiveWindowsAsync(DemoRun run, CancellationToken ct)
+    private static async Task<List<(Guid Participant, DateTime Start, DateTime End)>> LiveWindowsAsync(DemoRun run, IReadOnlyDictionary<string, User> staff, CancellationToken ct)
     {
         // Every day of the history window, not only the two the live set builds: a live shift of three days ago still owns its day (its as-needed dose,
         // its closing doses), and a history dose written beside them could fall inside the minimum interval of one.
         var anchors = run.Anchors;
         var dates = Enumerable.Range(0, HistoryDays + 1).Select(i => anchors.D0.AddDays(-i)).ToArray();
 
-        // A window is the live set's only while its shift is being worked: one the owner cancelled, or that was never published, is nobody's, and counting
-        // it would leave the day's doses unrecorded for good (PR 2 review L2).
-        var states = (await DemoQueries.ShiftStatesOf(run.Db, LiveSetCatalog.ShiftIds(dates).ToList()).ToListAsync(ct)).ToDictionary(s => s.Id, s => s.Status);
+        // A window is the live set's only while its shift is being worked: one the owner cancelled, or that was never published, is nobody's, and so is one with
+        // nobody on it or with somebody the stories do not name, which the live set leaves alone; counting any of them would leave the day's doses unrecorded for
+        // good (PR 2 review L2, independent review N1).
+        var workers = staff.Values.Select(u => u.Id).ToHashSet();
+        var states = (await DemoQueries.ShiftStatesOf(run.Db, LiveSetCatalog.ShiftIds(dates).ToList()).ToListAsync(ct)).ToDictionary(s => s.Id);
 
         var windows = new List<(Guid, DateTime, DateTime)>();
         foreach (var date in dates)
         {
             foreach (var story in LiveSetCatalog.Stories)
             {
-                if (!states.TryGetValue(LiveSetCatalog.ShiftId(story, date), out var status) || status is ShiftStatus.Cancelled or ShiftStatus.Draft) continue;
+                if (!states.TryGetValue(LiveSetCatalog.ShiftId(story, date), out var state) || state.Status is ShiftStatus.Cancelled or ShiftStatus.Draft) continue;
+                if (state.UserId is not { } worker || !workers.Contains(worker)) continue;
                 if (run.Directory.Participant(story.Participant) is not { } participant) continue;
                 windows.Add((participant.Id, PackageRows.Local(date, story.Start), PackageRows.Local(date, story.End)));
             }

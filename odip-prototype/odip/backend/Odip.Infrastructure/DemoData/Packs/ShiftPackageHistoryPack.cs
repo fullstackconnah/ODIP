@@ -226,11 +226,14 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
 
             var at = (occurrence.OccursAtLocal ?? startLocal).AddMinutes(5 + DemoIds.Pick(key, "after", 0, 30));
 
-            // The portal takes a tick only once the worker has started, so never before it and not in the same minute (PR 2 review L4: a routine due at the
-            // rostered start, ticked for a worker who started six to twelve minutes late, came before the start).
+            // The portal takes a tick only while the shift is in progress, so never before the worker started, and not in the same minute (PR 2 review L4: a routine
+            // due at the rostered start, ticked for a worker who started six to twelve minutes late, came before the start), and never after the Finish (independent
+            // review N8: a worker can finish eight minutes before the rostered end, and a tick clamped to five minutes before it came after).
             var firstPossible = Local(run, ProviderLocalTime.AsUtc(completion.ActualStart)).AddMinutes(1);
+            var lastPossible = Local(run, ProviderLocalTime.AsUtc(completion.ActualEnd!.Value)).AddMinutes(-1);
             if (at < firstPossible) at = firstPossible;
             if (at >= endLocal) at = endLocal.AddMinutes(-5);
+            if (at > lastPossible) at = lastPossible;
             if (at < firstPossible) continue;
             ticks.Add((PackageRows.Tick(run, completion, occurrence.Routine, occurrence.OccursAtLocal, worker, at), worker));
         }

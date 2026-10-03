@@ -88,7 +88,8 @@ public static class MedicationCatalog
     /// The day of the first run, read back from the rows that remember it: each of the nine new medications was started on that day plus its own
     /// offset, so the first run's D0 is any of them less its offset. A medication the owner deleted is made again counted from a later day, so the
     /// answer is the EARLIEST of the nine (PR 2 review L9), which does not depend on the order the chart comes in or on how many were made again.
-    /// Null when none of the nine is on the chart (nothing then needs the anchor).
+    /// Null when none of the nine is on the chart (nothing then needs the anchor). The start date is a column the medication form edits, so an owner who moves one
+    /// of the nine to an earlier day moves the anchor with it (the earliest wins); there is no row the owner cannot edit to hold it instead.
     /// </summary>
     public static DateOnly? FirstRunDay(IEnumerable<ParticipantMedication> chart)
     {
