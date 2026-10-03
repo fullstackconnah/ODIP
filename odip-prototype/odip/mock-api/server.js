@@ -95,9 +95,12 @@ const enquiryFeed = [
     createdAt: '2026-02-01T00:00:00Z', participantIsDraft: false, participantIsActive: true, participantIntakeCompletedAt: '2026-02-10T00:00:00Z' },
 ]
 
+// An NDIS-funded participant has a sixth gate, "Funding recorded" (budget phase 1): the real API counts it in totalSteps and adds this reason while no plan budget is recorded. The mock treats
+// everyone on the worklist as NDIS-funded, and Mei has no plan budget (funding.js holds plans for p-0002 and p-0004 only).
+const FUNDING_NOT_RECORDED_REASON = "Funding is not recorded: add the plan budget on the participant's Funding tab."
 const onboardingWorklist = [
-  { participantId: 'p-0103', fullName: 'Mei Tanaka', stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 5,
-    reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.'] },
+  { participantId: 'p-0103', fullName: 'Mei Tanaka', stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 6,
+    reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', FUNDING_NOT_RECORDED_REASON] },
 ]
 
 // Drafts are not on the register, so the participants list never returns these; only their detail and checklist are served (the mock's default
@@ -2249,10 +2252,13 @@ const routes = [
     flagMatches(searchParams, 'isActive', p.isActive) && flagMatches(searchParams, 'isDraft', !!p.isDraft)))],
   ['inquiries', () => enquiryFeed],
   ['inquiries/onboarding-worklist', () => onboardingWorklist],
-  ['inquiries/:id/onboarding', (id) => ({
-    participantId: id, intakeComplete: true, profileComplete: false, serviceTypeConfirmed: false, serviceAgreementSigned: false, isReady: false,
-    reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.'],
-  })],
+  ['inquiries/:id/onboarding', (id) => {
+    const fundingRecorded = funding.hasPlan(id)
+    return {
+      participantId: id, intakeComplete: true, profileComplete: false, serviceTypeConfirmed: false, serviceAgreementSigned: false, fundingRecorded, isReady: false,
+      reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', ...(fundingRecorded ? [] : [FUNDING_NOT_RECORDED_REASON])],
+    }
+  }],
   ['participants/:id/bookings', (id) => bookings.filter((b) => b.participantId === id)],
   // NDIS Claims (shift-completion design spec §2/§4, PR 3) — see the `claims` fixture's own
   // comment for why this only ever returns Shift-kind rows, mirroring the real

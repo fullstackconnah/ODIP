@@ -225,7 +225,10 @@ function create({ respond, fundingSources }) {
     }],
   ]
 
-  return { get, post, put, delete: del }
+  /** Whether a participant has any plan recorded: the onboarding checklist's "Funding recorded" gate (the mock has no clock, so any plan counts, current or not). */
+  const hasPlan = (participantId) => plansOf(participantId).length > 0
+
+  return { get, post, put, delete: del, hasPlan }
 }
 
 module.exports = { create, PACE_CATEGORIES }

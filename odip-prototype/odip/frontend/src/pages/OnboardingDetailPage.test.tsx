@@ -206,6 +206,72 @@ describe('OnboardingDetailPage', () => {
   })
 })
 
+// "Funding recorded" is a step of the activation checklist for an NDIS-funded participant (budget phase 1). The server sends fundingRecorded only for them, and counts it in the
+// worklist's total ("N of 6 gates"), so this page has to show the same gate or the two disagree about how many there are.
+describe('OnboardingDetailPage — the funding gate', () => {
+  const everythingElseDone = { ...readyForSchedule, reasons: ["Funding is not recorded: add the plan budget on the participant's Funding tab."] }
+
+  beforeEach(() => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseQuery.mockReturnValue({ data: { ...everythingElseDone, fundingRecorded: false }, isLoading: false })
+    mockUseMutation.mockReturnValue({ mutate: vi.fn(), error: null, isPending: false })
+    mockUseParticipant.mockReturnValue({ data: { firstName: 'Jamie', lastName: 'Rivers', preferredName: null }, isLoading: false })
+  })
+
+  it('adds a Funding recorded gate that needs attention, counts it among the gates, and links to the Funding tab', () => {
+    renderDetail()
+
+    const gate = screen.getByText('Funding recorded').closest('article')!
+    expect(gate).toHaveTextContent('Needs attention')
+    expect(within(gate).getByRole('link', { name: 'Record plan budget' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
+    expect(screen.getByText('Progress: 4 of 6 gates complete')).toBeInTheDocument()
+    expect(screen.getByText("Funding is not recorded: add the plan budget on the participant's Funding tab.")).toBeInTheDocument()
+  })
+
+  it('puts it before the schedule review, the proposal-only gate that stays last', () => {
+    renderDetail()
+
+    const labels = screen.getAllByRole('heading', { level: 3 }).map(heading => heading.textContent)
+    expect(labels.indexOf('Funding recorded')).toBe(labels.indexOf('Current agreement evidence') + 1)
+    expect(labels[labels.length - 1]).toBe('Schedule review')
+  })
+
+  it('shows it complete, without a link, once the plan budget is recorded', () => {
+    mockUseQuery.mockReturnValue({ data: { ...readyForSchedule, fundingRecorded: true }, isLoading: false })
+    renderDetail()
+
+    const gate = screen.getByText('Funding recorded').closest('article')!
+    expect(gate).toHaveTextContent('Complete')
+    expect(within(gate).queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByText('Progress: 5 of 6 gates complete')).toBeInTheDocument()
+  })
+
+  it('keeps the five gates, and shows no funding gate, when the server says nothing about funding (a participant who is not NDIS-funded)', () => {
+    for (const data of [{ ...readyForSchedule }, { ...readyForSchedule, fundingRecorded: null }]) {
+      mockUseQuery.mockReturnValue({ data, isLoading: false })
+      const { unmount } = renderDetail()
+      expect(screen.queryByText('Funding recorded')).not.toBeInTheDocument()
+      expect(screen.getByText('Progress: 4 of 5 gates complete')).toBeInTheDocument()
+      unmount()
+    }
+  })
+
+  it('offers the Funding tab to the roles that may manage funding, and keeps the gate but not the link for a ReadOnly or SupportWorker reader', () => {
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator']) {
+      localStorage.setItem('odip_user', JSON.stringify({ role }))
+      const { unmount } = renderDetail()
+      expect(screen.getByRole('link', { name: 'Record plan budget' }), role).toHaveAttribute('href', '/participants/p-1?tab=funding')
+      unmount()
+    }
+    for (const role of ['ReadOnly', 'SupportWorker']) {
+      localStorage.setItem('odip_user', JSON.stringify({ role }))
+      const { unmount } = renderDetail()
+      expect(screen.getByText('Funding recorded'), role).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Record plan budget' }), role).not.toBeInTheDocument()
+      unmount()
+    }
+  })
+})
 
 // Finishing onboarding is the Profile wizard's Complete Profile: it finalises the participant, and when the organisation's readiness rule allows it
 // they become active and move to Active participants. The checklist used to offer the wizard (as "Edit profile") only while the profile gate was open,
