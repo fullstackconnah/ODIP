@@ -149,11 +149,12 @@ public class DemoRunbookTests
 
         var startup = Assert.Single(log.Entries, e => e.Level == LogLevel.Information).Message;
         var warning = Assert.Single(log.Entries, e => e.Level == LogLevel.Warning).Message;
-        foreach (var fragment in new[] { "Demo data top-up is On", "packs that will run," })
-        {
-            Assert.Contains(fragment, startup, StringComparison.Ordinal);
-            Assert.Contains(fragment, runbook, StringComparison.Ordinal);
-        }
+        // The runbook abbreviates the first half of the line ("first tick in ..., then every ...") to "...": the rest of what it quotes has to be the line as logged. (A loose
+        // fragment would pass on the prose around the quotation, which says the same words.)
+        var quoted = Regex.Replace(startup, "first tick in [^;]*;", "...;", RegexOptions.CultureInvariant);
+        var quotedPrefix = quoted[..(quoted.IndexOf("packs that will run, ", StringComparison.Ordinal) + "packs that will run, ".Length)];
+        Assert.StartsWith("Demo data top-up is On: ...; packs that will run, ", quotedPrefix, StringComparison.Ordinal);
+        Assert.Contains(quotedPrefix, runbook, StringComparison.Ordinal);
         foreach (var fragment in new[] { "is not a pack and matches nothing", "will run", "stay off", "names no pack" })
         {
             Assert.Contains(fragment, runbook, StringComparison.Ordinal);
