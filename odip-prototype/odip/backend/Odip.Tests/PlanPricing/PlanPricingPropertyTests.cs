@@ -31,8 +31,41 @@ public class PlanPricingPropertyTests
 
     // ── The generator ─────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// The heaviest shape there is, found by the verification of fix round 1: a 24 hour short-term accommodation block from a random quarter hour with a sleepover window of 8 hours
+    /// or more and more than two active hours, ten headcount changes, provider travel with minutes and kilometres, and accommodation with a worker on site. The properties about
+    /// the size of an answer need cases near the bound, and random blocks stay far under it.
+    /// </summary>
+    private static PlanBlock HeavyBlock(Random random, int index)
+    {
+        // Starts in the afternoon or evening, so that midnight is within ten hours of the start and a sleepover window of 8 to 12 hours can be placed across it (a window that does not
+        // cross midnight is no sleepover). The ten headcount changes go anywhere outside the window: one inside it cuts nothing.
+        var start = new TimeOnly(random.Next(14, 24), random.Next(0, 4) * 15);
+        var toMidnight = 24 * 60 - (start.Hour * 60 + start.Minute);
+        var windowOffset = random.Next(0, toMidnight / 15) * 15;
+        var windowLength = random.Next(Math.Max(8 * 4, (toMidnight - windowOffset) / 15 + 1), 12 * 4 + 1) * 15;
+        var from = start.AddMinutes(windowOffset);
+        var outside = Enumerable.Range(1, 24 * 4 - 1).Select(step => step * 15).Where(offset => offset < windowOffset || offset >= windowOffset + windowLength).OrderBy(_ => random.Next()).ToList();
+        return new PlanBlock
+        {
+            Id = $"b{index}", SupportType = PlanSupportType.StaSupport,
+            Days = Enum.GetValues<DayOfWeek>().OrderBy(_ => random.Next()).Take(random.Next(1, 4)).ToArray(),
+            Start = start, End = start, ParticipantsPresent = 4, Location = RandomLocation(random), OnPublicHoliday = (HolidayDecision)random.Next(3),
+            WorkerMaySleep = true, SleepoverWindow = new PlanSleepoverWindow { From = from, To = from.AddMinutes(windowLength) }, SleepoverActiveHours = random.Next(5, 9) * 0.5m,
+            HeadcountChanges = outside.Take(PlanBlock.MaxHeadcountChanges).Select(offset => new PlanHeadcountChange { From = start.AddMinutes(offset), ParticipantsPresent = random.Next(1, 5) }).ToList(),
+            Travel = new PlanProviderTravel { Claim = true, MinutesEachWay = random.Next(1, 9) * 15, ReturnToBase = random.Next(2) == 0, KmEachWay = random.Next(1, 30) },
+            Accommodation = new PlanAccommodation { Nights = random.Next(1, 4), WorkerOnSite = true },
+        };
+    }
+
     private static PlanBlock RandomBlock(Random random, int index)
     {
+        if (random.Next(8) == 0)
+        {
+            var heavy = HeavyBlock(random, index);
+            if (heavy.Validate().Count == 0) return heavy;
+        }
+
         for (var attempt = 0; attempt < 50; attempt++)
         {
             var type = (PlanSupportType)random.Next(4);
@@ -125,8 +158,24 @@ public class PlanPricingPropertyTests
         var (from, to) = Windows[random.Next(Windows.Length)];
         var blocks = Enumerable.Range(0, random.Next(1, 5)).Select(i => RandomBlock(random, i)).ToList();
         var holidays = RandomHolidays(random, from, to);
+        AddPartDayStress(random, blocks, holidays, from, to);
         var policy = PlanPricingPolicy.Default with { Crossing = random.Next(2) == 0 ? CrossingPolicy.Split : CrossingPolicy.HigherOf };
         return new Case(seed, blocks, holidays, policy, from, to, Quote(blocks, from, to, policy, holidays));
+    }
+
+    /// <summary>
+    /// A heavy block (ten headcount changes) on the days a part-day holiday of its state falls in the middle of the day: the one case that adds two more day parts to every
+    /// occurrence, and so the one where the real lines reach the bound instead of staying under it. One part-day row a date, as the line bound assumes.
+    /// </summary>
+    private static void AddPartDayStress(Random random, List<PlanBlock> blocks, List<HolidayEntry> holidays, DateOnly from, DateOnly to)
+    {
+        foreach (var block in blocks.Where(b => b.Changes.Count >= 8))
+            for (var date = from; date <= to; date = date.AddDays(1))
+            {
+                if (!block.Days.Contains(date.DayOfWeek) || holidays.Any(h => h.Date == date && !h.IsWholeDay)) continue;
+                var hour = random.Next(8, 17);
+                holidays.Add(new HolidayEntry(date, block.Location.State, "Stress part day", new TimeOnly(hour, 0), new TimeOnly(hour + 2, 0), "random"));
+            }
     }
 
     private static string Tag(Case c) => $"seed {c.Seed}";
@@ -299,6 +348,27 @@ public class PlanPricingPropertyTests
         }
 
         Assert.True(changed > 100, "the December set priced nothing differently, so the check proved nothing");
+    }
+
+    [Fact]
+    public void A_blocks_lines_never_exceed_its_dates_times_the_upper_bound_the_quotes_size_ceiling_is_built_on()
+    {
+        // Verification of fix round 1, N4: the 100,000 line ceiling refuses a quote on an ESTIMATE (each block's dated occurrences times PlanBlock.MaxLinesPerOccurrence)
+        // before any pricing. That is only a safe ceiling while no occurrence can make more lines than its bound: a later line type (a new companion, a second hourly
+        // piece) that did would make the ceiling quietly mean more than 100,000. The generated plans (ten headcount changes, sleepovers, travel, transport, accommodation,
+        // holidays, clock changes) are the check that nothing does today.
+        var busiest = 0.0;
+        foreach (var c in AllCases.Value)
+            foreach (var block in c.Blocks.Where(b => b.Validate().Count == 0))
+            {
+                var lines = c.Quote.Lines.Count(l => l.BlockId == block.Id);
+                var bound = Dates(block, c.From, c.To).Count * block.MaxLinesPerOccurrence;
+
+                Assert.True(lines <= bound, $"{Tag(c)}, block {block.Id}: {lines} lines against an upper bound of {bound} ({block.MaxLinesPerOccurrence} an occurrence)");
+                if (bound > 0) busiest = Math.Max(busiest, (double)lines / bound);
+            }
+
+        Assert.True(busiest > 0.5, $"the generated plans never got within half of the bound (closest {busiest:P0}), so the check proved little");
     }
 
     [Fact]

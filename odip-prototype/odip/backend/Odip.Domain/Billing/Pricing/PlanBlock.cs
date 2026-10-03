@@ -166,7 +166,9 @@ public sealed record PlanBlock
     /// <summary>
     /// An upper bound on the lines one occurrence can produce, for the engine's ceiling on a quote's size: the day bands the occurrence can touch (06:00, 20:00
     /// and midnight cut it) plus two for a part-day holiday's hours, one more for each headcount change, and the sleepover, centre capital, travel, transport and
-    /// accommodation lines the block asks for. A plain 09:00 to 13:00 block is 3.
+    /// accommodation lines the block asks for. A plain 09:00 to 13:00 block is 3. It is a bound while a date has at most one part-day holiday row (the two are for its start and
+    /// its end; the seeded rows run to midnight): a second row on the same date can add up to two more lines an occurrence, and only SQL can write those rows. The bound is tight: the
+    /// heaviest short-term accommodation shape reaches it exactly (22) with one mid-day part-day holiday, and PlanPricingRulesTests sweeps that shape to prove no occurrence exceeds it.
     /// </summary>
     public int MaxLinesPerOccurrence
     {

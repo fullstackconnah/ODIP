@@ -641,6 +641,93 @@ public class PlanPricingRulesTests
     }
 
     [Fact]
+    public void The_heaviest_legal_occurrence_makes_20_lines_against_an_upper_bound_of_22_and_never_more()
+    {
+        // Verification of fix round 1, N4. The quote ceiling is built on PlanBlock.MaxLinesPerOccurrence, so the shape that comes closest to it is pinned here. A short-term
+        // accommodation block of 24 hours from 19:59 (so the day's bands cut it four ways), with ten headcount changes outside the sleepover (each one cuts an hourly part),
+        // a sleepover window of 21:00 to 05:00 with more than two active hours, provider travel with minutes and kilometres, and accommodation with a worker on site.
+        var changes = new[] { T(20, 15), T(20, 30), T(20, 45), T(5, 30), T(7), T(9), T(11), T(13), T(15), T(17) };
+        var shape = Block("sta-heaviest", PlanSupportType.StaSupport, DayOfWeek.Monday, T(19, 59), T(19, 59), b => b with
+        {
+            ParticipantsPresent = 3,
+            WorkerMaySleep = true, SleepoverWindow = new PlanSleepoverWindow { From = T(21), To = T(5) }, SleepoverActiveHours = 3m,
+            HeadcountChanges = changes.Select((at, i) => new PlanHeadcountChange { From = at, ParticipantsPresent = 1 + i % 3 }).ToList(),
+            Travel = new PlanProviderTravel { Claim = true, MinutesEachWay = 20, ReturnToBase = true, KmEachWay = 5m },
+            Accommodation = new PlanAccommodation { Nights = 1, WorkerOnSite = true },
+        });
+        Assert.Empty(shape.Validate());
+
+        var quote = QuoteOne(shape, Mon12Oct);
+
+        // The bound: 4 bands, 2 for a part-day holiday (none here), 10 changes, and 6 for the sleepover (2), travel (2) and accommodation (2).
+        Assert.Equal(22, shape.MaxLinesPerOccurrence);
+        // The lines: 14 hourly parts (4 bands and 10 changes, none of the changes inside the sleepover), the sleepover and its extra active hours, the two travel lines
+        // and the two nights.
+        var byKind = quote.Lines.GroupBy(l => l.Kind).ToDictionary(g => g.Key, g => g.Count());
+        Assert.Equal(new Dictionary<PlannedLineKind, int>
+        {
+            [PlannedLineKind.Support] = 14, [PlannedLineKind.Sleepover] = 1, [PlannedLineKind.SleepoverActiveHours] = 1,
+            [PlannedLineKind.ProviderTravelTime] = 1, [PlannedLineKind.ProviderTravelCosts] = 1,
+            [PlannedLineKind.ParticipantAccommodation] = 1, [PlannedLineKind.WorkerAccommodation] = 1,
+        }, byKind);
+        Assert.Equal(20, quote.Lines.Count);
+        Assert.True(quote.Lines.Count <= shape.MaxLinesPerOccurrence);
+    }
+
+    [Fact]
+    public void The_heaviest_shape_stays_inside_the_line_bound_at_every_start_and_sleepover_window_and_reaches_it_with_one_mid_day_part_day_holiday()
+    {
+        // Verification of fix round 1, N4, as a sweep instead of a single shape: the short-term accommodation block of the test above from every half hour, on a weekday and on a
+        // Saturday, with its 8 hour sleepover window across midnight at every half hour that keeps it a sleepover, ten headcount changes spread over the hourly parts (none inside
+        // the window), with and without a part-day holiday in the middle of the day. No occurrence may make more lines than PlanBlock.MaxLinesPerOccurrence, and the bound is
+        // tight: a mid-day part-day holiday on top of everything else makes exactly that many, so an estimate that forgot any one kind of line would be caught.
+        var runs = 0;
+        var most = new Dictionary<bool, int> { [false] = 0, [true] = 0 };
+        var bound = 0;
+        foreach (var startMinute in Enumerable.Range(0, 48).Select(i => i * 30))
+            foreach (var (weekday, date) in new[] { (DayOfWeek.Monday, Mon12Oct), (DayOfWeek.Saturday, Sat17Oct) })
+                foreach (var windowOffset in Enumerable.Range(0, 24).Select(i => i * 30))
+                {
+                    var start = TimeOnly.MinValue.AddMinutes(startMinute);
+                    var toMidnight = startMinute == 0 ? 24 * 60 : 24 * 60 - startMinute;
+                    if (windowOffset >= toMidnight || windowOffset + 8 * 60 <= toMidnight || windowOffset + 8 * 60 > 24 * 60) continue;   // the window must cross midnight and lie inside the block
+
+                    var from = start.AddMinutes(windowOffset);
+                    var outside = Enumerable.Range(1, 95).Select(step => step * 15).Where(offset => offset < windowOffset || offset >= windowOffset + 8 * 60).ToList();
+                    var every = Math.Max(1, outside.Count / PlanBlock.MaxHeadcountChanges);
+                    var block = Block("heavy", PlanSupportType.StaSupport, weekday, start, start, b => b with
+                    {
+                        ParticipantsPresent = 3, WorkerMaySleep = true, SleepoverWindow = new PlanSleepoverWindow { From = from, To = from.AddMinutes(8 * 60) }, SleepoverActiveHours = 3m,
+                        HeadcountChanges = outside.Where((_, i) => i % every == 0).Take(PlanBlock.MaxHeadcountChanges)
+                            .Select((offset, i) => new PlanHeadcountChange { From = start.AddMinutes(offset), ParticipantsPresent = 1 + i % 3 }).ToList(),
+                        Travel = new PlanProviderTravel { Claim = true, MinutesEachWay = 20, ReturnToBase = true, KmEachWay = 5m },
+                        Accommodation = new PlanAccommodation { Nights = 1, WorkerOnSite = true },
+                    });
+                    Assert.Empty(block.Validate());
+
+                    foreach (var partDay in new[] { false, true })
+                    {
+                        // The occurrence runs into the next day, so the part-day row is on both days: one row a date, as the bound assumes.
+                        var holidays = partDay
+                            ? new[] { new HolidayEntry(date, "NSW", "Mid day", T(11), T(13), "sweep"), new HolidayEntry(date.AddDays(1), "NSW", "Mid day", T(11), T(13), "sweep") }
+                            : Array.Empty<HolidayEntry>();
+
+                        var lines = QuoteOne(block, date, holidays: holidays).Lines.Count;
+
+                        Assert.True(lines <= block.MaxLinesPerOccurrence, $"{weekday} from {start}, window from {from}, part-day {partDay}: {lines} lines against a bound of {block.MaxLinesPerOccurrence}");
+                        most[partDay] = Math.Max(most[partDay], lines);
+                        bound = block.MaxLinesPerOccurrence;
+                        runs++;
+                    }
+                }
+
+        Assert.True(runs > 500, $"only {runs} runs");
+        Assert.Equal(22, bound);
+        Assert.Equal(20, most[false]);   // the verification's heaviest shape: 2 under the bound while no part-day holiday cuts the day
+        Assert.Equal(22, most[true]);    // and exactly the bound with one
+    }
+
+    [Fact]
     public void A_block_that_breaks_a_rule_or_repeats_an_id_is_refused_with_its_messages_and_the_others_are_priced()
     {
         var good = Weekday(PlanSupportType.CommunityAccess, id: "good");
