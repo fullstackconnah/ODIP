@@ -41,6 +41,11 @@ export interface EditorPool {
   fromPlan: boolean
   /** An amount was changed by hand in this session. Only then is the proposal's "edited" note true, and only then is "Split again" worth offering by itself. */
   touched: boolean
+  /**
+   * A set-aside on the periods is the person's own (typed into a period, or read from a saved plan), not a share worked out from the set-aside box. The box then leaves the periods as they
+   * are when it is retyped, and says they no longer add up to it, as the plan amount's box does; "Split again" applies the box. Shares worked out from the box keep following it as it is typed.
+   */
+  setAsideByHand: boolean
 }
 
 export interface EditorState {
@@ -114,7 +119,7 @@ export function editorStateFromPlan(plan: FundingPlanDto): EditorState {
       periods: pool.periods.map(period => ({
         periodStart: period.periodStart, periodEnd: period.periodEnd, planAmount: moneyText(period.planAmount), setAside: period.setAside === undefined ? '' : moneyText(period.setAside),
       })),
-      edited: true, fromPlan: true, touched: false,
+      edited: true, fromPlan: true, touched: false, setAsideByHand: pool.periods.some(period => period.setAside !== undefined),
     })),
   }
 }
@@ -151,7 +156,7 @@ export function noPeriodsReason(state: Pick<EditorState, 'planStart' | 'planEnd'
 
 /** The pool with its periods worked out again from the plan's dates and the totals it holds. */
 export function resplit(state: EditorState, pool: EditorPool): EditorPool {
-  return { ...pool, periods: proposedPeriods(state, pool.totalText, pool.setAsideText), edited: false, fromPlan: false, touched: false }
+  return { ...pool, periods: proposedPeriods(state, pool.totalText, pool.setAsideText), edited: false, fromPlan: false, touched: false, setAsideByHand: false }
 }
 
 /** Every pool's periods worked out again (the plan's dates or funding period length changed). True in `rewroteEdits` when some pool had amounts typed by hand that this replaced. */
@@ -171,8 +176,10 @@ export function withPlanFields(state: EditorState, patch: Partial<EditorState>):
 /**
  * A change to what was typed for a pool's totals. Until a period has been edited by hand (or the periods were read from a saved plan) the periods follow the totals. After that the
  * plan amounts are left as they are, but the SET-ASIDE box still has to agree with the periods, or the figure typed would silently not be saved (a pool's limit is its set-aside when
- * it has one, so a lost set-aside would make the limit the whole plan amount): typing a set-aside spreads it over the periods in proportion to their plan amounts, and clearing the box
- * clears it from every period (a pool has a set-aside on every period or on none). A half-typed amount ("4.") changes nothing until it is a whole one.
+ * it has one, so a lost set-aside would make the limit the whole plan amount): typing a set-aside spreads it over the periods in proportion to their plan amounts when no period holds
+ * one the person typed or the plan stored (the shares worked out from the box follow it as it is typed), and clearing the box clears it from every period (a pool has a set-aside on every
+ * period or on none). Over set-asides that are the person's own the box leaves the periods alone, as the plan amount's box does, and `poolSums` says they no longer add up to it.
+ * A half-typed amount ("4.") changes nothing until it is a whole one.
  */
 export function withPoolTotals(state: EditorState, key: string, patch: Partial<Pick<EditorPool, 'totalText' | 'setAsideText'>>): EditorState {
   return {
@@ -189,21 +196,25 @@ export function withPoolTotals(state: EditorState, key: string, patch: Partial<P
 /** The set-aside box of an edited pool, as the periods should read once it changed. */
 function agreeSetAside(before: EditorPool, next: EditorPool): EditorPool {
   if (isBlank(next.setAsideText)) {
-    // Cleared: no set-aside, on every period too. A box that was blank already, with set-asides typed into the periods, is not "cleared": they are the person's own.
-    return isBlank(before.setAsideText) ? next : { ...next, periods: next.periods.map(period => ({ ...period, setAside: '' })) }
+    // Cleared: no set-aside, on every period too (the person said none). A box that was blank already, with set-asides typed into the periods, is not "cleared": they are the person's own.
+    return isBlank(before.setAsideText) ? next : { ...next, setAsideByHand: false, periods: next.periods.map(period => ({ ...period, setAside: '' })) }
   }
   const typed = moneyOf(next.setAsideText)
   const amounts = next.periods.map(period => moneyOf(period.planAmount))
   if (typed === null || next.periods.length === 0 || amounts.some(amount => amount === null)) return next
+  // The person's own set-asides are never overwritten by typing in the box: they stay, and the mismatch is said. With none on the periods (or only shares of the box's earlier digits) it spreads.
+  if (next.setAsideByHand && next.periods.some(period => !isBlank(period.setAside))) return next
   const shares = spreadSetAside(toCents(typed), amounts.map(amount => toCents(amount as number)))
-  return { ...next, periods: next.periods.map((period, index) => ({ ...period, setAside: moneyText(shares[index] / 100) })) }
+  return { ...next, setAsideByHand: false, periods: next.periods.map((period, index) => ({ ...period, setAside: moneyText(shares[index] / 100) })) }
 }
 
-/** A period's amount changed by hand: the pool's periods stop following the typed totals. */
+/** A period's amount changed by hand: the pool's periods stop following the typed totals, and a set-aside typed into a period is the person's own from then on. */
 export function withPeriodEdit(state: EditorState, key: string, index: number, patch: Partial<Pick<EditorPeriod, 'planAmount' | 'setAside'>>): EditorState {
   return {
     ...state,
-    pools: state.pools.map(pool => (pool.key !== key ? pool : { ...pool, edited: true, touched: true, periods: pool.periods.map((period, i) => (i === index ? { ...period, ...patch } : period)) })),
+    pools: state.pools.map(pool => (pool.key !== key
+      ? pool
+      : { ...pool, edited: true, touched: true, setAsideByHand: pool.setAsideByHand || patch.setAside !== undefined, periods: pool.periods.map((period, i) => (i === index ? { ...period, ...patch } : period)) })),
   }
 }
 
@@ -216,9 +227,9 @@ export function hasPool(state: EditorState, paceCategory: number, managementType
   return state.pools.some(pool => pool.paceCategory === paceCategory && pool.managementType === managementType)
 }
 
-function addPool(state: EditorState, pool: Omit<EditorPool, 'key' | 'periods' | 'edited' | 'fromPlan' | 'touched' | 'totalText' | 'setAsideText' | 'notes'> & Partial<Pick<EditorPool, 'totalText' | 'setAsideText'>>): EditorState {
+function addPool(state: EditorState, pool: Omit<EditorPool, 'key' | 'periods' | 'edited' | 'fromPlan' | 'touched' | 'setAsideByHand' | 'totalText' | 'setAsideText' | 'notes'> & Partial<Pick<EditorPool, 'totalText' | 'setAsideText'>>): EditorState {
   if (hasPool(state, pool.paceCategory, pool.managementType)) return state
-  const base: EditorPool = { totalText: '', setAsideText: '', ...pool, key: newPoolKey(), notes: '', periods: [], edited: false, fromPlan: false, touched: false }
+  const base: EditorPool = { totalText: '', setAsideText: '', ...pool, key: newPoolKey(), notes: '', periods: [], edited: false, fromPlan: false, touched: false, setAsideByHand: false }
   return { ...state, pools: [...state.pools, resplit(state, base)] }
 }
 
@@ -257,6 +268,8 @@ export interface PoolSums {
   /** The periods no longer add up to what was typed for the pool. The save sends the periods: the server keeps no pool total. */
   planMismatch: boolean
   setAsideMismatch: boolean
+  /** The box holds an amount but no period carries a set-aside, so a save would record none: the box was typed while an amount in the periods was blank, so there was nothing to spread over. */
+  setAsideMissing: boolean
 }
 
 function sumOf(texts: string[]): number | null {
@@ -274,6 +287,7 @@ export function poolSums(pool: EditorPool): PoolSums {
     periodsPlan, periodsSetAside, typedPlan, typedSetAside,
     planMismatch: periodsPlan !== null && typedPlan !== null && toCents(periodsPlan) !== toCents(typedPlan),
     setAsideMismatch: periodsSetAside !== null && typedSetAside !== null && toCents(periodsSetAside) !== toCents(typedSetAside),
+    setAsideMissing: typedSetAside !== null && pool.periods.length > 0 && withSetAside.length === 0,
   }
 }
 
@@ -303,6 +317,8 @@ export interface Problems {
 
 const NOT_AN_AMOUNT = 'Enter dollars and cents, like 8000.00.'
 const TOO_LARGE = 'The most a plan amount can be is $99,999,999.99.'
+/** A set-aside typed in the box that no period carries (the periods are what is saved, so it would be saved as none). Also said live, beside the periods, as soon as it is so. */
+export const SET_ASIDE_NOT_APPLIED = 'The set-aside is not on any period yet. Split again from the plan amount to apply it.'
 
 function amountProblem(text: string, required: boolean, requiredMessage: string): string | undefined {
   if (isBlank(text)) return required ? requiredMessage : undefined
@@ -354,9 +370,10 @@ export function validate(state: EditorState): Problems {
         if (!row.setAside && planValue !== null && asideValue !== null && toCents(asideValue) > toCents(planValue)) row.setAside = 'More than the plan amount.'
         if (row.planAmount || row.setAside) found.periods[index] = row
       })
+      if (!found.setAside && poolSums(pool).setAsideMissing) found.general.push(SET_ASIDE_NOT_APPLIED)
     }
 
-    if (found.name || found.notes || found.total || found.setAside || Object.keys(found.periods).length > 0) problems.pools[pool.key] = found
+    if (found.name || found.notes || found.total || found.setAside || found.general.length > 0 || Object.keys(found.periods).length > 0) problems.pools[pool.key] = found
   }
 
   problems.any = Boolean(problems.planStart || problems.planEnd || problems.confirmedByName || problems.notes || problems.general.length > 0 || Object.keys(problems.pools).length > 0)

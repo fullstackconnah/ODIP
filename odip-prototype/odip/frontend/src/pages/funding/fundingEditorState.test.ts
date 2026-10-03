@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { FundingPlanDto } from '@/api/types'
 import {
-  addCorePool, addStatedPool, editorStateFromPlan, emptyEditorState, hasPool, moneyOf, moneyText, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, startFromBilling, toSaveBody, validate,
-  withPeriodEdit, withPlanFields, withPoolTotals, type EditorState,
+  addCorePool, addStatedPool, editorStateFromPlan, emptyEditorState, hasPool, moneyOf, moneyText, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, startFromBilling,
+  toSaveBody, validate, withPeriodEdit, withPlanFields, withPoolTotals, type EditorState,
 } from './fundingEditorState'
 
 // The editor's form as plain data: what the person typed, how the periods follow the dates and the totals, what is wrong in plain words, and the body that is saved.
@@ -292,14 +292,69 @@ describe('the set-aside box agrees with the periods, in whichever order it is ty
     expect(state.pools[0].periods.every(p => toNumber(p.setAside) <= toNumber(p.planAmount))).toBe(true)
   })
 
-  it('re-spreads when the box is retyped, even over set-asides that were typed into the periods by hand: the box is the pool\'s set-aside', () => {
+  it('leaves set-asides typed into the periods by hand alone when the box is retyped, says they no longer add up to it, and lets "Split again" apply the box (the plan-amount box does the same)', () => {
     let state = byHand(['1000.00', '1000.00', '1000.00', '1000.00'], '400')
     state = withPeriodEdit(state, state.pools[0].key, 0, { setAside: '10.00' })
-    expect(poolSums(state.pools[0]).setAsideMismatch).toBe(true)   // the box says 400, the periods add up to 310: said in words
+    expect(poolSums(state.pools[0])).toMatchObject({ periodsSetAside: 310, typedSetAside: 400, setAsideMismatch: true })   // the box says 400, the periods add up to 310: said in words
 
     state = withPoolTotals(state, state.pools[0].key, { setAsideText: '200' })
 
-    expect(asides(state)).toEqual(['50.00', '50.00', '50.00', '50.00'])
+    expect(asides(state)).toEqual(['10.00', '100.00', '100.00', '100.00'])   // the person's own figure and the rest as they were: nothing overwritten
+    expect(poolSums(state.pools[0])).toMatchObject({ periodsSetAside: 310, typedSetAside: 200, setAsideMismatch: true })
+    expect(poolSums(state.pools[0]).setAsideMissing).toBe(false)
+
+    const applied = resplit(state, state.pools[0])   // "Split again from the plan amount": the box is applied (and the amounts are split by days again)
+    expect(poolSums(applied)).toMatchObject({ periodsPlan: 4000, periodsSetAside: 200, typedSetAside: 200, planMismatch: false, setAsideMismatch: false, setAsideMissing: false })
+    expect(applied.periods.map(period => period.setAside)).toEqual(['50.41', '50.41', '49.32', '49.86'])   // 200 over 92, 92, 90 and 91 days
+  })
+
+  it('keeps the uneven set-asides of a saved plan when its box is corrected, and says they no longer add up to it', () => {
+    const stored: FundingPlanDto = {
+      id: 'plan-1', participantId: 'p1', planStart: '2026-07-01', planEnd: '2027-06-30', periodLengthMonths: 6, evidence: 'PlanCopy', revision: 1, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z',
+      pools: [{
+        id: 'pool-1', position: 0, kind: 'CoreFlexible', paceCategory: 0, managementType: 'PlanManaged', name: 'Core (flexible)', planTotal: 10000, setAsideTotal: 8000,
+        periods: [
+          { id: 'a', position: 0, periodStart: '2026-07-01', periodEnd: '2026-12-31', planAmount: 6000, setAside: 5000 },
+          { id: 'b', position: 1, periodStart: '2027-01-01', periodEnd: '2027-06-30', planAmount: 4000, setAside: 3000 },
+        ],
+      }],
+    }
+    const loaded = editorStateFromPlan(stored)
+
+    const corrected = withPoolTotals(loaded, loaded.pools[0].key, { setAsideText: '8100' })   // or just backspaced and retyped
+
+    expect(corrected.pools[0].periods.map(period => period.setAside)).toEqual(['5000.00', '3000.00'])   // the plan's own release schedule survives
+    expect(poolSums(corrected.pools[0])).toMatchObject({ periodsSetAside: 8000, typedSetAside: 8100, setAsideMismatch: true })
+    expect(validate(corrected).any).toBe(false)   // a mismatch is said, not refused: the periods are what is saved
+  })
+
+  it('lets the cells that came from the box follow it as it is typed, digit by digit', () => {
+    let state = byHand(['1000.00', '1000.00', '1000.00', '1000.00'])
+
+    for (const typed of ['8', '80', '800']) state = withPoolTotals(state, state.pools[0].key, { setAsideText: typed })
+
+    expect(asides(state)).toEqual(['200.00', '200.00', '200.00', '200.00'])   // not left at the first digit's 2.00 with a message
+    expect(poolSums(state.pools[0])).toMatchObject({ periodsSetAside: 800, typedSetAside: 800, setAsideMismatch: false })
+  })
+
+  it('follows the box again once every set-aside the person typed has been cleared away by hand', () => {
+    let state = byHand(['1000.00', '1000.00', '1000.00', '1000.00'])
+    for (const index of [0, 1, 2, 3]) state = withPeriodEdit(state, state.pools[0].key, index, { setAside: '10.00' })
+    for (const index of [0, 1, 2, 3]) state = withPeriodEdit(state, state.pools[0].key, index, { setAside: '' })   // none left: nothing of the person's to protect
+
+    for (const typed of ['8', '80']) state = withPoolTotals(state, state.pools[0].key, { setAsideText: typed })
+
+    expect(asides(state)).toEqual(['20.00', '20.00', '20.00', '20.00'])
+  })
+
+  it('clears the cells when the box is cleared, whether they came from the box or were typed by hand (the person said none)', () => {
+    let state = byHand(['1000.00', '1000.00', '1000.00', '1000.00'], '400')
+    state = withPeriodEdit(state, state.pools[0].key, 1, { setAside: '10.00' })   // one is now the person's own
+
+    state = withPoolTotals(state, state.pools[0].key, { setAsideText: '' })
+
+    expect(asides(state)).toEqual(['', '', '', ''])
+    expect(state.pools[0].setAsideByHand).toBe(false)
   })
 
   it('removes the set-aside from every period of an edited pool when the box is cleared, and from a pool that still follows its totals', () => {
@@ -364,6 +419,65 @@ describe('the set-aside box agrees with the periods, in whichever order it is ty
   })
 })
 
+describe('a set-aside typed where no period can carry it', () => {
+  /** An edited pool whose second period's amount was cleared to retype it, with the box typed meanwhile (so there was nothing to spread over), then the amount retyped. */
+  const typedOverABlank = (): EditorState => {
+    let state = addCorePool(yearPlan(), 'PlanManaged', { totalText: '4000' })
+    state = withPeriodEdit(state, state.pools[0].key, 1, { planAmount: '' })
+    state = withPoolTotals(state, state.pools[0].key, { setAsideText: '4000' })
+    return withPeriodEdit(state, state.pools[0].key, 1, { planAmount: '1008.22' })
+  }
+
+  it('is said in plain words once the box holds an amount and no period carries a set-aside (a save would record none)', () => {
+    const state = typedOverABlank()
+    const pool = state.pools[0]
+
+    expect(pool.periods.map(period => period.setAside)).toEqual(['', '', '', ''])
+    expect(poolSums(pool)).toMatchObject({ periodsSetAside: null, typedSetAside: 4000, setAsideMissing: true })
+    expect(validate(state).pools[pool.key].general).toEqual([SET_ASIDE_NOT_APPLIED])
+    expect(validate(state).any).toBe(true)
+    expect(SET_ASIDE_NOT_APPLIED).toBe('The set-aside is not on any period yet. Split again from the plan amount to apply it.')
+  })
+
+  it('goes away when "Split again" applies the box, and when the box is cleared', () => {
+    const state = typedOverABlank()
+    const applied: EditorState = { ...state, pools: [resplit(state, state.pools[0])] }
+    expect(poolSums(applied.pools[0]).setAsideMissing).toBe(false)
+    expect(validate(applied).any).toBe(false)
+    expect(toSaveBody(applied).pools[0].periods.map(p => p.setAside)).toEqual([1008.22, 1008.22, 986.3, 997.26])   // the box is what is saved: 4000 is the whole plan amount
+
+    const cleared = withPoolTotals(state, state.pools[0].key, { setAsideText: '' })
+    expect(poolSums(cleared.pools[0]).setAsideMissing).toBe(false)
+    expect(validate(cleared).any).toBe(false)
+  })
+
+  it('says nothing while the box is blank or unreadable (that has its own message), and nothing when a period carries one', () => {
+    const state = typedOverABlank()
+    const key = state.pools[0].key
+
+    expect(poolSums(withPoolTotals(state, key, { setAsideText: '' }).pools[0]).setAsideMissing).toBe(false)
+    const unreadable = withPoolTotals(state, key, { setAsideText: 'lots' })
+    expect(poolSums(unreadable.pools[0]).setAsideMissing).toBe(false)
+    expect(validate(unreadable).pools[key]).toEqual({ periods: {}, general: [], setAside: 'Enter dollars and cents, like 8000.00.' })
+    const carried = withPeriodEdit(state, key, 0, { setAside: '100.00' })
+    expect(poolSums(carried.pools[0]).setAsideMissing).toBe(false)
+
+    // Over the plan amount, and still on no period: the message beside the box says so, and the second message does not pile on.
+    let tooMuch = addCorePool(yearPlan(), 'PlanManaged', { totalText: '4000' })
+    tooMuch = withPeriodEdit(tooMuch, tooMuch.pools[0].key, 1, { planAmount: '' })
+    tooMuch = withPoolTotals(tooMuch, tooMuch.pools[0].key, { setAsideText: '9000' })
+    expect(poolSums(tooMuch.pools[0]).setAsideMissing).toBe(true)
+    expect(validate(tooMuch).pools[tooMuch.pools[0].key]).toMatchObject({ setAside: 'The set-aside cannot be more than the plan amount.', general: [], periods: { 1: { planAmount: 'Enter an amount.' } } })
+  })
+
+  it('does not apply when the whole plan is one period: the box is the set-aside itself', () => {
+    const wholePlan = addCorePool({ ...yearPlan(), periodLengthMonths: null }, 'PlanManaged', { totalText: '4000', setAsideText: '400' })
+
+    expect(validate(wholePlan).any).toBe(false)
+    expect(toSaveBody(wholePlan).pools[0].periods).toEqual([{ periodStart: '2026-07-01', periodEnd: '2027-06-30', planAmount: 4000, setAside: 400 }])
+  })
+})
+
 describe('what the form remembers about a pool\'s periods', () => {
   it('knows periods read from a saved plan from periods worked out here, and whether an amount was changed by hand since', () => {
     const proposed = addCorePool(yearPlan(), 'PlanManaged', { totalText: '8000' })
@@ -374,6 +488,28 @@ describe('what the form remembers about a pool\'s periods', () => {
 
     const again = resplit(changed, changed.pools[0])
     expect(again).toMatchObject({ edited: false, fromPlan: false, touched: false })
+  })
+
+  it('knows a set-aside typed into a period (or stored with the plan) from shares worked out from the box', () => {
+    const proposed = addCorePool(yearPlan(), 'PlanManaged', { totalText: '8000', setAsideText: '800' })
+    expect(proposed.pools[0].setAsideByHand).toBe(false)   // worked out from the box
+
+    const amountOnly = withPeriodEdit(proposed, proposed.pools[0].key, 0, { planAmount: '1.00' })
+    expect(amountOnly.pools[0].setAsideByHand).toBe(false)   // an amount is not a set-aside
+
+    const typed = withPeriodEdit(amountOnly, proposed.pools[0].key, 1, { setAside: '5.00' })
+    expect(typed.pools[0].setAsideByHand).toBe(true)
+    expect(withPeriodEdit(typed, proposed.pools[0].key, 1, { planAmount: '9.00' }).pools[0].setAsideByHand).toBe(true)   // and stays so
+
+    expect(resplit(typed, typed.pools[0]).setAsideByHand).toBe(false)   // "Split again" works them out from the box again
+    expect(withPoolTotals(typed, typed.pools[0].key, { setAsideText: '' }).pools[0].setAsideByHand).toBe(false)   // as does clearing the box
+
+    const stored = (setAside?: number) => editorStateFromPlan({
+      id: 'plan-1', participantId: 'p1', planStart: '2026-07-01', planEnd: '2027-06-30', evidence: 'PlanCopy', revision: 1, createdAt: '', updatedAt: '',
+      pools: [{ id: 'pool-1', position: 0, kind: 'CoreFlexible', paceCategory: 0, managementType: 'PlanManaged', name: 'Core (flexible)', planTotal: 100, periods: [{ id: 'a', position: 0, periodStart: '2026-07-01', periodEnd: '2027-06-30', planAmount: 100, setAside }] }],
+    } as FundingPlanDto)
+    expect(stored(40).pools[0].setAsideByHand).toBe(true)
+    expect(stored(undefined).pools[0].setAsideByHand).toBe(false)
   })
 
   it('loads a stored pool as edited (its amounts are the plan\'s own) but not touched, until an amount is changed', () => {
