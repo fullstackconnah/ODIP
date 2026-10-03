@@ -192,6 +192,11 @@ public sealed class LiveSetPack : IDemoPack
             var completion = completions.FirstOrDefault(c => c.ShiftId == shift.Id && c.ReviewOutcome is null && c.ReviewedByUserId is null && c.SubmittedAt != null);
             if (completion is null) continue;
 
+            // The shifts the script worked and finished, and no others: one a person started by hand and finished, or that a coordinator returned and the worker finished again,
+            // is theirs to review (third independent review Q1).
+            var story = LiveSetCatalog.Stories.First(s => LiveSetCatalog.ShiftId(s, shift.ServiceDate) == shift.Id);
+            if (LiveSetCatalog.TakenOver(story, shift.ServiceDate, shift.Id, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.ReturnCount, completion.Id)) continue;
+
             ShiftLifecycle.Approve(run, shift, completion, reviewer.Id);
             shift.Status = ShiftStatus.Completed;
             shift.UpdatedAt = completion.ReviewedAt ?? anchors.NowUtc;

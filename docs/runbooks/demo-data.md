@@ -51,7 +51,7 @@ what `DEMO_DATA_PACKS` takes.
 | `emergency-contacts` | people and the contact roles that link them to participants |
 | `shift-patterns` | the recurring shift patterns |
 | `leave-and-availability` | leave requests, recurring unavailability and staff availability |
-| `roster-weeks` | shifts and the completions of the ones that have ended; moves shift statuses forward |
+| `roster-weeks` | shifts and the completions of the ones that have ended; moves shift statuses forward (only the shifts it made: a Draft the app generated for a demo pattern is a person's, and a date that already has a shift of its pattern is not filled again) |
 | `leave-coverage-tasks` | the tasks that ask a coordinator to re-cover a shift a staff member's leave takes |
 | `medications` | the participants' medication charts |
 | `live-set` | three live shifts a day that follow the provider's clock: start, doses, break, note, routine tick, handover, finish |

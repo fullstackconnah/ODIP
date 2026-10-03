@@ -77,6 +77,16 @@ public static class DemoQueries
                         && (s.Status == ShiftStatus.Published || s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.PendingReview))
             .Where(s => s.ShiftPatternId == null || patternIds.Contains(s.ShiftPatternId.Value));
 
+    public sealed record PatternDate(Guid PatternId, DateOnly ServiceDate);
+
+    /// <summary>
+    /// Read only: the dates of a range on which a shift of one of these patterns already stands, whoever made it and whatever its status. The app holds one shift per pattern and
+    /// date (its own Generate skips a date that already carries one), so the roster pack places none there (third independent review R3).
+    /// </summary>
+    public static IQueryable<PatternDate> PatternDatesOf(OdipDbContext db, List<Guid> patternIds, DateOnly from, DateOnly to) =>
+        db.Shifts.AsNoTracking().Where(s => s.ShiftPatternId != null && patternIds.Contains(s.ShiftPatternId.Value) && s.ServiceDate >= from && s.ServiceDate <= to)
+            .Select(s => new PatternDate(s.ShiftPatternId!.Value, s.ServiceDate));
+
     public static IQueryable<ShiftCompletion> CompletionsOf(OdipDbContext db, List<Guid> shiftIds) =>
         db.ShiftCompletions.Where(c => shiftIds.Contains(c.ShiftId));
 

@@ -36,6 +36,17 @@ public sealed class RosterWeeksPack : IDemoPack
         var existing = await run.ExistingIdsAsync<Shift>(expected.Select(s => s.Id), ct);
         var fresh = expected.Where(s => !existing.Contains(s.Id)).ToList();
 
+        // The app holds one shift per pattern and date (its own Generate skips a date that already carries one, whoever made it), and the id of the pack's own is not that key: a
+        // Draft a coordinator generated for a date beyond this window has a random id, and the window reaches it weeks later. A date that has a shift of its pattern is not placed
+        // again (third independent review R3).
+        var patterned = fresh.Where(s => s.ShiftPatternId is not null).ToList();
+        if (patterned.Count > 0)
+        {
+            var taken = (await DemoQueries.PatternDatesOf(run.Db, patterned.Select(s => s.ShiftPatternId!.Value).Distinct().ToList(), patterned.Min(s => s.ServiceDate), patterned.Max(s => s.ServiceDate))
+                    .ToListAsync(ct)).Select(t => (t.PatternId, t.ServiceDate)).ToHashSet();
+            fresh = fresh.Where(s => s.ShiftPatternId is not { } pattern || !taken.Contains((pattern, s.ServiceDate))).ToList();
+        }
+
         var completions = new List<ShiftCompletion>();
         foreach (var shift in fresh) Place(run, shift, reviewer, completions);
         if (fresh.Count > 0)
@@ -123,8 +134,9 @@ public sealed class RosterWeeksPack : IDemoPack
         var anchors = run.Anchors;
         var pastDate = shift.ServiceDate < anchors.D0;
 
-        // A past shift was rostered about a fortnight before it happened; a future one is created now.
-        var createdAt = pastDate ? anchors.LocalToUtc(shift.ServiceDate.AddDays(-14), new TimeOnly(9, 0)) : anchors.NowUtc;
+        // A past shift was rostered about a fortnight before it happened; a future one is created now. So is one of today that has been worked: its completion began before now,
+        // and a shift is not created after its own completion started (third independent review Q8).
+        var createdAt = pastDate || ShiftLifecycle.HasEnded(anchors, shift) ? anchors.LocalToUtc(shift.ServiceDate.AddDays(-14), new TimeOnly(9, 0)) : anchors.NowUtc;
         shift.CreatedAt = createdAt;
         shift.UpdatedAt = createdAt;
 
@@ -148,8 +160,8 @@ public sealed class RosterWeeksPack : IDemoPack
     }
 
     /// <summary>
-    /// The forward-only moves for shifts this top-up created on an earlier tick (found by their pattern, or by the ids of the pack weeks it
-    /// could have made): a Published shift that has ended is closed out (or cancelled if nobody was rostered), an unpublished draft whose day
+    /// The forward-only moves for shifts this top-up created on an earlier tick (found by their ids: a pattern's for a date it has an occurrence on, and
+    /// the pack weeks it could have made): a Published shift that has ended is closed out (or cancelled if nobody was rostered), an unpublished draft whose day
     /// has gone is cancelled, and a PendingReview shift three days old is approved. Each move is made only from the state this top-up
     /// leaves things in; a shift somebody else changed (cancelled by hand, returned for correction, started) is not in that state and is
     /// left alone. Completion rows that exist are never replaced.
@@ -164,7 +176,10 @@ public sealed class RosterWeeksPack : IDemoPack
         // top-up's patterns, and the ones with no pattern, which are then matched against the ids of every pack week in memory. The id set grows
         // with the weeks, so it is never sent to the database.
         var open = await DemoQueries.OpenShifts(run.Db, anchors.D0, patternIds).ToListAsync(ct);
-        var candidates = open.Where(s => s.ShiftPatternId != null || storyIds.Contains(s.Id)).ToList();
+
+        // The shifts this top-up made, and no others: a pattern shift is its own when its id is the one the pack gives the pattern and date (a Draft the app's Generate made for a demo
+        // pattern has a random id, and is a person's), and a pack week's by the ids of the weeks it could have made (third independent review R3).
+        var candidates = open.Where(s => (s.ShiftPatternId is { } pattern && s.Id == RosterCatalog.PatternShiftId(pattern, s.ServiceDate)) || storyIds.Contains(s.Id)).ToList();
         if (candidates.Count == 0) return;
 
         var candidateIds = candidates.Select(s => s.Id).ToList();
@@ -202,9 +217,11 @@ public sealed class RosterWeeksPack : IDemoPack
                     moved++;
                     break;
 
-                case ShiftStatus.PendingReview when reviewer is not null
+                case ShiftStatus.PendingReview when reviewer is not null && shift.ReturnCount == 0
                                                      && anchors.D0.DayNumber - shift.ServiceDate.DayNumber >= ShiftLifecycle.ApproveAfterDays:
-                    var waiting = mine.SingleOrDefault(c => c.IsActive && c.ReviewOutcome is null && c.ReviewedByUserId is null && c.SubmittedAt is not null);
+                    // The completion this top-up closed it out with, and no other: a shift a coordinator returned, or a worker finished themselves, is left to its reviewer (Q1).
+                    var waiting = mine.SingleOrDefault(c => c.Id == DemoIds.For("shift-completion", shift.Id) && c.IsActive && c.ReviewOutcome is null && c.ReviewedByUserId is null
+                                                            && c.SubmittedAt is not null);
                     if (waiting is null) break;
                     ShiftLifecycle.Approve(run, shift, waiting, reviewer.Id);
                     shift.Status = ShiftStatus.Completed;
