@@ -432,10 +432,11 @@ public sealed class LiveSetPack : IDemoPack
 
         /// <summary>
         /// The events of one type whose row is already there, by id (the script's own row from an earlier tick) AND by the key the app holds the row to
-        /// (PR 2 review H1). A row a person makes in the portal has a random id where the script's is deterministic, but the app allows one
-        /// acknowledgement per reader and handover, one running break per completion, and one tick per completion, routine and occurrence, so a person's row
-        /// is "already there" and the script writes nothing beside it: a second row for the key is refused by the database and, inside a pack's one
-        /// transaction, rolls the whole pack back for good.
+        /// (PR 2 review H1, H2). A row a person makes in the portal has a random id where the script's is deterministic, but the app allows one
+        /// acknowledgement per reader and handover, one running break per completion, one tick per completion, routine and occurrence, and one active
+        /// record per scheduled medication slot, so a person's row is "already there" and the script writes nothing beside it: a second row for the key
+        /// is refused by the database and, inside a pack's one transaction, rolls the whole pack back for good, or (a dose, which has no such index)
+        /// hides the person's record behind the script's.
         /// </summary>
         private async Task<HashSet<Guid>> AlreadyThereAsync(Type type, List<Event> events, CancellationToken ct)
         {
@@ -469,7 +470,26 @@ public sealed class LiveSetPack : IDemoPack
                 have.UnionWith(Pending<ShiftRoutineCheck>().Select(t => (t.ShiftCompletionId, t.ParticipantRoutineId, t.ScheduledAt)));
                 there.UnionWith(ticks.Where(t => have.Contains((t.Row.ShiftCompletionId, t.Row.ParticipantRoutineId, t.Row.ScheduledAt))).Select(t => t.Event.Id));
             }
+            else if (type == typeof(MedicationAdministration))
+            {
+                var scheduled = events.Select(e => (Event: e, Row: (MedicationAdministration)e.Entity)).Where(d => d.Row.ScheduledAt is not null).ToList();
+                if (scheduled.Count > 0)
+                {
+                    var recorded = await RecordedSlotsAsync(scheduled.Select(d => d.Row.ParticipantMedicationId).Distinct().ToList(),
+                        scheduled.Min(d => d.Row.ScheduledAt!.Value), scheduled.Max(d => d.Row.ScheduledAt!.Value).AddMinutes(1), ct);
+                    there.UnionWith(scheduled.Where(d => recorded.Contains((d.Row.ParticipantMedicationId, d.Row.ScheduledAt!.Value))).Select(d => d.Event.Id));
+                }
+            }
             return there;
+        }
+
+        /// <summary>The scheduled slots in a provider-local window that already have an active record, whoever wrote it: saved ones, and ones this run has loaded or added.</summary>
+        private async Task<HashSet<(Guid Medication, DateTime Slot)>> RecordedSlotsAsync(List<Guid> medicationIds, DateTime fromLocal, DateTime toLocal, CancellationToken ct)
+        {
+            var recorded = (await DemoQueries.SlotsRecorded(_run.Db, medicationIds, fromLocal, toLocal).ToListAsync(ct)).Select(s => (s.MedicationId, s.ScheduledAt)).ToHashSet();
+            recorded.UnionWith(Pending<MedicationAdministration>().Where(a => a.ScheduledAt != null && a.SupersededByAdministrationId == null)
+                .Select(a => (a.ParticipantMedicationId, a.ScheduledAt!.Value)));
+            return recorded;
         }
 
         private Task<HashSet<Guid>> ExistingAsync(Type type, List<Guid> ids, CancellationToken ct)
@@ -520,10 +540,14 @@ public sealed class LiveSetPack : IDemoPack
                 .ToList();
             if (open.Count > 0)
             {
-                var recorded = await _run.ExistingIdsAsync<MedicationAdministration>(open.Select(x => x.Id), ct);
-                recorded.UnionWith(Pending<MedicationAdministration>().Select(a => a.Id));             // including the ones this run has just written
+                // A slot that has an active record is dealt with, whoever wrote it: a person who recorded the 12:00 dose, given or refused, has recorded it, and
+                // the script never writes a second beside theirs (PR 2 review H2: the shift's close would otherwise hide the person's record behind its own).
+                // The script's own row by id counts too (a later record may have superseded it), and so do the ones this run has just written.
+                var recorded = await RecordedSlotsAsync(open.Select(x => x.Med.Id).Distinct().ToList(), windowStart, windowEnd, ct);
+                var ours = await _run.ExistingIdsAsync<MedicationAdministration>(open.Select(x => x.Id), ct);
+                ours.UnionWith(Pending<MedicationAdministration>().Select(a => a.Id));
                 var recordedAt = submittedLocal.AddMinutes(-3);
-                foreach (var (med, slot, id) in open.Where(x => !recorded.Contains(x.Id)))
+                foreach (var (med, slot, id) in open.Where(x => !recorded.Contains((x.Med.Id, x.Slot)) && !ours.Contains(x.Id)))
                 {
                     var given = slot.AddMinutes(DemoIds.Pick(id, "late-given", 8, 40));
                     if (given >= recordedAt) given = recordedAt.AddMinutes(-1);

@@ -53,7 +53,10 @@ public class DemoUniqueIndexAccountingTests
 
         ["MedicationAdministration|IX_MedicationAdministrations_TenantId_IdempotencyKey"] = new(
             "The packs' key is demo-v1:{id} (PackageRows.Dose), so it can only collide with the pack's own row, which is found by id; a person's key is the recorder's own. " +
-            "(The slot a dose is for has no unique index: the recorder's slot lock is all there is, which is why the packs read the slot, see DemoRecordedSlotTests.)"),
+            "(The slot a dose is for has no unique index, only the recorder's slot lock, so the packs read the slot itself: DemoQueries.SlotsRecorded.)",
+            "DemoRecordedSlotTests.APresenterWhoRecordsTheLunchtimeDoseAsGiven_BeforeTheShiftsEnd_LeavesOneActiveRecordOfTheSlot_TheirOwn",
+            "DemoRecordedSlotTests.APresenterWhoRecordsTheLunchtimeDoseAsRefused_BeforeTheShiftsEnd_LeavesOneActiveRecordOfTheSlot_TheirOwn",
+            "DemoRecordedSlotTests.APresenterWhoRecordsADoseTheScriptWouldWriteWhileTheShiftRuns_LeavesOneActiveRecordOfTheSlot_TheirOwn"),
 
         ["BookingTask|IX_BookingTask_SourceKey"] = new(
             "Every pack task's SourceKey is built from the id of the row it belongs to (flagged-note:{note}, med-witness:{dose}, incident-qsc:{incident}) and is written in the same " +
