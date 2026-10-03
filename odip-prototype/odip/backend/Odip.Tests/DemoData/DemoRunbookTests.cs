@@ -91,6 +91,36 @@ public class DemoRunbookTests
         }
     }
 
+    /// <summary>
+    /// Independent review S2: "exactly one row, or stop" was a SELECT that only printed, so with no tenant matched the deletes of the tables that have no tenant column
+    /// (incidents, staff availability) still removed every version-8 row. The purge now fails at the guard, and each of those tables is scoped through the tenant.
+    /// </summary>
+    [SkippableFact]
+    public void ThePurge_FailsUnlessExactlyOneDemoTenantIsFound_AndScopesEveryTableWithoutATenantColumnThroughIt()
+    {
+        var runbook = Runbook();
+        var fence = Regex.Match(runbook, "```sql\\r?\\n(?<sql>.*?)```", RegexOptions.Singleline | RegexOptions.CultureInvariant);
+        Assert.True(fence.Success, "the runbook has no sql block");
+        var sql = fence.Groups["sql"].Value;
+
+        var guard = sql.IndexOf("RAISE EXCEPTION", StringComparison.Ordinal);
+        var firstDelete = sql.IndexOf("DELETE FROM", StringComparison.Ordinal);
+        Assert.True(guard > sql.IndexOf("CREATE TEMP TABLE demo_tenant", StringComparison.Ordinal), "no guard after the tenant is found");
+        Assert.True(guard < firstDelete, "the guard must come before the first DELETE");
+        Assert.Contains("<> 1", sql[..guard], StringComparison.Ordinal);
+
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql("Host=localhost;Database=model;Username=u;Password=p").Options, DemoDataPostgresFixture.SuperAdmin());
+        var withoutTenantColumn = DemoTenantGuard.NonTenantParents.Keys.Select(type => db.Model.FindEntityType(type)!).Where(entity => entity.FindProperty("TenantId") is null)
+            .Select(entity => entity.GetTableName()!).ToList();
+        Assert.NotEmpty(withoutTenantColumn);
+        foreach (var table in withoutTenantColumn)
+        {
+            var statement = Regex.Match(sql, "DELETE FROM \"" + table + "\"[^;]*;", RegexOptions.CultureInvariant).Value;
+            Assert.True(statement.Length > 0, table + " has no DELETE");
+            Assert.True(statement.Contains("demo_tenant", StringComparison.Ordinal) || statement.Contains("demo_incident", StringComparison.Ordinal), table + " is not scoped through the Demo tenant: " + statement);
+        }
+    }
+
     [SkippableFact]
     public void TheComposeFile_PassesTheTwoSwitchesToTheApi()
     {
