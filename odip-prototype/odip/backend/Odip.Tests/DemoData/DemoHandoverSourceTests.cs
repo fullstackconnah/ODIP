@@ -40,8 +40,13 @@ public class DemoHandoverSourceTests
         Assert.True(withHandover > 100, $"only {withHandover} of {shifts.Count} shifts had a handover to compare");
     }
 
+    /// <summary>
+    /// A read names the handover the portal showed at the moment of the read (the app's rule over the completions submitted by then), and the portal agrees with it now
+    /// wherever nothing was submitted since: a shift that started earlier but was submitted after the read (a roster shift closed late) is what the portal shows now,
+    /// which is the reader's next handover to read, not a different read.
+    /// </summary>
     [Fact]
-    public async Task EveryHandoverReadTheTopUpWrites_IsTheOneThePortalShowsThatReader_AndShowsAsRead()
+    public async Task EveryHandoverReadTheTopUpWrites_IsTheOneThePortalShowedThatReaderAtTheTime_AndTheOneItShowsNowUnlessALaterSubmissionChangedIt()
     {
         var env = await TickAsync(Friday1030);
         for (var week = 1; week <= 2; week++) await RunAsync(env, Friday1030.AddDays(7 * week));
@@ -49,15 +54,62 @@ public class DemoHandoverSourceTests
         var service = new ShiftHandoverService(db, env.Clock);
         var shifts = await db.Shifts.ToDictionaryAsync(s => s.Id);
         var acks = await db.HandoverAcknowledgements.ToListAsync();
+        var sources = await DemoQueries.HandoverSourcesOf(db, shifts.Values.Select(s => s.ParticipantId).Distinct().ToList(), DateOnly.MinValue).ToListAsync();
 
         Assert.True(acks.Count > 20, $"only {acks.Count} reads to look at");
+        var agreeNow = 0;
         foreach (var ack in acks)
         {
-            var shown = (await service.GetAsync(shifts[ack.ShiftId], ack.UserId, CancellationToken.None)).Latest;
+            var shift = shifts[ack.ShiftId];
+            var atTheTime = HandoverSourceRule.LatestBefore(sources.Where(s => s.SubmittedAt < ack.AcknowledgedAt), shift.ParticipantId, shift.Id, shift.ServiceDate, shift.StartTime);
+            Assert.Equal(atTheTime?.CompletionId, ack.SourceCompletionId);                                                   // what the portal showed when it was read
+
+            var shown = (await service.GetAsync(shift, ack.UserId, CancellationToken.None)).Latest;
             Assert.NotNull(shown);
-            Assert.Equal(ack.SourceCompletionId, shown!.CompletionId);
-            Assert.True(shown.IsRead, $"the portal does not show the read of {ack.UserId} on {shifts[ack.ShiftId].ServiceDate:yyyy-MM-dd}");
+            if (shown!.CompletionId == ack.SourceCompletionId)
+            {
+                Assert.True(shown.IsRead, $"the portal does not show the read of {ack.UserId} on {shift.ServiceDate:yyyy-MM-dd}");
+                agreeNow++;
+            }
+            else
+            {
+                Assert.True(sources.Single(s => s.CompletionId == shown.CompletionId).SubmittedAt >= ack.AcknowledgedAt, "the portal shows another handover now, and it was not submitted after the read");
+            }
         }
+        Assert.True(agreeNow * 10 >= acks.Count * 9, $"the portal agrees with only {agreeNow} of {acks.Count} reads");
+    }
+
+    /// <summary>
+    /// Independent review S1: the handover a read names is the one the portal showed AT the read, and the rows the top-up writes must be the same whatever the ticks
+    /// were. Charlotte has a roster shift on Friday 9 October (14:00 to 22:00, the "leave pending" story of the pack week), which the roster pack closes at the first
+    /// tick after 22:45 with a submit time of about 22:00, after the live evening reads at 15:20. With hourly ticks the read names Thursday evening's handover, the one
+    /// the portal showed. With no tick between Thursday night and Saturday morning the roster shift is closed just before the live set runs, is the latest shift by the
+    /// app's rule, and was not yet submitted at the read: choosing the latest first and then asking whether it was submitted wrote no read at all.
+    /// </summary>
+    [Fact]
+    public async Task TheReadsOfAFriday_AreTheSame_WhetherTheTicksWereHourlyOrTheHostWasDownUntilSaturdayMorning()
+    {
+        var friday = new DateOnly(2026, 10, 9);
+        var untilThursdayNight = Enumerable.Range(1, 6).Select(d => Friday1030.AddDays(d)).Append(Utc("2026-10-08T12:00:00Z")).ToList();       // daily to Thu 8 Oct 11:30, then Thu 23:00
+        var fridayTicks = new[] { "2026-10-08T19:30:00Z", "2026-10-09T04:30:00Z", "2026-10-09T12:00:00Z" };                                      // Fri 06:30, 15:30, 23:00 (AEDT)
+        var saturdayMorning = Utc("2026-10-09T21:00:00Z");                                           // Sat 10 Oct 08:00 AEDT
+
+        var hourly = await TickAsync(Friday1030);
+        foreach (var tick in untilThursdayNight.Concat(fridayTicks.Select(Utc)).Append(saturdayMorning)) await RunAsync(hourly, tick);
+        var gap = await TickAsync(Friday1030);
+        foreach (var tick in untilThursdayNight.Append(saturdayMorning)) await RunAsync(gap, tick);                                          // the host was down all Friday
+
+        // The handover each live shift of the Friday read (null: it read nothing). Who works a shift cast after the fact can differ, so the reader is not compared.
+        async Task<Dictionary<string, Guid?>> FridayReadsAsync(DemoTestEnv env)
+        {
+            await using var db = env.AdminDb();
+            var acks = await db.HandoverAcknowledgements.ToListAsync();
+            return LiveSetCatalog.Stories.ToDictionary(s => s.Key, s => acks.SingleOrDefault(a => a.ShiftId == LiveSetCatalog.ShiftId(s, friday))?.SourceCompletionId);
+        }
+
+        var withHourlyTicks = await FridayReadsAsync(hourly);
+        Assert.True(withHourlyTicks.Values.Count(source => source is not null) >= 2, "fewer than two reads on the Friday to compare");
+        Assert.Equal(withHourlyTicks, await FridayReadsAsync(gap));
     }
 
     [Fact]

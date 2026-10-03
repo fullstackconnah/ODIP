@@ -225,10 +225,12 @@ public sealed class LiveSetPack : IDemoPack
             live.Story == LiveSetCatalog.Evening ? At(live, 15, 20) : live.Story == LiveSetCatalog.Insulin ? At(live, 8, 20) : At(live, 7, 12);
 
         /// <summary>
-        /// The handover the worker reads, once the read is due: the one the portal shows, by the app's own rule across every shift of the participant (PR 2
-        /// review L3: the latest shift before this one, whatever story it belongs to, not the same story's day before, which can be an older handover than the
-        /// night shift that came in between), if it had been submitted by the time of the read. Earlier live shifts were finished and saved before this one is
-        /// worked, so a day built from nothing in one tick comes out the same as one built over two.
+        /// The handover the worker reads, once the read is due: the one the portal showed AT the read, by the app's own rule across every shift of the participant
+        /// (PR 2 review L3: the latest shift before this one, whatever story it belongs to, not the same story's day before, which can be an older handover than the
+        /// night shift that came in between), among the completions that had been submitted by then. Choosing the latest first and asking afterwards whether it was
+        /// submitted made the read depend on the ticks (independent review S1): a roster shift that ends after the read is closed at a later tick, and when the host
+        /// had been down until then the read was written for nothing. Earlier live shifts were finished and saved before this one is worked, so a day built from
+        /// nothing in one tick comes out the same as one built over two.
         /// </summary>
         private async Task ChooseHandoverAsync(Live live, DateTime actualStartLocal, CancellationToken ct)
         {
@@ -237,8 +239,9 @@ public sealed class LiveSetPack : IDemoPack
             if (at <= actualStartLocal || !Due(at)) return;                                    // a worker who has not started has read nothing, and nothing is read before its time
 
             var sources = await DemoQueries.HandoverSourcesOf(_run.Db, new List<Guid> { live.Shift.ParticipantId }, live.Date.AddDays(-HandoverLookbackDays)).ToListAsync(ct);
-            var latest = HandoverSourceRule.LatestBefore(sources, live.Shift.ParticipantId, live.Shift.Id, live.Shift.ServiceDate, live.Shift.StartTime);
-            if (latest is { HasHandover: true } && latest.SubmittedAt < _a.LocalToUtc(at)) live.Handover = latest;                  // not yet handed over: nothing to read yet
+            var readAt = _a.LocalToUtc(at);
+            var latest = HandoverSourceRule.LatestBefore(sources.Where(s => s.SubmittedAt < readAt), live.Shift.ParticipantId, live.Shift.Id, live.Shift.ServiceDate, live.Shift.StartTime);
+            if (latest is { HasHandover: true }) live.Handover = latest;
         }
 
         /// <summary>True once the local time is at least <see cref="GraceMinutes"/> minutes in the past on the provider's clock.</summary>

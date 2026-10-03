@@ -240,7 +240,7 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
 
     /// <summary>
     /// The reader of each closed shift marks as read the handover the portal would have shown them (PR 2 review L3: the app's own rule across every shift of the
-    /// participant, the live set's and the old seed's included), all but about one in eight, and never their own.
+    /// participant, the live set's and the old seed's included, among those submitted by the time of the read), all but about one in eight, and never their own.
     /// </summary>
     private static void AcknowledgementsOf(DemoRun run, List<DemoQueries.ClosedPair> closed, List<HandoverSource> sources, IReadOnlyDictionary<string, User> staff,
         List<(HandoverAcknowledgement, User)> acks)
@@ -252,10 +252,9 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
             if (DemoIds.Pick(reader.Completion.Id, "unread", 0, 99) < UnreadPercent) continue;
 
             var at = ProviderLocalTime.AsUtc(reader.Completion.ActualStart).AddMinutes(8 + DemoIds.Pick(reader.Completion.Id, "ack-after", 0, 32));
-            var source = HandoverSourceRule.LatestBefore(sources, reader.Shift.ParticipantId, reader.Shift.Id, reader.Shift.ServiceDate, reader.Shift.StartTime);
+            var source = HandoverSourceRule.LatestBefore(sources.Where(s => ProviderLocalTime.AsUtc(s.SubmittedAt) < at), reader.Shift.ParticipantId, reader.Shift.Id, reader.Shift.ServiceDate, reader.Shift.StartTime);
             if (source is not { HasHandover: true }) continue;                                              // nothing to read (and an older handover is never resurrected)
             if (reader.Shift.UserId == source.ShiftUserId) continue;                                        // the baton passes to somebody else
-            if (at <= ProviderLocalTime.AsUtc(source.SubmittedAt)) continue;                                // the shifts overlap: nothing to read yet
             acks.Add((PackageRows.Acknowledgement(run, source.CompletionId, reader.Shift, readerUser, Local(run, at)), readerUser));
         }
     }
