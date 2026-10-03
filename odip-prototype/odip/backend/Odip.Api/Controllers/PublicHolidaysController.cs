@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Application.Interfaces;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Infrastructure.Data;
 
@@ -38,12 +39,24 @@ public class PublicHolidaysController : ControllerBase
         return Ok(ApiResponse<List<PublicHolidayDto>>.Ok(items));
     }
 
+    // The table is global: every tenant's quotes and claims read the same rows, and a row decides whether a day is priced at the public holiday
+    // rate (+122% on a weekday). So adding, deleting and syncing are the SuperAdmin's, not any tenant's Admin (review M6 of plan builder phase B).
     [HttpPost]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<ApiResponse<PublicHolidayDto>>> Create(
         [FromBody] CreatePublicHolidayDto dto, CancellationToken ct)
     {
-        var holiday = new PublicHoliday { Id = Guid.NewGuid(), Date = dto.Date, Name = dto.Name, State = dto.State };
+        // A row only prices a day if its state is one the engine can match: one of the eight codes, in capitals (no state is a holiday in every state).
+        string? state = null;
+        if (dto.State is not null)
+        {
+            state = dto.State.Trim().ToUpperInvariant();
+            if (!HolidayCalendar.StateCodes.Contains(state))
+                return BadRequest(ApiResponse<PublicHolidayDto>.Fail(
+                    $"State must be one of {string.Join(", ", HolidayCalendar.StateCodes)}, or left out for a holiday in every state."));
+        }
+
+        var holiday = new PublicHoliday { Id = Guid.NewGuid(), Date = dto.Date, Name = dto.Name, State = state };
         _db.PublicHolidays.Add(holiday);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<PublicHolidayDto>.Ok(
@@ -51,7 +64,7 @@ public class PublicHolidaysController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
         var h = await _db.PublicHolidays.FirstOrDefaultAsync(x => x.Id == id, ct);
@@ -62,7 +75,7 @@ public class PublicHolidaysController : ControllerBase
     }
 
     [HttpPost("sync")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<ApiResponse<SyncResultDto>>> Sync(
         [FromBody] SyncHolidaysDto dto, CancellationToken ct)
     {
