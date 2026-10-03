@@ -46,12 +46,6 @@ const snapshotOf = (details: Details, plan: readonly DraftBlock[]) => JSON.strin
  */
 const withoutControlCharacters = (text: string) => text.replace(/[\t\r\n]+/g, ' ').replace(/\p{Cc}/gu, '')
 
-/** "Block 1", "Blocks 1 and 3", "Blocks 1, 3 and 4". */
-function blocksNamed(places: readonly number[]): string {
-  if (places.length === 1) return `Block ${places[0]}`
-  return `Blocks ${places.slice(0, -1).join(', ')} and ${places[places.length - 1]}`
-}
-
 /** The years the pricing engine answers for, as the bounds of every date box (a box that is left to run takes a year with six digits). */
 const DATE_MIN = `${PRICING_FIRST_YEAR}-01-01`
 const DATE_MAX = `${PRICING_LAST_YEAR}-12-31`
@@ -245,15 +239,6 @@ function DraftPage() {
 
   const saveRow = ({ refused }: { refused: readonly PlanIssue[] }) => canEdit ? (
     <div className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-3">
-      {refused.length > 0 && (() => {
-        // Names the blocks by their places: what to do is on each block's own row, with the step that does it, so it is not said twice.
-        const places = [...new Set(refused.map(issue => plan.findIndex(entry => entry.block.id === issue.blockId)).filter(at => at >= 0))].sort((a, b) => a - b).map(at => at + 1)
-        return (
-          <Callout tone="error" className="max-w-prose">
-            {places.length > 0 ? `${blocksNamed(places)} cannot be priced yet, so the plan cannot be saved.` : 'This plan cannot be priced yet, so it cannot be saved.'}
-          </Callout>
-        )
-      })()}
       <div className="flex flex-wrap items-center gap-3">
         <Button data-plan-save onClick={save} disabled={create.isPending || loadingNewest || refused.length > 0}>{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}{create.isPending ? 'Saving draft…' : 'Save draft'}</Button>
         <p className="text-sm text-[var(--color-muted-foreground)]">{dirty ? 'You have unsaved changes. ' : ''}Every save is a new version: earlier versions never change.</p>

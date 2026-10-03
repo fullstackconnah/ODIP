@@ -141,6 +141,24 @@ describe('ServiceAgreementDraftPage: saving a plan built from blocks', () => {
     expect(createMutate.mock.calls[0][0].data.representative).toBe('A. Representative')
   })
 
+  // Round 3, L3: the plan becoming unsaved is said, politely and once, in the bar's one status (it was a status in the save row, a plain paragraph since round 2).
+  it('tells a screen reader once that the plan is unsaved, not on every keystroke, and says it was saved when it is', async () => {
+    createMutate.mockImplementation((_request, options) => options.onSuccess({ version: 3 }))
+    renderPage()
+    const user = await fillDetails()
+    await addBlockFromTemplate(user)
+    const status = within(screen.getByRole('region', { name: 'Running budget' }).parentElement as HTMLElement).getByRole('status')
+    expect(status).toHaveTextContent('The plan has changes that are not saved.')
+    const sentence = status.innerHTML
+
+    await user.type(screen.getByLabelText('Representative'), ' more')
+    expect(status.innerHTML).toBe(sentence)
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(status).toHaveTextContent('Saved as version 3.')
+    expect(status).not.toHaveTextContent('not saved')
+  })
+
   it('says it was saved as the next version, and then there is nothing to lose', async () => {
     createMutate.mockImplementation((_request, options) => options.onSuccess({ version: 3 }))
     renderPage()
@@ -284,6 +302,9 @@ describe('ServiceAgreementDraftPage: a plan the engine cannot price', () => {
     // row, with the step that does it: said once, there, and not again in the Callout.
     const callout = refusalCallout('Block 1 cannot be priced yet, so the plan cannot be saved.')
     expect(callout).toHaveTextContent(/^Block 1 cannot be priced yet, so the plan cannot be saved\.$/)
+    // Round 3, L1: once, in the dock, as the reason beside the Save it holds back (it is there from the stepper too), and not again in the save row.
+    expect(screen.getAllByText('Block 1 cannot be priced yet, so the plan cannot be saved.')).toHaveLength(1)
+    expect(screen.getByRole('region', { name: 'Running budget' }).parentElement).toContainElement(callout)
     expect(callout).not.toHaveTextContent(/pricing engine/i)
     expect(callout).not.toHaveTextContent('Choose another support type')
     expect(screen.getAllByText(/Choose another support type/)).toHaveLength(1)

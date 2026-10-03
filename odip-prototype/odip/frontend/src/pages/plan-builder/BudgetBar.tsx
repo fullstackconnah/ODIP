@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
 import type { PlanBudget } from '@/api/hooks'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { TONE } from '@/lib/tone'
 import { formatHours } from '@/lib/planBlocks'
 import { NO_FIGURE, asSentence, categoryLabel, compareBudget, describeQuoteError, pricedNothing, totalsCaption } from '@/lib/planQuote'
@@ -38,6 +39,11 @@ type BudgetBarProps = {
    */
   blocked?: boolean
   /**
+   * Why it is blocked, in a sentence: an alert in the dock, so that a refusal found in the stepper (where the save row is not drawn, and the issue list is quiet) is announced, and so that the Save it has
+   * switched off has its reason beside it (review L1). Given with `blocked`.
+   */
+  blockedReason?: string
+  /**
    * What the last save said when it was not "saved": the problems found, the server's refusal, a newer version somebody else made. Docked with the bar, so it is in view from the overview and from
    * every step of a block, wherever Save was pressed: a Save from the bar, with a block open, used to answer nowhere and go back to "Save".
    */
@@ -63,7 +69,7 @@ const CHIP = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
  * totals stand alone and say so. A total that leaves work out says so beside the figure, in shifts, and a chip says it on the one-line form. Below 1280px it is one line and a Details
  * toggle (the full bar is a third of a tablet's screen). Every figure is the pricing engine's, for the plan as it would be saved.
  */
-export function BudgetBar({ status, budget, refreshing = false, idleNote, error, onRetry, planBudget, planBudgetUnreadable = false, incompleteBlocks = 0, blocked = false, unsaved, notice, saved = null, onDockHeight }: BudgetBarProps) {
+export function BudgetBar({ status, budget, refreshing = false, idleNote, error, onRetry, planBudget, planBudgetUnreadable = false, incompleteBlocks = 0, blocked = false, blockedReason, unsaved, notice, saved = null, onDockHeight }: BudgetBarProps) {
   const [open, setOpen] = useState(false)
   const dock = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -96,12 +102,17 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
   return (
     <div ref={dock} className="sticky bottom-[var(--mobile-nav-h)] z-30 -mx-[var(--card-pad)] -mb-[var(--card-pad)] border-t border-[var(--color-border)] bg-[var(--color-card)] px-[var(--card-pad)] py-2 lg:bottom-0">
       {/* The last save's answer, above the figures it is about, capped so a long list of problems scrolls and never takes the screen. */}
-      <div className="mb-2 flex max-h-[40vh] flex-col gap-2 overflow-y-auto empty:hidden">{notice}</div>
+      <div className="mb-2 flex max-h-[40vh] flex-col gap-2 overflow-y-auto empty:hidden">
+        {notice}
+        {blockedReason && <Callout tone="error" className="max-w-prose">{blockedReason}</Callout>}
+      </div>
       {/* The bar's one polite live region, in the page from the start so that what is put into it is announced: the answer of a save that worked, and, visually hidden, the plan crossing its budget (it
-          says so once, when it crosses, and not with the amount, which changes on every recalculation while somebody types). Nothing else in the bar is live. */}
+          says so once, when it crosses, and not with the amount, which changes on every recalculation while somebody types) and the plan becoming unsaved (once, when it does, and not on every keystroke
+          after it: the sentence does not change). Nothing else in the bar is live. */}
       <div role="status">
         {saved && <p className="mb-2 text-sm font-medium">{saved}</p>}
         <p className="sr-only">{over ? 'Over the plan budget.' : ''}</p>
+        <p className="sr-only">{unsaved ? 'The plan has changes that are not saved.' : ''}</p>
       </div>
       <section aria-label="Running budget" aria-busy={status === 'loading' || updating}>
         {/* A plan that could not be priced says so wherever it is read, on a phone too: not inside the Details a phone keeps shut. */}

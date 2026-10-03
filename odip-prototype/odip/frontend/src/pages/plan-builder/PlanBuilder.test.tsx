@@ -498,6 +498,43 @@ describe('PlanBuilder and what the engine refused', () => {
 
     expect(footer).toHaveBeenCalledWith({ refused: [] })
   })
+
+  // Round 3, L1: the issue list is quiet (design D7) and the save row is not drawn in the stepper, so a refusal found in a step was announced nowhere, and the bar's Save was off with no reason. The sentence
+  // is the dock's now: an alert beside the Save it holds back.
+  it('says why the plan cannot be saved in the dock, as an alert, and not again in the save row', () => {
+    budgetState.current = { data: { ...budgetOf('b1'), period: quote({ ...budgetOf('b1').period, issues: [review, refusal] }) }, isError: false, isFetching: false }
+    render(<Page initial={twoBlocks()} />)
+
+    const dock = screen.getByRole('region', { name: 'Running budget' }).parentElement as HTMLElement
+    const alert = within(dock).getByText('Block 2 cannot be priced yet, so the plan cannot be saved.').closest('[role="alert"]')
+    expect(alert).not.toBeNull()
+    expect(screen.getAllByText('Block 2 cannot be priced yet, so the plan cannot be saved.')).toHaveLength(1)
+  })
+
+  it('says it in the stepper too, for a block being added, named by the place it will take', async () => {
+    const user = userEvent.setup()
+    budgetState.current = { data: { ...budgetOf('b1'), period: quote({ ...budgetOf('b1').period, issues: [{ ...refusal, blockId: 'b3' }] }) }, isError: false, isFetching: false }
+    render(<Page initial={twoBlocks()} unsaved={{ onSave: vi.fn(), saving: false }} />)
+    await user.click(screen.getByRole('button', { name: 'Add block' }))
+    await user.click(screen.getByRole('radio', { name: /Community access weekdays/ }))
+
+    expect(screen.getByRole('heading', { name: 'Add a block' })).toBeInTheDocument() // the save row is not drawn here
+    expect(screen.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument()
+    const dock = screen.getByRole('region', { name: 'Running budget' }).parentElement as HTMLElement
+    expect(within(dock).getByText('Block 3 cannot be priced yet, so the plan cannot be saved.').closest('[role="alert"]')).not.toBeNull()
+    expect(within(dock).getByRole('button', { name: 'Save' })).toBeDisabled() // and the Save it holds back has its reason beside it
+  })
+
+  it('names the plan, not a block, when the refusal names none, and says nothing when nothing is refused', () => {
+    budgetState.current = { data: { ...budgetOf('b1'), period: quote({ ...budgetOf('b1').period, issues: [{ ...refusal, blockId: '', reason: 'InvalidInput', message: 'The agreement period ends before it starts.' }] }) }, isError: false, isFetching: false }
+    const { unmount } = render(<Page initial={twoBlocks()} />)
+    expect(screen.getByText('This plan cannot be priced yet, so it cannot be saved.')).toBeInTheDocument()
+    unmount()
+
+    budgetState.current = { data: { ...budgetOf('b1'), period: quote({ ...budgetOf('b1').period, issues: [review] }) }, isError: false, isFetching: false }
+    render(<Page initial={twoBlocks()} />)
+    expect(screen.queryByText(/cannot be priced yet/)).not.toBeInTheDocument()
+  })
 })
 
 // Round 3, M1 (WCAG 2.4.11 Focus Not Obscured): the margin that keeps a focused control clear of the docked bar was a fixed 160 px, and the bar with a notice is taller than that. It is the bar's measured height now.

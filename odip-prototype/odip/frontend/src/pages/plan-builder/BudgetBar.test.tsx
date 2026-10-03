@@ -96,6 +96,55 @@ describe('BudgetBar', () => {
     })
   })
 
+  // Round 3, L3: "You have unsaved changes." was a status in the save row, a plain paragraph since round 2, and the bar's Not saved chip is text: nothing told a screen reader the plan had become unsaved.
+  describe('the plan becoming unsaved', () => {
+    const unsaved = (saving = false) => ({ onSave: vi.fn(), saving })
+
+    it('is said once, politely, in the one status the bar has, when it happens: filled in place, not inserted holding its text', () => {
+      const { rerender } = ready()
+      const region = screen.getByRole('status')
+      expect(region.textContent).toBe('')
+
+      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} unsaved={unsaved()} />)
+
+      expect(screen.getByRole('status')).toBe(region)
+      expect(region).toHaveTextContent('The plan has changes that are not saved.')
+      expect(screen.getAllByRole('status')).toHaveLength(1)
+      expect(region.querySelector('p.sr-only:last-child')).toHaveTextContent('The plan has changes that are not saved.') // visually hidden: the chip beside the figure is the sighted cue
+    })
+
+    it('does not say it again on every change after that: the sentence is the same, so nothing is put into the region', () => {
+      const { rerender } = ready({ unsaved: unsaved() })
+      const before = screen.getByRole('status').innerHTML
+
+      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 41000, count: 1 }} unsaved={unsaved()} refreshing />)       // typing: a new quote is on its way, the figures move
+      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 42000, count: 1 }} unsaved={unsaved()} />)
+
+      expect(screen.getByRole('status').innerHTML).toBe(before)
+    })
+
+    it('lets go of it when the plan is saved, and the answer of the save takes its place', () => {
+      const { rerender } = ready({ unsaved: unsaved() })
+      expect(screen.getByRole('status')).toHaveTextContent('The plan has changes that are not saved.')
+
+      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} saved="Saved as version 5." />)
+
+      expect(screen.getByRole('status')).toHaveTextContent('Saved as version 5.')
+      expect(screen.getByRole('status')).not.toHaveTextContent('not saved')
+    })
+  })
+
+  // Round 3, L1: the reason a plan cannot be saved is an alert in the dock, beside the Save it switches off.
+  it('says why it is blocked, as an alert in the dock, and says nothing without a reason', () => {
+    const { rerender } = ready({ blocked: true, blockedReason: 'Block 1 cannot be priced yet, so the plan cannot be saved.', unsaved: { onSave: vi.fn(), saving: false } })
+    const dock = screen.getByRole('region', { name: 'Running budget' }).parentElement as HTMLElement
+    expect(within(dock).getByText('Block 1 cannot be priced yet, so the plan cannot be saved.').closest('[role="alert"]')).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+
+    rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} />)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   // Design review D3: the amber cell said "You can still save the draft" while the Callout said the plan cannot be saved and Save draft was off.
   it('does not say the draft can still be saved while a block is refused', () => {
     const { rerender } = ready({ planBudget: { total: 25000, count: 1 } })

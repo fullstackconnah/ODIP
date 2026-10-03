@@ -6,7 +6,7 @@ import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { blockProblems, describeBlock, duplicateBlock, nextBlockId, normaliseBlock, stampLocation, type PlanStepKey } from '@/lib/planBlocks'
-import { periodProblem, periodPrompt, planBudgetFor, refusals } from '@/lib/planQuote'
+import { periodProblem, periodPrompt, planBudgetFor, refusalSentence, refusals } from '@/lib/planQuote'
 import { templateByKey, type PlanTemplate } from '@/lib/planTemplates'
 import { BudgetBar } from './BudgetBar'
 import { PlanOverview } from './PlanOverview'
@@ -100,7 +100,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
       ? entries.map((entry, index) => (index === session.index ? session.entry : entry))
       : session?.mode === 'new' && session.hasBlock ? withBlockAt(entries, session.index, session.entry) : [...entries]
     const complete = entriesNow.filter(entry => blockProblems(entry.block, { groupsHeld: undefined }).length === 0)
-    return { quoted: complete.map(entry => stampLocation(entry.block, state, zone)), incomplete: entriesNow.length - complete.length }
+    return { quoted: complete.map(entry => stampLocation(entry.block, state, zone)), incomplete: entriesNow.length - complete.length, named: entriesNow.map(entry => entry.block) }
   }, [entries, session, state, zone])
   const settled = useDebouncedValue(blocksNow.quoted)
   const settling = JSON.stringify(settled) !== JSON.stringify(blocksNow.quoted)
@@ -113,6 +113,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
   const status = !canQuote || blocksNow.quoted.length === 0 || dates !== null ? 'idle' : answer ? 'ready' : budget.isError ? 'error' : 'loading'
   const planBudget = planBudgetFor(funding.data, from, to)
   const planIssues = answer?.period.issues ?? []
+  const refused = refusals(planIssues)
 
   const open = (next: Omit<Session, 'id' | 'began'>) => {
     setSession({ ...next, id: nextSession, began: JSON.stringify(next.entry) })
@@ -233,7 +234,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
           onEdit={edit}
           onDuplicate={duplicate}
           onRemove={remove}
-          footer={typeof footer === 'function' ? footer({ refused: refusals(planIssues) }) : footer}
+          footer={typeof footer === 'function' ? footer({ refused }) : footer}
         />
       )}
 
@@ -248,7 +249,8 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
           planBudget={planBudget}
           planBudgetUnreadable={funding.isError}
           incompleteBlocks={blocksNow.incomplete}
-          blocked={refusals(planIssues).length > 0}
+          blocked={refused.length > 0}
+          blockedReason={refused.length > 0 ? refusalSentence(refused, blocksNow.named) : undefined}
           unsaved={unsaved}
           notice={saveNotice}
           saved={savedNote}

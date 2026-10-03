@@ -398,6 +398,22 @@ export function blockName(blocks: readonly PlanBlock[], blockId: string, describ
   return index < 0 ? 'A block' : `Block ${index + 1} (${describe(blocks[index])})`
 }
 
+/** "Block 1", "Blocks 1 and 3", "Blocks 1, 3 and 4". */
+function blocksNamed(places: readonly number[]): string {
+  if (places.length === 1) return `Block ${places[0]}`
+  return `Blocks ${places.slice(0, -1).join(', ')} and ${places[places.length - 1]}`
+}
+
+/**
+ * Why the plan cannot be saved, in one sentence, when the engine refused something: "Block 1 cannot be priced yet, so the plan cannot be saved.", naming the blocks by their places in `blocks` (the plan
+ * as it is being priced, a block being added or changed in its place), or, when the refusal names no block (the dates, say), "This plan cannot be priced yet, so it cannot be saved." What to do is on the
+ * block's own row, with the step that does it, so it is not said again here. Shown beside the Save it holds back (review D5, L1).
+ */
+export function refusalSentence(refused: readonly PlanIssue[], blocks: readonly PlanBlock[]): string {
+  const places = [...new Set(refused.map(issue => blocks.findIndex(block => block.id === issue.blockId)).filter(at => at >= 0))].sort((a, b) => a - b).map(at => at + 1)
+  return places.length > 0 ? `${blocksNamed(places)} cannot be priced yet, so the plan cannot be saved.` : 'This plan cannot be priced yet, so it cannot be saved.'
+}
+
 // ── The plan budget ───────────────────────────────────────────────────────────
 
 export interface BudgetComparison {

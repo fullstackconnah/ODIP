@@ -10,7 +10,7 @@ const PRICING = resolve(BACKEND, 'Odip.Domain/Billing/Pricing')
 const hasBackend = existsSync(PRICING)
 import {
   CATEGORY_SHORT, NO_FIGURE, REASON_COPY, addDays, asSentence, bandLabel, categoryLabel, compareBudget, conflictVersionOf, describeQuoteError, describeSaveError, formatServiceDate, friendlyMessage, groupLines,
-  groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, periodProblem, periodPrompt, planBudgetFor, pricedNothing, quantityLabel, questionShort, referenceWeek, refusals, ruleWords, shiftsNotPriced, shiftsNotPricedAtLeast, totalsCaption,
+  groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, periodProblem, periodPrompt, planBudgetFor, pricedNothing, quantityLabel, questionShort, referenceWeek, refusalSentence, refusals, ruleWords, shiftsNotPriced, shiftsNotPricedAtLeast, totalsCaption,
 } from './planQuote'
 
 const line = (changes: Partial<PlannedLine>): PlannedLine => ({
@@ -70,6 +70,26 @@ describe('the agreement period', () => {
     expect(periodPrompt('invalid', 'this block')).toBe('Enter the agreement dates to price this block')
     expect(periodPrompt('reversed', 'the plan')).toBe('The agreement ends before it starts, so the plan cannot be priced')
     expect(periodPrompt('reversed', 'this block')).toBe('The agreement ends before it starts, so this block cannot be priced')
+  })
+})
+
+// Round 3, L1: the one sentence for a refusal, named by the places of the blocks in the plan as it is being priced.
+describe('why a plan cannot be saved', () => {
+  const refusal = (blockId: string, reason: PlanFailureReason = 'RegistrationGroupNotHeld'): PlanIssue => ({ blockId, reason, message: `${reason} ${blockId}`, count: 1 })
+  const blocks = ['b1', 'b2', 'b3', 'b4'].map(id => emptyBlock(id, 'NSW'))
+
+  it('names one block by its place', () => {
+    expect(refusalSentence([refusal('b2')], blocks)).toBe('Block 2 cannot be priced yet, so the plan cannot be saved.')
+  })
+
+  it('names several blocks once each, in order, whatever order or how many times they were refused', () => {
+    expect(refusalSentence([refusal('b3'), refusal('b1'), refusal('b3', 'InvalidInput')], blocks)).toBe('Blocks 1 and 3 cannot be priced yet, so the plan cannot be saved.')
+    expect(refusalSentence([refusal('b4'), refusal('b1'), refusal('b2')], blocks)).toBe('Blocks 1, 2 and 4 cannot be priced yet, so the plan cannot be saved.')
+  })
+
+  it('names the plan when the refusal names no block, or one that is not in the plan', () => {
+    expect(refusalSentence([refusal('', 'InvalidInput')], blocks)).toBe('This plan cannot be priced yet, so it cannot be saved.')
+    expect(refusalSentence([refusal('gone')], blocks)).toBe('This plan cannot be priced yet, so it cannot be saved.')
   })
 })
 
