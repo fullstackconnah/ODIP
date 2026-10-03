@@ -379,16 +379,52 @@ describe('ServiceAgreementDraftPage: starting from the newest revision', () => {
     expect(within(card).getByText(/As priced when it was saved: 3 shifts with a part not priced/)).toBeInTheDocument()
   })
 
-  it('is not dirty until the plan changes, and says so once it has', async () => {
+  // Review F17: this test was titled for the unsaved message and never asserted it (removing the only block leaves an empty plan, which is not dirty).
+  it('is not unsaved until the plan changes, and says so, in the save row and on the budget bar, once it has', async () => {
     drafts.mockReturnValue({ data: [priced], isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
     const user = userEvent.setup()
     expect(screen.queryByText(/You have unsaved changes/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Not saved')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Edit times of block 1' }))
+    await user.click(screen.getByRole('button', { name: 'Friday' }))
+    await user.click(screen.getByRole('button', { name: 'Save block' }))
+
+    expect(screen.getByText(/You have unsaved changes/)).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Running budget' })).getByText('Not saved')).toBeInTheDocument()
+  })
+
+  it('saves from the budget bar with the same request as the save row: the whole plan, on the version it started from', async () => {
+    drafts.mockReturnValue({ data: [priced], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Edit times of block 1' }))
+    await user.click(screen.getByRole('button', { name: 'Friday' }))
+    await user.click(screen.getByRole('button', { name: 'Save block' }))
+    await user.click(within(screen.getByRole('region', { name: 'Running budget' })).getByRole('button', { name: 'Save' }))
+
+    expect(createMutate).toHaveBeenCalledTimes(1)
+    const { participantId, data } = createMutate.mock.calls[0][0]
+    expect(participantId).toBe('p-1')
+    expect(data).toMatchObject({ state: 'QLD', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-10-01', agreementEndDate: '2027-03-31', representative: 'R. Tran', baseVersion: 4, serviceTypes: ['Community access'] })
+    expect(data.blocks).toHaveLength(1)
+    expect(data.blocks[0].block.days).toEqual(['Monday', 'Wednesday', 'Friday'])
+    expect(data.blocks[0].block.location).toEqual({ state: 'QLD', zone: 'Remote' })
+    expect(data.blocks[0].requirements).toEqual({ workerGender: 'Female', driver: true, skills: ['FirstAid'] })
+  })
+
+  it('removing the only block leaves an empty plan, which has nothing to save or to lose', async () => {
+    drafts.mockReturnValue({ data: [priced], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    const user = userEvent.setup()
 
     await user.click(screen.getByRole('button', { name: 'Remove block 1' }))
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Remove block' }))
 
     expect(screen.getByRole('heading', { name: 'Start the week from a template' })).toBeInTheDocument()
+    expect(screen.queryByText(/You have unsaved changes/)).not.toBeInTheDocument()
   })
 })
 

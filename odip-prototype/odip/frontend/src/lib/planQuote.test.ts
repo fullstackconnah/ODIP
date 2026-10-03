@@ -3,6 +3,11 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { FundingSourceDto, PlannedLine, PlanBlock, PlanFailureReason, PlanIssue, PlanQuote } from '@/api/types'
 import { emptyBlock } from './planBlocks'
+
+// The backend does not always sit beside the frontend (an image build has only the frontend). A test that reads the C# is skipped THEN, where the run says so, and is never a pass that checked nothing.
+const BACKEND = resolve(__dirname, '../../../backend')
+const PRICING = resolve(BACKEND, 'Odip.Domain/Billing/Pricing')
+const hasBackend = existsSync(PRICING)
 import {
   CATEGORY_SHORT, NO_FIGURE, REASON_COPY, addDays, bandLabel, categoryLabel, compareBudget, conflictVersionOf, describeQuoteError, describeSaveError, formatServiceDate, friendlyMessage, groupLines,
   groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, planBudgetFor, quantityLabel, questionShort, referenceWeek, refusals, ruleWords, shiftsNotPriced, totalsCaption,
@@ -137,9 +142,8 @@ describe('why, in plain words', () => {
     expect(ruleWords('totally:unknown')).toBe('totally:unknown')
   })
 
-  it('has words for every rule id the pricing engine can write', () => {
-    const source = resolve(__dirname, '../../../backend/Odip.Domain/Billing/Pricing')
-    if (!existsSync(source)) return   // the backend does not sit beside the frontend here (an image build): nothing to read
+  it.skipIf(!hasBackend)('has words for every rule id the pricing engine can write', () => {
+    const source = PRICING
     const text = ['OccurrencePricer.cs', 'PlanPricingEngine.cs'].map(file => readFileSync(resolve(source, file), 'utf-8')).join('\n')
     const ids = [...new Set([...text.matchAll(/"([a-z][a-z0-9-]*:[a-z][^"{}\s]*)"/g)].map(match => match[1]))].filter(id => !/^(bands|unpriced):$/.test(id))
     expect(ids.length).toBeGreaterThan(15)
@@ -180,6 +184,19 @@ describe('what each refusal means', () => {
     expect(refusals([
       { blockId: 'b1', reason: 'NoItem', message: 'm', count: 1 }, { blockId: 'b2', reason: 'InvalidInput', message: 'bad', count: 1 },
     ]).map(issue => issue.reason)).toEqual(['InvalidInput'])
+  })
+
+  // Review F17: the three reasons were asserted by hand. The service that refuses a save names them in SaveRefusals, so the screen's list is read from there and cannot drift from it.
+  it.skipIf(!hasBackend)('agrees with the backend on which reasons stop a save: the screen holds Save back for exactly the reasons SaveRefusals refuses', () => {
+    const service = readFileSync(resolve(BACKEND, 'Odip.Infrastructure/Services/ServiceAgreementDraftService.cs'), 'utf-8')
+    const declared = /SaveRefusals\s*=\s*\{([^}]*)\}/.exec(service)?.[1]
+    expect(declared, 'SaveRefusals is no longer declared as an array in ServiceAgreementDraftService').toBeDefined()
+    const server = [...(declared as string).matchAll(/PlanFailureReason\.([A-Za-z]+)/g)].map(match => match[1]).sort()
+    const enumBody = readFileSync(resolve(PRICING, 'PlanQuote.cs'), 'utf-8').match(/enum PlanFailureReason\s*\{([\s\S]*?)\n\}/)?.[1] ?? ''
+    const everyReason = [...enumBody.matchAll(/^\s+([A-Z][A-Za-z]+)\s*=\s*\d+/gm)].map(match => match[1])
+
+    expect(server).toHaveLength(3)
+    expect(everyReason.filter(reason => isRefusal(reason as PlanFailureReason)).sort()).toEqual(server)
   })
 
   it('calls a block by its place in the plan, not by the id the screen gave it', () => {
