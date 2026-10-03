@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FundingPlanDto } from '@/api/types'
 import {
-  addCorePool, addStatedPool, editorStateFromPlan, emptyEditorState, hasPool, moneyOf, moneyText, nextPlanState, poolSums, removePool, resplit, startFromBilling, toSaveBody, validate,
+  addCorePool, addStatedPool, editorStateFromPlan, emptyEditorState, hasPool, moneyOf, moneyText, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, startFromBilling, toSaveBody, validate,
   withPeriodEdit, withPlanFields, withPoolTotals, type EditorState,
 } from './fundingEditorState'
 
@@ -385,6 +385,16 @@ describe('what the form remembers about a pool\'s periods', () => {
     const loaded = editorStateFromPlan(stored)
     expect(loaded.pools[0]).toMatchObject({ edited: true, fromPlan: true, touched: false })
     expect(withPeriodEdit(loaded, loaded.pools[0].key, 0, { planAmount: '90.00' }).pools[0]).toMatchObject({ edited: true, fromPlan: true, touched: true })
+  })
+})
+
+describe('why a pool shows no periods', () => {
+  it('says the dates are missing, backwards, or more than a plan may run', () => {
+    expect(noPeriodsReason({ planStart: '', planEnd: '2027-06-30' })).toBe('Give the plan’s dates to see its periods.')
+    expect(noPeriodsReason({ planStart: '2026-02-30', planEnd: '2027-06-30' })).toBe('Give the plan’s dates to see its periods.')
+    expect(noPeriodsReason({ planStart: '2027-06-30', planEnd: '2026-07-01' })).toBe('The plan ends before it starts, so there are no periods to show.')
+    expect(noPeriodsReason({ planStart: '0002-07-01', planEnd: '2027-06-30' })).toBe('A plan can run at most 800 days, so no periods are shown. Check the plan’s dates.')
+    expect(noPeriodsReason({ planStart: '2026-07-01', planEnd: '2028-09-08' })).toBe('A plan can run at most 800 days, so no periods are shown. Check the plan’s dates.')
   })
 })
 

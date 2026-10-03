@@ -136,6 +136,19 @@ export function proposedPeriods(state: Pick<EditorState, 'planStart' | 'planEnd'
   }))
 }
 
+/**
+ * Why a pool shows no periods: the plan's dates are missing or not real days, the plan ends before it starts, or it runs longer than the server accepts (so none are proposed: a year typed
+ * digit by digit passes through years like 0002). Said in the table, so an empty one is never a puzzle.
+ */
+export function noPeriodsReason(state: Pick<EditorState, 'planStart' | 'planEnd'>): string {
+  const start = parseDateOnly(state.planStart)
+  const end = parseDateOnly(state.planEnd)
+  if (start === null || end === null) return 'Give the plan’s dates to see its periods.'
+  if (end < start) return 'The plan ends before it starts, so there are no periods to show.'
+  if (end - start + 1 > MAX_PLAN_DAYS) return `A plan can run at most ${MAX_PLAN_DAYS} days, so no periods are shown. Check the plan’s dates.`
+  return 'Give the plan’s dates to see its periods.'
+}
+
 /** The pool with its periods worked out again from the plan's dates and the totals it holds. */
 export function resplit(state: EditorState, pool: EditorPool): EditorPool {
   return { ...pool, periods: proposedPeriods(state, pool.totalText, pool.setAsideText), edited: false, fromPlan: false, touched: false }

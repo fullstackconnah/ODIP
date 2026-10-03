@@ -78,15 +78,15 @@ describe('editor: a new plan', () => {
 
   it('adds a Core (flexible) pool under the management type chosen, and the participant’s plan type is the default', async () => {
     const { user } = renderEditor({ defaultManagement: 'AgencyManaged' })
-    expect(screen.getByLabelText('Managed by')).toHaveValue('AgencyManaged')
+    expect(screen.getByLabelText('Management type')).toHaveValue('AgencyManaged')
 
-    await user.selectOptions(screen.getByLabelText('Managed by'), 'PlanManaged')
+    await user.selectOptions(screen.getByLabelText('Management type'), 'PlanManaged')
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
 
     const card = coreCard()
     expect(within(card).getByText('01–04')).toBeInTheDocument()
     expect(within(card).getByLabelText('Plan amount for the whole plan')).toBeInTheDocument()
-    expect(within(card).getByLabelText("Oassist's set-aside (optional)")).toBeInTheDocument()
+    expect(within(card).getByLabelText("Set-aside for your organisation (optional)")).toBeInTheDocument()
   })
 
   it('offers stated supports from the served list, never 01 to 04 or Recurring Transport (18)', async () => {
@@ -109,7 +109,7 @@ describe('editor: a new plan', () => {
     expect(screen.getByRole('button', { name: 'Add Core (flexible)' })).toBeDisabled()
     expect(screen.getByText('Core (flexible) is already in this plan under this management type.')).toBeInTheDocument()
 
-    await user.selectOptions(screen.getByLabelText('Managed by'), 'AgencyManaged')
+    await user.selectOptions(screen.getByLabelText('Management type'), 'AgencyManaged')
     expect(screen.getByRole('button', { name: 'Add Core (flexible)' })).toBeEnabled()
   })
 
@@ -194,12 +194,12 @@ describe('editor: the periods are proposed, and stay editable', () => {
     expect(within(coreCard()).queryByText(/you typed/)).not.toBeInTheDocument()
   })
 
-  it('splits Oassist’s set-aside the same way', async () => {
+  it('splits the set-aside the same way', async () => {
     const { user } = renderEditor()
     typeYear()
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
     await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '4000')
-    await user.type(within(coreCard()).getByLabelText("Oassist's set-aside (optional)"), '2000')
+    await user.type(within(coreCard()).getByLabelText("Set-aside for your organisation (optional)"), '2000')
 
     expect(within(coreCard()).getByLabelText('Set-aside, 1 Jul – 30 Sep 2026')).toHaveValue('504.11')
     expect(within(coreCard()).getByLabelText('Set-aside, 1 Apr – 30 Jun 2027')).toHaveValue('498.63')
@@ -262,9 +262,9 @@ describe('editor: saving', () => {
     typeYear()
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
     await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
-    await user.type(within(coreCard()).getByLabelText("Oassist's set-aside (optional)"), '4000')
+    await user.type(within(coreCard()).getByLabelText("Set-aside for your organisation (optional)"), '4000')
     await user.selectOptions(screen.getByLabelText('Stated support category'), '15')
-    await user.selectOptions(screen.getByLabelText('Managed by'), 'AgencyManaged')
+    await user.selectOptions(screen.getByLabelText('Management type'), 'AgencyManaged')
     await user.click(screen.getByRole('button', { name: 'Add a stated support' }))
     await user.type(within(screen.getByRole('region', { name: /^Improved Daily Living Skills, Agency Managed/ })).getByLabelText('Plan amount for the whole plan'), '1200')
     await user.type(screen.getByLabelText('Confirmed by'), 'Priya Coordinator')
@@ -384,7 +384,7 @@ describe('editor: changing a recorded plan', () => {
     await user.type(screen.getByLabelText('Confirmed by'), 'My Change')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(screen.getByRole('alert')).toHaveTextContent('changed by someone else')
+    expect(screen.getByRole('alert')).toHaveTextContent('Someone else changed this plan after you opened it. What you typed is still here. Load the latest to see their changes; that replaces what you have typed.')
     expect(screen.getByLabelText('Confirmed by')).toHaveValue('My Change')   // their input is still there
     expect(onClose).not.toHaveBeenCalled()
 
@@ -443,5 +443,373 @@ describe('editor: start from Billing funding sources', () => {
 
     renderEditor({ plan: plan() })
     expect(hint).toHaveBeenLastCalledWith('participant-1', false)
+  })
+})
+
+// ── What the reviews found (budget fix round 1) ──────────────────────────────
+
+const scrollIntoView = vi.fn()
+beforeEach(() => {
+  scrollIntoView.mockClear()
+  Element.prototype.scrollIntoView = scrollIntoView   // jsdom has no layout, so no scrollIntoView: the call is what is checked
+})
+
+const staleReply = { response: { status: 409, data: { success: false, code: 'funding-revision-conflict', errors: ['This plan was changed by someone else since you opened it.'], data: { currentRevision: 5 } } } }
+
+describe('editor: a refused save is never out of sight', () => {
+  async function addCoreWithAmount(user: ReturnType<typeof userEvent.setup>) {
+    typeYear()
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
+  }
+
+  it('scrolls the server’s reasons into view and moves focus to them when a save is refused (400)', async () => {
+    create.mockImplementation((_body, options) => options.onError({ response: { status: 400, data: { success: false, errors: ['The plan runs 900 days.'] } } }))
+    const { user } = renderEditor()
+    await addCoreWithAmount(user)
+
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('The plan runs 900 days.')
+    expect(alert.parentElement).toHaveFocus()   // the Save button was at the bottom of a long form: the reason is what is announced and in view now
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+  })
+
+  it('does the same for a stale save (409), and says it in these words', async () => {
+    update.mockImplementation((_variables, options) => options.onError(staleReply))
+    const { user } = renderEditor({ plan: plan({ revision: 4 }) })
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('Someone else changed this plan after you opened it. What you typed is still here. Load the latest to see their changes; that replaces what you have typed.')
+    expect(alert.parentElement).toHaveFocus()
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+  })
+
+  it('focuses the first field that needs attention when the plan fails its own checks, and says each has a message beside it', async () => {
+    const { user } = renderEditor()
+
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    expect(screen.getByLabelText(/^Plan start/)).toHaveFocus()
+    expect(screen.getByText('Some fields need attention. Each has a message beside it.')).toBeInTheDocument()
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+  })
+
+  it('goes to a pool’s amount when the dates are fine, and to the missing-pool message when that is all that is wrong', async () => {
+    const { user } = renderEditor()
+    typeYear()
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+    expect(screen.getByText('Add at least one pool from the plan.')).toHaveFocus()
+
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+    expect(within(coreCard()).getByLabelText('Plan amount for the whole plan')).toHaveFocus()
+  })
+
+  it('goes to a period’s own amount when that is the first thing wrong', async () => {
+    const { user } = renderEditor()
+    await addCoreWithAmount(user)
+    const second = within(coreCard()).getByLabelText('Plan amount, 1 Oct – 31 Dec 2026')
+    await user.clear(second)
+    await user.type(second, 'abc')
+
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    expect(within(coreCard()).getByLabelText('Plan amount, 1 Oct – 31 Dec 2026')).toHaveFocus()
+  })
+})
+
+describe('editor: the buttons sit under the sentence, not beside it', () => {
+  it('puts "Load the latest" under the 409 sentence', async () => {
+    update.mockImplementation((_variables, options) => options.onError(staleReply))
+    const { user } = renderEditor({ plan: plan({ revision: 4 }) })
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const sentence = within(screen.getByRole('alert')).getByText(/^Someone else changed this plan/)
+    expect(sentence.nextElementSibling).toContainElement(screen.getByRole('button', { name: 'Load the latest' }))
+  })
+
+  it('puts "Start from Billing funding sources" under its sentence', () => {
+    hint.mockReturnValue({ data: { total: 25100.5, planStart: '2026-07-01', planEnd: '2027-06-30', managementType: 'PlanManaged', rows: [{ id: 'f1', routeType: 'PlanManaged', budget: 25100.5 }] } })
+    renderEditor()
+
+    const sentence = screen.getByText(/^The Billing page records \$25,100\.50 across one funding source/)
+    expect(sentence.nextElementSibling).toContainElement(screen.getByRole('button', { name: 'Start from Billing funding sources' }))
+  })
+})
+
+describe('editor: the proposed periods say they are a proposal', () => {
+  const PROPOSAL = 'Worked out from the plan dates and split by days. Change any amount to match the plan’s release schedule.'
+
+  it('says the periods were worked out, and that the person can change any amount', async () => {
+    const { user } = renderEditor()
+    typeYear()
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
+
+    expect(within(coreCard()).getByText(PROPOSAL)).toBeInTheDocument()
+    expect(within(coreCard()).queryByText(/You have edited some amounts/)).not.toBeInTheDocument()
+  })
+
+  it('adds that amounts were edited once one has been', async () => {
+    const { user } = renderEditor()
+    typeYear()
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
+    const first = within(coreCard()).getByLabelText('Plan amount, 1 Jul – 30 Sep 2026')
+    await user.clear(first)
+    await user.type(first, '1000')
+
+    expect(within(coreCard()).getByText(`${PROPOSAL} You have edited some amounts.`)).toBeInTheDocument()
+  })
+
+  it('says nothing about a proposal for the periods of a saved plan, until an amount is edited: then only that it was', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    const core = screen.getByRole('region', { name: /^Core \(flexible\), Plan Managed/ })
+    expect(within(core).queryByText(/Worked out from the plan dates/)).not.toBeInTheDocument()
+    expect(within(core).queryByText(/You have edited some amounts/)).not.toBeInTheDocument()
+
+    const first = within(core).getByLabelText('Plan amount, 1 Jul – 30 Sep 2026')
+    await user.clear(first)
+    await user.type(first, '2100')
+
+    expect(within(core).getByText('You have edited some amounts.')).toBeInTheDocument()
+    expect(within(core).queryByText(/Worked out from the plan dates/)).not.toBeInTheDocument()
+  })
+
+  it('offers "Split again" only after an amount was changed (or the periods stopped adding up), never on a saved pool as it was loaded', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    const core = screen.getByRole('region', { name: /^Core \(flexible\), Plan Managed/ })
+    expect(within(core).queryByRole('button', { name: 'Split again from the plan amount' })).not.toBeInTheDocument()
+
+    const first = within(core).getByLabelText('Plan amount, 1 Jul – 30 Sep 2026')
+    await user.clear(first)
+    await user.type(first, '2100')
+
+    expect(within(core).getByRole('button', { name: 'Split again from the plan amount' })).toBeInTheDocument()
+  })
+
+  it('offers it too when the typed total no longer matches the saved periods, since that is what it is for', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    const core = screen.getByRole('region', { name: /^Core \(flexible\), Plan Managed/ })
+
+    const total = within(core).getByLabelText('Plan amount for the whole plan')
+    await user.clear(total)
+    await user.type(total, '9000')
+
+    expect(within(core).getByText(/not the \$9,000\.00 you typed/)).toBeInTheDocument()
+    expect(within(core).getByRole('button', { name: 'Split again from the plan amount' })).toBeInTheDocument()
+  })
+})
+
+describe('editor: the set-aside is the organisation’s, and says so without naming it', () => {
+  it('labels the field, hints at what it is for, and heads the column "Set-aside"', async () => {
+    const { user } = renderEditor()
+    typeYear()
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+
+    const card = coreCard()
+    expect(within(card).getByLabelText('Set-aside for your organisation (optional)')).toBeInTheDocument()
+    expect(within(card).getByText('The part of this pool kept for your organisation when the participant also uses other providers. Leave blank if none is set aside.')).toBeInTheDocument()
+    await user.type(within(card).getByLabelText('Plan amount for the whole plan'), '8000')
+    expect(within(card).getByRole('columnheader', { name: 'Set-aside' })).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('Oassist')
+  })
+
+  it('says a set-aside above the plan amount is too much, beside the field', async () => {
+    const { user } = renderEditor()
+    typeYear()
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '1000')
+    await user.type(within(coreCard()).getByLabelText('Set-aside for your organisation (optional)'), '1500')
+
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    expect(within(coreCard()).getByText('The set-aside cannot be more than the plan amount.')).toBeInTheDocument()
+  })
+})
+
+describe('editor: a set-aside typed after a period was edited is saved, in either order', () => {
+  async function startPool(user: ReturnType<typeof userEvent.setup>, total = '4000') {
+    typeYear()
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), total)
+  }
+  const editPeriod = async (user: ReturnType<typeof userEvent.setup>, label: string, amount: string) => {
+    const input = within(coreCard()).getByLabelText(label)
+    await user.clear(input)
+    await user.type(input, amount)
+  }
+  const savedPeriods = () => (create.mock.calls[0][0].pools[0].periods as { planAmount: number; setAside?: number }[])
+  const cents = (values: (number | undefined)[]) => values.reduce<number>((sum, value) => sum + Math.round((value ?? 0) * 100), 0)
+
+  it('saves a set-aside typed AFTER a period was edited, on every period, adding up to what was typed', async () => {
+    const { user } = renderEditor()
+    await startPool(user)
+    await editPeriod(user, 'Plan amount, 1 Jul – 30 Sep 2026', '1000')
+    await user.type(within(coreCard()).getByLabelText('Set-aside for your organisation (optional)'), '800')
+
+    expect(within(coreCard()).getByLabelText('Set-aside, 1 Jul – 30 Sep 2026')).not.toHaveValue('')   // it shows on the periods: nothing is saved that is not seen
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    const periods = savedPeriods()
+    expect(periods.every(period => typeof period.setAside === 'number')).toBe(true)
+    expect(cents(periods.map(period => period.setAside))).toBe(80000)
+    periods.forEach(period => expect(Math.round((period.setAside ?? 0) * 100)).toBeLessThanOrEqual(Math.round(period.planAmount * 100)))
+  })
+
+  it('saves a set-aside typed BEFORE a period was edited, unchanged by the edit', async () => {
+    const { user } = renderEditor()
+    await startPool(user)
+    await user.type(within(coreCard()).getByLabelText('Set-aside for your organisation (optional)'), '800')
+    await editPeriod(user, 'Plan amount, 1 Jul – 30 Sep 2026', '1000')
+
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    expect(cents(savedPeriods().map(period => period.setAside))).toBe(80000)
+  })
+
+  it('saves no set-aside at all once the box is cleared, even after periods were edited', async () => {
+    const { user } = renderEditor()
+    await startPool(user)
+    await user.type(within(coreCard()).getByLabelText('Set-aside for your organisation (optional)'), '800')
+    await editPeriod(user, 'Plan amount, 1 Jul – 30 Sep 2026', '1000')
+
+    await user.clear(within(coreCard()).getByLabelText('Set-aside for your organisation (optional)'))
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    expect(savedPeriods().some(period => 'setAside' in period)).toBe(false)
+    expect(within(coreCard()).queryByText(/set-asides add up to/)).not.toBeInTheDocument()
+  })
+})
+
+describe('editor: a plan over 800 days has no periods, and says why', () => {
+  it('says so, in the table, for a year typed digit by digit (0002 on the way to 2026)', async () => {
+    const { user } = renderEditor()
+    day('Plan start', '2026-07-01')
+    day('Plan end', '2027-06-30')
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
+
+    day('Plan start', '0002-07-01')
+
+    expect(within(coreCard()).queryByLabelText(/^Plan amount, /)).not.toBeInTheDocument()
+    expect(within(coreCard()).getByText('A plan can run at most 800 days, so no periods are shown. Check the plan’s dates.')).toBeInTheDocument()
+
+    day('Plan start', '2026-07-01')
+    expect(within(coreCard()).getAllByLabelText(/^Plan amount, /)).toHaveLength(4)
+  })
+
+  it('asks for the dates when they are missing, and says so when the plan ends before it starts', async () => {
+    const { user } = renderEditor()
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    expect(within(coreCard()).getByText('Give the plan’s dates to see its periods.')).toBeInTheDocument()
+
+    day('Plan start', '2027-06-30')
+    day('Plan end', '2026-07-01')
+    expect(within(coreCard()).getByText('The plan ends before it starts, so there are no periods to show.')).toBeInTheDocument()
+  })
+})
+
+describe('editor: focus goes where the person is looking', () => {
+  it('moves focus to the new pool’s amount when a pool is added, so the person can type it', async () => {
+    const { user } = renderEditor()
+    typeYear()
+
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    expect(within(coreCard()).getByLabelText('Plan amount for the whole plan')).toHaveFocus()
+
+    await user.selectOptions(screen.getByLabelText('Stated support category'), '15')
+    await user.click(screen.getByRole('button', { name: 'Add a stated support' }))
+    expect(within(screen.getByRole('region', { name: /^Improved Daily Living Skills, Plan Managed/ })).getByLabelText('Plan amount for the whole plan')).toHaveFocus()
+  })
+
+  it('moves focus to the pool before a removed one, or to the Pools heading when none is left, so it is not lost with the button', async () => {
+    const { user } = renderEditor()
+    typeYear()
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.selectOptions(screen.getByLabelText('Stated support category'), '15')
+    await user.click(screen.getByRole('button', { name: 'Add a stated support' }))
+
+    await user.click(screen.getByRole('button', { name: 'Remove Improved Daily Living Skills, Plan Managed' }))
+    expect(coreCard()).toHaveFocus()
+
+    await user.click(screen.getByRole('button', { name: 'Remove Core (flexible), Plan Managed' }))
+    expect(screen.getByRole('heading', { name: 'Pools' })).toHaveFocus()
+  })
+})
+
+describe('editor: what counts as having changed something', () => {
+  it('is not changed after "Load the latest", so closing does not ask to discard what the person never typed', async () => {
+    update.mockImplementation((_variables, options) => options.onError(staleReply))
+    const newer = plan({ revision: 5, confirmedByName: 'Somebody Else', pools: [pool({ periods: quarters(3000) })] })
+    plans.mockReturnValue({ data: { plans: [plan({ revision: 4 })], profilePlanDates: {} }, refetch: vi.fn().mockResolvedValue({ data: { plans: [newer], profilePlanDates: {} } }) })
+    const { user, onClose } = renderEditor({ plan: plan({ revision: 4 }) })
+    await user.clear(screen.getByLabelText('Confirmed by'))
+    await user.type(screen.getByLabelText('Confirmed by'), 'My Change')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await user.click(screen.getByRole('button', { name: 'Load the latest' }))
+    await waitFor(() => expect(screen.getByLabelText('Confirmed by')).toHaveValue('Somebody Else'))
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByText('Discard changes?')).not.toBeInTheDocument()
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('still asks before discarding something that was typed, and not when the typed value is put back', async () => {
+    const { user, onClose } = renderEditor({ plan: plan() })
+    const by = screen.getByLabelText('Confirmed by')
+    await user.type(by, 'x')
+    await user.keyboard('{Escape}')
+    expect(screen.getByText('Discard changes?')).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+
+    await user.clear(by)
+    await user.type(by, 'Priya Coordinator')   // as it was
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByText('Discard changes?')).not.toBeInTheDocument()
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('calls the closing button Cancel as soon as something has been typed, even where it says "Plan not shared yet" until then', async () => {
+    const { user } = renderEditor({ skipLabel: 'Plan not shared yet' })
+    expect(screen.getByRole('button', { name: 'Plan not shared yet' })).toBeInTheDocument()
+
+    day('Plan start', '2026-07-01')
+
+    expect(screen.queryByRole('button', { name: 'Plan not shared yet' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+  })
+})
+
+describe('editor: a first plan starts from the dates the profile already holds', () => {
+  it('prefills the plan dates from the profile, and proposes the periods as soon as a pool is added', async () => {
+    plans.mockReturnValue({ data: { plans: [], profilePlanDates: { start: '2026-07-01', end: '2027-06-30' } }, refetch: vi.fn() })
+    const { user } = renderEditor()
+
+    expect(screen.getByLabelText(/^Plan start/)).toHaveValue('2026-07-01')
+    expect(screen.getByLabelText(/^Plan end/)).toHaveValue('2027-06-30')
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
+    expect(within(coreCard()).getAllByLabelText(/^Plan amount, /)).toHaveLength(4)
+  })
+
+  it('leaves the dates empty when the profile has only one, and follows the last plan instead when there is one', () => {
+    plans.mockReturnValue({ data: { plans: [], profilePlanDates: { start: '2026-07-01' } }, refetch: vi.fn() })
+    const first = renderEditor()
+    expect(screen.getByLabelText(/^Plan start/)).toHaveValue('')
+    first.unmount()
+
+    plans.mockReturnValue({ data: { plans: [plan()], profilePlanDates: { start: '2020-01-01', end: '2020-12-31' } }, refetch: vi.fn() })
+    renderEditor({ previousPlan: plan({ planEnd: '2027-06-30' }) })
+    expect(screen.getByLabelText(/^Plan start/)).toHaveValue('2027-07-01')
   })
 })

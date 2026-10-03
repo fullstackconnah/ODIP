@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Trash2 } from 'lucide-react'
 import { useBillingSourcesHint, useCreateFundingPlan, useFundingPlans, usePaceCategories, useUpdateFundingPlan } from '@/api/hooks'
 import type { BudgetEvidenceSource, FundingPlanDto } from '@/api/types'
@@ -16,7 +17,7 @@ import { categoriesLabel, managementLabel, paceNumber, writtenSpan } from '@/lib
 import { apiErrorCode, apiErrorMessages, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { formatCurrency } from '@/lib/utils'
 import {
-  addCorePool, addStatedPool, editorStateFromPlan, hasPool, nextPlanState, poolSums, removePool, resplit, startFromBilling, toSaveBody, updatePool, validate,
+  addCorePool, addStatedPool, editorStateFromPlan, hasPool, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, startFromBilling, toSaveBody, updatePool, validate,
   withPeriodEdit, withPlanFields, withPoolTotals, type EditorPool, type EditorState, type PoolProblems, type Problems,
 } from './fundingEditorState'
 
@@ -30,7 +31,7 @@ export type FundingPlanEditorProps = {
   previousPlan?: FundingPlanDto
   /** The management type the add buttons start with: the participant's own plan type. */
   defaultManagement: PlanType
-  /** What the button that closes without saving says. The intake and profile cards call it "Plan not shared yet"; elsewhere it is Cancel. */
+  /** What the button that closes without saving says while nothing has been typed. The intake and profile cards call it "Plan not shared yet"; elsewhere it is Cancel, and once anything is typed it is Cancel everywhere. */
   skipLabel?: string
   onSaved?: (plan: FundingPlanDto) => void
 }
@@ -38,6 +39,9 @@ export type FundingPlanEditorProps = {
 const PERIOD_LENGTH_OPTIONS = [null, 1, 3, 6, 12].map(months => ({ value: months === null ? '' : String(months), label: periodLengthLabel(months) }))
 const EVIDENCE_OPTIONS = BUDGET_EVIDENCE_SOURCES.map(source => ({ value: source, label: BUDGET_EVIDENCE_LABELS[source] }))
 const MANAGEMENT_OPTIONS = PLAN_TYPES.map(type => ({ value: type, label: PLAN_TYPE_LABELS[type] }))
+
+const PROPOSAL_NOTE = 'Worked out from the plan dates and split by days. Change any amount to match the plan’s release schedule.'
+const EDITED_NOTE = 'You have edited some amounts.'
 
 type Failure = { kind: 'messages'; messages: string[] } | { kind: 'stale' }
 
@@ -48,13 +52,31 @@ function failureOf(error: unknown): Failure {
   return { kind: 'messages', messages: messages.length > 0 ? messages : ['The plan budget was not saved. Check your connection and try again.'] }
 }
 
+/** Where focus goes after the form changes under the person's hands: into a new pool's amount, onto the pool before a removed one, or onto the Pools heading when none is left. */
+type FocusTarget = { kind: 'amount'; key: string } | { kind: 'pool'; key: string } | { kind: 'heading' }
+
+/**
+ * The form's own content, for "has anything changed": what the person can see and type, not the bookkeeping (a pool's key and flags, the revision). Two forms with the same content are the
+ * same form, so a value put back as it was is not a change, and a plan loaded from the server (new keys) is not one either.
+ */
+function contentOf(state: EditorState): string {
+  return JSON.stringify({
+    planStart: state.planStart, planEnd: state.planEnd, reassessmentDate: state.reassessmentDate, periodLengthMonths: state.periodLengthMonths, evidence: state.evidence,
+    confirmedOn: state.confirmedOn, confirmedByName: state.confirmedByName, notes: state.notes,
+    pools: state.pools.map(pool => ({
+      kind: pool.kind, paceCategory: pool.paceCategory, managementType: pool.managementType, name: pool.name, notes: pool.notes, totalText: pool.totalText, setAsideText: pool.setAsideText, periods: pool.periods,
+    })),
+  })
+}
+
 /**
  * The plan budget editor: one SlideOver for the Funding tab, the intake card and the profile wizard. It records a plan's dates, how its funding is released and where the figures came from, then
  * its pools (Core flexible, or a stated support from the served category list) and each pool's periods. The periods are PROPOSED from the plan's dates and the length, the pool's amount split by
  * days to the cent, and every amount stays editable to match the plan's real release schedule; the server only checks the invariants and never proposes. What the periods add up to is shown,
  * and when edited amounts no longer add up to what was typed the editor says so (the save sends the periods: the server keeps no pool total).
- * Problems are said in plain words beside the field once a save has been tried. A refused save keeps everything on screen: the server's reasons are listed, and a stale revision (409) offers
- * "Load the latest" without discarding what the person typed until they choose to.
+ * Problems are said in plain words beside the field once a save has been tried, and focus goes to the first of them. A refused save keeps everything on screen: the server's reasons are listed
+ * (scrolled into view and focused, because the Save button is at the bottom of a long form), and a stale revision (409) offers "Load the latest" without discarding what the person typed until
+ * they choose to.
  */
 export function FundingPlanEditor(props: FundingPlanEditorProps) {
   // Closed, the editor holds nothing: opening it again starts from the plan (or the next plan) as it is then, never from a previous session's edits.
@@ -69,16 +91,23 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
   // The Billing hint is for starting a NEW plan only, and it is asked for once, while the editor is open.
   const hintQuery = useBillingSourcesHint(participantId, !plan)
 
-  const initial = useMemo(() => (plan ? editorStateFromPlan(plan) : nextPlanState(previousPlan)), [plan, previousPlan])
+  // A first plan starts from the plan dates the profile already holds (typed once at intake, not twice); a later one follows the plan before it.
+  const profileDates = latest.data?.profilePlanDates
+  const initial = useMemo(() => (plan ? editorStateFromPlan(plan) : nextPlanState(previousPlan, profileDates)), [plan, previousPlan, profileDates])
   const [state, setState] = useState<EditorState>(initial)
+  // What "unsaved changes" is measured against: the form as it opened, or as it was last loaded from the server ("Load the latest").
+  const [baseline, setBaseline] = useState<EditorState>(initial)
   const [attempted, setAttempted] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const [rewrote, setRewrote] = useState(false)
   const [management, setManagement] = useState<PlanType>(defaultManagement)
   const [category, setCategory] = useState('')
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const failureRef = useRef<HTMLDivElement>(null)
+  const pendingFocus = useRef<FocusTarget | null>(null)
 
   const problems = useMemo(() => validate(state), [state])
-  const dirty = useMemo(() => JSON.stringify(state) !== JSON.stringify(initial), [state, initial])
+  const dirty = useMemo(() => contentOf(state) !== contentOf(baseline), [state, baseline])
   const saving = create.isPending || update.isPending
   const hint = hintQuery.data
   const categories = categoriesQuery.data ?? []
@@ -87,6 +116,29 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
   const defaultNameOf = (pool: EditorPool): string => (pool.kind === 'CoreFlexible' ? 'Core (flexible)' : categories.find(c => c.number === pool.paceCategory)?.name ?? `Category ${paceNumber(pool.paceCategory)}`)
   const coreHeld = hasPool(state, 0, management)
   const statedHeld = chosen ? hasPool(state, chosen.number, management) : false
+  const periodsReason = useMemo(() => noPeriodsReason(state), [state])
+
+  // A refused save puts its reason where the person is looking: the failure is scrolled into view and takes focus (the Save button is at the bottom of a long form, and it is disabled while saving).
+  useEffect(() => {
+    if (!failure) return
+    failureRef.current?.focus({ preventScroll: true })
+    failureRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [failure])
+
+  // Focus that was asked for by a handler (a pool added or removed) lands once the form has re-rendered.
+  useEffect(() => {
+    const target = pendingFocus.current
+    if (!target) return
+    pendingFocus.current = null
+    const root = bodyRef.current
+    const element = target.kind === 'heading'
+      ? root?.querySelector<HTMLElement>('#funding-pools-heading')
+      : target.kind === 'pool'
+        ? root?.querySelector<HTMLElement>(`[data-pool-key="${target.key}"]`)
+        : root?.querySelector<HTMLElement>(`[data-pool-key="${target.key}"] input[inputmode="decimal"]`)
+    element?.focus({ preventScroll: true })
+    element?.scrollIntoView({ block: 'nearest' })
+  })
 
   const change = (patch: Partial<EditorState>) => {
     const { state: next, rewroteEdits } = withPlanFields(state, patch)
@@ -94,9 +146,33 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
     if (rewroteEdits) setRewrote(true)
   }
 
+  const addPool = (next: EditorState) => {
+    const added = next.pools.find(pool => !state.pools.some(held => held.key === pool.key))
+    if (added) pendingFocus.current = { kind: 'amount', key: added.key }
+    setState(next)
+  }
+
+  const remove = (key: string) => {
+    const index = state.pools.findIndex(pool => pool.key === key)
+    const before = index > 0 ? state.pools[index - 1] : state.pools[index + 1]
+    pendingFocus.current = before ? { kind: 'pool', key: before.key } : { kind: 'heading' }
+    setState(removePool(state, key))
+  }
+
+  /** Every message beside a field is in the DOM once a save has been tried: focus goes to the first field marked invalid, or the plan-level message when no field is. */
+  const focusFirstProblem = () => {
+    const first = bodyRef.current?.querySelector<HTMLElement>('[aria-invalid="true"], [data-problem]')
+    first?.focus({ preventScroll: true })
+    first?.scrollIntoView({ block: 'nearest' })
+  }
+
   const save = () => {
-    setAttempted(true)
-    if (problems.any) return
+    // The messages must be on screen before focus goes to the first of them.
+    if (!attempted) flushSync(() => setAttempted(true))
+    if (problems.any) {
+      focusFirstProblem()
+      return
+    }
     setFailure(null)
     const body = toSaveBody(state)
     const handlers = {
@@ -114,7 +190,10 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
       setFailure({ kind: 'messages', messages: ['That plan could not be found any more. Close this panel and look at the participant’s Funding tab.'] })
       return
     }
-    setState(editorStateFromPlan(newer))
+    // The newer plan is the form's new starting point, so closing straight afterwards does not ask to discard what the person never typed.
+    const loaded = editorStateFromPlan(newer)
+    setState(loaded)
+    setBaseline(loaded)
     setFailure(null)
     setRewrote(false)
     setAttempted(false)
@@ -130,39 +209,41 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
       dirty={dirty}
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[13px] text-[var(--color-muted-foreground)]" aria-live="polite">{attempted && problems.any ? 'Some fields need attention. They are marked below.' : ''}</p>
+          <p className="text-[13px] text-[var(--color-muted-foreground)]" aria-live="polite">{attempted && problems.any ? 'Some fields need attention. Each has a message beside it.' : ''}</p>
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={onClose}>{skipLabel ?? 'Cancel'}</Button>
+            <Button variant="secondary" onClick={onClose}>{dirty ? 'Cancel' : skipLabel ?? 'Cancel'}</Button>
             <Button onClick={save} disabled={saving}>{saving ? 'Saving…' : plan ? 'Save changes' : 'Save plan budget'}</Button>
           </div>
         </div>
       }
     >
-      <div className="flex flex-col gap-[var(--section-gap)]">
-        {failure?.kind === 'stale' && (
-          <Callout tone="warning" actions={<Button variant="secondary" size="sm" onClick={() => { void loadLatest() }}>Load the latest</Button>}>
-            This plan was changed by someone else since you opened it. Your changes are still on screen: load the latest to see theirs, which replaces what you have typed.
-          </Callout>
-        )}
-        {failure?.kind === 'messages' && (
-          <Callout tone="danger" title="The plan budget was not saved.">
-            <ul className="list-disc pl-5">{failure.messages.map(message => <li key={message}>{message}</li>)}</ul>
-          </Callout>
+      <div ref={bodyRef} className="flex flex-col gap-[var(--section-gap)]">
+        {failure && (
+          <div ref={failureRef} tabIndex={-1} className="rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
+            {failure.kind === 'stale' ? (
+              <Callout tone="warning">
+                <p>Someone else changed this plan after you opened it. What you typed is still here. Load the latest to see their changes; that replaces what you have typed.</p>
+                <div className="mt-2"><Button variant="secondary" size="sm" onClick={() => { void loadLatest() }}>Load the latest</Button></div>
+              </Callout>
+            ) : (
+              <Callout tone="danger" title="The plan budget was not saved.">
+                <ul className="list-disc pl-5">{failure.messages.map(message => <li key={message}>{message}</li>)}</ul>
+              </Callout>
+            )}
+          </div>
         )}
 
         <PlanFields state={state} problems={attempted ? problems : null} onChange={change} />
         {rewrote && <Callout tone="info">The periods were worked out again from the new dates, so amounts you had edited were replaced.</Callout>}
 
         <section className="flex flex-col gap-3" aria-labelledby="funding-pools-heading">
-          <h3 id="funding-pools-heading" className="text-sm font-semibold">Pools</h3>
-          {attempted && problems.general.map(message => <p key={message} className="text-sm text-[var(--color-destructive)]">{message}</p>)}
+          <h3 id="funding-pools-heading" tabIndex={-1} className="text-sm font-semibold focus:outline-none">Pools</h3>
+          {attempted && problems.general.map(message => <p key={message} data-problem="" tabIndex={-1} className="text-sm text-[var(--color-destructive)] focus:outline-none">{message}</p>)}
 
           {!plan && hint && hint.rows.length > 0 && state.pools.length === 0 && (
-            <Callout
-              tone="info"
-              actions={<Button variant="secondary" size="sm" onClick={() => setState(startFromBilling(state, hint, defaultManagement))}>Start from Billing funding sources</Button>}
-            >
-              The Billing page records {formatCurrency(hint.total)} across {hint.rows.length === 1 ? 'one funding source' : `${hint.rows.length} funding sources`} for this participant. You can start from that and check it against the plan.
+            <Callout tone="info">
+              <p>The Billing page records {formatCurrency(hint.total)} across {hint.rows.length === 1 ? 'one funding source' : `${hint.rows.length} funding sources`} for this participant. You can start from that and check it against the plan.</p>
+              <div className="mt-2"><Button variant="secondary" size="sm" onClick={() => setState(startFromBilling(state, hint, defaultManagement))}>Start from Billing funding sources</Button></div>
             </Callout>
           )}
 
@@ -173,15 +254,17 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
               state={state}
               problems={attempted ? problems.pools[pool.key] : undefined}
               defaultName={defaultNameOf(pool)}
+              noPeriodsReason={periodsReason}
               onState={setState}
+              onRemove={() => remove(pool.key)}
             />
           ))}
 
           <fieldset className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
             <legend className="px-1 text-[13px] font-semibold text-[var(--color-muted-foreground)]">Add a pool</legend>
-            <SelectField label="Managed by" value={management} onChange={event => setManagement(event.target.value as PlanType)} options={MANAGEMENT_OPTIONS} />
+            <SelectField label="Management type" value={management} onChange={event => setManagement(event.target.value as PlanType)} options={MANAGEMENT_OPTIONS} />
             <div className="flex flex-col gap-1">
-              <Button variant="secondary" className="w-fit" disabled={coreHeld} onClick={() => setState(addCorePool(state, management))}>Add Core (flexible)</Button>
+              <Button variant="secondary" className="w-fit" disabled={coreHeld} onClick={() => addPool(addCorePool(state, management))}>Add Core (flexible)</Button>
               {coreHeld && <p className="text-[13px] text-[var(--color-muted-foreground)]">Core (flexible) is already in this plan under this management type.</p>}
             </div>
             <div className="flex flex-col gap-1">
@@ -191,7 +274,7 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
                 onChange={event => setCategory(event.target.value)}
                 options={[{ value: '', label: 'Choose a category' }, ...statedChoices.map(c => ({ value: String(c.number), label: `${paceNumber(c.number)} ${c.name}` }))]}
               />
-              <Button variant="secondary" className="w-fit" disabled={!chosen || statedHeld} onClick={() => { if (chosen) { setState(addStatedPool(state, chosen, management)); setCategory('') } }}>Add a stated support</Button>
+              <Button variant="secondary" className="w-fit" disabled={!chosen || statedHeld} onClick={() => { if (chosen) { addPool(addStatedPool(state, chosen, management)); setCategory('') } }}>Add a stated support</Button>
               {chosen && statedHeld && <p className="text-[13px] text-[var(--color-muted-foreground)]">{chosen.name} is already in this plan under this management type.</p>}
             </div>
           </fieldset>
@@ -221,20 +304,32 @@ function PlanFields({ state, problems, onChange }: { state: EditorState; problem
   )
 }
 
-function PoolCard({ pool, state, problems, defaultName, onState }: { pool: EditorPool; state: EditorState; problems: PoolProblems | undefined; defaultName: string; onState: (next: EditorState) => void }) {
+/** The one sentence above a pool's periods: that they were worked out (when they were), and that amounts were edited (when they were). Nothing for a saved pool nobody has touched. */
+function periodsNote(pool: EditorPool): string | null {
+  const parts = [pool.fromPlan ? null : PROPOSAL_NOTE, pool.touched ? EDITED_NOTE : null].filter((part): part is string => part !== null)
+  return parts.length > 0 ? parts.join(' ') : null
+}
+
+function PoolCard(
+  { pool, state, problems, defaultName, noPeriodsReason: reason, onState, onRemove }:
+  { pool: EditorPool; state: EditorState; problems: PoolProblems | undefined; defaultName: string; noPeriodsReason: string; onState: (next: EditorState) => void; onRemove: () => void },
+) {
   const shownName = pool.name.trim() || defaultName
   const label = `${shownName}, ${managementLabel(pool.managementType)}`
   const sums = poolSums(pool)
   const periodic = state.periodLengthMonths !== null
+  const note = periodic && pool.periods.length > 0 ? periodsNote(pool) : null
+  // "Split again" rewrites the periods from the typed totals, so it is offered when there is something to undo: an amount was changed in this session, or the periods and the box disagree.
+  const canSplitAgain = pool.touched || sums.planMismatch || sums.setAsideMismatch
 
   return (
-    <section aria-label={label} className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
+    <section aria-label={label} data-pool-key={pool.key} tabIndex={-1} className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h4 className="truncate text-sm font-semibold">{shownName}</h4>
           <p className="text-[13px] text-[var(--color-muted-foreground)]"><span className="tabular-nums">{categoriesLabel(pool)}</span> · {managementLabel(pool.managementType)}</p>
         </div>
-        <Button variant="ghost-danger" size="sm" aria-label={`Remove ${label}`} onClick={() => onState(removePool(state, pool.key))}>
+        <Button variant="ghost-danger" size="sm" aria-label={`Remove ${label}`} onClick={onRemove}>
           <Trash2 className="h-4 w-4" aria-hidden="true" /> Remove
         </Button>
       </div>
@@ -246,15 +341,16 @@ function PoolCard({ pool, state, problems, defaultName, onState }: { pool: Edito
           onChange={event => onState(withPoolTotals(state, pool.key, { totalText: event.target.value }))} error={problems?.total}
         />
         <TextField
-          label="Oassist's set-aside (optional)" inputMode="decimal" placeholder="0.00" value={pool.setAsideText}
+          label="Set-aside for your organisation (optional)" inputMode="decimal" placeholder="0.00" value={pool.setAsideText}
           onChange={event => onState(withPoolTotals(state, pool.key, { setAsideText: event.target.value }))} error={problems?.setAside}
-          hint="Only when the participant also uses other providers."
+          hint="The part of this pool kept for your organisation when the participant also uses other providers. Leave blank if none is set aside."
         />
       </div>
 
       {periodic ? (
         <>
-          <PeriodsTable pool={pool} problems={problems} onEdit={(index, patch) => onState(withPeriodEdit(state, pool.key, index, patch))} />
+          {note && <p className="text-[13px] text-[var(--color-muted-foreground)]">{note}</p>}
+          <PeriodsTable pool={pool} problems={problems} emptyReason={reason} onEdit={(index, patch) => onState(withPeriodEdit(state, pool.key, index, patch))} />
           <div className="flex flex-col gap-1 text-sm" aria-live="polite">
             {sums.periodsPlan !== null && !sums.planMismatch && <p>The periods add up to {formatCurrency(sums.periodsPlan)}</p>}
             {sums.planMismatch && sums.periodsPlan !== null && sums.typedPlan !== null && (
@@ -263,7 +359,7 @@ function PoolCard({ pool, state, problems, defaultName, onState }: { pool: Edito
             {sums.setAsideMismatch && sums.periodsSetAside !== null && sums.typedSetAside !== null && (
               <p className="text-[var(--color-on-warning-container)]">The set-asides add up to {formatCurrency(sums.periodsSetAside)}, not the {formatCurrency(sums.typedSetAside)} you typed. The periods are what is saved.</p>
             )}
-            {pool.edited && (
+            {canSplitAgain && (
               <Button variant="ghost" size="sm" className="w-fit" onClick={() => onState({ ...state, pools: state.pools.map(p => (p.key === pool.key ? resplit(state, p) : p)) })}>Split again from the plan amount</Button>
             )}
           </div>
@@ -275,15 +371,15 @@ function PoolCard({ pool, state, problems, defaultName, onState }: { pool: Edito
   )
 }
 
-function PeriodsTable({ pool, problems, onEdit }: { pool: EditorPool; problems: PoolProblems | undefined; onEdit: (index: number, patch: { planAmount?: string; setAside?: string }) => void }) {
-  if (pool.periods.length === 0) return <p className="text-[13px] text-[var(--color-muted-foreground)]">Give the plan&rsquo;s dates to see its periods.</p>
+function PeriodsTable({ pool, problems, emptyReason, onEdit }: { pool: EditorPool; problems: PoolProblems | undefined; emptyReason: string; onEdit: (index: number, patch: { planAmount?: string; setAside?: string }) => void }) {
+  if (pool.periods.length === 0) return <p className="text-[13px] text-[var(--color-muted-foreground)]">{emptyReason}</p>
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="text-left text-[13px] text-[var(--color-muted-foreground)]">
           <th scope="col" className="py-1 pr-2 font-medium">Period</th>
           <th scope="col" className="px-1 py-1 font-medium">Plan amount</th>
-          <th scope="col" className="px-1 py-1 font-medium">Oassist&rsquo;s set-aside</th>
+          <th scope="col" className="whitespace-nowrap px-1 py-1 font-medium">Set-aside</th>
         </tr>
       </thead>
       <tbody>
