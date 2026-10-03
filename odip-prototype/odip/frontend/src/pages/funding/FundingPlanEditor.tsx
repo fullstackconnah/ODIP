@@ -15,7 +15,7 @@ import { TextField } from '@/components/TextField'
 import { periodLengthLabel } from '@/lib/fundingPeriods'
 import { categoriesLabel, managementLabel, paceNumber, writtenSpan } from '@/lib/fundingPlan'
 import { apiErrorCode, apiErrorMessages, apiErrorStatus } from '@/lib/shiftPackageErrors'
-import { formatCurrency } from '@/lib/utils'
+import { cn, formatCurrency } from '@/lib/utils'
 import {
   addCorePool, addStatedPool, editorStateFromPlan, hasPool, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, startFromBilling, toSaveBody, updatePool, validate,
   withPeriodEdit, withPlanFields, withPoolTotals, type EditorPool, type EditorState, type PoolProblems, type Problems,
@@ -39,6 +39,9 @@ export type FundingPlanEditorProps = {
 const PERIOD_LENGTH_OPTIONS = [null, 1, 3, 6, 12].map(months => ({ value: months === null ? '' : String(months), label: periodLengthLabel(months) }))
 const EVIDENCE_OPTIONS = BUDGET_EVIDENCE_SOURCES.map(source => ({ value: source, label: BUDGET_EVIDENCE_LABELS[source] }))
 const MANAGEMENT_OPTIONS = PLAN_TYPES.map(type => ({ value: type, label: PLAN_TYPE_LABELS[type] }))
+
+/** A period's amount box: the shared input, with px-2 REPLACING its px-3 (cn merges them; two padding classes together are decided by the stylesheet, and px-3 won, which clipped a figure on a phone). */
+const periodInputClass = cn(inputClass, 'px-2 tabular-nums')
 
 const PROPOSAL_NOTE = 'Worked out from the plan dates and split by days. Change any amount to match the plan’s release schedule.'
 const EDITED_NOTE = 'You have edited some amounts.'
@@ -335,7 +338,8 @@ function PoolCard(
       </div>
 
       <TextField label="Name on the plan" placeholder={shownName} value={pool.name} onChange={event => onState(updatePool(state, pool.key, { name: event.target.value }))} error={problems?.name} />
-      <div className="grid grid-cols-1 gap-x-3 gap-y-[var(--field-gap-y)] sm:grid-cols-2">
+      {/* One column at every width: the set-aside's label is long enough to wrap in half of the panel, which put its box lower than the plan amount's beside it. */}
+      <div className="grid grid-cols-1 gap-y-[var(--field-gap-y)]">
         <TextField
           label="Plan amount for the whole plan" inputMode="decimal" placeholder="0.00" value={pool.totalText}
           onChange={event => onState(withPoolTotals(state, pool.key, { totalText: event.target.value }))} error={problems?.total}
@@ -373,6 +377,7 @@ function PoolCard(
 
 function PeriodsTable({ pool, problems, emptyReason, onEdit }: { pool: EditorPool; problems: PoolProblems | undefined; emptyReason: string; onEdit: (index: number, patch: { planAmount?: string; setAside?: string }) => void }) {
   if (pool.periods.length === 0) return <p className="text-[13px] text-[var(--color-muted-foreground)]">{emptyReason}</p>
+  // The amount boxes are 7rem wide (88px of text at the 16px a phone needs): a figure like 100000.00 fits, where 6.5rem clipped the last digit of 15123.29 at 390 wide.
   return (
     <table className="w-full text-sm">
       <thead>
@@ -389,16 +394,16 @@ function PeriodsTable({ pool, problems, emptyReason, onEdit }: { pool: EditorPoo
           return (
             <tr key={period.periodStart} className="align-top">
               <td className="py-1 pr-2 tabular-nums sm:whitespace-nowrap">{span}</td>
-              <td className="w-[6.5rem] px-1 py-1 sm:w-28">
+              <td className="w-28 px-1 py-1">
                 <input
-                  className={`${inputClass} px-2 tabular-nums`} inputMode="decimal" aria-label={`Plan amount, ${span}`} aria-invalid={row?.planAmount ? true : undefined}
+                  className={periodInputClass} inputMode="decimal" aria-label={`Plan amount, ${span}`} aria-invalid={row?.planAmount ? true : undefined}
                   value={period.planAmount} onChange={event => onEdit(index, { planAmount: event.target.value })}
                 />
                 {row?.planAmount && <p className="mt-0.5 text-[13px] text-[var(--color-destructive)]">{row.planAmount}</p>}
               </td>
-              <td className="w-[6.5rem] px-1 py-1 sm:w-28">
+              <td className="w-28 px-1 py-1">
                 <input
-                  className={`${inputClass} px-2 tabular-nums`} inputMode="decimal" aria-label={`Set-aside, ${span}`} aria-invalid={row?.setAside ? true : undefined}
+                  className={periodInputClass} inputMode="decimal" aria-label={`Set-aside, ${span}`} aria-invalid={row?.setAside ? true : undefined}
                   value={period.setAside} onChange={event => onEdit(index, { setAside: event.target.value })}
                 />
                 {row?.setAside && <p className="mt-0.5 text-[13px] text-[var(--color-destructive)]">{row.setAside}</p>}

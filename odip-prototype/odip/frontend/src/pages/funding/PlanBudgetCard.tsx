@@ -62,10 +62,13 @@ function PlanBudgetCardBody({ participantId, planType }: { participantId?: strin
   } else {
     body = (
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-          {ended && <StatusBadge tone="neutral" label="Ended" />}
-          <span className="font-medium tabular-nums">{writtenSpan(current.planStart, current.planEnd)}</span>
-          <span className="text-[var(--color-muted-foreground)]">· {periodLengthLabel(current.periodLengthMonths)} · {plural(current.pools.length, 'pool')} · <span className="tabular-nums">{formatCurrency(planTotal(current))} in total</span></span>
+        {/* Two groups that wrap as wholes (never mid-way, which left a separator dot at the start of a line): which plan, then what is in it. */}
+        <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {ended && <StatusBadge tone="neutral" label="Ended" />}
+            <span className="font-medium tabular-nums">{writtenSpan(current.planStart, current.planEnd)}</span>
+          </span>
+          <span className="text-[var(--color-muted-foreground)]">{periodLengthLabel(current.periodLengthMonths)} · {plural(current.pools.length, 'pool')} · <span className="tabular-nums">{formatCurrency(planTotal(current))} in total</span></span>
         </p>
         <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>{ended ? 'Record a new plan' : 'Edit'}</Button>
       </div>
