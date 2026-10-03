@@ -109,6 +109,10 @@ public static class AuditedEntities
         typeof(PlanPricingSettings),
         typeof(PublicHoliday),
         typeof(PublicHolidayOverride),
+
+        // Plan builder phase D: approving an agreement revision for rostering makes the weekly patterns that shifts are generated from, and ends the patterns of the revision before it.
+        // The approval row is the one record of who did that and when (the patterns and shifts it makes are audited as they are saved, with the same actor), so it is audited like them.
+        typeof(ServiceAgreementDraftApproval),
     };
 
     private static readonly HashSet<string> ExcludedProperties = new()

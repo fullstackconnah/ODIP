@@ -33,6 +33,7 @@ public class OdipDbContext : DbContext
     public DbSet<ServiceAgreementDraft> ServiceAgreementDrafts => Set<ServiceAgreementDraft>();
     public DbSet<ServiceAgreementDraftLine> ServiceAgreementDraftLines => Set<ServiceAgreementDraftLine>();
     public DbSet<ServiceAgreementDraftBlock> ServiceAgreementDraftBlocks => Set<ServiceAgreementDraftBlock>();
+    public DbSet<ServiceAgreementDraftApproval> ServiceAgreementDraftApprovals => Set<ServiceAgreementDraftApproval>();
     public DbSet<ElectronicSigningSnapshot> ElectronicSigningSnapshots => Set<ElectronicSigningSnapshot>();
     public DbSet<ElectronicSigningEvidence> ElectronicSigningEvidence => Set<ElectronicSigningEvidence>();
     public DbSet<Contact> Contacts => Set<Contact>();
@@ -1191,6 +1192,9 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.Notes).HasMaxLength(2000);
             entity.Property(e => e.OverrideReason).HasMaxLength(2000);
             entity.Property(e => e.AcknowledgedFindingCodes).HasMaxLength(500);
+            // What the pattern the shift was generated from asked of a worker (plan builder, phase D). Deliberately no unique index on a shift: the demo pack places its shifts by a
+            // deterministic id, and a natural key here would wedge it. Generation is made safe by an advisory lock (RosterShiftGenerator), not by a key.
+            entity.Property(e => e.RequirementsJson).HasColumnType("jsonb");
             // Computed from StartTime/EndTime/EndsNextDay — never persisted.
             entity.Ignore(e => e.DurationHours);
 
@@ -1236,6 +1240,14 @@ public class OdipDbContext : DbContext
 
             entity.HasIndex(e => new { e.TenantId, e.ParticipantId });
             entity.HasIndex(e => e.IsActive);
+
+            // Plan builder phase D: the pattern an approved agreement revision made remembers its revision, block and worker slot. The key is partial so that a hand-made or demo pattern
+            // (no source) is outside it altogether, and approving the same revision twice, or two approvals racing, can never make the same weekday twice.
+            entity.Property(e => e.SourceBlockKey).HasMaxLength(64);
+            entity.Property(e => e.RequirementsJson).HasColumnType("jsonb");
+            entity.HasOne<ServiceAgreementDraft>().WithMany().HasForeignKey(e => e.SourceDraftId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => e.SourceDraftId);
+            entity.HasIndex(e => new { e.SourceDraftId, e.SourceBlockKey, e.DayOfWeek, e.WorkerSlot }).IsUnique().HasFilter("\"SourceDraftId\" IS NOT NULL").HasDatabaseName("IX_ShiftPatterns_SourceDraft_Block_Day_Slot");
         });
 
         // ── StaffParticipantCompatibility ────────────────────────
@@ -1708,6 +1720,16 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.DraftId, e.Position }).IsUnique();
             entity.HasIndex(e => new { e.DraftId, e.BlockKey }).IsUnique();
         });
+        // One row for each approved revision (plan builder, phase D): the unique DraftId is what makes approving twice, or two approvals racing, one approval.
+        modelBuilder.Entity<ServiceAgreementDraftApproval>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ApprovedByName).HasMaxLength(300).IsRequired();
+            entity.HasOne(e => e.Draft).WithMany().HasForeignKey(e => e.DraftId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => e.DraftId).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.ParticipantId });
+        });
         modelBuilder.Entity<ServiceAgreementDraftLine>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -1873,6 +1895,8 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ParticipantIntakeSnapshot>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ServiceAgreementDraft>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ServiceAgreementDraftApproval>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ElectronicSigningSnapshot>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);

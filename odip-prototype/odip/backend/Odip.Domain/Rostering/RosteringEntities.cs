@@ -70,6 +70,12 @@ public class Shift : ITenantEntity
 
     /// <summary>Provenance: the <see cref="ShiftPattern"/> this shift was generated from. Null for one-offs.</summary>
     public Guid? ShiftPatternId { get; set; }
+
+    /// <summary>
+    /// What this shift asks of a worker (a gender preference, a driver, skills), as the JSON of <c>DraftBlockRequirementsDto</c>, copied from its pattern when the shift was generated.
+    /// Informational: nothing on the roster checks it yet. Null for a one-off and for a shift made from a pattern that asked for nothing.
+    /// </summary>
+    public string? RequirementsJson { get; set; }
     public string? Notes { get; set; }
 
     /// <summary>Why the coordinator accepted the Warning findings below, if any were.</summary>
@@ -129,6 +135,21 @@ public class ShiftPattern : ITenantEntity
 
     public bool IsActive { get; set; } = true;
     public string? Notes { get; set; }
+
+    // The four columns below are set only on a pattern an approved service agreement revision made (plan builder, phase D). A hand-made or demo pattern leaves them null
+    // and behaves exactly as it always did: the daily top-up never touches it, and approving a revision never ends it.
+
+    /// <summary>The service agreement revision (<see cref="Odip.Domain.Entities.ServiceAgreementDraft"/>) whose approval made this pattern. Null for every other pattern.</summary>
+    public Guid? SourceDraftId { get; set; }
+
+    /// <summary>The block of that revision (<c>PlanBlock.Id</c>) this pattern is one weekday of.</summary>
+    public string? SourceBlockKey { get; set; }
+
+    /// <summary>1, 2 and so on for the workers a block asks for at once (a 2:1 support is two patterns, slots 1 and 2). With the revision, block and weekday it is the pattern's key.</summary>
+    public int? WorkerSlot { get; set; }
+
+    /// <summary>What the shifts of this pattern ask of a worker, as the JSON of <c>DraftBlockRequirementsDto</c>; copied onto each shift it generates. Null on a pattern that asks for nothing.</summary>
+    public string? RequirementsJson { get; set; }
 }
 
 /// <summary>
