@@ -1,9 +1,11 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
@@ -32,19 +34,29 @@ public class ServiceAgreementDraftsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<ServiceAgreementDraftDto>>>> List(Guid participantId, CancellationToken ct)
     {
-        var drafts = await _db.ServiceAgreementDrafts.Include(x => x.Lines).Where(x => x.ParticipantId == participantId).OrderByDescending(x => x.Version).ToListAsync(ct);
+        // Two collections (the blocks and the lines) are loaded beside each draft: as separate queries, so a draft with many of each is not a cross product of them.
+        var drafts = await _db.ServiceAgreementDrafts.Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery().Where(x => x.ParticipantId == participantId).OrderByDescending(x => x.Version).ToListAsync(ct);
         return Ok(ApiResponse<List<ServiceAgreementDraftDto>>.Ok(drafts.Select(ToDto).ToList()));
     }
 
+    /// <summary>
+    /// Saves a new revision from support blocks (priced here by the pricing engine: the client sends no price and no catalogue code) or, for a caller that predates the builder,
+    /// from hand-typed lines. Every reason a save is refused is in <c>errors</c>.
+    /// </summary>
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    [RequestSizeLimit(1_048_576)]
+    [EnableRateLimiting("api")]
     public async Task<ActionResult<ApiResponse<ServiceAgreementDraftDto>>> Create(Guid participantId, CreateServiceAgreementDraftDto dto, CancellationToken ct)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail("A tenant context is required."));
         var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown";
-        var (draft, error) = await _service.CreateAsync(tenantId, participantId, dto, actor, ct);
-        if (error != null) return error == "Participant not found." ? NotFound(ApiResponse<ServiceAgreementDraftDto>.Fail(error)) : BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail(error));
-        return Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(draft!)));
+        var result = await _service.SaveAsync(tenantId, participantId, dto, actor, ct);
+        if (result.Draft is null)
+            return result.NotFound
+                ? NotFound(ApiResponse<ServiceAgreementDraftDto>.Fail(result.Errors.First()))
+                : BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail(result.Errors.ToList()));
+        return Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(result.Draft)));
     }
 
     [HttpGet("{id:guid}/pdf")]
@@ -101,7 +113,16 @@ public class ServiceAgreementDraftsController : ControllerBase
         Id = draft.Id, ParticipantId = draft.ParticipantId, Version = draft.Version, State = draft.State,
         Status = ProvisionalAgreementTemplate.State, TemplateVersion = ProvisionalAgreementTemplate.Version,
         TemplateDocxSha256 = ProvisionalAgreementTemplate.DocxSha256, TemplatePdfSha256 = ProvisionalAgreementTemplate.PdfSha256,
+        PlanStartDate = draft.PlanStartDate, PlanEndDate = draft.PlanEndDate, Representative = draft.Representative,
         AgreementStartDate = draft.AgreementStartDate, AgreementEndDate = draft.AgreementEndDate,
-        Lines = draft.Lines.Select(x => new ServiceAgreementDraftLineDto { ServiceType = x.ServiceType, Hours = x.Hours, ItemCode = x.ItemCode, UnitPrice = x.UnitPrice, CatalogueVersion = x.CatalogueVersion, CatalogueEffectiveFrom = x.CatalogueEffectiveFrom, CatalogueEffectiveTo = x.CatalogueEffectiveTo }).ToList()
+        Blocks = draft.Blocks.OrderBy(x => x.Position).Select(DraftJson.ToDto).ToList(),
+        Pricing = DraftJson.ReadQuote(draft.PricingJson),
+        Lines = draft.Lines.OrderBy(x => x.Position).ThenBy(x => x.Id).Select(x => new ServiceAgreementDraftLineDto
+        {
+            ServiceType = x.ServiceType, Hours = x.Hours, ItemCode = x.ItemCode, UnitPrice = x.UnitPrice, CatalogueVersion = x.CatalogueVersion,
+            CatalogueEffectiveFrom = x.CatalogueEffectiveFrom, CatalogueEffectiveTo = x.CatalogueEffectiveTo,
+            BlockId = x.BlockKey, Band = x.Band, Unit = x.Unit, Occurrences = x.Occurrences, Flags = (PlannedLineFlags)x.Flags,
+            Total = x.Total ?? Math.Floor(x.Hours * x.UnitPrice * 100m) / 100m,
+        }).ToList()
     };
 }
