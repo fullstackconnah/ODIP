@@ -83,11 +83,22 @@ public class ParticipantInquiriesController : ControllerBase
             if (detail.IsReady) continue;
             // "Funding recorded" is a step of the activation checklist for an NDIS-funded participant (FundingRecorded is null for any other, who have five steps, not six).
             var completed = (detail.IntakeComplete ? 1 : 0) + (detail.ProfileComplete ? 1 : 0) + (detail.ServiceTypeConfirmed ? 1 : 0) + (detail.ServiceAgreementSigned ? 1 : 0) + (detail.FundingRecorded == true ? 1 : 0);
-            var action = !detail.IntakeComplete ? "Complete intake" : !detail.ProfileComplete ? "Validate profile essentials" : !detail.ServiceTypeConfirmed ? "Confirm service needs" : "Review agreement evidence";
-            result.Add(new ParticipantOnboardingWorklistDto { ParticipantId = p.Id, FullName = p.FullName, Stage = !detail.IntakeComplete ? "Intake incomplete" : "Onboarding incomplete", NextAction = action, CompletedSteps = completed, TotalSteps = detail.FundingRecorded is null ? 5 : 6, Reasons = detail.Reasons });
+            result.Add(new ParticipantOnboardingWorklistDto { ParticipantId = p.Id, FullName = p.FullName, Stage = !detail.IntakeComplete ? "Intake incomplete" : "Onboarding incomplete", NextAction = NextActionOf(detail), CompletedSteps = completed, TotalSteps = detail.FundingRecorded is null ? 5 : 6, Reasons = detail.Reasons });
         }
         return Ok(ApiResponse<List<ParticipantOnboardingWorklistDto>>.Ok(result));
     }
+
+    /// <summary>
+    /// The one next step the worklist names: the first open gate, in the order the checklist page lists them. "Funding recorded" (an NDIS-funded participant with no current plan budget)
+    /// comes after the agreement evidence, so it is named once everything before it is done; the worklist's last word, when nothing but the proposal-only schedule review is left, is unchanged.
+    /// </summary>
+    internal static string NextActionOf(ParticipantOnboardingDto detail) =>
+        !detail.IntakeComplete ? "Complete intake"
+        : !detail.ProfileComplete ? "Validate profile essentials"
+        : !detail.ServiceTypeConfirmed ? "Confirm service needs"
+        : !detail.ServiceAgreementSigned ? "Review agreement evidence"
+        : detail.FundingRecorded == false ? "Record plan budget"
+        : "Review agreement evidence";
 
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -226,7 +237,11 @@ public class ParticipantInquiriesController : ControllerBase
         bool? fundingRecorded = participant.FundingSource == ParticipantFundingSource.Ndis
             ? await ParticipantReadinessGate.HasFundingRecordedAsync(_db, participant.Id, today ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct), ct)
             : null;
-        if (fundingRecorded == false) reasons.Add("Funding is not recorded: add the plan budget on the participant's Funding tab.");
+        // Say which it is: nothing was ever recorded, or the plans there are have all ended (the Funding tab shows that plan as Ended, so "not recorded" would send the coordinator looking for something that is there).
+        if (fundingRecorded == false)
+            reasons.Add(await _db.FundingPlans.AnyAsync(f => f.ParticipantId == participant.Id && f.TenantId == participant.TenantId, ct)
+                ? "The plan budget has ended: record the new plan on the participant's Funding tab."
+                : "Funding is not recorded: add the plan budget on the participant's Funding tab.");
         var evidenceVerified = newestDraft != null && await _db.ElectronicSigningSnapshots.AnyAsync(s => s.ParticipantId == participant.Id && s.DraftId == newestDraft.Id && s.DraftVersion == newestDraft.Version && _db.ElectronicSigningEvidence.Any(e => e.SnapshotId == s.Id && e.Status == "Verified"), ct);
         if (!evidenceVerified || !onboarding.ServiceAgreementSigned) reasons.Add("Current immutable agreement evidence is pending; the UnapprovedDraft source is not complete or eligible.");
         reasons.Add("Schedule review is proposal-only; no schedule coverage has been approved and no shifts are created here.");

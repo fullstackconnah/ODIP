@@ -488,4 +488,61 @@ public class FundingReadinessTests
         Assert.Equal(6, rows.Single(r => r.ParticipantId == recorded.Id).TotalSteps);
         Assert.Equal(rows.Single(r => r.ParticipantId == ndis.Id).CompletedSteps + 1, rows.Single(r => r.ParticipantId == recorded.Id).CompletedSteps);
     }
+
+    // ── An ended plan is not "not recorded" ─────────────────────────────────
+
+    [Fact]
+    public async Task TheOnboardingChecklist_SaysThePlanBudgetHasEnded_WhenTheOnlyPlansHave_AndNotRecordedWhenThereIsNone()
+    {
+        using var db = CreateDb(tenantId: TenantA, superAdmin: false);
+        SetProvider(db);
+        var none = SeedOnboarding(db);
+        var ended = SeedOnboarding(db);
+        SeedPlan(db, ended, Today.AddDays(-30));
+        var inquiries = Inquiries(db, NoonUtc, TenantA);
+
+        var withNone = Detail(await inquiries.GetOnboarding(none.Id, default));
+        var withEnded = Detail(await inquiries.GetOnboarding(ended.Id, default));
+
+        Assert.False(withNone.FundingRecorded);
+        Assert.Contains("Funding is not recorded: add the plan budget on the participant's Funding tab.", withNone.Reasons);
+        Assert.False(withEnded.FundingRecorded);   // an ended plan is still not a recorded budget for readiness
+        Assert.Contains("The plan budget has ended: record the new plan on the participant's Funding tab.", withEnded.Reasons);
+        Assert.DoesNotContain(withEnded.Reasons, r => r.Contains("not recorded", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task AnotherOrganisationsEndedPlan_DoesNotTurnNotRecordedIntoEnded()
+    {
+        var database = Guid.NewGuid().ToString();
+        using var db = CreateDb(database, tenantId: TenantA, superAdmin: false);
+        SetProvider(db);
+        var mine = SeedOnboarding(db);
+        using (var other = CreateDb(database))   // a SuperAdmin context writes a plan of the other organisation for the same participant id
+            SeedPlan(other, mine, Today.AddDays(-30), tenantId: TenantB);
+
+        var detail = Detail(await Inquiries(db, NoonUtc, TenantA).GetOnboarding(mine.Id, default));
+
+        Assert.Contains("Funding is not recorded: add the plan budget on the participant's Funding tab.", detail.Reasons);
+    }
+
+    // ── The next action counts the funding gate ─────────────────────────────
+
+    private static ParticipantOnboardingDto Gates(bool intake = true, bool profile = true, bool service = true, bool agreement = true, bool? funding = null) => new()
+    {
+        IntakeComplete = intake, ProfileComplete = profile, ServiceTypeConfirmed = service, ServiceAgreementSigned = agreement, FundingRecorded = funding,
+    };
+
+    [Theory]
+    [InlineData(false, true, true, true, null, "Complete intake")]
+    [InlineData(true, false, true, true, false, "Validate profile essentials")]
+    [InlineData(true, true, false, true, false, "Confirm service needs")]
+    [InlineData(true, true, true, false, false, "Review agreement evidence")]    // the agreement evidence still comes first
+    [InlineData(true, true, true, true, false, "Record plan budget")]            // an NDIS-funded participant whose only other open gate is the budget is told so
+    [InlineData(true, true, true, true, true, "Review agreement evidence")]      // nothing else open: the worklist's existing last word
+    [InlineData(true, true, true, true, null, "Review agreement evidence")]      // not NDIS-funded: no funding gate to name
+    public void TheWorklistsNextAction_IsTheFirstOpenGate_InTheOrderTheChecklistListsThem(bool intake, bool profile, bool service, bool agreement, bool? funding, string expected)
+    {
+        Assert.Equal(expected, ParticipantInquiriesController.NextActionOf(Gates(intake, profile, service, agreement, funding)));
+    }
 }
