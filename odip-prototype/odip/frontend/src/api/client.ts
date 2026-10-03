@@ -51,6 +51,13 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && config?.url?.endsWith('/auth/logout')) {
       return Promise.reject(error)
     }
+    // The exchange IS the sign-in, so a 401 from it is its answer (a refusal, and the code that says why), not an expired session. Refreshing and retrying it
+    // would ask the exchange again about the same account and get the same answer; and because the refresh itself calls the exchange, a refusal there waited
+    // on its own refresh and never settled. A refused sign-in used to leave the page on "Signing in..." for good, and a refresh refused mid-session left the
+    // request that triggered it hanging. Now it is passed on as it is (the login page reads the code), and a refused refresh signs the person out below.
+    if (error.response?.status === 401 && config?.url?.endsWith('/auth/exchange')) {
+      return Promise.reject(error)
+    }
     if (error.response?.status === 401 && !config._retried) {
       config._retried = true
       try {
