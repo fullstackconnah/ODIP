@@ -15,7 +15,7 @@ import { plural } from '@/lib/format'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
 import { SUPPORT_LABEL, blockProblems, normaliseBlock, stampLocation } from '@/lib/planBlocks'
-import { describeSaveError, type SaveFailure } from '@/lib/planQuote'
+import { describeSaveError, friendlyMessage, type SaveFailure } from '@/lib/planQuote'
 import { PlanBuilder } from './plan-builder/PlanBuilder'
 import { RevisionCard } from './plan-builder/RevisionCard'
 
@@ -123,7 +123,7 @@ export default function ServiceAgreementDraftPage() {
       )}
       {failure && (
         <Callout tone="error" title={failure.title}>
-          <ul className="list-disc pl-5">{failure.messages.map(message => <li key={message}>{message}</li>)}</ul>
+          <ul className="list-disc pl-5">{failure.messages.map(message => <li key={message}>{friendlyMessage(message, plan.map(entry => entry.block))}</li>)}</ul>
         </Callout>
       )}
       {refused.length > 0 && (

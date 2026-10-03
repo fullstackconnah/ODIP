@@ -177,8 +177,9 @@ export function ReviewStep({ entry, quoted, others, position, from, to, week, pl
       )}
 
       {quoteable && quote.isError && !data && failure && (
-        <Callout tone="error" title={failure.title} actions={failure.retryable ? <Button variant="secondary" size="sm" onClick={() => { void quote.refetch() }}>Try again</Button> : undefined}>
+        <Callout tone="error" title={failure.title}>
           {failure.detail}
+          {failure.retryable && <span className="mt-2 block"><Button variant="secondary" size="sm" onClick={() => { void quote.refetch() }}>Try again</Button></span>}
         </Callout>
       )}
 

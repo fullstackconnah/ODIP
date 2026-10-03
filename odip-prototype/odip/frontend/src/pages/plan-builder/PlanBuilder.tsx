@@ -179,7 +179,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
         />
       )}
 
-      {(entries.length > 0 || session !== null) && (
+      {!readOnly && (entries.length > 0 || session !== null) && (
         <BudgetBar
           status={status}
           budget={budget.data}

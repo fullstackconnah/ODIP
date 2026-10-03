@@ -165,6 +165,24 @@ describe('PlanOverview when read only', () => {
   })
 })
 
+describe('PlanOverview when read only and nothing can be priced', () => {
+  it('has no column of figures waiting for a quote that will never come: the saved versions carry the prices', () => {
+    setUp({ readOnly: true, budget: undefined, budgetStatus: 'idle' })
+
+    expect(screen.getByText('Mon, Wed · 09:00–13:00 · Community access 1:1 · +20 km transport')).toBeInTheDocument()
+    expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Block'])
+    expect(screen.queryByText('…')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('table')).queryByText('—')).not.toBeInTheDocument()
+  })
+
+  it('shows a dash, not three dots, for a figure that nothing is going to fill in', () => {
+    setUp({ budget: undefined, budgetStatus: 'idle' })
+
+    expect(screen.queryByText('…')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('table')).getAllByText('—')).toHaveLength(4)    // two blocks, a week and an agreement figure each
+  })
+})
+
 describe('PlanOverview with no blocks', () => {
   it('starts the week from the six templates, and says nothing is typed in by hand', async () => {
     const user = userEvent.setup()

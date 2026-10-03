@@ -146,8 +146,9 @@ describe('ServiceAgreementDraftPage: saving a plan built from blocks', () => {
     await user.click(screen.getByRole('button', { name: 'Save draft' }))
 
     const alert = await screen.findByText('The draft was not saved')
-    expect(alert.closest('[role="alert"]')).toHaveTextContent('Community access needs registration group 0125, which the provider does not hold.')
-    expect(alert.closest('[role="alert"]')).toHaveTextContent('workers must be between 1 and 10.')
+    expect(alert.closest('[role="alert"]')).toHaveTextContent('Block 1: Community access needs registration group 0125, which the provider does not hold.')   // the block by its place, not the id the screen gave it
+    expect(alert.closest('[role="alert"]')).toHaveTextContent('Block 1: workers must be between 1 and 10.')
+    expect(alert.closest('[role="alert"]')).not.toHaveTextContent("'b1'")
     expect(screen.getByLabelText('Representative')).toHaveValue('Keep me')
     expect(screen.getByLabelText('Agreement start')).toHaveValue('2026-10-01')
     expect(screen.getByText('Mon–Fri · 09:00–13:00 · Community access 1:1')).toBeInTheDocument()

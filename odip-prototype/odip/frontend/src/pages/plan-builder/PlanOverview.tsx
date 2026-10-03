@@ -71,10 +71,12 @@ export function PlanOverview({ entries, readOnly = false, budget, budgetStatus, 
   const planLevel = issues.filter(issue => !blocks.some(block => block.id === issue.blockId))
   const weeklyOf = (id: string) => budget?.weekly?.totals.byBlock.find(total => total.blockId === id)
   const periodOf = (id: string) => budget?.period.totals.byBlock.find(total => total.blockId === id)
-  const pending = budgetStatus === 'loading' || (budgetStatus === 'idle')
+  const pending = budgetStatus === 'loading'
+  // Somebody who can only read the plan cannot ask the pricing engine anything: with no figures to show, the columns for them are left out and the saved versions below carry the prices.
+  const showFigures = !readOnly || !!budget
   const figure = (text: string | null) => text ?? (pending ? '…' : '—')
 
-  const columns: Column<Row>[] = [
+  const allColumns: Column<Row>[] = [
     {
       key: 'block', header: 'Block', wrap: true, minWidth: '14rem',
       render: row => {
@@ -127,6 +129,7 @@ export function PlanOverview({ entries, readOnly = false, budget, budgetStatus, 
       ),
     },
   ]
+  const columns = allColumns.filter(column => (column.key === 'weekly' || column.key === 'period' ? showFigures : column.key === 'actions' ? !readOnly : true))
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">

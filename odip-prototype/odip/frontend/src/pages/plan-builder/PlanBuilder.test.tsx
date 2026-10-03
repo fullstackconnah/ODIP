@@ -353,5 +353,8 @@ describe('PlanBuilder when it cannot be changed', () => {
     expect(screen.queryByRole('button', { name: 'Add block' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Edit times/ })).not.toBeInTheDocument()
     expect(budgetCall.mock.calls.every(call => call[3] === false)).toBe(true)
+    // Nothing is priced for somebody who can only read, so there is no budget bar to say "Add a block" under a plan that has blocks.
+    expect(screen.queryByRole('region', { name: 'Running budget' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Add a block to see/)).not.toBeInTheDocument()
   })
 })

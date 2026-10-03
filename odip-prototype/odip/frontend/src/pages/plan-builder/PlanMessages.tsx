@@ -67,10 +67,13 @@ export function IssueList({ issues, blocks, onFix }: IssueListProps) {
         const where = issueWhere(issue)
         return (
           <li key={`${issue.blockId}-${issue.reason}-${issue.message}`}>
-            <Callout tone={copy?.refusal ? 'error' : 'warning'} title={copy?.title ?? 'Needs a look'}
-              actions={onFix && step && issue.blockId ? <Button variant="secondary" size="sm" onClick={() => onFix(issue.blockId, step)}>Go to {PLAN_STEPS.find(candidate => candidate.key === step)?.label ?? 'the step'}</Button> : undefined}>
+            {/* The way to the step is under the text, not in the Callout's actions slot: beside the text it takes a third of a phone's width and the message wraps to twenty lines. */}
+            <Callout tone={copy?.refusal ? 'error' : 'warning'} title={copy?.title ?? 'Needs a look'}>
               <span className="block">{friendlyMessage(issue.message, blocks)}{where && <span className="text-[var(--color-muted-foreground)]">{' '}({where})</span>}</span>
               {copy && <span className="mt-1 block">{copy.advice}</span>}
+              {onFix && step && issue.blockId && (
+                <span className="mt-2 block"><Button variant="secondary" size="sm" onClick={() => onFix(issue.blockId, step)}>Go to {PLAN_STEPS.find(candidate => candidate.key === step)?.label ?? 'the step'}</Button></span>
+              )}
             </Callout>
           </li>
         )
