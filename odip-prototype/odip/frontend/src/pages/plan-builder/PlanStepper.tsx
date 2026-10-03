@@ -113,7 +113,7 @@ export function PlanStepper({ mode, entry, templateKey, hasBlock, step, onStepCh
     <WizardShell
       railLabel="Block steps"
       railClassName="hidden lg:block"
-      rail={<WizardStepRail steps={RAIL_STEPS} visitedSteps={visited} currentKey={step} onSelect={key => go(key as PlanStepKey)} orientation="vertical" ariaLabel="Block steps" />}
+      rail={<WizardStepRail steps={RAIL_STEPS} visitedSteps={visited} currentKey={step} onSelect={key => go(key as PlanStepKey)} orientation="vertical" ariaLabel="Block steps" filled />}
     >
       <form onSubmit={submit} noValidate aria-label={`${mode === 'new' ? 'New block' : 'Edit block'}: ${current.label}`}>
         {/* A phone has no rail: the step is a line of its own with Back and Next beside it, so stepping on is not a scroll to the foot of a long step. */}

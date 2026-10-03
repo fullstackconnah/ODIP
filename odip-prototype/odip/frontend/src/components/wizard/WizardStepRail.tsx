@@ -24,6 +24,14 @@ export type WizardStepRailProps<V> = {
    * should become "Wizard steps") once the branch that owns those two pages has merged.
    */
   ariaLabel?: string
+  /**
+   * Fills the steps by state: the current step solid, the finished ones tinted, the rest on the plain accent. Off by default, and the incident and the
+   * caregiver wizards leave it off: their rail is a full-width stack from `lg`, in the page flow, and a solid band there is the loudest thing on a form
+   * page. (On main the fill never reached the DOM at all, so those two are exactly as they were.) The plan builder, the intake and the profile wizards turn
+   * it on, where the rail sits in its own column. A step that cannot be opened yet is not dimmed with `opacity`, which left its label at about 2.9:1; it
+   * keeps the full ink on a lighter fill, and the current step's focus ring stands off the pill so it can be seen against the same olive.
+   */
+  filled?: boolean
 }
 
 /**
@@ -47,6 +55,7 @@ export function WizardStepRail<V>({
   onSelect,
   orientation = 'auto',
   ariaLabel = 'Intake wizard steps',
+  filled = false,
 }: WizardStepRailProps<V>) {
   const currentIndex = steps.findIndex((s) => s.key === currentKey)
   const stepNumber = currentIndex + 1
@@ -88,8 +97,9 @@ export function WizardStepRail<V>({
           'lg:flex-col lg:items-stretch lg:w-full lg:gap-0',
         ].join(' ')
 
-  // clsx, not `[...].join(' ')`: the state classes are an object, and an object in an array joined into a string is "[object Object]", so the current and the completed
-  // step were never given their fill (only `aria-current` said which step it was). The fix is the rail's own: the classes were always meant to apply.
+  // clsx, not `[...].join(' ')`: the state classes are an object, and an object in an array joined into a string is "[object Object]", so the fills below
+  // never reached the DOM on main, where only `aria-current` said which step it was. They are an opt-in (`filled`) so that the two wizards that never had them
+  // stay as they are.
   const buttonClasses = (isCurrent: boolean, isCompleted: boolean, isClickable: boolean) =>
     clsx(
       'flex items-center gap-2 px-3 py-1.5 min-h-[var(--control-h)] rounded-full text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]',
@@ -97,12 +107,16 @@ export function WizardStepRail<V>({
       // so it reads as a list item rather than a pill. The lg: vertical variant applies the same
       // shape without locking the mobile/tablet horizontal mode.
       (forceVertical || isVerticalAtLg) && 'lg:w-full lg:justify-start lg:rounded-lg lg:text-left',
-      {
+      filled && {
         'bg-[var(--color-primary)] text-white': isCurrent,
         'bg-[var(--color-primary)]/10 text-[var(--color-primary)]': isCompleted && !isCurrent,
-        'bg-[var(--color-accent)] text-[var(--color-muted-foreground)]': !isCurrent && !isCompleted,
+        // A step that cannot be opened yet is the lighter fill, not a faded one: opacity-60 over this fill was about 2.9:1.
+        'bg-[var(--color-accent)] text-[var(--color-muted-foreground)]': !isCurrent && !isCompleted && isClickable,
+        'bg-[var(--color-accent)]/40 text-[var(--color-muted-foreground)]': !isCurrent && !isCompleted && !isClickable,
       },
-      !isClickable ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+      // The ring is the fill's own olive, so on the current step it stands off the pill.
+      filled && 'focus-visible:ring-offset-2',
+      !isClickable ? clsx('cursor-not-allowed', !filled && 'opacity-60') : 'cursor-pointer',
     )
 
   const renderConnector = (idx: number) => {
@@ -148,7 +162,9 @@ export function WizardStepRail<V>({
               >
                 <span
                   className={`flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold shrink-0 ${
-                    isCurrent ? 'bg-white/20' : isCompleted ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-border)]'
+                    isCurrent
+                      ? filled ? 'bg-white text-[var(--color-primary)]' : 'bg-white/20'      // filled: white over the olive, 7.2:1; the 20% veil was 4.46:1
+                      : isCompleted ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-border)]'
                   }`}
                 >
                   {isCompleted ? <Check className="w-3 h-3" /> : idx + 1}
