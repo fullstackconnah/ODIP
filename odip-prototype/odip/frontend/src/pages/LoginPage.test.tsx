@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import LoginPage from './LoginPage'
@@ -135,7 +135,8 @@ describe('LoginPage: a sign-in the exchange refused', () => {
 
     await waitFor(() => expect(mockResend).toHaveBeenCalledTimes(1))
     expect(mockResend).toHaveBeenCalledWith({ email: EMAIL, password: 'a-password' })
-    expect(await screen.findByRole('status')).toHaveTextContent(`We've sent it again to ${EMAIL}. It can take a few minutes, so check your spam folder.`)
+    // The polite status is on the page before anything is said, so wait for what is said in it.
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(`We've sent it again to ${EMAIL}. It can take a few minutes, so check your spam folder.`))
     // Held again: another click does nothing until the wait is over.
     await u.click(screen.getByRole('button', { name: 'Send it again' }))
     expect(mockResend).toHaveBeenCalledTimes(1)
@@ -443,5 +444,102 @@ describe('LoginPage: the verification link is sent at most once per hold', () =>
     await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(2))
     expect(mockLogin).toHaveBeenNthCalledWith(2, { email: EMAIL, password: 'a-password', sendVerification: false })
     expect(await screen.findByText(/a moment ago/)).toBeInTheDocument()
+  })
+})
+
+// The error is a role=alert, which a screen reader reads whole whenever anything inside it changes. So what happens to "Send it again" must not change its
+// text (the label stays, the button is marked busy), and the outcome of a resend goes to a polite status that was on the page first, not to a second alert.
+// "Sending the verification link" gives a screen reader the progress the label used to. And while a resend is in flight Sign In waits: the resend's late
+// sign-out would end the Firebase session a new sign-in had just made.
+describe('LoginPage: sending the verification link again', () => {
+  function pendingResend() {
+    let finish: () => void = () => {}
+    let fail: (reason: unknown) => void = () => {}
+    mockResend.mockImplementation(() => new Promise<void>((resolve, reject) => { finish = resolve; fail = reject }))
+    return { finish: () => act(async () => finish()), fail: (reason: unknown) => act(async () => fail(reason)) }
+  }
+
+  // A send that did not go leaves Send it again free to press at once.
+  async function refusedUnverified() {
+    mockLogin.mockRejectedValue(new SignInRefused(refusal('EmailNotVerified'), 'not-sent'))
+    const u = renderPage()
+    await signIn(u)
+    await alert()
+    return u
+  }
+
+  const sendAgain = () => screen.getByRole('button', { name: 'Send it again' })
+  const signInButton = () => screen.getByRole('button', { name: 'Sign In' })
+
+  it('keeps the text of the alert, Send it again included, as it was while the link is being sent, and marks the button busy', async () => {
+    const resend = pendingResend()
+    const u = await refusedUnverified()
+    const shown = await alert()
+    const spoken = shown.textContent
+    const again = sendAgain()
+
+    await u.click(again)
+
+    await waitFor(() => expect(again).toHaveAttribute('aria-busy', 'true'))
+    expect(within(shown).getByRole('button', { name: 'Send it again' })).toBe(again)
+    expect(again).toHaveAttribute('aria-disabled', 'true')
+    expect(shown.textContent).toBe(spoken)
+
+    await resend.finish()
+    await waitFor(() => expect(again).not.toHaveAttribute('aria-busy', 'true'))
+    expect(shown.textContent).toBe(spoken)
+  })
+
+  it('says that it is sending and then that it went, in a polite status that is on the page before either, and shows the sentence once', async () => {
+    const resend = pendingResend()
+    const u = await refusedUnverified()
+    const status = screen.getByRole('status')
+    expect(status).toBeEmptyDOMElement()
+
+    await u.click(sendAgain())
+    await waitFor(() => expect(status).toHaveTextContent('Sending the verification link.'))
+    await resend.finish()
+
+    await waitFor(() => expect(status).toHaveTextContent(`We've sent it again to ${EMAIL}. It can take a few minutes, so check your spam folder.`))
+    expect(status).not.toHaveTextContent('Sending')
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(screen.getByRole('status')).toBe(status)
+  })
+
+  it('does not add a second alert when the resend fails: the failure is said in that polite status', async () => {
+    const resend = pendingResend()
+    const u = await refusedUnverified()
+    const status = screen.getByRole('status')
+
+    await u.click(sendAgain())
+    await resend.fail({ code: 'auth/too-many-requests' })
+
+    await waitFor(() => expect(status).toHaveTextContent("We couldn't send it just now. Wait a few minutes, then try again."))
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+  })
+
+  it('disables Sign In while the link is being sent again, and enables it when that is over', async () => {
+    const resend = pendingResend()
+    const u = await refusedUnverified()
+    expect(signInButton()).toBeEnabled()
+
+    await u.click(sendAgain())
+
+    await waitFor(() => expect(signInButton()).toBeDisabled())
+    await resend.finish()
+    await waitFor(() => expect(signInButton()).toBeEnabled())
+  })
+
+  it('does not start a sign-in from the keyboard or a bare submit either while the link is being sent again', async () => {
+    pendingResend()
+    const u = await refusedUnverified()
+    await u.click(sendAgain())
+    await waitFor(() => expect(signInButton()).toBeDisabled())
+
+    await u.type(screen.getByLabelText('Password'), '{Enter}')
+    fireEvent.submit(screen.getByLabelText('Password').closest('form')!)
+
+    expect(mockLogin).toHaveBeenCalledTimes(1)
   })
 })

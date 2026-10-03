@@ -82,6 +82,8 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // Sign In is disabled while a resend is in flight (its late sign-out would end the Firebase session this sign-in makes); Enter in a field must not get round that.
+    if (resend === 'sending') return
     setProblem(null)
     setResetSent(false)
     clearResend()
@@ -212,11 +214,13 @@ export default function LoginPage() {
                     variant="secondary"
                     size="sm"
                     onClick={handleResend}
-                    // Held, not `disabled`: a keyboard user keeps focus on the button while it waits.
+                    // The label never changes: this is inside a role=alert, which a screen reader reads whole again whenever its text changes, so progress is
+                    // said in the status below instead. Held, not `disabled`: a keyboard user keeps focus on the button while it waits.
                     aria-disabled={resendHeld || resend === 'sending'}
+                    aria-busy={resend === 'sending' || undefined}
                     className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
                   >
-                    {resend === 'sending' ? 'Sending...' : 'Send it again'}
+                    Send it again
                   </Button>
                 ) : undefined
               }
@@ -226,17 +230,23 @@ export default function LoginPage() {
             </Callout>
           )}
 
-          {unverified && resend === 'sent' && (
-            <Callout tone="success" className="mb-4">
-              We've sent it again to {unverified.email}. It can take a few minutes, so check your spam folder.
-            </Callout>
-          )}
+          {/* A polite status that is always on the page, so what a resend does is announced when it is written into it (one that appears already holding its text
+              is announced unreliably). The Callouts in it do not announce themselves too, and a failure is said here, not in a second alert. */}
+          <div role="status" aria-live="polite" aria-atomic="true">
+            {unverified && resend === 'sending' && <p className="sr-only">Sending the verification link.</p>}
 
-          {unverified && resend === 'failed' && (
-            <Callout tone="warning" className="mb-4">
-              We couldn't send it just now. Wait a few minutes, then try again.
-            </Callout>
-          )}
+            {unverified && resend === 'sent' && (
+              <Callout tone="success" announce={false} className="mb-4">
+                We've sent it again to {unverified.email}. It can take a few minutes, so check your spam folder.
+              </Callout>
+            )}
+
+            {unverified && resend === 'failed' && (
+              <Callout tone="warning" announce={false} className="mb-4">
+                We couldn't send it just now. Wait a few minutes, then try again.
+              </Callout>
+            )}
+          </div>
 
           {resetSent && (
             <Callout tone="success" className="mb-4">
@@ -286,7 +296,7 @@ export default function LoginPage() {
             <button
               id="login-submit"
               type="submit"
-              disabled={login.isPending}
+              disabled={login.isPending || resend === 'sending'}
               className="w-full py-2.5 rounded-[var(--radius-lg)] bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[var(--color-primary)]/20"
             >
               {login.isPending ? 'Signing in...' : 'Sign In'}
