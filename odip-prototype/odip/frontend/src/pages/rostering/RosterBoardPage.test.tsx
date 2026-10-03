@@ -28,6 +28,7 @@ vi.mock('@/api/hooks', async () => {
     useParticipantRoutines: () => ({ data: [] }),
     useCompatibility: () => ({ data: [] }),
     useRosterShiftNotes: () => ({ data: [] }),
+    usePattern: () => ({ data: undefined }),
     useCheckShift: () => ({ mutate: vi.fn(), isPending: false }),
   }
 })
@@ -486,6 +487,43 @@ describe('RosterBoardPage — ?participant= and ?unfilled= open the board alread
     expect(screen.queryByText('Casey Roe')).not.toBeInTheDocument()            // the staff rows are out of the way, the open shifts are the board
     expect(shown('Amy Ng')).toBe(true)
     expect(shown('Ben Ito')).toBe(false)
+  })
+
+  it('does the same on the participant board, which is the default: the row stays, and only the shifts nobody is assigned to are drawn', () => {
+    // 'Unfilled only' used to exist on the staff board alone, so ?unfilled=1 did nothing for a person who landed on By participant.
+    const board = makeParticipantBoard({
+      participantRows: [makeParticipantRow({
+        participantId: 'p-1', fullName: 'Amy Ng',
+        shifts: [
+          makeShift({ id: 'taken', participantId: 'p-1', participantName: 'Amy Ng', staffId: 'staff-1', staffName: 'Casey Roe', serviceDate: '2026-08-17' }),
+          makeShift({ id: 'open', participantId: 'p-1', participantName: 'Amy Ng', staffId: null, staffName: null, serviceDate: '2026-08-18' }),
+        ],
+      })],
+    })
+    mockUseRosterBoard.mockReturnValue({ data: board, isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage('/rostering?date=2026-10-14&participant=p-1&unfilled=1')
+
+    expect(screen.getByRole('button', { name: 'Unfilled only' })).toHaveAttribute('aria-pressed', 'true')
+    expect(shown('Amy Ng')).toBe(true)                                                // the row is still on the board
+    expect(screen.queryByText('Casey Roe')).not.toBeInTheDocument()                     // the shift somebody has is out of the way
+    expect(screen.getAllByText('Unfilled').length).toBeGreaterThan(0)                   // the one nobody has is not
+  })
+
+  it('shows the assigned shifts again when the toggle is pressed off, on the participant board', async () => {
+    const user = userEvent.setup()
+    const board = makeParticipantBoard({
+      participantRows: [makeParticipantRow({
+        participantId: 'p-1', fullName: 'Amy Ng',
+        shifts: [makeShift({ id: 'taken', participantId: 'p-1', participantName: 'Amy Ng', staffId: 'staff-1', staffName: 'Casey Roe', serviceDate: '2026-08-17' })],
+      })],
+    })
+    mockUseRosterBoard.mockReturnValue({ data: board, isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage('/rostering?date=2026-10-14&unfilled=1')
+    expect(screen.queryByText('Casey Roe')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Unfilled only' }))
+
+    expect(screen.getByText('Casey Roe')).toBeInTheDocument()
   })
 
   it('leaves "Unfilled only" off unless the address asks for it', () => {

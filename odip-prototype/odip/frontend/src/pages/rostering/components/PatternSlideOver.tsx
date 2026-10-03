@@ -68,6 +68,10 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
   const current = JSON.stringify([participantId, defaultStaffId, dayOfWeek, startTime, endTime, endsNextDay, ratio, nightType, effectiveFrom, effectiveTo, notes])
   const [opened] = useState(current)
   const dirty = current !== opened
+  // What the agreement set is the day, the times, the ratio, the kind of night and the dates: only a change to one of those makes the roster differ from it. Who does the shifts, and the notes, are the coordinator's own.
+  const definition = JSON.stringify([dayOfWeek, startTime, endTime, endsNextDay, ratio, nightType, effectiveFrom, effectiveTo])
+  const [openedDefinition] = useState(definition)
+  const redefined = definition !== openedDefinition
 
   const createPattern = useCreatePattern()
   const updatePattern = useUpdatePattern()
@@ -75,6 +79,8 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
 
   if (!open) return null
 
+  // The version when the server knows it, never a placeholder.
+  const source = existing?.sourceDraftVersion !== undefined ? `agreement v${existing.sourceDraftVersion}` : 'an agreement'
   const isBusy = createPattern.isPending || updatePattern.isPending
   const canSave = !!participantId && !!effectiveFrom && !!startTime && !!endTime
 
@@ -145,11 +151,9 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
           </>
         ) : undefined}
       >
-        {existing?.sourceDraftId && (
-          <Callout tone="warning">
-            {`This pattern came from agreement v${existing.sourceDraftVersion ?? '?'}; changing it here makes the roster differ from the agreement.`}
-          </Callout>
-        )}
+        {existing?.sourceDraftId && (redefined
+          ? <Callout tone="warning">{`You have changed what ${source} set, so the roster will differ from it. To change the plan itself, save a new revision.`}</Callout>
+          : <p role="status" className="text-sm text-[var(--color-muted-foreground)]">{`From ${source}.`}</p>)}
         {existing?.requirements && requirementLabels(existing.requirements).length > 0 && (
           <FormField label="Asks for" hint="From the agreement. Shown, not checked against the worker yet.">
             <RequirementChips requirements={existing.requirements} />

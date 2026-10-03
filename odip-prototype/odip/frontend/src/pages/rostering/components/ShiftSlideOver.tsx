@@ -12,7 +12,7 @@ import { ReadinessNote } from '@/components/ReadinessNote'
 import { RequirementChips } from '@/components/RequirementChips'
 import { requirementLabels } from '@/lib/workerRequirements'
 import {
-  useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, useCompatibility, useRosterShiftNotes, getRosterFindings,
+  useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, useCompatibility, useRosterShiftNotes, usePattern, getRosterFindings,
 } from '@/api/hooks'
 import { extractErrorMessage } from '@/lib/utils'
 import { formatNoteTimestamp } from '@/lib/format'
@@ -132,6 +132,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // through the portal. Only fetched in edit mode (a real shift id exists); a new/unsaved shift
   // can't have notes yet.
   const { data: shiftNotes = [] } = useRosterShiftNotes(existing?.id)
+  // Plan builder phase D: a shift made from an agreement's pattern says which agreement, read only (the shifts of one revision and the next sit on the board at the same times). One small read of the shift's own pattern.
+  const { data: sourcePattern } = usePattern(existing?.shiftPatternId ?? undefined)
   const [showAllNotes, setShowAllNotes] = useState(false)
   const visibleNotes = showAllNotes ? shiftNotes : shiftNotes.slice(0, 2)
   const compatibilityByStaffId = useMemo(() => {
@@ -400,6 +402,10 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               items={statusItems}
             />
           </FormField>
+        )}
+
+        {sourcePattern?.sourceDraftId && (
+          <p className="text-sm text-[var(--color-muted-foreground)]">{sourcePattern.sourceDraftVersion !== undefined ? `From agreement v${sourcePattern.sourceDraftVersion}` : 'From an agreement'}</p>
         )}
 
         {/* Plan builder phase D: what the agreement asked of a worker for this shift (copied from its pattern). Information: nothing checks it against the worker yet. */}

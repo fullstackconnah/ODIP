@@ -382,19 +382,75 @@ describe('PatternSlideOver — a pattern an agreement made', () => {
     />,
   )
 
-  it('warns, in the agreement\'s own version, that changing it here makes the roster differ from the agreement', () => {
+  it('opens with a quiet line that says where the pattern came from, not an alert: nothing has been changed yet', () => {
     open(agreementPattern())
 
-    expect(screen.getByText('This pattern came from agreement v2; changing it here makes the roster differ from the agreement.')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('From agreement v2.')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(/the roster will differ/)).not.toBeInTheDocument()
+  })
+
+  it('does not warn about the edits that cause no drift: who does the shifts, and the notes', () => {
+    open(agreementPattern())
+
+    fireEvent.change(screen.getByLabelText(/Notes/), { target: { value: 'Ring the bell twice' } })
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['the start time', () => fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })],
+    ['the end time', () => fireEvent.change(screen.getByLabelText(/End time/), { target: { value: '18:00' } })],
+    ['the days it covers', () => fireEvent.change(screen.getByLabelText(/Effective to/), { target: { value: '2026-12-31' } })],
+  ])('warns, in the agreement\'s own version, once %s differs from what the agreement set, and says how to change the plan itself', (_, change) => {
+    open(agreementPattern())
+
+    change()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('You have changed what agreement v2 set, so the roster will differ from it. To change the plan itself, save a new revision.')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('takes the warning back when the change is put back', () => {
+    open(agreementPattern())
+
+    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '09:00' } })
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('From agreement v2.')
+  })
+
+  it('says "an agreement", never a version it does not know', () => {
+    open({ ...agreementPattern(), sourceDraftVersion: undefined })
+
+    expect(screen.getByRole('status')).toHaveTextContent('From an agreement.')
+    expect(screen.queryByText(/v\?/)).not.toBeInTheDocument()
   })
 
   it('says nothing of the kind about a hand-made pattern, or when making a new one', () => {
     const { unmount } = open(makePattern())
-    expect(screen.queryByText(/came from agreement/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/From agreement|From an agreement|came from agreement/)).not.toBeInTheDocument()
     unmount()
 
     open(null)
-    expect(screen.queryByText(/came from agreement/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/From agreement|From an agreement|came from agreement/)).not.toBeInTheDocument()
+  })
+
+  it("a clash the server refuses (409, a day its block already has) shows the server's words, keeps what was edited, and keeps the warning", async () => {
+    const user = userEvent.setup()
+    const conflict = { response: { status: 409, data: { success: false, errors: ['This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.'] } } }
+    mockUpdateMutateAsync.mockRejectedValueOnce(conflict)
+    open(agreementPattern())
+
+    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'pattern-1', data: expect.objectContaining({ participantId: 'participant-1', dayOfWeek: 'Monday', startTime: '10:00', endTime: '17:00' }) })
+    expect(await screen.findByText('This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Start time/)).toHaveValue('10:00')                       // what was typed stays
+    expect(screen.getByText(/You have changed what agreement v2 set/)).toBeInTheDocument()
   })
 
   it('shows what the agreement asks of a worker as chips, which are information and not a field to change', () => {

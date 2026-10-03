@@ -120,6 +120,8 @@ export default function RosterBoardPage() {
         // what's meant to surface gaps, not row position.
         participantRows: board.participantRows
           .filter(row => !participantFilter || row.participantId === participantFilter)
+          // "Unfilled only" on this board keeps every row (the grid is always whole) and draws only the shifts nobody is assigned to.
+          .map(row => unfilledOnly ? { ...row, shifts: row.shifts.filter(shift => shift.staffId === null) } : row)
           .slice()
           .sort((a, b) => a.fullName.localeCompare(b.fullName)),
       }
@@ -132,7 +134,7 @@ export default function RosterBoardPage() {
         .filter(row => !regionFilter || staffRegionById.get(row.staffId) === regionFilter)
         .map(row => ({ ...row, shifts: row.shifts.filter(matchesParticipant) })),
     }
-  }, [board, participantFilter, regionFilter, staffRegionById])
+  }, [board, participantFilter, regionFilter, staffRegionById, unfilledOnly])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),

@@ -88,7 +88,7 @@ describe('PatternsPage — activating a pattern the server refuses', () => {
     mockUpdateMutate.mockImplementation((_vars: unknown, opts?: { onError?: (e: unknown) => void }) => opts?.onError?.(badRequest(NOT_READY_MESSAGE)))
     render(<PatternsPage />)
 
-    await user.click(screen.getByRole('button', { name: "Activate Mia Chen's Monday pattern" }))
+    await user.click(screen.getByRole('button', { name: "Activate Mia Chen's Monday 9am–5pm pattern" }))
 
     expect(mockUpdateMutate).toHaveBeenCalledTimes(1)
     expect(mockUpdateMutate).toHaveBeenCalledWith(
@@ -106,7 +106,7 @@ describe('PatternsPage — activating a pattern the server refuses', () => {
     mockUpdateMutate.mockImplementation((_vars: unknown, opts?: { onError?: (e: unknown) => void }) => opts?.onError?.(new Error('Network Error')))
     render(<PatternsPage />)
 
-    await user.click(screen.getByRole('button', { name: "Activate Mia Chen's Monday pattern" }))
+    await user.click(screen.getByRole('button', { name: "Activate Mia Chen's Monday 9am–5pm pattern" }))
 
     expect(await screen.findByText('Something went wrong activating this pattern. Please try again.')).toBeInTheDocument()
     expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
@@ -118,16 +118,16 @@ describe('PatternsPage — activating a pattern the server refuses', () => {
     mockUpdateMutate.mockImplementationOnce((_vars: unknown, opts?: { onError?: (e: unknown) => void }) => opts?.onError?.(badRequest(NOT_READY_MESSAGE)))
     render(<PatternsPage />)
 
-    await user.click(screen.getByRole('button', { name: "Activate Mia Chen's Monday pattern" }))
+    await user.click(screen.getByRole('button', { name: "Activate Mia Chen's Monday 9am–5pm pattern" }))
     expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Dismiss error' }))
     expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
 
     mockUpdateMutate.mockImplementationOnce((_vars: unknown, opts?: { onError?: (e: unknown) => void }) => opts?.onError?.(badRequest(NOT_READY_MESSAGE)))
-    await user.click(screen.getByRole('button', { name: "Activate Mia Chen's Monday pattern" }))
+    await user.click(screen.getByRole('button', { name: "Activate Mia Chen's Monday 9am–5pm pattern" }))
     expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
     // The next attempt (this one goes through) clears the old message at the start.
-    await user.click(screen.getByRole('button', { name: "Activate Mia Chen's Monday pattern" }))
+    await user.click(screen.getByRole('button', { name: "Activate Mia Chen's Monday 9am–5pm pattern" }))
     expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
   })
 })
@@ -140,7 +140,7 @@ describe('PatternsPage — deactivating a pattern the server refuses', () => {
     mockUpdateMutateAsync.mockRejectedValueOnce(badRequest(NOT_READY_MESSAGE))
     render(<PatternsPage />)
 
-    await user.click(screen.getByRole('button', { name: "Deactivate Mia Chen's Monday pattern" }))
+    await user.click(screen.getByRole('button', { name: "Deactivate Mia Chen's Monday 9am–5pm pattern" }))
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Deactivate' }))
 
@@ -157,7 +157,7 @@ describe('PatternsPage — deactivating a pattern the server refuses', () => {
     mockUpdateMutateAsync.mockRejectedValueOnce({ response: { status: 500, data: {} } })
     render(<PatternsPage />)
 
-    await user.click(screen.getByRole('button', { name: "Deactivate Mia Chen's Monday pattern" }))
+    await user.click(screen.getByRole('button', { name: "Deactivate Mia Chen's Monday 9am–5pm pattern" }))
     await user.click(screen.getByRole('button', { name: 'Deactivate' }))
 
     expect(await screen.findByText('Something went wrong deactivating this pattern. Please try again.')).toBeInTheDocument()
@@ -170,7 +170,7 @@ describe('PatternsPage — deactivating a pattern the server refuses', () => {
     mockUpdateMutateAsync.mockResolvedValueOnce(makePattern({ isActive: false }))
     render(<PatternsPage />)
 
-    await user.click(screen.getByRole('button', { name: "Deactivate Mia Chen's Monday pattern" }))
+    await user.click(screen.getByRole('button', { name: "Deactivate Mia Chen's Monday 9am–5pm pattern" }))
     await user.click(screen.getByRole('button', { name: 'Deactivate' }))
 
     expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
@@ -201,6 +201,55 @@ describe('PatternsPage — patterns made by an agreement', () => {
     expect(within(handMade).queryByRole('list', { name: 'Asks for' })).not.toBeInTheDocument()
   })
 
+  it('calls the column "Source": the badge under a header that says "From agreement" would say the same words twice', () => {
+    mockUsePatterns.mockReturnValue({ data: [agreement()], isLoading: false, isError: false, refetch: vi.fn() })
+    render(<PatternsPage />)
+
+    expect(screen.getByRole('columnheader', { name: 'Source' })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'From agreement' })).not.toBeInTheDocument()
+  })
+
+  it('says which worker of a 2:1 support each of the two patterns is, so twin rows can be told apart', () => {
+    mockUsePatterns.mockReturnValue({
+      data: [
+        agreement({ id: 'slot-1', ratio: 'TwoToOne', workerSlot: 1 }),
+        agreement({ id: 'slot-2', ratio: 'TwoToOne', workerSlot: 2 }),
+        agreement({ id: 'single', ratio: 'OneToOne', workerSlot: 1 }),
+      ],
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    render(<PatternsPage />)
+
+    expect(screen.getByText('From agreement v2 · worker 1 of 2')).toBeInTheDocument()
+    expect(screen.getByText('From agreement v2 · worker 2 of 2')).toBeInTheDocument()
+    expect(screen.getAllByText('From agreement v2')).toHaveLength(1)                    // a one-to-one pattern has no second worker to name
+  })
+
+  it('names each row action with the time as well as the day, so two patterns on one day can be chosen between', () => {
+    mockUsePatterns.mockReturnValue({
+      data: [makePattern({ id: 'a', startTime: '09:00:00', endTime: '13:00:00' }), makePattern({ id: 'b', startTime: '14:00:00', endTime: '17:00:00', endsNextDay: false })],
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    render(<PatternsPage />)
+
+    expect(screen.getByRole('button', { name: "Edit Mia Chen's Monday 9am–1pm pattern" })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: "Edit Mia Chen's Monday 2pm–5pm pattern" })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: "Generate shifts for Mia Chen's Monday 9am–1pm pattern" })).toBeInTheDocument()
+  })
+
+  it('says in the deactivate confirm that turning an agreement pattern off makes the roster differ from the agreement, and says nothing of the kind for another', async () => {
+    const user = userEvent.setup()
+    mockUsePatterns.mockReturnValue({ data: [agreement(), makePattern({ id: 'pattern-hand', dayOfWeek: 'Wednesday' })], isLoading: false, isError: false, refetch: vi.fn() })
+    render(<PatternsPage />)
+
+    await user.click(screen.getByRole('button', { name: /Deactivate Mia Chen's Tuesday 9am–5pm pattern/ }))
+    expect(screen.getByText('This pattern came from agreement v2: turning it off makes the roster differ from the agreement.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await user.click(screen.getByRole('button', { name: /Deactivate Mia Chen's Wednesday 9am–5pm pattern/ }))
+    expect(screen.queryByText(/came from agreement/)).not.toBeInTheDocument()
+  })
+
   it('says "an agreement" when the revision is not known, and draws no chips for a pattern that asks for nothing', () => {
     mockUsePatterns.mockReturnValue({ data: [agreement({ sourceDraftVersion: undefined, requirements: { workerGender: 'NoPreference', driver: false, skills: [] } })], isLoading: false, isError: false, refetch: vi.fn() })
     render(<PatternsPage />)
@@ -215,7 +264,7 @@ describe('PatternsPage — patterns made by an agreement', () => {
     mockUpdateMutateAsync.mockResolvedValue({})
     render(<PatternsPage />)
 
-    await user.click(screen.getByRole('button', { name: /Deactivate Mia Chen's Tuesday pattern/ }))
+    await user.click(screen.getByRole('button', { name: /Deactivate Mia Chen's Tuesday 9am–5pm pattern/ }))
     await user.click(screen.getByRole('button', { name: 'Deactivate' }))
 
     expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'pattern-agreement', data: fullPayload(agreement(), false) })

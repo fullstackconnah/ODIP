@@ -42,13 +42,15 @@ function PatternRowActions({
   onGenerate: () => void
   onToggleActive: () => void
 }) {
+  // The time is in the name as well as the day: a participant can have two patterns on one day (a 2:1 agreement makes two with the same times), and a button heard on its own has to be told apart.
+  const which = `${pattern.participantName}'s ${pattern.dayOfWeek} ${formatShiftRange(pattern.startTime, pattern.endTime, pattern.endsNextDay)} pattern`
   return (
     <div className="flex items-center justify-end gap-1">
       <button
         type="button"
         onClick={onEdit}
         title="Edit pattern"
-        aria-label={`Edit ${pattern.participantName}'s ${pattern.dayOfWeek} pattern`}
+        aria-label={`Edit ${which}`}
         className="rounded-lg p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Pencil className="h-4 w-4" />
@@ -58,7 +60,7 @@ function PatternRowActions({
         onClick={onGenerate}
         disabled={!pattern.isActive}
         title={pattern.isActive ? 'Generate shifts' : 'Inactive patterns generate nothing'}
-        aria-label={`Generate shifts for ${pattern.participantName}'s ${pattern.dayOfWeek} pattern`}
+        aria-label={`Generate shifts for ${which}`}
         className="rounded-lg p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:pointer-events-none"
       >
         <Repeat className="h-4 w-4" />
@@ -67,7 +69,7 @@ function PatternRowActions({
         type="button"
         onClick={onToggleActive}
         title={pattern.isActive ? 'Deactivate pattern' : 'Activate pattern'}
-        aria-label={`${pattern.isActive ? 'Deactivate' : 'Activate'} ${pattern.participantName}'s ${pattern.dayOfWeek} pattern`}
+        aria-label={`${pattern.isActive ? 'Deactivate' : 'Activate'} ${which}`}
         className="rounded-lg p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Power className="h-4 w-4" />
@@ -80,7 +82,7 @@ function PatternRowActions({
 function PatternsSkeleton() {
   const { prefs } = useUiPreferences()
   const dividerClass = prefs.tableVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
-  const headers = ['Participant', 'Day', 'Time', 'Ratio', 'Night type', 'Default staff', 'Effective range', 'From agreement', 'Status', '']
+  const headers = ['Participant', 'Day', 'Time', 'Ratio', 'Night type', 'Default staff', 'Effective range', 'Source', 'Status', '']
   const widths = ['w-28', 'w-16', 'w-20', 'w-10', 'w-16', 'w-24', 'w-32', 'w-24', 'w-14', 'w-8']
   return (
     <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-card" aria-hidden="true">
@@ -164,7 +166,7 @@ export default function PatternsPage() {
     { key: 'defaultStaffName', header: 'Default staff', render: p => p.defaultStaffName ?? 'Unfilled' },
     { key: 'effectiveRange', header: 'Effective range', render: p => formatEffectiveRange(p.effectiveFrom, p.effectiveTo) },
     // Plan builder phase D: a pattern an approved agreement made says which version, and what the agreement asks of a worker. Information only.
-    { key: 'source', header: 'From agreement', wrap: true, render: p => <PatternSource pattern={p} /> },
+    { key: 'source', header: 'Source', wrap: true, render: p => <PatternSource pattern={p} /> },
     { key: 'isActive', header: 'Status', render: p => <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} /> },
   ]
 
@@ -263,6 +265,9 @@ export default function PatternsPage() {
           <>
             <p>This stops the pattern from generating any further shifts.</p>
             <p>It does not remove shifts already generated — those stay on the roster exactly as they are.</p>
+            {deactivateTarget?.sourceDraftId && (
+              <p>{`This pattern came from ${deactivateTarget.sourceDraftVersion !== undefined ? `agreement v${deactivateTarget.sourceDraftVersion}` : 'an agreement'}: turning it off makes the roster differ from the agreement.`}</p>
+            )}
           </>
         }
         confirmLabel="Deactivate"

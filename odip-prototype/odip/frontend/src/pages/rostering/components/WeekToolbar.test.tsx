@@ -44,6 +44,22 @@ describe('WeekToolbar "Unfilled only" filter', () => {
     expect(toggle.closest('[role="radiogroup"]')).toBeNull()
   })
 
+  it('is offered on the participant board as well as the staff board, so a link that asks for it can be answered on either', () => {
+    const { unmount } = renderToolbar({ groupBy: 'participant' })
+    expect(screen.getByRole('button', { name: 'Unfilled only' })).toBeInTheDocument()
+    unmount()
+
+    renderToolbar({ groupBy: 'staff' })
+    expect(screen.getByRole('button', { name: 'Unfilled only' })).toBeInTheDocument()
+  })
+
+  it('gives the participant filter room for a full name instead of a fixed 160px box that wraps it', () => {
+    const { container } = renderToolbar({ participantFilter: 'p-1', participantOptions: [{ value: 'p-1', label: 'Grace Palmer-Hughes' }] })
+
+    expect(container.querySelector('.w-40')).toBeNull()
+    expect(container.querySelector('.min-w-40')).not.toBeNull()
+  })
+
   it('reflects the checked state via aria-pressed', () => {
     renderToolbar({ unfilledOnly: true })
 

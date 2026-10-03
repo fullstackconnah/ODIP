@@ -70,6 +70,33 @@ describe('GeneratePatternDialog buttons', () => {
   })
 })
 
+// ── What "skipped" means ─────────────────────────────────────────────────────────────────────────
+// The count now also holds the days an agreement's plan skips for a public holiday, so for an agreement pattern it cannot say they were all "already on the roster".
+describe('GeneratePatternDialog — what skipped means', () => {
+  const generateFor = async (shown: ShiftPatternDto) => {
+    const user = userEvent.setup()
+    mockGenerate.mockResolvedValue({ created: 3, skipped: 2 })
+    render(<GeneratePatternDialog pattern={shown} onClose={vi.fn()} />)
+    await user.type(screen.getByLabelText(/from/i), '2026-09-14')
+    await user.type(screen.getByLabelText(/^to/i), '2026-09-28')
+    await user.click(screen.getByRole('button', { name: 'Generate' }))
+    await screen.findByRole('button', { name: 'Done' })
+  }
+
+  it('says a hand-made pattern\'s skipped days were already on the roster', async () => {
+    await generateFor(pattern)
+
+    expect(screen.getByText(/already on the roster from this pattern\.$/)).toBeInTheDocument()
+    expect(screen.queryByText(/public holiday/)).not.toBeInTheDocument()
+  })
+
+  it('says an agreement pattern\'s skipped days were on the roster already or a public holiday the agreement skips', async () => {
+    await generateFor({ ...pattern, sourceDraftId: 'draft-2', sourceDraftVersion: 2 })
+
+    expect(screen.getByText(/already on the roster from this pattern, or a public holiday the agreement skips\.$/)).toBeInTheDocument()
+  })
+})
+
 // ── The server's refusal (readiness Enforce mode) ────────────────────────────────────────────────────────────────────
 // A failed generate used to be an unhandled rejection: the dialog just sat there. In Enforce mode the API answers with a 400
 // "Participant is not ready for booking or rostering."; that line has to be on screen, with the range the user picked kept.
