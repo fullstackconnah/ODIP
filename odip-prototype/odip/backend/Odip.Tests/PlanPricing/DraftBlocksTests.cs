@@ -90,6 +90,37 @@ public class DraftBlocksTests
         Blocks = blocks.ToList(),
     };
 
+    // ── Free text ─────────────────────────────────────────────────────────────────
+
+    // Code review N13: the representative is length-limited but was not filtered for control characters, so a NUL through the API was a PostgreSQL refusal and a 500, as a block id's was (review F6).
+    [Theory]
+    [InlineData("A. Rep\0resentative")]
+    [InlineData("A. Rep\nresentative")]
+    [InlineData("A.\tRepresentative")]
+    public async Task A_representative_with_a_control_character_is_refused_in_words_and_nothing_is_saved(string representative)
+    {
+        await using var f = await SetUpAsync();
+
+        var result = await f.Service.SaveAsync(f.TenantId, f.Participant.Id, Request(new[] { Entry(MonWed()) }) with { Representative = representative }, "actor", CancellationToken.None);
+
+        Assert.Null(result.Draft);
+        var error = Assert.Single(result.Errors);
+        Assert.Contains("representative", error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("control character", error);
+        Assert.DoesNotContain(error, c => char.IsControl(c));        // and the character is not repeated in the message that says so
+        Assert.Empty(await f.Db.ServiceAgreementDrafts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task A_representative_is_trimmed_and_an_ordinary_one_saves()
+    {
+        await using var f = await SetUpAsync();
+
+        var result = await f.Service.SaveAsync(f.TenantId, f.Participant.Id, Request(new[] { Entry(MonWed()) }) with { Representative = "  A. Representative, O'Brien-Smith  " }, "actor", CancellationToken.None);
+
+        Assert.Equal("A. Representative, O'Brien-Smith", Assert.IsType<ServiceAgreementDraft>(result.Draft).Representative);
+    }
+
     // ── Saving prices the blocks on the server ────────────────────────────────────
 
     [Fact]

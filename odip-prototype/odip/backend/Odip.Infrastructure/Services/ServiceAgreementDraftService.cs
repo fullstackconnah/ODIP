@@ -56,6 +56,11 @@ public sealed class ServiceAgreementDraftService
         var participant = await _db.Participants.FirstOrDefaultAsync(x => x.Id == participantId, ct);
         if (participant == null || participant.TenantId != tenantId) return new DraftSaveResult(null, new[] { "Participant not found." }, NotFound: true);
 
+        // Free text is written into a Postgres text column and onto the PDF: a NUL in it is refused by the database (a 500 with nothing the caller can read), as one in a block id was (review F6). It is
+        // said here, in words, and not repeated in the message.
+        if (request.Representative is { } representative && representative.Any(char.IsControl))
+            return DraftSaveResult.Refused("The representative cannot contain a control character (a line break, a tab, a NUL).");
+
         var blocks = request.Blocks ?? [];
         if (blocks.Count > 0 && request.Lines.Count > 0)
             return DraftSaveResult.Refused("Send the support blocks or the hand-typed lines, not both.");
