@@ -1,20 +1,36 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sendPasswordResetEmail } from 'firebase/auth'
 import { auth, devAuthEnabled } from '@/lib/firebase'
-import { useLogin, useDevLogin, useDevUsers } from '@/api/hooks'
+import { useLogin, useResendVerification, useDevLogin, useDevUsers } from '@/api/hooks'
 import type { AuthResponseDto, ApiResponse } from '@/api/types'
+import { Callout } from '@/components/Callout'
+import { Button } from '@/components/Button'
+import { SignInRefused, describeSignInRefusal, type RefusalWords } from '@/lib/signInRefusal'
 import { Map, Eye, EyeOff } from 'lucide-react'
+
+// After the verification link goes out, "Send it again" is held for this long. Firebase rate-limits verification emails and every click costs one.
+const RESEND_HOLD_MS = 30_000
+
+/** What the person is told: one plain sentence, and what to do next when the sentence does not already say. */
+type Problem = RefusalWords
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState('')
+  const [problem, setProblem] = useState<Problem | null>(null)
   const [resetSent, setResetSent] = useState(false)
+  // Set when the exchange refused an unverified email: what was typed (so "Send it again" uses it), and how the resend is going. The refused sign-in ended
+  // its Firebase session, so sending again signs in once more with these.
+  const [unverified, setUnverified] = useState<{ email: string; password: string } | null>(null)
+  const [resend, setResend] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle')
+  const [resendHeld, setResendHeld] = useState(false)
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [devUsernameOverride, setDevUsernameOverride] = useState<string | null>(null)
   const navigate = useNavigate()
   const login = useLogin()
+  const resendVerification = useResendVerification()
   const devLogin = useDevLogin()
   const devUsers = useDevUsers()
 
@@ -23,6 +39,23 @@ export default function LoginPage() {
     ? 'admin'
     : (devUserOptions[0]?.username ?? 'admin')
   const devUsername = devUsernameOverride ?? defaultDevUsername
+
+  useEffect(() => () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current)
+  }, [])
+
+  const holdResend = () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current)
+    setResendHeld(true)
+    holdTimer.current = setTimeout(() => setResendHeld(false), RESEND_HOLD_MS)
+  }
+
+  const clearResend = () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current)
+    setUnverified(null)
+    setResend('idle')
+    setResendHeld(false)
+  }
 
   const applyLoginSuccess = (res: ApiResponse<AuthResponseDto>) => {
     if (res.success && res.data) {
@@ -39,73 +72,97 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
+    setProblem(null)
     setResetSent(false)
+    clearResend()
     try {
       const res = await login.mutateAsync({ email, password })
       if (!applyLoginSuccess(res)) {
-        setError(res.errors?.[0] || 'Login failed')
+        setProblem({ sentence: res.errors?.[0] || 'Login failed' })
       }
     } catch (err) {
-      // Distinguishes wrong credentials from network/rate-limit/other failures, mirroring
-      // handleDevLogin's branching below. login.mutateAsync can reject with either a Firebase
-      // AuthError (from signInWithEmailAndPassword — has a `.code`) or an Axios error from the
-      // /auth/exchange call (has `.response`/`.code === 'ERR_NETWORK'`).
+      // The exchange refused the sign-in and said why: the mutation rejects with a SignInRefused, having already ended the Firebase session and, for an
+      // unverified email, sent the verification link once. Anything else is a Firebase AuthError from signInWithEmailAndPassword (has a `.code`) or a
+      // network failure from the exchange call (`.code === 'ERR_NETWORK'`, or a request that got no response).
+      if (err instanceof SignInRefused) {
+        setProblem(describeSignInRefusal(err.refusal, email, err.verification))
+        if (err.refusal.code === 'EmailNotVerified') {
+          setUnverified({ email, password })
+          if (err.verification === 'sent') holdResend()
+        }
+        return
+      }
+
       const firebaseCode = (err as { code?: string })?.code
       const httpStatus = (err as { response?: { status?: number } })?.response?.status
-      const isNetworkError = firebaseCode === 'auth/network-request-failed' || (err as { code?: string })?.code === 'ERR_NETWORK' || (!httpStatus && (err as { request?: unknown })?.request)
+      const isNetworkError = firebaseCode === 'auth/network-request-failed' || firebaseCode === 'ERR_NETWORK' || (!httpStatus && (err as { request?: unknown })?.request)
 
-      if (httpStatus === 429 || firebaseCode === 'auth/too-many-requests') {
-        setError('Too many sign-in attempts. Wait a few minutes and try again.')
+      if (firebaseCode === 'auth/too-many-requests') {
+        setProblem({ sentence: 'Too many attempts. Try again in a few minutes.' })
       } else if (
         firebaseCode === 'auth/wrong-password' ||
         firebaseCode === 'auth/user-not-found' ||
         firebaseCode === 'auth/invalid-credential' ||
         firebaseCode === 'auth/invalid-email'
       ) {
-        setError('Invalid email or password')
+        // One sentence for all of them, so a wrong password and an address Firebase has never heard of cannot be told apart.
+        setProblem({ sentence: "That email and password don't match.", nextStep: 'Check them, or use Forgot password.' })
       } else if (isNetworkError) {
-        setError('Network error. Check your connection and try again.')
+        setProblem({ sentence: 'Network error. Check your connection and try again.' })
       } else {
-        setError('Login failed. Please try again.')
+        setProblem({ sentence: 'Login failed. Please try again.' })
       }
     }
   }
 
+  const handleResend = async () => {
+    if (!unverified || resendHeld || resend === 'sending') return
+    setResend('sending')
+    try {
+      await resendVerification.mutateAsync(unverified)
+      setResend('sent')
+    } catch {
+      setResend('failed')
+    }
+    holdResend()
+  }
+
   const handleForgotPassword = async () => {
+    clearResend()
     if (!email) {
-      setError('Enter your email address first, then click Forgot password')
+      setProblem({ sentence: 'Enter your email address first, then click Forgot password' })
       return
     }
     if (!auth) {
-      setError('Password reset is unavailable in dev-auth mode.')
+      setProblem({ sentence: 'Password reset is unavailable in dev-auth mode.' })
       return
     }
     try {
       await sendPasswordResetEmail(auth, email)
       setResetSent(true)
-      setError('')
+      setProblem(null)
     } catch {
-      setError('Could not send reset email. Check the address and try again.')
+      setProblem({ sentence: 'Could not send reset email. Check the address and try again.' })
     }
   }
 
   const handleDevLogin = async () => {
-    setError('')
+    setProblem(null)
     setResetSent(false)
+    clearResend()
     try {
       const res = await devLogin.mutateAsync({ username: devUsername })
       if (!applyLoginSuccess(res)) {
-        setError(res.errors?.[0] || 'Login failed')
+        setProblem({ sentence: res.errors?.[0] || 'Login failed' })
       }
     } catch (err) {
       const status = (err as { response?: { status?: number } })?.response?.status
       if (status === 429) {
-        setError('Too many sign-in attempts. Wait a few minutes and try again.')
+        setProblem({ sentence: 'Too many sign-in attempts. Wait a few minutes and try again.' })
       } else if (status === 404) {
-        setError('Dev login failed — is DEV_AUTH_ENABLED set on the API?')
+        setProblem({ sentence: 'Dev login failed — is DEV_AUTH_ENABLED set on the API?' })
       } else {
-        setError('Dev login failed. Please try again.')
+        setProblem({ sentence: 'Dev login failed. Please try again.' })
       }
     }
   }
@@ -124,16 +181,46 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">
           <h2 className="text-xl font-semibold mb-6 text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sign in to your account</h2>
 
-          {error && (
-            <div role="alert" className="mb-4 p-3 rounded-[var(--radius-lg)] bg-[var(--color-error-container)] text-[var(--color-on-error-container)] text-sm">
-              {error}
-            </div>
+          {problem && (
+            <Callout
+              tone="error"
+              className="mb-4"
+              actions={
+                unverified ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleResend}
+                    // Held, not `disabled`: a keyboard user keeps focus on the button while it waits.
+                    aria-disabled={resendHeld || resend === 'sending'}
+                    className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+                  >
+                    {resend === 'sending' ? 'Sending...' : 'Send it again'}
+                  </Button>
+                ) : undefined
+              }
+            >
+              <p>{problem.sentence}</p>
+              {problem.nextStep && <p>{problem.nextStep}</p>}
+            </Callout>
+          )}
+
+          {unverified && resend === 'sent' && (
+            <Callout tone="success" className="mb-4">
+              We've sent it again to {unverified.email}. It can take a few minutes, so check your spam folder.
+            </Callout>
+          )}
+
+          {unverified && resend === 'failed' && (
+            <Callout tone="warning" className="mb-4">
+              We couldn't send it just now. Wait a few minutes, then try again.
+            </Callout>
           )}
 
           {resetSent && (
-            <div className="mb-4 p-3 rounded-[var(--radius-lg)] bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] text-sm">
+            <Callout tone="success" className="mb-4">
               Password reset email sent. Check your inbox.
-            </div>
+            </Callout>
           )}
 
           <div className="space-y-4">
