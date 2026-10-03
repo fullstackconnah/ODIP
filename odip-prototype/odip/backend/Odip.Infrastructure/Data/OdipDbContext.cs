@@ -5,6 +5,7 @@ using Odip.Domain.Billing;
 using Odip.Domain.Dictionary;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Funding;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
@@ -89,6 +90,11 @@ public class OdipDbContext : DbContext
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
     public DbSet<PublicHolidayOverride> PublicHolidayOverrides => Set<PublicHolidayOverride>();
     public DbSet<PlanPricingSettings> PlanPricingSettings => Set<PlanPricingSettings>();
+    // Participant budgets (phase 1): see Odip.Domain.Funding.FundingEntities.
+    public DbSet<FundingPlan> FundingPlans => Set<FundingPlan>();
+    public DbSet<FundingPool> FundingPools => Set<FundingPool>();
+    public DbSet<FundingPeriod> FundingPeriods => Set<FundingPeriod>();
+    public DbSet<BudgetSettings> BudgetSettings => Set<BudgetSettings>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     /// <summary>Public landing-page early-access requests. NOT tenant-scoped: see <see cref="Entities.EarlyAccessRequest"/>'s type doc.</summary>
@@ -943,6 +949,68 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.GroupOutings).HasDefaultValue(Odip.Domain.Billing.Pricing.GroupOutingFamily.GroupActivities);
             entity.Property(e => e.StaUsesHourlyAndAccommodation).HasDefaultValue(true);
             entity.Property(e => e.ApproverRoles).HasMaxLength(100).IsRequired().HasDefaultValue(Odip.Domain.Entities.PlanPricingSettings.DefaultApproverRoles);
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.TenantId).IsUnique();
+        });
+
+        // ── Participant budgets (phase 1): FundingPlan, FundingPool, FundingPeriod, BudgetSettings ────────────
+        // A plan is the root of a participant's budget history, so deleting the participant must not silently cascade it away (Restrict, like the
+        // Billing FundingSource); the pools and periods are parts of the plan and go with it. Money is decimal(18,2) on the period only: a pool's
+        // total is the sum of its periods. Dates are `date` columns (DateOnly), instants are UTC `timestamp` columns like the rest of the model.
+        modelBuilder.Entity<FundingPlan>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ConfirmedByName).HasMaxLength(200);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.CreatedBy).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.UpdatedBy).HasMaxLength(100).IsRequired();
+
+            entity.HasOne(e => e.Participant)
+                .WithMany()
+                .HasForeignKey(e => e.ParticipantId)
+                .OnDelete(DeleteBehavior.Restrict);
+            // One plan per participant per start day. (Overlap between plans of different start days is refused by the save, under a lock on the participant.)
+            entity.HasIndex(e => new { e.TenantId, e.ParticipantId, e.PlanStart }).IsUnique();
+            entity.HasIndex(e => e.ParticipantId);
+        });
+
+        modelBuilder.Entity<FundingPool>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+
+            entity.HasOne(e => e.FundingPlan)
+                .WithMany(p => p.Pools)
+                .HasForeignKey(e => e.FundingPlanId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.FundingPlanId, e.PaceCategory, e.ManagementType }).IsUnique();
+        });
+
+        modelBuilder.Entity<FundingPeriod>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.PlanAmount).HasPrecision(18, 2);
+            entity.Property(e => e.SetAside).HasPrecision(18, 2);
+
+            entity.HasOne(e => e.FundingPool)
+                .WithMany(p => p.Periods)
+                .HasForeignKey(e => e.FundingPoolId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.FundingPoolId, e.PeriodStart }).IsUnique();
+        });
+
+        // One row per tenant. Every column is NOT NULL with a constant default equal to the default the code uses, so a missing row means the defaults
+        // and a row written by an older build during a rolling deploy reads back as them (the same shape as PlanPricingSettings).
+        modelBuilder.Entity<BudgetSettings>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Mode).HasDefaultValue(Odip.Domain.Funding.BudgetSettings.DefaultMode);
+            entity.Property(e => e.ApproachingPercent).HasDefaultValue(Odip.Domain.Funding.BudgetSettings.DefaultApproachingPercent);
 
             entity.HasOne(e => e.Tenant)
                 .WithMany()
@@ -1924,6 +1992,17 @@ public class OdipDbContext : DbContext
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<PlanPricingSettings>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+
+        // Participant budgets (phase 1): every table carries its own TenantId and the standard filter, so a pool or a period is never reached across tenants
+        // even by a query that does not go through its plan.
+        modelBuilder.Entity<FundingPlan>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<FundingPool>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<FundingPeriod>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<BudgetSettings>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         // Tenants table — unique index on EmailDomain
