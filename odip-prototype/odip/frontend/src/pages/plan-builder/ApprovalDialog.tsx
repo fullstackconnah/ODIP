@@ -16,21 +16,24 @@ import { REASON_COPY, formatServiceDate, friendlyMessage, isRefusal } from '@/li
 import { rosterLink } from '@/lib/rosterLinks'
 import { formatShiftTime } from '@/lib/utils'
 
-/** The titles of the reasons only approval has (the engine's own are in REASON_COPY), and where each is fixed: `step` is the block step that fixes it, none when it is about the whole revision. */
-const OWN_REASONS: Record<string, { title: string; hard: boolean; step?: PlanStepKey }> = {
-  HolidayUndecided: { title: 'A public holiday has no decision', hard: false, step: 'review' },
-  ReviewFlag: { title: 'Some lines need a decision', hard: false, step: 'review' },
-  HandTyped: { title: 'This revision was typed by hand', hard: true },
-  BlockUnreadable: { title: 'A block could not be read', hard: true },
-  BlockInvalid: { title: 'A block breaks a rule', hard: true, step: 'times' },
-  AgreementEnded: { title: 'The agreement has ended', hard: true },
-  TimeZoneMismatch: { title: 'The time zones differ', hard: true },
-  TooManyPatterns: { title: 'Too many weekly patterns', hard: true },
-  Superseded: { title: 'A newer revision exists', hard: true },
-  AlreadyApproved: { title: 'Already approved', hard: true },
+/**
+ * The reasons only approval has (the engine's own are in REASON_COPY), and where each is fixed: `step` is the block step that fixes it, none when it is about the whole revision. The server's sentence for
+ * each of these is complete (it names the block, how many and from when), so the dialog shows it as it is, with no title that would say it again; an engine reason keeps its title, and how many shifts.
+ */
+const OWN_REASONS: Record<string, { hard: boolean; step?: PlanStepKey }> = {
+  HolidayUndecided: { hard: false, step: 'review' },
+  ReviewFlag: { hard: false, step: 'review' },
+  HandTyped: { hard: true },
+  BlockUnreadable: { hard: true },
+  BlockInvalid: { hard: true, step: 'times' },
+  AgreementEnded: { hard: true },
+  TimeZoneMismatch: { hard: true },
+  TooManyPatterns: { hard: true },
+  Superseded: { hard: true },
+  AlreadyApproved: { hard: true },
 }
 
-const reasonTitle = (code: string) => REASON_COPY[code as keyof typeof REASON_COPY]?.title ?? OWN_REASONS[code]?.title ?? 'Needs a look'
+const reasonTitle = (code: string) => REASON_COPY[code as keyof typeof REASON_COPY]?.title ?? 'Needs a look'
 const reasonStep = (code: string): PlanStepKey => REASON_COPY[code as keyof typeof REASON_COPY]?.step ?? OWN_REASONS[code]?.step ?? 'review'
 const reasonIsHard = (code: string) => OWN_REASONS[code]?.hard ?? isRefusal(code as keyof typeof REASON_COPY)
 
@@ -161,19 +164,20 @@ function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge
   )
 }
 
-/** Every reason it cannot be approved yet, under its title, in the screen's own block numbers, with the way to the block it is about. */
+/** Every reason it cannot be approved yet, in the screen's own block numbers, with the way to the block it is about. */
 function Reasons({ reasons, blocks, onGoToBlock }: { reasons: ApprovalReasonDto[]; blocks: readonly PlanBlock[]; onGoToBlock?: (blockId: string, step: PlanStepKey) => void }) {
   return (
     <>
       <p>Fix these, save a new revision and approve that one. Nothing has been changed.</p>
       <ul className="flex flex-col gap-2">
         {reasons.map(reason => {
-          const where = (reason.count ?? 0) > 1 ? ` (${plural(reason.count!, 'shift')}${reason.firstDate ? `, from ${formatServiceDate(reason.firstDate)}` : ''})` : ''
+          const own = OWN_REASONS[reason.code] !== undefined
+          const where = !own && (reason.count ?? 0) > 1 ? ` (${plural(reason.count!, 'shift')}${reason.firstDate ? `, from ${formatServiceDate(reason.firstDate)}` : ''})` : ''
           const place = reason.blockId ? blocks.findIndex(block => block.id === reason.blockId) + 1 : 0
           return (
             <li key={`${reason.code}-${reason.blockId ?? ''}-${reason.message}`} className="flex flex-wrap items-start gap-2">
               <StatusBadge tone={reasonIsHard(reason.code) ? 'danger' : 'warning'} label={reasonIsHard(reason.code) ? 'Fix' : 'Review'} />
-              <span className="min-w-0 flex-1">{reasonTitle(reason.code)}: {friendlyMessage(reason.message, blocks)}{where}</span>
+              <span className="min-w-0 flex-1">{own ? '' : `${reasonTitle(reason.code)}: `}{friendlyMessage(reason.message, blocks)}{where}</span>
               {onGoToBlock && reason.blockId && place > 0 && (
                 <Button variant="secondary" size="sm" onClick={() => onGoToBlock(reason.blockId!, reasonStep(reason.code))}>Go to block {place}</Button>
               )}

@@ -197,18 +197,31 @@ describe('ApprovalDialog: when it cannot be approved yet', () => {
     { code: 'TimeZoneMismatch', message: "This agreement is delivered in QLD (Australia/Brisbane), but your organisation's roster runs on Australia/Sydney time." },
   ]
 
-  it('lists each reason under its title, in the words of the block numbers the screen uses, and offers no Approve', () => {
+  it('lists each reason in the words of the block numbers the screen uses, and offers no Approve', () => {
     ready(preview({ canApprove: false, reasons, patternsToCreate: 0, shiftsToCreate: 0 }))
     setUp()
 
     const dialog = screen.getByRole('dialog', { name: 'Not ready to approve' })
     const items = within(dialog).getAllByRole('listitem')
     expect(items).toHaveLength(3)
+    // The engine's own reasons keep their title and say how many shifts are meant; the sentences only approval has are complete as the server wrote them, so they are not given a title that says it again.
     expect(items[0]).toHaveTextContent('Part of this block has no price item: Block 2: no item for the night. (4 shifts, from Tue 3 Nov 2026)')
-    expect(items[1]).toHaveTextContent('A public holiday has no decision: Block 1: a public holiday has no decision yet (Labour Day on Mon 5 Oct 2026). Choose Charge or Skip for it, then save a new revision.')
-    expect(items[2]).toHaveTextContent("The time zones differ: This agreement is delivered in QLD (Australia/Brisbane), but your organisation's roster runs on Australia/Sydney time.")
+    expect(within(items[1]).getByText(/^Block 1: a public holiday has no decision yet \(Labour Day on Mon 5 Oct 2026\)\. Choose Charge or Skip for it, then save a new revision\.$/)).toBeInTheDocument()
+    expect(within(items[2]).getByText(/^This agreement is delivered in QLD \(Australia\/Brisbane\), but your organisation's roster runs on Australia\/Sydney time\.$/)).toBeInTheDocument()
     expect(within(dialog).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument()
+  })
+
+  it('does not count the shifts of a holiday reason a second time: its sentence already says how many holidays and the first', () => {
+    ready(preview({
+      canApprove: false,
+      reasons: [{ code: 'HolidayUndecided', message: "Block 'b1': 5 public holidays have no decision yet (the first is Labour Day on 2026-10-05). Choose Charge or Skip for each, then save a new revision.", blockId: 'b1', count: 5, firstDate: '2026-10-05' }],
+    }))
+    setUp()
+
+    const item = within(screen.getByRole('dialog', { name: 'Not ready to approve' })).getByRole('listitem')
+    expect(within(item).getByText(/^Block 1: 5 public holidays have no decision yet \(the first is Labour Day on Mon 5 Oct 2026\)\. Choose Charge or Skip for each, then save a new revision\.$/)).toBeInTheDocument()
+    expect(item).not.toHaveTextContent('5 shifts')
   })
 
   it('takes you to the block a reason is about, at the step that fixes it, and closes', async () => {
