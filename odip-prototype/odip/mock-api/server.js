@@ -8,6 +8,7 @@
 // All names/organisations are fictional.
 
 const http = require('http')
+const planPricing = require('./planPricing')
 
 const PORT = Number(process.env.MOCK_PORT) || 5062
 const BASE = '/api/v1'
@@ -2128,8 +2129,76 @@ function scheduleAvailabilityForStaff(id) {
 // ── Routing ──────────────────────────────────────────────────
 
 // Routes checked in order. :id captures a path segment.
+// ── Plan builder (phase C): the pricing settings, the plan budgets, and the agreement drafts ─────────────────────────────────────────
+// The quote and the drafts are priced by ./planPricing.js, a stand-in that follows the real engine's shapes and main rules (its prices are illustrative).
+// Seeded so each state of the builder can be seen: p-0001 has no draft (the empty state), p-0002 a hand-typed one (read-only, rebuild from blocks), p-0003 a
+// plan built from blocks that costs more than its small plan budget, p-0004 the same plan with no budget recorded (the totals stand alone).
+let planPricingSettings = planPricing.defaultSettings()
+const fundingSources = [
+  { id: 'fs-0001', participantId: 'p-0001', participantName: 'Liam Okafor', routeType: 'PlanManaged', budgetCategory: 'Core - Social & Community Participation', ndisPlanNumber: null, planStartDate: '2026-07-01', planEndDate: '2027-06-30', budget: 60000, payerName: null, payerEmail: null, isActive: true },
+  { id: 'fs-0003', participantId: 'p-0003', participantName: 'Marcus Tran', routeType: 'SelfManaged', budgetCategory: 'Core - Social & Community Participation', ndisPlanNumber: null, planStartDate: '2026-07-01', planEndDate: '2027-06-30', budget: 25000, payerName: null, payerEmail: null, isActive: true },
+]
+const serviceAgreementDrafts = {}
+
+function draftDto(participantId, version, body, quoteResult, lines) {
+  return {
+    id: `draft-${participantId}-v${version}`, participantId, version, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27',
+    templateDocxSha256: '9f2c1d0e', templatePdfSha256: '41ab77c3', state: body.state, planStartDate: body.planStartDate, planEndDate: body.planEndDate,
+    agreementStartDate: body.agreementStartDate, agreementEndDate: body.agreementEndDate, ...(body.representative ? { representative: body.representative } : {}),
+    blocks: (body.blocks || []).map((entry) => ({ block: entry.block, requirements: { workerGender: 'NoPreference', driver: false, skills: [], ...(entry.requirements || {}) } })),
+    ...(quoteResult ? { pricing: { ...quoteResult, lines: [] } } : {}), lines,
+  }
+}
+
+function saveDraft(participantId, body) {
+  const blocks = (body.blocks || []).map((entry) => entry.block)
+  const drafts = serviceAgreementDrafts[participantId] || (serviceAgreementDrafts[participantId] = [])
+  if (blocks.length === 0) return respond(400, failEnvelope(null, ['Add at least one support block.']))
+  if (!body.agreementStartDate || !body.agreementEndDate || body.agreementEndDate < body.agreementStartDate) return respond(400, failEnvelope(null, ['End dates must not precede start dates.']))
+  const problems = []
+  blocks.forEach((block, index) => {
+    problems.push(...planPricing.validate(block, index))
+    if (!block.location || block.location.state !== body.state) problems.push(`Block '${block.id}': the delivery state must be ${body.state}, the state of the agreement.`)
+  })
+  if (problems.length > 0) return respond(400, failEnvelope(null, [...new Set(problems)]))
+  const result = planPricing.quote({ blocks, periodFrom: body.agreementStartDate, periodTo: body.agreementEndDate, includeLines: true }, planPricingSettings)
+  const refusals = result.issues.filter((issue) => ['InvalidInput', 'RegistrationGroupNotHeld', 'StaLegacyNotSupported'].includes(issue.reason)).map((issue) => issue.message)
+  if (refusals.length > 0) return respond(400, failEnvelope(null, [...new Set(refusals)]))
+  const lines = planPricing.groupLines(result._lines, blocks)
+  delete result._lines
+  const draft = draftDto(participantId, drafts.length + 1, body, result, lines)
+  drafts.unshift(draft)
+  return draft
+}
+
+;(function seedDrafts() {
+  serviceAgreementDrafts['p-0002'] = [{
+    id: 'draft-p-0002-v1', participantId: 'p-0002', version: 1, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27', templateDocxSha256: '9f2c1d0e', templatePdfSha256: '41ab77c3',
+    state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', blocks: [],
+    lines: [{ serviceType: 'Daily support', hours: 2, itemCode: '04_104_0125_6_1', unitPrice: 73.58, catalogueVersion: '2026-27', catalogueEffectiveFrom: '2026-07-01', unit: 'H', total: 147.16, occurrences: 0, flags: 'None' }],
+  }]
+  const block = (id, extra) => ({ id, intensity: 'Standard', workers: 1, participantsPresent: 1, headcountChanges: [], setting: 'Community', location: { state: 'NSW', zone: 'National' }, workerMaySleep: false, sleepoverActiveHours: 0, onPublicHoliday: 'Review', ...extra })
+  const none = { workerGender: 'NoPreference', driver: false, skills: [] }
+  const base = { state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-10-01', agreementEndDate: '2027-06-30', representative: 'Ruth Tran' }
+  const plan = [
+    { block: block('b1', { supportType: 'CommunityAccess', days: ['Monday', 'Wednesday'], start: '09:00:00', end: '13:00:00', transport: { km: 20, vehicle: 'Standard', tolls: 0, parking: 0 } }), requirements: { workerGender: 'Female', driver: true, skills: ['FirstAid'] } },
+    { block: block('b2', { supportType: 'GroupActivity', days: ['Saturday'], start: '09:00:00', end: '15:00:00', participantsPresent: 3 }), requirements: none },
+    { block: block('b3', { supportType: 'PersonalCare', days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], start: '07:00:00', end: '09:00:00', setting: 'AtHome' }), requirements: { ...none, skills: ['ManualHandling'] } },
+  ]
+  for (const participantId of ['p-0003', 'p-0004']) {
+    const body = { ...base, blocks: plan }
+    const result = planPricing.quote({ blocks: plan.map((entry) => entry.block), periodFrom: base.agreementStartDate, periodTo: base.agreementEndDate, includeLines: true }, planPricingSettings)
+    const lines = planPricing.groupLines(result._lines, plan.map((entry) => entry.block))
+    delete result._lines
+    serviceAgreementDrafts[participantId] = [draftDto(participantId, 1, body, result, lines)]
+  }
+})()
+
 const routes = [
   ['dashboard/summary', () => dashboardSummary],
+  ['plan-pricing/settings', () => planPricingSettings],
+  ['participants/:id/service-agreement-drafts', (id) => serviceAgreementDrafts[id] || []],
+  ['billing/funding-sources', (searchParams) => paged(fundingSources.filter((f) => !searchParams.get('participantId') || f.participantId === searchParams.get('participantId')))],
 
   // participants (paged list)
   // Honours the filters the Active participants tab sends (Active = isActive=true, Archived = isActive=false, both isDraft=false); the fixtures here have no drafts.
@@ -2363,6 +2432,18 @@ const routes = [
 // with its new status/decision fields, plus the one pure-preview endpoint (staff-assignments/check)
 // that must return an array of findings, not an echoed object.
 const postRoutes = [
+  ['plan-pricing/quote', (body) => {
+    if (!Array.isArray(body.blocks)) return respond(400, failEnvelope(null, ['The request needs a list of blocks.']))
+    if (!body.periodFrom || !body.periodTo || body.periodFrom > body.periodTo) return respond(400, failEnvelope(null, ['The agreement period ends before it starts.']))
+    if (body.blocks.length > planPricing.MAX_BLOCKS) return respond(400, failEnvelope(null, [`A quote prices at most ${planPricing.MAX_BLOCKS} blocks.`]))
+    const result = planPricing.quote(body, planPricingSettings)
+    if (body.includeLines !== false && result._lines.length > planPricing.MAX_LINES) {
+      return respond(400, failEnvelope(null, [`The quote has ${result._lines.length.toLocaleString('en-AU')} lines, more than the 60,000 one answer carries: ask for the totals only (includeLines: false), shorten the period, or price fewer blocks.`]))
+    }
+    delete result._lines
+    return result
+  }],
+  ['participants/:id/service-agreement-drafts', (id, body) => saveDraft(id, body)],
   ...packageRoutesPost,
   ['staff-assignments/check', () => []],
 
@@ -2493,6 +2574,20 @@ const postRoutes = [
 // echo fallback, per this task's "existing PUT /staff-availability/{id} unchanged" note.
 const putRoutes = [
   ...packageRoutesPut,
+  ['plan-pricing/settings', (body) => {
+    for (const rate of [body.travelKmRateStandard, body.travelKmRateAccessible]) {
+      if (typeof rate === 'number' && (rate < 0 || rate > 5)) return respond(400, failEnvelope(null, ['The travel rate per kilometre must be between $0 and $5.']))
+    }
+    if (Array.isArray(body.approverRoles) && body.approverRoles.length === 0) return respond(400, failEnvelope(null, ['At least one approver role is needed.']))
+    const next = { ...planPricingSettings, isDefault: false }
+    for (const key of ['registrationGroupsHeld', 'crossingPolicy', 'claimProviderTravel', 'travelKmRateStandard', 'travelKmRateAccessible', 'travelRatesProvisional', 'groupOutings', 'approverRoles']) {
+      if (body[key] !== undefined) next[key] = body[key]
+    }
+    if (body.registrationGroupsHeld !== undefined) next.registrationGroupsConfirmed = body.registrationGroupsConfirmed ?? true
+    else if (body.registrationGroupsConfirmed !== undefined) next.registrationGroupsConfirmed = body.registrationGroupsConfirmed
+    planPricingSettings = next
+    return planPricingSettings
+  }],
   ['leave/:id', (id, body) => ({
     leave: { ...(leaveRequests.find((r) => r.id === id) || leaveRequests[0]), ...body },
     overlaps: [sampleOverlapFinding],

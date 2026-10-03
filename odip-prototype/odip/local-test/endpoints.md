@@ -113,10 +113,16 @@ for role **RO** globally regardless of what's listed below.
 - PUT `` — SA, A — upsert provider settings (Coordinator excluded here specifically)
 
 ## PlanPricingController — `api/v1/plan-pricing` — class: `[Authorize(Roles = "SuperAdmin,Admin,Coordinator")]`
-INTERNAL (plan builder phase B): phase C's builder is the only intended caller; the shapes may change with it. A SuperAdmin must pick an organisation (`X-View-As-Tenant`) first: the settings belong to one tenant.
+INTERNAL (plan builder phase B): the phase C builder screen is the only intended caller; the shapes may change with it. A SuperAdmin must pick an organisation (`X-View-As-Tenant`) first: the settings belong to one tenant.
 - POST `/quote` — SA, A, C — price weekly support blocks over an agreement period (body `blocks`, `periodFrom`, `periodTo`, `includeLines`); uses the caller's tenant's pricing settings, the date-effective catalogue and the delivery states' public holidays (synced rows plus the override table); a block with a mistake is an issue in the answer, an unpriceable request is a 400 (including `includeLines` true on an answer of more than 60,000 lines: ask for the totals only); rate limited with the `api` policy and at most 2 in flight per organisation (a third gets a 429 "Try again shortly"); the answer carries `timeBasis` (`tz-database` or `fixed+10:00`)
 - GET `/settings` — SA, A, C — the tenant's pricing settings (the owner-approved defaults with `isDefault` true until something is stored)
 - PUT `/settings` — SA, A — change pricing settings (only the fields sent change; sending the registration groups confirms them; a per-kilometre rate is at most $5; Coordinator excluded)
+
+## ServiceAgreementDraftsController — `api/v1/participants/{participantId:guid}/service-agreement-drafts` — class: `[Authorize]`
+- GET `` — Authenticated — the participant's draft revisions, newest first. A revision made with the plan builder carries its `blocks` (each the pricing engine's block and the worker `requirements`), the `lines` the server generated from them (band, unit, `total`, occurrences, flags, catalogue provenance) and `pricing` (what the engine answered when it was saved: totals, issues, notices, holiday occurrences, open questions, no per-occurrence lines). A draft typed by hand before the builder has no blocks and no pricing and reads as it always did.
+- POST `` — A, C, SA — save a new revision (version N+1; a revision is never edited). From `blocks`: the server prices them through the plan pricing engine with the caller's tenant's settings and stores the lines, so the client sends no price and no code; a block the engine cannot price (invalid input, a registration group not held, legacy STA) refuses the save and every reason is in `errors`; Review flags and unpriced bands are saved and shown. From hand-typed `lines`: kept for callers that predate the builder. Never both. `[EnableRateLimiting("api")]`, body capped at 1 MiB.
+- GET `/{id:guid}/pdf` — Authenticated — the unsigned draft PDF (a block-based line prints its band, unit and total)
+- POST `/signing-snapshots`, POST `/signing-snapshots/{snapshotId:guid}/evidence`, POST `/{id:guid}/demo-journey-simulation` — A, C, SA — unchanged (signing is disabled while the agreement template is unapproved)
 
 ## ScheduleController — `api/v1/schedule` — class: `[Authorize]`
 - GET `` (`?from&to`) — Authenticated — schedule overview
