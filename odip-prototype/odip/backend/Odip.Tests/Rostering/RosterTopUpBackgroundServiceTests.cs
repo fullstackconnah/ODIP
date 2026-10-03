@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Odip.Api.Services;
@@ -34,7 +35,7 @@ public class RosterTopUpBackgroundServiceTests
         return new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(name).Options, tenant.Object);
     }
 
-    private static (OdipDbContext Db, RosterTopUpBackgroundService Service, string Name) Build(FakeClock clock, Dictionary<string, string?>? config = null, IRosterPlacementGate? gate = null, string? name = null)
+    private static (OdipDbContext Db, RosterTopUpBackgroundService Service, string Name) Build(FakeClock clock, Dictionary<string, string?>? config = null, IRosterPlacementGate? gate = null, string? name = null, ILogger<RosterTopUpBackgroundService>? logger = null)
     {
         name ??= Guid.NewGuid().ToString();
         var services = new ServiceCollection();
@@ -43,7 +44,7 @@ public class RosterTopUpBackgroundServiceTests
         services.AddSingleton<RosterShiftGenerator>();
         var provider = services.BuildServiceProvider();
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(config ?? new Dictionary<string, string?>()).Build();
-        var service = new RosterTopUpBackgroundService(provider.GetRequiredService<IServiceScopeFactory>(), configuration, NullLogger<RosterTopUpBackgroundService>.Instance, clock);
+        var service = new RosterTopUpBackgroundService(provider.GetRequiredService<IServiceScopeFactory>(), configuration, logger ?? NullLogger<RosterTopUpBackgroundService>.Instance, clock);
         return (NewAdminDb(name), service, name);
     }
 
@@ -326,6 +327,52 @@ public class RosterTopUpBackgroundServiceTests
         Assert.Equal((0, 0, 0), (done.Failures, done.ShiftsCreated, done.Tenants));
         Assert.Equal(8, await db.Shifts.CountAsync(s => s.ParticipantId == good.Id));
         Assert.Equal(8, await db.Shifts.CountAsync(s => s.ParticipantId == bad.Id));
+    }
+
+    /// <summary>The roster lock of one participant stays busy the first time: what the lock raises when another generation of theirs outlasts the wait.</summary>
+    private sealed class BusyTheFirstTime(Guid participantId) : IRosterPlacementGate
+    {
+        private readonly RosterPlacementGate _real = new();
+        private bool _busy;
+        public Task<bool> MayPlaceAsync(OdipDbContext db, Guid id, CancellationToken ct)
+        {
+            if (id != participantId || _busy) return _real.MayPlaceAsync(db, id, ct);
+            _busy = true;
+            throw new RosterBusyException();
+        }
+    }
+
+    private sealed class RecordingLogger : ILogger<RosterTopUpBackgroundService>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = new();
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) => Entries.Add((logLevel, formatter(state, exception)));
+    }
+
+    [Fact]
+    public async Task A_participant_whose_roster_is_busy_is_a_warning_and_a_failure_that_the_next_tick_tries_again_not_an_error()
+    {
+        var name = Guid.NewGuid().ToString();
+        await using var seed = NewAdminDb(name);
+        var busy = await AddParticipantAsync(seed, TenantA, name: "Busy");
+        var good = await AddParticipantAsync(seed, TenantA, name: "Good");
+        seed.ShiftPatterns.Add(AgreementPattern(busy, DayOfWeek.Monday));
+        seed.ShiftPatterns.Add(AgreementPattern(good, DayOfWeek.Monday));
+        await seed.SaveChangesAsync();
+        var logger = new RecordingLogger();
+        var (db, service, _) = Build(Clock(), gate: new BusyTheFirstTime(busy.Id), name: name, logger: logger);
+        await using var _ = db;
+
+        var first = await service.RunOnceAsync(CancellationToken.None);          // the good participant is done; the busy one is skipped
+        var retry = await service.RunOnceAsync(CancellationToken.None);          // the day was not marked done, so the busy one is tried again and now goes through
+
+        Assert.Equal((1, 8), (first.Failures, first.ShiftsCreated));
+        Assert.Equal((0, 8), (retry.Failures, retry.ShiftsCreated));
+        Assert.Equal(8, await db.Shifts.CountAsync(s => s.ParticipantId == busy.Id));
+        Assert.Equal(8, await db.Shifts.CountAsync(s => s.ParticipantId == good.Id));
+        Assert.Contains(logger.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains(busy.Id.ToString()) && e.Message.Contains("still running"));
+        Assert.DoesNotContain(logger.Entries, e => e.Level >= LogLevel.Error);          // a busy lock is the system working, not something to alert on
     }
 
     [Fact]
