@@ -35,7 +35,7 @@ export interface ServiceAgreementDraftDto {
   lineCount: number
   /** What the revision's lines add up to over the agreement. */
   total: number
-  /** What a reader must not miss, a sentence each: shift lines not priced, to review, and on provisional rates. Empty for a revision priced in full or typed by hand. */
+  /** What a reader must not miss, a sentence each, counted in shifts: shifts with a part not priced, public holiday shifts to decide, and provisional rates. Empty for a revision priced in full or typed by hand. */
   caveats: string[]
 }
 

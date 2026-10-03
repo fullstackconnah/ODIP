@@ -2151,14 +2151,20 @@ function draftDto(participantId, version, body, quoteResult, lines) {
   }
 }
 
-// What the real server adds to every revision: its counts, what it came to, and what a reader must not miss (the PDF's sentences).
+// What the real server adds to every revision: its counts, what it came to, and what a reader must not miss (the PDF's sentences), in shifts: a block counts its largest issue and the blocks add up
+// (DraftPricingCaveats.cs), the engine's counts of lines being shifts times items.
+const LEFT_OUT = new Set(['NoItem', 'CatalogueNotFound', 'CatalogueAmbiguous', 'ZoneNotEligible', 'CatalogueNotPriced', 'UnexpectedUnit', 'SleepoverNotAvailable', 'TransportNotAvailable', 'AccommodationNotAvailable', 'TravelNotClaimable', 'SupportInSkippedHour'])
 function draftSummaryFields(quoteResult, lines, blockCount) {
-  const totals = quoteResult ? quoteResult.totals : null
   const caveats = []
-  const shiftLines = (n) => (n === 1 ? '1 shift line' : `${n} shift lines`)
-  if (totals && totals.unpricedLines > 0) caveats.push(`${shiftLines(totals.unpricedLines)} ${totals.unpricedLines === 1 ? 'is' : 'are'} not priced (the catalogue has no price for ${totals.unpricedLines === 1 ? 'it' : 'them'}) and ${totals.unpricedLines === 1 ? 'is' : 'are'} not in any total.`)
-  if (totals && totals.reviewLines > 0) caveats.push(`${shiftLines(totals.reviewLines)} need${totals.reviewLines === 1 ? 's' : ''} review by a person before this agreement is approved (for example a public holiday nobody has decided).`)
-  if (totals && totals.provisionalLines > 0) caveats.push(`${shiftLines(totals.provisionalLines)} use${totals.provisionalLines === 1 ? 's' : ''} provisional rates that are not yet confirmed.`)
+  if (quoteResult) {
+    const perBlock = new Map()
+    for (const issue of quoteResult.issues || []) if (LEFT_OUT.has(issue.reason)) perBlock.set(issue.blockId, Math.max(perBlock.get(issue.blockId) || 0, issue.count))
+    const notPriced = [...perBlock.values()].reduce((sum, count) => sum + count, 0)
+    if (notPriced > 0) caveats.push(`${notPriced === 1 ? '1 shift has' : `${notPriced} shifts have`} a part that is not priced, so that part is not in any total.`)
+    const holidays = (quoteResult.holidayOccurrences || []).filter((occurrence) => occurrence.decision === 'Review' && !occurrence.skipped).length
+    if (holidays > 0) caveats.push(`${holidays === 1 ? '1 public holiday shift is' : `${holidays} public holiday shifts are`} priced at the holiday rate and still need${holidays === 1 ? 's' : ''} a decision by a person before this agreement is approved.`)
+    if (quoteResult.totals && quoteResult.totals.provisionalLines > 0) caveats.push('Some lines use provisional rates that are not yet confirmed.')
+  }
   return { isSummary: false, blockCount, lineCount: lines.length, total: Math.round(lines.reduce((sum, line) => sum + (line.total || 0), 0) * 100) / 100, caveats }
 }
 

@@ -20,10 +20,14 @@ public class DraftSigningAndPdfTests
     private static PlanBlock MonWed(string id = "b1") =>
         Block(id, PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(9), T(13), b => b with { Days = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday } });
 
-    private static ServiceAgreementDraft BlockBuilt(PlanTotals? totals = null, string? pricingJson = null, string? blockJson = null)
+    private static ServiceAgreementDraft BlockBuilt(PlanTotals? totals = null, string? pricingJson = null, string? blockJson = null, IReadOnlyList<PlanIssue>? issues = null, IReadOnlyList<HolidayOccurrence>? holidays = null)
     {
         var block = MonWed();
-        var quote = new PlanQuote { PeriodFrom = Mon12Oct, PeriodTo = Sun18Oct, Totals = totals ?? new PlanTotals { Amount = 588.64m, SupportHours = 8, LineCount = 2 }, TimeBasis = "tz-database" };
+        var quote = new PlanQuote
+        {
+            PeriodFrom = Mon12Oct, PeriodTo = Sun18Oct, Totals = totals ?? new PlanTotals { Amount = 588.64m, SupportHours = 8, LineCount = 2 }, TimeBasis = "tz-database",
+            Issues = issues ?? Array.Empty<PlanIssue>(), HolidayOccurrences = holidays ?? Array.Empty<HolidayOccurrence>(),
+        };
         var draftId = Guid.NewGuid();
         return new ServiceAgreementDraft
         {
@@ -127,17 +131,58 @@ public class DraftSigningAndPdfTests
 
     // ── What the PDF must not leave out ───────────────────────────────────────────
 
+    private static PlanIssue Issue(PlanFailureReason reason, int shifts, string blockId = "b1") => new(blockId, reason, reason + " message", shifts, Mon12Oct);
+
+    private static HolidayOccurrence Holiday(HolidayDecision decision, bool skipped = false, int day = 0) =>
+        new("b1", Mon12Oct.AddDays(day), "Holiday", "NSW", decision, skipped, null, null, null);
+
+    // Design review 1: the PDF is what a family reads, and it said "186 shift lines" for a count that is shifts times items (a shift short of two things was counted twice).
     [Fact]
-    public void The_pdf_says_what_was_not_priced_what_needs_a_person_and_what_is_provisional()
+    public void The_pdf_says_what_was_not_priced_what_needs_a_person_and_what_is_provisional_in_shifts_not_in_the_engines_lines()
     {
-        var draft = BlockBuilt(totals: new PlanTotals { Amount = 588.64m, SupportHours = 8, LineCount = 2, UnpricedLines = 186, ReviewLines = 219, ProvisionalLines = 468 });
+        var draft = BlockBuilt(
+            totals: new PlanTotals { Amount = 588.64m, SupportHours = 8, LineCount = 2, UnpricedLines = 372, ReviewLines = 219, ProvisionalLines = 468 },
+            issues: new[] { Issue(PlanFailureReason.NoItem, 186), Issue(PlanFailureReason.CatalogueNotFound, 186) },       // one shift, two things not priced: 186 shifts, not 372
+            holidays: Enumerable.Range(0, 15).Select(day => Holiday(HolidayDecision.Review, day: day)).ToList());
 
         var caveats = DraftPricingCaveats.For(draft);
 
-        Assert.Equal(3, caveats.Count);
-        Assert.Contains(caveats, c => c.Contains("186") && c.Contains("not priced"));
-        Assert.Contains(caveats, c => c.Contains("219") && c.Contains("review"));
-        Assert.Contains(caveats, c => c.Contains("468") && c.Contains("provisional"));
+        Assert.Equal(new[]
+        {
+            "186 shifts have a part that is not priced, so that part is not in any total.",
+            "15 public holiday shifts are priced at the holiday rate and still need a decision by a person before this agreement is approved.",
+            "Some lines use provisional rates that are not yet confirmed.",
+        }, caveats);
+        Assert.DoesNotContain(caveats, c => c.Contains("372") || c.Contains("219") || c.Contains("468"));
+    }
+
+    [Fact]
+    public void Blocks_add_up_and_a_block_counts_its_largest_issue_and_a_decided_holiday_or_a_flag_that_is_only_for_review_is_not_work_left_out()
+    {
+        var draft = BlockBuilt(
+            issues: new[]
+            {
+                Issue(PlanFailureReason.NoItem, 10), Issue(PlanFailureReason.TransportNotAvailable, 4), Issue(PlanFailureReason.NoItem, 3, "b2"),
+                Issue(PlanFailureReason.SleepoverClockChange, 7), Issue(PlanFailureReason.BlocksOverlap, 9), Issue(PlanFailureReason.RegistrationGroupNotHeld, 1),
+            },
+            holidays: new[] { Holiday(HolidayDecision.Charge), Holiday(HolidayDecision.Skip, skipped: true, day: 1), Holiday(HolidayDecision.Review, day: 2) });
+
+        var caveats = DraftPricingCaveats.For(draft);
+
+        Assert.Equal(13, DraftPricingCaveats.ShiftsNotPriced(DraftJson.ReadQuote(draft.PricingJson!)!));     // 10 (the larger of block 1's two) + 3
+        Assert.Equal(new[]
+        {
+            "13 shifts have a part that is not priced, so that part is not in any total.",
+            "1 public holiday shift is priced at the holiday rate and still needs a decision by a person before this agreement is approved.",
+        }, caveats);
+    }
+
+    [Fact]
+    public void One_shift_is_said_in_the_singular()
+    {
+        var caveats = DraftPricingCaveats.For(BlockBuilt(issues: new[] { Issue(PlanFailureReason.NoItem, 1) }));
+
+        Assert.Equal("1 shift has a part that is not priced, so that part is not in any total.", Assert.Single(caveats));
     }
 
     [Fact]

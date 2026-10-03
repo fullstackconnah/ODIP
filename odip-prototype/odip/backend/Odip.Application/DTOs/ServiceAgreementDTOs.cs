@@ -96,7 +96,7 @@ public record ServiceAgreementDraftDto
     public int LineCount { get; init; }
     /// <summary>What the revision's lines add up to over the agreement (a hand-typed line is hours times unit price, floored to the cent).</summary>
     public decimal Total { get; init; }
-    /// <summary>What a reader must not miss, a sentence each: shift lines not priced, to review, and on provisional rates. Empty for a revision priced in full or typed by hand.</summary>
+    /// <summary>What a reader must not miss, a sentence each, counted in shifts: shifts with a part not priced, public holiday shifts to decide, and provisional rates. Empty for a revision priced in full or typed by hand.</summary>
     public List<string> Caveats { get; init; } = [];
 }
 

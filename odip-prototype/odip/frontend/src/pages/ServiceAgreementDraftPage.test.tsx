@@ -560,7 +560,7 @@ describe('ServiceAgreementDraftPage: what is on the page around the plan', () =>
 describe('ServiceAgreementDraftPage: older revisions are summaries (review F12)', () => {
   const newest = () => draft({ id: 'd-3', version: 3, blocks: [draftBlock(mondayWednesday('b1'))], pricing: quote(), blockCount: 1, lineCount: 1, total: 588.64 })
   const summary = (changes: Partial<ServiceAgreementDraftDto> = {}) => draft({
-    id: 'd-2', version: 2, isSummary: true, blockCount: 2, lineCount: 3, total: 795.7, caveats: ['5 shift lines are not priced (the catalogue has no price for them) and are not in any total.'], ...changes,
+    id: 'd-2', version: 2, isSummary: true, blockCount: 2, lineCount: 3, total: 795.7, caveats: ['5 shifts have a part that is not priced, so that part is not in any total.'], ...changes,
   })
   const full = () => draft({
     id: 'd-2', version: 2, blocks: [draftBlock(mondayWednesday('b1'))], pricing: quote(), blockCount: 1, lineCount: 1, total: 588.64,
@@ -573,7 +573,7 @@ describe('ServiceAgreementDraftPage: older revisions are summaries (review F12)'
 
     const card = screen.getByText('Version 2').closest('article') as HTMLElement
     expect(card).toHaveTextContent('2 blocks · 3 lines · $795.70 over the agreement')
-    expect(card).toHaveTextContent('5 shift lines are not priced (the catalogue has no price for them) and are not in any total.')
+    expect(card).toHaveTextContent('5 shifts have a part that is not priced, so that part is not in any total.')
     expect(within(card).queryByRole('table')).not.toBeInTheDocument()
     expect(within(card).queryByText('Blocks in this version')).not.toBeInTheDocument()
     expect(detail).toHaveBeenCalledWith('p-1', 'd-2', false)
