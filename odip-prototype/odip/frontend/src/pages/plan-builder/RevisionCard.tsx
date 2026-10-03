@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Download, Loader2 } from 'lucide-react'
 import type { DraftBlock, ServiceAgreementDraftDto, ServiceAgreementDraftLineDto } from '@/api/types'
 import { useDemoJourneySimulation, useServiceAgreementDraft } from '@/api/hooks'
@@ -86,10 +86,18 @@ export function RevisionCard(props: RevisionCardProps) {
   const { participantId, draft } = props
   const [open, setOpen] = useState(false)
   const detail = useServiceAgreementDraft(participantId, draft.id, draft.isSummary && open)
+  const summary = useRef<HTMLElement>(null)
+  const folded = useRef(false)
+  // Show details and Hide details are one control in two cards, and pressing either one unmounts the card it is in: focus falls to the top of the page. It goes to the other one (review N7).
+  useEffect(() => {
+    if (open || !folded.current) return
+    folded.current = false
+    summary.current?.querySelector<HTMLElement>('button[aria-expanded]')?.focus()
+  }, [open])
   if (!draft.isSummary) return <FullRevision {...props} />
-  if (open && detail.data) return <FullRevision {...props} draft={detail.data} onCollapse={() => setOpen(false)} />
+  if (open && detail.data) return <FullRevision {...props} draft={detail.data} onCollapse={() => { folded.current = true; setOpen(false) }} />
   return (
-    <article className={CARD}>
+    <article ref={summary} className={CARD}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <strong>Version {draft.version}</strong> <StatusBadge status={draft.status} label={draftStatusLabel(draft.status)} className="ml-2" />
@@ -124,6 +132,16 @@ export function RevisionCard(props: RevisionCardProps) {
  * by hand before the builder existed shows its lines exactly as they were, and says it can only be rebuilt.
  */
 function FullRevision({ participantId, draft, onDownload, downloading, onCollapse }: RevisionCardProps & { onCollapse?: () => void }) {
+  const card = useRef<HTMLElement>(null)
+  const collapsible = onCollapse !== undefined
+  // Opened by a person (it has Hide details): the Show details they pressed went with the summary, so focus is on the page. It goes to Hide details, unless it has been put somewhere else meanwhile
+  // (the version can take a moment to read, and somebody may have moved on). The newest revision, in full from the start, is not opened by anybody and takes nothing (review N7).
+  useEffect(() => {
+    if (!collapsible) return
+    const active = document.activeElement
+    if (active && active !== document.body) return
+    card.current?.querySelector<HTMLElement>('button[aria-expanded="true"]')?.focus()
+  }, [collapsible])
   const fromBlocks = draft.blocks.length > 0
   const lines = draft.lines.map((line, index) => ({ ...line, key: `${line.itemCode}-${index}` }))
   const pricing = draft.pricing
@@ -133,7 +151,7 @@ function FullRevision({ participantId, draft, onDownload, downloading, onCollaps
   const caption = pricing ? totalsCaption(pricing).text : ''
   const total = lines.reduce((sum, line) => sum + line.total, 0)
 
-  return <article className={CARD}>
+  return <article ref={card} className={CARD}>
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
         <strong>Version {draft.version}</strong> <StatusBadge status={draft.status} label={draftStatusLabel(draft.status)} className="ml-2" />

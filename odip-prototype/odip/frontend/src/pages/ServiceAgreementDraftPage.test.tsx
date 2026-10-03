@@ -733,6 +733,46 @@ describe('ServiceAgreementDraftPage: older revisions are summaries (review F12)'
     expect(within(screen.getByText('Version 2').closest('article') as HTMLElement).getByRole('button', { name: 'Show details' })).toBeInTheDocument()
   })
 
+  // Code review N7: the button that was pressed is unmounted when the card swaps between the summary and the version in full, so focus fell to the top of the page.
+  describe('focus, when the card swaps between its summary and the version in full', () => {
+    it('goes to Hide details when Show details opens it, and back to Show details when Hide details folds it', async () => {
+      detail.mockImplementation((_participantId, _id, enabled) => ({ data: enabled ? full() : undefined, isLoading: false, isError: false, refetch: vi.fn() }))
+      drafts.mockReturnValue({ data: [newest(), summary()], isLoading: false, isError: false, refetch: vi.fn() })
+      renderPage()
+      const user = userEvent.setup()
+      const cardOf = () => screen.getByText('Version 2').closest('article') as HTMLElement
+
+      await user.click(within(cardOf()).getByRole('button', { name: 'Show details' }))
+      expect(within(cardOf()).getByRole('button', { name: 'Hide details' })).toHaveFocus()
+
+      await user.click(within(cardOf()).getByRole('button', { name: 'Hide details' }))
+      expect(within(cardOf()).getByRole('button', { name: 'Show details' })).toHaveFocus()
+    })
+
+    it('takes nothing when the page loads: the newest revision is in full from the start and nobody opened it', () => {
+      detail.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
+      drafts.mockReturnValue({ data: [newest(), summary()], isLoading: false, isError: false, refetch: vi.fn() })
+      renderPage()
+
+      expect(document.body).toHaveFocus()
+    })
+
+    it('does not take focus from where the person has moved on to while the version was being read', async () => {
+      detail.mockImplementation((_participantId, _id, enabled) => ({ data: undefined, isLoading: enabled, isError: false, refetch: vi.fn() }))
+      drafts.mockReturnValue({ data: [newest(), summary()], isLoading: false, isError: false, refetch: vi.fn() })
+      renderPage()
+      const user = userEvent.setup()
+      await user.click(within(screen.getByText('Version 2').closest('article') as HTMLElement).getByRole('button', { name: 'Show details' }))
+      screen.getByLabelText('Representative').focus()                      // somebody moved on while it was being read
+
+      detail.mockImplementation((_participantId, _id, enabled) => ({ data: enabled ? full() : undefined, isLoading: false, isError: false, refetch: vi.fn() }))
+      fireEvent.change(screen.getByLabelText('Representative'), { target: { value: 'x' } })       // a render, with the version in hand, that does not move focus
+
+      expect(within(screen.getByText('Version 2').closest('article') as HTMLElement).getByRole('button', { name: 'Hide details' })).toBeInTheDocument()
+      expect(screen.getByLabelText('Representative')).toHaveFocus()
+    })
+  })
+
   it('says it is reading, and when it could not, with a way to try again', async () => {
     const refetch = vi.fn()
     detail.mockImplementation((_participantId, _id, enabled) => (enabled ? { data: undefined, isLoading: false, isError: true, refetch } : { data: undefined, isLoading: false, isError: false, refetch }))
