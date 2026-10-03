@@ -52,6 +52,13 @@ public static class ServiceAgreementDraftPdfRenderer
                 });
                 if (draft.Lines.Any(x => x.Total is not null))
                     column.Item().PaddingTop(6).Text($"Total of the priced lines over the agreement period: {draft.Lines.Sum(x => x.Total ?? 0m).ToString("0.00", CultureInfo.InvariantCulture)}. Prices are the catalogue maximums on each service date and are not a quote.").FontColor(Colors.Grey.Darken1);
+                // A total that leaves work out says so beside the total: what was not priced, what a person has to look at and what rests on a rate nobody has confirmed.
+                var caveats = DraftPricingCaveats.For(draft);
+                if (caveats.Count > 0)
+                {
+                    column.Item().PaddingTop(8).Text("Read before relying on these totals").Bold().FontColor(Colors.Orange.Darken3);
+                    foreach (var caveat in caveats) column.Item().PaddingTop(2).Text("• " + caveat).FontColor(Colors.Orange.Darken3);
+                }
                 column.Item().PaddingTop(18).Text("Agreement review sections (all fields require approved, participant-specific completion)").Bold().FontSize(12);
                 Section(column, "1. Parties and representatives", "Participant, authorised representative authority, provider legal entity, ABN, registration status and notices contacts are placeholders pending review.");
                 Section(column, "2. Supports, delivery and schedule", "Select eligible support code, arrangement/ratio, service delivery state or territory, location, dates, times, recurrence, exceptions and accessibility requirements per line. Standard 1:1 community access is only a suggestion, never a default charge.");
