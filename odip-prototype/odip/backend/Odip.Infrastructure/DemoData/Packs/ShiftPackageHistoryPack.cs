@@ -29,6 +29,9 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
     private const int LookbackDays = 28;
     private const int UnreadPercent = 12;
 
+    /// <summary>How far before the window a reader's handover is looked for (the participant's latest shift before the reader's is nearly always within a day or two).</summary>
+    private const int HandoverLookbackDays = 7;
+
     /// <summary>A row is written when its time is this many minutes in the past (plan 5.2: "at least 2 minutes past").</summary>
     private const int GraceMinutes = 2;
 
@@ -69,6 +72,7 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
 
         var participants = run.Directory.AllParticipants.Where(p => p.Key.Length > 0).ToDictionary(p => p.Id);
         closed = closed.Where(p => participants.ContainsKey(p.Shift.ParticipantId)).ToList();
+        var sources = await DemoQueries.HandoverSourcesOf(run.Db, participants.Keys.ToList(), anchors.D0.AddDays(-LookbackDays - HandoverLookbackDays)).ToListAsync(ct);
         var routines = await DemoQueries.ActiveRoutinesOf(run.Db, participants.Keys.ToList()).ToListAsync(ct);
         var notesAllowed = await OldSeedChecks.ShiftNotesThereAsync(run, "shift package history notes", ct);
 
@@ -87,7 +91,7 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
             if (notesAllowed) NotesOf(run, completion, shift, worker, participants[shift.ParticipantId], notes);
             TicksOf(run, completion, shift, worker, routines.Where(r => r.ParticipantId == shift.ParticipantId).ToList(), ticks);
         }
-        AcknowledgementsOf(run, closed, staff, acks);
+        AcknowledgementsOf(run, closed, sources, staff, acks);
 
         // Only what is not there yet. A person's own acknowledgement or tick has a random id, but the app allows one acknowledgement per reader and handover and one
         // tick per completion, routine and occurrence, so those two are looked up by that key (which finds the pack's own row too): a second row for the key is
@@ -231,23 +235,25 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
 
     // ── the handover read ──
 
-    private static void AcknowledgementsOf(DemoRun run, List<DemoQueries.ClosedPair> closed, IReadOnlyDictionary<string, User> staff, List<(HandoverAcknowledgement, User)> acks)
+    /// <summary>
+    /// The reader of each closed shift marks as read the handover the portal would have shown them (PR 2 review L3: the app's own rule across every shift of the
+    /// participant, the live set's and the old seed's included), all but about one in eight, and never their own.
+    /// </summary>
+    private static void AcknowledgementsOf(DemoRun run, List<DemoQueries.ClosedPair> closed, List<HandoverSource> sources, IReadOnlyDictionary<string, User> staff,
+        List<(HandoverAcknowledgement, User)> acks)
     {
-        foreach (var byParticipant in closed.GroupBy(p => p.Shift.ParticipantId))
+        foreach (var reader in closed.OrderBy(p => p.Shift.ServiceDate).ThenBy(p => p.Shift.StartTime))
         {
-            var ordered = byParticipant.OrderBy(p => p.Shift.ServiceDate).ThenBy(p => p.Shift.StartTime).ToList();
-            for (var i = 1; i < ordered.Count; i++)
-            {
-                var (source, reader) = (ordered[i - 1], ordered[i]);
-                if (string.IsNullOrWhiteSpace(source.Completion.HandoverText) || source.Completion.NothingToHandOver) continue;
-                var readerUser = staff.Values.FirstOrDefault(u => u.Id == reader.Shift.UserId);
-                if (readerUser is null || reader.Shift.UserId == source.Shift.UserId) continue;          // the baton passes to somebody else
-                if (DemoIds.Pick(reader.Completion.Id, "unread", 0, 99) < UnreadPercent) continue;
+            var readerUser = staff.Values.FirstOrDefault(u => u.Id == reader.Shift.UserId);
+            if (readerUser is null) continue;
+            if (DemoIds.Pick(reader.Completion.Id, "unread", 0, 99) < UnreadPercent) continue;
 
-                var at = ProviderLocalTime.AsUtc(reader.Completion.ActualStart).AddMinutes(8 + DemoIds.Pick(reader.Completion.Id, "ack-after", 0, 32));
-                if (at <= ProviderLocalTime.AsUtc(source.Completion.SubmittedAt!.Value)) continue;      // the shifts overlap: nothing to read yet
-                acks.Add((PackageRows.Acknowledgement(run, source.Completion, reader.Shift, readerUser, Local(run, at)), readerUser));
-            }
+            var at = ProviderLocalTime.AsUtc(reader.Completion.ActualStart).AddMinutes(8 + DemoIds.Pick(reader.Completion.Id, "ack-after", 0, 32));
+            var source = HandoverSourceRule.LatestBefore(sources, reader.Shift.ParticipantId, reader.Shift.Id, reader.Shift.ServiceDate, reader.Shift.StartTime);
+            if (source is not { HasHandover: true }) continue;                                              // nothing to read (and an older handover is never resurrected)
+            if (reader.Shift.UserId == source.ShiftUserId) continue;                                        // the baton passes to somebody else
+            if (at <= ProviderLocalTime.AsUtc(source.SubmittedAt)) continue;                                // the shifts overlap: nothing to read yet
+            acks.Add((PackageRows.Acknowledgement(run, source.CompletionId, reader.Shift, readerUser, Local(run, at)), readerUser));
         }
     }
 }

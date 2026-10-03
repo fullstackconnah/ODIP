@@ -223,14 +223,14 @@ internal static class PackageRows
     }
 
     /// <summary>The next worker marking the previous worker's handover read, from their own shift.</summary>
-    public static HandoverAcknowledgement Acknowledgement(DemoRun run, ShiftCompletion source, Shift readerShift, User reader, DateTime atLocal)
+    public static HandoverAcknowledgement Acknowledgement(DemoRun run, Guid sourceCompletionId, Shift readerShift, User reader, DateTime atLocal)
     {
         var at = run.Anchors.LocalToUtc(atLocal);
         return new HandoverAcknowledgement
         {
-            Id = DemoIds.For("handover-ack", source.Id, reader.Id),
+            Id = DemoIds.For("handover-ack", sourceCompletionId, reader.Id),
             TenantId = run.TenantId,
-            SourceCompletionId = source.Id,
+            SourceCompletionId = sourceCompletionId,
             ShiftId = readerShift.Id,
             UserId = reader.Id,
             AcknowledgedAt = at,

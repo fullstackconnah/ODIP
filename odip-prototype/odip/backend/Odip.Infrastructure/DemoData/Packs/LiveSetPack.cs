@@ -32,6 +32,9 @@ public sealed class LiveSetPack : IDemoPack
     /// <summary>An event is written when its time is this many minutes in the past (plan 5.2: "at least 2 minutes past").</summary>
     private const int GraceMinutes = 2;
 
+    /// <summary>How far back a reader's handover is looked for: the participant's latest shift before this one is nearly always within a day or two.</summary>
+    private const int HandoverLookbackDays = 7;
+
     private static readonly TimeOnly LiveFrom = new(6, 0);
     private static readonly TimeOnly LiveUntil = new(23, 0);
 
@@ -46,6 +49,9 @@ public sealed class LiveSetPack : IDemoPack
         public required User Worker { get; init; }
         public ShiftCompletion? Completion { get; set; }
         public bool IsNew { get; init; }
+
+        /// <summary>The handover the worker reads, chosen by the app's own rule once the read is due (null: nothing to read, or not due yet).</summary>
+        public HandoverSource? Handover { get; set; }
     }
 
     public async Task RunAsync(DemoRun run, CancellationToken ct)
@@ -214,12 +220,26 @@ public sealed class LiveSetPack : IDemoPack
             _lives = lives;
         }
 
+        /// <summary>When the worker reads the last handover, on the wall clock of the shift's day.</summary>
+        private static DateTime AckAt(Live live) =>
+            live.Story == LiveSetCatalog.Evening ? At(live, 15, 20) : live.Story == LiveSetCatalog.Insulin ? At(live, 8, 20) : At(live, 7, 12);
+
         /// <summary>
-        /// The handover to read: the completion of the same story's shift the day before, once it has been finished. Looked up among the shifts of
-        /// this run, so a day built from nothing in one tick comes out the same as one built over two.
+        /// The handover the worker reads, once the read is due: the one the portal shows, by the app's own rule across every shift of the participant (PR 2
+        /// review L3: the latest shift before this one, whatever story it belongs to, not the same story's day before, which can be an older handover than the
+        /// night shift that came in between), if it had been submitted by the time of the read. Earlier live shifts were finished and saved before this one is
+        /// worked, so a day built from nothing in one tick comes out the same as one built over two.
         /// </summary>
-        private ShiftCompletion? PreviousHandover(Live live) =>
-            _lives.FirstOrDefault(l => l.Story == live.Story && l.Date == live.Date.AddDays(-1))?.Completion is { SubmittedAt: not null } done ? done : null;
+        private async Task ChooseHandoverAsync(Live live, DateTime actualStartLocal, CancellationToken ct)
+        {
+            live.Handover = null;
+            var at = AckAt(live);
+            if (at <= actualStartLocal || !Due(at)) return;                                    // a worker who has not started has read nothing, and nothing is read before its time
+
+            var sources = await DemoQueries.HandoverSourcesOf(_run.Db, new List<Guid> { live.Shift.ParticipantId }, live.Date.AddDays(-HandoverLookbackDays)).ToListAsync(ct);
+            var latest = HandoverSourceRule.LatestBefore(sources, live.Shift.ParticipantId, live.Shift.Id, live.Shift.ServiceDate, live.Shift.StartTime);
+            if (latest is { HasHandover: true } && latest.SubmittedAt < _a.LocalToUtc(at)) live.Handover = latest;                  // not yet handed over: nothing to read yet
+        }
 
         /// <summary>True once the local time is at least <see cref="GraceMinutes"/> minutes in the past on the provider's clock.</summary>
         private bool Due(DateTime local) => _a.LocalToUtc(local).AddMinutes(GraceMinutes) <= _a.NowUtc;
@@ -251,6 +271,7 @@ public sealed class LiveSetPack : IDemoPack
             }
             if (shift.Status != ShiftStatus.InProgress || live.Completion is null) return;
 
+            await ChooseHandoverAsync(live, actualStartLocal, ct);
             var events = Events(live, actualStartLocal).Where(e => Due(e.Local)).ToList();
             await WriteAsync(live, events, ct);
             await CloseAsync(live, endLocal, ct);
@@ -299,15 +320,12 @@ public sealed class LiveSetPack : IDemoPack
             var worker = live.Worker;
             var story = live.Story;
 
-            // The next worker reads the last handover (a worker who has not started has read nothing).
-            if (PreviousHandover(live) is { } source)
+            // The next worker reads the last handover (a worker who has not started has read nothing), the one chosen by ChooseHandoverAsync.
+            if (live.Handover is { } source)
             {
-                var at = story == LiveSetCatalog.Evening ? At(live, 15, 20) : story == LiveSetCatalog.Insulin ? At(live, 8, 20) : At(live, 7, 12);
-                if (at > actualStartLocal)
-                {
-                    var ack = PackageRows.Acknowledgement(_run, source, live.Shift, worker, at);
-                    yield return new Event(at, typeof(HandoverAcknowledgement), ack.Id, ack, worker);
-                }
+                var at = AckAt(live);
+                var ack = PackageRows.Acknowledgement(_run, source.CompletionId, live.Shift, worker, at);
+                yield return new Event(at, typeof(HandoverAcknowledgement), ack.Id, ack, worker);
             }
 
             if (story == LiveSetCatalog.Morning)

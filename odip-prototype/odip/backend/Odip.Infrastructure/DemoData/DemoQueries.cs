@@ -208,6 +208,16 @@ public static class DemoQueries
               && (s.Status == ShiftStatus.PendingReview || s.Status == ShiftStatus.Completed)
         select new ClosedPair(c, s);
 
+    /// <summary>
+    /// Read only: every active submitted completion of these participants' shifts from a date on, with the facts of its shift that the app's handover rule orders by:
+    /// the material <see cref="HandoverSourceRule.LatestBefore"/> chooses a reader's handover from (PR 2 review L3).
+    /// </summary>
+    public static IQueryable<HandoverSource> HandoverSourcesOf(OdipDbContext db, List<Guid> participantIds, DateOnly since) =>
+        from c in db.ShiftCompletions.AsNoTracking()
+        join s in db.Shifts.AsNoTracking() on c.ShiftId equals s.Id
+        where participantIds.Contains(s.ParticipantId) && c.IsActive && c.SubmittedAt != null && s.ServiceDate >= since
+        select new HandoverSource(c.Id, s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, c.SubmittedAt!.Value, c.HandoverText, c.NothingToHandOver, s.UserId);
+
     /// <summary>Read only: the active routines of these participants, which the shift package matches against a shift's window.</summary>
     public static IQueryable<ParticipantRoutine> ActiveRoutinesOf(OdipDbContext db, List<Guid> participantIds) =>
         db.ParticipantRoutines.AsNoTracking().Where(r => participantIds.Contains(r.ParticipantId) && r.IsActive);
