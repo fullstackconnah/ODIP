@@ -43,9 +43,11 @@ public class DemoUniqueIndexAccountingTests
             "DemoHumanRowsTests.APresenterWhoTicksTheMorningRoutineBeforeTheScript_LeavesOneTick_AndTheLiveSetGoesOn"),
 
         ["ShiftCompletion|IX_ShiftCompletions_ShiftId_Active"] = new(
-            "Every writer looks the shift's completion up by shift first: the live set (ActiveCompletionsOf), and the roster pack, which writes a completion only with a shift it has " +
-            "just created or for a Published shift that has none at all (CompletionsOf).",
-            "DemoHumanRowsTests.APresenterWhoStartsTheShiftThemselves_LeavesOneActiveCompletion_AndTheScriptWorksTheShiftOnIt"),
+            "Every writer looks the shift's completion up by shift first: the live set (ActiveCompletionsOf), which also leaves alone a shift whose active completion is a person's " +
+            "or that a coordinator returned (the returned completion is inactive but keeps its id, which a start would insert a second time), and the roster pack, which writes a " +
+            "completion only with a shift it has just created or for a Published shift that was never returned and has none at all (CompletionsOf).",
+            "DemoHumanRowsTests.APresenterWhoStartsTheShiftThemselves_LeavesOneActiveCompletion_AndTheScriptLeavesTheirShiftAlone",
+            "DemoHumanRowsTests.ALiveShiftACoordinatorReturnedForCorrection_IsLeftToTheWorkerAgain_AndNoLaterTickFails"),
 
         ["StaffParticipantCompatibility|IX_StaffParticipantCompatibility_TenantId_UserId_ParticipantId"] = new(
             "The compatibility pack skips a pair that has a cell, by id or by (user, participant): the owner's cell wins.",

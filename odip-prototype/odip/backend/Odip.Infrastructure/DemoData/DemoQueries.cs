@@ -143,10 +143,10 @@ public static class DemoQueries
 
     /// <summary>
     /// Shifts from before the two days the live set works on that were never finished (a host that was off): Published or InProgress, no pattern,
-    /// for the live set's participants. No lower bound: only what earlier ticks left behind can match, a handful of rows however long the gap.
+    /// for the live set's participants, never one a coordinator returned (that is the worker's again). No lower bound: only what earlier ticks left behind can match, a handful of rows however long the gap.
     /// </summary>
     public static IQueryable<Shift> UnfinishedShifts(OdipDbContext db, DateOnly before, List<Guid> participantIds) =>
-        db.Shifts.Where(s => s.ShiftPatternId == null && (s.Status == ShiftStatus.Published || s.Status == ShiftStatus.InProgress)
+        db.Shifts.Where(s => s.ShiftPatternId == null && (s.Status == ShiftStatus.Published || s.Status == ShiftStatus.InProgress) && s.ReturnCount == 0
                              && s.ServiceDate < before && participantIds.Contains(s.ParticipantId));
 
     /// <summary>Tracked: a high-risk dose this top-up recorded whose staff witness has not answered yet.</summary>

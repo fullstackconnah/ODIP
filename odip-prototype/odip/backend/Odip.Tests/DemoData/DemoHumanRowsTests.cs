@@ -52,8 +52,46 @@ public class DemoHumanRowsTests
         Assert.NotNull(morning.Completion!.SubmittedAt);                                                                      // and the rest of the day was still worked
     }
 
+    /// <summary>
+    /// Second independent review X1: "Return for correction" is what a presenter demonstrates on a shift waiting in the review queue, and every live shift waits there for
+    /// three days. The app makes the completion inactive, puts the shift back to Published and counts the return; the live set then saw a Published shift with no active
+    /// completion, started it again under the completion id the returned one still holds, and failed on the primary key at every tick for good.
+    /// </summary>
     [Fact]
-    public async Task APresenterWhoStartsTheShiftThemselves_LeavesOneActiveCompletion_AndTheScriptWorksTheShiftOnIt()
+    public async Task ALiveShiftACoordinatorReturnedForCorrection_IsLeftToTheWorkerAgain_AndNoLaterTickFails()
+    {
+        var env = await TickAsync(Utc("2026-10-02T12:55:00Z"));                                   // Fri 22:55: all three of the day's shifts are finished and wait for review
+        var shiftId = LiveSetCatalog.ShiftId(LiveSetCatalog.Morning, Friday);
+        Guid returned;
+        await using (var db = env.AdminDb())
+        {
+            var shift = await db.Shifts.SingleAsync(s => s.Id == shiftId);
+            var completion = await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shiftId && c.IsActive);
+            returned = completion.Id;
+            completion.IsActive = false;                                                              // what RosteringController.Return does
+            completion.ReviewOutcome = ReviewOutcome.Returned;
+            completion.ReturnReason = "The handover note is missing a detail about the evening medication.";
+            completion.ReviewedByUserId = DemoFixture.StaffId("sarah");
+            completion.ReviewedAt = env.Clock.GetUtcNow().UtcDateTime;
+            shift.Status = ShiftStatus.Published;
+            shift.ReturnCount += 1;
+            await db.SaveChangesAsync();
+        }
+
+        await RunAsync(env, Utc("2026-10-02T22:00:00Z"));                                         // Sat 08:00: must run clean, as must every tick after it
+        await RunAsync(env, Utc("2026-10-03T03:00:00Z"));
+
+        await using var check = env.AdminDb();
+        var completions = await check.ShiftCompletions.Where(c => c.ShiftId == shiftId).ToListAsync();
+        Assert.Equal(returned, Assert.Single(completions).Id);                                    // the script did not start it again
+        Assert.False(completions[0].IsActive);
+        var shiftNow = await check.Shifts.SingleAsync(s => s.Id == shiftId);
+        Assert.Equal(ShiftStatus.Published, shiftNow.Status);                                     // it waits for the worker to start it again
+        Assert.Equal(1, shiftNow.ReturnCount);
+    }
+
+    [Fact]
+    public async Task APresenterWhoStartsTheShiftThemselves_LeavesOneActiveCompletion_AndTheScriptLeavesTheirShiftAlone()
     {
         var env = await TickAsync(Utc("2026-10-01T20:30:00Z"));                                  // Fri 06:30: Sophie's shift (06:58) has not started
         var shiftId = LiveSetCatalog.ShiftId(LiveSetCatalog.Morning, Friday);
@@ -80,8 +118,14 @@ public class DemoHumanRowsTests
         await using var check = env.AdminDb();
         var completions = await check.ShiftCompletions.Where(c => c.ShiftId == shiftId).ToListAsync();
         Assert.Equal(completionId, Assert.Single(completions).Id);                                                            // the presenter's start is the one start
-        Assert.NotEmpty(await check.ShiftRoutineChecks.Where(t => t.ShiftCompletionId == completionId).ToListAsync());        // and the script ticked the routine on it
         Assert.Equal(ShiftStatus.InProgress, (await check.Shifts.SingleAsync(s => s.Id == shiftId)).Status);
+        // It is their shift now (the script "never touches a shift somebody else changed"): nothing is written for it at scripted times, which could come before
+        // the start they made, and it is not finished for them. The day's other shifts carry on.
+        Assert.Empty(await check.ShiftRoutineChecks.Where(t => t.ShiftCompletionId == completionId).ToListAsync());
+        Assert.Empty(await check.HandoverAcknowledgements.Where(a => a.ShiftId == shiftId).ToListAsync());
+        Assert.Empty(await check.ShiftNotes.Where(n => n.ShiftId == shiftId).ToListAsync());
+        Assert.Null((await check.ShiftCompletions.SingleAsync(c => c.Id == completionId)).SubmittedAt);
+        Assert.NotNull((await RequireDayAsync(env, LiveSetCatalog.Morning, Friday.AddDays(-1))).Completion!.SubmittedAt);          // and yesterday's shift of the same story was finished as ever
     }
 
     [Fact]

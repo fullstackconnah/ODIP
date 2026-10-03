@@ -157,7 +157,7 @@ public sealed class LiveSetPack : IDemoPack
         var routines = await DemoQueries.RoutinesByIds(run.Db, new List<Guid> { MorningRoutine }).ToListAsync(ct);
 
         var script = new Script(run, await run.FreshStaffAsync(ct), meds, routines, lives);
-        foreach (var live in open.OrderBy(l => l.Date).ThenBy(l => l.Shift.StartTime))
+        foreach (var live in open.Where(l => !TakenOver(l)).OrderBy(l => l.Date).ThenBy(l => l.Shift.StartTime))
         {
             // One live shift, whole or not at all: a person's own row the script did not foresee, a race with somebody editing the same shift, a bug in one
             // day's story. It is undone and reported, and the other shifts are worked as if it had not been there (PR 2 review H1).
@@ -167,6 +167,15 @@ public sealed class LiveSetPack : IDemoPack
             live.Completion = (await DemoQueries.ActiveCompletionsOf(run.Db, new List<Guid> { live.Shift.Id }).ToListAsync(ct)).FirstOrDefault();
         }
     }
+
+    /// <summary>
+    /// A live shift somebody else has taken over is theirs, not the script's ("it never touches a shift somebody else changed"): one a coordinator returned for correction
+    /// (the app makes its completion inactive, puts the shift back to Published and counts the return, so a start would make a second completion under the id the first
+    /// still holds and fail on the primary key at every tick for good: second independent review X1), and one a person started by hand (the script's times are placed
+    /// from its own start, and could come before theirs, and its close would finish a shift they are working).
+    /// </summary>
+    private static bool TakenOver(Live live) =>
+        live.Shift.ReturnCount > 0 || (live.Completion is { } completion && completion.Id != DemoIds.For("shift-completion", live.Shift.Id));
 
     // ── 3. approval ──────────────────────────────────────────────────────────
 
