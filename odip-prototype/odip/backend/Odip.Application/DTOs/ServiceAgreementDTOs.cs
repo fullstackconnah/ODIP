@@ -41,6 +41,11 @@ public record DraftBlockDto
 {
     public PlanBlock Block { get; init; } = new();
     public DraftBlockRequirementsDto Requirements { get; init; } = new();
+    /// <summary>
+    /// True when the stored text of this block can no longer be read (the model it was written with has changed): <see cref="Block"/> is then an empty block, which a screen must not show as a block
+    /// somebody planned. Output only: ignored on a save.
+    /// </summary>
+    public bool Unreadable { get; init; }
 }
 
 /// <summary>

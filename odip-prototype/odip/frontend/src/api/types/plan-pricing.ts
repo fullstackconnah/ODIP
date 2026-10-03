@@ -77,6 +77,11 @@ export interface PlanBlockRequirements {
 export interface DraftBlock {
   block: PlanBlock
   requirements: PlanBlockRequirements
+  /**
+   * Set by the server on a block of a saved revision whose stored text can no longer be read (the model it was written with has changed): `block` is then an empty block, which must not be
+   * shown as one somebody planned. Output only: never sent.
+   */
+  unreadable?: boolean
 }
 
 // ── The answer ────────────────────────────────────────────────────────────────

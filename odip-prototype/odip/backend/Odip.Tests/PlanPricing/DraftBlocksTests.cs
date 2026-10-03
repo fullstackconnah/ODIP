@@ -463,6 +463,23 @@ public class DraftBlocksTests
         Assert.Equal(4, Assert.Single(quote.Totals.ByCategory).PaceCategory);
     }
 
+    // Review F21: an unreadable stored block came back as an empty block with no signal.
+    [Fact]
+    public async Task A_stored_block_that_can_no_longer_be_read_says_so_and_is_not_an_empty_block_that_looks_planned()
+    {
+        await using var f = await SetUpAsync();
+        await SaveFrom(f, 0, Entry(MonWed()), Entry(Block("sat", PlanSupportType.GroupActivity, DayOfWeek.Saturday, T(9), T(15))));
+        var stored = f.Db.ServiceAgreementDraftBlocks.Single(b => b.BlockKey == "sat");
+        stored.BlockJson = """{"id":"sat","supportType":"ARenamedMember","days":["Saturday"]}""";
+        await f.Db.SaveChangesAsync();
+
+        var newest = Assert.Single(await ListedAsync(Controller(f), f.Participant.Id));
+
+        Assert.Equal(new[] { false, true }, newest.Blocks.Select(b => b.Unreadable));
+        Assert.Equal("b1", newest.Blocks[0].Block.Id);
+        Assert.Equal(string.Empty, newest.Blocks[1].Block.Id);                  // empty, and flagged
+    }
+
     // ── The list: the newest revision in full, the older ones as summaries (review F12) ──
 
     private static async Task<List<ServiceAgreementDraftDto>> ListedAsync(ServiceAgreementDraftsController controller, Guid participantId) =>

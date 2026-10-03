@@ -428,6 +428,45 @@ describe('ServiceAgreementDraftPage: starting from the newest revision', () => {
   })
 })
 
+// Review F21: a stored block that can no longer be read came back as an empty block with no signal, so an old revision was blanked quietly.
+describe('ServiceAgreementDraftPage: a revision with a block that can no longer be read', () => {
+  const lost: DraftBlock = { block: { ...draftBlock().block, id: '' }, requirements: draftBlock().requirements, unreadable: true }
+  const withLostBlock = () => draft({ version: 4, blocks: [draftBlock(mondayWednesday('b1')), lost], pricing: quote(), lines: [{ ...legacyLine, blockId: 'b1', band: 'Weekday Daytime', occurrences: 2, flags: 'None' }] })
+
+  it('is not loaded for editing and says so, and shows the version with the block it could not read', () => {
+    drafts.mockReturnValue({ data: [withLostBlock()], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByText('Version 4 could not be opened for editing')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Start the week from a template' })).toBeInTheDocument()   // an empty plan, not a plan with a hole in it
+    const card = screen.getByText('Version 4', { selector: 'strong' }).closest('article') as HTMLElement
+    expect(within(card).getByText('A block that could not be read')).toBeInTheDocument()
+    expect(within(card).getByText(/1 block of this version could not be read/)).toBeInTheDocument()
+    expect(within(card).getByText(/Mon, Wed · 09:00–13:00/)).toBeInTheDocument()                          // the one that could be read is shown as it was
+  })
+
+  it('lets the plan be built again and saved as the next version, on top of the one it could not open', async () => {
+    drafts.mockReturnValue({ data: [withLostBlock()], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    const user = await fillDetails()
+    await addBlockFromTemplate(user)
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    expect(createMutate.mock.calls[0][0].data.baseVersion).toBe(4)
+    expect(createMutate.mock.calls[0][0].data.blocks).toHaveLength(1)
+    expect(JSON.stringify(createMutate.mock.calls[0][0])).not.toContain('unreadable')
+  })
+
+  it('says nothing of it for a revision whose blocks all read', () => {
+    drafts.mockReturnValue({ data: [draft({ version: 4, blocks: [draftBlock(mondayWednesday('b1'))], pricing: quote() })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.queryByText(/could not be opened for editing/)).not.toBeInTheDocument()
+    expect(screen.queryByText('A block that could not be read')).not.toBeInTheDocument()
+  })
+})
+
 describe('ServiceAgreementDraftPage: drafts typed by hand before the builder', () => {
   it('shows their lines as they were saved, read-only, with a note to rebuild them from blocks, and starts the builder empty', () => {
     drafts.mockReturnValue({ data: [draft({ version: 1, lines: [legacyLine] })], isLoading: false, isError: false, refetch: vi.fn() })

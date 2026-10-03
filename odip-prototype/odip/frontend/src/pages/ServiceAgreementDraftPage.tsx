@@ -87,7 +87,8 @@ function DraftPage() {
   if (loaded && baseline === null) {
     const latest = drafts.data?.[0]
     setBaseVersion(latest?.version ?? 0)
-    if (latest && latest.blocks.length > 0) {
+    // A revision with a block that can no longer be read is not loaded: an empty block would look like a plan nobody made, and saving over it would lose it for good.
+    if (latest && latest.blocks.length > 0 && !latest.blocks.some(entry => entry.unreadable)) {
       const next: Details = {
         state: latest.state, zone: latest.blocks[0].block.location.zone, planStartDate: latest.planStartDate, planEndDate: latest.planEndDate,
         agreementStartDate: latest.agreementStartDate, agreementEndDate: latest.agreementEndDate, representative: latest.representative ?? '',
@@ -99,6 +100,9 @@ function DraftPage() {
       setBaseline(snapshotOf(EMPTY_DETAILS, []))
     }
   }
+
+  const newest = drafts.data?.[0]
+  const unreadableVersion = newest && newest.blocks.some(entry => entry.unreadable) ? newest.version : null
 
   // Dates typed over an empty plan are nothing to lose: there is nothing to save until there is a block.
   const dirty = baseline !== null && plan.length > 0 && snapshotOf(details, plan) !== baseline
@@ -251,6 +255,12 @@ function DraftPage() {
         </div>
       </fieldset>
     </section>
+
+    {unreadableVersion !== null && (
+      <Callout tone="warning" className="max-w-prose" title={`Version ${unreadableVersion} could not be opened for editing`}>
+        A block in it can no longer be read, so it is not loaded here: an empty block would look like a plan nobody made. The version is kept as it was, with its lines, below. Build the plan again and save it as the next version.
+      </Callout>
+    )}
 
     <PlanBuilder
       participantId={participantId}

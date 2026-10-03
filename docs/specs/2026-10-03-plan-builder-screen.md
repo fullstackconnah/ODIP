@@ -31,6 +31,9 @@ saves it whole.
   `lineCount`, `total`, `caveats`: no blocks, lines or answer), and `GET participants/:id/service-agreement-drafts/:draftId` returns one in full, which the page asks for when somebody
   opens an older version. A total that leaves work out says so beside the figure (`caveats`, and on the PDF).
 - A revision made before this has lines and no blocks. It is read-only, shown as it was, with a note that it can only be rebuilt from blocks.
+- A stored block whose text can no longer be read (the model it was written with has changed; a golden stored-JSON test fails first, so this is the net under it) comes back with
+  `unreadable: true` and an empty block. The page does not load such a revision for editing (an empty block would look like a plan nobody made) and says so; the version card says "A block that
+  could not be read" and keeps the lines as they were saved.
 
 ## The overview
 

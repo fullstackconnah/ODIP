@@ -128,6 +128,7 @@ function FullRevision({ participantId, draft, onDownload, downloading, onCollaps
   const lines = draft.lines.map((line, index) => ({ ...line, key: `${line.itemCode}-${index}` }))
   const pricing = draft.pricing
   const blocks = draft.blocks.map((entry: DraftBlock) => entry.block)
+  const unreadable = draft.blocks.filter(entry => entry.unreadable).length
   const issues = groupIssues(pricing?.issues ?? [])
   const caption = pricing ? totalsCaption(pricing).text : ''
   const total = lines.reduce((sum, line) => sum + line.total, 0)
@@ -150,8 +151,17 @@ function FullRevision({ participantId, draft, onDownload, downloading, onCollaps
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-semibold">Blocks in this version</h3>
         <ol className="flex flex-col gap-0.5 text-sm">
-          {blocks.map((block, index) => <li key={block.id}><span className="tabular-nums text-[var(--color-muted-foreground)]">{index + 1}.</span> {describeBlock(block)}</li>)}
+          {draft.blocks.map((entry, index) => (
+            <li key={`${index}-${entry.block.id}`}>
+              <span className="tabular-nums text-[var(--color-muted-foreground)]">{index + 1}.</span> {entry.unreadable ? <span className="text-[var(--color-muted-foreground)]">A block that could not be read</span> : describeBlock(entry.block)}
+            </li>
+          ))}
         </ol>
+        {unreadable > 0 && (
+          <Callout tone="warning" className="max-w-prose">
+            {plural(unreadable, 'block')} of this version could not be read, so the plan it was is not complete here. Its lines, below, are as they were saved. Build the plan again and save it as a new version.
+          </Callout>
+        )}
       </div>
     ) : (
       lines.length > 0 && <Callout tone="info" className="max-w-prose" title="Typed by hand">This version&apos;s lines were typed by hand before the plan builder existed. They are shown as they were saved and cannot be changed. To rebuild them from support blocks, build the plan above and save it as a new version.</Callout>

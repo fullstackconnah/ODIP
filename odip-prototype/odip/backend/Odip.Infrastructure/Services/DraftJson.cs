@@ -36,8 +36,12 @@ public static class DraftJson
 
     public static PlanQuote? ReadQuote(string? json) => string.IsNullOrWhiteSpace(json) ? null : Read<PlanQuote>(json);
 
-    /// <summary>One block row as the API shows it.</summary>
-    public static DraftBlockDto ToDto(ServiceAgreementDraftBlock row) => new() { Block = ReadBlock(row.BlockJson), Requirements = ReadRequirements(row.RequirementsJson) };
+    /// <summary>One block row as the API shows it. A block whose text cannot be read is an empty block that says so (<see cref="DraftBlockDto.Unreadable"/>), not one that looks planned.</summary>
+    public static DraftBlockDto ToDto(ServiceAgreementDraftBlock row)
+    {
+        var block = Read<PlanBlock>(row.BlockJson);
+        return new DraftBlockDto { Block = block ?? new PlanBlock(), Requirements = ReadRequirements(row.RequirementsJson), Unreadable = block is null };
+    }
 
     private static T? Read<T>(string json) where T : class
     {
