@@ -139,16 +139,60 @@ public class AuditInterceptorTests
     {
         using var db = CreateDb(userId: Guid.NewGuid());
 
-        // PublicHoliday is deliberately not in AuditedEntities.Types (it's bulk-upserted by
-        // HolidaySyncBackgroundService and would otherwise generate high-churn audit noise).
-        db.PublicHolidays.Add(new PublicHoliday
+        // EarlyAccessRequest is deliberately not in AuditedEntities.Types: a sign-up from the public landing page has no
+        // signed-in actor to attribute and nothing worth recovering. (PublicHoliday used to stand in here; it is audited now,
+        // see the two tests below.)
+        var now = DateTime.UtcNow;
+        db.EarlyAccessRequests.Add(new EarlyAccessRequest
         {
             Id = Guid.NewGuid(),
-            Date = new DateOnly(2026, 1, 1),
-            Name = "New Year's Day"
+            Name = "Jo Visitor",
+            Organisation = "Example Care",
+            Email = "jo@example.com",
+            CreatedAtUtc = now,
+            LastRequestedAtUtc = now,
+            RequestCount = 1
         });
         await db.SaveChangesAsync();
 
         Assert.Empty(db.AuditLogs.ToList());
+    }
+
+    [Fact]
+    public async Task SaveChanges_PublicHoliday_IsAudited_BecauseTheRowsDecideWhichDaysArePricedAtTheHolidayRate()
+    {
+        // Review M6 (plan builder phase B): the table is global and a row moves every tenant's quotes (+122% on a weekday),
+        // so who added, renamed or removed one, and when, must be recoverable. The yearly sync writes 150 or so rows on a
+        // fresh database and after that only the rows the feed adds or renames, so the audit volume is small.
+        Assert.Contains(typeof(PublicHoliday), AuditedEntities.Types);
+
+        using var db = CreateDb(userId: Guid.NewGuid());
+        var holiday = new PublicHoliday { Id = Guid.NewGuid(), Date = new DateOnly(2026, 10, 5), Name = "Labour Day", State = "NSW" };
+        db.PublicHolidays.Add(holiday);
+        await db.SaveChangesAsync();
+        holiday.Name = "Labour Day (renamed)";
+        await db.SaveChangesAsync();
+        db.PublicHolidays.Remove(holiday);
+        await db.SaveChangesAsync();
+
+        var logs = db.AuditLogs.ToList();
+        Assert.Equal(new[] { AuditAction.Created, AuditAction.Updated, AuditAction.Deleted }.OrderBy(a => a), logs.Select(l => l.Action).OrderBy(a => a));
+        Assert.All(logs, l => Assert.Equal(("PublicHoliday", holiday.Id), (l.EntityType, l.EntityId)));
+        Assert.Contains("Labour Day (renamed)", Assert.Single(logs, l => l.Action == AuditAction.Updated).Changes);
+    }
+
+    [Fact]
+    public async Task SaveChanges_PublicHolidayFromTheBackgroundSync_IsAuditedWithNoActorAndDoesNotThrow()
+    {
+        using var db = CreateDb(userId: null);   // HolidaySyncBackgroundService runs with no request and no user
+
+        db.PublicHolidays.Add(new PublicHoliday { Id = Guid.NewGuid(), Date = new DateOnly(2026, 12, 25), Name = "Christmas Day", State = null });
+        await db.SaveChangesAsync();
+
+        var log = Assert.Single(db.AuditLogs.ToList());
+        Assert.Equal("PublicHoliday", log.EntityType);
+        Assert.Equal(AuditAction.Created, log.Action);
+        Assert.Null(log.ChangedById);
+        Assert.Null(log.ChangedByName);
     }
 }

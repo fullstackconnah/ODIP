@@ -6,8 +6,10 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SettingsPage from './SettingsPage'
 
-const { mockUsePermissions, mockUseEventTemplates, settingsData, providerSettings, mockUpsertMutate, mockSyncMutate } = vi.hoisted(() => ({
+const { mockUsePermissions, mockUseEventTemplates, settingsData, providerSettings, mockUpsertMutate, mockSyncMutate, holidayRows } = vi.hoisted(() => ({
   mockUsePermissions: vi.fn(),
+  // The Public Holidays tab: the rows usePublicHolidays returns (a stable reference, like a cached query).
+  holidayRows: { current: [] as unknown[] },
   // The Provider Settings tab: what useProviderSettings returns (a stable reference, like a cached query) and the captured save mutation.
   providerSettings: { current: {} as Record<string, unknown> },
   mockUpsertMutate: vi.fn(),
@@ -56,7 +58,7 @@ vi.mock('@/api/hooks', () => ({
   useProviderSettings: () => ({ data: providerSettings.current }),
   useUpsertProviderSettings: () => ({ mutate: mockUpsertMutate, isPending: false }),
   useSupportCatalogue: () => ({ data: [] }),
-  usePublicHolidays: () => ({ data: [] }),
+  usePublicHolidays: () => ({ data: holidayRows.current }),
   useCreatePublicHoliday: () => ({ mutate: vi.fn(), isPending: false }),
   useDeletePublicHoliday: () => ({ mutate: vi.fn(), isPending: false }),
   useSyncHolidays: () => ({ mutate: mockSyncMutate, isPending: false }),
@@ -103,6 +105,7 @@ beforeEach(() => {
   mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
   mockUseEventTemplates.mockReturnValue({ data: [] })
   providerSettings.current = {}
+  holidayRows.current = []
   mockUpsertMutate.mockReset()
   mockSyncMutate.mockReset()
 })
@@ -156,6 +159,43 @@ describe('SettingsPage — Event Templates tab', () => {
     expect(action).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
     // EmptyState's own action slot is the only place that min-h-[44px] link-button is drawn; it is left unused here.
     expect(container.querySelector('.min-h-\\[44px\\]')).toBeNull()
+  })
+})
+
+// The public holiday table is global: every tenant's quotes and claims read the same rows, and a row decides whether a day is priced at the public
+// holiday rate (+122% on a weekday). Only a SuperAdmin may add, delete or sync rows (the API refuses everyone else, review M6 of plan builder
+// phase B), so everyone else gets the calendar to read and no control that would only fail.
+describe('SettingsPage — Public Holidays tab: who may change the calendar', () => {
+  const labourDay = { id: 'h1', date: '2026-10-05', name: 'Labour Day', state: 'NSW' }
+
+  it('shows a non-SuperAdmin the calendar read-only: the rows, no Add, Sync or Delete control, and the reason', async () => {
+    const user = userEvent.setup()
+    holidayRows.current = [labourDay]
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    renderSettingsPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Public Holidays' }))
+
+    expect(screen.getByText('Labour Day')).toBeInTheDocument()
+    for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', 'Delete']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+    }
+    expect(screen.getByText(/only a super admin can add, delete or sync public holidays/i)).toBeInTheDocument()
+  })
+
+  it('gives a SuperAdmin the Add, Sync and Delete controls and no read-only note', async () => {
+    const user = userEvent.setup()
+    holidayRows.current = [labourDay]
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    renderSettingsPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Public Holidays' }))
+
+    expect(screen.getByText('Labour Day')).toBeInTheDocument()
+    for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', 'Delete']) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument()
+    }
+    expect(screen.queryByText(/only a super admin can add, delete or sync public holidays/i)).not.toBeInTheDocument()
   })
 })
 

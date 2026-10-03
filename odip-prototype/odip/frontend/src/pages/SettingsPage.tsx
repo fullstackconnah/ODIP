@@ -145,7 +145,8 @@ export default function SettingsPage() {
     { key: 'appearance' as const, label: 'Appearance' },
     { key: 'provider' as const, label: 'Provider Settings' },
     { key: 'catalogue' as const, label: 'Support Catalogue', superAdminOnly: true },
-    { key: 'holidays' as const, label: 'Public Holidays', superAdminOnly: true },
+    // Everyone reads the calendar (it prices their plans and claims); only a SuperAdmin changes it, so the tab is read-only for the rest.
+    { key: 'holidays' as const, label: 'Public Holidays' },
     { key: 'tenants' as const, label: 'Tenants', superAdminOnly: true },
     { key: 'users' as const, label: 'Users', superAdminOnly: true },
     { key: 'notifications' as const, label: 'Notifications' },
@@ -259,7 +260,7 @@ export default function SettingsPage() {
       {tab === 'appearance' && <AppearanceSettingsTab />}
       {tab === 'provider' && <ProviderSettingsTab />}
       {tab === 'catalogue' && <SupportCatalogueTab />}
-      {tab === 'holidays' && <PublicHolidaysTab />}
+      {tab === 'holidays' && <PublicHolidaysTab canEdit={isSuperAdmin} />}
       {tab === 'notifications' && <NotificationPreferencesTab />}
       {tab === 'notifications-admin' && canManageNotifications && <AdminNotificationsTab />}
 
@@ -658,7 +659,12 @@ function SupportCatalogueTab() {
   )
 }
 
-function PublicHolidaysTab() {
+/**
+ * The public holiday calendar. It is global: every tenant's plan quotes and claims read the same rows, and a row decides whether a day is priced at
+ * the public holiday rate (+122% on a weekday). So only a SuperAdmin may add, delete or sync rows (the API refuses everyone else); with
+ * <code>canEdit</code> false the tab is the calendar to read, with no control that would only fail.
+ */
+function PublicHolidaysTab({ canEdit }: { canEdit: boolean }) {
   const [year, setYear] = useState(new Date().getFullYear())
   const [state, setState] = useState('VIC')
   const { data: holidays = [] } = usePublicHolidays(year, state)
@@ -717,7 +723,12 @@ function PublicHolidaysTab() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="font-semibold text-[var(--color-foreground)]">Public Holidays</h2>
-          <p className="text-sm text-[var(--color-muted-foreground)]">Used to determine NDIS public holiday rates on claims.</p>
+          <p className="text-sm text-[var(--color-muted-foreground)]">Used to determine NDIS public holiday rates on plans and claims.</p>
+          {!canEdit && (
+            <p className="text-sm text-[var(--color-muted-foreground)]">
+              Only a super admin can add, delete or sync public holidays: one calendar prices every organisation&apos;s plans and claims.
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Dropdown
@@ -734,13 +745,15 @@ function PublicHolidaysTab() {
             items={states.map(s => ({ value: s, label: s }))}
             label="Select state"
           />
-          <Button size="md" onClick={() => setAdding(true)}>
-            + Add Holiday
-          </Button>
+          {canEdit && (
+            <Button size="md" onClick={() => setAdding(true)}>
+              + Add Holiday
+            </Button>
+          )}
         </div>
       </div>
 
-      {adding && (
+      {canEdit && adding && (
         <div className="bg-[var(--color-card)] rounded-t-2xl border border-b-0 border-[var(--color-border)] p-3">
           <div className="flex items-center gap-3">
             <input type="date" value={newForm.date} onChange={e => setNewForm(p => ({ ...p, date: e.target.value }))} className={inputClass + ' w-40'} />
@@ -776,67 +789,71 @@ function PublicHolidaysTab() {
               </span>
             ),
           },
-          {
-            key: 'actions',
-            header: '',
-            render: (h: PublicHolidayDto) => (
-              <button onClick={() => setDeletingHoliday(h)} className="text-xs text-[var(--color-destructive)] hover:underline">
-                Delete
-              </button>
-            ),
-          },
+          ...(canEdit
+            ? [{
+                key: 'actions',
+                header: '',
+                render: (h: PublicHolidayDto) => (
+                  <button onClick={() => setDeletingHoliday(h)} className="text-xs text-[var(--color-destructive)] hover:underline">
+                    Delete
+                  </button>
+                ),
+              }]
+            : []),
         ]}
         emptyMessage={`No holidays found for ${year} in ${state}.`}
       />
 
       {/* Holiday Sync */}
-      <div className="pt-4">
-        <div className="flex items-center gap-3">
-          <Button size="md" onClick={handleSync} disabled={syncHolidays.isPending}>
-            {syncHolidays.isPending ? 'Syncing...' : 'Sync Holidays'}
-          </Button>
-          <button
-            type="button"
-            onClick={() => setShowSyncAdvanced(v => !v)}
-            className="text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] underline"
-          >
-            {showSyncAdvanced ? 'Hide advanced' : 'Advanced'}
-          </button>
+      {canEdit && (
+        <div className="pt-4">
+          <div className="flex items-center gap-3">
+            <Button size="md" onClick={handleSync} disabled={syncHolidays.isPending}>
+              {syncHolidays.isPending ? 'Syncing...' : 'Sync Holidays'}
+            </Button>
+            <button
+              type="button"
+              onClick={() => setShowSyncAdvanced(v => !v)}
+              className="text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] underline"
+            >
+              {showSyncAdvanced ? 'Hide advanced' : 'Advanced'}
+            </button>
+          </div>
+
+          {showSyncAdvanced && (
+            <div className="flex items-center gap-3 mt-3">
+              <label className="text-sm text-[var(--color-muted-foreground)]">From year</label>
+              <input
+                type="number"
+                value={syncFromYear ?? ''}
+                onChange={e => setSyncFromYear(e.target.value ? Number(e.target.value) : undefined)}
+                placeholder={String(new Date().getFullYear())}
+                className="w-24 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+              />
+              <label className="text-sm text-[var(--color-muted-foreground)]">To year</label>
+              <input
+                type="number"
+                value={syncToYear ?? ''}
+                onChange={e => setSyncToYear(e.target.value ? Number(e.target.value) : undefined)}
+                placeholder={String(new Date().getFullYear() + 1)}
+                className="w-24 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+              />
+            </div>
+          )}
+
+          {syncMessage && (
+            <div className={`mt-3 px-4 py-2.5 rounded-[var(--radius-md)] text-sm ${
+              syncMessage.type === 'success'
+                ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
+                : syncMessage.type === 'warning'
+                ? 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
+                : 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
+            }`}>
+              {syncMessage.text}
+            </div>
+          )}
         </div>
-
-        {showSyncAdvanced && (
-          <div className="flex items-center gap-3 mt-3">
-            <label className="text-sm text-[var(--color-muted-foreground)]">From year</label>
-            <input
-              type="number"
-              value={syncFromYear ?? ''}
-              onChange={e => setSyncFromYear(e.target.value ? Number(e.target.value) : undefined)}
-              placeholder={String(new Date().getFullYear())}
-              className="w-24 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-            />
-            <label className="text-sm text-[var(--color-muted-foreground)]">To year</label>
-            <input
-              type="number"
-              value={syncToYear ?? ''}
-              onChange={e => setSyncToYear(e.target.value ? Number(e.target.value) : undefined)}
-              placeholder={String(new Date().getFullYear() + 1)}
-              className="w-24 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-            />
-          </div>
-        )}
-
-        {syncMessage && (
-          <div className={`mt-3 px-4 py-2.5 rounded-[var(--radius-md)] text-sm ${
-            syncMessage.type === 'success'
-              ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
-              : syncMessage.type === 'warning'
-              ? 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
-              : 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
-          }`}>
-            {syncMessage.text}
-          </div>
-        )}
-      </div>
+      )}
 
       <ConfirmDialog
         open={deletingHoliday !== null}

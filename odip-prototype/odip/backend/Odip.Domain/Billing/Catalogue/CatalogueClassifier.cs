@@ -40,6 +40,21 @@ public static class CatalogueClassifier
         return Map.TryGetValue($"{parts[0]}_{parts[1]}_{group}", out var classification) ? classification : CatalogueClassification.Other;
     }
 
+    /// <summary>
+    /// The map read the other way: the "CC_SSS_RRRR" keys filed under this family, intensity and day type (a null intensity or day type matches
+    /// the entries that have none), optionally only those of one registration group, in a stable order. The pricing engine asks for what it needs
+    /// ("community access, standard, Saturday") and finds the catalogue rows by these keys, so the codes are never repeated outside this table.
+    /// Empty when the map names no such item: the Weekday Night band of community access and group activities, for one.
+    /// </summary>
+    public static IReadOnlyList<string> KeysFor(SupportFamily family, SupportIntensity? intensity, ClaimDayType? dayType, string? registrationGroup = null) =>
+        Map.Where(entry => entry.Value.Family == family
+                           && entry.Value.Intensity == intensity
+                           && entry.Value.DayType == dayType
+                           && (registrationGroup is null || entry.Key.EndsWith("_" + registrationGroup, StringComparison.Ordinal)))
+            .Select(entry => entry.Key)
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToList();
+
     private static Dictionary<string, CatalogueClassification> BuildMap()
     {
         var map = new Dictionary<string, CatalogueClassification>(StringComparer.Ordinal);
