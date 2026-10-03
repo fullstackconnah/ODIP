@@ -41,10 +41,10 @@ internal static class PlanPricingTestSupport
     }
 
     /// <summary>The database behind <see cref="WithDecemberPriceSetAsync"/>: the 2026-27 catalogue and then the December price set, imported as a SuperAdmin would. The caller disposes it.</summary>
-    public static async Task<OdipDbContext> DecemberDatabaseAsync(Func<string, bool> raised, decimal increase = 1m)
+    public static async Task<OdipDbContext> DecemberDatabaseAsync(Func<string, bool> raised, decimal increase = 1m, string? databaseName = null)
     {
         var december1 = new DateOnly(2026, 12, 1);
-        var db = CatalogueImportTestSupport.CreateDb();
+        var db = CatalogueImportTestSupport.CreateDb(databaseName);
         await CatalogueImportTestSupport.ImportAsync(db, CatalogueFixtures.File2026_27);
         var rows = (await CatalogueImportTestSupport.PreviewAsync(db, CatalogueFixtures.File2026_27)).Rows
             .Select(r => raised(r.ItemNumber) && r.PriceNational is not null && (r.EffectiveTo is null || r.EffectiveTo >= december1) ? Raised(r, december1, increase) : r)

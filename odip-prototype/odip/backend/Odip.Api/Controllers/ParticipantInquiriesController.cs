@@ -234,7 +234,10 @@ public class ParticipantInquiriesController : ControllerBase
             || draft.AgreementStartDate < draft.PlanStartDate || draft.AgreementEndDate > draft.PlanEndDate
             || draft.Lines.Count == 0
             || draft.Lines.Any(line => line.Hours <= 0 || line.UnitPrice <= 0 || string.IsNullOrWhiteSpace(line.ItemCode) || string.IsNullOrWhiteSpace(line.CatalogueVersion)
-                || line.CatalogueEffectiveFrom > draft.AgreementStartDate || (line.CatalogueEffectiveTo != null && line.CatalogueEffectiveTo < draft.AgreementStartDate)))
+                // A hand-typed line was priced on the agreement's start date, so its catalogue row has to be valid on it. A line the plan builder generated (it names its block) is priced on
+                // the date of each shift: its row is the one valid on that shift, and when the plan crosses a catalogue price change that row starts after the agreement does.
+                || (string.IsNullOrEmpty(line.BlockKey)
+                    && (line.CatalogueEffectiveFrom > draft.AgreementStartDate || (line.CatalogueEffectiveTo != null && line.CatalogueEffectiveTo < draft.AgreementStartDate)))))
             return null;
         return draft;
     }

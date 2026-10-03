@@ -14,12 +14,13 @@ namespace Odip.Tests.Catalogue;
 /// <summary>Shared set-up for the catalogue importer tests: an InMemory database, a fixed clock and one-call preview-then-confirm.</summary>
 internal static class CatalogueImportTestSupport
 {
-    public static OdipDbContext CreateDb()
+    /// <summary>A SuperAdmin's context on a new in-memory database, or on the named one (so another context can open the same store as a tenant's user would).</summary>
+    public static OdipDbContext CreateDb(string? name = null)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns((Guid?)null);
         tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-        return new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
+        return new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(name ?? Guid.NewGuid().ToString()).Options, tenant.Object);
     }
 
     /// <summary>02:00 UTC on the given date, which is midday in Sydney (the provider's zone when there is no settings row): the provider's date is the same day all year.</summary>
