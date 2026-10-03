@@ -785,7 +785,7 @@ describe('ServiceAgreementDraftPage: a second coordinator, and a block in progre
   })
 
   it('says a newer version was saved by somebody else, keeps everything on screen, and loads theirs only when asked and confirmed', async () => {
-    const refetch = vi.fn(async () => { drafts.mockReturnValue({ data: [newer(), older()], isLoading: false, isError: false, refetch }); return {} })
+    const refetch = vi.fn(async () => { drafts.mockReturnValue({ data: [newer(), older()], isLoading: false, isError: false, refetch }); return { data: [newer(), older()], isError: false } })
     drafts.mockReturnValue({ data: [older()], isLoading: false, isError: false, refetch })
     createMutate.mockImplementationOnce((_request, options) => options.onError({ response: { status: 409, data: { success: false, code: 'draft-version-conflict', data: { currentVersion: 5 }, errors: ['Version 5 was saved after the version this plan started from. Load version 5 to see what changed, then make your changes again.'] } } }))
     renderPage()
@@ -811,6 +811,59 @@ describe('ServiceAgreementDraftPage: a second coordinator, and a block in progre
     expect(screen.queryByText('Version 5 was saved by somebody else')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save draft' }))
     expect(createMutate.mock.calls[1][0].data.baseVersion).toBe(5)                              // and the next save starts from it
+  })
+
+  // Code review N8: loadNewest ignored a failed read: after the confirm it cleared the conflict, gave up what was on screen and seeded from the older revision still in the cache, with no word, and the next
+  // save conflicted again.
+  describe('loading the newer version', () => {
+    type Read = { data?: unknown[]; isError: boolean }
+    /** The conflict is met (version 5 is the newer one) and the person has asked to load it; `answer` is what a read of the drafts says (the 409 reads them once, and loading reads them again). */
+    async function askToLoadVersion5(answer: (refetch: () => Promise<Read>) => Read) {
+      const refetch = vi.fn((): Promise<Read> => Promise.resolve(answer(refetch)))
+      drafts.mockReturnValue({ data: [older()], isLoading: false, isError: false, refetch })
+      createMutate.mockImplementationOnce((_request, options) => options.onError({ response: { status: 409, data: { success: false, code: 'draft-version-conflict', data: { currentVersion: 5 }, errors: ['Version 5 was saved.'] } } }))
+      renderPage()
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Representative'), ' (mine)')
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      const callout = (await screen.findByText('Version 5 was saved by somebody else')).closest('[role="alert"]') as HTMLElement
+      await user.click(within(callout).getByRole('button', { name: 'Load version 5' }))
+      await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Load version 5' }))
+      return { user, refetch }
+    }
+
+    it('does not replace what is on screen when the read failed, and says so, with the conflict still there to try again', async () => {
+      await askToLoadVersion5(refetch => { drafts.mockReturnValue({ data: [older()], isLoading: false, isError: true, refetch }); return { data: [older()], isError: true } })
+
+      expect(await screen.findByText('Version 5 could not be loaded')).toBeInTheDocument()
+      expect(screen.getByLabelText('Representative')).toHaveValue('R. Tran (mine)')                  // what the person typed is still there
+      expect(screen.getByText('Version 5 was saved by somebody else')).toBeInTheDocument()        // and the version is still there to load
+      expect(screen.getByRole('button', { name: 'Load version 5' })).toBeInTheDocument()
+      expect(screen.queryByText(/Couldn't load/)).not.toBeInTheDocument()                          // the page is not blanked by the failed read: the plan stays
+    })
+
+    it('does not seed from the older version a read that did not reach the newer one leaves behind', async () => {
+      const { user } = await askToLoadVersion5(() => ({ data: [older()], isError: false }))
+
+      expect(await screen.findByText('Version 5 could not be loaded')).toBeInTheDocument()
+      expect(screen.getByLabelText('Representative')).toHaveValue('R. Tran (mine)')
+      await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+      createMutate.mockClear()
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      expect(createMutate.mock.calls[0][0].data.baseVersion).toBe(4)      // it is still the plan that started from version 4: nothing was re-seeded
+    })
+
+    it('offers the newest instead when somebody saved another version meanwhile, and replaces nothing until asked again', async () => {
+      const sixth = () => draft({ id: 'd-6', version: 6, representative: 'Sixth Rep', blocks: [draftBlock(mondayWednesday('b1'))], pricing: quote() })
+      const { user } = await askToLoadVersion5(refetch => { drafts.mockReturnValue({ data: [sixth(), newer(), older()], isLoading: false, isError: false, refetch }); return { data: [sixth(), newer(), older()], isError: false } })
+
+      expect(await screen.findByText('Version 5 is not the newest any more')).toBeInTheDocument()
+      expect(screen.getByLabelText('Representative')).toHaveValue('R. Tran (mine)')
+      expect(screen.getByText('Version 6 was saved by somebody else')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Load version 6' }))
+      await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Load version 6' }))
+      expect(await screen.findByDisplayValue('Sixth Rep')).toBeInTheDocument()
+    })
   })
 
   it('lets a person keep editing instead, and says it again if they save again', async () => {

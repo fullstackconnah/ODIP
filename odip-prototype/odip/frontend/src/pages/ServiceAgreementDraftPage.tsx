@@ -113,7 +113,8 @@ function DraftPage() {
   }), [participant.data])
 
   if (participant.isLoading || drafts.isLoading) return <PageState kind="loading" noun="service agreement draft" />
-  if (participant.isError || drafts.isError) {
+  // A read of the drafts that fails once the page has them (the second read of a conflict, say) does not take the plan on screen away: it is said where the person is (loadNewest), not by an error page.
+  if (participant.isError || (drafts.isError && !loaded)) {
     return isNotFoundError(participant.error)
       ? <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
       : <PageState kind="error" noun="service agreement drafts" onRetry={() => { void participant.refetch(); void drafts.refetch() }} />
@@ -153,12 +154,24 @@ function DraftPage() {
     })
   }
 
-  // Replaces the working copy with the newest revision's, once it has been read again: the details and the plan on screen are given up for it.
+  // Replaces the working copy with the newest revision's, once it has been read again: the details and the plan on screen are given up for it, and only for the version that was named. A read that
+  // failed leaves the older revision in the cache, and seeding from that would give up what is on screen for the version this plan started from (and the next save would conflict again): so it
+  // only goes ahead when the read worked and its newest version is the one the conflict named. Somebody saving yet another meanwhile makes that the version to load.
   const loadNewest = async () => {
     setConfirmingLoad(false)
-    await drafts.refetch()
-    setConflict(null)
     setFailure(null)
+    const read = await drafts.refetch()
+    const newest = read.isError ? undefined : read.data?.[0]
+    if (!newest || newest.version !== conflict) {
+      if (newest && conflict !== null && newest.version > conflict) {
+        setConflict(newest.version)
+        setFailure({ title: `Version ${conflict} is not the newest any more`, messages: [`Version ${newest.version} has been saved since. Nothing on this page was replaced: load version ${newest.version} instead.`] })
+      } else {
+        setFailure({ title: `Version ${conflict ?? ''} could not be loaded`, messages: ['It could not be read just now. Nothing on this page was replaced; the version is still there to load. Try again.'] })
+      }
+      return
+    }
+    setConflict(null)
     setProblems([])
     setSavedVersion(null)
     setBaseline(null)
