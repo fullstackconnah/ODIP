@@ -5,7 +5,7 @@ import type { FundingSourceDto, PlannedLine, PlanBlock, PlanFailureReason, PlanI
 import { emptyBlock } from './planBlocks'
 import {
   CATEGORY_SHORT, REASON_COPY, addDays, agreementWeeks, bandLabel, categoryLabel, compareBudget, describeQuoteError, describeSaveError, flagSummary, formatServiceDate, friendlyMessage, groupLines,
-  groupByReason, groupIssues, isRefusal, issueWhere, parseFlags, planBudgetFor, quantityLabel, questionShort, referenceWeek, refusals, ruleWords,
+  groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, planBudgetFor, quantityLabel, questionShort, referenceWeek, refusals, ruleWords,
 } from './planQuote'
 
 const line = (changes: Partial<PlannedLine>): PlannedLine => ({
@@ -23,6 +23,14 @@ describe('dates', () => {
     expect(formatServiceDate(undefined)).toBe('')
     expect(addDays('2026-12-31', 1)).toBe('2027-01-01')
     expect(addDays('2026-10-05', -5)).toBe('2026-09-30')
+  })
+
+  // Review F1: a date box lets a person type a five digit year; the string comparison from <= to passed it and the server answered a 400 the screen could not read.
+  it('accepts only a real day in the years the engine prices, never a five digit year or a day that is not on the calendar', () => {
+    for (const good of ['2026-10-05', '2000-01-01', '2100-12-31', '2028-02-29']) expect(isPricingDate(good), good).toBe(true)
+    for (const bad of ['', '20261-10-05', '1999-12-31', '2101-01-01', '2026-02-30', '2027-02-29', '2026-13-01', '26-10-05', '2026-10-05T00:00:00', 'abc']) expect(isPricingDate(bad), bad).toBe(false)
+    expect(isPricingDate(undefined)).toBe(false)
+    expect(isPricingDate(null)).toBe(false)
   })
 })
 
@@ -308,5 +316,32 @@ describe('when a request fails', () => {
     expect(describeSaveError(axiosError(404, { errors: ['Participant not found.'] })).messages).toEqual(['Participant not found.'])
     expect(describeSaveError(axiosError(500)).messages[0]).toContain('nothing you entered is lost')
     expect(describeSaveError(axiosError(400)).messages).toEqual(['The server refused the draft.'])
+  })
+
+  // Review F1: ASP.NET's model-binding 400 is a ValidationProblemDetails whose `errors` is an OBJECT keyed by field, not a list. Spreading it threw inside render and lost the unsaved plan.
+  const problemDetails = (errors: unknown) => axiosError(400, { type: 'https://tools.ietf.org/html/rfc9110#section-15.5.1', title: 'One or more validation errors occurred.', status: 400, traceId: '00-abc-def-00', errors })
+  const CLEARED_BOX = 'A box in the plan is empty or is not a number. Check the days, times and numbers on each step.'
+
+  it('reads the framework\'s validation answer without throwing, in plain words, for a quote and for a save', () => {
+    const error = problemDetails({
+      'blocks[0].block.sleepoverActiveHours': ['The JSON value could not be converted to System.Decimal. Path: $.blocks[0].block.sleepoverActiveHours | LineNumber: 0 | BytePositionInLine: 480.'],
+      PlanStartDate: ['The agreement period ends before it starts.'],
+    })
+
+    expect(() => describeQuoteError(error)).not.toThrow()
+    expect(() => describeSaveError(error)).not.toThrow()
+    expect(describeQuoteError(error)).toEqual({ title: 'This plan cannot be priced yet', detail: CLEARED_BOX, retryable: false })
+    expect(describeSaveError(error)).toEqual({ title: 'The draft was not saved', messages: [CLEARED_BOX, 'The agreement period ends before it starts.'] })
+  })
+
+  it('reads every other shape a failed call can have: a field with one message, no errors at all, null, a string body, nothing', () => {
+    expect(describeSaveError(problemDetails({ Representative: 'The field Representative must be a string with a maximum length of 500.' })).messages).toEqual(['The field Representative must be a string with a maximum length of 500.'])
+    for (const errors of [null, undefined, 'a string', 42, {}, [], { a: [] }]) {
+      expect(() => describeQuoteError(problemDetails(errors))).not.toThrow()
+      expect(describeSaveError(problemDetails(errors)).messages.length).toBeGreaterThan(0)
+    }
+    expect(describeQuoteError(axiosError(400, '<html>Bad gateway</html>')).title).toBe('This plan cannot be priced yet')
+    expect(describeSaveError({ response: { status: 400 } }).messages).toEqual(['The server refused the draft.'])
+    expect(describeSaveError(undefined).title).toBe('The draft was not saved')
   })
 })

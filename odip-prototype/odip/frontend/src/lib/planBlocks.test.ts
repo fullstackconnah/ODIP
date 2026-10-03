@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { PlanBlock } from '@/api/types'
 import {
   BAND_EDGES, blockProblems, canOfferSleepover, clock, dayBars, daysSummary, defaultSleepoverWindow, describeBlock, duplicateBlock, durationMinutes, emptyBlock, endsNextDay, formatDuration, formatHours,
-  formatMinute, fromClock, layoutDay, needsSleepoverWindow, nextBlockId, normaliseBlock, offeredSupportTypes, ratioSentence, registrationGroupFor, stampLocation, toMinutes, toWireTime, weekdayBandParts,
+  forTheServer, formatMinute, fromClock, layoutDay, needsSleepoverWindow, nextBlockId, normaliseBlock, offeredSupportTypes, ratioSentence, registrationGroupFor, stampLocation, toMinutes, toWireTime, weekdayBandParts,
   weeklyHours,
 } from './planBlocks'
 import { PLAN_TEMPLATES } from './planTemplates'
@@ -158,12 +158,47 @@ describe('what is wrong with a block', () => {
     expect(found({ ...sleeping, sleepoverWindow: { from: '20:00:00', to: '03:00:00' } })).toEqual(['times:sleepoverFrom'])   // starts before the block
   })
 
+  // Review F1: a number box that was cleared reports NaN, JSON turns NaN into null, and the server refuses a null for a decimal with a 400 the screen could not read.
+  it('says a cleared box is a problem for every number a block carries, NaN and infinity included, never a null for the server', () => {
+    const sleeping = { supportType: 'PersonalCare' as const, start: '22:00:00', end: '06:00:00', workerMaySleep: true }
+    expect(found({ ...sleeping, sleepoverActiveHours: Number.NaN })).toEqual(['times:sleepoverActiveHours'])
+    expect(found({ ...sleeping, sleepoverActiveHours: Number.POSITIVE_INFINITY })).toEqual(['times:sleepoverActiveHours'])
+    expect(found({ participantsPresent: Number.NaN })).toEqual(['requirements:participantsPresent'])
+    expect(found({ travel: { claim: true, minutesEachWay: Number.NaN, returnToBase: false, kmEachWay: Number.NaN } })).toEqual(['travel:travelMinutes', 'travel:travelKm'])
+    expect(found({ transport: { km: Number.NaN, vehicle: 'Standard', tolls: Number.NaN, parking: Number.NaN } })).toEqual(['travel:transportKm', 'travel:tolls', 'travel:parking'])
+    expect(found({ supportType: 'StaSupport', accommodation: { nights: Number.NaN, workerOnSite: false } })).toEqual(['travel:nights'])
+  })
+
   it('checks travel, transport, sharing and nights against the engine\'s ranges', () => {
     expect(found({ travel: { claim: true, minutesEachWay: 500, returnToBase: false, kmEachWay: 0 } })).toEqual(['travel:travelMinutes'])
     expect(found({ travel: { claim: false, minutesEachWay: 500, returnToBase: false, kmEachWay: 0 } })).toEqual([])   // not claimed: nothing to check
     expect(found({ transport: { km: -1, vehicle: 'Standard', tolls: 10001, parking: 0 } })).toEqual(['travel:transportKm', 'travel:tolls'])
     expect(found({ participantsPresent: 2, transport: { km: 5, vehicle: 'Standard', tolls: 0, parking: 0, participantsSharing: 3 } })).toEqual(['travel:transportSharing'])
     expect(found({ supportType: 'StaSupport', accommodation: { nights: 15, workerOnSite: false } })).toEqual(['travel:nights'])
+  })
+})
+
+describe('forTheServer', () => {
+  it('leaves a block with every number in it exactly as it is', () => {
+    const complete = block({ travel: { claim: true, minutesEachWay: 20, returnToBase: true, kmEachWay: 8.5, participantsSharing: 1 }, transport: { km: 20, vehicle: 'Standard', tolls: 0, parking: 4.5, participantsSharing: 1 } })
+    expect(forTheServer(complete)).toEqual(complete)
+  })
+
+  it('writes a number nobody can see (travel switched off, an emptied box behind it) as one the server can read, so JSON never carries a null for a decimal', () => {
+    const hidden = block({
+      sleepoverActiveHours: Number.NaN,
+      travel: { claim: false, minutesEachWay: Number.NaN, returnToBase: false, kmEachWay: Number.NaN, participantsSharing: Number.NaN },
+      transport: { km: Number.NaN, vehicle: 'Standard', tolls: Number.NaN, parking: 2, participantsSharing: Number.NaN },
+      accommodation: { nights: Number.NaN, workerOnSite: false },
+    })
+
+    const wire = JSON.parse(JSON.stringify(forTheServer(hidden)))
+
+    expect(wire.sleepoverActiveHours).toBe(0)
+    expect(wire.travel).toEqual({ claim: false, minutesEachWay: 0, returnToBase: false, kmEachWay: 0 })
+    expect(wire.transport).toEqual({ km: 0, vehicle: 'Standard', tolls: 0, parking: 2 })
+    expect(wire.accommodation).toEqual({ nights: 0, workerOnSite: false })
+    expect(JSON.stringify(wire)).not.toContain('null')
   })
 })
 

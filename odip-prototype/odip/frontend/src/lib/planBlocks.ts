@@ -295,9 +295,24 @@ export function duplicateBlock(entry: DraftBlock, id: string): DraftBlock {
   return JSON.parse(JSON.stringify({ ...entry, block: { ...entry.block, id } })) as DraftBlock
 }
 
-/** What a block looks like on the wire for a given agreement: the delivery location is the agreement's, whatever the block carried. */
+/**
+ * A block as the server can read it. A number box that was cleared reports NaN, and JSON writes NaN as null, which the server refuses for a decimal with a 400. A box whose number matters
+ * is a problem the person sees (blockProblems) and that block is never sent; this is for a number nobody can see any more (travel switched off, transport cleared, a sleepover turned
+ * off behind an emptied "active hours" box): it goes as 0, or is left out where it is optional.
+ */
+export function forTheServer(block: PlanBlock): PlanBlock {
+  const finite = (value: number) => (Number.isFinite(value) ? value : 0)
+  const optional = (value: number | undefined) => (value === undefined || !Number.isFinite(value) ? undefined : value)
+  const next: PlanBlock = { ...block, sleepoverActiveHours: finite(block.sleepoverActiveHours) }
+  if (block.travel) next.travel = { ...block.travel, minutesEachWay: finite(block.travel.minutesEachWay), kmEachWay: finite(block.travel.kmEachWay), participantsSharing: optional(block.travel.participantsSharing) }
+  if (block.transport) next.transport = { ...block.transport, km: finite(block.transport.km), tolls: finite(block.transport.tolls), parking: finite(block.transport.parking), participantsSharing: optional(block.transport.participantsSharing) }
+  if (block.accommodation) next.accommodation = { ...block.accommodation, nights: finite(block.accommodation.nights) }
+  return next
+}
+
+/** What a block looks like on the wire for a given agreement: the delivery location is the agreement's, whatever the block carried, and every number is one the server can read. */
 export function stampLocation(block: PlanBlock, state: AgreementState, zone: PlanPriceZone): PlanBlock {
-  return { ...block, location: { state, zone } }
+  return { ...forTheServer(block), location: { state, zone } }
 }
 
 // ── What is wrong with a block ────────────────────────────────────────────────
@@ -339,7 +354,7 @@ export function blockProblems(block: PlanBlock, context: BlockCheckContext = {})
     if (needsSleepoverWindow(block) && !block.sleepoverWindow) add('times', 'sleepoverFrom', 'A block of more than 12 hours needs the part of it where the worker sleeps.')
     if (block.sleepoverWindow && sleepoverMinutes(block) === 0) add('times', 'sleepoverFrom', 'The sleeping window needs a start and an end.')
     if (block.sleepoverWindow && sleepoverMinutes(block) > 0 && !windowInsideBlock(block)) add('times', 'sleepoverFrom', 'The sleeping window must lie inside the block.')
-    if (block.sleepoverActiveHours < 0 || block.sleepoverActiveHours > sleepoverMinutes(block) / 60) add('times', 'sleepoverActiveHours', 'Active hours must be between 0 and the length of the sleepover.')
+    if (!(block.sleepoverActiveHours >= 0 && block.sleepoverActiveHours <= sleepoverMinutes(block) / 60)) add('times', 'sleepoverActiveHours', 'Active hours must be between 0 and the length of the sleepover.')
   }
 
   if (!Number.isInteger(block.workers) || block.workers < 1 || block.workers > 10) add('requirements', 'workers', 'Workers must be between 1 and 10.')

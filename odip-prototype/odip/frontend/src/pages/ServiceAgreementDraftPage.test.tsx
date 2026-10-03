@@ -188,6 +188,34 @@ describe('ServiceAgreementDraftPage: saving a plan built from blocks', () => {
     expect(screen.getByText('Enter the plan and agreement dates.')).toBeInTheDocument()
   })
 
+  // Review F1: a date box takes a year with five digits ("20261-10-01"), which is later than any end date as text and no date at all to the server.
+  it('does not send a date the server cannot read: a five digit year is said in words next to the others and nothing is sent', async () => {
+    renderPage()
+    const user = await fillDetails()
+    await addBlockFromTemplate(user)
+    fireEvent.change(screen.getByLabelText('Agreement end'), { target: { value: '20271-06-30' } })
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    expect(createMutate).not.toHaveBeenCalled()
+    expect(screen.getByText('Fix these before saving')).toBeInTheDocument()
+    expect(screen.getByText('Check the dates: each needs a day, a month and a four digit year between 2000 and 2100.')).toBeInTheDocument()
+  })
+
+  it('keeps the plan and says what is wrong when the server answers with the framework\'s validation errors, as an object by field', async () => {
+    createMutate.mockImplementation((_request, options) => options.onError({ response: { status: 400, data: { title: 'One or more validation errors occurred.', status: 400, errors: { 'blocks[0].block.sleepoverActiveHours': ['The JSON value could not be converted to System.Decimal. Path: $.blocks[0].block.sleepoverActiveHours | LineNumber: 0 | BytePositionInLine: 480.'] } } } }))
+    renderPage()
+    const user = await fillDetails('Keep me')
+    await addBlockFromTemplate(user)
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    const alert = await screen.findByText('The draft was not saved')
+    expect(alert.closest('[role="alert"]')).toHaveTextContent('A box in the plan is empty or is not a number.')
+    expect(screen.getByLabelText('Representative')).toHaveValue('Keep me')
+    expect(screen.getByText('Mon–Fri · 09:00–13:00 · Community access 1:1')).toBeInTheDocument()
+  })
+
   it('does not send an agreement that ends before it starts', async () => {
     renderPage()
     const user = await fillDetails()

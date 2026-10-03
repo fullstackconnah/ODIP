@@ -108,6 +108,15 @@ describe('BudgetBar', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   })
 
+  // Review F1: the framework's validation answer (errors as an object by field) threw inside render and emptied the page.
+  it('reads the framework\'s validation answer without throwing, and says it in words', () => {
+    const error = { response: { status: 400, data: { title: 'One or more validation errors occurred.', status: 400, errors: { 'blocks[0].block.sleepoverActiveHours': ['The JSON value could not be converted to System.Decimal. Path: $.blocks[0]...'] } } } }
+
+    expect(() => render(<BudgetBar status="error" error={error} onRetry={vi.fn()} planBudget={null} />)).not.toThrow()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('A box in the plan is empty or is not a number.')
+  })
+
   it('shows a plan that prices to nothing as exactly that, with no categories to list', () => {
     ready({ budget: { period: { ...budget().period, totals: emptyTotals() }, weekly: null, week: null } })
     expect(screen.getAllByText(/\$0\.00/).length).toBeGreaterThan(0)

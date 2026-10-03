@@ -288,6 +288,16 @@ describe('ReviewStep states', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   })
 
+  // Review F1: the framework's validation answer (errors as an object by field) threw inside render and took the unsaved block with it.
+  it('reads the framework\'s validation answer without throwing, and says it in words', () => {
+    state.current = { data: undefined, isLoading: false, isError: true, error: { response: { status: 400, data: { title: 'One or more validation errors occurred.', status: 400, errors: { 'blocks[0].block.sleepoverActiveHours': ['The JSON value could not be converted to System.Decimal. Path: $.blocks[0]...'] } } } } }
+
+    expect(() => setUp()).not.toThrow()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('A box in the plan is empty or is not a number.')
+    expect(screen.getByRole('alert')).toHaveTextContent('This plan cannot be priced yet')
+  })
+
   it('keeps showing the last answer when a newer one fails', () => {
     state.current = { data: blockQuote(), isLoading: false, isError: true, error: new Error('Network Error') }
     setUp()

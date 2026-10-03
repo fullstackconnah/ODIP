@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPut } from '../client'
 import type { ApiResponse, PlanBlock, PlanPricingSettingsDto, PlanQuote, PlanQuoteRequest, UpdatePlanPricingSettingsDto } from '../types'
-import { referenceWeek, type ReferenceWeek } from '@/lib/planQuote'
+import { isPricingDate, referenceWeek, type ReferenceWeek } from '@/lib/planQuote'
 
 // The plan builder's calls to the pricing engine (POST api/v1/plan-pricing/quote, GET and PUT api/v1/plan-pricing/settings). The client sends blocks and an
 // agreement period and never a price or a policy: the server reads the organisation's own settings, the catalogue valid on each date and the holidays.
@@ -48,7 +48,7 @@ export interface PlanBudget {
  * holiday in it. The week needs the period's holiday dates, so the two requests are made one after the other.
  */
 export function usePlanBudget(blocks: readonly PlanBlock[], from: string, to: string, enabled = true) {
-  const ready = enabled && blocks.length > 0 && !!from && !!to && from <= to
+  const ready = enabled && blocks.length > 0 && isPricingDate(from) && isPricingDate(to) && from <= to
   return useQuery({
     queryKey: ['plan-budget', JSON.stringify({ blocks, from, to })],
     enabled: ready,
@@ -66,7 +66,7 @@ export function usePlanBudget(blocks: readonly PlanBlock[], from: string, to: st
 
 /** One block priced alone over the agreement, with its lines: the Review step's table, holiday exposure and why. */
 export function usePlanBlockQuote(block: PlanBlock | null, from: string, to: string, enabled = true) {
-  const ready = enabled && block !== null && !!from && !!to && from <= to
+  const ready = enabled && block !== null && isPricingDate(from) && isPricingDate(to) && from <= to
   return useQuery({
     queryKey: ['plan-block-quote', JSON.stringify({ block, from, to })],
     enabled: ready,

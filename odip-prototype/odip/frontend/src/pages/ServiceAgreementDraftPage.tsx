@@ -15,7 +15,7 @@ import { plural } from '@/lib/format'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
 import { SUPPORT_LABEL, blockProblems, normaliseBlock, stampLocation } from '@/lib/planBlocks'
-import { describeSaveError, friendlyMessage, type SaveFailure } from '@/lib/planQuote'
+import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, describeSaveError, friendlyMessage, isPricingDate, type SaveFailure } from '@/lib/planQuote'
 import { PlanBuilder } from './plan-builder/PlanBuilder'
 import { RevisionCard } from './plan-builder/RevisionCard'
 
@@ -39,6 +39,10 @@ type Details = {
 const EMPTY_DETAILS: Details = { state: 'NSW', zone: 'National', planStartDate: '', planEndDate: '', agreementStartDate: '', agreementEndDate: '', representative: '' }
 
 const snapshotOf = (details: Details, plan: readonly DraftBlock[]) => JSON.stringify({ details, plan })
+
+/** The years the pricing engine answers for, as the bounds of every date box (a box that is left to run takes a year with six digits). */
+const DATE_MIN = `${PRICING_FIRST_YEAR}-01-01`
+const DATE_MAX = `${PRICING_LAST_YEAR}-12-31`
 
 export default function ServiceAgreementDraftPage() {
   const { id: participantId } = useParams<{ id: string }>()
@@ -96,7 +100,9 @@ export default function ServiceAgreementDraftPage() {
     setFailure(null)
     setSavedVersion(null)
     const found: string[] = []
-    if (!details.planStartDate || !details.planEndDate || !details.agreementStartDate || !details.agreementEndDate) found.push('Enter the plan and agreement dates.')
+    const dates = [details.planStartDate, details.planEndDate, details.agreementStartDate, details.agreementEndDate]
+    if (dates.some(date => !date)) found.push('Enter the plan and agreement dates.')
+    else if (!dates.every(isPricingDate)) found.push(`Check the dates: each needs a day, a month and a four digit year between ${PRICING_FIRST_YEAR} and ${PRICING_LAST_YEAR}.`)
     else if (details.planEndDate < details.planStartDate || details.agreementEndDate < details.agreementStartDate) found.push('An end date cannot come before its start date.')
     if (plan.length === 0) found.push('Add at least one support block.')
     plan.forEach((entry, index) => blockProblems(entry.block).forEach(problem => found.push(`Block ${index + 1}: ${problem.message}`)))
@@ -165,16 +171,16 @@ export default function ServiceAgreementDraftPage() {
             <select value={details.zone} onChange={e => edit({ zone: e.target.value as PlanPriceZone })}>{ZONES.map(zone => <option key={zone.value} value={zone.value}>{zone.label}</option>)}</select>
           </FormField>
           <FormField label="Plan start" className={span.date}>
-            <input type="date" value={details.planStartDate} onChange={e => edit({ planStartDate: e.target.value })} />
+            <input type="date" min={DATE_MIN} max={DATE_MAX} value={details.planStartDate} onChange={e => edit({ planStartDate: e.target.value })} />
           </FormField>
           <FormField label="Plan end" className={span.date}>
-            <input type="date" value={details.planEndDate} onChange={e => edit({ planEndDate: e.target.value })} />
+            <input type="date" min={DATE_MIN} max={DATE_MAX} value={details.planEndDate} onChange={e => edit({ planEndDate: e.target.value })} />
           </FormField>
           <FormField label="Agreement start" className={span.date}>
-            <input type="date" value={details.agreementStartDate} onChange={e => edit({ agreementStartDate: e.target.value })} />
+            <input type="date" min={DATE_MIN} max={DATE_MAX} value={details.agreementStartDate} onChange={e => edit({ agreementStartDate: e.target.value })} />
           </FormField>
           <FormField label="Agreement end" className={span.date}>
-            <input type="date" value={details.agreementEndDate} onChange={e => edit({ agreementEndDate: e.target.value })} />
+            <input type="date" min={DATE_MIN} max={DATE_MAX} value={details.agreementEndDate} onChange={e => edit({ agreementEndDate: e.target.value })} />
           </FormField>
           <FormField label="Representative" className={span.medium}>
             <input value={details.representative} maxLength={500} onChange={e => edit({ representative: e.target.value })} />

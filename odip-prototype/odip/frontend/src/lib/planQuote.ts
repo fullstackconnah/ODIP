@@ -3,9 +3,10 @@
 // The engine is the authority on every number: nothing here prices anything, and a line's total is always the server's total.
 import type { AxiosError } from 'axios'
 import type { FundingSourceDto, PlanFailureReason, PlannedLine, PlannedLineKind, PlanIssue, PlanBlock } from '@/api/types'
-import { parseDateOnly, formatDayNumber } from './dateOnly'
+import { isDateOnly, parseDateOnly, formatDayNumber } from './dateOnly'
 import { formatHours, type PlanStepKey } from './planBlocks'
 import { plural } from './format'
+import { apiErrorMessages } from './shiftPackageErrors'
 
 // ── Dates ─────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,20 @@ export function formatServiceDate(iso: string | null | undefined): string {
 export function addDays(iso: string, days: number): string {
   const day = parseDateOnly(iso)
   return day === null ? iso : formatDayNumber(day + days)
+}
+
+/** The years the pricing engine answers for. */
+export const PRICING_FIRST_YEAR = 2000
+export const PRICING_LAST_YEAR = 2100
+
+/**
+ * "YYYY-MM-DD", a real day, in the years the engine prices. A date box lets a person type a year with five or six digits, which is no date to the server (a 400 the screen could not
+ * read, review F1), and "2026-02-30" is no day: such a date is never sent to price anything.
+ */
+export function isPricingDate(value: string | null | undefined): boolean {
+  if (!value || !isDateOnly(value) || parseDateOnly(value) === null) return false
+  const year = Number(value.slice(0, 4))
+  return year >= PRICING_FIRST_YEAR && year <= PRICING_LAST_YEAR
 }
 
 // ── "A week" ──────────────────────────────────────────────────────────────────
@@ -362,9 +377,22 @@ function statusOf(error: unknown): number | undefined {
   return (error as AxiosError | undefined)?.response?.status
 }
 
+/**
+ * The server's own words for what went wrong. The app's envelope sends `errors` as a list; a request the framework refuses before the action runs (a number box that was cleared and
+ * became null, a date with five digits in its year) is a ValidationProblemDetails whose `errors` is an OBJECT keyed by field. apiErrorMessages reads both; spreading the object threw
+ * inside render and took the unsaved plan with it (review F1). Never throws.
+ */
 function messagesOf(error: unknown): string[] {
-  const data = (error as AxiosError<{ message?: string; errors?: string[] }> | undefined)?.response?.data
-  return [...(data?.errors ?? []), ...(data?.message ? [data.message] : [])].filter(text => typeof text === 'string' && text.length > 0)
+  return apiErrorMessages(error).filter((text): text is string => typeof text === 'string' && text.length > 0)
+}
+
+/** Text the framework writes about a value it could not bind: true of the plan's own sentences never, and of no use to a person. */
+const FRAMEWORK_TEXT = /JSON value could not be converted|Path: \$|LineNumber|BytePositionInLine|is not valid for|non-empty request body is required|could not be mapped/i
+export const CLEARED_BOX_MESSAGE = 'A box in the plan is empty or is not a number. Check the days, times and numbers on each step.'
+
+/** The server's sentence as a person should read it: the framework's binding errors become one plain line, everything the engine itself said stays as it was. */
+function plain(text: string): string {
+  return FRAMEWORK_TEXT.test(text) ? CLEARED_BOX_MESSAGE : text
 }
 
 /** What a failed quote says: the busy service, an answer too big to list, a refusal in the server's words, and a dropped connection are four different things. */
@@ -375,7 +403,7 @@ export function describeQuoteError(error: unknown): FriendlyError {
   if (status === 400 && messages.some(text => /ask for the totals only|one answer carries/i.test(text))) {
     return { title: 'This plan has too many lines to list', detail: 'The agreement and its blocks make more lines than one answer can carry. Shorten the agreement period or price fewer blocks; the totals are still worked out.', retryable: false }
   }
-  if (status === 400) return { title: 'This plan cannot be priced yet', detail: messages[0] ?? 'The pricing service refused the request.', retryable: false }
+  if (status === 400) return { title: 'This plan cannot be priced yet', detail: plain(messages[0] ?? 'The pricing service refused the request.'), retryable: false }
   if (status === 403) return { title: 'You cannot price plans', detail: 'Pricing is for Admins and Coordinators. Ask one of them to build the plan.', retryable: false }
   if (status === 413) return { title: 'The plan is too large to send', detail: 'Price fewer blocks at a time.', retryable: false }
   return { title: 'The plan could not be priced', detail: 'Check your connection and try again. Nothing you entered is lost.', retryable: true }
@@ -394,6 +422,6 @@ export function describeSaveError(error: unknown): SaveFailure {
   if (status === 429) return { title: 'The server is busy', messages: ['Too many requests just now. Wait a moment and save again. Nothing you entered is lost.'] }
   if (status === 403) return { title: 'You cannot save this draft', messages: ['Only Admins and Coordinators can save agreement drafts.'] }
   if (status === 413) return { title: 'The plan is too large to save', messages: ['Save fewer blocks, or split the agreement.'] }
-  if (status === 400 || status === 404) return { title: 'The draft was not saved', messages: messages.length > 0 ? messages : ['The server refused the draft.'] }
+  if (status === 400 || status === 404) return { title: 'The draft was not saved', messages: messages.length > 0 ? [...new Set(messages.map(plain))] : ['The server refused the draft.'] }
   return { title: 'The draft was not saved', messages: ['The server could not price and save this draft. Check your connection and try again; nothing you entered is lost.'] }
 }

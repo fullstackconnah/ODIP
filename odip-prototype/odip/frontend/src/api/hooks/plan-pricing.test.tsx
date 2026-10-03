@@ -65,6 +65,19 @@ describe('usePlanBudget', () => {
     expect(post).not.toHaveBeenCalled()
   })
 
+  // Review F1: the date box lets a person type a year with five digits, which compares as a later string than the end date and used to go to the server as a 400 nobody could read.
+  it('asks nothing for a date the engine would refuse: a five digit year, a day that is not on the calendar, a year it does not price', () => {
+    const client = new QueryClient()
+    renderHook(() => usePlanBudget([block], '20261-10-01', '2026-12-31'), { wrapper: wrapper(client) })
+    renderHook(() => usePlanBudget([block], '2026-10-01', '20271-06-30'), { wrapper: wrapper(client) })
+    renderHook(() => usePlanBudget([block], '2026-10-01', '2027-02-30'), { wrapper: wrapper(client) })
+    renderHook(() => usePlanBudget([block], '1999-10-01', '2026-12-31'), { wrapper: wrapper(client) })
+    renderHook(() => usePlanBlockQuote(block, '2026-10-01', '20271-06-30'), { wrapper: wrapper(client) })
+    renderHook(() => usePlanBlockQuote(block, '2026-10-01', '2101-06-30'), { wrapper: wrapper(client) })
+
+    expect(post).not.toHaveBeenCalled()
+  })
+
   it('reports a refusal as an error and does not retry it', async () => {
     post.mockRejectedValue({ response: { status: 429, data: {} } })
     const { result } = renderHook(() => usePlanBudget([block], '2026-10-01', '2026-12-31'), { wrapper: wrapper(new QueryClient()) })
