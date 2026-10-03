@@ -235,7 +235,7 @@ describe('Plan pricing settings while they load', () => {
 
   // Review F20: a SuperAdmin with no organisation chosen is told so by the server (a 400); the tab said only that it could not load, and Try again could not fix it.
   it("shows the server's sentence when it says what to do (choose an organisation to view as), and offers no Try again for it", () => {
-    query.current = { data: undefined, isLoading: false, isError: true, refetch: vi.fn(), error: { response: { status: 400, data: { success: false, message: 'Choose an organisation to view as before using the plan pricing engine: its settings belong to one organisation.' } } } }
+    query.current = { data: undefined, isLoading: false, isError: true, refetch: vi.fn(), error: { response: { status: 400, data: { success: false, errors: ['Choose an organisation to view as before using the plan pricing engine: its settings belong to one organisation.'] } } } }
     render(<RouterProvider router={createMemoryRouter([{ path: '/settings', element: <PlanPricingSettingsTab /> }], { initialEntries: ['/settings'] })} />)
 
     expect(screen.getByText('Choose an organisation to view as before using the plan pricing engine: its settings belong to one organisation.')).toBeInTheDocument()
