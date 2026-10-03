@@ -16,9 +16,15 @@ reasons.
    - Or the person uses **Forgot password?** on the login page.
 2. **Do not mark an account verified on someone's behalf** (in the console, or with the Admin SDK) unless you have confirmed by another channel that the
    person controls that mailbox. "Verified" is the only thing that stops a stranger who signed up in Firebase with that address from using it.
-3. **Turn off Firebase self sign-up** (recommended). Firebase console, Authentication, Settings, User actions: untick *Enable create (sign-up)*. ODIP
-   makes accounts through the Admin SDK, which should not be affected (confirm once with a test user). With sign-up open, anyone can create an unverified
-   Firebase account for any address, which ODIP refuses, but which can also sit in the way of the real owner's account being made.
+3. **Firebase self sign-up must be off.** This is a rule, and a step to do before the sign-in changes go live, not a recommendation. Firebase console,
+   Authentication, Settings, User actions: untick *Enable create (sign-up)*. ODIP makes accounts through the Admin SDK, which should not be affected
+   (confirm once with a test user). With sign-up open, anyone can create a Firebase account for any address, with a password they chose. ODIP refuses it
+   while it is unverified, but the login page mails the verification link to that address when the stranger tries to sign in. If the real owner opens a
+   link they did not ask for, the account becomes verified with the stranger's password still on it, and the stranger can sign in as them.
+4. **A verification email nobody asked for may mean a stranger registered your address.** Do not open it. Use **Forgot password?** on the login page
+   instead: the reset replaces any password on the account, so only you will know the new one. Then ask an administrator to look the address up in the
+   Firebase user list (Authentication, Users). An account you did not create, or one created on a date you cannot account for, is the stranger's: the
+   administrator removes it there and sends **Send set-password email** from ODIP, which makes a verified account (do not add the user in the console).
 
 ## What each message means
 
@@ -42,6 +48,8 @@ An unverified account is verified by the person who owns the mailbox, not by an 
 
 1. Ask them to sign in at the login page. ODIP sends the verification link automatically and says so.
 2. They open the link from their own mailbox, then sign in again. The exchange now accepts the account.
+
+This is only for a link they asked for by trying to sign in. A verification email that arrives when they did not try is rule 4 above: they do not open it.
 
 Completing **Forgot password?** also proves they own the mailbox, and Firebase normally marks the address verified when a reset link is completed; if the
 page still says "isn't verified yet" after that, use the verification link. If neither email arrives, check the address on their ODIP row first.
