@@ -22,8 +22,10 @@ What it will and will not do, because the production host has it switched on:
   person's row alone. A live shift a person has taken over, by starting it by hand, by a coordinator returning its completion for correction or by a
   coordinator moving it to other times or another date, is theirs: the script leaves it alone, the history's handover reads do not wait for it, and
   the history writes its window's doses, like any other day's, once the window (and the close-out buffer after it) is over and nobody has finished
-  the shift. The one exception to "leaves the person's row alone" is the finish of a live shift the script itself is working, which ends a break
-  that is still running, whoever started it, as the app's Finish requires.
+  the shift. An as-needed dose is judged as the app's recorder judges one: the script writes none that would break the medication's minimum
+  interval or daily maximum beside a dose already recorded (a person's, or the other script's), on either side of it. The one exception to "leaves the
+  person's row alone" is the finish of a live shift the script itself is working, which ends a break that is still running, whoever started it, as the
+  app's Finish requires.
 
 ## Switches
 

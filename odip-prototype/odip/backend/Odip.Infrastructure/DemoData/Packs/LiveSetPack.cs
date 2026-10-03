@@ -509,6 +509,25 @@ public sealed class LiveSetPack : IDemoPack
                         scheduled.Min(d => d.Row.ScheduledAt!.Value), scheduled.Max(d => d.Row.ScheduledAt!.Value).AddMinutes(1), ct);
                     there.UnionWith(scheduled.Where(d => recorded.Contains((d.Row.ParticipantMedicationId, d.Row.ScheduledAt!.Value))).Select(d => d.Event.Id));
                 }
+
+                // An as-needed dose is judged by the recorder against the doses already given, on both sides: one that breaks the medication's minimum interval or daily maximum
+                // beside a person's (or the history's) is one the app would refuse, so it is not written (third independent review R4).
+                var prn = events.Select(e => (Event: e, Row: (MedicationAdministration)e.Entity))
+                    .Where(d => d.Row.ScheduledAt is null && d.Row.Status == MedicationAdministrationStatus.Administered && d.Row.AdministeredAt is not null && !there.Contains(d.Event.Id))
+                    .OrderBy(d => d.Row.AdministeredAt).ToList();
+                if (prn.Count > 0)
+                {
+                    var beside = (await DemoQueries.PrnGivenIn(_run.Db, prn.Select(d => d.Row.ParticipantMedicationId).Distinct().ToList(),
+                            prn.Min(d => d.Row.AdministeredAt!.Value).AddHours(-24), prn.Max(d => d.Row.AdministeredAt!.Value).AddHours(24)).ToListAsync(ct))
+                        .GroupBy(g => g.MedicationId).ToDictionary(g => g.Key, g => g.Select(x => x.AdministeredAt).ToList());
+                    foreach (var (e, row) in prn)
+                    {
+                        if (_meds.FirstOrDefault(m => m.Id == row.ParticipantMedicationId) is not { } med) continue;
+                        if (!beside.TryGetValue(med.Id, out var doses)) beside[med.Id] = doses = new List<DateTime>();
+                        if (PrnLimits.WouldBreach(med, row.AdministeredAt!.Value, doses)) there.Add(e.Id);
+                        else doses.Add(row.AdministeredAt!.Value);
+                    }
+                }
             }
             return there;
         }

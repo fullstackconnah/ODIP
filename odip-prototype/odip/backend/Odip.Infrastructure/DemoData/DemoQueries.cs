@@ -277,6 +277,18 @@ public static class DemoQueries
                                                 && a.PrnOutcome == null && a.AdministeredAt != null && a.AdministeredAt >= sinceUtc && a.AdministeredAt < untilUtc
                                                 && a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:"));
 
+    public sealed record PrnGiven(Guid Id, Guid MedicationId, DateTime AdministeredAt);
+
+    /// <summary>
+    /// Read only: when the doses of these medications were given between two instants (UTC), among the Administered records no later record superseded: the records the recorder
+    /// judges an as-needed dose's limits against (<see cref="PrnLimits"/>), whoever wrote them (third independent review R4).
+    /// </summary>
+    public static IQueryable<PrnGiven> PrnGivenIn(OdipDbContext db, List<Guid> medicationIds, DateTime fromUtc, DateTime untilUtc) =>
+        db.MedicationAdministrations.AsNoTracking()
+            .Where(a => medicationIds.Contains(a.ParticipantMedicationId) && a.Status == MedicationAdministrationStatus.Administered && a.SupersededByAdministrationId == null
+                        && a.AdministeredAt != null && a.AdministeredAt >= fromUtc && a.AdministeredAt <= untilUtc)
+            .Select(a => new PrnGiven(a.Id, a.ParticipantMedicationId, a.AdministeredAt!.Value));
+
     /// <summary>
     /// Tracked: the running breaks of these completions, whoever started them. The app holds one running break per completion (a unique index), so a break
     /// the script would start waits for a person's to end, and the shift's end ends whichever is running.

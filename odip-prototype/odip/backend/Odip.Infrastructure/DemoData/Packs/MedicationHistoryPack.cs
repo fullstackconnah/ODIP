@@ -262,7 +262,17 @@ public sealed class MedicationHistoryPack : IDemoPack
         if (candidates.Count == 0) return;
 
         var existing = await run.ExistingIdsAsync<MedicationAdministration>(candidates.Select(c => c.Id), ct);
-        foreach (var (med, date, given, id) in candidates.Where(c => !existing.Contains(c.Id)))
+        var fresh = candidates.Where(c => !existing.Contains(c.Id)).ToList();
+        if (fresh.Count == 0) return;
+
+        // The doses of these medications already on the chart, whoever recorded them: the recorder refuses an as-needed dose that breaks the medication's minimum interval or its
+        // daily maximum beside them unless the worker acknowledges the breach, and a row of the top-up's carries no acknowledgement, so the history writes none that would
+        // (third independent review R4). The doses it writes itself count for the days after them.
+        var beside = (await DemoQueries.PrnGivenIn(run.Db, fresh.Select(c => c.Med.Id).Distinct().ToList(),
+                anchors.LocalToUtc(fresh.Min(c => c.Given)).AddHours(-24), anchors.LocalToUtc(fresh.Max(c => c.Given)).AddHours(24)).ToListAsync(ct))
+            .GroupBy(g => g.MedicationId).ToDictionary(g => g.Key, g => g.Select(x => x.AdministeredAt).ToList());
+
+        foreach (var (med, date, given, id) in fresh)
         {
             var hasOutcome = DemoIds.Pick(id, "has-outcome", 0, 99) < 75;
             var recordedLocal = given.AddMinutes(DemoIds.Pick(id, "recorded-after", 1, 3));
@@ -271,6 +281,9 @@ public sealed class MedicationHistoryPack : IDemoPack
 
             var recorder = Recorder(staff, id, given, med);
             if (recorder is null) continue;
+            if (!beside.TryGetValue(med.Id, out var doses)) beside[med.Id] = doses = new List<DateTime>();
+            if (PrnLimits.WouldBreach(med, anchors.LocalToUtc(given), doses)) continue;
+            doses.Add(anchors.LocalToUtc(given));
             var reason = PrnReasonFor(med, id);
             var dose = PackageRows.Dose(run, med, null, MedicationAdministrationStatus.Administered, recorder, given, recordedLocal,
                 doseGiven: med.DoseDescription, prnReason: reason);

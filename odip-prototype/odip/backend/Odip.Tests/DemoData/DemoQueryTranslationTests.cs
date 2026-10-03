@@ -79,6 +79,7 @@ public class DemoQueryTranslationTests
         yield return Q(nameof(DemoQueries.UnfinishedStartsOf), db => DemoQueries.UnfinishedStartsOf(db, Ids), "\"ParticipantId\" = ANY (", "\"ReturnCount\" = 0", "\"ShiftPatternId\" IS NULL", "FROM \"ShiftCompletions\"", "\"IsActive\"");
         yield return Q(nameof(DemoQueries.ActiveRoutinesOf), db => DemoQueries.ActiveRoutinesOf(db, Ids), "\"ParticipantId\" = ANY (", "\"IsActive\"");
         yield return Q(nameof(DemoQueries.SlotsRecorded), db => DemoQueries.SlotsRecorded(db, Ids, new DateTime(2026, 9, 25), new DateTime(2026, 10, 3)), "\"ParticipantMedicationId\" = ANY (", "\"ScheduledAt\" >=", "\"ScheduledAt\" <", "\"SupersededByAdministrationId\" IS NULL");
+        yield return Q(nameof(DemoQueries.PrnGivenIn), db => DemoQueries.PrnGivenIn(db, Ids, DateTime.UtcNow.AddDays(-1), DateTime.UtcNow), "\"ParticipantMedicationId\" = ANY (", "\"SupersededByAdministrationId\" IS NULL", "\"AdministeredAt\" >=", "\"AdministeredAt\" <=");
         yield return Q(nameof(DemoQueries.PrnDosesAwaitingOutcome), db => DemoQueries.PrnDosesAwaitingOutcome(db, Ids, DateTime.UtcNow.AddHours(-6), DateTime.UtcNow), "\"ParticipantMedicationId\" = ANY (", "\"PrnOutcome\" IS NULL", "\"AdministeredAt\" <", "LIKE 'demo-v1:%'");
     }
 
