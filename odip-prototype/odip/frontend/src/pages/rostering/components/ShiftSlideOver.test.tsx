@@ -18,7 +18,7 @@ const {
   mockUseParticipantRoutines: vi.fn(() => ({ data: [] as ParticipantRoutineDto[] })),
   mockUseCompatibility: vi.fn(() => ({ data: [] as CompatibilityRowDto[] })),
   mockUseShiftNotes: vi.fn(() => ({ data: [] as ShiftNoteDto[] })),
-  mockUsePattern: vi.fn((_id?: string) => ({ data: undefined as ShiftPatternDto | undefined })),
+  mockUsePattern: vi.fn(() => ({ data: undefined as ShiftPatternDto | undefined })),
 }))
 
 // Only the API layer is mocked — every other collaborator (FindingsList, SlideOver,
