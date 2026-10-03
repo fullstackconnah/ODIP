@@ -2,7 +2,7 @@
 // AgreementPatternMapper, RosterShiftGenerator), kept in memory so the patterns page and the roster board show what an approval made. Plain functions over the stores server.js owns.
 //
 //   preview(...)  GET  participants/:id/service-agreement-drafts/:id/approval-preview   what approving would do, nothing done
-//   approve(...)  POST participants/:id/service-agreement-drafts/:id/approve            records it, makes the patterns, ends the old ones, generates open shifts
+//   approve(...)  POST participants/:id/service-agreement-drafts/:id/approve            records it, makes the patterns, ends the old ones, generates unfilled shifts
 //
 // "Today" is the provider's calendar date (Sydney), never the UTC date. The horizon is 56 days.
 
