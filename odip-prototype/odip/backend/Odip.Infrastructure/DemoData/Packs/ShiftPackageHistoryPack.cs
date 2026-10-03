@@ -12,7 +12,8 @@ namespace Odip.Infrastructure.DemoData.Packs;
 ///  - a break of 15 to 45 minutes for a shift of five hours or more, placed by adding minutes to the start (elapsed time, so a clock change cannot move it);
 ///  - one shift note on a little over half of them, a second on the long ones, from a few wordings that the keyword scanner reads as nothing, and on
 ///    about one in twenty-five one that it flags (Falls, Medication, Injury, BehaviourOfConcern), which the author acknowledged the next morning, the
-///    coordinator's follow-up task closed with it. A completion that has a note says so: it no longer says "nothing to note";
+///    coordinator's follow-up task closed with it: the note and its task are written once that morning has come, not before. A completion that has a
+///    note says so: it no longer says "nothing to note";
 ///  - the routines that fall inside the shift, matched by the portal's own rule (<see cref="RoutineWindowMatcher"/>), ticked at about four in five;
 ///  - the handover read: the next worker for that participant marking the previous one's handover read from their own shift, all but about one
 ///    in eight, which stay unread.
@@ -27,6 +28,9 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
 
     private const int LookbackDays = 28;
     private const int UnreadPercent = 12;
+
+    /// <summary>A row is written when its time is this many minutes in the past (plan 5.2: "at least 2 minutes past").</summary>
+    private const int GraceMinutes = 2;
 
     /// <summary>Wordings the keyword scanner reads as nothing; {n} is the participant's first name.</summary>
     public static readonly string[] CalmNotes =
@@ -182,7 +186,14 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
             var flagged = DemoIds.Pick(key, "flagged", 0, 99) < 4;
             var template = flagged ? FlaggedNotes[DemoIds.Pick(key, "wording", 0, FlaggedNotes.Length - 1)] : CalmNotes[DemoIds.Pick(key, "wording", 0, CalmNotes.Length - 1)];
             var note = PackageRows.Note(run, shift, worker, Local(run, at), template.Replace("{n}", first, StringComparison.Ordinal));
-            if (flagged) note.FlagsAcknowledgedAt = run.Anchors.LocalToUtc(DateOnly.FromDateTime(Local(run, at)).AddDays(1), new TimeOnly(9, 15));
+            if (flagged)
+            {
+                // The author acknowledges the flags the next morning and the follow-up task is closed with it. The note waits for that moment (and, like every
+                // other row, for two minutes past it), so no row is ever dated after the tick that writes it (PR 2 review L1).
+                var acknowledgedAt = run.Anchors.LocalToUtc(DateOnly.FromDateTime(Local(run, at)).AddDays(1), new TimeOnly(9, 15));
+                if (acknowledgedAt.AddMinutes(GraceMinutes) > run.Anchors.NowUtc) continue;
+                note.FlagsAcknowledgedAt = acknowledgedAt;
+            }
             notes.Add((note, worker, completion));
         }
     }
@@ -207,7 +218,13 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
             if (DemoIds.Pick(key, "tick", 0, 99) >= 80) continue;                             // one in five is left for the viewer to notice
 
             var at = (occurrence.OccursAtLocal ?? startLocal).AddMinutes(5 + DemoIds.Pick(key, "after", 0, 30));
+
+            // The portal takes a tick only once the worker has started, so never before it and not in the same minute (PR 2 review L4: a routine due at the
+            // rostered start, ticked for a worker who started six to twelve minutes late, came before the start).
+            var firstPossible = Local(run, ProviderLocalTime.AsUtc(completion.ActualStart)).AddMinutes(1);
+            if (at < firstPossible) at = firstPossible;
             if (at >= endLocal) at = endLocal.AddMinutes(-5);
+            if (at < firstPossible) continue;
             ticks.Add((PackageRows.Tick(run, completion, occurrence.Routine, occurrence.OccursAtLocal, worker, at), worker));
         }
     }

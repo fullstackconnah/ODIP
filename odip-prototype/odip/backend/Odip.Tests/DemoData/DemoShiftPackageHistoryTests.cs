@@ -123,6 +123,47 @@ public class DemoShiftPackageHistoryTests
         }
     }
 
+    /// <summary>
+    /// PR 2 review L1: a flagged note was written already acknowledged, with the acknowledgement and the closed follow-up task dated the next morning even when
+    /// the shift had closed that evening, so a row said it happened in the future. The acknowledgement is the author's the next morning at 09:15; the note
+    /// and its task wait for it (the way a PRN dose and its outcome wait for each other). The test finds where the flagged notes' acknowledgements fall, then
+    /// replays the same ticks with one a minute before each and one just after, and looks at every flagged note and task after every tick.
+    /// </summary>
+    [Fact]
+    public async Task AFlaggedNote_AndItsFollowUpTask_AreNeverDatedAfterTheTickThatWroteThem()
+    {
+        var weekly = Enumerable.Range(1, 8).Select(w => Friday1030.AddDays(7 * w)).ToList();
+        var discovery = await TickAsync(Friday1030);
+        foreach (var tick in weekly) await RunAsync(discovery, tick);
+        List<(Guid Id, DateTimeOffset At)> found;
+        await using (var db = discovery.AdminDb())
+            found = (await db.ShiftNotes.ToListAsync()).Where(n => n.FlaggedCategories != ShiftNoteFlagCategory.None && n.FlagsAcknowledgedAt > Friday1030.UtcDateTime)     // after the first tick
+                .Select(n => (n.Id, new DateTimeOffset(ProviderLocalTime.AsUtc(n.FlagsAcknowledgedAt!.Value)))).OrderBy(x => x.Item2).Take(3).ToList();
+        Assert.NotEmpty(found);
+
+        var around = found.SelectMany(f => new[] { f.At.AddMinutes(-1), f.At.AddMinutes(3) });
+        var plan = weekly.Concat(around).Distinct().OrderBy(t => t).ToList();
+        var env = await TickAsync(Friday1030);
+        foreach (var tick in plan)
+        {
+            await RunAsync(env, tick);
+
+            await using var db = env.AdminDb();
+            var notes = (await db.ShiftNotes.ToListAsync()).Where(n => n.FlaggedCategories != ShiftNoteFlagCategory.None && n.FlagsAcknowledgedAt != null).ToList();
+            var tasks = await db.BookingTasks.Where(t => t.TaskType == TaskType.FlaggedNoteFollowUp).ToListAsync();
+            var now = tick.UtcDateTime;
+            Assert.All(notes, n => Assert.True(n.FlagsAcknowledgedAt <= now, $"{tick:O}: a note acknowledged at {n.FlagsAcknowledgedAt:O}"));
+            Assert.All(tasks.Where(t => t.AutoCompletedAt != null), t => Assert.True(t.AutoCompletedAt <= now, $"{tick:O}: a task completed at {t.AutoCompletedAt:O}"));
+            Assert.All(tasks.Where(t => t.CompletedDate != null), t => Assert.True(t.CompletedDate <= DateOnly.FromDateTime(Local(now)), $"{tick:O}: a task completed on {t.CompletedDate}"));
+
+            foreach (var f in found)
+            {
+                if (tick == f.At.AddMinutes(-1)) Assert.DoesNotContain(notes, n => n.Id == f.Id);                 // not there before its time ...
+                if (tick == f.At.AddMinutes(3)) Assert.Contains(notes, n => n.Id == f.Id);                        // ... and there just after it
+            }
+        }
+    }
+
     // ── routine ticks ──
 
     [Fact]
@@ -148,6 +189,63 @@ public class DemoShiftPackageHistoryTests
                 Assert.True(Local(t.CheckedAt) >= start && Local(t.CheckedAt) < end, "ticked inside the shift");
             });
         }
+    }
+
+    /// <summary>PR 2 review L4: the portal only takes a tick once the shift is InProgress with a started completion, so a tick before the worker started cannot exist.</summary>
+    [Fact]
+    public async Task ARoutineTick_IsNeverBeforeTheWorkerStarted_ButAtLeastAMinuteAfter()
+    {
+        var env = new DemoTestEnv(Friday1030);
+        await DemoFixture.SeedPeopleAsync(env);
+        await env.SetProviderStateAsync("NSW");
+        // Sophie's morning routine falls at 07:00, the start of a 07:00 shift. Sixty such shifts whose worker started twelve minutes late (the +6 to +12
+        // starts of the review's example): the tick is placed five to thirty-five minutes after the occurrence, so some would land before the start.
+        var zone = Zone();
+        await using (var db = env.AdminDb())
+        {
+            for (var i = 0; i < 60; i++)
+            {
+                var date = Friday.AddDays(-2 - i % 20);
+                var shiftId = DemoIds.For("fixture", "late-start", i);
+                var start = ProviderLocalTime.LocalToUtc(At(date, 7, 12), zone);
+                var end = ProviderLocalTime.LocalToUtc(At(date, 13, 3), zone);
+                db.Shifts.Add(new Shift
+                {
+                    Id = shiftId, TenantId = DemoTestEnv.DemoTenantId, ParticipantId = DemoFixture.ParticipantId("sophie"), UserId = DemoFixture.StaffId("james"), ServiceDate = date,
+                    StartTime = new TimeOnly(7, 0), EndTime = new TimeOnly(13, 0), Status = ShiftStatus.Completed,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                });
+                db.ShiftCompletions.Add(new ShiftCompletion
+                {
+                    Id = DemoIds.For("shift-completion", shiftId), TenantId = DemoTestEnv.DemoTenantId, ShiftId = shiftId, ActualStart = start, ActualEnd = end, StartedAt = start,
+                    SubmittedAt = end.AddMinutes(6), TimeZoneId = zone.Id, SubmittedByUserId = DemoFixture.StaffId("james"), NothingToNoteConfirmed = true, IsActive = true,
+                    ReviewOutcome = ReviewOutcome.Approved, ReviewedByUserId = DemoFixture.StaffId("sarah"), ReviewedAt = end.AddDays(1), CreatedAt = end.AddMinutes(6), UpdatedAt = end.AddDays(1),
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        await RunAsync(env, Friday1030);
+
+        await using var check = env.AdminDb();
+        var late = (await check.ShiftCompletions.ToListAsync()).Where(c => c.Id == DemoIds.For("shift-completion", c.ShiftId) && Local(c.ActualStart).TimeOfDay == new TimeSpan(7, 12, 0)).ToDictionary(c => c.Id);
+        var ticks = (await check.ShiftRoutineChecks.ToListAsync()).Where(t => late.ContainsKey(t.ShiftCompletionId)).ToList();
+        Assert.True(ticks.Count > 60, $"only {ticks.Count} ticks to look at");                               // about four in five of each routine of the window, over sixty shifts
+
+        // A late start moves a tick, it does not lose it: every occurrence the history ticks (four in five, by the pack's own pick) has its tick.
+        var shifts = await check.Shifts.ToDictionaryAsync(s => s.Id);
+        var routines = await check.ParticipantRoutines.Where(r => r.IsActive).ToListAsync();
+        var expected = late.Values.Sum(c =>
+        {
+            var (from, to) = ProviderLocalTime.RosteredWindowLocal(shifts[c.ShiftId]);
+            return RoutineWindowMatcher.Match(routines.Where(r => r.ParticipantId == shifts[c.ShiftId].ParticipantId), from, to)
+                .Count(o => DemoIds.Pick(DemoIds.For("history-tick", c.Id, o.Routine.Id), "tick", 0, 99) < 80);
+        });
+        Assert.Equal(expected, ticks.Count);
+
+        var early = ticks.Where(t => t.CheckedAt < late[t.ShiftCompletionId].ActualStart.AddMinutes(1)).ToList();
+        Assert.True(early.Count == 0, $"{early.Count} of {ticks.Count} ticks were made before the worker started (or in the same minute), e.g. {(early.Count == 0 ? "" : $"{early[0].CheckedAt:O} against a start of {late[early[0].ShiftCompletionId].ActualStart:O}")}");
+        Assert.All(ticks, t => Assert.True(Local(t.CheckedAt) < At(DateOnly.FromDateTime(Local(t.CheckedAt)), 13, 0), "and still inside the shift"));
     }
 
     // ── the handover read ──
