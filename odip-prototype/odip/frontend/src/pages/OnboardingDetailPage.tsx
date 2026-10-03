@@ -12,7 +12,7 @@ import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { usePermissions } from '@/lib/permissions'
-import { extractErrorMessage } from '@/lib/utils'
+import { extractErrorMessage, formatWithTimeZone } from '@/lib/utils'
 
 type Detail = {
   participantId: string
@@ -26,6 +26,9 @@ type Detail = {
   serviceAgreementSigned: boolean
   isReady: boolean
   reasons: string[]
+  /** The newest revision of the agreement that has been approved for rostering, and when (plan builder, phase D). Absent until one has. */
+  scheduleApprovedVersion?: number
+  scheduleApprovedAt?: string
 }
 
 type Gate = { label: string; state: 'Needs attention' | 'Blocked' | 'Complete'; context?: React.ReactNode; fixRoute?: { to: string; label: string } }
@@ -59,6 +62,8 @@ export default function OnboardingDetailPage() {
     : undefined
   const headingTitle = participantLoading ? 'Loading…' : (participantName ?? 'Participant')
 
+  const scheduleApproved = d.scheduleApprovedVersion !== undefined
+  const approvedOn = d.scheduleApprovedAt ? formatWithTimeZone(d.scheduleApprovedAt, undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : undefined
   const recommended = !d.intakeComplete
     ? {
         label: 'Complete intake',
@@ -93,11 +98,21 @@ export default function OnboardingDetailPage() {
               reason: 'Open the agreement draft to check its signing evidence. Agreements are signed and approved there, not on this screen.',
               action: <Button to={`/participants/${id}/agreement-draft`}>Review agreement evidence</Button>,
             }
-          : {
-              label: 'Review schedule proposal',
-              reason: 'The schedule is made when an agreement revision is approved for rostering, from its draft page: that makes the weekly patterns and the open shifts. Check them under shift patterns. Nothing is created from this page.',
-              action: canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
-            }
+          : scheduleApproved
+            ? {
+                // A revision has been approved for rostering: what is left is to look at what it made.
+                label: 'Check the roster',
+                reason: `Version ${d.scheduleApprovedVersion} was approved for rostering${approvedOn ? ` on ${approvedOn}` : ''}: its weekly patterns and unfilled shifts are made. Check them under Shift patterns and on the roster. Nothing is created from this page.`,
+                action: canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
+              }
+            : {
+                label: 'Approve the agreement for rostering',
+                reason: 'The schedule is made when you approve an agreement revision for rostering, on its draft page. That creates the weekly patterns and unfilled shifts; check them under Shift patterns. Nothing is created from this page.',
+                // The draft carries money, so only the roles the API admits to it are sent there.
+                action: canAccessPage('agreement-drafts')
+                  ? <Button to={`/participants/${id}/agreement-draft`}>Open agreement draft</Button>
+                  : canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
+              }
 
   const gates: Gate[] = [
     { label: 'Intake completed', state: gateState(d.intakeComplete) },
@@ -105,7 +120,14 @@ export default function OnboardingDetailPage() {
     { label: 'Service needs and provisional lines', state: gateState(d.serviceTypeConfirmed), fixRoute: { to: `/participants/${id}?tab=support`, label: 'Edit service needs' } },
     // The draft carries money, so only the roles the API admits to it are sent there (a ReadOnly or SupportWorker who can read this page would only meet a redirect or a 403).
     { label: 'Current agreement evidence', state: gateState(d.serviceAgreementSigned), context: 'Agreements are signed and approved elsewhere.', fixRoute: canAccessPage('agreement-drafts') ? { to: `/participants/${id}/agreement-draft`, label: 'Open agreement draft' } : undefined },
-    { label: 'Schedule review', state: 'Blocked', context: 'The schedule is made when the agreement draft is approved for rostering. Nothing is created from this page.', fixRoute: canAccessPage('rostering') ? { to: '/rostering/patterns', label: 'Open shift patterns' } : undefined },
+    {
+      label: 'Schedule review',
+      // Complete once a revision has been approved for rostering (it made the patterns and the shifts); until then it is where the schedule will be made, never something onboarding itself does.
+      state: scheduleApproved ? 'Complete' : 'Blocked',
+      context: scheduleApproved
+        ? `Approved for rostering: version ${d.scheduleApprovedVersion}${approvedOn ? `, on ${approvedOn}` : ''}. Nothing is created from this page.`
+        : 'The schedule is made when the agreement draft is approved for rostering. Nothing is created from this page.',
+      fixRoute: canAccessPage('rostering') ? { to: '/rostering/patterns', label: 'Open shift patterns' } : undefined },
   ]
   const completedGateCount = gates.filter(gate => gate.state === 'Complete').length
   // Finishing onboarding is the Profile wizard's Complete Profile: it finalises the participant, and when the organisation's readiness rule allows it they

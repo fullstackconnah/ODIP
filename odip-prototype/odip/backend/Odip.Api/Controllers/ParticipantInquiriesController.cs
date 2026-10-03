@@ -220,8 +220,14 @@ public class ParticipantInquiriesController : ControllerBase
         if (!serviceNeedsCurrent) reasons.Add(newestDraft != null ? "Service needs require server confirmation for the current draft revision." : "A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.");
         var evidenceVerified = newestDraft != null && await _db.ElectronicSigningSnapshots.AnyAsync(s => s.ParticipantId == participant.Id && s.DraftId == newestDraft.Id && s.DraftVersion == newestDraft.Version && _db.ElectronicSigningEvidence.Any(e => e.SnapshotId == s.Id && e.Status == "Verified"), ct);
         if (!evidenceVerified || !onboarding.ServiceAgreementSigned) reasons.Add("Current immutable agreement evidence is pending; the UnapprovedDraft source is not complete or eligible.");
-        reasons.Add("The schedule is made when an agreement revision is approved for rostering, from its draft page; nothing is created from onboarding itself.");
-        return new ParticipantOnboardingDto { ParticipantId = participant.Id, IntakeComplete = intakeComplete, ProfileComplete = onboarding.ProfileComplete, ProfileCompletedAt = onboarding.ProfileCompletedAt, ProfileCompletedBy = onboarding.ProfileCompletedBy, ServiceTypeConfirmed = serviceNeedsCurrent, ServiceTypeConfirmedAt = serviceNeedsCurrent ? onboarding.ServiceTypeConfirmedAt : null, ServiceTypeConfirmedBy = serviceNeedsCurrent ? onboarding.ServiceTypeConfirmedBy : null, ServiceAgreementSigned = onboarding.ServiceAgreementSigned, IsReady = false, Reasons = reasons };
+        // The schedule is made when an agreement revision is approved for rostering (plan builder, phase D), never from onboarding: say where it is made, or, once a revision has been approved, which one.
+        var approved = await _db.ServiceAgreementDraftApprovals.AsNoTracking()
+            .Where(a => a.ParticipantId == participant.Id && a.TenantId == participant.TenantId)
+            .OrderByDescending(a => a.DraftVersion).Select(a => new { a.DraftVersion, a.ApprovedAt }).FirstOrDefaultAsync(ct);
+        reasons.Add(approved is null
+            ? "The schedule is made when an agreement revision is approved for rostering, from its draft page; nothing is created from onboarding itself."
+            : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Version {approved.DraftVersion} of the agreement was approved for rostering: its weekly patterns and shifts are on the roster. Nothing is created from onboarding itself."));
+        return new ParticipantOnboardingDto { ParticipantId = participant.Id, IntakeComplete = intakeComplete, ProfileComplete = onboarding.ProfileComplete, ProfileCompletedAt = onboarding.ProfileCompletedAt, ProfileCompletedBy = onboarding.ProfileCompletedBy, ServiceTypeConfirmed = serviceNeedsCurrent, ServiceTypeConfirmedAt = serviceNeedsCurrent ? onboarding.ServiceTypeConfirmedAt : null, ServiceTypeConfirmedBy = serviceNeedsCurrent ? onboarding.ServiceTypeConfirmedBy : null, ServiceAgreementSigned = onboarding.ServiceAgreementSigned, IsReady = false, Reasons = reasons, ScheduleApprovedVersion = approved?.DraftVersion, ScheduleApprovedAt = approved?.ApprovedAt };
     }
 
     private async Task<ServiceAgreementDraft?> CurrentValidDraftAsync(Participant participant, CancellationToken ct)

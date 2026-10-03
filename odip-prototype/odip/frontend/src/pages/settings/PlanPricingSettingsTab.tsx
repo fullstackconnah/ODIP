@@ -175,7 +175,7 @@ export default function PlanPricingSettingsTab() {
           {APPROVER_ROLES.map(role => <CheckboxField key={role} label={role} checked={current.approverRoles.includes(role)} onChange={() => toggleRole(role)} />)}
         </div>
         {current.approverRoles.length === 0 && <p role="alert" className="text-sm text-[var(--color-destructive)]">At least one role must be able to approve.</p>}
-        <p className="text-[13px] text-[var(--color-muted-foreground)]">These roles may mark a plan approved for rostering, on the newest revision of an agreement draft. Approving makes its weekly roster patterns and open shifts; it is separate from signing. A SuperAdmin acting for an organisation may always approve.</p>
+        <p className="text-[13px] text-[var(--color-muted-foreground)]">These roles may mark a plan approved for rostering, on the newest revision of an agreement draft. Approving makes its weekly roster patterns and unfilled shifts; it is separate from signing. A SuperAdmin acting for an organisation may always approve.</p>
       </section>
 
       {message && <Callout tone={message.tone} className="max-w-prose">{message.text}</Callout>}

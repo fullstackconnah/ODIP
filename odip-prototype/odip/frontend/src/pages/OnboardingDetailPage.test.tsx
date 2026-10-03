@@ -121,14 +121,36 @@ describe('OnboardingDetailPage', () => {
     expect(within(recommendation).getByRole('link', { name: 'Edit service needs' })).toHaveAttribute('href', '/participants/p-1?tab=support')
   })
 
-  it('gives the final "Review schedule proposal" gate a link into rostering instead of a dead end', () => {
+  it('sends the last step to where the schedule is made, the agreement draft, and says what approving does there', () => {
     mockUseQuery.mockReturnValue({ data: readyForSchedule, isLoading: false })
     renderDetail()
 
-    const recommendation = screen.getByRole('heading', { name: 'Review schedule proposal' }).closest('section')!
-    expect(within(recommendation).getByRole('link', { name: 'Open shift patterns' })).toHaveAttribute('href', '/rostering/patterns')
-    expect(within(recommendation).getByText(/The schedule is made when an agreement revision is approved for rostering, from its draft page/)).toBeInTheDocument()
+    const recommendation = screen.getByRole('heading', { name: 'Approve the agreement for rostering' }).closest('section')!
+    expect(within(recommendation).getByRole('link', { name: 'Open agreement draft' })).toHaveAttribute('href', '/participants/p-1/agreement-draft')
+    expect(within(recommendation).getByText('The schedule is made when you approve an agreement revision for rostering, on its draft page. That creates the weekly patterns and unfilled shifts; check them under Shift patterns. Nothing is created from this page.')).toBeInTheDocument()
     expect(within(recommendation).queryByText(/proposal-only|no shifts are created here/)).not.toBeInTheDocument()
+    expect(screen.getByText('Schedule review').parentElement).toHaveTextContent('Blocked')
+  })
+
+  it('says so once a revision has been approved for rostering: the gate is complete, and the next thing is to check the roster it made', () => {
+    mockUseQuery.mockReturnValue({ data: { ...readyForSchedule, scheduleApprovedVersion: 2, scheduleApprovedAt: '2026-10-05T03:00:00Z' }, isLoading: false })
+    renderDetail()
+
+    expect(screen.getByText('Schedule review').parentElement).toHaveTextContent('Complete')
+    expect(screen.getByText('Approved for rostering: version 2, on 5 Oct 2026. Nothing is created from this page.')).toBeInTheDocument()
+    expect(screen.getByText('Progress: 5 of 5 gates complete')).toBeInTheDocument()
+    const recommendation = screen.getByRole('heading', { name: 'Check the roster' }).closest('section')!
+    expect(within(recommendation).getByText('Version 2 was approved for rostering on 5 Oct 2026: its weekly patterns and unfilled shifts are made. Check them under Shift patterns and on the roster. Nothing is created from this page.')).toBeInTheDocument()
+    expect(within(recommendation).getByRole('link', { name: 'Open shift patterns' })).toHaveAttribute('href', '/rostering/patterns')
+    expect(screen.queryByRole('heading', { name: 'Approve the agreement for rostering' })).not.toBeInTheDocument()
+  })
+
+  it('does not send a role that may not open agreement drafts to one, where it would meet a redirect or a 403', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
+    mockUseQuery.mockReturnValue({ data: readyForSchedule, isLoading: false })
+    renderDetail()
+
+    expect(screen.queryByRole('link', { name: 'Open agreement draft' })).not.toBeInTheDocument()
   })
 
   it('preserves readable status but suppresses mutation controls when lifecycle capability is absent', () => {
