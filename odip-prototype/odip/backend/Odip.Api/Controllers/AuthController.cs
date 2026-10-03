@@ -69,16 +69,18 @@ public class AuthController : ControllerBase
                 .ToString(CultureInfo.InvariantCulture);
             return StatusCode(
                 StatusCodes.Status429TooManyRequests,
-                ApiResponse<AuthResponseDto>.Fail("Too many failed sign-in attempts. Try again shortly."));
+                ApiResponse<AuthResponseDto>.Fail(ExchangeRefusal.MessageFor(ExchangeRefusal.LockedOut), ExchangeRefusal.LockedOut));
         }
 
-        ActionResult<ApiResponse<AuthResponseDto>> Rejected(string logMessage, params object?[] logArgs)
+        ActionResult<ApiResponse<AuthResponseDto>> Rejected(string code, string logMessage, params object?[] logArgs)
         {
             _loginAttempts.RecordFailure(attemptKey);
             _logger.LogWarning(logMessage, logArgs);
-            // The message is deliberately identical for every cause. Telling "no such user" from "that address is on
-            // two rows" or "its tenant is inactive" would confirm which addresses exist.
-            return Unauthorized(ApiResponse<AuthResponseDto>.Fail("Invalid or expired token"));
+            // Still a 401, and still counted. The code says why, so the sign-in page can tell the person what to do. That is safe because of the order
+            // the checks run in (see ExchangeRefusal): everything that depends on ODIP's own rows is decided only after the token's email is verified and
+            // its provider allowed, i.e. only for someone who controls the mailbox, and about their own address; an unverified token (which anyone can
+            // get for any address) gets the same answer whether or not ODIP knows the address. InvalidToken stays generic.
+            return Unauthorized(ApiResponse<AuthResponseDto>.Fail(ExchangeRefusal.MessageFor(code), code));
         }
 
         // 1. Verify Firebase ID token
@@ -89,7 +91,7 @@ public class AuthController : ControllerBase
         }
         catch (FirebaseAuthException ex)
         {
-            return Rejected("Firebase token verification failed: {Message}", ex.Message);
+            return Rejected(ExchangeRefusal.InvalidToken, "Firebase token verification failed: {Message}", ex.Message);
         }
 
         var rawEmail = claims.TryGetValue("email", out var emailClaim)
@@ -97,7 +99,7 @@ public class AuthController : ControllerBase
             : null;
 
         if (string.IsNullOrWhiteSpace(rawEmail))
-            return Rejected("Exchange failed — token carried no email claim");
+            return Rejected(ExchangeRefusal.InvalidToken, "Exchange failed — token carried no email claim");
 
         // Both sides of the lookups below are compared in one form (see EmailIdentity). Firebase lower-cases an address, but a user row
         // stored as typed before that rule existed is mixed-case, and an exact comparison would answer its owner with a 401.
@@ -117,7 +119,7 @@ public class AuthController : ControllerBase
         // password cannot be signed into until its owner follows the emailed set-password link, which proves they control the mailbox. An
         // account that already existed is never marked verified by the app: EnsureSignInAccountAsync and UpdateUserByEmailAsync leave it as it is.
         if (!IsEmailVerified(claims))
-            return Rejected("Exchange failed — email not verified: {Email}", email);
+            return Rejected(ExchangeRefusal.EmailNotVerified, "Exchange failed — email not verified: {Email}", email);
 
         // How the person signed in decides what "verified" proves (see SignInProviders), so a token from a provider that is not listed is refused,
         // and so is one that does not say which it came from. Both paths below come after this.
@@ -125,13 +127,18 @@ public class AuthController : ControllerBase
         if (provider is null)
         {
             claims.TryGetValue("firebase", out var firebaseClaim);
+            // A claim the exchange cannot read is a fault with the token (or the SDK), not something the person can act on, so it stays the generic
+            // InvalidToken rather than posing as "that sign-in method is not enabled" to someone who did use email and password.
             return Rejected(
+                ExchangeRefusal.InvalidToken,
                 "Exchange failed — token carried no readable firebase.sign_in_provider (the firebase claim is {ClaimType}): {Email}",
                 firebaseClaim?.GetType().Name ?? "missing", email);
         }
 
         if (!SignInProviders.Allowed(_config).Contains(provider))
-            return Rejected("Exchange failed — sign-in provider {Provider} is not allowed (see {ConfigKey}): {Email}", provider, SignInProviders.ConfigKey, email);
+            return Rejected(
+                ExchangeRefusal.ProviderNotAllowed,
+                "Exchange failed — sign-in provider {Provider} is not allowed (see {ConfigKey}): {Email}", provider, SignInProviders.ConfigKey, email);
 
         var domain = email.Split('@').Last();
 
@@ -145,7 +152,7 @@ public class AuthController : ControllerBase
 
             if (superAdmin is null)
             {
-                return Rejected("SuperAdmin exchange — email not in DB: {Email}", email);
+                return Rejected(ExchangeRefusal.NoOdipAccount, "SuperAdmin exchange — email not in DB: {Email}", email);
             }
 
             superAdmin.LastLoginAt = DateTime.UtcNow;
@@ -183,12 +190,13 @@ public class AuthController : ControllerBase
 
         if (matches.Count == 0)
         {
-            return Rejected("Exchange failed — no active user has this email: {Email}", email);
+            return Rejected(ExchangeRefusal.NoOdipAccount, "Exchange failed — no active user has this email: {Email}", email);
         }
 
         if (matches.Count > 1)
         {
             return Rejected(
+                ExchangeRefusal.Ambiguous,
                 "Exchange failed — email matches more than one active user ({FirstUserId} and {SecondUserId}), so nobody was signed in. " +
                 "Fix the duplicate rows: {Email}", matches[0].Id, matches[1].Id, email);
         }
@@ -200,7 +208,7 @@ public class AuthController : ControllerBase
 
         if (tenant is null)
         {
-            return Rejected("Exchange failed — the tenant of user {UserId} is missing or inactive: {Email}", user.Id, email);
+            return Rejected(ExchangeRefusal.TenantInactive, "Exchange failed — the tenant of user {UserId} is missing or inactive: {Email}", user.Id, email);
         }
 
         user.LastLoginAt = DateTime.UtcNow;

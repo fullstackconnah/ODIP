@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Net;
+using FirebaseAdmin.Auth;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -33,6 +35,12 @@ public class AuthControllerExchangeTests
     {
         public Task<IReadOnlyDictionary<string, object>> VerifyIdTokenAsync(string idToken, CancellationToken ct) =>
             Task.FromResult<IReadOnlyDictionary<string, object>>(claims);
+    }
+
+    /// <summary>A token Firebase will not vouch for (malformed, expired, wrong project): the SDK throws.</summary>
+    private sealed class RefusingVerifier(FirebaseAuthException failure) : IFirebaseTokenVerifier
+    {
+        public Task<IReadOnlyDictionary<string, object>> VerifyIdTokenAsync(string idToken, CancellationToken ct) => throw failure;
     }
 
     // The shape of the request that reaches the exchange in PRODUCTION: ANONYMOUS. CurrentTenant reads the tenant and the SuperAdmin flag from a JWT the
@@ -75,7 +83,11 @@ public class AuthControllerExchangeTests
         CreateController(db, FirebaseTestClaims.For(tokenEmail, emailVerified, signInProvider), logger, settings);
 
     private static AuthController CreateController(
-        OdipDbContext db, IReadOnlyDictionary<string, object> claims, ILogger<AuthController>? logger = null, Dictionary<string, string?>? settings = null)
+        OdipDbContext db, IReadOnlyDictionary<string, object> claims, ILogger<AuthController>? logger = null, Dictionary<string, string?>? settings = null) =>
+        CreateController(db, new FakeVerifier(claims), logger, settings);
+
+    private static AuthController CreateController(
+        OdipDbContext db, IFirebaseTokenVerifier verifier, ILogger<AuthController>? logger = null, Dictionary<string, string?>? settings = null)
     {
         var configured = new Dictionary<string, string?> { ["Jwt:Secret"] = new string('k', 48), ["Auth:SuperAdminDomain"] = SuperAdminDomain };
         foreach (var (key, value) in settings ?? [])
@@ -88,7 +100,7 @@ public class AuthControllerExchangeTests
 
         return new AuthController(
             db, config, logger ?? new Mock<ILogger<AuthController>>().Object, new LoginAttemptTracker(TimeProvider.System),
-            new Mock<ICurrentTenant>().Object, new FakeVerifier(claims))
+            new Mock<ICurrentTenant>().Object, verifier)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
         };
@@ -225,7 +237,7 @@ public class AuthControllerExchangeTests
     }
 
     [Fact]
-    public async Task An_address_no_active_user_has_is_refused_with_the_same_answer_as_any_other_refusal()
+    public async Task An_address_no_active_user_has_is_refused()
     {
         using var db = CreateDb();
         var tenant = SeedTenant(db);
@@ -233,8 +245,8 @@ public class AuthControllerExchangeTests
 
         var result = await Exchange(CreateController(db, "jane.smith@gmail.com"));
 
-        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
-        Assert.Equal("Invalid or expired token", Assert.IsType<ApiResponse<AuthResponseDto>>(unauthorized.Value).Errors!.Single());
+        // What it says is pinned below ("Why a refusal was a refusal"): a verified address with no account is NoOdipAccount.
+        Assert.IsType<UnauthorizedObjectResult>(result.Result);
     }
 
     [Fact]
@@ -266,9 +278,8 @@ public class AuthControllerExchangeTests
 
         var result = await Exchange(CreateController(db, "jane.smith@gmail.com", logger: logger.Object));
 
-        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
-        // Not distinguishable from any other refusal, so the answer never says which addresses exist twice.
-        Assert.Equal("Invalid or expired token", Assert.IsType<ApiResponse<AuthResponseDto>>(unauthorized.Value).Errors!.Single());
+        // The answer says it is ambiguous (to someone who has proved the mailbox, about their own address) but never WHICH rows: the log names those.
+        AssertRefusal(result, "Ambiguous", "More than one active ODIP account uses this email address.");
         VerifyWarningNaming(logger, first.Id, second.Id);
     }
 
@@ -495,7 +506,7 @@ public class AuthControllerExchangeTests
     [InlineData("phone")]
     [InlineData("anonymous")]
     [InlineData("saml.acme")]
-    public async Task A_provider_that_is_not_listed_is_refused_for_a_user_who_exists_with_the_same_answer_as_any_other_refusal(string provider)
+    public async Task A_provider_that_is_not_listed_is_refused_for_a_user_who_exists_and_leaves_their_LastLoginAt_alone(string provider)
     {
         using var db = CreateDb();
         var user = SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
@@ -503,10 +514,9 @@ public class AuthControllerExchangeTests
 
         var result = await Exchange(CreateController(db, "jane.smith@gmail.com", logger: logger.Object, signInProvider: provider));
 
-        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
-        Assert.Equal("Invalid or expired token", Assert.IsType<ApiResponse<AuthResponseDto>>(unauthorized.Value).Errors!.Single());
+        AssertRefusal(result, "ProviderNotAllowed", "This sign-in method is not enabled for ODIP.");
         Assert.Null(StoredLastLoginAt(db, user.Id));
-        // The log, not the answer, says why.
+        // The answer says the method is not enabled; the log says which one it was.
         VerifyWarningMentioning(logger, provider);
     }
 
@@ -579,5 +589,163 @@ public class AuthControllerExchangeTests
         Assert.IsType<OkObjectResult>((await Exchange(CreateController(db, "jane.smith@gmail.com", signInProvider: "password", settings: settings))).Result);
         Assert.IsType<OkObjectResult>((await Exchange(CreateController(db, "jane.smith@gmail.com", signInProvider: "google.com", settings: settings))).Result);
         Assert.IsType<UnauthorizedObjectResult>((await Exchange(CreateController(db, "jane.smith@gmail.com", signInProvider: "microsoft.com", settings: settings))).Result);
+    }
+
+    // ── Why a refusal was a refusal ─────────────────────────────────────
+    // Every refusal is still a 401 and still spends from the failure budget, but it now says WHY in ApiResponse.Code, so the sign-in page can tell the
+    // person what to do instead of "login failed" (an account Firebase re-created arrives unverified, and nobody could tell). Safe to say, because of
+    // the ORDER the exchange decides in: the codes that depend on ODIP's own data (NoOdipAccount, TenantInactive, Ambiguous) come only after the email
+    // is verified and the provider allowed, so only someone who controls the mailbox ever sees one, and only about their own address. Firebase lets
+    // anyone sign up with any address and hold a token for it, which is why EmailNotVerified, decided from the token alone, answers the same for an
+    // address ODIP knows and one it does not. Anything else about the token stays the generic InvalidToken.
+
+    private static ApiResponse<AuthResponseDto> AssertRefusal(ActionResult<ApiResponse<AuthResponseDto>> result, string code, string message)
+    {
+        var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<AuthResponseDto>>(unauthorized.Value);
+        Assert.False(body.Success);
+        Assert.Equal(code, body.Code);
+        Assert.Equal(message, Assert.Single(body.Errors!));
+        return body;
+    }
+
+    [Fact]
+    public async Task An_unverified_email_is_refused_as_EmailNotVerified()
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
+
+        var result = await Exchange(CreateController(db, "jane.smith@gmail.com", emailVerified: false));
+
+        AssertRefusal(result, "EmailNotVerified", "The email address on this sign-in has not been verified.");
+    }
+
+    [Fact]
+    public async Task A_verified_address_with_no_active_user_is_refused_as_NoOdipAccount()
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "someone.else@gmail.com");
+        SeedUser(db, SeedTenant(db, "Other Care", "other.example.org").Id, "jane.smith@gmail.com", isActive: false);
+
+        var result = await Exchange(CreateController(db, "jane.smith@gmail.com"));
+
+        AssertRefusal(result, "NoOdipAccount", "No active ODIP account uses this email address.");
+    }
+
+    [Fact]
+    public async Task A_SuperAdmin_domain_address_with_no_active_row_is_refused_as_NoOdipAccount_too()
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "platform.admin@platform.example.com", UserRole.SuperAdmin, isActive: false);
+
+        var result = await Exchange(CreateController(db, "platform.admin@platform.example.com"));
+
+        AssertRefusal(result, "NoOdipAccount", "No active ODIP account uses this email address.");
+    }
+
+    [Fact]
+    public async Task A_user_whose_tenant_is_inactive_or_gone_is_refused_as_TenantInactive()
+    {
+        using var db = CreateDb();
+        var inactive = SeedTenant(db, isActive: false);
+        SeedUser(db, inactive.Id, "jane.smith@gmail.com");
+        SeedUser(db, Guid.NewGuid(), "orphan@gmail.com");
+
+        AssertRefusal(await Exchange(CreateController(db, "jane.smith@gmail.com")), "TenantInactive", "The organisation this account belongs to is inactive.");
+        AssertRefusal(await Exchange(CreateController(db, "orphan@gmail.com")), "TenantInactive", "The organisation this account belongs to is inactive.");
+    }
+
+    [Fact]
+    public async Task A_provider_that_is_not_listed_is_refused_as_ProviderNotAllowed()
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
+
+        var result = await Exchange(CreateController(db, "jane.smith@gmail.com", signInProvider: "google.com"));
+
+        AssertRefusal(result, "ProviderNotAllowed", "This sign-in method is not enabled for ODIP.");
+    }
+
+    [Fact]
+    public async Task An_address_on_two_active_rows_is_refused_as_Ambiguous()
+    {
+        using var db = CreateDb();
+        var acme = SeedTenant(db);
+        var other = SeedTenant(db, "Other Care", "other.example.org");
+        SeedUser(db, acme.Id, "jane.smith@gmail.com");
+        SeedUser(db, other.Id, "jane.smith@gmail.com");
+
+        var result = await Exchange(CreateController(db, "jane.smith@gmail.com"));
+
+        AssertRefusal(result, "Ambiguous", "More than one active ODIP account uses this email address.");
+    }
+
+    [Fact]
+    public async Task A_token_Firebase_will_not_vouch_for_stays_the_generic_InvalidToken()
+    {
+        using var db = CreateDb();
+        var verifier = new RefusingVerifier(FirebaseTestExceptions.WithCode(AuthErrorCode.InvalidIdToken));
+
+        AssertRefusal(await Exchange(CreateController(db, verifier)), "InvalidToken", "Invalid or expired token");
+    }
+
+    [Theory]
+    [InlineData("""{"email_verified":true,"firebase":{"sign_in_provider":"password"}}""")]                    // no email in it
+    [InlineData("""{"email":"  ","email_verified":true,"firebase":{"sign_in_provider":"password"}}""")]       // a blank one
+    [InlineData("""{"email":"jane.smith@gmail.com","email_verified":true}""")]                                 // no provider it can read
+    [InlineData("""{"email":"jane.smith@gmail.com","email_verified":true,"firebase":{"sign_in_provider":5}}""")]
+    public async Task A_token_that_is_missing_what_the_exchange_needs_stays_the_generic_InvalidToken(string payload)
+    {
+        // A claim the exchange cannot read is a fault with the token (or the SDK), not something the person can act on: it must not read as "that sign-in
+        // method is not enabled" when they did use email and password.
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
+
+        var result = await Exchange(CreateController(db, FirebaseTestClaims.FromPayload(payload)));
+
+        AssertRefusal(result, "InvalidToken", "Invalid or expired token");
+    }
+
+    [Fact]
+    public async Task An_unverified_token_gets_the_same_answer_for_an_address_ODIP_knows_and_one_it_does_not()
+    {
+        // Anyone can sign up to Firebase with any address and hold an (unverified) token for it. That must teach them nothing about ODIP's rows.
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "has.account@gmail.com");
+
+        var known = AssertRefusal(await Exchange(CreateController(db, "has.account@gmail.com", emailVerified: false)), "EmailNotVerified", "The email address on this sign-in has not been verified.");
+        var unknown = AssertRefusal(await Exchange(CreateController(db, "no.account@gmail.com", emailVerified: false)), "EmailNotVerified", "The email address on this sign-in has not been verified.");
+
+        Assert.Equal(known.Code, unknown.Code);
+        Assert.Equal(known.Errors, unknown.Errors);
+    }
+
+    [Fact]
+    public async Task A_provider_that_is_not_listed_gets_the_same_answer_for_an_address_ODIP_knows_and_one_it_does_not()
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "has.account@gmail.com");
+
+        AssertRefusal(await Exchange(CreateController(db, "has.account@gmail.com", signInProvider: "google.com")), "ProviderNotAllowed", "This sign-in method is not enabled for ODIP.");
+        AssertRefusal(await Exchange(CreateController(db, "no.account@gmail.com", signInProvider: "google.com")), "ProviderNotAllowed", "This sign-in method is not enabled for ODIP.");
+    }
+
+    [Fact]
+    public async Task A_client_over_the_failure_budget_gets_a_429_LockedOut_and_is_told_how_long_to_wait_in_seconds()
+    {
+        using var db = CreateDb();
+        var controller = CreateController(db, "nobody@gmail.com");   // no such row: every attempt is a refusal, one client address, one budget
+        for (var attempt = 0; attempt < LoginAttemptTracker.MaxFailures; attempt++)
+            await Exchange(controller);
+
+        var locked = Assert.IsType<ObjectResult>((await Exchange(controller)).Result);
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, locked.StatusCode);
+        var body = Assert.IsType<ApiResponse<AuthResponseDto>>(locked.Value);
+        Assert.False(body.Success);
+        Assert.Equal("LockedOut", body.Code);
+        Assert.Equal("Too many failed sign-in attempts. Try again shortly.", Assert.Single(body.Errors!));
+        var retryAfterSeconds = int.Parse(controller.Response.Headers.RetryAfter.ToString(), CultureInfo.InvariantCulture);
+        Assert.InRange(retryAfterSeconds, 1, (int)LoginAttemptTracker.FailureWindow.TotalSeconds);
     }
 }
