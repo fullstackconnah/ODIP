@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Plus } from 'lucide-react'
 import type { AgreementState, DraftBlock, PlanIssue, PlanPriceZone } from '@/api/types'
-import { useFundingSources, usePlanBudget, usePlanPricingSettings } from '@/api/hooks'
+import { useFundingSources, usePlanBudget, usePlanPricingSettings, type PlanBudget } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
@@ -46,6 +46,13 @@ type PlanBuilderProps = {
   readOnly?: boolean
   readOnlyNote?: string
   /**
+   * The answer a saved revision was priced with (its totals, issues and notices: no lines, so no ordinary week), shown instead of a live quote while the plan is read only. A revision somebody has
+   * approved is read from here, so its figures are the ones that were approved and the server is asked nothing.
+   */
+  stored?: PlanBudget
+  /** Drawn beside the heading while the plan is read only: what the page offers instead of editing (Start a new revision). */
+  readOnlyAction?: ReactNode
+  /**
    * The save row, drawn under the list. Given as a function it is told what the pricing engine refused (a block it cannot price, a registration group the provider does not hold):
    * a plan with a refusal cannot be saved, and the row can say so before the server does.
    */
@@ -79,7 +86,7 @@ type PlanBuilderProps = {
  * block being added or changed; the plan itself is the page's, and changes by whole blocks. The figures are the pricing engine's, asked for when the person pauses, for the plan as it
  * would be saved (the block being changed stands in for its saved self, and a block that is not complete yet is left out and said to be).
  */
-export function PlanBuilder({ participantId, state, zone, from, to, entries, onChange, readOnly = false, readOnlyNote, footer, onBuildingChange, onOpenChange, unsaved, saveNotice, savedNote }: PlanBuilderProps) {
+export function PlanBuilder({ participantId, state, zone, from, to, entries, onChange, readOnly = false, readOnlyNote, stored, readOnlyAction, footer, onBuildingChange, onOpenChange, unsaved, saveNotice, savedNote }: PlanBuilderProps) {
   const [session, setSession] = useState<Session | null>(null)
   const building = session !== null && session.hasBlock && JSON.stringify(session.entry) !== session.began
   useEffect(() => { onBuildingChange?.(building) }, [building, onBuildingChange])
@@ -108,9 +115,11 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
   // Dates that cannot be priced over (not typed, no day, an end before the start) are asked of nobody: the query is off for them, and with it off nothing is "pricing" and nothing on the screen may be the
   // answer for the dates there were before (the query keeps the previous answer while a new one is on its way, and keeps it when none will come). The bar says what is missing instead (review N1).
   const dates = periodProblem(from, to)
-  const answer = dates === null && blocksNow.quoted.length > 0 ? budget.data : undefined
+  const live = dates === null && blocksNow.quoted.length > 0 ? budget.data : undefined
+  // A read-only plan that is given the answer it was saved with shows that and asks for nothing; otherwise the answer is the live quote.
+  const answer = readOnly && stored ? stored : live
   // Nothing to price only when no block is complete or the dates are not there; a block just added is "pricing" through the pause before the quote is asked for, never "add a block".
-  const status = !canQuote || blocksNow.quoted.length === 0 || dates !== null ? 'idle' : answer ? 'ready' : budget.isError ? 'error' : 'loading'
+  const status = readOnly && stored ? 'ready' : !canQuote || blocksNow.quoted.length === 0 || dates !== null ? 'idle' : answer ? 'ready' : budget.isError ? 'error' : 'loading'
   const planBudget = planBudgetFor(funding.data, from, to)
   const planIssues = answer?.period.issues ?? []
   const refused = refusals(planIssues)
@@ -196,6 +205,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
           </p>
         </div>
         {!session && !readOnly && entries.length > 0 && <Button onClick={add}><Plus className="h-4 w-4" aria-hidden="true" />Add block</Button>}
+        {!session && readOnly && readOnlyAction}
       </div>
 
       {session ? (

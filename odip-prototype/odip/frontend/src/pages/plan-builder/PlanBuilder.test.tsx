@@ -29,13 +29,14 @@ const source = (changes: Partial<FundingSourceDto> = {}): FundingSourceDto => ({
 })
 
 /** The plan belongs to the page; this is the smallest page. */
-function Page({ initial = [] as DraftBlock[], readOnly = false, onPlan, footer, unsaved, from = '2026-10-01', to = '2027-06-30', saveNotice }: { initial?: DraftBlock[]; readOnly?: boolean; onPlan?: (entries: DraftBlock[]) => void; footer?: React.ComponentProps<typeof PlanBuilder>['footer']; unsaved?: React.ComponentProps<typeof PlanBuilder>['unsaved']; from?: string; to?: string; saveNotice?: React.ReactNode }) {
+function Page({ initial = [] as DraftBlock[], readOnly = false, onPlan, footer, unsaved, from = '2026-10-01', to = '2027-06-30', saveNotice, stored, readOnlyNote, readOnlyAction }: { initial?: DraftBlock[]; readOnly?: boolean; onPlan?: (entries: DraftBlock[]) => void; footer?: React.ComponentProps<typeof PlanBuilder>['footer']; unsaved?: React.ComponentProps<typeof PlanBuilder>['unsaved']; from?: string; to?: string; saveNotice?: React.ReactNode; stored?: React.ComponentProps<typeof PlanBuilder>['stored']; readOnlyNote?: string; readOnlyAction?: React.ReactNode }) {
   const [entries, setEntries] = useState(initial)
   return (
     <MemoryRouter>
       <PlanBuilder
         participantId="p-1" state="NSW" zone="National" from={from} to={to} entries={entries}
         onChange={next => { setEntries(next); onPlan?.(next) }} readOnly={readOnly} footer={footer ?? <button type="button">Save draft</button>} unsaved={unsaved} saveNotice={saveNotice}
+        stored={stored} readOnlyNote={readOnlyNote} readOnlyAction={readOnlyAction}
       />
     </MemoryRouter>
   )
@@ -604,5 +605,24 @@ describe('PlanBuilder when it cannot be changed', () => {
     // Nothing is priced for somebody who can only read, so there is no budget bar to say "Add a block" under a plan that has blocks.
     expect(screen.queryByRole('region', { name: 'Running budget' })).not.toBeInTheDocument()
     expect(screen.queryByText(/Add a block to see/)).not.toBeInTheDocument()
+  })
+
+  it('shows the answer a saved revision was priced with when it is given one: its figures stand, the server is asked nothing, and there is no running budget', () => {
+    const stored = { period: budgetOf('b1').period, weekly: null, week: null }
+    render(<Page initial={twoBlocks()} readOnly stored={stored} readOnlyNote="Approved for rostering. Start a new revision to change." />)
+
+    expect(screen.getByText('Approved for rostering. Start a new revision to change.')).toBeInTheDocument()
+    expect(screen.getByText('$30,610.28')).toBeInTheDocument()                      // what block 1 came to over the agreement, as it was saved
+    expect(screen.queryByText('An ordinary week')).not.toBeInTheDocument()          // the stored answer has no lines to rebuild a week from
+    expect(budgetCall.mock.calls.every(call => call[3] === false)).toBe(true)
+    expect(screen.queryByRole('region', { name: 'Running budget' })).not.toBeInTheDocument()
+  })
+
+  it('draws what the page gives it beside the heading (Start a new revision), and only while it is read only', () => {
+    const { rerender } = render(<Page initial={twoBlocks()} readOnly readOnlyAction={<button type="button">Start a new revision</button>} />)
+    expect(screen.getByRole('button', { name: 'Start a new revision' })).toBeInTheDocument()
+
+    rerender(<Page initial={twoBlocks()} readOnlyAction={<button type="button">Start a new revision</button>} />)
+    expect(screen.queryByRole('button', { name: 'Start a new revision' })).not.toBeInTheDocument()
   })
 })

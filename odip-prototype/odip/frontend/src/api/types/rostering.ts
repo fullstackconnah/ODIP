@@ -6,6 +6,7 @@ import type {
 } from './shift-package'
 import type { SupportRatio, SleepoverType, ShiftStatus, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel, IncidentSeverity, IncidentStatus } from './enums'
 import type { UnavailabilityKind } from './leave'
+import type { PlanBlockRequirements } from './plan-pricing'
 import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 
 // ── Roster Finding ───────────────────────────────────────
@@ -46,6 +47,8 @@ export interface ShiftDto {
   /** What is still missing for this shift's participant (e.g. "Intake not complete"), shown verbatim as a
    * quiet warning. Omitted by the server when there is nothing missing. Never blocks a save in Warn mode. */
   readinessIssues?: string[]
+  /** What the shift asks of a worker (gender, a driver, skills), copied from the pattern it was generated from: shown as chips, informational (nothing checks it yet). Absent when it asks for nothing. */
+  requirements?: PlanBlockRequirements
 }
 
 // ── Shift Notes (NOTES-01) — shared shape read by both the portal (own-shift
@@ -379,6 +382,15 @@ export interface ShiftPatternDto {
   effectiveTo: string | null
   isActive: boolean
   notes: string | null
+  /** The agreement revision whose approval made this pattern (plan builder, phase D); absent for a hand-made or demo pattern. */
+  sourceDraftId?: string
+  sourceBlockKey?: string
+  /** The version of that revision, for "From agreement v2". */
+  sourceDraftVersion?: number
+  /** Which of the workers a block asks for at once this pattern is (a 2:1 support is slots 1 and 2). */
+  workerSlot?: number
+  /** What the pattern's shifts ask of a worker, shown as chips; informational. Absent when it asks for nothing or was made by hand. */
+  requirements?: PlanBlockRequirements
 }
 
 export interface CreateShiftPatternDto {

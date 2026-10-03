@@ -18,6 +18,9 @@ vi.mock('@/api/hooks', () => ({
   useDownloadServiceAgreementDraftPdf: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useCreateElectronicSigningSnapshot: () => ({ mutate: snapshotMutate, isPending: false }),
   useSubmitElectronicSigningEvidence: () => ({ mutate: evidenceMutate, isPending: false }),
+  // "Mark approved" (phase D) has its own tests (ServiceAgreementDraftPage.approval.test.tsx, RevisionCard.approval.test.tsx, ApprovalDialog.test.tsx); here its hooks only have to exist.
+  useApprovalPreview: () => ({ data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() }),
+  useApproveServiceAgreementDraft: () => ({ mutate: vi.fn(), isPending: false }),
   usePlanPricingSettings: () => ({ data: makeSettings() }),
   usePlanBudget: () => budget(),
   usePlanBlockQuote: () => ({ data: quote(), isLoading: false, isError: false, refetch: vi.fn() }),

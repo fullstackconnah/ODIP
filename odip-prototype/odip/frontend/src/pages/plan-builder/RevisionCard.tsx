@@ -1,16 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Download, Loader2 } from 'lucide-react'
-import type { DraftBlock, ServiceAgreementDraftDto, ServiceAgreementDraftLineDto } from '@/api/types'
-import { useDemoJourneySimulation, useServiceAgreementDraft } from '@/api/hooks'
+import type { DraftApprovalDto, DraftBlock, ServiceAgreementDraftDto, ServiceAgreementDraftLineDto } from '@/api/types'
+import { useDemoJourneySimulation, usePlanPricingSettings, useServiceAgreementDraft } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { DataTable, type Column } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
-import { describeBlock, formatHours } from '@/lib/planBlocks'
+import { describeBlock, formatHours, type PlanStepKey } from '@/lib/planBlocks'
 import { REASON_COPY, bandLabel, formatServiceDate, friendlyMessage, groupIssues, isRefusal, totalsCaption } from '@/lib/planQuote'
-import { plural } from '@/lib/format'
-import { formatCurrency } from '@/lib/utils'
+import { joinList, plural } from '@/lib/format'
+import { usePermissions } from '@/lib/permissions'
+import { rosterLink } from '@/lib/rosterLinks'
+import { formatCurrency, formatWithTimeZone } from '@/lib/utils'
 import ElectronicSigningEvidencePanel from '@/pages/ElectronicSigningEvidencePanel'
+import { ApprovalDialog } from './ApprovalDialog'
 import { FlagBadges } from './PlanMessages'
 
 // Human labels for the small set of statuses this draft workflow currently produces. StatusBadge falls back to its own default styling for a key not present in its
@@ -74,6 +78,33 @@ type RevisionCardProps = {
   draft: ServiceAgreementDraftDto
   onDownload: (id: string) => void
   downloading: boolean
+  /** This is the participant's newest revision: the only one that can be approved for rostering. */
+  isNewest?: boolean
+  /** A reason approval was refused is about a block: take the person to it, at the step that fixes it (the page owns the plan the blocks are in). */
+  onGoToBlock?: (blockId: string, step: PlanStepKey) => void
+}
+
+/**
+ * Who approved a revision for rostering and what that made. It is not the e-signing status beside the version number (the template's state, the same on every revision): approving
+ * makes the weekly roster patterns and the open shifts, and the agreement is still not signed.
+ */
+function ApprovalNote({ participantId, approval }: { participantId: string; approval: DraftApprovalDto }) {
+  const on = formatWithTimeZone(approval.approvedAt, undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+  const patterns = plural(approval.patternsCreated, 'weekly pattern')
+  const link = approval.firstShiftDate
+    ? <Link className="font-medium underline" to={rosterLink(approval.firstShiftDate, participantId, { unfilled: true })}>Open on the roster</Link>
+    : <Link className="font-medium underline" to="/rostering/patterns">Open the shift patterns</Link>
+  return (
+    <Callout tone="success" className="max-w-prose" title={`Approved for rostering by ${approval.approvedByName} on ${on}`}>
+      <p>
+        {approval.shiftsCreated > 0 && approval.horizonEnd
+          ? `${patterns}, open shifts to ${formatServiceDate(approval.horizonEnd)}.`
+          : `${patterns}. Open shifts are created each day as the dates come within 8 weeks, once the participant is active.`}{' '}
+        {link}
+      </p>
+      <p className="mt-1 text-[13px]">Approved for rostering, separate from signing: the agreement itself is not signed.</p>
+    </Callout>
+  )
 }
 
 const CARD = 'rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] flex flex-col gap-[var(--field-gap-y)]'
@@ -116,6 +147,7 @@ export function RevisionCard(props: RevisionCardProps) {
           {draft.caveats.map(caveat => <li key={caveat} className="flex items-start gap-1.5"><StatusBadge tone="warning" label="Read" /><span>{caveat}</span></li>)}
         </ul>
       )}
+      {draft.approval && <ApprovalNote participantId={participantId} approval={draft.approval} />}
       {open && detail.isLoading && <p role="status" aria-busy="true" className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />Reading this version…</p>}
       {open && detail.isError && (
         <Callout tone="error" className="max-w-prose" title="This version could not be read">
@@ -131,8 +163,10 @@ export function RevisionCard(props: RevisionCardProps) {
  * One revision in full. A revision made with the plan builder shows its blocks, its lines with their totals and what a person still has to look at as it was when it was saved; one typed
  * by hand before the builder existed shows its lines exactly as they were, and says it can only be rebuilt.
  */
-function FullRevision({ participantId, draft, onDownload, downloading, onCollapse }: RevisionCardProps & { onCollapse?: () => void }) {
+function FullRevision({ participantId, draft, onDownload, downloading, onCollapse, isNewest = false, onGoToBlock }: RevisionCardProps & { onCollapse?: () => void }) {
   const card = useRef<HTMLElement>(null)
+  const [approving, setApproving] = useState(false)
+  const { canManageParticipantLifecycle, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
   const collapsible = onCollapse !== undefined
   // Opened by a person (it has Hide details): the Show details they pressed went with the summary, so focus is on the page. It goes to Hide details, unless it has been put somewhere else meanwhile
   // (the version can take a moment to read, and somebody may have moved on). The newest revision, in full from the start, is not opened by anybody and takes nothing (review N7).
@@ -151,6 +185,12 @@ function FullRevision({ participantId, draft, onDownload, downloading, onCollaps
   const caption = pricing ? totalsCaption(pricing).text : ''
   const total = lines.reduce((sum, line) => sum + line.total, 0)
 
+  // Only the newest revision that was built from blocks and has not been approved can be approved. The organisation says which roles may (Admin and Coordinator until it says otherwise); the screen
+  // follows that list when it has it and leaves the server to decide while it is still loading. A SuperAdmin acting for an organisation always may.
+  const approvable = isNewest && fromBlocks && !draft.approval && canManageParticipantLifecycle
+  const approverRoles = usePlanPricingSettings(approvable).data?.approverRoles
+  const mayApprove = isSuperAdmin || !approverRoles || (isAdmin && approverRoles.includes('Admin')) || (isCoordinator && approverRoles.includes('Coordinator'))
+
   return <article ref={card} className={CARD}>
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
@@ -163,6 +203,16 @@ function FullRevision({ participantId, draft, onDownload, downloading, onCollaps
         {onCollapse && <Button variant="secondary" aria-expanded="true" onClick={onCollapse}>Hide details</Button>}
       </div>
     </div>
+    {draft.approval && <ApprovalNote participantId={participantId} approval={draft.approval} />}
+    {approvable && (mayApprove ? (
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={() => setApproving(true)}>Mark approved</Button>
+        <p className="text-sm text-[var(--color-muted-foreground)]">Makes this plan's weekly roster patterns and open shifts. Separate from signing.</p>
+      </div>
+    ) : approverRoles && (
+      <p className="text-sm text-[var(--color-muted-foreground)]">Your organisation lets only {joinList(approverRoles)} approve plans.</p>
+    ))}
+    {approvable && mayApprove && <ApprovalDialog open={approving} participantId={participantId} draft={draft} onClose={() => setApproving(false)} onApproved={() => setApproving(false)} onGoToBlock={onGoToBlock} />}
     <ElectronicSigningEvidencePanel participantId={participantId} draft={draft} />
 
     {fromBlocks ? (

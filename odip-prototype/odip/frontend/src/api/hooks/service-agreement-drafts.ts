@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
-import type { CreateServiceAgreementDraftDto, DemoJourneySimulationDto, ElectronicSigningEvidenceDto, ElectronicSigningSnapshotDto, ServiceAgreementDraftDto, SubmitElectronicSigningEvidenceDto } from '../types'
+import type { ApproveDraftDto, CreateServiceAgreementDraftDto, DemoJourneySimulationDto, DraftApprovalPreviewDto, ElectronicSigningEvidenceDto, ElectronicSigningSnapshotDto, ServiceAgreementDraftDto, SubmitElectronicSigningEvidenceDto } from '../types'
 
 const path = (participantId: string) => `/participants/${participantId}/service-agreement-drafts`
 
@@ -29,6 +29,47 @@ export function useCreateServiceAgreementDraft() {
     mutationFn: ({ participantId, data }: { participantId: string; data: CreateServiceAgreementDraftDto }) =>
       apiPost<ServiceAgreementDraftDto>(path(participantId), data),
     onSuccess: (_, { participantId }) => queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] }),
+  })
+}
+
+const previewKey = (participantId: string | undefined, id: string | undefined) => ['service-agreement-draft-approval-preview', participantId, id] as const
+
+/**
+ * What approving a revision for rostering would do, with nothing done (the confirm dialog's counts, the reasons it cannot be approved, the hand-made patterns that overlap). It depends on the roster as it is
+ * now, so it is read again every time it is wanted (the dialog opens) and kept for no longer than that.
+ */
+export function useApprovalPreview(participantId: string | undefined, id: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: previewKey(participantId, id),
+    queryFn: () => apiGet<DraftApprovalPreviewDto>(`${path(participantId!)}/${id}/approval-preview`),
+    enabled: enabled && !!participantId && !!id,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always',
+  })
+}
+
+/**
+ * Approves the newest revision for rostering: the server records who and when, makes the weekly roster patterns and the open shifts, and ends the patterns of the revision before. It changes what
+ * the revisions list, the patterns page, the roster board and the participant's rostering tab show, so each is refreshed. A refusal (a newer revision exists, something the preview did not know) refreshes
+ * only the revisions and the preview: nothing on the roster changed.
+ */
+export function useApproveServiceAgreementDraft() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ participantId, draftId, acknowledgeOverlaps }: { participantId: string; draftId: string } & ApproveDraftDto) =>
+      apiPost<ServiceAgreementDraftDto>(`${path(participantId)}/${draftId}/approve`, { acknowledgeOverlaps }),
+    onSuccess: (_, { participantId }) => Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] }),
+      queryClient.invalidateQueries({ queryKey: ['service-agreement-draft', participantId] }),
+      queryClient.invalidateQueries({ queryKey: ['roster-board'] }),
+      queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
+      queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
+    ]),
+    onError: (_, { participantId, draftId }) => Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] }),
+      queryClient.invalidateQueries({ queryKey: previewKey(participantId, draftId) }),
+    ]),
   })
 }
 

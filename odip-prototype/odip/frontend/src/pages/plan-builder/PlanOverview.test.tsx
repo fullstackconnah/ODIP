@@ -384,6 +384,24 @@ describe('PlanOverview when read only', () => {
   })
 })
 
+describe('PlanOverview when read only with the answer a revision was saved with', () => {
+  it('shows what each block came to over the agreement and no column for an ordinary week, which cannot be rebuilt from a stored answer', () => {
+    setUp({ readOnly: true, budget: { period: budget().period, weekly: null, week: null }, budgetStatus: 'ready' })
+
+    expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Block', 'The agreement'])
+    expect(screen.getByText('$30,610.28')).toBeInTheDocument()
+    expect(screen.getByText('$8,195.16')).toBeInTheDocument()
+    expect(screen.queryByText('8 h · $588.64')).not.toBeInTheDocument()
+    expect(screen.queryByText('…')).not.toBeInTheDocument()
+  })
+
+  it('still shows the ordinary week of a plan that can be priced live, with the week and the agreement both', () => {
+    setUp({ budget: { ...budget(), weekly: null, week: null } })      // an agreement shorter than a week has no ordinary week, and a person who can edit sees the dash
+
+    expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Block', 'An ordinary week', 'The agreement', ''])
+  })
+})
+
 describe('PlanOverview when read only and nothing can be priced', () => {
   it('has no column of figures waiting for a quote that will never come: the saved versions carry the prices', () => {
     setUp({ readOnly: true, budget: undefined, budgetStatus: 'idle' })

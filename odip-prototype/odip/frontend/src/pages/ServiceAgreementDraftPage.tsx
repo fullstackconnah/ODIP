@@ -14,7 +14,7 @@ import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { formGrid, span } from '@/lib/formGrid'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
-import { SUPPORT_LABEL, blockProblems, normaliseBlock, stampLocation } from '@/lib/planBlocks'
+import { SUPPORT_LABEL, blockProblems, normaliseBlock, stampLocation, type PlanStepKey } from '@/lib/planBlocks'
 import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, conflictVersionOf, describeSaveError, friendlyMessage, isPricingDate, type SaveFailure } from '@/lib/planQuote'
 import { PlanBuilder } from './plan-builder/PlanBuilder'
 import { RevisionCard } from './plan-builder/RevisionCard'
@@ -39,6 +39,15 @@ type Details = {
 const EMPTY_DETAILS: Details = { state: 'NSW', zone: 'National', planStartDate: '', planEndDate: '', agreementStartDate: '', agreementEndDate: '', representative: '' }
 
 const snapshotOf = (details: Details, plan: readonly DraftBlock[]) => JSON.stringify({ details, plan })
+
+/** The accessible name of the chip on a block's row that opens each step (the plan overview's own names): what "Go to block" focuses. */
+const CHIP_NAME: Record<PlanStepKey, string> = {
+  template: 'Edit times of block',
+  times: 'Edit times of block',
+  requirements: 'Edit support and requirements of block',
+  travel: 'Edit travel and transport of block',
+  review: 'Review prices of block',
+}
 
 /**
  * A tab or a line break pasted into a one-line box becomes the space it stands for, and any other control character (a NUL) is dropped: the server refuses a representative that has one (it is written to a
@@ -90,6 +99,9 @@ function DraftPage() {
   // The newer version is being read to be loaded. A save pressed meanwhile would be made on the version this plan started from and meet the 409 again, for the version that has just been loaded
   // (review L5): Save is held, and so are the buttons that would answer the notice a second time.
   const [loadingNewest, setLoadingNewest] = useState(false)
+  // The revision whose "Start a new revision" was pressed. A revision somebody approved for rostering is what the roster was made from, so its page is read only until somebody says they mean to change
+  // it, and then only for THAT revision: when the next version is saved (and is itself approved one day) the page is locked again. Nothing is saved by pressing it; the working copy was already the newest.
+  const [revisingFrom, setRevisingFrom] = useState<string | null>(null)
 
   const loaded = drafts.data !== undefined
   if (loaded && baseline === null) {
@@ -111,6 +123,7 @@ function DraftPage() {
 
   const newest = drafts.data?.[0]
   const unreadableVersion = newest && newest.blocks.some(entry => entry.unreadable) ? newest.version : null
+  const locked = canEdit && !!newest?.approval && revisingFrom !== newest.id
 
   // Dates typed over an empty plan are nothing to lose: there is nothing to save until there is a block.
   const dirty = baseline !== null && plan.length > 0 && snapshotOf(details, plan) !== baseline
@@ -237,7 +250,19 @@ function DraftPage() {
     </>
   ) : null
 
-  const saveRow = ({ refused }: { refused: readonly PlanIssue[] }) => canEdit ? (
+  // Where a reason approval was refused for is on screen: the chip of the block's step that fixes it (or the plan's heading when that block is not drawn, a block being open in the stepper, say).
+  // The dialog that asked is closing, and gives focus back to the button that opened it as it does: focus goes to the block once that has happened, not before it.
+  const goToBlock = (blockId: string, step: PlanStepKey) => {
+    const place = plan.findIndex(entry => entry.block.id === blockId) + 1
+    window.setTimeout(() => {
+      const chip = place > 0 ? document.querySelector<HTMLElement>(`button[aria-label="${CHIP_NAME[step]} ${place}"]`) : null
+      const target = chip ?? document.getElementById('plan-heading')
+      target?.scrollIntoView?.({ block: 'center' })
+      target?.focus()
+    }, 0)
+  }
+
+  const saveRow = ({ refused }: { refused: readonly PlanIssue[] }) => canEdit && !locked ? (
     <div className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-3">
       <div className="flex flex-wrap items-center gap-3">
         <Button data-plan-save onClick={save} disabled={create.isPending || loadingNewest || refused.length > 0}>{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}{create.isPending ? 'Saving draft…' : 'Save draft'}</Button>
@@ -264,13 +289,13 @@ function DraftPage() {
     </div>
 
     <div role="note" className="rounded-[var(--radius-md)] border border-[var(--color-warning)]/40 bg-[var(--color-warning-container)] p-[var(--card-pad)] text-sm text-[var(--color-on-warning-container)] space-y-2">
-      <p><strong>Draft only</strong> — not approved for signing or use. It can't be used to activate the participant, roster shifts, invoice or claim.</p>
+      <p><strong>Draft only</strong> — not approved for signing or use. Approving a revision for rostering makes its weekly patterns and open shifts, and nothing else: it is separate from signing, and it can't be used to activate the participant, invoice or claim.</p>
       <p><strong>Participant identifiers come from the participant record.</strong> NDIS number: {canonicalIdentifiers.ndis}; date of birth: {canonicalIdentifiers.dob}. <Link className="underline font-medium" to={`/participants/${participantId}/profile`}>View or edit participant details</Link>. A snapshot of both is stored with this draft and printed on its PDF, which any signed-in user can open; a later change to the record does not change an existing draft.</p>
     </div>
 
     <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] flex flex-col gap-[var(--section-gap)]">
       <h2 className="font-semibold">Draft details</h2>
-      <fieldset disabled={!canEdit} className="min-w-0">
+      <fieldset disabled={!canEdit || locked} className="min-w-0">
         <div className={formGrid}>
           <FormField label="State" className={span.short}>
             <select value={details.state} onChange={e => edit({ state: e.target.value as AgreementState })}>{states.map(value => <option key={value} value={value}>{value}</option>)}</select>
@@ -312,20 +337,23 @@ function DraftPage() {
       to={details.agreementEndDate}
       entries={plan}
       onChange={changePlan}
-      readOnly={!canEdit}
-      readOnlyNote="You can read this plan; Admins and Coordinators change it."
+      readOnly={!canEdit || locked}
+      readOnlyNote={locked ? 'Approved for rostering. Start a new revision to change.' : 'You can read this plan; Admins and Coordinators change it.'}
+      // A locked plan shows what the revision was approved at, as it was saved: no live quote is asked for.
+      stored={locked && newest?.pricing ? { period: newest.pricing, weekly: null, week: null } : undefined}
+      readOnlyAction={locked && newest ? <Button onClick={() => setRevisingFrom(newest.id)}>Start a new revision</Button> : undefined}
       footer={saveRow}
       onBuildingChange={setBuilding}
       onOpenChange={setBlockOpen}
-      unsaved={canEdit && dirty ? { onSave: save, saving: create.isPending, holding: loadingNewest } : undefined}
+      unsaved={canEdit && !locked && dirty ? { onSave: save, saving: create.isPending, holding: loadingNewest } : undefined}
       saveNotice={saveNotice}
       savedNote={canEdit && savedVersion !== null ? `Saved as version ${savedVersion}.` : null}
     />
 
     <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] flex flex-col gap-[var(--section-gap)]">
       <h2 className="font-semibold">Draft versions</h2>
-      {(drafts.data ?? []).length === 0 ? <p className="text-sm text-[var(--color-muted-foreground)]">No draft versions yet.</p> : (drafts.data ?? []).map(draft => (
-        <RevisionCard key={draft.id} participantId={participantId} draft={draft} onDownload={id => download.mutate({ participantId, id })} downloading={download.isPending} />
+      {(drafts.data ?? []).length === 0 ? <p className="text-sm text-[var(--color-muted-foreground)]">No draft versions yet.</p> : (drafts.data ?? []).map((draft, index) => (
+        <RevisionCard key={draft.id} participantId={participantId} draft={draft} onDownload={id => download.mutate({ participantId, id })} downloading={download.isPending} isNewest={index === 0} onGoToBlock={goToBlock} />
       ))}
       {download.isError && <Callout tone="error">Could not download this draft PDF. Try again.</Callout>}
       <p className="text-xs text-[var(--color-muted-foreground)] flex gap-2"><FileText className="w-4 h-4 shrink-0" /> Draft PDFs are informational only — not signed and not billing authority.</p>
