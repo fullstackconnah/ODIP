@@ -157,8 +157,9 @@ public class UniqueIndexEmulatorTests
         foreach (var index in indexes)
         {
             // A row of defaults must be classified (held or not) without the emulator giving up on the filter.
-            var key = UniqueIndexEmulator.IndexKey(index, p => p.ClrType == typeof(string) ? "x" : Nullable.GetUnderlyingType(p.ClrType) is not null ? null : p.ClrType.IsValueType ? Activator.CreateInstance(p.ClrType) : null);
-            Assert.True(key is null or { Length: >= 0 }, UniqueIndexEmulator.NameOf(index));
+            var gaveUp = Record.Exception(() => UniqueIndexEmulator.IndexKey(index,
+                p => p.ClrType == typeof(string) ? "x" : Nullable.GetUnderlyingType(p.ClrType) is not null ? null : p.ClrType.IsValueType ? Activator.CreateInstance(p.ClrType) : null));
+            Assert.True(gaveUp is null, UniqueIndexEmulator.NameOf(index) + ": " + gaveUp?.Message);
         }
         Assert.Contains(indexes, i => UniqueIndexEmulator.NameOf(i) == HandoverAcknowledgement.UniqueReaderIndexName);
         Assert.Contains(indexes, i => UniqueIndexEmulator.NameOf(i) == "IX_CaregiverProfileSubmissions_ParticipantId_Active");        // the IN (0, 1) one
