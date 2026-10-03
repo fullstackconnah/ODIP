@@ -225,6 +225,53 @@ describe('PlanOverview with blocks', () => {
 
       expect(stops(screen.getByRole('toolbar', { name: 'Block 2 actions' }))[0]).toHaveAccessibleName('Edit support and requirements of block 2')
     })
+
+    // Code review N3: the Tab stop was chosen once, when the row mounted, and a refusal arrives with the first quote, after it: the test above renders the issue from the start, which is not how it comes.
+    describe('when the refusal arrives after the row is on screen', () => {
+      const refusal: PlanIssue = { blockId: 'b2', reason: 'RegistrationGroupNotHeld', message: "Block 'b2': needs group 0136.", count: 1 }
+      const view = (issues: PlanIssue[]) => (
+        <MemoryRouter>
+          <PlanOverview entries={entries()} budget={budget()} budgetStatus="ready" issues={issues} state="NSW" zone="National" onStart={vi.fn()} onEdit={vi.fn()} onDuplicate={vi.fn()} onRemove={vi.fn()} />
+        </MemoryRouter>
+      )
+
+      it('moves the Tab stop to the step that fixes it, until the person has been in the toolbar', () => {
+        const { rerender } = render(view([]))
+        const toolbar = () => screen.getByRole('toolbar', { name: 'Block 2 actions' })
+        expect(stops(toolbar())[0]).toHaveAccessibleName('Edit times of block 2')       // nothing is wrong yet: the first
+
+        rerender(view([refusal]))
+
+        expect(stops(toolbar())).toHaveLength(1)
+        expect(stops(toolbar())[0]).toHaveAccessibleName('Edit support and requirements of block 2')
+      })
+
+      it('keeps the stop where the person left it once they have used the toolbar, whatever arrives', async () => {
+        const user = userEvent.setup()
+        const { rerender } = render(view([]))
+        await user.click(screen.getByRole('button', { name: 'Duplicate block 2' }))      // in the toolbar: Duplicate is the stop
+
+        rerender(view([refusal]))
+
+        expect(stops(screen.getByRole('toolbar', { name: 'Block 2 actions' }))[0]).toHaveAccessibleName('Duplicate block 2')
+      })
+
+      it('goes back to the first chip when the refusal is gone, if the toolbar was not used', () => {
+        const { rerender } = render(view([refusal]))
+        expect(stops(screen.getByRole('toolbar', { name: 'Block 2 actions' }))[0]).toHaveAccessibleName('Edit support and requirements of block 2')
+
+        rerender(view([]))
+
+        expect(stops(screen.getByRole('toolbar', { name: 'Block 2 actions' }))[0]).toHaveAccessibleName('Edit times of block 2')
+      })
+    })
+  })
+
+  // Design review D10: at 390 the muted line broke inside its link ("Confirm in" / "Settings"), so the link read as two fragments.
+  it('keeps the link that confirms the registration groups whole when the line wraps', () => {
+    setUp({ budget: { ...budget(), period: quote({ ...budget().period, notices: [{ code: 'registration-groups-not-confirmed', message: 'Not confirmed.', openQuestion: 1 }] }) } })
+
+    expect(screen.getByRole('link', { name: 'Confirm in Settings' })).toHaveClass('whitespace-nowrap')
   })
 
   it('puts what needs a person beside the block it is about, in plain words, and the refusals apart', () => {

@@ -59,7 +59,10 @@ type BlockActionsProps = {
  */
 function BlockActions({ number, suggested, onEdit, onDuplicate, onRemove }: BlockActionsProps) {
   const toolbar = useRef<HTMLDivElement>(null)
-  const [active, setActive] = useState(suggested)
+  // The Tab stop is where the person last was in the toolbar. Until they have been in it, it follows what the block needs: a refusal arrives with the first quote, after the row is on screen, so
+  // a stop that was chosen once when the row mounted would stay on the first chip (review N3).
+  const [used, setUsed] = useState<number | null>(null)
+  const active = used ?? suggested
   const buttons = () => [...(toolbar.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
   const stop = (index: number) => (index === active ? 0 : -1)
 
@@ -79,7 +82,7 @@ function BlockActions({ number, suggested, onEdit, onDuplicate, onRemove }: Bloc
       role="toolbar"
       aria-label={`Block ${number} actions`}
       onKeyDown={move}
-      onFocus={event => { const at = buttons().findIndex(button => button === (event.target as Node)); if (at >= 0) setActive(at) }}
+      onFocus={event => { const at = buttons().findIndex(button => button === (event.target as Node)); if (at >= 0) setUsed(at) }}
       className="flex flex-wrap items-center gap-2 md:justify-end"
     >
       <div className="flex flex-wrap items-center gap-1.5">

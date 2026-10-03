@@ -254,11 +254,18 @@ describe('ReviewStep what needs a person', () => {
     expect(within(screen.getByRole('region', { name: 'To look at' })).getByText(/Blocks 1 and 3 are on at the same time on the same day\./)).toBeInTheDocument()
   })
 
-  it('calls a refusal an error, not a warning', () => {
-    state.current = { data: blockQuote({ issues: [{ blockId: 'b1', reason: 'RegistrationGroupNotHeld', message: "Block 'b1': needs group 0125.", count: 1 }] }), isLoading: false, isError: false }
+  // Design review D7: each issue was an assertive alert, so a screen reader said every one of them again at every visit to the step. The list is on screen where the person is looking.
+  it('calls a refusal an error, not a warning, and does not announce it again at every visit to the step', () => {
+    state.current = { data: blockQuote({ issues: [{ blockId: 'b1', reason: 'RegistrationGroupNotHeld', message: "Block 'b1': needs group 0125.", count: 1 }, { blockId: 'b1', reason: 'NoItem', message: "Block 'b1': no item for Weekday Night.", count: 3 }] }), isLoading: false, isError: false }
     setUp()
 
-    expect(screen.getByRole('region', { name: 'To look at' }).querySelector('[role="alert"]')).toHaveTextContent('Your organisation does not hold this registration group')
+    const list = screen.getByRole('region', { name: 'To look at' })
+    const refusal = within(list).getByText('Your organisation does not hold this registration group').closest('div[class*="rounded-lg"]') as HTMLElement
+    const warning = within(list).getByText('Part of this block has no price item').closest('div[class*="rounded-lg"]') as HTMLElement
+    expect(refusal.className).toContain('--color-destructive')
+    expect(warning.className).toContain('--color-warning-container')
+    expect(list.querySelector('[role="alert"]')).toBeNull()
+    expect(list.querySelector('[aria-live]')).toBeNull()
   })
 
   it('lists the questions this block waits on, closed until opened', () => {

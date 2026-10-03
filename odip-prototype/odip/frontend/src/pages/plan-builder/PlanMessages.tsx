@@ -42,7 +42,7 @@ export function PlanNotices({ notices, scope }: PlanNoticesProps) {
         <p className="text-sm text-[var(--color-muted-foreground)]" title={registration.message}>
           Registration groups are not confirmed.{' '}
           {isAdmin || isSuperAdmin
-            ? <Link to="/settings?tab=pricing" className="font-medium text-[var(--color-primary)] underline underline-offset-2">Confirm in Settings</Link>
+            ? <Link to="/settings?tab=pricing" className="whitespace-nowrap font-medium text-[var(--color-primary)] underline underline-offset-2">Confirm in Settings</Link>
             : 'Ask an Admin to confirm them.'}
         </p>
       )}
@@ -84,7 +84,8 @@ export function IssueList({ issues, blocks, onFix }: IssueListProps) {
         return (
           <li key={`${issue.blockId}-${issue.reason}-${issue.message}`}>
             {/* The way to the step is under the text, not in the Callout's actions slot: beside the text it takes a third of a phone's width and the message wraps to twenty lines. */}
-            <Callout tone={copy?.refusal ? 'error' : 'warning'} className="max-w-prose" title={copy?.title ?? 'Needs a look'}>
+            {/* Not announced: Review is a step a person comes back to, and an assertive role on each issue says them all again at every visit (design D7); the list is on screen where they look. */}
+            <Callout tone={copy?.refusal ? 'error' : 'warning'} announce={false} className="max-w-prose" title={copy?.title ?? 'Needs a look'}>
               <span className="block">{friendlyMessage(issue.message, blocks)}{where && <span className="text-[var(--color-muted-foreground)]">{' '}({where})</span>}</span>
               {copy && <span className="mt-1 block">{copy.advice}</span>}
               {onFix && step && issue.blockId && (
