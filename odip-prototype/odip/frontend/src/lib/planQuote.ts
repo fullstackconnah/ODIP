@@ -60,12 +60,6 @@ export function referenceWeek(from: string, to: string, holidayDates: readonly s
   return { from: formatDayNumber(first), to: formatDayNumber(first + 6) }
 }
 
-/** How many weeks the agreement runs (a part week counts as its share). */
-export function agreementWeeks(from: string, to: string): number {
-  const first = parseDateOnly(from), last = parseDateOnly(to)
-  return first === null || last === null || last < first ? 0 : (last - first + 1) / 7
-}
-
 // ── Flags ─────────────────────────────────────────────────────────────────────
 
 export interface LineFlags { review: boolean; holidayExposure: boolean; provisional: boolean }
@@ -133,9 +127,12 @@ function kindOrder(kind: PlannedLineKind): number { return KIND_ORDER.indexOf(ki
 
 function roundCents(value: number): number { return Math.round(value * 100) / 100 }
 
+/** A figure that is not known, or that nothing can say: an en dash, as the dashboard's tiles do (DESIGN.md, The Quiet Zero Rule), never a 0 that reads as a price. */
+export const NO_FIGURE = '–'
+
 /** The quantity of a line in words: hours, nights, each; a dollar line (kilometres, tolls, parking) is its own money, so it has no quantity to show. */
 export function quantityLabel(kind: PlannedLineKind, unit: string, qty: number): string {
-  if (kind === 'ProviderTravelCosts' || kind === 'ActivityTransport') return '—'
+  if (kind === 'ProviderTravelCosts' || kind === 'ActivityTransport') return NO_FIGURE
   if (unit === 'H') return `${formatHours(qty)} h`
   if (unit === 'D') return plural(Math.round(qty * 100) / 100, 'night')
   return kind === 'Sleepover' ? plural(Math.round(qty * 100) / 100, 'sleepover') : `${Math.round(qty * 100) / 100} each`
@@ -239,7 +236,7 @@ export const REASON_COPY: Record<PlanFailureReason, ReasonCopy> = {
   InvalidInput: { title: 'A block breaks a rule', advice: 'Fix the field the message names. Nothing is priced from this block until it does.', step: 'times', refusal: true },
   RegistrationGroupNotHeld: { title: 'Your organisation does not hold this registration group', advice: 'Choose another support type, or an Admin can record the groups you hold in Settings, Plan pricing.', step: 'requirements', refusal: true },
   StaLegacyNotSupported: { title: 'Short-term accommodation is set to the legacy per-day items', advice: 'Those items end on 30 June 2027. An Admin can switch to the hourly items plus accommodation nights in Settings, Plan pricing.', refusal: true },
-  NoItem: { title: 'Part of this block has no price item', advice: 'The NDIS catalogue has no weekday night (00:00–06:00) item for community access or group activities, so that part is left unpriced. Finish by midnight, start after 06:00, or use personal care.', step: 'times', refusal: false },
+  NoItem: { title: 'Part of this block has no price item', advice: 'That part is left out of every total. Community access and group activities have no item between 00:00 and 06:00 on a weekday: keep the block clear of those hours, or use personal care.', step: 'times', refusal: false },
   CatalogueNotFound: { title: 'No catalogue prices for part of the agreement', advice: 'The support catalogue has not been imported for some of these dates, so those lines have no price. A SuperAdmin can import it in Settings, or shorten the agreement.', refusal: false },
   CatalogueAmbiguous: { title: 'Two catalogue prices clash', advice: 'Two rows of one catalogue version are valid on the same date. A SuperAdmin needs to fix the catalogue before this can be priced.', refusal: false },
   ZoneNotEligible: { title: 'This item has no price for the delivery zone', advice: 'The catalogue lists no price for this item in the price zone. Check the zone in the agreement details.', refusal: false },
@@ -303,13 +300,15 @@ export function issueWhere(issue: PlanIssue): string {
 
 /**
  * The engine names a block by the id the screen gave it ("Block 'b2'", and for an overlap "Blocks 'b1' and 'b2'"); a coordinator knows it by its place in the plan ("Block 2",
- * "Blocks 1 and 2"). An id that is not in the plan is left as the engine wrote it.
+ * "Blocks 1 and 2"). An id that is not in the plan is left as the engine wrote it. Its dates are ISO ("2027-07-05"), beside the en-AU ones the screen writes ("Mon 5 Jul 2027") in the same
+ * sentence, so they are written the same way.
  */
 export function friendlyMessage(message: string, blocks: readonly PlanBlock[]): string {
   const place = (id: string) => blocks.findIndex(block => block.id === id) + 1
   return message
     .replace(/Blocks '([^']+)' and '([^']+)'/g, (whole, first: string, second: string) => (place(first) > 0 && place(second) > 0 ? `Blocks ${place(first)} and ${place(second)}` : whole))
     .replace(/Block '([^']+)'/g, (whole, id: string) => (place(id) > 0 ? `Block ${place(id)}` : whole))
+    .replace(/\b(\d{4}-\d{2}-\d{2})\b/g, (whole, iso: string) => formatServiceDate(iso) || whole)
 }
 
 /**

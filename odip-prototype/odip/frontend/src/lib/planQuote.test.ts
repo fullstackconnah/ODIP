@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { FundingSourceDto, PlannedLine, PlanBlock, PlanFailureReason, PlanIssue, PlanQuote } from '@/api/types'
 import { emptyBlock } from './planBlocks'
 import {
-  CATEGORY_SHORT, REASON_COPY, addDays, agreementWeeks, bandLabel, categoryLabel, compareBudget, conflictVersionOf, describeQuoteError, describeSaveError, formatServiceDate, friendlyMessage, groupLines,
+  CATEGORY_SHORT, NO_FIGURE, REASON_COPY, addDays, bandLabel, categoryLabel, compareBudget, conflictVersionOf, describeQuoteError, describeSaveError, formatServiceDate, friendlyMessage, groupLines,
   groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, planBudgetFor, quantityLabel, questionShort, referenceWeek, refusals, ruleWords, shiftsNotPriced, totalsCaption,
 } from './planQuote'
 
@@ -47,12 +47,6 @@ describe('an ordinary week', () => {
     expect(referenceWeek('2026-10-01', '2026-10-06', [])).toBeNull()
     expect(referenceWeek('2026-10-01', '2026-10-07', [])).toEqual({ from: '2026-10-01', to: '2026-10-07' })
     expect(referenceWeek('', '2026-10-07', [])).toBeNull()
-  })
-
-  it('counts the weeks of an agreement, a part week as its share', () => {
-    expect(agreementWeeks('2026-07-01', '2027-06-30')).toBeCloseTo(52.14, 2)
-    expect(agreementWeeks('2026-10-01', '2026-10-07')).toBe(1)
-    expect(agreementWeeks('2026-10-07', '2026-10-01')).toBe(0)
   })
 })
 
@@ -123,7 +117,8 @@ describe('the lines of an agreement', () => {
     expect(quantityLabel('Sleepover', 'E', 1)).toBe('1 sleepover')
     expect(quantityLabel('ParticipantAccommodation', 'D', 1)).toBe('1 night')
     expect(quantityLabel('CentreCapital', 'E', 3)).toBe('3 each')
-    expect(quantityLabel('ActivityTransport', 'E', 12.4)).toBe('—')
+    expect(quantityLabel('ActivityTransport', 'E', 12.4)).toBe(NO_FIGURE)
+    expect(NO_FIGURE).toBe('–')    // an en dash, as the dashboard's tiles use for a figure that is not known (DESIGN.md, The Quiet Zero Rule)
     expect(bandLabel('Weekday Daytime')).toBe('Weekday daytime')
     expect(bandLabel('Saturday')).toBe('Saturday')
   })
@@ -200,6 +195,18 @@ describe('what each refusal means', () => {
     expect(friendlyMessage("Blocks 'b7' and 'gone' are on at the same time.", blocks)).toBe("Blocks 'b7' and 'gone' are on at the same time.")
   })
 
+  // The engine writes its dates as ISO beside the screen's en-AU ones, in one sentence (design review 11).
+  it('writes the engine\'s dates the way the screen does, and leaves what is not a date alone', () => {
+    expect(friendlyMessage('The overrides run to 2027-04-25. Prices from 2026-07-01 hold.', [])).toBe('The overrides run to Sun 25 Apr 2027. Prices from Wed 1 Jul 2026 hold.')
+    expect(friendlyMessage('No such day: 2026-02-30. Version 2026-27, item 04_104_0125_6_1.', [])).toBe('No such day: 2026-02-30. Version 2026-27, item 04_104_0125_6_1.')
+  })
+
+  it('does not tell a block that starts at five in the morning to finish by midnight: the advice says what the catalogue lacks and the way out, without a time that is not the block\'s', () => {
+    const advice = REASON_COPY.NoItem.advice
+    expect(advice).not.toMatch(/midnight/i)
+    expect(advice).toContain('left out of every total')
+    expect(advice).toContain('between 00:00 and 06:00 on a weekday')
+  })
 })
 
 // Review (design 1): a total that leaves work out has to say so beside the figure, in the unit a coordinator thinks in (shifts, not lines of items times shifts).
