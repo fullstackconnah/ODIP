@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { FileText, Loader2 } from 'lucide-react'
+import { FileText, Loader2, X } from 'lucide-react'
 import { useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useParticipant, useServiceAgreementDrafts } from '@/api/hooks'
 import type { AgreementState, CreateServiceAgreementDraftDto, DraftBlock, PlanIssue, PlanPriceZone } from '@/api/types'
 import { BackButton } from '@/components/BackButton'
@@ -141,8 +141,21 @@ function DraftPage() {
   }
   if (!participantId || !participant.data) return <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
 
-  const edit = (patch: Partial<Details>) => { setDetails(current => ({ ...current, ...patch })); setSavedVersion(null) }
-  const changePlan = (next: DraftBlock[]) => { setPlan(next); setSavedVersion(null); setProblems([]) }
+  // What the last save said is about the plan and the details as they were when it was pressed: any change to either lets go of the problems it found and of the failure it met (the notice that a newer version
+  // exists is not about what was typed, and stays until it is answered or closed). They ride in the dock into every step, so they must not outlast the edit that answers them (review M2).
+  const edit = (patch: Partial<Details>) => { setDetails(current => ({ ...current, ...patch })); setSavedVersion(null); setProblems([]); setFailure(null) }
+  const changePlan = (next: DraftBlock[]) => { setPlan(next); setSavedVersion(null); setProblems([]); setFailure(null) }
+
+  // Closing a notice takes the button that closed it with it, and focus would fall to the top of the page: it goes back to the Save that asked the question (the bar's below xl, the save row's above it, whichever
+  // can take it), else to the plan's heading.
+  const closing = (clear: () => void) => () => {
+    const taken = [...document.querySelectorAll<HTMLElement>('[data-plan-save]')].some(control => { control.focus(); return document.activeElement === control })
+    if (!taken) document.getElementById('plan-heading')?.focus()
+    clear()
+  }
+  const closeButton = (clear: () => void) => (
+    <Button variant="ghost" size="sm" iconOnly aria-label="Close this message" onClick={closing(clear)}><X className="h-4 w-4" aria-hidden="true" /></Button>
+  )
 
   const save = () => {
     if (create.isPending || loadingNewest) return
@@ -209,17 +222,17 @@ function DraftPage() {
   const saveNotice = canEdit ? (
     <>
       {problems.length > 0 && (
-        <Callout tone="warning" className="max-w-prose" title="Fix these before saving">
+        <Callout tone="warning" className="max-w-prose" title="Fix these before saving" actions={closeButton(() => setProblems([]))}>
           <ul className="list-disc pl-5">{problems.map(problem => <li key={problem}>{problem}</li>)}</ul>
         </Callout>
       )}
       {failure && (
-        <Callout tone="error" className="max-w-prose" title={failure.title}>
+        <Callout tone="error" className="max-w-prose" title={failure.title} actions={closeButton(() => setFailure(null))}>
           <ul className="list-disc pl-5">{failure.messages.map(message => <li key={message}>{friendlyMessage(message, plan.map(entry => entry.block))}</li>)}</ul>
         </Callout>
       )}
       {conflict !== null && (
-        <Callout tone="warning" className="max-w-prose" title={`Version ${conflict} was saved by somebody else`}>
+        <Callout tone="warning" className="max-w-prose" title={`Version ${conflict} was saved by somebody else`} actions={loadingNewest ? undefined : closeButton(() => setConflict(null))}>
           <span className="block">It was saved after the version this plan started from, so saving this plan now would replace their work as the newest version. Load version {conflict} to see what changed, then make your changes again. Nothing on this page is lost until you do.</span>
           <span className="mt-2 flex flex-wrap gap-2">
             <Button size="sm" disabled={loadingNewest} onClick={() => setConfirmingLoad(true)}>{loadingNewest && <Loader2 className="w-3.5 h-3.5 animate-spin" />}{loadingNewest ? `Loading version ${conflict}…` : `Load version ${conflict}`}</Button>
@@ -242,7 +255,7 @@ function DraftPage() {
         )
       })()}
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={save} disabled={create.isPending || loadingNewest || refused.length > 0}>{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}{create.isPending ? 'Saving draft…' : 'Save draft'}</Button>
+        <Button data-plan-save onClick={save} disabled={create.isPending || loadingNewest || refused.length > 0}>{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}{create.isPending ? 'Saving draft…' : 'Save draft'}</Button>
         <p className="text-sm text-[var(--color-muted-foreground)]">{dirty ? 'You have unsaved changes. ' : ''}Every save is a new version: earlier versions never change.</p>
       </div>
     </div>

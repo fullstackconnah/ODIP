@@ -111,7 +111,7 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
                   {unsaved && (
                     <span className="inline-flex items-center gap-1.5">
                       <span className={CHIP}><AlertTriangle className="h-3 w-3" aria-hidden="true" />Not saved</span>
-                      <Button variant="secondary" size="sm" disabled={unsaved.saving || unsaved.holding || blocked} onClick={unsaved.onSave}>{unsaved.saving ? 'Saving…' : 'Save'}</Button>
+                      <Button variant="secondary" size="sm" data-plan-save disabled={unsaved.saving || unsaved.holding || blocked} onClick={unsaved.onSave}>{unsaved.saving ? 'Saving…' : 'Save'}</Button>
                     </span>
                   )}
                   {notFullyPriced && <span className={CHIP}><AlertTriangle className="h-3 w-3" aria-hidden="true" />Not fully priced</span>}

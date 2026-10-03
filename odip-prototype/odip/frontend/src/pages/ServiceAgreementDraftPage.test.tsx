@@ -533,6 +533,156 @@ describe('ServiceAgreementDraftPage: a Save pressed from the budget bar, with a 
   })
 })
 
+// Round 3, M2: the notices ride in the dock into every step, and they were never cleared by the edit that answers them nor closable: "Fix these before saving: An end date cannot come before its start date"
+// stayed after the end date was corrected, and "The server is busy" through every later edit.
+describe('ServiceAgreementDraftPage: the notices in the dock go when they are answered or closed', () => {
+  const block: DraftBlock = draftBlock(mondayWednesday('b1'))
+  const saved = draft({ version: 4, state: 'NSW', representative: 'R. Tran', agreementStartDate: '2026-10-01', agreementEndDate: '2027-03-31', blocks: [block], pricing: quote() })
+  const bar = () => screen.getByRole('region', { name: 'Running budget' })
+  const dock = () => bar().parentElement as HTMLElement
+
+  async function open() {
+    drafts.mockReturnValue({ data: [saved], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    return userEvent.setup()
+  }
+  /** A save that finds a problem: the agreement ends before it starts. */
+  async function meetAProblem(user: ReturnType<typeof userEvent.setup>) {
+    fireEvent.change(screen.getByLabelText('Agreement end'), { target: { value: '2026-09-01' } })
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(within(dock()).getByText('Fix these before saving')).toBeInTheDocument()
+  }
+  const failTheSave = () => createMutate.mockImplementation((_request, options) => options.onError({ response: { status: 429, data: {} } }))
+  const meetAConflict = () => createMutate.mockImplementation((_request, options) => options.onError({ response: { status: 409, data: { success: false, code: 'draft-version-conflict', data: { currentVersion: 5 }, errors: ['Version 5 was saved.'] } } }))
+
+  describe('what an edit lets go of', () => {
+    it('lets go of the problems the save found when a detail is changed, so that correcting the date takes the message with it', async () => {
+      const user = await open()
+      await meetAProblem(user)
+
+      fireEvent.change(screen.getByLabelText('Agreement end'), { target: { value: '2027-03-31' } })
+
+      expect(screen.queryByText('Fix these before saving')).not.toBeInTheDocument()
+      expect(screen.queryByText('An end date cannot come before its start date.')).not.toBeInTheDocument()
+    })
+
+    it('lets go of the problems when the plan changes too (a block is saved to it)', async () => {
+      const user = await open()
+      await meetAProblem(user)
+
+      await user.click(screen.getByRole('button', { name: 'Edit times of block 1' }))
+      await user.click(screen.getByRole('button', { name: 'Friday' }))
+      await user.click(screen.getByRole('button', { name: 'Save block' }))
+
+      expect(screen.queryByText('Fix these before saving')).not.toBeInTheDocument()
+    })
+
+    it('lets go of a failure when a detail is changed', async () => {
+      failTheSave()
+      const user = await open()
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      expect(await within(dock()).findByText('The server is busy')).toBeInTheDocument()
+
+      await user.type(screen.getByLabelText('Representative'), ' x')
+
+      expect(screen.queryByText('The server is busy')).not.toBeInTheDocument()
+    })
+
+    it('lets go of a failure when the plan changes', async () => {
+      failTheSave()
+      const user = await open()
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      expect(await within(dock()).findByText('The server is busy')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Edit times of block 1' }))
+      await user.click(screen.getByRole('button', { name: 'Friday' }))
+      await user.click(screen.getByRole('button', { name: 'Save block' }))
+
+      expect(screen.queryByText('The server is busy')).not.toBeInTheDocument()
+    })
+
+    it('lets go of a failure on the next save, before it asks, whatever the answer will be', async () => {
+      failTheSave()
+      const user = await open()
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      expect(await within(dock()).findByText('The server is busy')).toBeInTheDocument()
+      createMutate.mockReset()                                                  // the server is not asked again here: it never answers
+
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+      expect(screen.queryByText('The server is busy')).not.toBeInTheDocument()
+    })
+
+    it('keeps the notice that a newer version exists through an edit: it is not about what was typed', async () => {
+      meetAConflict()
+      const user = await open()
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      expect(await within(dock()).findByText('Version 5 was saved by somebody else')).toBeInTheDocument()
+
+      await user.type(screen.getByLabelText('Representative'), ' x')
+
+      expect(within(dock()).getByText('Version 5 was saved by somebody else')).toBeInTheDocument()
+    })
+  })
+
+  describe('closing a notice', () => {
+    it('closes the problems with a button that has a name, and focus goes to the Save that asked', async () => {
+      const user = await open()
+      await meetAProblem(user)
+      const notice = within(dock()).getByText('Fix these before saving').closest('[role="alert"]') as HTMLElement
+
+      await user.click(within(notice).getByRole('button', { name: 'Close this message' }))
+
+      expect(screen.queryByText('Fix these before saving')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Save draft' })).toHaveFocus()
+    })
+
+    it('closes a failure, and it comes back when the save fails again', async () => {
+      failTheSave()
+      const user = await open()
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      const notice = (await within(dock()).findByText('The server is busy')).closest('[role="alert"]') as HTMLElement
+
+      await user.click(within(notice).getByRole('button', { name: 'Close this message' }))
+
+      expect(screen.queryByText('The server is busy')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Save draft' })).toHaveFocus()
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      expect(await within(dock()).findByText('The server is busy')).toBeInTheDocument()
+    })
+
+    it('closes the notice that a newer version exists, as Keep editing does, and it comes back on the next save', async () => {
+      meetAConflict()
+      const user = await open()
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      const notice = (await within(dock()).findByText('Version 5 was saved by somebody else')).closest('[role="alert"]') as HTMLElement
+
+      await user.click(within(notice).getByRole('button', { name: 'Close this message' }))
+
+      expect(screen.queryByText('Version 5 was saved by somebody else')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Save draft' })).toHaveFocus()
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      expect(await within(dock()).findByText('Version 5 was saved by somebody else')).toBeInTheDocument()
+    })
+
+    it('puts focus on the bar\'s Save when the notice was met from the stepper, where the save row is not', async () => {
+      failTheSave()
+      const user = await open()
+      await user.click(screen.getByRole('button', { name: 'Edit times of block 1' }))
+      await user.click(screen.getByRole('button', { name: 'Friday' }))
+      await user.click(screen.getByRole('button', { name: 'Save block' }))
+      await user.click(screen.getByRole('button', { name: 'Edit times of block 1' }))
+      await user.click(within(bar()).getByRole('button', { name: 'Save' }))
+      const notice = (await within(dock()).findByText('The server is busy')).closest('[role="alert"]') as HTMLElement
+
+      await user.click(within(notice).getByRole('button', { name: 'Close this message' }))
+
+      expect(within(bar()).getByRole('button', { name: 'Save' })).toHaveFocus()
+      expect(screen.getByRole('heading', { name: 'Edit block 1' })).toBeInTheDocument()         // and the stepper is as it was
+    })
+  })
+})
+
 // Review F21: a stored block that can no longer be read came back as an empty block with no signal, so an old revision was blanked quietly.
 describe('ServiceAgreementDraftPage: a revision with a block that can no longer be read', () => {
   const lost: DraftBlock = { block: { ...draftBlock().block, id: '' }, requirements: draftBlock().requirements, unreadable: true }
