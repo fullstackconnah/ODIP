@@ -125,8 +125,24 @@ describe('ReviewStep lines', () => {
   })
 
   it('has no weekly figure to give an agreement shorter than a week, and says so', () => {
-    setUp({ week: null })
+    setUp({ week: null, to: '2026-10-04' })
     expect(screen.getByText(/shorter than a week, so there is no weekly figure/)).toBeInTheDocument()
+  })
+
+  // Review F9: the week came from the budget, which has not answered yet (or failed), so a twelve month agreement was told it was shorter than a week.
+  it('works the ordinary week out itself while the budget has not answered, and never calls a long agreement shorter than a week', () => {
+    setUp({ week: null })
+
+    expect(screen.queryByText(/shorter than a week/)).not.toBeInTheDocument()
+    expect(screen.getByText(/8 h and \$588\.64 in an ordinary week/)).toBeInTheDocument()   // Monday 12 and Wednesday 14 October: the first week with no holiday in it
+    const daytime = within(linesTable()).getAllByRole('row').find(row => within(row).queryByText('04_104_0125_6_1'))!
+    expect(daytime).toHaveTextContent('$588.64')
+  })
+
+  it("prefers the plan's own ordinary week when the budget has given one", () => {
+    setUp({ week: { from: '2026-10-19', to: '2026-10-25' } })
+    const daytime = within(linesTable()).getAllByRole('row').find(row => within(row).queryByText('04_104_0125_6_1'))!
+    expect(daytime).toHaveTextContent('4 h')       // only Monday 19 October is in that week
   })
 })
 
@@ -196,7 +212,7 @@ describe('ReviewStep what needs a person', () => {
     expect(section).toHaveTextContent('Part of this block has no price item')
     expect(section).toHaveTextContent('Block 1: the catalogue has no community access item for Weekday Night')   // the block named by its place, not its id
     expect(section).toHaveTextContent('24 shifts, the first on Tue 13 Oct 2026')
-    expect(section).toHaveTextContent('Finish by midnight, start after 06:00, or use personal care.')
+    expect(section).toHaveTextContent('keep the block clear of those hours, or use personal care.')
     await user.click(within(section).getByRole('button', { name: 'Go to Days and times' }))
     expect(onGoTo).toHaveBeenCalledWith('times')
   })
@@ -252,10 +268,19 @@ describe('ReviewStep what needs a person', () => {
     expect(details).toHaveTextContent('Question 8. Part-day and regional public holidays are maintained by the owner.')
   })
 
-  it('carries the plan notices, with the way to confirm the registration groups', () => {
-    state.current = { data: blockQuote({ notices: [{ code: 'registration-groups-not-confirmed', message: 'Not confirmed.', openQuestion: 1 }] }), isLoading: false, isError: false }
+  // Design review 2 and 3: the registration notice is the plan's standing caveat and the overview says it once, as a quiet line; here it was a full-width Callout above the lines of every block.
+  it('leaves the registration notice to the overview, and carries the notices that are about prices, without interrupting', () => {
+    state.current = { data: blockQuote({ notices: [
+      { code: 'registration-groups-not-confirmed', message: 'Not confirmed.', openQuestion: 1 },
+      { code: 'holiday-calendar-missing', message: 'The calendar has no rows after 2027-04-25 for NSW.', openQuestion: 8 },
+    ] }), isLoading: false, isError: false }
     setUp()
-    expect(screen.getByRole('link', { name: 'Confirm in Settings' })).toHaveAttribute('href', '/settings?tab=pricing')
+
+    expect(screen.queryByRole('link', { name: 'Confirm in Settings' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Registration groups are not confirmed/)).not.toBeInTheDocument()
+    const callout = screen.getByText('The public holiday calendar has gaps').closest('div[class*="rounded-lg"]') as HTMLElement
+    expect(callout).toHaveTextContent('after Sun 25 Apr 2027')
+    expect(callout).not.toHaveAttribute('role')
   })
 })
 
@@ -332,5 +357,184 @@ describe('ReviewStep states', () => {
     const picture = screen.getByRole('img')
     expect(picture.getAttribute('aria-label')).toContain('Saturday: 09:00–13:00')
     expect(picture.querySelectorAll('[data-highlight="true"]')).toHaveLength(2)    // Monday and Wednesday of this block
+  })
+})
+
+const precedes = (first: Element, second: Element) => (first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+const gap: PlanIssue = { blockId: 'b1', reason: 'NoItem', message: "Block 'b1': the catalogue has no item for Weekday Night.", count: 24, firstDate: '2026-10-13' }
+/** A line the engine could not price, on Tuesday 13 October: five hours of a night with no catalogue item. */
+const unpricedNight = (changes: Partial<ReturnType<typeof line>> = {}) => line({ itemCode: undefined, unpriced: 'NoItem', unitPrice: 0, total: 0, band: 'Weekday Night', qty: 5, serviceDate: '2026-10-13', flags: 'Review', isPriced: false, ...changes })
+
+// Design review 3: Review is where the stepper builds to, and it ordered the lines, then the holidays, then what was wrong, a thousand pixels below the row it was about.
+describe('ReviewStep in the order a coordinator needs it', () => {
+  it('puts what has to be looked at before the lines, the lines before the holidays, and the questions last', () => {
+    state.current = { data: blockQuote({ issues: [gap] }), isLoading: false, isError: false }
+    setUp()
+
+    expect(screen.getAllByRole('heading', { level: 4 }).map(heading => heading.textContent)).toEqual(['To look at', 'Lines this block produces', 'Public holidays'])
+    const lookAt = screen.getByRole('region', { name: 'To look at' })
+    const lines = screen.getByRole('region', { name: 'Lines this block produces' })
+    const holidays = screen.getByRole('region', { name: 'Public holidays' })
+    const questions = screen.getByText(/Questions this block waits on/)
+    expect(precedes(screen.getByRole('img'), lookAt)).toBe(true)          // the strip, then ...
+    expect(precedes(lookAt, lines)).toBe(true)
+    expect(precedes(lines, holidays)).toBe(true)
+    expect(precedes(holidays, questions)).toBe(true)
+  })
+
+  it('has no To look at when there is nothing to look at', () => {
+    setUp()
+
+    expect(screen.queryByRole('region', { name: 'To look at' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 4 }).map(heading => heading.textContent)).toEqual(['Lines this block produces', 'Public holidays'])
+  })
+
+  it('puts the block\'s total in bold directly under the table', () => {
+    setUp()
+
+    const total = screen.getByText('$1,530.48')
+    expect(total).toHaveClass('font-bold')
+    expect(total.closest('p')).toHaveTextContent('$1,530.48 over the agreement, 4 shifts.')
+    expect(precedes(within(screen.getByRole('region', { name: 'Lines this block produces' })).getByRole('table'), total)).toBe(true)
+  })
+
+  // Review F16: after "Skip the shift" the old lines stayed up, undimmed, until the new answer landed, with the caption beside them already changed and nothing said to a screen reader.
+  it('dims the lines and says they are updating while a newer answer is on its way, once and politely', () => {
+    state.current = { data: blockQuote(), isLoading: false, isError: false, isFetching: true, isPlaceholderData: true }
+    setUp()
+
+    expect(screen.getByRole('region', { name: /Lines this block produces/ })).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByText(/updating…/)).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Updating prices')
+    expect(linesTable().closest('.opacity-60')).not.toBeNull()
+  })
+
+  it('says nothing of updating when the answer on screen is the answer for this block, even while it is checked again in the background', () => {
+    state.current = { data: blockQuote(), isLoading: false, isError: false, isFetching: true, isPlaceholderData: false }
+    setUp()
+
+    expect(screen.queryByText(/updating/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(linesTable().closest('.opacity-60')).toBeNull()
+  })
+})
+
+// Design review 1 and review F10: a total that leaves work out says so, and hours are counted the way the engine and the budget bar count them: the priced ones.
+describe('ReviewStep and what is not priced', () => {
+  it('shows an en dash, never $0.00, as the price, the week and the agreement total of a line with no price, and still counts its shifts', () => {
+    state.current = { data: blockQuote({ lines: [unpricedNight({ qty: 1, serviceDate: '2026-10-12' })], issues: [gap] }), isLoading: false, isError: false }
+    setUp()
+
+    const row = within(linesTable()).getAllByRole('row')[1]
+    expect(row).toHaveTextContent('No item')
+    expect(row).not.toHaveTextContent('$0.00')
+    expect(row).toHaveTextContent('1 shift')
+    expect(within(row).getAllByText('–').length).toBeGreaterThanOrEqual(3)     // the unit price, a week, the agreement
+  })
+
+  it('counts the hours that are priced beside the dollars that pay for them, and the hours that are not, apart', () => {
+    state.current = { data: blockQuote({ lines: [...blockQuote().lines, unpricedNight()], issues: [gap] }), isLoading: false, isError: false }
+    setUp()
+
+    const week = screen.getByText(/8 h and \$588\.64 in an ordinary week/)
+    expect(week.closest('p')).toHaveTextContent('8 h and $588.64 in an ordinary week · 5 h not priced.')
+    expect(week.closest('p')).not.toHaveTextContent('13 h')
+  })
+
+  it('has no figure at all for a block that nothing is priced from, and says how many hours are left out', () => {
+    state.current = { data: blockQuote({ lines: [unpricedNight()], issues: [gap], totals: { ...emptyTotals(), amount: 0, byBlock: [{ blockId: 'b1', amount: 0, supportHours: 0, occurrences: 24, skippedOccurrences: 0 }] }, holidayOccurrences: [] }), isLoading: false, isError: false }
+    setUp()
+
+    const total = screen.getByText('–', { selector: 'span.font-bold' })
+    expect(total.closest('p')).toHaveTextContent('– over the agreement, 24 shifts.')
+    expect(screen.getByText(/5 h in an ordinary week are not priced\./)).toBeInTheDocument()
+    expect(screen.queryByText('$0.00')).not.toBeInTheDocument()
+  })
+
+  it('says in shifts what is left out of the total beside it, as the budget bar does', () => {
+    state.current = { data: blockQuote({ issues: [gap, { ...gap, message: 'Block \'b1\': no item for Weekday Evening.' }] }), isLoading: false, isError: false }
+    setUp()
+
+    expect(screen.getByText('24 shifts with a part not priced · 1 public holiday shift to decide.')).toBeInTheDocument()
+  })
+})
+
+// Design review 4: the reasoning opened after the table, nowhere near its row, and nothing moved.
+describe('ReviewStep: Why opens where it is asked', () => {
+  const daytime = () => screen.getByRole('button', { name: 'Why 04_104_0125_6_1, Weekday daytime' })
+  const holiday = () => screen.getByRole('button', { name: 'Why 04_102_0125_6_1, Public holiday' })
+
+  it('has the panel in the page before it is opened, hidden, so that the aria-controls of every Why points at something', () => {
+    setUp()
+
+    expect(document.getElementById('plan-why-panel')).toHaveAttribute('hidden')
+    for (const button of screen.getAllByRole('button', { name: /^Why / })) expect(button).toHaveAttribute('aria-controls', 'plan-why-panel')
+    expect(screen.queryByRole('region', { name: 'Why this price' })).not.toBeInTheDocument()     // hidden is out of the accessibility tree
+  })
+
+  it('moves focus to the panel when it opens, and shows the open Why as pressed', async () => {
+    const user = userEvent.setup()
+    setUp()
+
+    await user.click(daytime())
+
+    expect(screen.getByRole('region', { name: 'Why this price' })).toHaveFocus()
+    expect(daytime()).toHaveClass('bg-[var(--color-primary)]')
+    expect(holiday()).not.toHaveClass('bg-[var(--color-primary)]')
+    expect(daytime()).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('switches to the reasoning of another line, and Close goes back to the line it was opened for', async () => {
+    const user = userEvent.setup()
+    setUp()
+
+    await user.click(daytime())
+    await user.click(holiday())
+    const panel = screen.getByRole('region', { name: 'Why this price' })
+    expect(panel).toHaveTextContent('Public Holiday (public holiday: Labour Day)')
+    expect(panel).toHaveFocus()
+    expect(daytime()).not.toHaveClass('bg-[var(--color-primary)]')
+
+    await user.click(within(panel).getByRole('button', { name: 'Close' }))
+
+    expect(screen.queryByRole('region', { name: 'Why this price' })).not.toBeInTheDocument()
+    expect(holiday()).toHaveFocus()
+  })
+})
+
+// Design review 3 and review F15: nine holiday cards were 1,700px of the same three figures, with the decision after all of them; and the screen has one choice for the block, not one for each
+// holiday, and no Move.
+describe('ReviewStep holidays as a decision with its dates under it', () => {
+  const nine = Array.from({ length: 9 }, (_, i) => ({ blockId: 'b1', date: `2027-0${(i % 9) + 1}-04`, holidayName: `Holiday ${i + 1}`, decision: 'Review' as const, skipped: false, atHolidayRates: 490.38, atOrdinaryRates: 147.16, uplift: 343.22 }))
+
+  it('shuts the dates when there are more than two, with the choice and what it does above them', () => {
+    state.current = { data: blockQuote({ holidayOccurrences: nine }), isLoading: false, isError: false }
+    setUp()
+
+    const dates = screen.getByText('Dates and what each adds (9)').closest('details') as HTMLDetailsElement
+    expect(dates).not.toHaveAttribute('open')
+    const choice = screen.getByRole('radiogroup', { name: 'When a shift falls on a public holiday' })
+    expect(precedes(choice, dates)).toBe(true)
+    expect(precedes(screen.getByText(/Priced at the holiday rate and flagged/), dates)).toBe(true)
+    expect(screen.getByRole('region', { name: 'Public holidays' })).toHaveTextContent('9 shifts fall on a public holiday, adding $3,088.98 over ordinary days.')
+  })
+
+  it('leaves the dates open when there are one or two', () => {
+    state.current = { data: blockQuote({ holidayOccurrences: nine.slice(0, 2) }), isLoading: false, isError: false }
+    setUp()
+
+    expect(screen.getByText('Dates and what each adds (2)').closest('details')).toHaveAttribute('open')
+  })
+
+  it('leaves the one date open', () => {
+    setUp()
+    expect(screen.getByText('Dates and what each adds (1)').closest('details')).toHaveAttribute('open')
+  })
+
+  it('says it is one choice for the block, that there is no choice to move a shift, and what to do instead', () => {
+    setUp()
+
+    const hint = screen.getByText(/one choice for every shift of the block that falls on a public holiday/)
+    expect(hint).toHaveTextContent('There is no choice to move a shift to another day: to move one, change the block\'s days under Days and times.')
   })
 })

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -38,8 +41,83 @@ describe('WeekStrip', () => {
 
     expect(screen.queryByText('This block')).not.toBeInTheDocument()
     expect(screen.getAllByText('4 h')).toHaveLength(2)    // Monday and Wednesday
-    expect(screen.getAllByText('—')).toHaveLength(5)      // the days with nothing
+    expect(screen.getAllByText('–')).toHaveLength(5)      // the days with nothing: an en dash, as the dashboard's tiles use
     expect(screen.getByText(/weekday prices change at 06:00 and 20:00/)).toBeInTheDocument()
+  })
+
+  // Design review 9: the seams were drawn on Saturday and Sunday too, under a caption that says "weekday prices"; weekends are one price all day.
+  it('draws the 06:00 and 20:00 seams on the five weekday columns only', () => {
+    const { container } = render(<WeekStrip blocks={[mondayWednesday()]} />)
+
+    expect(container.querySelectorAll('[data-seam="true"]')).toHaveLength(10)    // two a day, Monday to Friday
+    const columns = [...container.querySelectorAll('div.relative.overflow-hidden')]
+    expect(columns).toHaveLength(7)
+    expect(columns.map(column => column.querySelectorAll('[data-seam="true"]').length)).toEqual([2, 2, 2, 2, 2, 0, 0])
+  })
+
+  // Design review 9: bars carried no number and no title, so nothing tied a bar to its row, and a block of two hours is thirteen pixels.
+  it('puts the block\'s number in a bar tall enough for it, and names every bar with its block\'s number and readable line', () => {
+    const blocks = [
+      mondayWednesday('b1'),
+      mondayWednesday('b2', { days: ['Friday'], start: '09:00:00', end: '10:30:00' }),     // an hour and a half: a sliver, so no number inside
+      mondayWednesday('b3', { days: ['Saturday'], start: '09:00:00', end: '15:00:00', supportType: 'GroupActivity', participantsPresent: 3 }),
+    ]
+    const { container } = render(<WeekStrip blocks={blocks} />)
+
+    const bar = (title: string) => container.querySelector<HTMLElement>(`span[title^="${title}"]`)
+    expect(container.querySelectorAll('span[title]')).toHaveLength(4)       // Monday and Wednesday of block 1, Friday of block 2, Saturday of block 3
+    expect(container.querySelectorAll('span[title^="1. "]')).toHaveLength(2)
+    expect(bar('1. ')).toHaveAttribute('title', '1. Mon, Wed · 09:00–13:00 · Community access 1:1')
+    expect(bar('1. ')).toHaveTextContent('1')
+    expect(bar('2. ')).toBeEmptyDOMElement()                                // 90 minutes is under the line for a number
+    expect(bar('3. ')).toHaveTextContent('3')
+    expect(bar('3. ')).toHaveAttribute('title', '3. Sat · 09:00–15:00 · Group activity 1:3')
+  })
+
+  it('does not put a number in a bar that shares its day with so many others it is a few pixels wide', () => {
+    const crowd = ['b1', 'b2', 'b3', 'b4'].map(id => mondayWednesday(id, { days: ['Monday'] }))
+    const { container } = render(<WeekStrip blocks={crowd} />)
+
+    expect(container.querySelectorAll('span[title]')).toHaveLength(4)
+    expect([...container.querySelectorAll('span[title]')].every(bar => bar.textContent === '')).toBe(true)
+  })
+
+  // Review F8: the other blocks' bars were 1.17:1 against their track, and the dashed seams 1.54:1; a graphic the picture cannot be read without holds 3:1 (WCAG 1.4.11).
+  describe('contrast of what it draws, read from the palette in index.css', () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../index.css'), 'utf-8')
+    const theme = css.slice(css.indexOf('@theme'), css.indexOf('}', css.indexOf('@theme')))
+    const token = (name: string) => {
+      const hex = new RegExp(`--color-${name}:\\s*#([0-9a-fA-F]{6})`).exec(theme)?.[1]
+      if (!hex) throw new Error(`--color-${name} is not a six digit colour in index.css`)
+      return [0, 2, 4].map(at => parseInt(hex.slice(at, at + 2), 16))
+    }
+    const luminance = ([r, g, b]: number[]) => [r, g, b].map(c => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4 }).reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0)
+    const contrast = (a: number[], b: number[]) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05) }
+    const over = (fg: number[], bg: number[], alpha: number) => fg.map((c, i) => c * alpha + bg[i] * (1 - alpha))
+    const track = token('surface-container-low')
+
+    it('draws every bar with the full primary border, 3:1 or better against the track, and the fill of the other blocks only tints', () => {
+      const { container } = render(<WeekStrip blocks={[mondayWednesday('b1'), mondayWednesday('b2', { days: ['Saturday'] })]} highlightId="b1" />)
+
+      for (const bar of container.querySelectorAll('span[title]')) expect(bar.className).toContain('border-[var(--color-primary)] ')
+      expect(contrast(token('primary'), track)).toBeGreaterThanOrEqual(3)
+      expect(container.querySelector('span[title^="2. "]')?.className).toContain('bg-[var(--color-primary-fixed)]')
+      expect(container.querySelector('span[title^="1. "]')?.className).toContain('bg-[var(--color-primary)]')     // this block: solid, not another hue
+    })
+
+    it('draws the numbers legibly: on the tint in the ink made for it, on the solid fill in white', () => {
+      expect(contrast(token('on-primary-fixed'), token('primary-fixed'))).toBeGreaterThanOrEqual(4.5)
+      expect(contrast([255, 255, 255], token('primary'))).toBeGreaterThanOrEqual(4.5)
+    })
+
+    it('draws the seams at 3:1 or better against the track', () => {
+      const { container } = render(<WeekStrip blocks={[mondayWednesday()]} />)
+      const seam = container.querySelector('[data-seam="true"]') as HTMLElement
+      const alpha = Number(/border-\[var\(--color-muted-foreground\)\]\/(\d+)/.exec(seam.className)?.[1]) / 100
+
+      expect(alpha).toBeGreaterThan(0)
+      expect(contrast(over(token('muted-foreground'), track, alpha), track)).toBeGreaterThanOrEqual(3)
+    })
   })
 
   it('puts two blocks on at the same time side by side', () => {

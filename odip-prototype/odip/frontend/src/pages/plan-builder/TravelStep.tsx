@@ -40,11 +40,11 @@ export function TravelStep({ entry, onChange, problems, settings }: StepProps) {
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
       {settings?.travelRatesProvisional && (
-        <Callout tone="info">Per-kilometre rates and travel time caps are 2025-26 values until NDIA publishes 2026-27, so the lines that use them are marked Provisional.</Callout>
+        <Callout tone="info" className="max-w-prose">Per-kilometre rates and travel time caps are 2025-26 values until NDIA publishes 2026-27, so the lines that use them are marked Provisional.</Callout>
       )}
 
       <section className="flex flex-col gap-[var(--field-gap-y)]" aria-labelledby="plan-travel-heading">
-        <h3 id="plan-travel-heading" className="text-sm font-semibold">Provider travel</h3>
+        <h4 id="plan-travel-heading" className="text-sm font-semibold">Provider travel</h4>
         <p className="text-[13px] text-[var(--color-muted-foreground)]">The worker&apos;s own travel to the participant, claimed on the support item. The minutes are capped by the delivery zone.</p>
         {!travelAllowed ? (
           <p className="text-sm text-[var(--color-muted-foreground)]">Your organisation has turned provider travel off in Settings, so none is priced.</p>
@@ -64,7 +64,7 @@ export function TravelStep({ entry, onChange, problems, settings }: StepProps) {
       </section>
 
       <section className="flex flex-col gap-[var(--field-gap-y)] border-t border-[var(--color-border)] pt-[var(--section-gap)]" aria-labelledby="plan-transport-heading">
-        <h3 id="plan-transport-heading" className="text-sm font-semibold">Activity-based transport</h3>
+        <h4 id="plan-transport-heading" className="text-sm font-semibold">Activity-based transport</h4>
         {!transportFamily(block.supportType) ? (
           <p className="text-sm text-[var(--color-muted-foreground)]">Transport goes with community access and group activities. {SUPPORT_LABEL[block.supportType]} has no transport item.</p>
         ) : (
@@ -88,7 +88,7 @@ export function TravelStep({ entry, onChange, problems, settings }: StepProps) {
 
       {block.supportType === 'StaSupport' && (
         <section className="flex flex-col gap-[var(--field-gap-y)] border-t border-[var(--color-border)] pt-[var(--section-gap)]" aria-labelledby="plan-accommodation-heading">
-          <h3 id="plan-accommodation-heading" className="text-sm font-semibold">Accommodation nights</h3>
+          <h4 id="plan-accommodation-heading" className="text-sm font-semibold">Accommodation nights</h4>
           <p className="text-[13px] text-[var(--color-muted-foreground)]">The nights of short-term accommodation each shift of this block includes. Legacy per-day items are not offered: they end on 30 June 2027.</p>
           <div className={formGrid}>
             <NumberField label="Nights each shift" className={span.short} value={accommodation?.nights ?? 0} min={0} max={14} error={fieldError(problems, 'nights')} onChange={value => patch({ accommodation: { ...(accommodation ?? DEFAULT_ACCOMMODATION), nights: value } })} />

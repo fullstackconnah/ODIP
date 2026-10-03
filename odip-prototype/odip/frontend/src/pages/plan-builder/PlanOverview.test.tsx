@@ -57,9 +57,22 @@ describe('PlanOverview with blocks', () => {
     await user.click(screen.getByRole('button', { name: 'Edit times of block 1' }))
     await user.click(screen.getByRole('button', { name: 'Edit support and requirements of block 2' }))
     await user.click(screen.getByRole('button', { name: 'Edit travel and transport of block 1' }))
-    await user.click(screen.getByRole('button', { name: 'Edit prices of block 2' }))
+    await user.click(screen.getByRole('button', { name: 'Review prices of block 2' }))
 
     expect(onEdit.mock.calls).toEqual([[0, 'times'], [1, 'requirements'], [0, 'travel'], [1, 'review']])
+  })
+
+  // Review F14 (WCAG 2.5.3): the visible word is "Review", so the name leads with it; voice control says "click Review".
+  it('names every chip so that the word on it is in its name, the Review chip included', () => {
+    setUp()
+
+    const toolbar = screen.getByRole('toolbar', { name: 'Block 1 actions' })
+    for (const label of ['Times', 'Support', 'Travel', 'Review']) {
+      const chip = within(toolbar).getByText(label).closest('button') as HTMLButtonElement
+      expect(chip.getAttribute('aria-label')?.toLowerCase()).toContain(label.toLowerCase())
+    }
+    expect(screen.getByRole('button', { name: 'Review prices of block 1' })).toHaveTextContent(/^Review$/)
+    expect(screen.queryByRole('button', { name: /Edit prices/ })).not.toBeInTheDocument()
   })
 
   it('duplicates a block from a visible button, and asks before removing one', async () => {
@@ -94,9 +107,124 @@ describe('PlanOverview with blocks', () => {
     expect(screen.queryByText('$0.00')).not.toBeInTheDocument()
   })
 
-  it('draws a dash for a block the quote left out', () => {
+  it('draws an en dash for a block the quote left out', () => {
     setUp({ budget: { ...budget(), weekly: null, week: null, period: quote() }, budgetStatus: 'ready' })
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(4)
+    expect(screen.getAllByText('–').length).toBeGreaterThanOrEqual(4)
+  })
+
+  // Design review 1 and 5: nothing was priced from a refused block, so a "0 h · $0.00" is not a figure; and the row, not only the save row below, says what to do about it.
+  describe('a block the engine refused', () => {
+    const refusal: PlanIssue = { blockId: 'b2', reason: 'RegistrationGroupNotHeld', message: "Block 'b2': GroupActivity needs registration group 0136, which the provider does not hold.", count: 1 }
+
+    it('has an en dash for both figures, and not a zero, while its neighbour keeps its own', () => {
+      setUp({ issues: [refusal] })
+
+      const rows = within(screen.getByRole('table')).getAllByRole('row')
+      const refused = rows.find(row => within(row).queryByText(/Sat · 09:00–15:00/))!
+      expect(within(refused).getAllByText('–')).toHaveLength(2)
+      expect(refused).not.toHaveTextContent('$0.00')
+      expect(refused).not.toHaveTextContent('$8,195.16')
+      const priced = rows.find(row => within(row).queryByText(/Mon, Wed · 09:00–13:00/))!
+      expect(priced).toHaveTextContent('8 h · $588.64')
+      expect(priced).toHaveTextContent('$30,610.28')
+    })
+
+    it('says on its row what to do, and offers the step that does it', async () => {
+      const user = userEvent.setup()
+      const { onEdit } = setUp({ issues: [refusal] })
+
+      expect(screen.getByText('Your organisation does not hold this registration group')).toBeInTheDocument()
+      expect(screen.getByText(/Choose another support type, or an Admin can record the groups you hold in Settings, Plan pricing\./)).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Open Support for block 2' }))
+      expect(onEdit).toHaveBeenCalledWith(1, 'requirements')
+    })
+
+    it('does not offer a step for a refusal that is fixed in Settings', () => {
+      setUp({ issues: [{ ...refusal, reason: 'StaLegacyNotSupported' }] })
+      expect(screen.getByText(/An Admin can switch to the hourly items/)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /^Open / })).not.toBeInTheDocument()
+    })
+
+    it('says what to do to somebody who can only read the plan, and gives them no button', () => {
+      setUp({ issues: [refusal], readOnly: true })
+      expect(screen.getByText(/Choose another support type/)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /^Open / })).not.toBeInTheDocument()
+    })
+
+    it('says only the title and the shifts for a flag that is not a refusal: a plan can still be saved with it', () => {
+      setUp({ issues: [{ blockId: 'b1', reason: 'NoItem', message: "Block 'b1': no item.", count: 4, firstDate: '2026-10-12' }] })
+
+      expect(screen.getByText('Part of this block has no price item, 4 shifts')).toBeInTheDocument()
+      expect(screen.queryByText(/Community access and group activities have no item/)).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /^Open / })).not.toBeInTheDocument()
+    })
+  })
+
+  // Design review 8: six Tab stops a block is about 240 for a plan of forty. The chips, Duplicate and Remove are one toolbar, one stop, arrow keys inside.
+  describe('the actions of a block as one Tab stop', () => {
+    const stops = (row: HTMLElement) => within(row).getAllByRole('button').filter(button => button.getAttribute('tabindex') !== '-1')
+
+    it('has one tabbable button in a block\'s toolbar, the first, however many actions it holds', () => {
+      setUp()
+
+      const toolbars = screen.getAllByRole('toolbar')
+      expect(toolbars.map(toolbar => toolbar.getAttribute('aria-label'))).toEqual(['Block 1 actions', 'Block 2 actions'])
+      for (const toolbar of toolbars) {
+        expect(within(toolbar).getAllByRole('button')).toHaveLength(6)
+        expect(stops(toolbar)).toHaveLength(1)
+      }
+      expect(stops(toolbars[0])[0]).toHaveAccessibleName('Edit times of block 1')
+    })
+
+    it('goes through a block with Tab once, and on to the next block, not through its six actions', async () => {
+      const user = userEvent.setup()
+      setUp()
+
+      await user.tab()
+      expect(screen.getByRole('button', { name: 'Edit times of block 1' })).toHaveFocus()
+      await user.tab()
+      expect(screen.getByRole('button', { name: 'Edit times of block 2' })).toHaveFocus()
+    })
+
+    it('moves with the arrow keys, wraps at either end, and Home and End go to the ends; Tab then comes back to the one last used', async () => {
+      const user = userEvent.setup()
+      setUp()
+      screen.getByRole('button', { name: 'Edit times of block 1' }).focus()
+
+      await user.keyboard('{ArrowRight}')
+      expect(screen.getByRole('button', { name: 'Edit support and requirements of block 1' })).toHaveFocus()
+      await user.keyboard('{End}')
+      expect(screen.getByRole('button', { name: 'Remove block 1' })).toHaveFocus()
+      await user.keyboard('{ArrowRight}')
+      expect(screen.getByRole('button', { name: 'Edit times of block 1' })).toHaveFocus()
+      await user.keyboard('{ArrowLeft}')
+      expect(screen.getByRole('button', { name: 'Remove block 1' })).toHaveFocus()
+      await user.keyboard('{Home}')
+      expect(screen.getByRole('button', { name: 'Edit times of block 1' })).toHaveFocus()
+
+      await user.keyboard('{ArrowRight}{ArrowRight}')    // Travel
+      await user.tab()                                   // on to block 2 ...
+      expect(screen.getByRole('button', { name: 'Edit times of block 2' })).toHaveFocus()
+      await user.tab({ shift: true })                    // ... and back to where block 1 was left
+      expect(screen.getByRole('button', { name: 'Edit travel and transport of block 1' })).toHaveFocus()
+    })
+
+    it('still works with the mouse: a click on any button does what it did, and a click makes it the tab stop', async () => {
+      const user = userEvent.setup()
+      const { onDuplicate } = setUp()
+
+      await user.click(screen.getByRole('button', { name: 'Duplicate block 2' }))
+      expect(onDuplicate).toHaveBeenCalledWith(1)
+      const toolbar = screen.getByRole('toolbar', { name: 'Block 2 actions' })
+      expect(stops(toolbar)).toHaveLength(1)
+      expect(stops(toolbar)[0]).toHaveAccessibleName('Duplicate block 2')
+    })
+
+    it('starts on the step that fixes what is wrong, in a block that was refused, so Tab lands where the way out is', () => {
+      setUp({ issues: [{ blockId: 'b2', reason: 'RegistrationGroupNotHeld', message: "Block 'b2': needs group 0136.", count: 1 }] })
+
+      expect(stops(screen.getByRole('toolbar', { name: 'Block 2 actions' }))[0]).toHaveAccessibleName('Edit support and requirements of block 2')
+    })
   })
 
   it('puts what needs a person beside the block it is about, in plain words, and the refusals apart', () => {
@@ -135,11 +263,37 @@ describe('PlanOverview with blocks', () => {
     })
     setUp({ budget: withNotices })
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Registration groups are not confirmed')
-    expect(screen.getByRole('link', { name: 'Confirm in Settings' })).toHaveAttribute('href', '/settings?tab=pricing')
+    // Design review 2 and 8: a standing caveat only an Admin can act on is one quiet line under the heading, not the loudest block on the screen, and it does not interrupt.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    const line = screen.getByText(/Registration groups are not confirmed\./)
+    expect(line.tagName).toBe('P')
+    expect(line).toHaveClass('text-[var(--color-muted-foreground)]')
+    expect(within(line).getByRole('link', { name: 'Confirm in Settings' })).toHaveAttribute('href', '/settings?tab=pricing')
+    expect(screen.queryByRole('heading', { name: /Registration groups/ })).not.toBeInTheDocument()
     const quiet = screen.getByText('Part-day holidays may be missing').closest('details')
     expect(quiet).not.toBeNull()
     expect(quiet).not.toHaveAttribute('open')
+  })
+
+  it('says the other plan-wide notices in the engine\'s words, with the engine\'s dates written the way the screen writes them, without interrupting', () => {
+    const withNotices = budget()
+    withNotices.period = quote({
+      ...withNotices.period,
+      notices: [{ code: 'holiday-calendar-missing', message: 'The calendar has no rows after 2027-04-25 for NSW.', openQuestion: 8 }],
+    })
+    setUp({ budget: withNotices })
+
+    const callout = screen.getByText('The public holiday calendar has gaps').closest('div[class*="rounded-lg"]') as HTMLElement
+    expect(callout).toHaveTextContent('The calendar has no rows after Sun 25 Apr 2027 for NSW.')
+    expect(callout).not.toHaveAttribute('role')            // standing: announced when it appeared, not at every return to this view
+    expect(callout).toHaveClass('max-w-prose')
+  })
+})
+
+describe('PlanOverview with blocks and a quote that was never asked for', () => {
+  it('says nothing of the registration groups before there is an answer to say it', () => {
+    setUp({ budget: undefined, budgetStatus: 'loading' })
+    expect(screen.queryByText(/Registration groups/)).not.toBeInTheDocument()
   })
 })
 
@@ -151,7 +305,8 @@ describe('PlanOverview as a Coordinator, who cannot confirm the groups', () => {
     setUp({ budget: withNotice })
 
     expect(screen.queryByRole('link', { name: 'Confirm in Settings' })).not.toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('An Admin can confirm them in Settings, under Plan pricing.')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByText(/Registration groups are not confirmed./)).toHaveTextContent('Ask an Admin to confirm them.')
   })
 })
 
@@ -180,7 +335,7 @@ describe('PlanOverview when read only and nothing can be priced', () => {
     setUp({ budget: undefined, budgetStatus: 'idle' })
 
     expect(screen.queryByText('…')).not.toBeInTheDocument()
-    expect(within(screen.getByRole('table')).getAllByText('—')).toHaveLength(4)    // two blocks, a week and an agreement figure each
+    expect(within(screen.getByRole('table')).getAllByText('–')).toHaveLength(4)    // two blocks, a week and an agreement figure each
   })
 })
 

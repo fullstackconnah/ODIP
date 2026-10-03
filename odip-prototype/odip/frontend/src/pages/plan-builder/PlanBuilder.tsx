@@ -12,10 +12,16 @@ import { BudgetBar } from './BudgetBar'
 import { PlanOverview } from './PlanOverview'
 import { PlanStepper } from './PlanStepper'
 
+/** The plan with a block put at `index` (the end when there is none). */
+function withBlockAt(entries: readonly DraftBlock[], index: number | null, entry: DraftBlock): DraftBlock[] {
+  const at = index === null ? entries.length : Math.min(Math.max(index, 0), entries.length)
+  return [...entries.slice(0, at), entry, ...entries.slice(at)]
+}
+
 /** One block being added or changed. It is a copy: the plan only changes when the session is saved. */
 type Session = {
   mode: 'new' | 'edit'
-  /** The block's place in the plan when it is being changed. */
+  /** The block's place in the plan when it is being changed; for a block being added, the place it will take (null: the end). */
   index: number | null
   entry: DraftBlock
   /** The JSON of the block as the session began, to tell a changed block from an untouched one. */
@@ -49,6 +55,11 @@ type PlanBuilderProps = {
    * page counts it with its own unsaved changes.
    */
   onBuildingChange?: (changed: boolean) => void
+  /**
+   * The plan has changes nobody has saved, and how to save them: the budget bar says so on a phone, where the save row is a long scroll below the blocks. Not given when there is nothing to
+   * save or nobody to save it.
+   */
+  unsaved?: { onSave: () => void; saving: boolean }
 }
 
 /**
@@ -56,7 +67,7 @@ type PlanBuilderProps = {
  * block being added or changed; the plan itself is the page's, and changes by whole blocks. The figures are the pricing engine's, asked for when the person pauses, for the plan as it
  * would be saved (the block being changed stands in for its saved self, and a block that is not complete yet is left out and said to be).
  */
-export function PlanBuilder({ participantId, state, zone, from, to, entries, onChange, readOnly = false, readOnlyNote, footer, onBuildingChange }: PlanBuilderProps) {
+export function PlanBuilder({ participantId, state, zone, from, to, entries, onChange, readOnly = false, readOnlyNote, footer, onBuildingChange, unsaved }: PlanBuilderProps) {
   const [session, setSession] = useState<Session | null>(null)
   const building = session !== null && session.hasBlock && JSON.stringify(session.entry) !== session.began
   useEffect(() => { onBuildingChange?.(building) }, [building, onBuildingChange])
@@ -71,7 +82,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
   const blocksNow = useMemo(() => {
     const entriesNow = session?.mode === 'edit' && session.index !== null
       ? entries.map((entry, index) => (index === session.index ? session.entry : entry))
-      : session?.mode === 'new' && session.hasBlock ? [...entries, session.entry] : [...entries]
+      : session?.mode === 'new' && session.hasBlock ? withBlockAt(entries, session.index, session.entry) : [...entries]
     const complete = entriesNow.filter(entry => blockProblems(entry.block, { groupsHeld: undefined }).length === 0)
     return { quoted: complete.map(entry => stampLocation(entry.block, state, zone)), incomplete: entriesNow.length - complete.length }
   }, [entries, session, state, zone])
@@ -91,12 +102,11 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
   const startWith = (template: PlanTemplate) => open({ mode: 'new', index: null, entry: template.build(nextBlockId(entries.map(entry => entry.block)), state, zone), step: 'times', templateKey: template.key, hasBlock: true })
   const add = () => open({ mode: 'new', index: null, entry: blank(), step: 'template', templateKey: null, hasBlock: false })
   const edit = (index: number, step: PlanStepKey) => open({ mode: 'edit', index, entry: JSON.parse(JSON.stringify(entries[index])) as DraftBlock, step, templateKey: null, hasBlock: true })
+  // A copy is a block being added, to take the place after the one it copies. It joins the plan on "Add to plan", like any block: duplicating and then cancelling used to leave an identical,
+  // overlapping block in the plan.
   const duplicate = (index: number) => {
     const copy = duplicateBlock(entries[index], nextBlockId(entries.map(entry => entry.block)))
-    const next = [...entries]
-    next.splice(index + 1, 0, copy)
-    onChange(next)
-    open({ mode: 'edit', index: index + 1, entry: JSON.parse(JSON.stringify(copy)) as DraftBlock, step: 'times', templateKey: null, hasBlock: true })
+    open({ mode: 'new', index: index + 1, entry: JSON.parse(JSON.stringify(copy)) as DraftBlock, step: 'times', templateKey: null, hasBlock: true })
   }
   const removedAt = useRef<number | null>(null)
   const remove = (index: number) => {
@@ -111,7 +121,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
   const save = () => {
     if (!session) return
     const finished: DraftBlock = { ...session.entry, block: normaliseBlock(session.entry.block) }
-    onChange(session.mode === 'edit' && session.index !== null ? entries.map((entry, index) => (index === session.index ? finished : entry)) : [...entries, finished])
+    onChange(session.mode === 'edit' && session.index !== null ? entries.map((entry, index) => (index === session.index ? finished : entry)) : withBlockAt(entries, session.index, finished))
     setSession(null)
   }
   const cancel = () => {
@@ -132,7 +142,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
     const root = sectionRef.current
     const active = document.activeElement
     if (active && active !== document.body && root?.contains(active)) return
-    const target = root?.querySelector<HTMLElement>('form h2') ?? headingRef.current
+    const target = root?.querySelector<HTMLElement>('form h3') ?? headingRef.current
     target?.focus({ preventScroll: true })
   }, [viewKey])
 
@@ -155,7 +165,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
           <h2 id="plan-heading" ref={headingRef} tabIndex={-1} className="font-semibold focus:outline-none">{title}</h2>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             {session ? (session.hasBlock ? describeBlock(session.entry.block) : 'Choose where the block starts. Nothing changes in the plan until you add it.')
-              : readOnly ? (readOnlyNote ?? 'The plan this draft was priced from.') : 'Each block is one weekly routine. Prices come from the NDIS catalogue on the date of each shift, and the agreement is only ever what the blocks say.'}
+              : readOnly ? (readOnlyNote ?? 'The plan this draft was priced from.') : 'Each block is one weekly routine, priced from the NDIS catalogue on the date of each shift.'}
           </p>
         </div>
         {!session && !readOnly && entries.length > 0 && <Button onClick={add}><Plus className="h-4 w-4" aria-hidden="true" />Add block</Button>}
@@ -175,8 +185,8 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
           onCancel={cancel}
           onSave={save}
           settings={settings}
-          others={entries.filter((_, index) => index !== session.index).map(entry => entry.block)}
-          position={session.mode === 'edit' && session.index !== null ? session.index : entries.length}
+          others={(session.mode === 'edit' ? entries.filter((_, index) => index !== session.index) : entries).map(entry => entry.block)}
+          position={session.index ?? entries.length}
           from={from}
           to={to}
           state={state}
@@ -211,6 +221,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
           planBudget={planBudget}
           planBudgetUnreadable={funding.isError}
           incompleteBlocks={blocksNow.incomplete}
+          unsaved={unsaved ? { ...unsaved, blocked: refusals(planIssues).length > 0 } : undefined}
         />
       )}
 

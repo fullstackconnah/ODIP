@@ -156,6 +156,34 @@ describe('BudgetBar', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   })
 
+  // Design review 6: "Add to plan" does not save, the save row is a long scroll below the blocks, and the one-line bar a phone shows was silent about it.
+  describe('a plan that is not saved', () => {
+    it('says Not saved on the one-line form with a Save that saves, named by its own visible word so it is not the save row\'s Save draft', async () => {
+      const user = userEvent.setup()
+      const onSave = vi.fn()
+      ready({ unsaved: { onSave, saving: false, blocked: false } })
+
+      const line = screen.getByText('8 h · $588.64 a week · $30,610.28 in all').parentElement as HTMLElement
+      expect(within(line).getByText('Not saved')).toBeInTheDocument()
+      await user.click(within(line).getByRole('button', { name: 'Save' }))
+      expect(onSave).toHaveBeenCalledTimes(1)
+    })
+
+    it('holds Save back while it saves, and when the plan cannot be saved as it is', () => {
+      const { rerender } = ready({ unsaved: { onSave: vi.fn(), saving: true, blocked: false } })
+      expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled()
+
+      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} unsaved={{ onSave: vi.fn(), saving: false, blocked: true }} />)
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    })
+
+    it('says nothing of saving when there is nothing to save', () => {
+      ready()
+      expect(screen.queryByText('Not saved')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    })
+  })
+
   it('shows the error outside the collapsible details, and only once', () => {
     render(<BudgetBar status="error" error={{ response: { status: 429, data: {} } }} onRetry={vi.fn()} planBudget={null} />)
 

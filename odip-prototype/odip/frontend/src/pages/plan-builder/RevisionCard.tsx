@@ -43,7 +43,7 @@ function DraftSimulationPanel({ participantId, draftId }: { participantId: strin
       <p className="text-sm">Demo-only, dev-auth walkthrough: simulated signing → activation → booking. It creates no signature evidence, participant activation, booking, billable event, invoice, or claim.</p>
       <button type="button" onClick={() => simulation.mutate({ participantId, draftId })} disabled={simulation.isPending} className="min-h-[44px] rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-[var(--control-h)] text-sm font-medium disabled:opacity-50">{simulation.isPending ? 'Running simulation…' : 'Run Demo-only simulation'}</button>
       {simulation.data && <div role="status" className="rounded border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-sm space-y-1"><strong>{simulation.data.banner}</strong><p>{simulation.data.signing}</p><p>{simulation.data.activation}</p><p>{simulation.data.booking}</p><p className="font-medium">{simulation.data.rateLabel}</p></div>}
-      {simulation.isError && <Callout tone="error">{messageFor(simulation.error)}</Callout>}
+      {simulation.isError && <Callout tone="error" className="max-w-prose">{messageFor(simulation.error)}</Callout>}
     </div>
   </details>
 }
@@ -110,7 +110,7 @@ export function RevisionCard(props: RevisionCardProps) {
       )}
       {open && detail.isLoading && <p role="status" aria-busy="true" className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />Reading this version…</p>}
       {open && detail.isError && (
-        <Callout tone="error" title="This version could not be read">
+        <Callout tone="error" className="max-w-prose" title="This version could not be read">
           Check your connection and try again.
           <span className="mt-2 block"><Button variant="secondary" size="sm" onClick={() => { void detail.refetch() }}>Try again</Button></span>
         </Callout>
@@ -154,7 +154,7 @@ function FullRevision({ participantId, draft, onDownload, downloading, onCollaps
         </ol>
       </div>
     ) : (
-      lines.length > 0 && <Callout tone="info" title="Typed by hand">This version&apos;s lines were typed by hand before the plan builder existed. They are shown as they were saved and cannot be changed. To rebuild them from support blocks, build the plan above and save it as a new version.</Callout>
+      lines.length > 0 && <Callout tone="info" className="max-w-prose" title="Typed by hand">This version&apos;s lines were typed by hand before the plan builder existed. They are shown as they were saved and cannot be changed. To rebuild them from support blocks, build the plan above and save it as a new version.</Callout>
     )}
 
     {lines.length > 0 && (

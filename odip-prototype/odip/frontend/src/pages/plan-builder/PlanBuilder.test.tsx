@@ -29,13 +29,13 @@ const source = (changes: Partial<FundingSourceDto> = {}): FundingSourceDto => ({
 })
 
 /** The plan belongs to the page; this is the smallest page. */
-function Page({ initial = [] as DraftBlock[], readOnly = false, onPlan, footer }: { initial?: DraftBlock[]; readOnly?: boolean; onPlan?: (entries: DraftBlock[]) => void; footer?: React.ComponentProps<typeof PlanBuilder>['footer'] }) {
+function Page({ initial = [] as DraftBlock[], readOnly = false, onPlan, footer, unsaved }: { initial?: DraftBlock[]; readOnly?: boolean; onPlan?: (entries: DraftBlock[]) => void; footer?: React.ComponentProps<typeof PlanBuilder>['footer']; unsaved?: React.ComponentProps<typeof PlanBuilder>['unsaved'] }) {
   const [entries, setEntries] = useState(initial)
   return (
     <MemoryRouter>
       <PlanBuilder
         participantId="p-1" state="NSW" zone="National" from="2026-10-01" to="2027-06-30" entries={entries}
-        onChange={next => { setEntries(next); onPlan?.(next) }} readOnly={readOnly} footer={footer ?? <button type="button">Save draft</button>}
+        onChange={next => { setEntries(next); onPlan?.(next) }} readOnly={readOnly} footer={footer ?? <button type="button">Save draft</button>} unsaved={unsaved}
       />
     </MemoryRouter>
   )
@@ -63,7 +63,7 @@ describe('PlanBuilder from an empty plan', () => {
     await user.click(screen.getByRole('button', { name: /Community access weekdays/ }))
 
     expect(screen.getByRole('heading', { name: 'Add a block' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 2, name: 'Days and times' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Days and times' })).toBeInTheDocument()
     expect(screen.getByText('Mon–Fri · 09:00–13:00 · Community access 1:1')).toBeInTheDocument()
   })
 
@@ -101,7 +101,7 @@ describe('PlanBuilder with a plan', () => {
 
     await user.click(screen.getByRole('button', { name: 'Edit times of block 2' }))
     expect(screen.getByRole('heading', { name: 'Edit block 2' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 2, name: 'Days and times' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Days and times' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Friday' }))
     expect(onPlan).not.toHaveBeenCalled()
 
@@ -152,18 +152,55 @@ describe('PlanBuilder with a plan', () => {
     expect(screen.getByText('Mon, Wed, Fri · 09:00–13:00 · Community access 1:1')).toBeInTheDocument()
   })
 
-  it('duplicates a block just after it on its own id, and opens the copy at Days and times, so "same, but Thursday" is one click and a day', async () => {
+  // Design review 11: the copy used to join the plan the moment Duplicate was pressed, so cancelling left an identical, overlapping block behind.
+  it('duplicates a block into a block being added just after it, at Days and times: "same, but Thursday" is one click and a day, and the plan changes only when it is added', async () => {
     const user = userEvent.setup()
     const onPlan = vi.fn()
     render(<Page initial={twoBlocks()} onPlan={onPlan} />)
 
     await user.click(screen.getByRole('button', { name: 'Duplicate block 1' }))
 
-    const next = onPlan.mock.calls[0][0] as DraftBlock[]
-    expect(next.map(entry => entry.block.id)).toEqual(['b1', 'b3', 'b2'])
-    expect(screen.getByRole('heading', { name: 'Edit block 2' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 2, name: 'Days and times' })).toBeInTheDocument()
+    expect(onPlan).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Add a block' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Days and times' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Monday' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: 'Thursday' }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(screen.getByRole('button', { name: 'Add to plan' }))
+
+    const next = onPlan.mock.calls[0][0] as DraftBlock[]
+    expect(next.map(entry => entry.block.id)).toEqual(['b1', 'b3', 'b2'])         // after the block it copies, on a free id
+    expect(next[1].block.days).toEqual(['Monday', 'Wednesday', 'Thursday'])
+    expect(next[0].block.days).toEqual(['Monday', 'Wednesday'])                    // the block it copies is as it was
+  })
+
+  it('leaves no copy behind when a duplicate is cancelled: it had never joined the plan, and nothing was changed to lose', async () => {
+    const user = userEvent.setup()
+    const onPlan = vi.fn()
+    render(<Page initial={twoBlocks()} onPlan={onPlan} />)
+
+    await user.click(screen.getByRole('button', { name: 'Duplicate block 1' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(onPlan).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('button', { name: /^Duplicate block/ })).toHaveLength(2)
+    expect(screen.getByRole('heading', { name: 'Support plan' })).toBeInTheDocument()
+  })
+
+  it('prices the copy in the place it will take, between the block it copies and the next, while it is being built', async () => {
+    const user = userEvent.setup()
+    render(<Page initial={twoBlocks()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Duplicate block 1' }))
+
+    // The budget asks after the pause for typing to settle.
+    await waitFor(() => {
+      const [blocks] = budgetCall.mock.calls[budgetCall.mock.calls.length - 1]
+      expect((blocks as { id: string }[]).map(block => block.id)).toEqual(['b1', 'b3', 'b2'])
+    })
   })
 
   it('removes a block once it is confirmed', async () => {
@@ -183,7 +220,7 @@ describe('PlanBuilder with a plan', () => {
     render(<Page initial={twoBlocks()} onPlan={onPlan} />)
 
     await user.click(screen.getByRole('button', { name: 'Add block' }))
-    expect(screen.getByRole('heading', { level: 2, name: 'Template' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Template' })).toBeInTheDocument()
     expect(screen.getByText('Choose where the block starts. Nothing changes in the plan until you add it.')).toBeInTheDocument()
     await user.click(screen.getByRole('radio', { name: /Personal care mornings/ }))
     await user.click(screen.getByRole('button', { name: 'Next' }))
@@ -202,11 +239,11 @@ describe('PlanBuilder with a plan', () => {
     blockQuoteState.current = quote({ issues: [{ blockId: 'b2', reason: 'BlocksOverlap', message: "Blocks 'b1' and 'b2' are on at the same time on the same day. Block 'b2' is the second.", count: 2, firstDate: '2026-10-12' }] })
     render(<Page initial={twoBlocks()} />)
 
-    await user.click(screen.getByRole('button', { name: 'Edit prices of block 2' }))
+    await user.click(screen.getByRole('button', { name: 'Review prices of block 2' }))
     expect(within(screen.getByRole('region', { name: 'To look at' })).getByText(/Blocks 1 and 2 are on at the same time on the same day\. Block 2 is the second\./)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    await user.click(screen.getByRole('button', { name: 'Edit prices of block 1' }))
+    await user.click(screen.getByRole('button', { name: 'Review prices of block 1' }))
     expect(within(screen.getByRole('region', { name: 'To look at' })).getByText(/Blocks 1 and 2 are on at the same time on the same day\. Block 2 is the second\./)).toBeInTheDocument()
   })
 
@@ -228,7 +265,7 @@ describe('PlanBuilder and where focus goes', () => {
 
     await user.click(screen.getByRole('button', { name: /Community access weekdays/ }))
 
-    expect(screen.getByRole('heading', { level: 2, name: 'Days and times' })).toHaveFocus()
+    expect(screen.getByRole('heading', { level: 3, name: 'Days and times' })).toHaveFocus()
   })
 
   it('moves focus into the stepper when an edit chip opens it, and back to "Support plan" when the block is saved or the stepper is cancelled', async () => {
@@ -236,7 +273,7 @@ describe('PlanBuilder and where focus goes', () => {
     render(<Page initial={twoBlocks()} />)
 
     await user.click(screen.getByRole('button', { name: 'Edit travel and transport of block 1' }))
-    expect(screen.getByRole('heading', { level: 2, name: 'Travel and transport' })).toHaveFocus()
+    expect(screen.getByRole('heading', { level: 3, name: 'Travel and transport' })).toHaveFocus()
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.getByRole('heading', { name: 'Support plan' })).toHaveFocus()
@@ -355,6 +392,35 @@ describe('PlanBuilder and the budget', () => {
     render(<Page initial={twoBlocks()} />)
 
     expect(screen.getByText('Part of this block has no price item, 4 shifts')).toBeInTheDocument()
+  })
+})
+
+// Design review 6: "Add to plan" does not save, and the save row is a long scroll below the blocks, so on a phone the bar says the plan is not saved and saves from there.
+describe('PlanBuilder and a plan that is not saved', () => {
+  it('says Not saved on the budget bar, with a Save beside it that saves, and says nothing when there is nothing to save', async () => {
+    const user = userEvent.setup()
+    const onSave = vi.fn()
+    const { unmount } = render(<Page initial={twoBlocks()} unsaved={{ onSave, saving: false }} />)
+
+    const bar = screen.getByRole('region', { name: 'Running budget' })
+    expect(within(bar).getByText('Not saved')).toBeInTheDocument()
+    await user.click(within(bar).getByRole('button', { name: 'Save' }))
+    expect(onSave).toHaveBeenCalledTimes(1)
+    unmount()
+
+    render(<Page initial={twoBlocks()} />)
+    expect(screen.queryByText('Not saved')).not.toBeInTheDocument()
+  })
+
+  it("holds the bar's Save back while a save is under way, and when the engine refused a block (the save row says why)", () => {
+    const refusal: PlanIssue = { blockId: 'b2', reason: 'RegistrationGroupNotHeld', message: "Block 'b2': needs group 0136.", count: 1 }
+    const { unmount } = render(<Page initial={twoBlocks()} unsaved={{ onSave: vi.fn(), saving: true }} />)
+    expect(within(screen.getByRole('region', { name: 'Running budget' })).getByRole('button', { name: 'Saving…' })).toBeDisabled()
+    unmount()
+
+    budgetState.current = { data: { ...budgetOf('b1'), period: quote({ ...budgetOf('b1').period, issues: [refusal] }) }, isError: false, isFetching: false }
+    render(<Page initial={twoBlocks()} unsaved={{ onSave: vi.fn(), saving: false }} />)
+    expect(within(screen.getByRole('region', { name: 'Running budget' })).getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 })
 

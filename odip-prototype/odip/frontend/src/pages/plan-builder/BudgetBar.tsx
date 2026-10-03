@@ -22,6 +22,11 @@ type BudgetBarProps = {
   planBudgetUnreadable?: boolean
   /** Blocks left out of the figures because they are not complete yet. */
   incompleteBlocks?: number
+  /**
+   * The plan has changes nobody has saved. The one-line form says so with a Save beside it: "Add to plan" does not save, and the save row is a long scroll away under the blocks.
+   * `blocked`: the plan cannot be saved as it is (the engine refused a block), and the save row says why.
+   */
+  unsaved?: { onSave: () => void; saving: boolean; blocked: boolean }
 }
 
 const LABEL = 'text-xs text-[var(--color-muted-foreground)]'
@@ -36,7 +41,7 @@ const CHIP = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
  * totals stand alone and say so. A total that leaves work out says so beside the figure, in shifts, and a chip says it on the one-line form. Below 1280px it is one line and a Details
  * toggle (the full bar is a third of a tablet's screen). Every figure is the pricing engine's, for the plan as it would be saved.
  */
-export function BudgetBar({ status, budget, refreshing = false, error, onRetry, planBudget, planBudgetUnreadable = false, incompleteBlocks = 0 }: BudgetBarProps) {
+export function BudgetBar({ status, budget, refreshing = false, error, onRetry, planBudget, planBudgetUnreadable = false, incompleteBlocks = 0, unsaved }: BudgetBarProps) {
   const [open, setOpen] = useState(false)
   const period = budget?.period
   const weekly = budget?.weekly ?? null
@@ -64,8 +69,14 @@ export function BudgetBar({ status, budget, refreshing = false, error, onRetry, 
         <div className="flex items-center justify-between gap-3 xl:hidden">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium tabular-nums">{oneLine}</p>
-            {(over || notFullyPriced) && (
-              <p className="mt-1 flex flex-wrap gap-1.5">
+            {(unsaved || over || notFullyPriced) && (
+              <p className="mt-1 flex flex-wrap items-center gap-1.5">
+                {unsaved && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className={CHIP}><AlertTriangle className="h-3 w-3" aria-hidden="true" />Not saved</span>
+                    <Button variant="secondary" size="sm" disabled={unsaved.saving || unsaved.blocked} onClick={unsaved.onSave}>{unsaved.saving ? 'Saving…' : 'Save'}</Button>
+                  </span>
+                )}
                 {notFullyPriced && <span className={CHIP}><AlertTriangle className="h-3 w-3" aria-hidden="true" />Not fully priced</span>}
                 {over && <span className={CHIP}><AlertTriangle className="h-3 w-3" aria-hidden="true" />Over budget</span>}
               </p>

@@ -69,7 +69,7 @@ export function RequirementsStep({ entry, onChange, problems, settings }: StepPr
 
       <section className="flex flex-col gap-[var(--field-gap-y)] border-t border-[var(--color-border)] pt-[var(--section-gap)]" aria-labelledby="plan-asks-heading">
         <div>
-          <h3 id="plan-asks-heading" className="text-sm font-semibold">What the shifts ask of a worker</h3>
+          <h4 id="plan-asks-heading" className="text-sm font-semibold">What the shifts ask of a worker</h4>
           <p className="mt-1 text-[13px] text-[var(--color-muted-foreground)]">Requirements only, never names. They go with the shifts this block becomes on the roster.</p>
         </div>
         <FormField label="Worker gender">

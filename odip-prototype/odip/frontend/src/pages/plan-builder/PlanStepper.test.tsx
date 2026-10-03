@@ -45,7 +45,7 @@ function Harness({ mode = 'new', initial = draftBlock(), hasBlock = true, step: 
 beforeEach(() => localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' })))
 afterEach(() => localStorage.clear())
 
-const heading = () => screen.getByRole('heading', { level: 2 })
+const heading = () => screen.getByRole('heading', { level: 3 })
 
 describe('PlanStepper navigation', () => {
   it('shows the step it is on, "Step 2 of 5 · Days and times" for a phone and the rail beside it for a desk, and moves one step at a time with Back and Next', async () => {
@@ -105,6 +105,60 @@ describe('PlanStepper navigation', () => {
     expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(onCancel).toHaveBeenCalledTimes(1)
+  })
+})
+
+// Design review 6: a phone has no rail, so the step line carries Back and Next (a step's own Back and Next are a scroll away on a long one), the heading under it is not said twice, and the
+// foot row's primary takes the width.
+describe('PlanStepper on a phone', () => {
+  const stepLine = (text: string) => screen.getByText(text).parentElement as HTMLElement
+
+  it('puts Back and Next beside the step line, named so they are not the foot row\'s, and moves one step with each', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+
+    expect(stepLine('Step 2 of 5 · Days and times')).toHaveClass('lg:hidden')     // the rail is the desk's way to step
+    await user.click(within(stepLine('Step 2 of 5 · Days and times')).getByRole('button', { name: 'Next step' }))
+    expect(heading()).toHaveTextContent('Requirements')
+    await user.click(within(stepLine('Step 3 of 5 · Requirements')).getByRole('button', { name: 'Back one step' }))
+    expect(heading()).toHaveTextContent('Days and times')
+    expect(within(stepLine('Step 2 of 5 · Days and times')).getByRole('button', { name: 'Next step' })).toHaveTextContent('Next')      // the visible word is in the name
+  })
+
+  it('keeps the step\'s heading for focus and the announcement, and hides its text below lg where the line says it', () => {
+    render(<Harness />)
+
+    expect(heading()).toHaveClass('max-lg:sr-only')
+    expect(heading()).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('makes the beside-the-line Next the same as the foot row\'s: it asks for the day first, and stays on the step', async () => {
+    const user = userEvent.setup()
+    render(<Harness initial={draftBlock(mondayWednesday('b1', { days: [] }))} />)
+
+    await user.click(within(stepLine('Step 2 of 5 · Days and times')).getByRole('button', { name: 'Next step' }))
+
+    expect(heading()).toHaveTextContent('Days and times')
+    expect(screen.getAllByText(/Choose at least one day/).length).toBeGreaterThan(0)
+  })
+
+  it('has no Back on the first step and no Next at all until a template is chosen, and no Next on Review, where the foot row adds the block', () => {
+    const first = render(<Harness hasBlock={false} step="template" />)
+    expect(within(stepLine('Step 1 of 5 · Template')).queryByRole('button', { name: 'Back one step' })).not.toBeInTheDocument()
+    expect(within(stepLine('Step 1 of 5 · Template')).getByRole('button', { name: 'Next step' })).toBeDisabled()
+    first.unmount()
+
+    render(<Harness step="review" />)
+    expect(within(stepLine('Step 5 of 5 · Review')).getByRole('button', { name: 'Back one step' })).toBeInTheDocument()
+    expect(within(stepLine('Step 5 of 5 · Review')).queryByRole('button', { name: 'Next step' })).not.toBeInTheDocument()
+  })
+
+  it('stacks the foot row on a phone, the primary full width under Cancel and Back in the order of Tab, and puts them in a row from sm', () => {
+    render(<Harness />)
+
+    const foot = screen.getByRole('button', { name: 'Cancel' }).parentElement?.parentElement as HTMLElement
+    expect(foot).toHaveClass('flex-col', 'sm:flex-row')
+    expect(screen.getByRole('button', { name: 'Next' }).parentElement).toHaveClass('flex-col', 'sm:flex-row')
   })
 })
 
@@ -214,6 +268,32 @@ describe('PlanStepper Days and times step', () => {
 
     expect(screen.getByRole('checkbox', { name: /A worker may sleep/ })).not.toBeChecked()
     await user.click(screen.getByRole('button', { name: 'Next' }))
+  })
+
+  // Review F22: editing 06:00 to 03:00 and back lost the sleepover and its active hours, and nothing said so.
+  it('says so, once, when new times take the sleepover off the block, and stops saying it when the person turns it on again', async () => {
+    const user = userEvent.setup()
+    render(<Harness initial={draftBlock(mondayWednesday('b1', { supportType: 'PersonalCare', days: ['Friday'], start: '22:00:00', end: '06:00:00', workerMaySleep: true, sleepoverActiveHours: 1 }))} />)
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Ends'), { target: { value: '03:00' } })
+
+    expect(screen.getByRole('status')).toHaveTextContent('The sleepover was taken off this block')
+    expect(screen.getByRole('status')).toHaveTextContent('Change the times back and turn it on again to keep it.')
+    fireEvent.change(screen.getByLabelText('Ends'), { target: { value: '06:00' } })
+    expect(screen.getByRole('status')).toBeInTheDocument()                                  // the times are back, the sleepover is not: still said
+    await user.click(screen.getByRole('checkbox', { name: /A worker may sleep/ }))
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('says nothing when the person turns the sleepover off themselves', async () => {
+    const user = userEvent.setup()
+    render(<Harness initial={draftBlock(mondayWednesday('b1', { supportType: 'PersonalCare', days: ['Friday'], start: '22:00:00', end: '06:00:00', workerMaySleep: true, sleepoverActiveHours: 1 }))} />)
+
+    await user.click(screen.getByRole('checkbox', { name: /A worker may sleep/ }))
+
+    expect(screen.getByRole('checkbox', { name: /A worker may sleep/ })).not.toBeChecked()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
   it('asks for the sleeping window once a block is longer than 12 hours, filled in from 22:00 to 06:00', async () => {

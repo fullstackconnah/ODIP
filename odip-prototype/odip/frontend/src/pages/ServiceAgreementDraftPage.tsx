@@ -12,11 +12,10 @@ import { PageHeader } from '@/components/PageHeader'
 import { PageState } from '@/components/PageState'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { formGrid, span } from '@/lib/formGrid'
-import { plural } from '@/lib/format'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
 import { SUPPORT_LABEL, blockProblems, normaliseBlock, stampLocation } from '@/lib/planBlocks'
-import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, conflictVersionOf, describeSaveError, friendlyMessage, isPricingDate, type SaveFailure } from '@/lib/planQuote'
+import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, REASON_COPY, conflictVersionOf, describeSaveError, friendlyMessage, isPricingDate, type SaveFailure } from '@/lib/planQuote'
 import { PlanBuilder } from './plan-builder/PlanBuilder'
 import { RevisionCard } from './plan-builder/RevisionCard'
 
@@ -40,6 +39,12 @@ type Details = {
 const EMPTY_DETAILS: Details = { state: 'NSW', zone: 'National', planStartDate: '', planEndDate: '', agreementStartDate: '', agreementEndDate: '', representative: '' }
 
 const snapshotOf = (details: Details, plan: readonly DraftBlock[]) => JSON.stringify({ details, plan })
+
+/** "Block 1", "Blocks 1 and 3", "Blocks 1, 3 and 4". */
+function blocksNamed(places: readonly number[]): string {
+  if (places.length === 1) return `Block ${places[0]}`
+  return `Blocks ${places.slice(0, -1).join(', ')} and ${places[places.length - 1]}`
+}
 
 /** The years the pricing engine answers for, as the bounds of every date box (a box that is left to run takes a year with six digits). */
 const DATE_MIN = `${PRICING_FIRST_YEAR}-01-01`
@@ -158,17 +163,17 @@ function DraftPage() {
   const saveRow = ({ refused }: { refused: readonly PlanIssue[] }) => canEdit ? (
     <div className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-3">
       {problems.length > 0 && (
-        <Callout tone="warning" title="Fix these before saving">
+        <Callout tone="warning" className="max-w-prose" title="Fix these before saving">
           <ul className="list-disc pl-5">{problems.map(problem => <li key={problem}>{problem}</li>)}</ul>
         </Callout>
       )}
       {failure && (
-        <Callout tone="error" title={failure.title}>
+        <Callout tone="error" className="max-w-prose" title={failure.title}>
           <ul className="list-disc pl-5">{failure.messages.map(message => <li key={message}>{friendlyMessage(message, plan.map(entry => entry.block))}</li>)}</ul>
         </Callout>
       )}
       {conflict !== null && (
-        <Callout tone="warning" title={`Version ${conflict} was saved by somebody else`}>
+        <Callout tone="warning" className="max-w-prose" title={`Version ${conflict} was saved by somebody else`}>
           <span className="block">It was saved after the version this plan started from, so saving this plan now would replace their work as the newest version. Load version {conflict} to see what changed, then make your changes again. Nothing on this page is lost until you do.</span>
           <span className="mt-2 flex flex-wrap gap-2">
             <Button size="sm" onClick={() => setConfirmingLoad(true)}>Load version {conflict}</Button>
@@ -176,11 +181,17 @@ function DraftPage() {
           </span>
         </Callout>
       )}
-      {refused.length > 0 && (
-        <Callout tone="error" title={`${plural(new Set(refused.map(issue => issue.blockId)).size, 'block')} cannot be priced`}>
-          The pricing engine priced nothing from {new Set(refused.map(issue => issue.blockId)).size === 1 ? 'a block' : 'some blocks'} (marked above), so this plan cannot be saved until {new Set(refused.map(issue => issue.blockId)).size === 1 ? 'it is' : 'they are'} fixed.
-        </Callout>
-      )}
+      {refused.length > 0 && (() => {
+        // Names the blocks by their places and says what to do, not who found the fault: the reasons' own advice when they are one reason, else where to look.
+        const places = [...new Set(refused.map(issue => plan.findIndex(entry => entry.block.id === issue.blockId)).filter(at => at >= 0))].sort((a, b) => a - b).map(at => at + 1)
+        const advice = [...new Set(refused.map(issue => REASON_COPY[issue.reason]?.advice))]
+        return (
+          <Callout tone="error" className="max-w-prose" title={places.length > 0 ? `${blocksNamed(places)} cannot be priced yet` : 'This plan cannot be priced yet'}>
+            <span className="block">The plan cannot be saved until {places.length > 1 ? 'they can' : 'it can'} be.</span>
+            <span className="mt-1 block">{advice.length === 1 && advice[0] ? advice[0] : 'Each one is marked above with what to do about it.'}</span>
+          </Callout>
+        )
+      })()}
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={save} disabled={create.isPending || refused.length > 0}>{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}{create.isPending ? 'Saving draft…' : 'Save draft'}</Button>
         <p role="status" className="text-sm text-[var(--color-muted-foreground)]">
@@ -253,6 +264,7 @@ function DraftPage() {
       readOnlyNote="You can read this plan; Admins and Coordinators change it."
       footer={saveRow}
       onBuildingChange={setBuilding}
+      unsaved={canEdit && dirty ? { onSave: save, saving: create.isPending } : undefined}
     />
 
     <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] flex flex-col gap-[var(--section-gap)]">

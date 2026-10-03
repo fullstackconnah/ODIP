@@ -252,21 +252,58 @@ describe('ServiceAgreementDraftPage: saving a plan built from blocks', () => {
 })
 
 describe('ServiceAgreementDraftPage: a plan the engine cannot price', () => {
-  const planWith = (issue: object) => {
-    drafts.mockReturnValue({ data: [draft({ version: 4, blocks: [draftBlock(mondayWednesday('b1'))], pricing: quote() })], isLoading: false, isError: false, refetch: vi.fn() })
-    budget.mockReturnValue({ data: { ...budgetOf('b1'), period: quote({ ...budgetOf('b1').period, issues: [issue as never] }) }, isError: false, isFetching: false, error: null, refetch: vi.fn() })
+  const planWith = (...issues: object[]) => {
+    drafts.mockReturnValue({ data: [draft({ version: 4, blocks: [draftBlock(mondayWednesday('b1')), draftBlock(mondayWednesday('b2', { days: ['Saturday'] }))], pricing: quote() })], isLoading: false, isError: false, refetch: vi.fn() })
+    budget.mockReturnValue({ data: { ...budgetOf('b1'), period: quote({ ...budgetOf('b1').period, issues: issues as never[] }) }, isError: false, isFetching: false, error: null, refetch: vi.fn() })
   }
+  const refusalCallout = (title: string) => screen.getByText(title).closest('div[class*="rounded-lg"]') as HTMLElement
 
   it('says which blocks cannot be priced and holds Save back, instead of sending a plan the server will refuse', async () => {
     planWith({ blockId: 'b1', reason: 'RegistrationGroupNotHeld', message: "Block 'b1': needs registration group 0125, which the provider does not hold.", count: 1 })
     renderPage()
     const user = userEvent.setup()
 
-    expect(screen.getByText('1 block cannot be priced')).toBeInTheDocument()
-    expect(screen.getByText(/so this plan cannot be saved until it is fixed/)).toBeInTheDocument()
+    // Design review 5: it names the block by its place and says what to do, not who found the fault ("The pricing engine priced nothing from a block").
+    const callout = refusalCallout('Block 1 cannot be priced yet')
+    expect(callout).toHaveTextContent('The plan cannot be saved until it can be.')
+    expect(callout).toHaveTextContent('Choose another support type, or an Admin can record the groups you hold in Settings, Plan pricing.')
+    expect(callout).not.toHaveTextContent(/pricing engine/i)
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Save draft' }))
     expect(createMutate).not.toHaveBeenCalled()
+  })
+
+  it("says it again on the block's own row, with the step that does it, so the way out is where the person is looking", async () => {
+    planWith({ blockId: 'b2', reason: 'RegistrationGroupNotHeld', message: "Block 'b2': needs registration group 0125, which the provider does not hold.", count: 1 })
+    renderPage()
+    const user = userEvent.setup()
+
+    const row = screen.getByText('Your organisation does not hold this registration group').closest('tr') as HTMLElement
+    expect(row).toHaveTextContent('Choose another support type')
+    await user.click(within(row).getByRole('button', { name: 'Open Support for block 2' }))
+    expect(screen.getByRole('heading', { name: 'Edit block 2' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Requirements' })).toBeInTheDocument()
+  })
+
+  it('names several blocks by their places, and points at the rows when they were refused for different reasons', () => {
+    planWith(
+      { blockId: 'b1', reason: 'RegistrationGroupNotHeld', message: "Block 'b1': needs registration group 0125.", count: 1 },
+      { blockId: 'b2', reason: 'InvalidInput', message: "Block 'b2': choose at least one day.", count: 1 },
+    )
+    renderPage()
+
+    const callout = refusalCallout('Blocks 1 and 2 cannot be priced yet')
+    expect(callout).toHaveTextContent('The plan cannot be saved until they can be.')
+    expect(callout).toHaveTextContent('Each one is marked above with what to do about it.')
+  })
+
+  it('says the plan itself cannot be priced when the refusal names no block (the dates, say), and still says what to do', () => {
+    planWith({ blockId: '', reason: 'InvalidInput', message: 'The agreement period ends before it starts.', count: 1 })
+    renderPage()
+
+    const callout = refusalCallout('This plan cannot be priced yet')
+    expect(callout).toHaveTextContent('Fix the field the message names.')
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled()
   })
 
   it('saves a plan that only has Review flags: they block nothing', async () => {
