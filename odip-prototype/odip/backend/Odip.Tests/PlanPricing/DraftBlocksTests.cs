@@ -416,6 +416,53 @@ public class DraftBlocksTests
         Assert.Contains("\"code\":\"draft-version-conflict\"", json);
     }
 
+    // ── An id with a control character is refused by the save (review F6) ─────────
+
+    [Fact]
+    public async Task A_block_id_with_a_NUL_or_a_line_break_is_a_refusal_the_screen_can_show_not_a_database_error()
+    {
+        await using var f = await SetUpAsync();
+
+        var nul = await f.Service.SaveAsync(f.TenantId, f.Participant.Id, Request(new[] { Entry(MonWed("a\0b")) }), "actor", CancellationToken.None);
+        var lineBreak = await f.Service.SaveAsync(f.TenantId, f.Participant.Id, Request(new[] { Entry(MonWed("a\nb")) }), "actor", CancellationToken.None);
+
+        Assert.Null(nul.Draft);
+        Assert.Contains(nul.Errors, e => e.Contains("control character"));
+        Assert.Contains(lineBreak.Errors, e => e.Contains("control character"));
+        Assert.All(nul.Errors.Concat(lineBreak.Errors), e => Assert.DoesNotContain(e, c => char.IsControl(c)));
+        Assert.Empty(f.Db.ServiceAgreementDrafts);
+    }
+
+    // ── What is stored keeps reading (review F15: an unreadable block comes back as an empty one, in silence) ──
+
+    [Fact]
+    public void A_revision_stored_today_reads_back_from_its_golden_json_so_renaming_a_member_of_the_model_fails_here_and_not_in_silence()
+    {
+        // As DraftJson.Write wrote them on 3 Oct 2026. If an enum member or a property is renamed, an old revision's blocks would come back empty; this test says so first.
+        const string block = """{"id":"b1","supportType":"CommunityAccess","intensity":"Standard","days":["Monday","Wednesday"],"start":"09:00:00","end":"13:00:00","workers":1,"participantsPresent":1,"headcountChanges":[],"setting":"Community","location":{"state":"NSW","zone":"National"},"workerMaySleep":false,"sleepoverActiveHours":0,"onPublicHoliday":"Review","travel":{"claim":true,"minutesEachWay":20,"returnToBase":true,"kmEachWay":8.5},"transport":{"km":20,"vehicle":"Standard","tolls":0,"parking":4.5,"participantsSharing":1},"maxLinesPerOccurrence":6,"endsNextDay":false,"durationMinutes":240}""";
+        const string requirements = """{"workerGender":"Female","driver":true,"skills":["FirstAid"]}""";
+        const string answer = """{"periodFrom":"2026-10-12","periodTo":"2026-10-18","lines":[],"issues":[{"blockId":"b1","reason":"NoItem","message":"Block 'b1': no item.","count":3,"firstDate":"2026-10-13"}],"notices":[{"code":"registration-groups-not-confirmed","message":"The registration groups the provider holds have not been confirmed.","openQuestion":1}],"holidayOccurrences":[{"blockId":"b1","date":"2026-10-05","holidayName":"Labour Day","state":"NSW","decision":"Review","skipped":false}],"openQuestions":[{"number":1,"text":"Which registration groups does the provider hold?"},{"number":6,"text":"Travel caps."}],"totals":{"amount":769.00,"supportHours":8,"lineCount":8,"unpricedLines":0,"reviewLines":0,"provisionalLines":6,"holidayOccurrences":0,"holidayUplift":0,"byCategory":[{"paceCategory":4,"name":"Assistance with Social, Economic and Community Participation","amount":769.00,"hours":8}],"byBlock":[{"blockId":"b1","amount":769.00,"supportHours":8,"occurrences":2,"skippedOccurrences":0}]},"timeBasis":"tz-database","needsReview":false}""";
+
+        var read = DraftJson.ReadBlock(block);
+
+        Assert.Equal(("b1", PlanSupportType.CommunityAccess, Odip.Domain.Enums.SupportIntensity.Standard, PlanSetting.Community, HolidayDecision.Review), (read.Id, read.SupportType, read.Intensity, read.Setting, read.OnPublicHoliday));
+        Assert.Equal(new[] { DayOfWeek.Monday, DayOfWeek.Wednesday }, read.Days);
+        Assert.Equal((T(9), T(13)), (read.Start, read.End));
+        Assert.Equal(new PlanProviderTravel { Claim = true, MinutesEachWay = 20, ReturnToBase = true, KmEachWay = 8.5m }, read.Travel);
+        Assert.Equal(new PlanActivityTransport { Km = 20m, Parking = 4.5m, ParticipantsSharing = 1 }, read.Transport);
+        Assert.Equal(new PlanLocation { State = "NSW" }, read.Location);
+        Assert.Equal(("Female", true, "FirstAid"), (DraftJson.ReadRequirements(requirements).WorkerGender, DraftJson.ReadRequirements(requirements).Driver, Assert.Single(DraftJson.ReadRequirements(requirements).Skills)));
+
+        var quote = DraftJson.ReadQuote(answer)!;
+        Assert.Equal(769.00m, quote.Totals.Amount);
+        var issue = Assert.Single(quote.Issues);
+        Assert.Equal((PlanFailureReason.NoItem, 3, new DateOnly(2026, 10, 13)), (issue.Reason, issue.Count, issue.FirstDate!.Value));
+        Assert.Equal("registration-groups-not-confirmed", Assert.Single(quote.Notices).Code);
+        Assert.Equal(new[] { 1, 6 }, quote.OpenQuestions.Select(q => q.Number));
+        Assert.Equal("Labour Day", Assert.Single(quote.HolidayOccurrences).HolidayName);
+        Assert.Equal(4, Assert.Single(quote.Totals.ByCategory).PaceCategory);
+    }
+
     // ── A save holds a permit of its own (review F12) ─────────────────────────────
 
     [Fact]
