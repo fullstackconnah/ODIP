@@ -35,7 +35,10 @@ public class ServiceAgreementDraftsController : ControllerBase
         _configuration = configuration ?? new ConfigurationBuilder().Build();
     }
 
+    // Every GET here returns money (unit prices, totals, the pricing answer, the PDF's figures), and money is never visible to SupportWorker or ReadOnly: Claims and Billing refuse them for every
+    // request, reads included. So the reads are admitted to the same roles as the writes (ServiceAgreementDraftsControllerRoleTests holds every GET to it).
     [HttpGet]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<List<ServiceAgreementDraftDto>>>> List(Guid participantId, CancellationToken ct)
     {
         // The newest revision in full (a plan is started from it) and the older ones as summaries: every save adds a revision of tens of kilobytes (blocks, answer, lines), so a long onboarding
@@ -58,6 +61,7 @@ public class ServiceAgreementDraftsController : ControllerBase
 
     /// <summary>One revision in full: how an older one's blocks, lines and answer are read (the list leaves them out). Not found for another participant's or another tenant's.</summary>
     [HttpGet("{id:guid}")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ServiceAgreementDraftDto>>> Get(Guid participantId, Guid id, CancellationToken ct)
     {
         var draft = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery()
@@ -100,6 +104,7 @@ public class ServiceAgreementDraftsController : ControllerBase
     }
 
     [HttpGet("{id:guid}/pdf")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<IActionResult> Pdf(Guid participantId, Guid id, CancellationToken ct)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<object>.Fail("A tenant context is required."));
