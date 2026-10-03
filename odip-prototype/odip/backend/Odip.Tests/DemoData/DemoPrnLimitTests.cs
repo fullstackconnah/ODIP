@@ -150,7 +150,7 @@ public class DemoPrnLimitTests
         await RunAsync(env, Utc("2026-10-02T01:05:00Z"));
 
         var friday = await ParacetamolGivenOnAsync(env, Friday);
-        var given = Assert.Single(friday.Where(d => d.Id != replaced));
+        var given = Assert.Single(friday, d => d.Id != replaced);
         Assert.StartsWith("demo-v1:", given.IdempotencyKey, StringComparison.Ordinal);                       // the script's own 10:20, which neither of them stops
     }
 
