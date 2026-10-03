@@ -58,8 +58,8 @@ public sealed class ServiceAgreementDraftService
 
         // Free text is written into a Postgres text column and onto the PDF: a NUL in it is refused by the database (a 500 with nothing the caller can read), as one in a block id was (review F6). It is
         // said here, in words, and not repeated in the message.
-        if (request.Representative is { } representative && representative.Any(char.IsControl))
-            return DraftSaveResult.Refused("The representative cannot contain a control character (a line break, a tab, a NUL).");
+        if (HasControlCharacter(request.Representative))
+            return DraftSaveResult.Refused(ControlCharacterRefusal("The representative"));
 
         var blocks = request.Blocks ?? [];
         if (blocks.Count > 0 && request.Lines.Count > 0)
@@ -91,6 +91,30 @@ public sealed class ServiceAgreementDraftService
             return DraftSaveResult.Conflicted(await NewestVersionAsync(participantId, ct));
         }
         return draft;
+    }
+
+    /// <summary>A control character (a NUL, a line break, a tab) in free text. Refused in words, and never repeated in the message that says so (review F6, N13, L4).</summary>
+    private static bool HasControlCharacter(string? text) => text is not null && text.Any(char.IsControl);
+
+    private static string ControlCharacterRefusal(string what) => $"{what} cannot contain a control character (a line break, a tab, a NUL).";
+
+    // The hand-typed path (a caller that predates the plan builder, which sends blocks) writes the same free text to the same columns and onto the same PDF as the representative, and queries the
+    // catalogue with the item code. A service type is a short label; the column that holds all of them is varchar(4000) and JSON writes a character outside ASCII as six or twelve.
+    private const int MaxServiceTypes = 20;
+    private const int MaxServiceTypeLength = 100;
+    private const int ServiceTypesColumnLength = 4000;
+
+    /// <summary>The first reason the free text of a hand-typed save is refused, or null: control characters, and the limits that keep it inside the column.</summary>
+    private static string? FreeTextProblem(CreateServiceAgreementDraftDto request)
+    {
+        if (request.ServiceTypes.Count > MaxServiceTypes) return $"A draft has at most {MaxServiceTypes} service types.";
+        if (request.ServiceTypes.Any(type => string.IsNullOrWhiteSpace(type))) return "A service type cannot be empty.";
+        if (request.ServiceTypes.Any(type => type.Length > MaxServiceTypeLength)) return $"A service type is at most {MaxServiceTypeLength} characters.";
+        if (request.ServiceTypes.Any(HasControlCharacter)) return ControlCharacterRefusal("A service type");
+        if (request.Lines.Any(line => HasControlCharacter(line.ServiceType))) return ControlCharacterRefusal("The service type of a line");
+        if (request.Lines.Any(line => HasControlCharacter(line.ItemCode))) return ControlCharacterRefusal("The item code of a line");
+        if (JsonSerializer.Serialize(request.ServiceTypes).Length > ServiceTypesColumnLength) return "The service types are too long to save.";
+        return null;
     }
 
     private async Task<int> NewestVersionAsync(Guid participantId, CancellationToken ct) =>
@@ -209,6 +233,7 @@ public sealed class ServiceAgreementDraftService
 
     private async Task<DraftSaveResult> BuildFromLinesAsync(Guid tenantId, Participant participant, CreateServiceAgreementDraftDto request, string actor, CancellationToken ct)
     {
+        if (FreeTextProblem(request) is { } problem) return DraftSaveResult.Refused(problem);
         var effectiveDate = request.AgreementStartDate;
         var lines = new List<ServiceAgreementDraftLine>();
         foreach (var requested in request.Lines)
