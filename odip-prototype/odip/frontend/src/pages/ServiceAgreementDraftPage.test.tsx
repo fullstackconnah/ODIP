@@ -921,6 +921,82 @@ describe('ServiceAgreementDraftPage: a second coordinator, and a block in progre
     })
   })
 
+  // Round 3, M3: the open block is a copy from the plan on screen. Loading another version re-seeded the plan and left that copy in the stepper, and Save block wrote it over whatever block was at its place in
+  // the version that replaced it (and if the loaded version had fewer blocks, the edit vanished).
+  describe('loading the newer version while a block is open in the stepper', () => {
+    /** The bar's Save is pressed with block 1 open and changed (Friday); the server says version 5 is newer, and the person is on the dialog that asks to load it. */
+    async function reachTheDialog() {
+      const both = () => [newer(), older()]
+      const refetch = vi.fn(async () => { drafts.mockReturnValue({ data: both(), isLoading: false, isError: false, refetch }); return { data: both(), isError: false } })
+      drafts.mockReturnValue({ data: [older()], isLoading: false, isError: false, refetch })
+      createMutate.mockImplementationOnce((_request, options) => options.onError({ response: { status: 409, data: { success: false, code: 'draft-version-conflict', data: { currentVersion: 5 }, errors: ['Version 5 was saved.'] } } }))
+      renderPage()
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Representative'), ' (mine)')                       // the plan is unsaved, so the bar has its Save
+      await user.click(screen.getByRole('button', { name: 'Edit times of block 1' }))
+      await user.click(screen.getByRole('button', { name: 'Friday' }))                          // and the stepper holds a changed copy of block 1
+      expect(screen.getByRole('heading', { name: 'Edit block 1' })).toBeInTheDocument()
+
+      await user.click(within(screen.getByRole('region', { name: 'Running budget' })).getByRole('button', { name: 'Save' }))
+      const callout = (await screen.findByText('Version 5 was saved by somebody else')).closest('[role="alert"]') as HTMLElement
+      await user.click(within(callout).getByRole('button', { name: 'Load version 5' }))
+      return { user, dialog: screen.getByRole('alertdialog') }
+    }
+
+    it('says in the dialog that the block that is open is closed, and its changes with it', async () => {
+      const { dialog } = await reachTheDialog()
+
+      expect(dialog).toHaveTextContent('replaces the plan and the details on screen')
+      expect(dialog).toHaveTextContent('The block you have open is closed, and its changes with it.')
+    })
+
+    it('closes the block, shows the loaded version\'s plan, and leaves no Save block to write the old copy over it', async () => {
+      const { user, dialog } = await reachTheDialog()
+
+      await user.click(within(dialog).getByRole('button', { name: 'Load version 5' }))
+
+      const plan = within(await screen.findByRole('region', { name: 'Support plan' }))
+      expect(await plan.findByText('Sat · 09:00–15:00 · Group activity 1:3')).toBeInTheDocument()     // version 5's block 1
+      expect(screen.queryByRole('heading', { name: 'Edit block 1' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Save block' })).not.toBeInTheDocument()
+      expect(plan.queryByText(/Mon, Wed/)).not.toBeInTheDocument()                                   // not the copy that was open, with its Friday
+      expect(screen.getByRole('heading', { name: 'Support plan' })).toHaveFocus()                      // and focus is somewhere sensible, not on the page
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      expect(createMutate.mock.calls[1][0].data.blocks[0].block.days).toEqual(['Saturday'])            // the next save is version 5's plan, as it was loaded
+      expect(createMutate.mock.calls[1][0].data.baseVersion).toBe(5)
+    })
+
+    it('does not mention a block when none is open, and loads exactly as before', async () => {
+      const refetch = vi.fn(async () => { drafts.mockReturnValue({ data: [newer(), older()], isLoading: false, isError: false, refetch }); return { data: [newer(), older()], isError: false } })
+      drafts.mockReturnValue({ data: [older()], isLoading: false, isError: false, refetch })
+      createMutate.mockImplementationOnce((_request, options) => options.onError({ response: { status: 409, data: { success: false, code: 'draft-version-conflict', data: { currentVersion: 5 }, errors: ['Version 5 was saved.'] } } }))
+      renderPage()
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Representative'), ' (mine)')
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      const callout = (await screen.findByText('Version 5 was saved by somebody else')).closest('[role="alert"]') as HTMLElement
+      await user.click(within(callout).getByRole('button', { name: 'Load version 5' }))
+
+      expect(screen.getByRole('alertdialog')).not.toHaveTextContent('block you have open')
+    })
+
+    it('says only that the block is closed when it was open and not changed', async () => {
+      const refetch = vi.fn(async () => { drafts.mockReturnValue({ data: [newer(), older()], isLoading: false, isError: false, refetch }); return { data: [newer(), older()], isError: false } })
+      drafts.mockReturnValue({ data: [older()], isLoading: false, isError: false, refetch })
+      createMutate.mockImplementationOnce((_request, options) => options.onError({ response: { status: 409, data: { success: false, code: 'draft-version-conflict', data: { currentVersion: 5 }, errors: ['Version 5 was saved.'] } } }))
+      renderPage()
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Representative'), ' (mine)')
+      await user.click(screen.getByRole('button', { name: 'Edit times of block 1' }))                // open, nothing changed in it
+      await user.click(within(screen.getByRole('region', { name: 'Running budget' })).getByRole('button', { name: 'Save' }))
+      const callout = (await screen.findByText('Version 5 was saved by somebody else')).closest('[role="alert"]') as HTMLElement
+      await user.click(within(callout).getByRole('button', { name: 'Load version 5' }))
+
+      expect(screen.getByRole('alertdialog')).toHaveTextContent('The block you have open is closed.')
+      expect(screen.getByRole('alertdialog')).not.toHaveTextContent('its changes')
+    })
+  })
+
   it('lets a person keep editing instead, and says it again if they save again', async () => {
     drafts.mockReturnValue({ data: [older()], isLoading: false, isError: false, refetch: vi.fn() })
     createMutate.mockImplementation((_request, options) => options.onError({ response: { status: 409, data: { success: false, code: 'draft-version-conflict', data: { currentVersion: 5 }, errors: ['Version 5 was saved.'] } } }))

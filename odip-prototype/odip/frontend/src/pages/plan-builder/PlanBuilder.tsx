@@ -56,6 +56,11 @@ type PlanBuilderProps = {
    */
   onBuildingChange?: (changed: boolean) => void
   /**
+   * Told whether a block is open in the stepper at all, changed or not: the page says so when a person is about to give up the plan on screen for another version (the open block is a copy from the plan
+   * that is being replaced, and is closed with it).
+   */
+  onOpenChange?: (open: boolean) => void
+  /**
    * The plan has changes nobody has saved, and how to save them: the budget bar says so on a phone, where the save row is a long scroll below the blocks. Not given when there is nothing to
    * save or nobody to save it.
    */
@@ -74,10 +79,12 @@ type PlanBuilderProps = {
  * block being added or changed; the plan itself is the page's, and changes by whole blocks. The figures are the pricing engine's, asked for when the person pauses, for the plan as it
  * would be saved (the block being changed stands in for its saved self, and a block that is not complete yet is left out and said to be).
  */
-export function PlanBuilder({ participantId, state, zone, from, to, entries, onChange, readOnly = false, readOnlyNote, footer, onBuildingChange, unsaved, saveNotice, savedNote }: PlanBuilderProps) {
+export function PlanBuilder({ participantId, state, zone, from, to, entries, onChange, readOnly = false, readOnlyNote, footer, onBuildingChange, onOpenChange, unsaved, saveNotice, savedNote }: PlanBuilderProps) {
   const [session, setSession] = useState<Session | null>(null)
   const building = session !== null && session.hasBlock && JSON.stringify(session.entry) !== session.began
   useEffect(() => { onBuildingChange?.(building) }, [building, onBuildingChange])
+  const sessionOpen = session !== null
+  useEffect(() => { onOpenChange?.(sessionOpen) }, [sessionOpen, onOpenChange])
   const [nextSession, setNextSession] = useState(1)
   const [discarding, setDiscarding] = useState(false)
   const sectionRef = useRef<HTMLElement>(null)

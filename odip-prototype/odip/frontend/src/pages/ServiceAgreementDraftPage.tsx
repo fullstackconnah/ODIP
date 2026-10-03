@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { FileText, Loader2 } from 'lucide-react'
 import { useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useParticipant, useServiceAgreementDrafts } from '@/api/hooks'
@@ -88,6 +88,11 @@ function DraftPage() {
   const [confirmingLoad, setConfirmingLoad] = useState(false)
   // A block is being built that has been changed and is not in the plan yet: leaving would lose it too.
   const [building, setBuilding] = useState(false)
+  // A block is open in the stepper, changed or not. It is a copy of one of the plan's blocks (or a new one) and belongs to the plan it was opened from: loading another version closes it.
+  const [blockOpen, setBlockOpen] = useState(false)
+  // Counts the versions loaded over the working copy. The plan builder is keyed by it, so that what it holds in flight (the open block, its step, its copy) is not carried over to the plan that replaced it:
+  // Save block would write that old copy over whatever block is at its place in the loaded version (review M3).
+  const [loadCount, setLoadCount] = useState(0)
 
   const loaded = drafts.data !== undefined
   if (loaded && baseline === null) {
@@ -113,6 +118,12 @@ function DraftPage() {
   // Dates typed over an empty plan are nothing to lose: there is nothing to save until there is a block.
   const dirty = baseline !== null && plan.length > 0 && snapshotOf(details, plan) !== baseline
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(dirty || building)
+
+  // The block that was open went with the plan it was a copy of; focus, which was on the dialog's opener (gone with the conflict notice), goes to the plan's heading.
+  useEffect(() => {
+    if (loadCount > 0) document.getElementById('plan-heading')?.focus()
+  }, [loadCount])
+
   const canonicalIdentifiers = useMemo(() => ({
     ndis: participant.data?.ndisNumber ? 'Recorded on participant' : 'Not recorded on participant',
     dob: participant.data?.dateOfBirth || 'Not recorded on participant',
@@ -181,6 +192,7 @@ function DraftPage() {
     setProblems([])
     setSavedVersion(null)
     setBaseline(null)
+    setLoadCount(count => count + 1)
   }
 
   // What the last save said when it did not go through. It is drawn with the budget bar (PlanBuilder's `saveNotice`), which is docked in the overview and through every step of a block: the bar's Save
@@ -234,7 +246,7 @@ function DraftPage() {
       onCancel={() => setConfirmingLoad(false)}
       onConfirm={() => { void loadNewest() }}
       title={`Load version ${conflict ?? ''}?`}
-      message="Loading it replaces the plan and the details on screen with that version's. What you changed here since this page opened is not kept."
+      message={`Loading it replaces the plan and the details on screen with that version's. What you changed here since this page opened is not kept.${blockOpen ? ` The block you have open is closed${building ? ', and its changes with it' : ''}.` : ''}`}
       confirmLabel={`Load version ${conflict ?? ''}`}
     />
     <div className="flex items-start gap-4">
@@ -285,6 +297,7 @@ function DraftPage() {
     )}
 
     <PlanBuilder
+      key={loadCount}
       participantId={participantId}
       state={details.state}
       zone={details.zone}
@@ -296,6 +309,7 @@ function DraftPage() {
       readOnlyNote="You can read this plan; Admins and Coordinators change it."
       footer={saveRow}
       onBuildingChange={setBuilding}
+      onOpenChange={setBlockOpen}
       unsaved={canEdit && dirty ? { onSave: save, saving: create.isPending } : undefined}
       saveNotice={saveNotice}
       savedNote={canEdit && savedVersion !== null ? `Saved as version ${savedVersion}.` : null}
