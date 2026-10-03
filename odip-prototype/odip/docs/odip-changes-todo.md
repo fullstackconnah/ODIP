@@ -305,20 +305,30 @@ owner decision (collected under Open Flags at the end).
   - Any address signs in. The exchange no longer maps the address's domain to a tenant: it
     finds the one active user with that address (compared lower-case) across tenants and
     uses that user's tenant. No match, an inactive tenant, and two active rows with the
-    same address all answer the same 401 (the two-row case logs both user ids, so the
-    duplicate can be fixed). `Tenant.EmailDomain` is still stored and unique, but it is not
-    read at sign-in. The SuperAdmin domain keeps its own path.
+    same address are each refused with a 401 whose code says why (`NoOdipAccount`,
+    `TenantInactive`, `Ambiguous`; the two-row case also logs both user ids, so the
+    duplicate can be fixed). Saying why is safe because of the ORDER of the checks: these
+    three are only reached by a token that already proved control of the mailbox (a verified
+    email, an allowed provider), so they are shown only to the owner of the address, about
+    their own address. The order is documented in `Odip.Api/Services/ExchangeRefusal.cs`.
+    `Tenant.EmailDomain` is still stored and unique, but it is not read at sign-in. The
+    SuperAdmin domain keeps its own path.
   - Only listed sign-in providers get in. The Firebase API key is public, so anyone can
     obtain an ID token from every provider enabled in the console, and what `email_verified`
     proves differs: control of the mailbox for email/password, whatever the provider asserts
-    for a federated one. The exchange reads `firebase.sign_in_provider` and refuses, with
-    the same 401 and a log line, a token whose provider is not in `Auth:AllowedSignInProviders`
-    and one that does not say. The setting is a list in appsettings or one comma-separated
+    for a federated one. The exchange reads `firebase.sign_in_provider` and refuses a token
+    whose provider is not in `Auth:AllowedSignInProviders` with a 401 coded
+    `ProviderNotAllowed` (decided from the token alone, so it answers the same for any
+    address), and one that does not say with the generic `InvalidToken`, each with a log
+    line. The setting is a list in appsettings or one comma-separated
     value in the environment (`Auth__AllowedSignInProviders=password,custom`, the default);
     blank means the default, and any other value replaces it rather than adding to it.
     `custom` is a token minted with the service-account key, which
     only its holder can do. Before deploy, check the Firebase console: only Email/Password
     should be enabled today.
+  - A refused sign-in says why on the login page (a code on the exchange's 401). What each
+    message means and how to verify an account safely: the runbook at the repo root,
+    `docs/runbooks/sign-in-trouble.md` (not under `odip-prototype/odip/docs/`).
   - The SSO plan above retires this whole flow. With the email/password provider disabled
     there is no password to set, so the set-password emails, the two sign-in-account
     routes, the temporary-password option and the verified-at-creation rule go with it.

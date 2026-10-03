@@ -12,7 +12,7 @@ Legend: **SA**=SuperAdmin, **A**=Admin, **C**=Coordinator, **SW**=SupportWorker,
 for role **RO** globally regardless of what's listed below.
 
 ## AuthController — `api/v1/auth` (no class-level `[Authorize]`)
-- POST `/exchange` — Anonymous (rate-limited: 5/5min per IP) — exchange a Firebase ID token for an Odip backend JWT (issues `odip_jwt` cookie + returns token in body)
+- POST `/exchange` — Anonymous (a flood guard of 60 requests / 5 min per IP, and a lockout after 10 FAILED exchanges in 15 min) — exchange a Firebase ID token for an Odip backend JWT (issues `odip_jwt` cookie + returns token in body). A refusal is a 401 whose body's `code` says why (`InvalidToken`, `EmailNotVerified`, `ProviderNotAllowed`, `NoOdipAccount`, `Ambiguous`, `TenantInactive`), or a 429 (`LockedOut`, with `Retry-After`); see the repo-root `docs/runbooks/sign-in-trouble.md` (not `odip-prototype/odip/docs/`)
 - POST `/logout` — Authenticated — clears the `odip_jwt` cookie
 
 ## AuditController — `api/v1/audit` — class: `[Authorize(Roles = "Admin,SuperAdmin")]`
@@ -206,8 +206,8 @@ INTERNAL (plan builder phase B): the phase C builder screen is the only intended
 ## Summary / testing implications
 
 - **Every** endpoint requires at minimum `[Authorize]` (a valid, non-expired JWT with
-  `iss`/`aud` = `Odip`) **except** `POST /api/v1/auth/exchange` (anonymous, rate-limited
-  5/5min/IP — not used by our JWT-minting flow) and implicitly the Swagger UI
+  `iss`/`aud` = `Odip`) **except** `POST /api/v1/auth/exchange` (anonymous, rate-limited:
+  a 60/5min/IP flood guard plus a lockout after 10 failures — not used by our JWT-minting flow) and implicitly the Swagger UI
   (`/swagger`, Development-only).
 - Read (`GET`) endpoints are almost universally open to **any authenticated role**
   (plain `[Authorize]`, no role list) — writes (`POST`/`PUT`/`PATCH`/`DELETE`) are

@@ -1,0 +1,125 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AxiosError, type InternalAxiosRequestConfig } from 'axios'
+
+// The shared client turns a 401 into "the session expired": it asks Firebase for a fresh ID token, exchanges it at /auth/exchange and retries the request once,
+// and when that fails it clears the session and sends the person to /login. That is wrong for the exchange ITSELF. A 401 from it is its answer (a refusal and
+// the code that says why), not an expired session, and the refresh calls the exchange too, so a refusal there used to wait on itself and never settle.
+
+const { getIdToken } = vi.hoisted(() => ({ getIdToken: vi.fn() }))
+vi.mock('@/lib/firebase', () => ({ auth: { currentUser: { getIdToken } }, devAuthEnabled: false }))
+
+type Client = typeof import('./client')
+
+type Answer = { status: number; data: unknown }
+
+/**
+ * Answers each request, recording what was asked: from `answers` in order, or from a function that sees the request (the real server refuses the
+ * same token every time it is asked). A status of 400 or more is an HTTP error, as axios makes it.
+ */
+function script(client: Client, answers: Answer[] | ((url: string) => Answer)) {
+  const requests: Array<{ url: string; authorization?: string }> = []
+  client.apiClient.defaults.adapter = (config: InternalAxiosRequestConfig) => {
+    const answer = typeof answers === 'function' ? answers(String(config.url)) : answers[requests.length]
+    requests.push({ url: String(config.url), authorization: config.headers?.Authorization as string | undefined })
+    if (!answer) return Promise.reject(new Error(`no answer scripted for request ${requests.length} (${config.url})`))
+    const response = { data: answer.data, status: answer.status, statusText: String(answer.status), headers: {}, config }
+    return answer.status < 400
+      ? Promise.resolve(response)
+      : Promise.reject(new AxiosError(`Request failed with status code ${answer.status}`, 'ERR_BAD_REQUEST', config, null, response))
+  }
+  return requests
+}
+
+/** Whatever the promise does within `ms`, as text: a promise that never settles shows as HUNG instead of timing the test out. */
+const outcome = (promise: Promise<unknown>, ms = 1000) =>
+  Promise.race([
+    promise.then(
+      () => 'RESOLVED',
+      (err: { response?: { status?: number; data?: { code?: string } } }) => `REJECTED ${err.response?.status} ${err.response?.data?.code ?? ''}`.trim(),
+    ),
+    new Promise<string>(resolve => setTimeout(() => resolve('HUNG'), ms)),
+  ])
+
+const refusal = (code: string) => ({ status: 401, data: { success: false, errors: ['x'], code } })
+
+async function freshClient(): Promise<Client> {
+  vi.resetModules()
+  return import('./client')
+}
+
+beforeEach(() => {
+  getIdToken.mockReset().mockResolvedValue('fresh-id-token')
+  localStorage.clear()
+})
+afterEach(() => localStorage.clear())
+
+describe('the exchange answering 401', () => {
+  it('is passed on as it is, with its code, after one request: no refresh, no second exchange, no sign-out', async () => {
+    const client = await freshClient()
+    localStorage.setItem('odip_token', 'a-session')
+    const requests = script(client, () => refusal('EmailNotVerified'))
+
+    const result = await outcome(client.apiPostRaw('/auth/exchange', { idToken: 'the-id-token' }))
+
+    expect(result).toBe('REJECTED 401 EmailNotVerified')
+    expect(requests.map(r => r.url)).toEqual(['/auth/exchange'])
+    expect(getIdToken).not.toHaveBeenCalled()
+    expect(localStorage.getItem('odip_token')).toBe('a-session')
+  })
+
+  it('does the same for every code the sign-in page can show', async () => {
+    for (const code of ['NoOdipAccount', 'TenantInactive', 'ProviderNotAllowed', 'Ambiguous', 'InvalidToken']) {
+      const client = await freshClient()
+      script(client, () => refusal(code))
+
+      expect(await outcome(client.apiPostRaw('/auth/exchange', { idToken: 'x' }))).toBe(`REJECTED 401 ${code}`)
+    }
+  })
+
+  it('keeps a 429 as it is too, with the headers the sign-in page reads the wait from', async () => {
+    const client = await freshClient()
+    const requests = script(client, [{ status: 429, data: { success: false, errors: ['x'], code: 'LockedOut' } }])
+
+    expect(await outcome(client.apiPostRaw('/auth/exchange', { idToken: 'x' }))).toBe('REJECTED 429 LockedOut')
+    expect(requests).toHaveLength(1)
+  })
+})
+
+describe('a 401 on any other request', () => {
+  it('still refreshes the session once and retries with the new token', async () => {
+    const client = await freshClient()
+    localStorage.setItem('odip_token', 'the-old-token')
+    const requests = script(client, [
+      { status: 401, data: {} },
+      { status: 200, data: { success: true, data: { token: 'the-new-token' } } },
+      { status: 200, data: { success: true, data: ['a participant'] } },
+    ])
+
+    const participants = await client.apiGet<string[]>('/participants')
+
+    expect(participants).toEqual(['a participant'])
+    expect(requests.map(r => r.url)).toEqual(['/participants', '/auth/exchange', '/participants'])
+    expect(requests[2].authorization).toBe('Bearer the-new-token')
+    expect(localStorage.getItem('odip_token')).toBe('the-new-token')
+  })
+
+  it('fails and clears the session when the refresh is refused (a tenant switched off mid-session), instead of waiting on itself', async () => {
+    const client = await freshClient()
+    // Signing out sets location.href, which jsdom reports as "not implemented: navigation"; that is the redirect to /login, so keep it out of the output.
+    const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      localStorage.setItem('odip_token', 'the-old-token')
+      localStorage.setItem('odip_user', '{}')
+      // The same refusal every time the exchange is asked, as a real server gives it; the sign-out also posts /auth/logout, and its own 401 is ignored.
+      script(client, url => (url === '/auth/exchange' ? refusal('TenantInactive') : { status: 401, data: {} }))
+
+      const result = await outcome(client.apiGet('/participants'))
+
+      expect(result).toBe('REJECTED 401')
+      expect(localStorage.getItem('odip_token')).toBeNull()
+      expect(localStorage.getItem('odip_user')).toBeNull()
+    } finally {
+      jsdomNoise.mockRestore()
+    }
+  })
+})
