@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -14,6 +15,7 @@ using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
+using Odip.Tests.Medications;
 using Xunit;
 
 namespace Odip.Tests.Rostering;
@@ -42,11 +44,11 @@ public class ShiftCompletionStateMachineTests
         return (new OdipDbContext(options, tenant.Object), tenant);
     }
 
-    private static PortalController MakeController(OdipDbContext db, ICurrentTenant tenant, Guid callerUserId)
+    private static PortalController MakeController(OdipDbContext db, ICurrentTenant tenant, Guid callerUserId, TimeProvider? clock = null)
     {
         var identity = new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, callerUserId.ToString())], "Test");
-        return new PortalController(db, tenant)
+        return new PortalController(db, tenant, clock: clock)
         {
             ControllerContext = new ControllerContext
             {
@@ -193,17 +195,27 @@ public class ShiftCompletionStateMachineTests
 
     // Early-start guard (PR1 review 4 N1): Start is refused more than PortalController.EarliestStartLeadMinutes
     // before the rostered start. Rostered start is provider-local (no ProviderSettings row => Australia/Sydney).
-    private static Shift SeedShiftStartingIn(OdipDbContext db, Guid participantId, Guid staffId, TimeSpan fromNow)
+    // These tests run the controller on a fixed clock. Against the real clock they failed for an hour or two around each daylight-saving
+    // change: at 23:18 AEST on Sat 3 Oct 2026 a shift "180 minutes from now" is rostered 03:18 AEDT, and the hour before it,
+    // 02:18, does not exist on the wall clock. OrdinaryDayNoon is Tue 8 Sep 2026 12:00 AEST (02:00Z), weeks from either change, so
+    // "N minutes from now" is plain wall-clock arithmetic there.
+    private static readonly DateTimeOffset OrdinaryDayNoon = new(2026, 9, 8, 2, 0, 0, TimeSpan.Zero);
+
+    private static readonly TimeZoneInfo Sydney = ProviderLocalTime.ResolveZone("Australia/Sydney");
+
+    private static Shift SeedShiftAt(OdipDbContext db, Guid participantId, Guid staffId, DateOnly serviceDate, TimeOnly startTime) => Seed(db, new Shift
+    {
+        Id = Guid.NewGuid(), ParticipantId = participantId, UserId = staffId,
+        ServiceDate = serviceDate, StartTime = startTime,
+        EndTime = new TimeOnly(23, 59), Ratio = SupportRatio.OneToOne,
+        NightType = SleepoverType.None, Status = ShiftStatus.Published,
+    });
+
+    private static Shift SeedShiftStartingIn(OdipDbContext db, Guid participantId, Guid staffId, DateTimeOffset now, TimeSpan fromNow)
     {
         var zone = ProviderLocalTime.ResolveZone(null);
-        var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow.Add(fromNow), zone);
-        return Seed(db, new Shift
-        {
-            Id = Guid.NewGuid(), ParticipantId = participantId, UserId = staffId,
-            ServiceDate = DateOnly.FromDateTime(local), StartTime = new TimeOnly(local.Hour, local.Minute),
-            EndTime = new TimeOnly(23, 59), Ratio = SupportRatio.OneToOne,
-            NightType = SleepoverType.None, Status = ShiftStatus.Published,
-        });
+        var local = TimeZoneInfo.ConvertTimeFromUtc(now.UtcDateTime.Add(fromNow), zone);
+        return SeedShiftAt(db, participantId, staffId, DateOnly.FromDateTime(local), new TimeOnly(local.Hour, local.Minute));
     }
 
     [Fact]
@@ -215,16 +227,16 @@ public class ShiftCompletionStateMachineTests
         var (db, tenant) = CreateDb();
         var user = SeedUser(db);
         var participant = SeedParticipant(db);
-        var shift = SeedShiftStartingIn(db, participant.Id, user.Id, TimeSpan.FromMinutes(180));
-        var controller = MakeController(db, tenant.Object, user.Id);
+        var shift = SeedShiftStartingIn(db, participant.Id, user.Id, OrdinaryDayNoon, TimeSpan.FromMinutes(180));
+        var controller = MakeController(db, tenant.Object, user.Id, new FakeClock(OrdinaryDayNoon));
 
         var result = await controller.StartShift(shift.Id, new StartShiftDto(), CancellationToken.None);
 
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(conflict.Value);
         Assert.Equal(ShiftErrorCodes.ShiftStartTooEarly, body.Code);
-        var openAt = shift.StartTime.AddMinutes(-60).ToString("h:mm tt", System.Globalization.CultureInfo.InvariantCulture).ToLowerInvariant();
-        Assert.Contains(openAt, Assert.Single(body.Errors!));
+        // Rostered 15:00 (12:00 + 3 hours); Start opens an hour earlier.
+        Assert.Equal("It's too early to start this shift. You can start from 2:00 pm on Tue 8 Sep.", Assert.Single(body.Errors!));
         Assert.Empty(await db.ShiftCompletions.ToListAsync());
         Assert.Equal(ShiftStatus.Published, (await db.Shifts.SingleAsync(s => s.Id == shift.Id)).Status);
     }
@@ -238,13 +250,80 @@ public class ShiftCompletionStateMachineTests
         var (db, tenant) = CreateDb();
         var user = SeedUser(db);
         var participant = SeedParticipant(db);
-        var shift = SeedShiftStartingIn(db, participant.Id, user.Id, TimeSpan.FromMinutes(minutesUntilStart));
-        var controller = MakeController(db, tenant.Object, user.Id);
+        var shift = SeedShiftStartingIn(db, participant.Id, user.Id, OrdinaryDayNoon, TimeSpan.FromMinutes(minutesUntilStart));
+        var controller = MakeController(db, tenant.Object, user.Id, new FakeClock(OrdinaryDayNoon));
 
         var result = await controller.StartShift(shift.Id, new StartShiftDto(), CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result.Result);
     }
+
+    // ── "Too early" across Sydney's two daylight-saving changes ──────────────────────────────────
+    // The rostered start is a provider-local wall-clock value (ServiceDate + StartTime). StartShift resolves it to a UTC INSTANT
+    // (ShiftVarianceCalculator.ResolveRosteredTimesUtc), takes the instant 60 minutes before that, and only then shows it on the
+    // provider's wall clock. "StartTime minus 60 minutes on the wall clock", which the real-clock test expected, is a different answer
+    // around a change. Each case runs the controller on a fixed clock: one minute before the opening instant
+    // Start is refused with exactly the message pinned in the case, and at the opening instant it starts, so the time the message
+    // names is the time Start really opens. The opening instants are written in UTC, worked out by hand rather than by the code under test.
+
+    private static async Task AssertStartOpensAt(string serviceDate, string startTime, string opensAtUtc, string expectedClock, string expectedDay)
+    {
+        var date = DateOnly.ParseExact(serviceDate, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var opensAt = DateTimeOffset.Parse(opensAtUtc, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
+        // The time the message names must be a real wall-clock time: one inside a skipped hour never appears on the clock.
+        var named = DateTime.ParseExact($"{expectedDay} {date.Year} {expectedClock}", "ddd d MMM yyyy h:mm tt", CultureInfo.InvariantCulture);
+        Assert.False(Sydney.IsInvalidTime(named), $"{expectedClock} on {expectedDay} does not exist on the Sydney wall clock");
+
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShiftAt(db, participant.Id, user.Id, date, TimeOnly.ParseExact(startTime, "HH:mm", CultureInfo.InvariantCulture));
+
+        var tooEarly = await MakeController(db, tenant.Object, user.Id, new FakeClock(opensAt.AddMinutes(-1)))
+            .StartShift(shift.Id, new StartShiftDto(), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(tooEarly.Result);
+        var body = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(conflict.Value);
+        Assert.Equal(ShiftErrorCodes.ShiftStartTooEarly, body.Code);
+        Assert.Equal($"It's too early to start this shift. You can start from {expectedClock} on {expectedDay}.", Assert.Single(body.Errors!));
+        Assert.Empty(await db.ShiftCompletions.ToListAsync());
+
+        var onTime = await MakeController(db, tenant.Object, user.Id, new FakeClock(opensAt))
+            .StartShift(shift.Id, new StartShiftDto(), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(onTime.Result);
+    }
+
+    // (c) An ordinary day: the instant 60 minutes before is the wall-clock time 60 minutes before.
+    [Fact]
+    public Task StartShift_TooEarly_OrdinaryDay_NamesAnHourBeforeTheRosteredStart() =>
+        AssertStartOpensAt("2026-09-08", "09:00", "2026-09-07T22:00:00Z", "8:00 am", "Tue 8 Sep");
+
+    // (a) The skipped hour. At 2026-10-03T16:00Z (Sun 4 Oct) Sydney clocks jump from 02:00 AEST to 03:00 AEDT, so 02:00-02:59 never appears.
+    [Theory]
+    // The 2026-10-03 flake. Rostered 03:18 AEDT opens at 15:18Z, which is still AEST and reads 1:18 am: the hour before 03:18 contains the
+    // skipped hour, so "03:18 - 60 minutes = 2:18 am" names a time that never exists.
+    [InlineData("2026-10-04", "03:18", "2026-10-03T15:18:00Z", "1:18 am", "Sun 4 Oct")]
+    // A rostered time inside the skipped hour does not exist either. As everywhere else (ShiftVarianceCalculator, ProviderLocalTime.LocalToUtc)
+    // it is moved one hour later, 02:30 -> 03:30 AEDT, so Start opens at the same instant as for a 03:30 start.
+    [InlineData("2026-10-04", "02:30", "2026-10-03T15:30:00Z", "1:30 am", "Sun 4 Oct")]
+    // Rostered 04:00 AEDT opens at 16:00Z, the instant of the change itself: the first reading of the new offset, 3:00 am.
+    [InlineData("2026-10-04", "04:00", "2026-10-03T16:00:00Z", "3:00 am", "Sun 4 Oct")]
+    public Task StartShift_TooEarly_SkippedHour_NamesATimeThatExists(
+        string serviceDate, string startTime, string opensAtUtc, string expectedClock, string expectedDay) =>
+        AssertStartOpensAt(serviceDate, startTime, opensAtUtc, expectedClock, expectedDay);
+
+    // (b) The repeated hour. At 2027-04-03T16:00Z (Sun 4 Apr) Sydney clocks go back from 03:00 AEDT to 02:00 AEST, so 02:00-02:59 happens twice.
+    [Theory]
+    // A rostered 02:30 is ambiguous. The server resolves it to STANDARD time, the .NET default for an ambiguous time (ShiftVarianceCalculator relies on
+    // it, ProviderLocalTime.LocalToUtc documents it): 02:30 AEST, 16:30Z. Start opens an hour earlier, 15:30Z, which is the FIRST 02:30 (AEDT), so the
+    // message names 2:30 am, the same reading as the shift's own start, a real hour apart.
+    [InlineData("2027-04-04", "02:30", "2027-04-03T15:30:00Z", "2:30 am", "Sun 4 Apr")]
+    // Rostered 03:30 AEST (17:30Z) is unambiguous and opens at 16:30Z, the SECOND 02:30 (AEST): the same words as the case above, an hour later.
+    [InlineData("2027-04-04", "03:30", "2027-04-03T16:30:00Z", "2:30 am", "Sun 4 Apr")]
+    public Task StartShift_TooEarly_RepeatedHour_ResolvesAnAmbiguousTimeToStandardTime(
+        string serviceDate, string startTime, string opensAtUtc, string expectedClock, string expectedDay) =>
+        AssertStartOpensAt(serviceDate, startTime, opensAtUtc, expectedClock, expectedDay);
 
     [Theory]
     [InlineData(ShiftStatus.PendingReview, "SHIFT_ALREADY_FINISHED")]
