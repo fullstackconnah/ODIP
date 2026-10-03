@@ -611,6 +611,7 @@ public sealed class LiveSetPack : IDemoPack
 
             shift.Status = ShiftStatus.PendingReview;
             shift.UpdatedAt = submittedAt;
+            _run.StampAudit(completion.Id, submittedAt, live.Worker);                          // the one tap is one story: the completion's Finish names the worker and the instant, as the shift's does (PR 2 review L10)
             _run.StampAudit(shift.Id, submittedAt, live.Worker);
             _run.Changed("live shifts finished");
         }

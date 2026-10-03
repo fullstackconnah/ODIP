@@ -85,6 +85,27 @@ public class DemoLiveSetLifecycleTests
         Assert.True(prn.PrnOutcomeAt > prn.AdministeredAt && prn.PrnOutcomeAt <= day.Completion.SubmittedAt);
     }
 
+    /// <summary>PR 2 review L10: the shift's own audit entry named the worker, the completion's Finish named the system, so the two histories of one tap disagreed.</summary>
+    [Fact]
+    public async Task TheFinishOfACompletion_IsAuditedAsTheWorkersAtTheInstantTheyFinished_AsTheShiftIs()
+    {
+        var env = await TickAsync(FridayEvening);
+
+        foreach (var story in LiveSetCatalog.Stories)
+        {
+            var day = await RequireDayAsync(env, story, Friday);
+            await using var db = env.AdminDb();
+            var finishes = (await db.AuditLogs.Where(l => l.EntityId == day.Completion!.Id && l.Action == AuditAction.Updated).ToListAsync()).Where(l => DemoAudit.Mentions(l, "SubmittedAt")).ToList();
+            var finish = Assert.Single(finishes);
+            var shiftMove = (await db.AuditLogs.Where(l => l.EntityId == day.Shift.Id && l.Action == AuditAction.Updated).ToListAsync()).Where(l => DemoAudit.Mentions(l, "Status")).OrderBy(l => l.ChangedAt).Last();
+
+            Assert.Equal(day.Worker.Id, finish.ChangedById);
+            Assert.Equal(day.Worker.FullName, finish.ChangedByName);
+            Assert.Equal(new DateTimeOffset(DateTime.SpecifyKind(day.Completion!.SubmittedAt!.Value, DateTimeKind.Utc)), finish.ChangedAt);       // the instant they submitted
+            Assert.Equal((shiftMove.ChangedAt, shiftMove.ChangedById, shiftMove.ChangedByName), (finish.ChangedAt, finish.ChangedById, finish.ChangedByName));
+        }
+    }
+
     // ── approval, by provider days ──
 
     [Fact]
