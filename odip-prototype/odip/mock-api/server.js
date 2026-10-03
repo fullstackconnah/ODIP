@@ -2537,6 +2537,17 @@ function matchRoute(pattern, segments) {
 
 // ── Server ───────────────────────────────────────────────────
 
+/** The refusals the real exchange gives, each with the sentence the API puts in errors[0] (the login page words its own from the code). */
+const EXCHANGE_REFUSALS = {
+  InvalidToken: 'Invalid or expired token',
+  EmailNotVerified: 'The email address on this sign-in has not been verified.',
+  ProviderNotAllowed: 'This sign-in method is not enabled for ODIP.',
+  NoOdipAccount: 'No active ODIP account uses this email address.',
+  Ambiguous: 'More than one active ODIP account uses this email address.',
+  TenantInactive: 'The organisation this account belongs to is inactive.',
+  LockedOut: 'Too many failed sign-in attempts. Try again shortly.',
+}
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': 'http://localhost:5173',
   'Access-Control-Allow-Credentials': 'true',
@@ -2704,6 +2715,19 @@ const server = http.createServer((req, res) => {
 
     // Special-case auth exchange so login flows get a plausible AuthResponseDto
     if (req.method === 'POST' && rel === 'auth/exchange') {
+      // A REFUSAL, as the real exchange gives one (Odip.Api/Services/ExchangeRefusal.cs): a 401 whose body's `code` says why, or a 429 with Retry-After for a
+      // locked-out client. The mock has no Firebase, so a script posts a magic token to see the shape: { "idToken": "refuse:EmailNotVerified" }.
+      const refusedCode = typeof body.idToken === 'string' && body.idToken.startsWith('refuse:') ? body.idToken.slice('refuse:'.length) : null
+      if (refusedCode && Object.hasOwn(EXCHANGE_REFUSALS, refusedCode)) {
+        const lockedOut = refusedCode === 'LockedOut'
+        res.writeHead(lockedOut ? 429 : 401, {
+          ...CORS_HEADERS,
+          'Content-Type': 'application/json; charset=utf-8',
+          ...(lockedOut ? { 'Retry-After': '600', 'Access-Control-Expose-Headers': 'Retry-After' } : {}),
+        })
+        res.end(JSON.stringify({ success: false, data: null, message: null, errors: [EXCHANGE_REFUSALS[refusedCode]], code: refusedCode }))
+        return
+      }
       send(res, 200, ok({
         token: 'mock-jwt-token',
         expiresAt: '2026-08-03T00:00:00Z',
