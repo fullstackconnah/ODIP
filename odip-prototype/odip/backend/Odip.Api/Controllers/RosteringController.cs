@@ -39,7 +39,7 @@ public class RosteringController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly RosterConflictService _conflictService = new();
-    private readonly ShiftPatternExpander _expander = new();
+    private readonly RosterShiftGenerator _generator;
     private readonly StaffCompatibilityLinkService _compatLink;
     private readonly IStaffUnavailabilityQuery _unavailabilityQuery;
     private readonly IConfiguration? _config;
@@ -54,9 +54,10 @@ public class RosteringController : ControllerBase
         OdipDbContext db, StaffCompatibilityLinkService compatLink, IStaffUnavailabilityQuery unavailabilityQuery,
         IConfiguration? config = null, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
         Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null,
-        ShiftPackageService? package = null, TimeProvider? clock = null)
+        ShiftPackageService? package = null, TimeProvider? clock = null, RosterShiftGenerator? generator = null)
     {
         _db = db;
+        _generator = generator ?? new RosterShiftGenerator();
         _clock = clock ?? TimeProvider.System;
         _compatLink = compatLink;
         _unavailabilityQuery = unavailabilityQuery;
@@ -1172,10 +1173,9 @@ public class RosteringController : ControllerBase
     }
 
     /// <summary>
-    /// Materialise a pattern into concrete Draft shifts across [from, to] via
-    /// <see cref="ShiftPatternExpander.Occurrences"/>. Idempotent: any date in range that
-    /// already carries a shift with this pattern's Id is skipped rather than duplicated, so
-    /// running the same range twice in a row creates nothing the second time.
+    /// Materialise a pattern into concrete Draft shifts across [from, to] through <see cref="RosterShiftGenerator"/>, the one place that does it (the approval of an agreement revision and the
+    /// daily top-up use it too). Idempotent: any date in range that already carries a shift with this pattern's Id is skipped rather than duplicated, so running the same range twice in a
+    /// row creates nothing the second time; so is a day the pattern's agreement plan skips for a public holiday, and concurrent calls for one participant take turns.
     /// </summary>
     [HttpPost("patterns/{id:guid}/generate")]
     public async Task<ActionResult<ApiResponse<GeneratePatternResultDto>>> GeneratePattern(
@@ -1186,32 +1186,8 @@ public class RosteringController : ControllerBase
         if (!(await ParticipantReadiness.CheckAsync(_db, pattern.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<GeneratePatternResultDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
-        var occurrences = _expander.Occurrences(pattern, from, to);
-        if (occurrences.Count == 0)
-            return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = 0, Skipped = 0 }));
-
-        var existingDates = await _db.Shifts
-            .Where(s => s.ShiftPatternId == pattern.Id && occurrences.Contains(s.ServiceDate))
-            .Select(s => s.ServiceDate)
-            .ToListAsync(ct);
-        var existingSet = existingDates.ToHashSet();
-
-        int created = 0, skipped = 0;
-        foreach (var date in occurrences)
-        {
-            if (existingSet.Contains(date)) { skipped++; continue; }
-
-            _db.Shifts.Add(new Shift
-            {
-                Id = Guid.NewGuid(), ParticipantId = pattern.ParticipantId, UserId = pattern.DefaultUserId,
-                ServiceDate = date, StartTime = pattern.StartTime, EndTime = pattern.EndTime, EndsNextDay = pattern.EndsNextDay,
-                Ratio = pattern.Ratio, NightType = pattern.NightType, Status = ShiftStatus.Draft, ShiftPatternId = pattern.Id
-            });
-            created++;
-        }
-
-        await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = created, Skipped = skipped }));
+        var generated = await _generator.GenerateAsync(_db, pattern.ParticipantId, new[] { pattern.Id }, from, to, ct);
+        return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = generated.Created, Skipped = generated.Skipped }));
     }
 
     // ══════════════════════════════════════════════════════════════
