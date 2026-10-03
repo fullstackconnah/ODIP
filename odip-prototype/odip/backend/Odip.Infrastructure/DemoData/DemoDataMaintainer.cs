@@ -132,6 +132,8 @@ public sealed class DemoDataMaintainer
         var state = await DemoQueries.ProviderState(db).FirstOrDefaultAsync(ct);
         var anchors = DemoAnchors.Create(_clock.GetUtcNow().UtcDateTime, state);
         stamps.NowUtc = anchors.NowUtc;
+        // Between 00:00 and 05:00 local only the day's first tick runs, so whatever falls due in those hours is written at the first tick after 05:00 (an event
+        // scripted for 00:30 appears at 05:xx; it carries its scripted time, so the row is not wrong, only late to appear).
         if (anchors.NowLocal.Hour < QuietHoursEndLocal && _lastRunLocalDate == anchors.D0)
         {
             return new DemoTickResult { Status = DemoTickStatus.QuietHours, Anchors = anchors, Elapsed = Stopwatch.GetElapsedTime(started) };

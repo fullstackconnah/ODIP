@@ -99,8 +99,11 @@ public static class IncidentCatalog
     /// <summary>
     /// The report to the Commission an incident has after it is filed (plan 2.5): how long after, and the reference the Commission gave. An incident
     /// with one is filed with its reporting Required, as the incident form files these types, so the form's obligation task is raised then and the
-    /// report completes it. Whether the report is within the day or late is how long after (24 hours, <c>QscReporting.OverdueHours</c>). William's
-    /// (I-04) is the one that is still to come at the first run: made inside its day, eleven hours after the demo starts.
+    /// report completes it. Whether the report is within the day or late is how long after (24 hours, <c>QscReporting.OverdueHours</c>); the app
+    /// decides only what is OVERDUE, not these two labels, which the form lets the coordinator choose. William's (I-04) is the one that is still to
+    /// come at the first run: scripted inside its day, eleven hours after the demo starts. A tick holds nothing back except between 00:00 and 05:00
+    /// local, so a first run between 13:00 and 14:00 on a night with no clock change makes it at the first tick after 05:00, up to an hour past the
+    /// 24-hour mark, and for that hour the overdue list holds his report too (its label stays within 24 hours, as scripted).
     /// </summary>
     public sealed record QscReport(TimeSpan After, string Reference);
 

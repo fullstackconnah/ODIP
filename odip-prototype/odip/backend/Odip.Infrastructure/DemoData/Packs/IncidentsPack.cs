@@ -17,7 +17,7 @@ namespace Odip.Infrastructure.DemoData.Packs;
 ///    its own audit entry, by the coordinator, at its own time: the review (which records who had been told), the escalation, the report to the
 ///    Commission (which completes the task), the resolution and the closing. By the first run eight are open; all six statuses, all five reporting
 ///    states, ten of the eleven types and all four severities are there. One has waited more than a day for its report (Ryan's restraint, which stays
-///    overdue for the demo); one is still inside its day (William's, whose report is made at 20 hours and its task completed then).
+///    overdue for the demo); one is still inside its day (William's, whose report is scripted at 20 hours and its task completed then: see IncidentCatalog.QscReport for the hour in which a tick held back by the quiet hours makes it late).
 ///  - The slip (I-09): the first day's note on Sophie's live shift at 09:41, which the scanner flags as Falls and Injury, raises the follow-up task;
 ///    at 10:30 the incident is filed from it with the shift and the note, and the task is closed as filing closes it. And one flagged note nobody has
 ///    filed anything from, on yesterday's evening shift, whose task stays open in the queue.

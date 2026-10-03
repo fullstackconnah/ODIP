@@ -181,8 +181,11 @@ public class DemoDomainConformanceTests
 
     [Theory]
     [MemberData(nameof(Clocks))]
-    public async Task EveryIncidentsReportingLabel_IsOneTheRuleThatSetsItWouldGive(string state, string date, int hour, int minute)
+    public async Task EveryIncidentsReportingLabel_AgreesWithTheTwentyFourHourRuleAsTheAuthorReadsIt(string state, string date, int hour, int minute)
     {
+        // The app has a rule for what is OVERDUE (QscReporting.IsOverdue: Required, not reported, more than 24 hours old) but none that sets ReportedWithin24h or
+        // ReportedLate: the form lets the coordinator choose. So the labels are held to the author's reading of the same 24 hours (how long after filing the
+        // report was made), which is a statement about the data, not about the app.
         var (env, now) = await RunAtAsync(state, date, hour, minute);
         await using var db = env.AdminDb();
         var users = await db.Users.Where(u => u.TenantId == DemoTestEnv.DemoTenantId).Select(u => u.Id).ToListAsync();
@@ -230,7 +233,10 @@ public class DemoDomainConformanceTests
             if (i.Status is IncidentStatus.Resolved or IncidentStatus.Closed) Assert.NotNull(i.ResolvedAt);
             else Assert.Null(i.ResolvedAt);
         }
-        // Exactly the one the plan says is overdue (Ryan's), whenever the clock is.
+        // Exactly the one the plan says is overdue (Ryan's) at each clock this test visits, which are ticks of an ordinary day. Not at every instant: a first run
+        // between 13:00 and 14:00 local on a night with no clock change has William's report (scripted at 20 hours) fall due inside the quiet hours, so it is
+        // made at the first tick after 05:00, up to an hour past the 24-hour mark, and for that hour the overdue list holds his as well as Ryan's (the label
+        // stays ReportedWithin24h, which reads the scripted time). The first run at 14:35 (DemoIncidentsTests) is not affected.
         Assert.Equal(new[] { IncidentCatalog.IdOf("I-03") }, incidents.Where(i => QscReporting.IsOverdue(i, now)).Select(i => i.Id));
     }
 }
