@@ -278,8 +278,8 @@ public class AuthControllerExchangeTests
 
         var result = await Exchange(CreateController(db, "jane.smith@gmail.com", logger: logger.Object));
 
-        // The answer says it is ambiguous (to someone who has proved the mailbox, about their own address) but never WHICH rows: the log names those.
-        AssertRefusal(result, "Ambiguous", "More than one active ODIP account uses this email address.");
+        // The answer says no more than to ask the administrator: not that another account shares the address, and never WHICH rows (the log names those).
+        AssertRefusal(result, "Ambiguous", "We can't sign you in with this email address yet. Ask your administrator to check your account.");
         VerifyWarningNaming(logger, first.Id, second.Id);
     }
 
@@ -677,7 +677,7 @@ public class AuthControllerExchangeTests
 
         var result = await Exchange(CreateController(db, "jane.smith@gmail.com"));
 
-        AssertRefusal(result, "Ambiguous", "More than one active ODIP account uses this email address.");
+        AssertRefusal(result, "Ambiguous", "We can't sign you in with this email address yet. Ask your administrator to check your account.");
     }
 
     [Fact]

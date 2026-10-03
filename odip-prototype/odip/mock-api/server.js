@@ -2543,7 +2543,7 @@ const EXCHANGE_REFUSALS = {
   EmailNotVerified: 'The email address on this sign-in has not been verified.',
   ProviderNotAllowed: 'This sign-in method is not enabled for ODIP.',
   NoOdipAccount: 'No active ODIP account uses this email address.',
-  Ambiguous: 'More than one active ODIP account uses this email address.',
+  Ambiguous: "We can't sign you in with this email address yet. Ask your administrator to check your account.",
   TenantInactive: 'The organisation this account belongs to is inactive.',
   LockedOut: 'Too many failed sign-in attempts. Try again shortly.',
 }

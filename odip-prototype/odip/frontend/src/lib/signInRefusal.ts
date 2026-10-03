@@ -104,7 +104,8 @@ export function describeSignInRefusal(refusal: SignInRefusal, email: string, ver
     case 'ProviderNotAllowed':
       return { sentence: "That sign-in method isn't enabled for ODIP. Use your email and password." }
     case 'Ambiguous':
-      return { sentence: `More than one ODIP account uses ${email}, so we can't tell which is yours.`, nextStep: 'Ask your administrator to fix it.' }
+      // No more than to ask the administrator: that other accounts share the address is for the server log and the runbook.
+      return { sentence: `We can't sign you in with ${email} yet.`, nextStep: 'Ask your administrator to check your account.' }
     case 'LockedOut':
       return { sentence: `Too many attempts. Try again in ${describeWait(refusal.retryAfterSeconds)}.` }
     case 'InvalidToken':

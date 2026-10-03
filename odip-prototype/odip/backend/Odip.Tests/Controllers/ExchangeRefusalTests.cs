@@ -34,4 +34,14 @@ public class ExchangeRefusalTests
         Assert.Equal("Invalid or expired token", ExchangeRefusal.MessageFor(ExchangeRefusal.InvalidToken));
         Assert.Equal("Invalid or expired token", ExchangeRefusal.MessageFor("SomethingNobodyHasMetYet"));
     }
+
+    [Fact]
+    public void Ambiguous_says_no_more_than_to_ask_the_administrator_and_not_that_other_accounts_share_the_address()
+    {
+        var sentence = ExchangeRefusal.MessageFor(ExchangeRefusal.Ambiguous);
+
+        Assert.Equal("We can't sign you in with this email address yet. Ask your administrator to check your account.", sentence);
+        Assert.DoesNotContain("more than one", sentence, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("another", sentence, StringComparison.OrdinalIgnoreCase);
+    }
 }

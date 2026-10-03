@@ -32,7 +32,10 @@ public static class ExchangeRefusal
     /// <summary>A verified address that no active ODIP user (or SuperAdmin) holds.</summary>
     public const string NoOdipAccount = "NoOdipAccount";
 
-    /// <summary>The address is held by more than one active user, so nobody is signed in rather than guessing which.</summary>
+    /// <summary>
+    /// The address is held by more than one active user, so nobody is signed in rather than guessing which. The words say no more than to ask the administrator:
+    /// that the address is shared, and by whom, is for the log (both user ids) and the runbook.
+    /// </summary>
     public const string Ambiguous = "Ambiguous";
 
     /// <summary>The user's organisation is inactive (or missing).</summary>
@@ -47,7 +50,7 @@ public static class ExchangeRefusal
         EmailNotVerified => "The email address on this sign-in has not been verified.",
         ProviderNotAllowed => "This sign-in method is not enabled for ODIP.",
         NoOdipAccount => "No active ODIP account uses this email address.",
-        Ambiguous => "More than one active ODIP account uses this email address.",
+        Ambiguous => "We can't sign you in with this email address yet. Ask your administrator to check your account.",
         TenantInactive => "The organisation this account belongs to is inactive.",
         LockedOut => "Too many failed sign-in attempts. Try again shortly.",
         _ => "Invalid or expired token",

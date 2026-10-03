@@ -100,11 +100,14 @@ describe('describeSignInRefusal', () => {
     expect(describeSignInRefusal(refused('ProviderNotAllowed'), email).sentence).toBe("That sign-in method isn't enabled for ODIP. Use your email and password.")
   })
 
-  it('says an ambiguous address is on more than one account, with the next step', () => {
-    expect(describeSignInRefusal(refused('Ambiguous'), email)).toEqual({
-      sentence: "More than one ODIP account uses jane.smith@acme.example.com, so we can't tell which is yours.",
-      nextStep: 'Ask your administrator to fix it.',
+  it('says no more for an ambiguous address than that it cannot sign in yet and to ask the administrator: not that other accounts share it', () => {
+    const words = describeSignInRefusal(refused('Ambiguous'), email)
+
+    expect(words).toEqual({
+      sentence: "We can't sign you in with jane.smith@acme.example.com yet.",
+      nextStep: 'Ask your administrator to check your account.',
     })
+    expect(`${words.sentence} ${words.nextStep}`).not.toMatch(/more than one|another|shared?/i)
   })
 
   it('says how long to wait when locked out, in whole minutes rounded up', () => {

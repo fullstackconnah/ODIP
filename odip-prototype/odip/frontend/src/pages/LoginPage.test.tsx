@@ -197,15 +197,16 @@ describe('LoginPage: a sign-in the exchange refused', () => {
     expect(within(await alert()).getByText("That sign-in method isn't enabled for ODIP. Use your email and password.")).toBeInTheDocument()
   })
 
-  it('tells an address on more than one account to ask an administrator to fix it', async () => {
+  it('tells an address that is on more than one account only that it cannot sign in yet, and to ask an administrator to check the account', async () => {
     mockLogin.mockRejectedValue(new SignInRefused(refusal('Ambiguous')))
     const u = renderPage()
 
     await signIn(u)
 
     const shown = await alert()
-    expect(within(shown).getByText(`More than one ODIP account uses ${EMAIL}, so we can't tell which is yours.`)).toBeInTheDocument()
-    expect(within(shown).getByText('Ask your administrator to fix it.')).toBeInTheDocument()
+    expect(within(shown).getByText(`We can't sign you in with ${EMAIL} yet.`)).toBeInTheDocument()
+    expect(within(shown).getByText('Ask your administrator to check your account.')).toBeInTheDocument()
+    expect(shown).not.toHaveTextContent(/more than one/i)
   })
 
   it('keeps the generic refusal generic, with a way forward', async () => {
