@@ -13,11 +13,11 @@ import { extractErrorMessage } from '@/lib/utils'
 
 const MODE_OPTIONS: { key: BudgetLimitMode; label: string }[] = [
   { key: 'Warn', label: 'Warn only' },
-  { key: 'HardLimit', label: 'Hard limit for ad-hoc shifts' },
+  { key: 'HardLimit', label: 'Hard limit for one-off shifts' },
 ]
 
 const MODE_WORDS: Record<BudgetLimitMode, string> = {
-  Warn: "Shows a warning when a one-off roster shift would take a participant's forecast past their budget for the funding period. The shift is still saved.",
+  Warn: "Shows a warning when a one-off roster shift would take a participant's forecast (what is used so far plus shifts already booked) past their budget for the funding period. The shift is still saved.",
   HardLimit: "Refuses a one-off roster shift that would take a participant's forecast past their budget for the funding period, unless an Admin overrides it with a reason. Emergency or safety bookings are always allowed and reviewed by an Admin afterwards.",
 }
 
@@ -71,6 +71,7 @@ export default function BudgetSettingsTab() {
     <div className="flex max-w-2xl flex-col gap-[var(--section-gap)]">
       {unsavedChangesDialog}
       {settings.isDefault && <Callout tone="info" className="max-w-prose">Nothing has been saved yet: these are the defaults (Warn only, and approaching at 80%).</Callout>}
+      <p className="text-[13px] text-[var(--color-muted-foreground)]">Budget checks arrive in a later release. Both choices on this page are saved for them.</p>
 
       <section className="flex flex-col gap-[var(--field-gap-y)]" aria-labelledby="budget-mode-heading">
         <h2 id="budget-mode-heading" className="font-semibold">When a one-off shift would go over a participant&rsquo;s budget</h2>
@@ -88,7 +89,6 @@ export default function BudgetSettingsTab() {
             </li>
           ))}
         </ul>
-        <p className="text-[13px] text-[var(--color-muted-foreground)]">Budget checks arrive in a later release; this choice is saved for them.</p>
       </section>
 
       <section className="flex flex-col gap-[var(--field-gap-y)] border-t border-[var(--color-border)] pt-[var(--section-gap)]" aria-labelledby="budget-percent-heading">

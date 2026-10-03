@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPut } from '../client'
 import type {
   ApplyPlanDatesResult, BillingSourcesHintDto, BudgetSettingsDto, FundingPlanDto, FundingPlansDto, PaceCategoryDto, SaveFundingPlanDto, UpdateBudgetSettingsDto,
@@ -9,6 +9,15 @@ import type {
 
 const SETTINGS_KEY = ['budget-settings'] as const
 export const fundingKey = (participantId: string | undefined) => ['participant-funding', participantId] as const
+
+/**
+ * A plan write changes what the onboarding checklist's "Funding recorded" gate says (and the worklist's count of gates), so the checklist and the worklist are refreshed with it: left alone
+ * they would show the old answer for their 30 s of staleness, which reads as the save not having worked when a coordinator goes back to the checklist from the Funding tab.
+ */
+function refreshOnboarding(queryClient: QueryClient, participantId: string) {
+  void queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] })
+  void queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+}
 
 /** The NDIS support categories (01 to 21). Reference data that does not change under a session, so it is fetched once. */
 export function usePaceCategories(enabled = true) {
@@ -43,7 +52,10 @@ export function useCreateFundingPlan(participantId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (body: SaveFundingPlanDto) => apiPost<FundingPlanDto>(`/participants/${participantId}/funding/plans`, body),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: fundingKey(participantId) }) },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: fundingKey(participantId) })
+      refreshOnboarding(queryClient, participantId)
+    },
   })
 }
 
@@ -52,7 +64,10 @@ export function useUpdateFundingPlan(participantId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ planId, body }: { planId: string; body: SaveFundingPlanDto }) => apiPut<FundingPlanDto>(`/participants/${participantId}/funding/plans/${planId}`, body),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: fundingKey(participantId) }) },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: fundingKey(participantId) })
+      refreshOnboarding(queryClient, participantId)
+    },
   })
 }
 
@@ -64,6 +79,7 @@ export function useApplyPlanDatesToProfile(participantId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: fundingKey(participantId) })
       void queryClient.invalidateQueries({ queryKey: ['participant', participantId] })
+      refreshOnboarding(queryClient, participantId)
     },
   })
 }

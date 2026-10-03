@@ -759,9 +759,11 @@ describe('SettingsPage — Budgets tab and the one-row tab strip', () => {
     asRole('superAdmin')
     renderSettingsPage()
 
+    // The one-row mode is what Settings asks of Tabs (overflow="scroll"): its strip carries the thin scrollbar from md up and never the wrap that put the tenth tab alone on a second row.
+    // flex-nowrap and overflow-x-auto are in BOTH modes, so they prove nothing; these two are what tell the modes apart (Tabs.test.tsx pins the same pair on Tabs itself).
     const strip = screen.getByRole('tablist', { name: 'Settings sections' })
-    expect(strip).toHaveClass('flex-nowrap', 'overflow-x-auto')
-    expect(strip.className).not.toMatch(/(^|s)md:flex-wrap/)
+    expect(strip).toHaveClass('flex-nowrap', 'overflow-x-auto', 'md:[scrollbar-width:thin]')
+    expect(strip).not.toHaveClass('md:flex-wrap')
   })
 
   it('scrolls the tab named by ?tab= into view when the strip is wider than its box', () => {

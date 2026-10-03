@@ -95,11 +95,17 @@ export default function OnboardingDetailPage() {
               reason: 'Open the agreement draft to check its signing evidence. Agreements are signed and approved there, not on this screen.',
               action: <Button to={`/participants/${id}/agreement-draft`}>Review agreement evidence</Button>,
             }
-          : {
-              label: 'Review schedule proposal',
-              reason: 'Schedule review is proposal-only. No schedule coverage has been approved and no shifts are created here.',
-              action: canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
-            }
+          : d.fundingRecorded === false
+            ? {
+                label: 'Record plan budget',
+                reason: 'The plan budget is recorded on the participant’s Funding tab, from the plan the participant shares or from their plan manager.',
+                action: canManageFunding ? <Button to={`/participants/${id}?tab=funding`}>Open Funding tab</Button> : null,
+              }
+            : {
+                label: 'Review schedule proposal',
+                reason: 'Schedule review is proposal-only. No schedule coverage has been approved and no shifts are created here.',
+                action: canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
+              }
 
   const gates: Gate[] = [
     { label: 'Intake completed', state: gateState(d.intakeComplete) },
@@ -113,7 +119,8 @@ export default function OnboardingDetailPage() {
       ? [{
           label: 'Funding recorded', state: gateState(d.fundingRecorded),
           context: "The plan budget, taken from the plan the participant shares or from their plan manager. Your organisation's readiness rule decides whether activation waits for it.",
-          fixRoute: canManageFunding ? { to: `/participants/${id}?tab=funding`, label: 'Record plan budget' } : undefined,
+          // It only opens the tab (where "Record plan budget" is the button), so it says so, like its sibling "Open agreement draft".
+          fixRoute: canManageFunding ? { to: `/participants/${id}?tab=funding`, label: 'Open Funding tab' } : undefined,
         } satisfies Gate]
       : []),
     { label: 'Schedule review', state: 'Blocked', context: 'Shows the proposed schedule only — no shifts are created.', fixRoute: canAccessPage('rostering') ? { to: '/rostering/patterns', label: 'Open shift patterns' } : undefined },

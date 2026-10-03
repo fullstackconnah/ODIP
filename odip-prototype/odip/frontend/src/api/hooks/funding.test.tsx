@@ -29,6 +29,12 @@ const body: SaveFundingPlanDto = {
 
 beforeEach(() => { apiGet.mockReset(); apiPost.mockReset(); apiPut.mockReset() })
 
+/** A plan write changes what the onboarding checklist's 'Funding recorded' gate and the worklist say, so both are refreshed with it (they would otherwise stay stale for their 30 s). */
+function expectOnboardingRefreshed(invalidate: { mock: { calls: unknown[][] } }) {
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['onboarding', 'participant-1'] })
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['participant-onboarding-worklist'] })
+}
+
 describe('reading', () => {
   it('lists a participant’s plans from the funding endpoint, and does not ask while disabled or with no participant', async () => {
     apiGet.mockResolvedValue({ plans: [plan()], profilePlanDates: {} })
@@ -69,6 +75,7 @@ describe('saving a plan', () => {
     expect(apiPost).toHaveBeenCalledTimes(1)
     expect(apiPost).toHaveBeenCalledWith('/participants/participant-1/funding/plans', body)
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['participant-funding', 'participant-1'] })
+    expectOnboardingRefreshed(invalidate)
   })
 
   it('puts the replacement, with its revision, to the plan’s own URL, then refreshes that participant’s funding', async () => {
@@ -81,6 +88,7 @@ describe('saving a plan', () => {
 
     expect(apiPut).toHaveBeenCalledWith('/participants/participant-1/funding/plans/plan-1', { ...body, revision: 4 })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['participant-funding', 'participant-1'] })
+    expectOnboardingRefreshed(invalidate)
   })
 
   it('does not refresh anything when the save is refused', async () => {
@@ -107,6 +115,7 @@ describe('applying a plan’s dates to the profile', () => {
     expect(apiPost).toHaveBeenCalledWith('/participants/participant-1/funding/plans/plan-1/apply-dates-to-profile')
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['participant-funding', 'participant-1'] })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['participant', 'participant-1'] })
+    expectOnboardingRefreshed(invalidate)
   })
 })
 

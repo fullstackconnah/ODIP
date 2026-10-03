@@ -223,7 +223,7 @@ describe('OnboardingDetailPage — the funding gate', () => {
 
     const gate = screen.getByText('Funding recorded').closest('article')!
     expect(gate).toHaveTextContent('Needs attention')
-    expect(within(gate).getByRole('link', { name: 'Record plan budget' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
+    expect(within(gate).getByRole('link', { name: 'Open Funding tab' })).toHaveAttribute('href', '/participants/p-1?tab=funding')   // it only opens the tab, where "Record plan budget" is the button
     expect(screen.getByText('Progress: 4 of 6 gates complete')).toBeInTheDocument()
     expect(screen.getByText("Funding is not recorded: add the plan budget on the participant's Funding tab.")).toBeInTheDocument()
   })
@@ -256,18 +256,43 @@ describe('OnboardingDetailPage — the funding gate', () => {
     }
   })
 
-  it('offers the Funding tab to the roles that may manage funding, and keeps the gate but not the link for a ReadOnly or SupportWorker reader', () => {
+  it('offers the Funding tab to the roles that may manage funding (in the gate and as the next action), and keeps the gate but not the link for a ReadOnly or SupportWorker reader', () => {
     for (const role of ['SuperAdmin', 'Admin', 'Coordinator']) {
       localStorage.setItem('odip_user', JSON.stringify({ role }))
       const { unmount } = renderDetail()
-      expect(screen.getByRole('link', { name: 'Record plan budget' }), role).toHaveAttribute('href', '/participants/p-1?tab=funding')
+      const links = screen.getAllByRole('link', { name: 'Open Funding tab' })
+      expect(links, role).toHaveLength(2)   // the gate's, and the recommended action's: everything before it is done
+      links.forEach(link => expect(link, role).toHaveAttribute('href', '/participants/p-1?tab=funding'))
       unmount()
     }
     for (const role of ['ReadOnly', 'SupportWorker']) {
       localStorage.setItem('odip_user', JSON.stringify({ role }))
       const { unmount } = renderDetail()
       expect(screen.getByText('Funding recorded'), role).toBeInTheDocument()
-      expect(screen.queryByRole('link', { name: 'Record plan budget' }), role).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Open Funding tab' }), role).not.toBeInTheDocument()
+      unmount()
+    }
+  })
+
+  it('recommends recording the plan budget once everything before it is done, and the agreement evidence while that is still open', () => {
+    const first = renderDetail()
+    const recommendation = screen.getByRole('heading', { name: 'Record plan budget' }).closest('section')!
+    expect(within(recommendation).getByRole('link', { name: 'Open Funding tab' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
+    expect(within(recommendation).getByText(/The plan budget is recorded on the participant’s Funding tab/)).toBeInTheDocument()
+    first.unmount()
+
+    mockUseQuery.mockReturnValue({ data: { ...everythingElseDone, serviceAgreementSigned: false, fundingRecorded: false }, isLoading: false })
+    renderDetail()
+    expect(screen.getByRole('heading', { name: 'Review agreement evidence' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Record plan budget' })).not.toBeInTheDocument()
+  })
+
+  it('goes on to the schedule proposal once the plan budget is recorded, as before, and never names the budget for a participant who is not NDIS-funded', () => {
+    for (const data of [{ ...readyForSchedule, fundingRecorded: true }, { ...readyForSchedule }]) {
+      mockUseQuery.mockReturnValue({ data, isLoading: false })
+      const { unmount } = renderDetail()
+      expect(screen.getByRole('heading', { name: 'Review schedule proposal' })).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Record plan budget' })).not.toBeInTheDocument()
       unmount()
     }
   })

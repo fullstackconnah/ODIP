@@ -32,15 +32,33 @@ describe('Budgets tab: what is shown', () => {
     renderTab()
 
     expect(screen.getByRole('radio', { name: 'Warn only' })).toBeChecked()
-    expect(screen.getByRole('radio', { name: 'Hard limit for ad-hoc shifts' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' })).not.toBeChecked()
     expect(screen.getByRole('button', { name: /Warn when used reaches/ })).toHaveTextContent('80%')
     expect(screen.getByText(/Refuses a one-off roster shift that would take a participant's forecast past their budget for the funding period, unless an Admin overrides it with a reason\. Emergency or safety bookings are always allowed and reviewed by an Admin afterwards\./)).toBeInTheDocument()
   })
 
-  it('says that the checks arrive in a later release and this choice is saved for them', () => {
+  it('says once, at the top, that the checks arrive in a later release and that BOTH choices are saved for them', () => {
     renderTab()
 
-    expect(screen.getByText('Budget checks arrive in a later release; this choice is saved for them.')).toBeInTheDocument()
+    const line = screen.getByText('Budget checks arrive in a later release. Both choices on this page are saved for them.')
+    expect(line).toBeInTheDocument()
+    expect(screen.queryByText(/this choice is saved for them/)).not.toBeInTheDocument()   // not under the first section only, which made the percentage read as live
+    const firstHeading = screen.getByRole('heading', { name: /When a one-off shift would go over/ })
+    expect(line.compareDocumentPosition(firstHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()   // it comes before both sections
+  })
+
+  it('puts that line under the defaults callout when there is one, and still shows it when there is not', () => {
+    useBudgetSettings.mockReturnValue(reply(saved({ isDefault: true })))
+    const { unmount } = renderTab()
+    const callout = screen.getByText(/Nothing has been saved yet/)
+    const line = screen.getByText('Budget checks arrive in a later release. Both choices on this page are saved for them.')
+    expect(callout.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    unmount()
+
+    useBudgetSettings.mockReturnValue(reply(saved({ isDefault: false })))
+    renderTab()
+    expect(screen.queryByText(/Nothing has been saved yet/)).not.toBeInTheDocument()
+    expect(screen.getByText('Budget checks arrive in a later release. Both choices on this page are saved for them.')).toBeInTheDocument()
   })
 
   it('says nothing has been saved yet while these are the defaults', () => {
@@ -48,6 +66,15 @@ describe('Budgets tab: what is shown', () => {
     renderTab()
 
     expect(screen.getByText(/Nothing has been saved yet/)).toBeInTheDocument()
+  })
+
+  it('calls the shifts "one-off" everywhere, and says once what a forecast is', () => {
+    renderTab()
+
+    expect(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' })).toBeInTheDocument()
+    expect(screen.queryByText(/ad-hoc/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/Shows a warning when a one-off roster shift would take a participant's forecast \(what is used so far plus shifts already booked\) past their budget for the funding period\. The shift is still saved\./)).toBeInTheDocument()
+    expect(screen.getAllByText(/forecast \(what is used/)).toHaveLength(1)   // defined where it is first met, not repeated
   })
 
   it('offers 50 to 95 percent in steps of five', async () => {
@@ -91,7 +118,7 @@ describe('Budgets tab: saving sends only what was changed', () => {
     const user = userEvent.setup()
     renderTab()
 
-    await user.click(screen.getByRole('radio', { name: 'Hard limit for ad-hoc shifts' }))
+    await user.click(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' }))
     await user.click(screen.getByRole('button', { name: 'Save settings' }))
 
     expect(mutate).toHaveBeenCalledTimes(1)
@@ -113,7 +140,7 @@ describe('Budgets tab: saving sends only what was changed', () => {
     const user = userEvent.setup()
     renderTab()
 
-    await user.click(screen.getByRole('radio', { name: 'Hard limit for ad-hoc shifts' }))
+    await user.click(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' }))
     await user.click(screen.getByRole('button', { name: /Warn when used reaches/ }))
     await user.click(screen.getByRole('option', { name: '95%' }))
     await user.click(screen.getByRole('button', { name: 'Save settings' }))
@@ -132,7 +159,7 @@ describe('Budgets tab: saving sends only what was changed', () => {
     const user = userEvent.setup()
     renderTab()
 
-    await user.click(screen.getByRole('radio', { name: 'Hard limit for ad-hoc shifts' }))
+    await user.click(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' }))
     await user.click(screen.getByRole('button', { name: 'Save settings' }))
 
     expect(screen.getByText('Budget settings saved.')).toBeInTheDocument()
@@ -143,11 +170,11 @@ describe('Budgets tab: saving sends only what was changed', () => {
     const user = userEvent.setup()
     renderTab()
 
-    await user.click(screen.getByRole('radio', { name: 'Hard limit for ad-hoc shifts' }))
+    await user.click(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' }))
     await user.click(screen.getByRole('button', { name: 'Save settings' }))
 
     expect(screen.getByRole('alert')).toHaveTextContent('Warn when used reaches must be from 50 to 95 percent, in steps of 5.')
-    expect(screen.getByRole('radio', { name: 'Hard limit for ad-hoc shifts' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' })).toBeChecked()
   })
 })
 
@@ -157,13 +184,13 @@ describe('Budgets tab: a pick made against a value that has since moved is dropp
     const { rerender } = renderTab()
 
     // The person picks Hard limit while the server holds Warn.
-    await user.click(screen.getByRole('radio', { name: 'Hard limit for ad-hoc shifts' }))
+    await user.click(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' }))
     expect(screen.getByRole('button', { name: 'Save settings' })).toBeEnabled()
 
     // Another admin changes the server to Hard limit with 90%: the pick (against Warn) is stale.
     useBudgetSettings.mockReturnValue(reply(saved({ mode: 'HardLimit', approachingPercent: 90 })))
     rerender(<BudgetSettingsTab />)
-    expect(screen.getByRole('radio', { name: 'Hard limit for ad-hoc shifts' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' })).toBeChecked()
     expect(screen.getByRole('button', { name: /Warn when used reaches/ })).toHaveTextContent('90%')
 
     // And back to Warn: the old pick is not revived.
