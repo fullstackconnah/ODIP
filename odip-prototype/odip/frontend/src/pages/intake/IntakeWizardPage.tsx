@@ -475,6 +475,7 @@ export default function IntakeWizardPage() {
             control={control} register={register} errors={errors}
             fundingSourceValue={fundingSourceValue}
             planTypeComplianceWarningValue={planTypeComplianceWarningValue}
+            participantId={isEditMode ? id : undefined}
           />
         )}
 
