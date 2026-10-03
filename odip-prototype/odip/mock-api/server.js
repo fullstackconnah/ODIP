@@ -98,6 +98,7 @@ const enquiryFeed = [
 // An NDIS-funded participant has a sixth gate, "Funding recorded" (budget phase 1): the real API counts it in totalSteps and adds this reason while no plan budget is recorded. The mock treats
 // everyone on the worklist as NDIS-funded, and Mei has no plan budget (funding.js holds plans for p-0002 and p-0004 only).
 const FUNDING_NOT_RECORDED_REASON = "Funding is not recorded: add the plan budget on the participant's Funding tab."
+const FUNDING_ENDED_REASON = "The plan budget has ended: record the new plan on the participant's Funding tab."
 const onboardingWorklist = [
   { participantId: 'p-0103', fullName: 'Mei Tanaka', stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 6,
     reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', FUNDING_NOT_RECORDED_REASON] },
@@ -2253,10 +2254,11 @@ const routes = [
   ['inquiries', () => enquiryFeed],
   ['inquiries/onboarding-worklist', () => onboardingWorklist],
   ['inquiries/:id/onboarding', (id) => {
-    const fundingRecorded = funding.hasPlan(id)
+    const budget = funding.budgetStatus(id)
+    const fundingRecorded = budget.recorded
     return {
       participantId: id, intakeComplete: true, profileComplete: false, serviceTypeConfirmed: false, serviceAgreementSigned: false, fundingRecorded, isReady: false,
-      reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', ...(fundingRecorded ? [] : [FUNDING_NOT_RECORDED_REASON])],
+      reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', ...(fundingRecorded ? [] : [budget.ended ? FUNDING_ENDED_REASON : FUNDING_NOT_RECORDED_REASON])],
     }
   }],
   ['participants/:id/bookings', (id) => bookings.filter((b) => b.participantId === id)],

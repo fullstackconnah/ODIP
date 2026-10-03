@@ -139,7 +139,7 @@ owner decision (collected under Open Flags at the end).
 - [ ] **FUND-03 — Participant plan budget record (budget phase 1 of 3).** Built on
   `feat/budget-record`, not yet merged or checked on the deployed stack, so not ticked.
   A Funding tab on the participant hub holding each plan's pools and funding periods
-  (Core (flexible) and stated supports, with Oassist's set-aside when there is one), a
+  (Core (flexible) and stated supports, with the organisation's set-aside when there is one), a
   "Plan budget" card on Intake and the Profile wizard, "Funding recorded" in the
   activation checklist for NDIS-funded participants (warn or enforce, as the existing
   readiness setting says), and a Settings → Budgets tab (warn or hard limit, and the
@@ -153,7 +153,7 @@ owner decision (collected under Open Flags at the end).
   dashboard tile and a Budgets list, the plan builder's budget bar on the new model, and
   the rejected-claim code. Depends on FUND-03.
 - [ ] **FUND-05 — Budget phase 3: moments and hard limits.** Roster findings, the
-  hard-limit mode for ad-hoc shifts with the Admin override and the emergency path (an
+  hard-limit mode for one-off shifts with the Admin override and the emergency path (an
   Admin reviews it afterwards), and the pattern-generate and trip-booking warnings.
   Depends on FUND-04.
 

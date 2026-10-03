@@ -1,8 +1,8 @@
 // The participant budget endpoints of the mock API (budget phase 1): api/v1/participants/{id}/funding/* and api/v1/funding/*. Kept in its own module like planPricing.js. It holds the
 // plans in memory, so a create, a replace and "apply the dates" show in the next GET, and it answers the way the real API does: 400 with every reason in errors, 409 with a `code` and `data`
 // for a stale revision or an overlapping plan. Two demo participants hold plans: p-0002 a 3-monthly one with a Core (flexible) pool and a stated pool (whose profile plan dates
-// differ, so the Funding tab offers to use the plan's), and p-0004 a plan with no funding periods. Every other participant has none ("No budget recorded"). All names and figures are
-// fictional.
+// differ, so the Funding tab offers to use the plan's), p-0004 a plan with no funding periods, and p-0003 a plan that has ENDED (the tab and the intake card say so, and the readiness
+// reason says the budget has ended). Every other participant has none ("No budget recorded"). All names and figures are fictional.
 
 const DAY = 86_400_000
 const day = (iso) => Date.parse(`${iso}T00:00:00Z`) / DAY
@@ -66,6 +66,11 @@ const plansByParticipant = {
     revision: 1, createdAt: '2025-08-02T00:00:00Z', updatedAt: '2025-08-02T00:00:00Z',
     pools: [pool({ position: 0, kind: 'CoreFlexible', paceCategory: 0, managementType: 'AgencyManaged', name: 'Core (flexible)', periods: periodsOf([['2025-07-01', '2025-12-31'], ['2026-01-01', '2026-06-30']], 30000) })],
   }],
+  'p-0003': [{
+    id: 'fplan-0003', participantId: 'p-0003', planStart: '2025-07-01', planEnd: '2026-06-30', reassessmentDate: '2026-05-01', periodLengthMonths: 6, evidence: 'PlanManager', confirmedOn: '2025-08-04', confirmedByName: 'Callum Radford',
+    revision: 1, createdAt: '2025-08-04T00:00:00Z', updatedAt: '2025-08-04T00:00:00Z',
+    pools: [pool({ position: 0, kind: 'CoreFlexible', paceCategory: 0, managementType: 'PlanManaged', name: 'Core (flexible)', periods: periodsOf([['2025-07-01', '2025-12-31'], ['2026-01-01', '2026-06-30']], 24000, 9000) })],
+  }],
   'p-0004': [{
     id: 'fplan-0002', participantId: 'p-0004', planStart: '2026-07-01', planEnd: '2027-06-30', reassessmentDate: '2027-04-15', evidence: 'PlanManager', confirmedOn: '2026-08-11', confirmedByName: 'Priya Nadarajah',
     revision: 1, createdAt: '2026-08-11T02:00:00Z', updatedAt: '2026-08-11T02:00:00Z',
@@ -76,6 +81,7 @@ const plansByParticipant = {
 /** What each participant's profile says the plan dates are (the Participant's own scalars): p-0002's differ from the recorded plan, p-0004's match. */
 const profileDates = {
   'p-0002': { start: '2026-01-01', end: '2026-12-31' },
+  'p-0003': { start: '2025-07-01', end: '2026-06-30' },
   'p-0004': { start: '2026-07-01', end: '2027-06-30' },
 }
 
@@ -225,10 +231,18 @@ function create({ respond, fundingSources }) {
     }],
   ]
 
-  /** Whether a participant has any plan recorded: the onboarding checklist's "Funding recorded" gate (the mock has no clock, so any plan counts, current or not). */
-  const hasPlan = (participantId) => plansOf(participantId).length > 0
+  /**
+   * What the onboarding checklist's "Funding recorded" gate says: recorded when a plan has not ended, else whether the plans there are have ended (the reason then says the budget has ended
+   * rather than that nothing is recorded). Today is the machine's, as in the screens.
+   */
+  const budgetStatus = (participantId) => {
+    const today = new Date().toISOString().slice(0, 10)
+    const plans = plansOf(participantId)
+    const recorded = plans.some((p) => p.planEnd >= today)
+    return { recorded, ended: !recorded && plans.length > 0 }
+  }
 
-  return { get, post, put, delete: del, hasPlan }
+  return { get, post, put, delete: del, budgetStatus }
 }
 
 module.exports = { create, PACE_CATEGORIES }
