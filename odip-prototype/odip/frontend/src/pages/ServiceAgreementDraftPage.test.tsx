@@ -1,18 +1,26 @@
-import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import * as React from 'react'
+import type { DraftBlock, PlanQuote, ServiceAgreementDraftDto } from '@/api/types'
+import { budgetOf, draftBlock, line, mondayWednesday, quote, settings as makeSettings } from '@/test/fixtures/planPricing'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
 
-const { createMutate, drafts, snapshotMutate, evidenceMutate, simulationMutate } = vi.hoisted(() => ({ createMutate: vi.fn(), drafts: vi.fn(), snapshotMutate: vi.fn(), evidenceMutate: vi.fn(), simulationMutate: vi.fn() }))
+const { createMutate, drafts, participant, snapshotMutate, evidenceMutate, simulationMutate, budget } = vi.hoisted(() => ({
+  createMutate: vi.fn(), drafts: vi.fn(), participant: vi.fn(), snapshotMutate: vi.fn(), evidenceMutate: vi.fn(), simulationMutate: vi.fn(), budget: vi.fn(),
+}))
 vi.mock('@/api/hooks', () => ({
-  useParticipant: () => ({ data: { id: 'p-1', ndisNumber: '430000001', dateOfBirth: '1990-01-02' }, isLoading: false }),
-  useServiceAgreementDrafts: () => ({ data: drafts(), isLoading: false }),
+  useParticipant: () => participant(),
+  useServiceAgreementDrafts: () => drafts(),
   useCreateServiceAgreementDraft: () => ({ mutate: createMutate, isPending: false }),
   useDownloadServiceAgreementDraftPdf: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useCreateElectronicSigningSnapshot: () => ({ mutate: snapshotMutate, isPending: false }),
   useSubmitElectronicSigningEvidence: () => ({ mutate: evidenceMutate, isPending: false }),
+  usePlanPricingSettings: () => ({ data: makeSettings() }),
+  usePlanBudget: () => budget(),
+  usePlanBlockQuote: () => ({ data: quote(), isLoading: false, isError: false, refetch: vi.fn() }),
+  useFundingSources: () => ({ data: [], isError: false }),
   useDemoJourneySimulation: () => {
     const [result, setResult] = React.useState<{ data?: { banner: string; signing: string; activation: string; booking: string; rateLabel: string }; error?: { response: { data: { message: string } } } }>({})
     return {
@@ -30,49 +38,268 @@ vi.mock('@/api/hooks', () => ({
   },
 }))
 
+const asRole = (role: string) => localStorage.setItem('odip_user', JSON.stringify({ role, id: 'u-1' }))
+
+/** A revision as the server sends it. */
+const draft = (changes: Partial<ServiceAgreementDraftDto> = {}): ServiceAgreementDraftDto => ({
+  id: 'd-1', participantId: 'p-1', version: 2, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27', templateDocxSha256: 'docx-hash', templatePdfSha256: 'pdf-hash',
+  state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', blocks: [], lines: [], ...changes,
+})
+
+const legacyLine = { serviceType: 'Daily support', itemCode: 'configured-code', hours: 2, unitPrice: 72.34, catalogueVersion: '2026-07', catalogueEffectiveFrom: '2026-07-01', catalogueEffectiveTo: null, unit: 'H', total: 144.68, occurrences: 0, flags: 'None' }
+
 function renderPage() {
-  drafts.mockReturnValue([])
-  return render(<MemoryRouter initialEntries={['/participants/p-1/agreement-draft']}><Routes><Route path="/participants/:id/agreement-draft" element={<ServiceAgreementDraftPage />} /></Routes></MemoryRouter>)
+  const router = createMemoryRouter([{ path: '/participants/:id/agreement-draft', element: <ServiceAgreementDraftPage /> }], { initialEntries: ['/participants/p-1/agreement-draft'] })
+  return render(<RouterProvider router={router} />)
 }
 
-describe('ServiceAgreementDraftPage', () => {
-  it('submits only editable draft inputs and leaves canonical participant identifiers out of the payload', async () => {
+beforeEach(() => {
+  asRole('Admin')
+  drafts.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
+  participant.mockReturnValue({ data: { id: 'p-1', fullName: 'Marcus Tran', ndisNumber: '430000001', dateOfBirth: '1990-01-02' }, isLoading: false, isError: false, refetch: vi.fn() })
+  budget.mockReturnValue({ data: budgetOf('b1'), isError: false, isFetching: false, error: null, refetch: vi.fn() })
+  createMutate.mockReset(); snapshotMutate.mockReset(); evidenceMutate.mockReset(); simulationMutate.mockReset()
+})
+afterEach(() => localStorage.clear())
+
+async function fillDetails(representative = 'A. Representative') {
+  const user = userEvent.setup()
+  fireEvent.change(screen.getByLabelText('Plan start'), { target: { value: '2026-07-01' } })
+  fireEvent.change(screen.getByLabelText('Plan end'), { target: { value: '2027-06-30' } })
+  fireEvent.change(screen.getByLabelText('Agreement start'), { target: { value: '2026-10-01' } })
+  fireEvent.change(screen.getByLabelText('Agreement end'), { target: { value: '2027-06-30' } })
+  await user.type(screen.getByLabelText('Representative'), representative)
+  return user
+}
+
+/** Template, then Days and times, Requirements and Travel, then Review, then Add to plan. */
+async function addBlockFromTemplate(user: ReturnType<typeof userEvent.setup>, template: RegExp = /Community access weekdays/) {
+  await user.click(screen.getByRole('button', { name: template }))
+  await user.click(screen.getByRole('button', { name: 'Next' }))
+  await user.click(screen.getByRole('button', { name: 'Next' }))
+  await user.click(screen.getByRole('button', { name: 'Next' }))
+  await user.click(screen.getByRole('button', { name: 'Add to plan' }))
+}
+
+describe('ServiceAgreementDraftPage: saving a plan built from blocks', () => {
+  it('sends the blocks and the details and nothing else: no price, no item code, no hand-typed lines', async () => {
+    renderPage()
+    const user = await fillDetails()
+    await addBlockFromTemplate(user)
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    expect(createMutate).toHaveBeenCalledTimes(1)
+    const [request, options] = createMutate.mock.calls[0]
+    expect(request).toEqual({
+      participantId: 'p-1',
+      data: {
+        planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-10-01', agreementEndDate: '2027-06-30', state: 'NSW', serviceTypes: ['Community access'], representative: 'A. Representative',
+        blocks: [{
+          block: {
+            id: 'b1', supportType: 'CommunityAccess', intensity: 'Standard', days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], start: '09:00:00', end: '13:00:00', workers: 1,
+            participantsPresent: 1, headcountChanges: [], setting: 'Community', location: { state: 'NSW', zone: 'National' }, workerMaySleep: false, sleepoverActiveHours: 0, onPublicHoliday: 'Review',
+          },
+          requirements: { workerGender: 'NoPreference', driver: false, skills: [] },
+        }],
+      },
+    })
+    const body = JSON.stringify(request)
+    expect(body).not.toMatch(/itemCode|unitPrice|"lines"|price/i)
+    expect(options).toEqual(expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }))
+  })
+
+  it('stamps every block with the agreement\'s state and price zone, whatever it carried, and normalises what the steps hid', async () => {
+    renderPage()
+    const user = await fillDetails()
+    fireEvent.change(screen.getByLabelText('State'), { target: { value: 'VIC' } })
+    fireEvent.change(screen.getByLabelText('Price zone'), { target: { value: 'Remote' } })
+    await addBlockFromTemplate(user, /Saturday group outing/)
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    const block = createMutate.mock.calls[0][0].data.blocks[0].block
+    expect(block.location).toEqual({ state: 'VIC', zone: 'Remote' })
+    expect(createMutate.mock.calls[0][0].data).toMatchObject({ state: 'VIC', serviceTypes: ['Group activity'] })
+  })
+
+  it('says it was saved as the next version, and then there is nothing to lose', async () => {
+    createMutate.mockImplementation((_request, options) => options.onSuccess({ version: 3 }))
+    renderPage()
+    const user = await fillDetails()
+    await addBlockFromTemplate(user)
+    expect(screen.getByRole('status', { name: '' })).toHaveTextContent('You have unsaved changes.')
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    expect(await screen.findByText(/Saved as version 3\./)).toBeInTheDocument()
+    expect(screen.getByText(/Saved as version 3\./)).toHaveTextContent('Every save is a new version: earlier versions never change.')
+    expect(screen.queryByText(/You have unsaved changes/)).not.toBeInTheDocument()
+  })
+
+  it('shows every reason the server gave when it refuses, and keeps the plan and what was typed', async () => {
+    createMutate.mockImplementation((_request, options) => options.onError({ response: { status: 400, data: { errors: ["Block 'b1': Community access needs registration group 0125, which the provider does not hold.", 'Block \'b1\': workers must be between 1 and 10.'] } } }))
+    renderPage()
+    const user = await fillDetails('Keep me')
+    await addBlockFromTemplate(user)
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    const alert = await screen.findByText('The draft was not saved')
+    expect(alert.closest('[role="alert"]')).toHaveTextContent('Community access needs registration group 0125, which the provider does not hold.')
+    expect(alert.closest('[role="alert"]')).toHaveTextContent('workers must be between 1 and 10.')
+    expect(screen.getByLabelText('Representative')).toHaveValue('Keep me')
+    expect(screen.getByLabelText('Agreement start')).toHaveValue('2026-10-01')
+    expect(screen.getByText('Mon–Fri · 09:00–13:00 · Community access 1:1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeEnabled()
+  })
+
+  it('says a busy server and a refused role in plain words, and keeps the plan', async () => {
+    createMutate.mockImplementationOnce((_request, options) => options.onError({ response: { status: 429, data: {} } }))
+    renderPage()
+    const user = await fillDetails()
+    await addBlockFromTemplate(user)
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(await screen.findByText('The server is busy')).toBeInTheDocument()
+    expect(screen.getByText(/Nothing you entered is lost/)).toBeInTheDocument()
+
+    createMutate.mockImplementationOnce((_request, options) => options.onError({ response: { status: 403, data: {} } }))
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(await screen.findByText('You cannot save this draft')).toBeInTheDocument()
+    expect(screen.queryByText('The server is busy')).not.toBeInTheDocument()
+  })
+
+  it('does not send a plan with no dates, says so, and sends nothing until they are entered', async () => {
+    renderPage()
     const user = userEvent.setup()
-    renderPage()
-    fireEvent.change(screen.getByLabelText('Plan start'), { target: { value: '2026-07-01' } })
-    fireEvent.change(screen.getByLabelText('Plan end'), { target: { value: '2027-06-30' } })
-    fireEvent.change(screen.getByLabelText('Agreement start'), { target: { value: '2026-07-01' } })
-    fireEvent.change(screen.getByLabelText('Agreement end'), { target: { value: '2027-06-30' } })
-    await user.type(screen.getByLabelText('Representative'), 'A. Representative')
-    await user.type(screen.getByLabelText('Support type 1'), 'Daily support')
-    await user.type(screen.getByLabelText('Catalogue code 1'), 'configured-code')
-    await user.type(screen.getByLabelText('Hours 1'), '2.5')
-    await user.click(screen.getByRole('button', { name: 'Create priced draft' }))
+    await user.click(screen.getByRole('button', { name: /Community access weekdays/ }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('Enter the agreement dates to price this block')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add to plan' }))
 
-    expect(createMutate).toHaveBeenCalledWith({ participantId: 'p-1', data: {
-      planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30',
-      state: 'NSW', serviceTypes: ['Daily support'], representative: 'A. Representative', lines: [{ serviceType: 'Daily support', itemCode: 'configured-code', hours: 2.5 }],
-    } }, expect.objectContaining({ onError: expect.any(Function) }))
-    expect(screen.getByText(/NDIS number: Recorded on participant/)).toBeInTheDocument()
-    expect(screen.getByText(/a later change to the record does not change an existing draft/i)).toBeInTheDocument()
-    expect(screen.queryByDisplayValue('430000001')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    expect(createMutate).not.toHaveBeenCalled()
+    expect(screen.getByText('Fix these before saving')).toBeInTheDocument()
+    expect(screen.getByText('Enter the plan and agreement dates.')).toBeInTheDocument()
   })
 
-  // L1-11: the banner said the identifiers "are not copied into this draft", but the draft stores a snapshot of the NDIS number and the date of
-  // birth and its PDF prints both, readable by every authenticated role. The banner now says what happens.
-  it('says the NDIS number and date of birth ARE snapshotted into the draft and printed on its PDF, not that they are not copied', () => {
+  it('does not send an agreement that ends before it starts', async () => {
     renderPage()
+    const user = await fillDetails()
+    await addBlockFromTemplate(user)
+    fireEvent.change(screen.getByLabelText('Agreement end'), { target: { value: '2026-09-01' } })
 
-    const banner = screen.getByText(/Participant identifiers/).closest('p') as HTMLElement
-    expect(banner).toHaveTextContent(/snapshot/i)
-    expect(banner).toHaveTextContent(/PDF/)
-    expect(banner).not.toHaveTextContent(/not copied/i)
-    expect(screen.queryByText(/not copied into this draft/i)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    expect(createMutate).not.toHaveBeenCalled()
+    expect(screen.getByText('An end date cannot come before its start date.')).toBeInTheDocument()
   })
 
-  it('shows the selected unapproved source version and server-priced line without calling it signed', () => {
-    drafts.mockReturnValue([{ id: 'd-1', version: 2, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27', templateDocxSha256: 'docx-hash', templatePdfSha256: 'pdf-hash', state: 'NSW', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', lines: [{ serviceType: 'Daily support', itemCode: 'configured-code', hours: 2, unitPrice: 72.34, catalogueVersion: '2026-07', catalogueEffectiveFrom: '2026-07-01', catalogueEffectiveTo: null }] }])
-    render(<MemoryRouter initialEntries={['/participants/p-1/agreement-draft']}><Routes><Route path="/participants/:id/agreement-draft" element={<ServiceAgreementDraftPage />} /></Routes></MemoryRouter>)
+  it('has nothing to save until there is a block, and starts from the templates', async () => {
+    renderPage()
+    await fillDetails()
+
+    expect(screen.getByRole('heading', { name: 'Start the week from a template' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument()
+    expect(createMutate).not.toHaveBeenCalled()
+  })
+
+  it('stays in the plan overview after a block is added, with the figures beside it', async () => {
+    renderPage()
+    const user = await fillDetails()
+    await addBlockFromTemplate(user)
+
+    expect(screen.getByRole('heading', { name: 'Support plan' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Running budget' })).toHaveTextContent('$30,610.28'))
+    expect(screen.getByRole('button', { name: 'Add block' })).toBeInTheDocument()
+  })
+})
+
+describe('ServiceAgreementDraftPage: starting from the newest revision', () => {
+  const block: DraftBlock = draftBlock(mondayWednesday('b1', { location: { state: 'QLD', zone: 'Remote' }, transport: { km: 20, vehicle: 'Standard', tolls: 0, parking: 0 } }), { workerGender: 'Female', driver: true, skills: ['FirstAid'] })
+  const pricing: PlanQuote = quote({ totals: { ...quote().totals, amount: 30610.28, holidayOccurrences: 1, reviewLines: 2, provisionalLines: 5 }, issues: [{ blockId: 'b1', reason: 'NoItem', message: "Block 'b1': no item for Weekday Night.", count: 3, firstDate: '2026-10-13' }] })
+  const priced = draft({ version: 4, state: 'QLD', representative: 'R. Tran', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-10-01', agreementEndDate: '2027-03-31', blocks: [block], pricing,
+    lines: [{ ...legacyLine, serviceType: 'Community access', itemCode: '04_104_0125_6_1', hours: 8, unitPrice: 73.58, total: 588.64, blockId: 'b1', band: 'Weekday Daytime', occurrences: 2, flags: 'None', catalogueVersion: '2026-27' }] })
+
+  it('loads its details and blocks into the builder, so a new version is a change to the last one', () => {
+    drafts.mockReturnValue({ data: [priced, draft({ version: 3 })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByLabelText('State')).toHaveValue('QLD')
+    expect(screen.getByLabelText('Price zone')).toHaveValue('Remote')
+    expect(screen.getByLabelText('Agreement start')).toHaveValue('2026-10-01')
+    expect(screen.getByLabelText('Agreement end')).toHaveValue('2027-03-31')
+    expect(screen.getByLabelText('Representative')).toHaveValue('R. Tran')
+    expect(within(screen.getByRole('region', { name: 'Support plan' })).getByText('Mon, Wed · 09:00–13:00 · Community access 1:1 · +20 km transport')).toBeInTheDocument()
+    expect(screen.getByText('Asks for Female worker, driver, first aid')).toBeInTheDocument()
+  })
+
+  it('sends the loaded plan back unchanged as the next version, with the requirements it had', async () => {
+    drafts.mockReturnValue({ data: [priced], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    const data = createMutate.mock.calls[0][0].data
+    expect(data).toMatchObject({ state: 'QLD', planStartDate: '2026-07-01', agreementEndDate: '2027-03-31', representative: 'R. Tran', serviceTypes: ['Community access'] })
+    expect(data.blocks).toHaveLength(1)
+    expect(data.blocks[0].block.location).toEqual({ state: 'QLD', zone: 'Remote' })
+    expect(data.blocks[0].requirements).toEqual({ workerGender: 'Female', driver: true, skills: ['FirstAid'] })
+  })
+
+  it('shows each saved version as it was saved: its blocks, its lines with totals and flags, and what a person still had to look at', () => {
+    drafts.mockReturnValue({ data: [priced], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    const card = screen.getByText('Version 4').closest('article') as HTMLElement
+    expect(within(card).getByText('Blocks in this version')).toBeInTheDocument()
+    expect(within(card).getByText(/Mon, Wed · 09:00–13:00/)).toBeInTheDocument()
+    expect(within(card).getByText('04_104_0125_6_1')).toBeInTheDocument()
+    expect(within(card).getAllByText('$588.64')).toHaveLength(2)    // the line's total, and the total of the lines
+    expect(within(card).getByText('8 h')).toBeInTheDocument()
+    expect(within(card).getByText(/2 lines to review, 5 provisional/)).toBeInTheDocument()
+    expect(within(card).getByText(/Part of this block has no price item: Block 1: no item for Weekday Night\. \(from Tue 13 Oct 2026\)/)).toBeInTheDocument()
+    expect(within(card).getByText(/over the agreement, including 1 public holiday shift/)).toBeInTheDocument()
+    expect(within(card).queryByText('Typed by hand')).not.toBeInTheDocument()
+  })
+
+  it('is not dirty until the plan changes, and says so once it has', async () => {
+    drafts.mockReturnValue({ data: [priced], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    const user = userEvent.setup()
+    expect(screen.queryByText(/You have unsaved changes/)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Remove block 1' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Remove block' }))
+
+    expect(screen.getByRole('heading', { name: 'Start the week from a template' })).toBeInTheDocument()
+  })
+})
+
+describe('ServiceAgreementDraftPage: drafts typed by hand before the builder', () => {
+  it('shows their lines as they were saved, read-only, with a note to rebuild them from blocks, and starts the builder empty', () => {
+    drafts.mockReturnValue({ data: [draft({ version: 1, lines: [legacyLine] })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    const card = screen.getByText('Version 1').closest('article') as HTMLElement
+    expect(within(card).getByText('Typed by hand')).toBeInTheDocument()
+    expect(within(card).getByText(/cannot be changed\. To rebuild them from support blocks, build the plan above and save it as a new version\./)).toBeInTheDocument()
+    expect(within(card).getByText('Daily support')).toBeInTheDocument()
+    expect(within(card).getByText('$72.34')).toBeInTheDocument()
+    expect(within(card).getByText('$144.68')).toBeInTheDocument()
+    expect(within(card).queryByText('Blocks in this version')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Start the week from a template' })).toBeInTheDocument()
+  })
+
+  it('shows the selected unapproved source version and the server-priced line without calling it signed', () => {
+    drafts.mockReturnValue({ data: [draft({ lines: [legacyLine] })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
     expect(screen.getByText('$72.34')).toBeInTheDocument()
     expect(screen.getByText(/2026-07 · effective 2026-07-01/)).toBeInTheDocument()
     expect(screen.getByText(/not signed and not billing authority/i)).toBeInTheDocument()
@@ -84,21 +311,18 @@ describe('ServiceAgreementDraftPage', () => {
   })
 
   it('keeps the demo simulation collapsed inside a details element, closed by default', () => {
-    drafts.mockReturnValue([{ id: 'd-1', version: 2, status: 'UnapprovedDraft', templateVersion: 'v', templateDocxSha256: 'a', templatePdfSha256: 'b', state: 'NSW', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', lines: [] }])
-    render(<MemoryRouter initialEntries={['/participants/p-1/agreement-draft']}><Routes><Route path="/participants/:id/agreement-draft" element={<ServiceAgreementDraftPage />} /></Routes></MemoryRouter>)
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
     const summary = screen.getByText('Demo-only simulation')
-    const details = summary.closest('details')
-    expect(details).not.toBeNull()
-    expect(details).not.toHaveAttribute('open')
+    expect(summary.closest('details')).not.toBeNull()
+    expect(summary.closest('details')).not.toHaveAttribute('open')
     expect(summary.tagName).toBe('SUMMARY')
   })
 
   it('attributes demo simulation success and rejection to their respective draft cards', () => {
-    drafts.mockReturnValue([
-      { id: 'd-old', version: 1, status: 'UnapprovedDraft', templateVersion: 'draft-v1', templateDocxSha256: 'old-docx', templatePdfSha256: 'old-pdf', state: 'NSW', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', lines: [] },
-      { id: 'd-new', version: 2, status: 'UnapprovedDraft', templateVersion: 'draft-v2', templateDocxSha256: 'new-docx', templatePdfSha256: 'new-pdf', state: 'NSW', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', lines: [] },
-    ])
-    render(<MemoryRouter initialEntries={['/participants/p-1/agreement-draft']}><Routes><Route path="/participants/:id/agreement-draft" element={<ServiceAgreementDraftPage />} /></Routes></MemoryRouter>)
+    drafts.mockReturnValue({ data: [draft({ id: 'd-old', version: 1, templateVersion: 'draft-v1' }), draft({ id: 'd-new', version: 2, templateVersion: 'draft-v2' })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
     const oldCard = screen.getByLabelText('Demo-only journey simulation for draft d-old')
     const newCard = screen.getByLabelText('Demo-only journey simulation for draft d-new')
 
@@ -111,5 +335,77 @@ describe('ServiceAgreementDraftPage', () => {
     expect(oldCard).not.toHaveTextContent('Simulation complete for newest')
     expect(simulationMutate).toHaveBeenCalledWith({ participantId: 'p-1', draftId: 'd-old' })
     expect(simulationMutate).toHaveBeenCalledWith({ participantId: 'p-1', draftId: 'd-new' })
+  })
+})
+
+describe('ServiceAgreementDraftPage: what is on the page around the plan', () => {
+  it('says the NDIS number and date of birth ARE snapshotted into the draft and printed on its PDF, not that they are not copied', () => {
+    renderPage()
+
+    const banner = screen.getByText(/Participant identifiers/).closest('p') as HTMLElement
+    expect(banner).toHaveTextContent(/snapshot/i)
+    expect(banner).toHaveTextContent(/PDF/)
+    expect(banner).not.toHaveTextContent(/not copied/i)
+    expect(screen.getByText(/NDIS number: Recorded on participant/)).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('430000001')).not.toBeInTheDocument()
+  })
+
+  it('shows a loading page, a failure with a way to try again, and a missing participant, as the other record pages do', async () => {
+    const user = userEvent.setup()
+    participant.mockReturnValue({ data: undefined, isLoading: true })
+    const { unmount } = renderPage()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading service agreement draft…')
+    unmount()
+
+    const refetch = vi.fn()
+    participant.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 500 } }, refetch })
+    drafts.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch })
+    const second = renderPage()
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this service agreement drafts")
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalled()
+    second.unmount()
+
+    participant.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch })
+    renderPage()
+    expect(screen.getByText('Participant not found')).toBeInTheDocument()
+  })
+
+  it('lets a person who can only read the plan see it, with nothing that changes it and no save', () => {
+    asRole('ReadOnly')
+    const block: DraftBlock = draftBlock(mondayWednesday('b1'))
+    drafts.mockReturnValue({ data: [draft({ blocks: [block], lines: [] })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(within(screen.getByRole('region', { name: 'Support plan' })).getByText('Mon, Wed · 09:00–13:00 · Community access 1:1')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add block' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Edit times/ })).not.toBeInTheDocument()
+    expect(screen.getByText('You can read this plan; Admins and Coordinators change it.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Representative').closest('fieldset')).toBeDisabled()
+  })
+
+  it('has a Draft versions section that says so when there are none', () => {
+    renderPage()
+    expect(screen.getByText('No draft versions yet.')).toBeInTheDocument()
+  })
+
+  it('uses one h1 for the screen and a heading for each of its three sections', async () => {
+    renderPage()
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Service agreement draft' })).toBeInTheDocument())
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent)).toEqual(['Draft details', 'Support plan', 'Draft versions'])
+  })
+
+  it('draws the lines of a saved version with the unit its quantity is in', () => {
+    const sleepover = { ...legacyLine, serviceType: 'Personal care', itemCode: '01_010_0107_1_1', hours: 5, unitPrice: 281.97, total: 1409.85, unit: 'E', blockId: 'b1', band: 'Sleepover', occurrences: 5, flags: 'Provisional' }
+    drafts.mockReturnValue({ data: [draft({ blocks: [draftBlock(mondayWednesday('b1'))], lines: [sleepover] })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    const card = screen.getByText('Version 2').closest('article') as HTMLElement
+    expect(within(card).getByText('5 each')).toBeInTheDocument()
+    expect(within(card).getByText('Personal care, Sleepover')).toBeInTheDocument()
+    expect(within(card).getByText('Provisional')).toBeInTheDocument()
+    expect(line().itemCode).toBe('04_104_0125_6_1')   // the fixtures agree with the engine's brief example
   })
 })

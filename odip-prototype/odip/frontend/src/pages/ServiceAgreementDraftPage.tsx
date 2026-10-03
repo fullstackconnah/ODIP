@@ -1,56 +1,43 @@
 import { useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Download, FileText, Loader2, Plus, Trash2 } from 'lucide-react'
-import { useCreateServiceAgreementDraft, useDemoJourneySimulation, useDownloadServiceAgreementDraftPdf, useParticipant, useServiceAgreementDrafts } from '@/api/hooks'
-import type { AgreementState, CreateServiceAgreementDraftDto } from '@/api/types'
-import { Callout } from '@/components/Callout'
+import { FileText, Loader2 } from 'lucide-react'
+import { useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useParticipant, useServiceAgreementDrafts } from '@/api/hooks'
+import type { AgreementState, CreateServiceAgreementDraftDto, DraftBlock, PlanPriceZone } from '@/api/types'
 import { BackButton } from '@/components/BackButton'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { FormField } from '@/components/FormField'
 import { PageHeader } from '@/components/PageHeader'
-import { StatusBadge } from '@/components/StatusBadge'
-import { formatCurrency } from '@/lib/utils'
+import { PageState } from '@/components/PageState'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { formGrid, span } from '@/lib/formGrid'
-import ElectronicSigningEvidencePanel from './ElectronicSigningEvidencePanel'
+import { isNotFoundError } from '@/lib/httpStatus'
+import { usePermissions } from '@/lib/permissions'
+import { SUPPORT_LABEL, blockProblems, normaliseBlock, stampLocation } from '@/lib/planBlocks'
+import { describeSaveError, type SaveFailure } from '@/lib/planQuote'
+import { PlanBuilder } from './plan-builder/PlanBuilder'
+import { RevisionCard } from './plan-builder/RevisionCard'
 
 const states: AgreementState[] = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA']
-type DraftLineForm = { serviceType: string; itemCode: string; hours: string }
+const ZONES: { value: PlanPriceZone; label: string }[] = [
+  { value: 'National', label: 'National (most places)' },
+  { value: 'Remote', label: 'Remote' },
+  { value: 'VeryRemote', label: 'Very remote' },
+]
 
-// Human labels for the small set of statuses this draft workflow currently produces. StatusBadge
-// falls back to its own default styling for a key not present in its colour map (neither of these
-// is), which is acceptable here — see report.
-const DRAFT_STATUS_LABELS: Record<string, string> = {
-  UnapprovedDraft: 'Unapproved draft',
-  ApprovedForElectronicSigning: 'Approved for e-signing',
+type Details = {
+  state: AgreementState
+  zone: PlanPriceZone
+  planStartDate: string
+  planEndDate: string
+  agreementStartDate: string
+  agreementEndDate: string
+  representative: string
 }
 
-function draftStatusLabel(status: string) {
-  return DRAFT_STATUS_LABELS[status] ?? status
-}
+const EMPTY_DETAILS: Details = { state: 'NSW', zone: 'National', planStartDate: '', planEndDate: '', agreementStartDate: '', agreementEndDate: '', representative: '' }
 
-function messageFor(error: unknown) {
-  if (typeof error === 'object' && error && 'response' in error) {
-    const data = (error as { response?: { data?: { message?: string; errors?: string[] } } }).response?.data
-    return data?.errors?.[0] || data?.message || 'The server could not price this draft. Check the state, effective dates and configured catalogue code.'
-  }
-  return 'The server could not price this draft. Check the state, effective dates and configured catalogue code.'
-}
-
-/** Each card owns its mutation state so results cannot cross draft versions. */
-function DraftSimulationPanel({ participantId, draftId }: { participantId: string; draftId: string }) {
-  const simulation = useDemoJourneySimulation()
-
-  return <details className="rounded-lg border-2 border-[var(--color-warning)] bg-[var(--color-warning-container)]/20" aria-label={`Demo-only journey simulation for draft ${draftId}`}>
-    <summary className="min-h-[44px] flex items-center px-4 py-2 cursor-pointer select-none font-semibold text-[var(--color-on-warning-container)]">Demo-only simulation</summary>
-    <div className="px-4 pb-4 space-y-3">
-      <h3 className="font-semibold">SIMULATED — NOT A LEGAL AGREEMENT / NO CLAIM</h3>
-      <p className="text-sm">Demo-only, dev-auth walkthrough: simulated signing → activation → booking. It creates no signature evidence, participant activation, booking, billable event, invoice, or claim.</p>
-      <button type="button" onClick={() => simulation.mutate({ participantId, draftId })} disabled={simulation.isPending} className="min-h-[44px] rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-[var(--control-h)] text-sm font-medium disabled:opacity-50">{simulation.isPending ? 'Running simulation…' : 'Run Demo-only simulation'}</button>
-      {simulation.data && <div role="status" className="rounded border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-sm space-y-1"><strong>{simulation.data.banner}</strong><p>{simulation.data.signing}</p><p>{simulation.data.activation}</p><p>{simulation.data.booking}</p><p className="font-medium">{simulation.data.rateLabel}</p></div>}
-      {simulation.isError && <Callout tone="error">{messageFor(simulation.error)}</Callout>}
-    </div>
-  </details>
-}
+const snapshotOf = (details: Details, plan: readonly DraftBlock[]) => JSON.stringify({ details, plan })
 
 export default function ServiceAgreementDraftPage() {
   const { id: participantId } = useParams<{ id: string }>()
@@ -58,39 +45,97 @@ export default function ServiceAgreementDraftPage() {
   const drafts = useServiceAgreementDrafts(participantId)
   const create = useCreateServiceAgreementDraft()
   const download = useDownloadServiceAgreementDraftPdf()
-  const [error, setError] = useState<string | null>(null)
-  const [state, setState] = useState<AgreementState>('NSW')
-  const [planStartDate, setPlanStartDate] = useState('')
-  const [planEndDate, setPlanEndDate] = useState('')
-  const [agreementStartDate, setAgreementStartDate] = useState('')
-  const [agreementEndDate, setAgreementEndDate] = useState('')
-  const [representative, setRepresentative] = useState('')
-  const [lines, setLines] = useState<DraftLineForm[]>([{ serviceType: '', itemCode: '', hours: '' }])
+  const { canManageParticipantLifecycle: canEdit } = usePermissions()
 
+  // The working copy: the agreement's details and the blocks of the plan. It starts as the newest revision's (a revision is never edited: saving makes the next one) and is
+  // saved as a whole. `baseline` is what it looked like when it was loaded or last saved, to know whether there is anything to lose.
+  const [details, setDetails] = useState<Details>(EMPTY_DETAILS)
+  const [plan, setPlan] = useState<DraftBlock[]>([])
+  const [baseline, setBaseline] = useState<string | null>(null)
+  const [failure, setFailure] = useState<SaveFailure | null>(null)
+  const [problems, setProblems] = useState<string[]>([])
+  const [savedVersion, setSavedVersion] = useState<number | null>(null)
+
+  const loaded = drafts.data !== undefined
+  if (loaded && baseline === null) {
+    const latest = drafts.data?.[0]
+    if (latest && latest.blocks.length > 0) {
+      const next: Details = {
+        state: latest.state, zone: latest.blocks[0].block.location.zone, planStartDate: latest.planStartDate, planEndDate: latest.planEndDate,
+        agreementStartDate: latest.agreementStartDate, agreementEndDate: latest.agreementEndDate, representative: latest.representative ?? '',
+      }
+      setDetails(next)
+      setPlan(latest.blocks)
+      setBaseline(snapshotOf(next, latest.blocks))
+    } else {
+      setBaseline(snapshotOf(EMPTY_DETAILS, []))
+    }
+  }
+
+  // Dates typed over an empty plan are nothing to lose: there is nothing to save until there is a block.
+  const dirty = baseline !== null && plan.length > 0 && snapshotOf(details, plan) !== baseline
+  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(dirty)
   const canonicalIdentifiers = useMemo(() => ({
     ndis: participant.data?.ndisNumber ? 'Recorded on participant' : 'Not recorded on participant',
     dob: participant.data?.dateOfBirth || 'Not recorded on participant',
   }), [participant.data])
 
-  if (participant.isLoading || drafts.isLoading) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
-  if (participant.isError || drafts.isError) return <Callout tone="error">Could not load this participant's service agreement drafts. Please try again.</Callout>
-  if (!participantId || !participant.data) return <div className="text-center py-12">Participant not found</div>
+  if (participant.isLoading || drafts.isLoading) return <PageState kind="loading" noun="service agreement draft" />
+  if (participant.isError || drafts.isError) {
+    return isNotFoundError(participant.error)
+      ? <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
+      : <PageState kind="error" noun="service agreement drafts" onRetry={() => { void participant.refetch(); void drafts.refetch() }} />
+  }
+  if (!participantId || !participant.data) return <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
 
-  const updateLine = (index: number, patch: Partial<DraftLineForm>) => setLines(current => current.map((line, i) => i === index ? { ...line, ...patch } : line))
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    setError(null)
-    const parsedLines = lines.map(line => ({ serviceType: line.serviceType.trim(), itemCode: line.itemCode.trim(), hours: Number(line.hours) }))
-    if (!planStartDate || !planEndDate || !agreementStartDate || !agreementEndDate || parsedLines.some(line => !line.serviceType || !line.itemCode || !Number.isFinite(line.hours) || line.hours <= 0)) {
-      setError('Enter plan and agreement dates, plus a support type, configured catalogue code and positive hours for every line.')
-      return
+  const edit = (patch: Partial<Details>) => { setDetails(current => ({ ...current, ...patch })); setSavedVersion(null) }
+  const changePlan = (next: DraftBlock[]) => { setPlan(next); setSavedVersion(null); setProblems([]) }
+
+  const save = () => {
+    setFailure(null)
+    setSavedVersion(null)
+    const found: string[] = []
+    if (!details.planStartDate || !details.planEndDate || !details.agreementStartDate || !details.agreementEndDate) found.push('Enter the plan and agreement dates.')
+    else if (details.planEndDate < details.planStartDate || details.agreementEndDate < details.agreementStartDate) found.push('An end date cannot come before its start date.')
+    if (plan.length === 0) found.push('Add at least one support block.')
+    plan.forEach((entry, index) => blockProblems(entry.block).forEach(problem => found.push(`Block ${index + 1}: ${problem.message}`)))
+    setProblems(found)
+    if (found.length > 0) return
+
+    const blocks = plan.map(entry => ({ block: stampLocation(normaliseBlock(entry.block), details.state, details.zone), requirements: entry.requirements }))
+    const data: CreateServiceAgreementDraftDto = {
+      planStartDate: details.planStartDate, planEndDate: details.planEndDate, agreementStartDate: details.agreementStartDate, agreementEndDate: details.agreementEndDate,
+      state: details.state, serviceTypes: [...new Set(blocks.map(entry => SUPPORT_LABEL[entry.block.supportType]))], representative: details.representative.trim() || undefined, blocks,
     }
-    const serviceTypes = [...new Set(parsedLines.map(line => line.serviceType))]
-    const data: CreateServiceAgreementDraftDto = { planStartDate, planEndDate, agreementStartDate, agreementEndDate, state, serviceTypes, representative: representative.trim() || undefined, lines: parsedLines }
-    create.mutate({ participantId, data }, { onError: failure => setError(messageFor(failure)) })
+    create.mutate({ participantId, data }, {
+      onSuccess: saved => { setPlan(blocks); setBaseline(snapshotOf(details, blocks)); setSavedVersion(saved?.version ?? null) },
+      onError: error => setFailure(describeSaveError(error)),
+    })
   }
 
+  const saveRow = canEdit ? (
+    <div className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-3">
+      {problems.length > 0 && (
+        <Callout tone="warning" title="Fix these before saving">
+          <ul className="list-disc pl-5">{problems.map(problem => <li key={problem}>{problem}</li>)}</ul>
+        </Callout>
+      )}
+      {failure && (
+        <Callout tone="error" title={failure.title}>
+          <ul className="list-disc pl-5">{failure.messages.map(message => <li key={message}>{message}</li>)}</ul>
+        </Callout>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={save} disabled={create.isPending}>{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}{create.isPending ? 'Saving draft…' : 'Save draft'}</Button>
+        <p role="status" className="text-sm text-[var(--color-muted-foreground)]">
+          {savedVersion !== null ? `Saved as version ${savedVersion}. ` : dirty ? 'You have unsaved changes. ' : ''}Every save is a new version: earlier versions never change.
+        </p>
+      </div>
+    </div>
+  ) : null
+
   return <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-6xl">
+    {unsavedChangesDialog}
     <div className="flex items-start gap-4">
       <BackButton to={`/participants/${participantId}`} label="participant" variant="icon" history={false} className="mt-1" />
       <div className="flex-1">
@@ -103,59 +148,53 @@ export default function ServiceAgreementDraftPage() {
       <p><strong>Participant identifiers come from the participant record.</strong> NDIS number: {canonicalIdentifiers.ndis}; date of birth: {canonicalIdentifiers.dob}. <Link className="underline font-medium" to={`/participants/${participantId}/profile`}>View or edit participant details</Link>. A snapshot of both is stored with this draft and printed on its PDF, which any signed-in user can open; a later change to the record does not change an existing draft.</p>
     </div>
 
-    <form onSubmit={submit} className="flex flex-col gap-[var(--section-gap)]">
-      <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] flex flex-col gap-[var(--section-gap)]">
-        <h2 className="font-semibold">Draft details</h2>
+    <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] flex flex-col gap-[var(--section-gap)]">
+      <h2 className="font-semibold">Draft details</h2>
+      <fieldset disabled={!canEdit} className="min-w-0">
         <div className={formGrid}>
           <FormField label="State" className={span.short}>
-            <select value={state} onChange={e => setState(e.target.value as AgreementState)}>{states.map(value => <option key={value} value={value}>{value}</option>)}</select>
+            <select value={details.state} onChange={e => edit({ state: e.target.value as AgreementState })}>{states.map(value => <option key={value} value={value}>{value}</option>)}</select>
+          </FormField>
+          <FormField label="Price zone" className={span.medium} hint="Where the supports are delivered. Remote and very remote add the NDIS loading.">
+            <select value={details.zone} onChange={e => edit({ zone: e.target.value as PlanPriceZone })}>{ZONES.map(zone => <option key={zone.value} value={zone.value}>{zone.label}</option>)}</select>
           </FormField>
           <FormField label="Plan start" className={span.date}>
-            <input type="date" value={planStartDate} onChange={e => setPlanStartDate(e.target.value)} />
+            <input type="date" value={details.planStartDate} onChange={e => edit({ planStartDate: e.target.value })} />
           </FormField>
           <FormField label="Plan end" className={span.date}>
-            <input type="date" value={planEndDate} onChange={e => setPlanEndDate(e.target.value)} />
+            <input type="date" value={details.planEndDate} onChange={e => edit({ planEndDate: e.target.value })} />
           </FormField>
           <FormField label="Agreement start" className={span.date}>
-            <input type="date" value={agreementStartDate} onChange={e => setAgreementStartDate(e.target.value)} />
+            <input type="date" value={details.agreementStartDate} onChange={e => edit({ agreementStartDate: e.target.value })} />
           </FormField>
           <FormField label="Agreement end" className={span.date}>
-            <input type="date" value={agreementEndDate} onChange={e => setAgreementEndDate(e.target.value)} />
+            <input type="date" value={details.agreementEndDate} onChange={e => edit({ agreementEndDate: e.target.value })} />
           </FormField>
           <FormField label="Representative" className={span.medium}>
-            <input value={representative} maxLength={500} onChange={e => setRepresentative(e.target.value)} />
+            <input value={details.representative} maxLength={500} onChange={e => edit({ representative: e.target.value })} />
           </FormField>
         </div>
-      </section>
+      </fieldset>
+    </section>
 
-      <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] flex flex-col gap-[var(--section-gap)]">
-        <div><h2 className="font-semibold">Proposed support lines</h2><p className="text-sm text-[var(--color-muted-foreground)]">Use an approved NDIS catalogue code. The price is looked up automatically; codes without a current price are rejected.</p></div>
-        {lines.map((line, index) => <div key={index} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1fr_1fr_10rem_auto] gap-x-[var(--field-gap-x)] gap-y-[var(--field-gap-y)] items-end">
-          <FormField label={`Support type ${index + 1}`}>
-            <input value={line.serviceType} onChange={e => updateLine(index, { serviceType: e.target.value })} />
-          </FormField>
-          <FormField label={`Catalogue code ${index + 1}`}>
-            <input value={line.itemCode} onChange={e => updateLine(index, { itemCode: e.target.value })} />
-          </FormField>
-          <FormField label={`Hours ${index + 1}`}>
-            <input type="number" min="0.01" step="0.01" value={line.hours} onChange={e => updateLine(index, { hours: e.target.value })} />
-          </FormField>
-          <button type="button" aria-label={`Remove line ${index + 1}`} disabled={lines.length === 1} onClick={() => setLines(current => current.filter((_, i) => i !== index))} className="h-[var(--control-h)] w-[var(--control-h)] flex items-center justify-center rounded-[var(--radius-md)] text-[var(--color-destructive)] hover:bg-[var(--color-accent)] disabled:opacity-40"><Trash2 className="w-5 h-5" /></button>
-        </div>)}
-        <button type="button" onClick={() => setLines(current => [...current, { serviceType: '', itemCode: '', hours: '' }])} className="inline-flex items-center gap-2 text-sm font-medium"><Plus className="w-4 h-4" /> Add support line</button>
-      </section>
-      {error && <Callout tone="error">{error}</Callout>}
-      <button type="submit" disabled={create.isPending} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 h-[var(--control-h)] text-sm font-medium text-white self-start disabled:opacity-50">{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}{create.isPending ? 'Pricing draft…' : 'Create priced draft'}</button>
-    </form>
+    <PlanBuilder
+      participantId={participantId}
+      state={details.state}
+      zone={details.zone}
+      from={details.agreementStartDate}
+      to={details.agreementEndDate}
+      entries={plan}
+      onChange={changePlan}
+      readOnly={!canEdit}
+      readOnlyNote="You can read this plan; Admins and Coordinators change it."
+      footer={saveRow}
+    />
 
     <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] flex flex-col gap-[var(--section-gap)]">
       <h2 className="font-semibold">Draft versions</h2>
-      {(drafts.data ?? []).length === 0 ? <p className="text-sm text-[var(--color-muted-foreground)]">No draft versions yet.</p> : (drafts.data ?? []).map(draft => <article key={draft.id} className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] flex flex-col gap-[var(--field-gap-y)]">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><strong>Version {draft.version}</strong> <StatusBadge status={draft.status} label={draftStatusLabel(draft.status)} className="ml-2" /><p className="text-sm text-[var(--color-muted-foreground)]">{draft.state} · {draft.agreementStartDate} to {draft.agreementEndDate}</p><details className="mt-1 text-xs text-[var(--color-muted-foreground)]"><summary className="cursor-pointer select-none">Template details</summary><p className="mt-1">Selected source: {draft.templateVersion} · DOCX SHA-256 {draft.templateDocxSha256} · PDF SHA-256 {draft.templatePdfSha256}</p></details></div><button type="button" onClick={() => download.mutate({ participantId, id: draft.id })} disabled={download.isPending} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-[var(--control-h)] text-sm disabled:opacity-50">{download.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Download draft PDF</button></div>
-        <ElectronicSigningEvidencePanel participantId={participantId} draft={draft} />
-        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[var(--color-muted-foreground)]"><th>Support type</th><th>Code</th><th>Hours</th><th>Unit price</th><th>Catalogue provenance</th></tr></thead><tbody>{draft.lines.map((line, i) => <tr key={`${line.itemCode}-${i}`} className="border-t border-[var(--color-border)]"><td className="py-2">{line.serviceType}</td><td>{line.itemCode}</td><td>{line.hours}</td><td>{formatCurrency(line.unitPrice)}</td><td>{line.catalogueVersion} · effective {line.catalogueEffectiveFrom}{line.catalogueEffectiveTo ? ` to ${line.catalogueEffectiveTo}` : ''}</td></tr>)}</tbody></table></div>
-        <DraftSimulationPanel participantId={participantId} draftId={draft.id} />
-      </article>)}
+      {(drafts.data ?? []).length === 0 ? <p className="text-sm text-[var(--color-muted-foreground)]">No draft versions yet.</p> : (drafts.data ?? []).map(draft => (
+        <RevisionCard key={draft.id} participantId={participantId} draft={draft} onDownload={id => download.mutate({ participantId, id })} downloading={download.isPending} />
+      ))}
       {download.isError && <Callout tone="error">Could not download this draft PDF. Try again.</Callout>}
       <p className="text-xs text-[var(--color-muted-foreground)] flex gap-2"><FileText className="w-4 h-4 shrink-0" /> Draft PDFs are informational only — not signed and not billing authority.</p>
     </section>
