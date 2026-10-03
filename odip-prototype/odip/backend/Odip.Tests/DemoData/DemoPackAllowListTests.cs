@@ -22,12 +22,35 @@ public class DemoPackAllowListTests
     [Fact]
     public void WithNothingSet_EveryPackMayRun_AndNothingIsReported()
     {
-        foreach (var options in new[] { From(null), From(""), From("   "), From(" , ,") })
+        foreach (var options in new[] { From(null), From("") })                                               // compose passes the empty string when the variable is unset
         {
             Assert.Empty(options.Packs);
             Assert.All(DemoPacks.Names, name => Assert.True(options.Allows(name), name));
             Assert.Null(options.Warning);
         }
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("   ")]
+    [InlineData(",")]
+    [InlineData(" , ,")]
+    [InlineData(", ,,\t")]
+    public void AValueThatIsSetButNamesNoPack_StillMeansEveryPack_AndIsSaidSo(string value)
+    {
+        var on = From(value);
+
+        Assert.Empty(on.Packs);                                                                              // kept: it means every pack, as an empty one does
+        Assert.Equal(DemoPacks.Names, on.PacksThatRun);
+        Assert.All(DemoPacks.Names, name => Assert.True(on.Allows(name), name));
+        var text = on.Warning!;
+        Assert.Contains(DemoDataOptions.PacksKey, text, StringComparison.Ordinal);
+        Assert.Contains("DEMO_DATA_PACKS", text, StringComparison.Ordinal);
+        Assert.Contains("is set but names no pack, so every pack runs", text, StringComparison.Ordinal);
+
+        var off = From(value, scenarios: "Off");                                                             // nothing runs while it is Off, so it says what it would do
+        Assert.Contains("is set but names no pack, so every pack would run", off.Warning, StringComparison.Ordinal);
+        Assert.DoesNotContain("every pack runs", off.Warning, StringComparison.Ordinal);
     }
 
     [Theory]

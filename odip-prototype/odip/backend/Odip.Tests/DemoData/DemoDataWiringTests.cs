@@ -148,6 +148,22 @@ public class DemoDataWiringTests
         Assert.Contains($"2 of {DemoPacks.Names.Count}: provider-settings, incidents", startup.Message, StringComparison.Ordinal);       // the code's order, not the typed one
     }
 
+    [Theory]
+    [InlineData(" ")]
+    [InlineData(",")]
+    [InlineData(" , ,")]
+    public async Task On_AValueThatIsSetButNamesNoPack_IsLoggedAsAWarning_BesideTheStartupLine_AndEveryPackRuns(string value)
+    {
+        var entries = (await StartupLogAsync(value)).ToList();
+
+        var startup = Assert.Single(entries, e => e.Message.StartsWith("Demo data top-up is On", StringComparison.Ordinal));
+        var warning = Assert.Single(entries, e => e.Level == LogLevel.Warning);
+        Assert.Equal(entries.IndexOf(startup) + 1, entries.IndexOf(warning));                                 // beside the startup line
+        Assert.Contains("is set but names no pack, so every pack runs", warning.Message, StringComparison.Ordinal);
+        Assert.Contains(string.Join(", ", DemoPacks.Names), startup.Message, StringComparison.Ordinal);       // and the startup line lists them all
+        Assert.Contains($"{DemoPacks.Names.Count} of {DemoPacks.Names.Count}", startup.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task On_ANoListAtAll_LogsNoWarning_AndTheStartupLineListsEveryPack()
     {

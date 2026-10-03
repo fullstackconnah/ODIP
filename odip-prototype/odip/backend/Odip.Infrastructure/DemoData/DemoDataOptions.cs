@@ -57,15 +57,15 @@ public sealed class DemoDataOptions
     public IReadOnlyList<string> PacksThatRun => DemoPacks.Names.Where(Allows).ToList();
 
     /// <summary>
-    /// What the startup line says of the packs: how many will run and which, from the filter ("8 of 14: provider-settings, ..."; with no list, "14 of 14 (DemoData:Packs is
-    /// empty, so every pack): ..."), so what the host reads there is what runs and not what was typed.
+    /// What the startup line says of the packs: how many will run and which, from the filter ("8 of 14: provider-settings, ..."; with no list, "14 of 14 (DemoData:Packs
+    /// names no pack, so every pack): ..."), so what the host reads there is what runs and not what was typed.
     /// </summary>
     public string DescribePacksThatRun()
     {
         var runs = PacksThatRun;
         var count = $"{runs.Count} of {DemoPacks.Names.Count}";
         var list = runs.Count == 0 ? "none" : string.Join(", ", runs);
-        return Packs.Count == 0 ? $"{count} ({PacksKey} is empty, so every pack): {list}" : $"{count}: {list}";
+        return Packs.Count == 0 ? $"{count} ({PacksKey} names no pack, so every pack): {list}" : $"{count}: {list}";
     }
 
     /// <summary>Wait after the host starts before the first tick (the "startup run"): readiness never waits for it.</summary>
@@ -89,7 +89,8 @@ public sealed class DemoDataOptions
             ? $"{ScenariosKey} is '{value}', which is neither On nor Off: treated as Off."
             : null;
 
-        var packs = (configuration[PacksKey] ?? string.Empty)
+        var rawPacks = configuration[PacksKey];
+        var packs = (rawPacks ?? string.Empty)
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .Select(name => name.ToLowerInvariant())
             .Distinct(StringComparer.Ordinal)
@@ -112,6 +113,15 @@ public sealed class DemoDataOptions
                 packsWarning += (unknown.Count == packs.Count ? ", so no pack will run" : string.Empty) + $" (the packs are {string.Join(", ", DemoPacks.Names)}).";
             }
             warning = warning is null ? packsWarning : warning + " " + packsWarning;
+        }
+
+        // A value that is set but names no pack (a stray comma, a space) means every pack, as the empty value does: kept, because compose passes the empty string when the
+        // variable is unset and the two must mean the same. But only the empty string is the default, so anything else that comes to no names is said aloud: a person who
+        // meant a list and left it blank has switched every pack on (PR 2 verification F5).
+        if (!string.IsNullOrEmpty(rawPacks) && packs.Count == 0)
+        {
+            var emptyWarning = $"{PacksKey} (the DEMO_DATA_PACKS variable) is set but names no pack, so every pack {(on ? "runs" : "would run once the flag is On")}; its value is '{rawPacks}'.";
+            warning = warning is null ? emptyWarning : warning + " " + emptyWarning;
         }
 
         return new DemoDataOptions
