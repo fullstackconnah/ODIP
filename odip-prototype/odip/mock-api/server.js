@@ -2147,7 +2147,24 @@ function draftDto(participantId, version, body, quoteResult, lines) {
     agreementStartDate: body.agreementStartDate, agreementEndDate: body.agreementEndDate, ...(body.representative ? { representative: body.representative } : {}),
     blocks: (body.blocks || []).map((entry) => ({ block: entry.block, requirements: { workerGender: 'NoPreference', driver: false, skills: [], ...(entry.requirements || {}) } })),
     ...(quoteResult ? { pricing: { ...quoteResult, lines: [] } } : {}), lines,
+    ...draftSummaryFields(quoteResult, lines, (body.blocks || []).length),
   }
+}
+
+// What the real server adds to every revision: its counts, what it came to, and what a reader must not miss (the PDF's sentences).
+function draftSummaryFields(quoteResult, lines, blockCount) {
+  const totals = quoteResult ? quoteResult.totals : null
+  const caveats = []
+  const shiftLines = (n) => (n === 1 ? '1 shift line' : `${n} shift lines`)
+  if (totals && totals.unpricedLines > 0) caveats.push(`${shiftLines(totals.unpricedLines)} ${totals.unpricedLines === 1 ? 'is' : 'are'} not priced (the catalogue has no price for ${totals.unpricedLines === 1 ? 'it' : 'them'}) and ${totals.unpricedLines === 1 ? 'is' : 'are'} not in any total.`)
+  if (totals && totals.reviewLines > 0) caveats.push(`${shiftLines(totals.reviewLines)} need${totals.reviewLines === 1 ? 's' : ''} review by a person before this agreement is approved (for example a public holiday nobody has decided).`)
+  if (totals && totals.provisionalLines > 0) caveats.push(`${shiftLines(totals.provisionalLines)} use${totals.provisionalLines === 1 ? 's' : ''} provisional rates that are not yet confirmed.`)
+  return { isSummary: false, blockCount, lineCount: lines.length, total: Math.round(lines.reduce((sum, line) => sum + (line.total || 0), 0) * 100) / 100, caveats }
+}
+
+// An older revision in the list: no blocks, no lines, no answer (GET .../{id} has them).
+function summaryOf(draft) {
+  return { ...draft, blocks: [], lines: [], pricing: undefined, isSummary: true }
 }
 
 function saveDraft(participantId, body) {
@@ -2155,6 +2172,10 @@ function saveDraft(participantId, body) {
   const drafts = serviceAgreementDrafts[participantId] || (serviceAgreementDrafts[participantId] = [])
   if (blocks.length === 0) return respond(400, failEnvelope(null, ['Add at least one support block.']))
   if (!body.agreementStartDate || !body.agreementEndDate || body.agreementEndDate < body.agreementStartDate) return respond(400, failEnvelope(null, ['End dates must not precede start dates.']))
+  // The version this plan started from: a save from an older one would silently replace the newer, so it is refused with the newer version's number.
+  if (Number.isInteger(body.baseVersion) && body.baseVersion !== drafts.length) {
+    return respond(409, failEnvelope({ currentVersion: drafts.length }, [`Version ${drafts.length} was saved after the version this plan started from. Load version ${drafts.length} to see what changed, then make your changes again.`], 'draft-version-conflict'))
+  }
   const problems = []
   blocks.forEach((block, index) => {
     problems.push(...planPricing.validate(block, index))
@@ -2176,6 +2197,7 @@ function saveDraft(participantId, body) {
     id: 'draft-p-0002-v1', participantId: 'p-0002', version: 1, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27', templateDocxSha256: '9f2c1d0e', templatePdfSha256: '41ab77c3',
     state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', blocks: [],
     lines: [{ serviceType: 'Daily support', hours: 2, itemCode: '04_104_0125_6_1', unitPrice: 73.58, catalogueVersion: '2026-27', catalogueEffectiveFrom: '2026-07-01', unit: 'H', total: 147.16, occurrences: 0, flags: 'None' }],
+    isSummary: false, blockCount: 0, lineCount: 1, total: 147.16, caveats: [],
   }]
   const block = (id, extra) => ({ id, intensity: 'Standard', workers: 1, participantsPresent: 1, headcountChanges: [], setting: 'Community', location: { state: 'NSW', zone: 'National' }, workerMaySleep: false, sleepoverActiveHours: 0, onPublicHoliday: 'Review', ...extra })
   const none = { workerGender: 'NoPreference', driver: false, skills: [] }
@@ -2197,7 +2219,12 @@ function saveDraft(participantId, body) {
 const routes = [
   ['dashboard/summary', () => dashboardSummary],
   ['plan-pricing/settings', () => planPricingSettings],
-  ['participants/:id/service-agreement-drafts', (id) => serviceAgreementDrafts[id] || []],
+  // The newest revision in full, the older ones as summaries; one revision in full by id.
+  ['participants/:id/service-agreement-drafts/:id', (participantId, draftId) => {
+    const found = (serviceAgreementDrafts[participantId] || []).find((draft) => draft.id === draftId)
+    return found || respond(404, failEnvelope(null, ['Draft not found.']))
+  }],
+  ['participants/:id/service-agreement-drafts', (id) => (serviceAgreementDrafts[id] || []).map((draft, index) => (index === 0 ? draft : summaryOf(draft)))],
   ['billing/funding-sources', (searchParams) => paged(fundingSources.filter((f) => !searchParams.get('participantId') || f.participantId === searchParams.get('participantId')))],
 
   // participants (paged list)

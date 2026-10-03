@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { Download, Loader2 } from 'lucide-react'
 import type { DraftBlock, ServiceAgreementDraftDto, ServiceAgreementDraftLineDto } from '@/api/types'
-import { useDemoJourneySimulation } from '@/api/hooks'
+import { useDemoJourneySimulation, useServiceAgreementDraft } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { DataTable, type Column } from '@/components/DataTable'
@@ -75,11 +76,54 @@ type RevisionCardProps = {
   downloading: boolean
 }
 
+const CARD = 'rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] flex flex-col gap-[var(--field-gap-y)]'
+
 /**
- * One saved revision, read-only: it is never edited, so a change is always a newer version. A revision made with the plan builder shows its blocks, its lines with their totals and
- * what a person still has to look at as it was when it was saved; one typed by hand before the builder existed shows its lines exactly as they were, and says it can only be rebuilt.
+ * One saved revision, read-only: it is never edited, so a change is always a newer version. The newest is in full. An older one arrives as a summary (what it came to and what a reader
+ * must not miss) and its details are read when somebody asks for them, so a long onboarding is not many revisions of blocks, answers and lines on every page load.
  */
-export function RevisionCard({ participantId, draft, onDownload, downloading }: RevisionCardProps) {
+export function RevisionCard(props: RevisionCardProps) {
+  const { participantId, draft } = props
+  const [open, setOpen] = useState(false)
+  const detail = useServiceAgreementDraft(participantId, draft.id, draft.isSummary && open)
+  if (!draft.isSummary) return <FullRevision {...props} />
+  if (open && detail.data) return <FullRevision {...props} draft={detail.data} onCollapse={() => setOpen(false)} />
+  return (
+    <article className={CARD}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <strong>Version {draft.version}</strong> <StatusBadge status={draft.status} label={draftStatusLabel(draft.status)} className="ml-2" />
+          <p className="text-sm text-[var(--color-muted-foreground)]">{draft.state} · {draft.agreementStartDate} to {draft.agreementEndDate}</p>
+          <p className="mt-1 text-sm tabular-nums">
+            {draft.blockCount > 0 ? `${plural(draft.blockCount, 'block')} · ` : 'Typed by hand before the plan builder · '}{plural(draft.lineCount, 'line')} · <span className="font-medium">{formatCurrency(draft.total)}</span> over the agreement
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => props.onDownload(draft.id)} disabled={props.downloading}>{props.downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Download draft PDF</Button>
+          <Button variant="secondary" aria-expanded={open} onClick={() => setOpen(true)}>Show details</Button>
+        </div>
+      </div>
+      {draft.caveats.length > 0 && (
+        <ul className="flex flex-col gap-0.5 text-sm">
+          {draft.caveats.map(caveat => <li key={caveat} className="flex items-start gap-1.5"><StatusBadge tone="warning" label="Read" /><span>{caveat}</span></li>)}
+        </ul>
+      )}
+      {open && detail.isLoading && <p role="status" aria-busy="true" className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />Reading this version…</p>}
+      {open && detail.isError && (
+        <Callout tone="error" title="This version could not be read">
+          Check your connection and try again.
+          <span className="mt-2 block"><Button variant="secondary" size="sm" onClick={() => { void detail.refetch() }}>Try again</Button></span>
+        </Callout>
+      )}
+    </article>
+  )
+}
+
+/**
+ * One revision in full. A revision made with the plan builder shows its blocks, its lines with their totals and what a person still has to look at as it was when it was saved; one typed
+ * by hand before the builder existed shows its lines exactly as they were, and says it can only be rebuilt.
+ */
+function FullRevision({ participantId, draft, onDownload, downloading, onCollapse }: RevisionCardProps & { onCollapse?: () => void }) {
   const fromBlocks = draft.blocks.length > 0
   const lines = draft.lines.map((line, index) => ({ ...line, key: `${line.itemCode}-${index}` }))
   const pricing = draft.pricing
@@ -87,14 +131,17 @@ export function RevisionCard({ participantId, draft, onDownload, downloading }: 
   const issues = groupIssues(pricing?.issues ?? [])
   const total = lines.reduce((sum, line) => sum + line.total, 0)
 
-  return <article className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] flex flex-col gap-[var(--field-gap-y)]">
+  return <article className={CARD}>
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
         <strong>Version {draft.version}</strong> <StatusBadge status={draft.status} label={draftStatusLabel(draft.status)} className="ml-2" />
         <p className="text-sm text-[var(--color-muted-foreground)]">{draft.state} · {draft.agreementStartDate} to {draft.agreementEndDate}</p>
         <details className="mt-1 text-xs text-[var(--color-muted-foreground)]"><summary className="cursor-pointer select-none">Template details</summary><p className="mt-1">Selected source: {draft.templateVersion} · DOCX SHA-256 {draft.templateDocxSha256} · PDF SHA-256 {draft.templatePdfSha256}</p></details>
       </div>
-      <Button variant="secondary" onClick={() => onDownload(draft.id)} disabled={downloading}>{downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Download draft PDF</Button>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" onClick={() => onDownload(draft.id)} disabled={downloading}>{downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Download draft PDF</Button>
+        {onCollapse && <Button variant="secondary" aria-expanded="true" onClick={onCollapse}>Hide details</Button>}
+      </div>
     </div>
     <ElectronicSigningEvidencePanel participantId={participantId} draft={draft} />
 

@@ -7,12 +7,13 @@ import type { DraftBlock, PlanQuote, ServiceAgreementDraftDto } from '@/api/type
 import { budgetOf, draftBlock, line, mondayWednesday, quote, settings as makeSettings } from '@/test/fixtures/planPricing'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
 
-const { createMutate, drafts, participant, snapshotMutate, evidenceMutate, simulationMutate, budget } = vi.hoisted(() => ({
-  createMutate: vi.fn(), drafts: vi.fn(), participant: vi.fn(), snapshotMutate: vi.fn(), evidenceMutate: vi.fn(), simulationMutate: vi.fn(), budget: vi.fn(),
+const { createMutate, drafts, detail, participant, snapshotMutate, evidenceMutate, simulationMutate, budget } = vi.hoisted(() => ({
+  createMutate: vi.fn(), drafts: vi.fn(), detail: vi.fn(), participant: vi.fn(), snapshotMutate: vi.fn(), evidenceMutate: vi.fn(), simulationMutate: vi.fn(), budget: vi.fn(),
 }))
 vi.mock('@/api/hooks', () => ({
   useParticipant: () => participant(),
   useServiceAgreementDrafts: () => drafts(),
+  useServiceAgreementDraft: (participantId: string, id: string, enabled: boolean) => detail(participantId, id, enabled),
   useCreateServiceAgreementDraft: () => ({ mutate: createMutate, isPending: false }),
   useDownloadServiceAgreementDraftPdf: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useCreateElectronicSigningSnapshot: () => ({ mutate: snapshotMutate, isPending: false }),
@@ -59,6 +60,7 @@ beforeEach(() => {
   participant.mockReturnValue({ data: { id: 'p-1', fullName: 'Marcus Tran', ndisNumber: '430000001', dateOfBirth: '1990-01-02' }, isLoading: false, isError: false, refetch: vi.fn() })
   budget.mockReturnValue({ data: budgetOf('b1'), isError: false, isFetching: false, error: null, refetch: vi.fn() })
   createMutate.mockReset(); snapshotMutate.mockReset(); evidenceMutate.mockReset(); simulationMutate.mockReset()
+  detail.mockReset(); detail.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
 })
 afterEach(() => localStorage.clear())
 
@@ -477,6 +479,76 @@ describe('ServiceAgreementDraftPage: what is on the page around the plan', () =>
     expect(within(card).getByText('Personal care, Sleepover')).toBeInTheDocument()
     expect(within(card).getByText('Provisional')).toBeInTheDocument()
     expect(line().itemCode).toBe('04_104_0125_6_1')   // the fixtures agree with the engine's brief example
+  })
+})
+
+describe('ServiceAgreementDraftPage: older revisions are summaries (review F12)', () => {
+  const newest = () => draft({ id: 'd-3', version: 3, blocks: [draftBlock(mondayWednesday('b1'))], pricing: quote(), blockCount: 1, lineCount: 1, total: 588.64 })
+  const summary = (changes: Partial<ServiceAgreementDraftDto> = {}) => draft({
+    id: 'd-2', version: 2, isSummary: true, blockCount: 2, lineCount: 3, total: 795.7, caveats: ['5 shift lines are not priced (the catalogue has no price for them) and are not in any total.'], ...changes,
+  })
+  const full = () => draft({
+    id: 'd-2', version: 2, blocks: [draftBlock(mondayWednesday('b1'))], pricing: quote(), blockCount: 1, lineCount: 1, total: 588.64,
+    lines: [{ ...legacyLine, serviceType: 'Community access', itemCode: '04_104_0125_6_1', hours: 8, unitPrice: 73.58, total: 588.64, blockId: 'b1', band: 'Weekday Daytime', occurrences: 2, flags: 'None', catalogueVersion: '2026-27' }],
+  })
+
+  it('shows an older revision as what it came to and what a reader must not miss, with no table of lines, and reads nothing until asked', () => {
+    drafts.mockReturnValue({ data: [newest(), summary()], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    const card = screen.getByText('Version 2').closest('article') as HTMLElement
+    expect(card).toHaveTextContent('2 blocks · 3 lines · $795.70 over the agreement')
+    expect(card).toHaveTextContent('5 shift lines are not priced (the catalogue has no price for them) and are not in any total.')
+    expect(within(card).queryByRole('table')).not.toBeInTheDocument()
+    expect(within(card).queryByText('Blocks in this version')).not.toBeInTheDocument()
+    expect(detail).toHaveBeenCalledWith('p-1', 'd-2', false)
+    expect(detail).not.toHaveBeenCalledWith('p-1', 'd-2', true)
+  })
+
+  it('keeps the newest revision in full and says a summary typed by hand is exactly that', () => {
+    drafts.mockReturnValue({ data: [newest(), summary({ blockCount: 0, lineCount: 1, total: 51.37, caveats: [] })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(within(screen.getByText('Version 3').closest('article') as HTMLElement).getByText('Blocks in this version')).toBeInTheDocument()
+    expect(screen.getByText('Version 2').closest('article')).toHaveTextContent('Typed by hand before the plan builder · 1 line · $51.37 over the agreement')
+  })
+
+  it('reads the revision in full when asked, shows it like any other, and folds it back', async () => {
+    detail.mockImplementation((_participantId, _id, enabled) => ({ data: enabled ? full() : undefined, isLoading: false, isError: false, refetch: vi.fn() }))
+    drafts.mockReturnValue({ data: [newest(), summary()], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    const user = userEvent.setup()
+
+    await user.click(within(screen.getByText('Version 2').closest('article') as HTMLElement).getByRole('button', { name: 'Show details' }))
+
+    expect(detail).toHaveBeenCalledWith('p-1', 'd-2', true)
+    const card = screen.getByText('Version 2').closest('article') as HTMLElement
+    expect(within(card).getByText('Blocks in this version')).toBeInTheDocument()
+    expect(within(card).getByText('04_104_0125_6_1')).toBeInTheDocument()
+    await user.click(within(card).getByRole('button', { name: 'Hide details' }))
+    expect(within(screen.getByText('Version 2').closest('article') as HTMLElement).getByRole('button', { name: 'Show details' })).toBeInTheDocument()
+  })
+
+  it('says it is reading, and when it could not, with a way to try again', async () => {
+    const refetch = vi.fn()
+    detail.mockImplementation((_participantId, _id, enabled) => (enabled ? { data: undefined, isLoading: false, isError: true, refetch } : { data: undefined, isLoading: false, isError: false, refetch }))
+    drafts.mockReturnValue({ data: [newest(), summary()], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    const user = userEvent.setup()
+
+    await user.click(within(screen.getByText('Version 2').closest('article') as HTMLElement).getByRole('button', { name: 'Show details' }))
+    const card = screen.getByText('Version 2').closest('article') as HTMLElement
+    expect(within(card).getByRole('alert')).toHaveTextContent('This version could not be read')
+    await user.click(within(card).getByRole('button', { name: 'Try again' }))
+
+    expect(refetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('still downloads the PDF of a summary: it is by id, nothing else is needed', async () => {
+    drafts.mockReturnValue({ data: [newest(), summary()], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(within(screen.getByText('Version 2').closest('article') as HTMLElement).getByRole('button', { name: /Download draft PDF/ })).toBeEnabled()
   })
 })
 
