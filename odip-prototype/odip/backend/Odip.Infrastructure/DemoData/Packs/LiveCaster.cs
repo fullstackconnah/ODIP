@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -44,7 +45,7 @@ internal sealed class LiveCaster
         var directory = _run.Directory.Participant(story.Participant);
         if (directory is null)
         {
-            _run.Skipped($"live shift {story.Key} on {date:yyyy-MM-dd}", $"{story.Participant} is missing");
+            _run.Skipped($"live shift {story.Key} on {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}", $"{story.Participant} is missing");
             return null;
         }
 
@@ -90,7 +91,7 @@ internal sealed class LiveCaster
             rejected.Add($"{key}: {string.Join("+", findings.Where(f => !Tolerated.Contains(f.Code)).Select(f => f.Code).Distinct())}");
         }
 
-        _run.Skipped($"live shift {story.Key} on {date:yyyy-MM-dd}", "nobody on the roster is free for it without a finding (" + string.Join("; ", rejected) + ")");
+        _run.Skipped($"live shift {story.Key} on {date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}", "nobody on the roster is free for it without a finding (" + string.Join("; ", rejected) + ")");
         return null;
     }
 

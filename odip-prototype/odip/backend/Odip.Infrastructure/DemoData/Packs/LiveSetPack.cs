@@ -439,7 +439,7 @@ public sealed class LiveSetPack : IDemoPack
                     };
                     if (e.Actor is not null) _run.StampAudit(e.Id, when, e.Actor);
                     if (e.After is not null) await e.After();
-                    _run.Added(live.Story.Key.Replace("live-", "live ") + " " + e.Type.Name);
+                    _run.Added(live.Story.Key.Replace("live-", "live ", StringComparison.Ordinal) + " " + e.Type.Name);
                 }
             }
         }
@@ -588,7 +588,7 @@ public sealed class LiveSetPack : IDemoPack
                 await DemoQueries.PrnDosesAwaitingOutcome(_run.Db, prnIds, from).ToListAsync(ct);          // attaches the saved ones
                 var pending = Pending<MedicationAdministration>()
                     .Where(a => prnIds.Contains(a.ParticipantMedicationId) && a.Status == MedicationAdministrationStatus.Administered && a.PrnOutcome == null
-                                && a.AdministeredAt >= from && a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:"))
+                                && a.AdministeredAt >= from && a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:", StringComparison.Ordinal))
                     .ToList();
                 foreach (var dose in pending)
                     PackageRows.PrnOutcome(_run, dose, "Settled within the hour with rest and a drink.", submittedLocal.AddMinutes(-4));

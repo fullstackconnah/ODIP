@@ -18,7 +18,7 @@ public class DemoSourceScanTests
     /// <summary>A construct the demo top-up must not use, why, and the files (relative to Odip.Infrastructure) that may.</summary>
     private sealed record Rule(string Pattern, string Why, params string[] AllowedIn);
 
-    private static readonly Rule[] Rules =
+    private static readonly Rule[] GuardRules =
     {
         new(@"\bExecuteSql\w*", "raw SQL runs without SaveChanges, so the guard never sees it"),
         new(@"\bFromSql\w*", "raw SQL reads whatever it names, whatever the tenant filter says"),
@@ -36,7 +36,30 @@ public class DemoSourceScanTests
         // the dispatcher and the channels are never called, so nothing is ever Pending to be sent and nothing reaches an inbox.
         new(@"\bINotificationRaiser\b|\bNotificationRaiser\b|\bINotificationChannel\b|\bSmtpEmailChannel\b|\bNotificationDispatch\w*|\bEmailSender\b",
             "the top-up sends nothing: it writes the terminal notification rows itself and never raises one"),
+        // PR 2 review L7: the first list named the type names of raw SQL; these are the other ways to it, and to deciding by hand what SaveChanges writes.
+        new(@"\bGetDbConnection\b", "the raw connection runs commands the guard never sees"),
+        new(@"\bCreateCommand\b", "a hand-written command is raw SQL, whatever type it is declared as"),
+        new(@"\.Entry\([^)]*\)\.State\b|\.State\s*=\s*EntityState\.",
+            "setting an entity's state by hand decides what SaveChanges writes without the guard's say; only the rollback of a failed piece, which forgets rows that were never written, does",
+            "DemoData/DemoRun.cs"),
     };
+
+    /// <summary>
+    /// PR 2 review L12: the deploy image runs the whole suite under invariant globalization and a developer's machine does not, so a call that reads the current
+    /// culture passes in one place and fails (or worse, writes something different) in the other. Everything the top-up compares or formats is spelled out.
+    /// </summary>
+    private static readonly Rule[] CultureRules =
+    {
+        new(@"\.(?:StartsWith|EndsWith|IndexOf|LastIndexOf)\(\s*""[^""]*""\s*\)",
+            "culture-sensitive: use StringComparison.Ordinal (an EF query has no such overload, so DemoQueries, whose expressions translate to LIKE, is the one file that may)",
+            "DemoData/DemoQueries.cs"),
+        new(@"\.To(?:Upper|Lower)\(\)", "culture-sensitive: use the Invariant form"),
+        new(@"\.ToString\(""(?![NDxX]\d*"")[^""]+""\)", "a format string with no IFormatProvider is read in the current culture: pass CultureInfo.InvariantCulture"),
+        new(@"\{[^{}:?""\s]+:(?![xX]\d*\}|D\d*\}|N\})(?!\s)[^{}""]+\}", "an interpolated value with a format is read in the current culture: use ToString(format, CultureInfo.InvariantCulture)"),
+        new(@"\b(?:int|long|decimal|double|DateTime|DateOnly|TimeOnly|TimeSpan)\.(?:Parse|TryParse)\((?![^;]*CultureInfo)", "parsing with no IFormatProvider reads the current culture"),
+    };
+
+    private static readonly Rule[] Rules = GuardRules.Concat(CultureRules).ToArray();        // after both lists: static fields are initialised in the order they are written
 
     private static string? FindInfrastructureRoot()
     {
@@ -102,6 +125,45 @@ public class DemoSourceScanTests
                 Assert.True(Regex.IsMatch(code!, rule.Pattern), $"{allowed} no longer uses {rule.Pattern}: take it off the allowance");
             }
         }
+    }
+
+    [Theory]
+    [InlineData(@"if (key.StartsWith(""demo-v1:"")) x();", true)]
+    [InlineData(@"if (key.StartsWith(""demo-v1:"", StringComparison.Ordinal)) x();", false)]
+    [InlineData(@"var i = text.IndexOf(""x"");", true)]
+    [InlineData(@"var i = text.IndexOf('/');", false)]
+    [InlineData(@"var s = name.ToLower();", true)]
+    [InlineData(@"var s = name.ToLowerInvariant();", false)]
+    [InlineData(@"var s = date.ToString(""yyyy-MM-dd"");", true)]
+    [InlineData(@"var s = date.ToString(""yyyy-MM-dd"", CultureInfo.InvariantCulture);", false)]
+    [InlineData(@"var s = id.ToString(""N"");", false)]
+    [InlineData(@"var s = $""on {date:yyyy-MM-dd}"";", true)]
+    [InlineData(@"var s = $""{count:N0} rows"";", true)]
+    [InlineData(@"var s = $""id {n:x12}"";", false)]
+    [InlineData(@"var s = $""key {id:N} and {number:D4}"";", false)]                       // a guid's N and an integer's zero padding read no culture
+    [InlineData(@"var s = $""{(many ? ""are"" : ""is"")}"";", false)]
+    [InlineData(@"if (x is { HasHandover: true }) y();", false)]
+    [InlineData(@"var s = ""{n} had a calm shift"";", false)]
+    [InlineData(@"var n = int.Parse(text);", true)]
+    [InlineData(@"var n = int.Parse(text, CultureInfo.InvariantCulture);", false)]
+    public void TheCultureRules_CatchWhatTheyAreFor_AndLeaveTheSafeFormsAlone(string code, bool caught)
+    {
+        var matched = CultureRules.Any(rule => Regex.IsMatch(code, rule.Pattern));
+
+        Assert.Equal(caught, matched);
+    }
+
+    [Theory]
+    [InlineData(@"var c = db.Database.GetDbConnection();", true)]
+    [InlineData(@"using var cmd = connection.CreateCommand();", true)]
+    [InlineData(@"db.Entry(row).State = EntityState.Modified;", true)]
+    [InlineData(@"entry.State = EntityState.Detached;", true)]
+    [InlineData(@"if (entry.State == EntityState.Added) x();", false)]
+    public void TheNewGuardRules_CatchTheOtherWaysToRawSqlAndToDecidingWhatIsSaved(string code, bool caught)
+    {
+        var matched = GuardRules.Any(rule => Regex.IsMatch(code, rule.Pattern));
+
+        Assert.Equal(caught, matched);
     }
 
     [Fact]
