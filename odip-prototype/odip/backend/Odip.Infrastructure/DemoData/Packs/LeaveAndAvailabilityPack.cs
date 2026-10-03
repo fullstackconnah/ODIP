@@ -44,6 +44,13 @@ public sealed class LeaveAndAvailabilityPack : IDemoPack
         var newRules = rules.Where(r => !existingRules.Contains(r.Id)).ToList();
         var newAvailability = availability.Where(a => !existingAvailability.Contains(a.Id)).ToList();
 
+        // The app holds a leave request to (staff member, type, first day, last day), and a recurring rule to (staff member, day, times, effective from and to), among those not
+        // cancelled or declined: a second identical request is a 409 ("An identical request already exists."), from the coordinator's form, the staff portal and an approval's edit
+        // alike. A request a person made first holds the key, and the top-up writes none beside it (PR 1 audit); one that is itself cancelled or declined is outside the key and is
+        // written as ever. The legacy availability rows have no such rule.
+        newLeave = await WithoutHeldLeaveAsync(run, newLeave, ct);
+        newRules = await WithoutHeldRulesAsync(run, newRules, ct);
+
         if (newLeave.Count + newRules.Count + newAvailability.Count > 0)
         {
             run.Db.LeaveRequests.AddRange(newLeave);
@@ -56,6 +63,24 @@ public sealed class LeaveAndAvailabilityPack : IDemoPack
         }
 
         await MoveForwardAsync(run, ct);
+    }
+
+    private static async Task<List<LeaveRequest>> WithoutHeldLeaveAsync(DemoRun run, List<LeaveRequest> rows, CancellationToken ct)
+    {
+        var inTheKey = rows.Where(l => l.Status != LeaveStatus.Cancelled && l.Status != LeaveStatus.Declined).ToList();
+        if (inTheKey.Count == 0) return rows;
+
+        var held = (await DemoQueries.ActiveLeaveKeysOf(run.Db, inTheKey.Select(l => l.UserId).Distinct().ToList()).ToListAsync(ct)).ToHashSet();
+        return rows.Where(l => !inTheKey.Contains(l) || !held.Contains(new DemoQueries.LeaveKey(l.UserId, l.LeaveType, l.StartDate, l.EndDate))).ToList();
+    }
+
+    private static async Task<List<RecurringUnavailability>> WithoutHeldRulesAsync(DemoRun run, List<RecurringUnavailability> rows, CancellationToken ct)
+    {
+        var inTheKey = rows.Where(r => r.Status != LeaveStatus.Cancelled && r.Status != LeaveStatus.Declined).ToList();
+        if (inTheKey.Count == 0) return rows;
+
+        var held = (await DemoQueries.ActiveRuleKeysOf(run.Db, inTheKey.Select(r => r.UserId).Distinct().ToList()).ToListAsync(ct)).ToHashSet();
+        return rows.Where(r => !inTheKey.Contains(r) || !held.Contains(new DemoQueries.RuleKey(r.UserId, r.DayOfWeek, r.StartTime, r.EndTime, r.EffectiveFrom, r.EffectiveTo))).ToList();
     }
 
     // ── the rows ─────────────────────────────────────────────────────────────

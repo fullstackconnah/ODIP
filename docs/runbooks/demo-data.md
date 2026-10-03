@@ -18,8 +18,9 @@ What it will and will not do, because the production host has it switched on:
 - Rows it writes carry deterministic ids (UUID version 8, `DemoIds`), so a second tick finds them and adds nothing; the audit rows the database
   layer writes about them have random ids and are found by the id of the row they describe. A row a person makes in the portal has a random id;
   where the app holds a row to a natural key (one acknowledgement per reader and handover, one running break per completion, one tick per
-  completion, routine and occurrence) or a rule (one active record per scheduled medication slot) the script looks for the key and leaves the
-  person's row alone. A live shift a person has taken over, by starting it by hand, by a coordinator returning its completion for correction or by a
+  completion, routine and occurrence; one active completion per shift; one compatibility cell per staff member and participant; one leave request or
+  recurring rule per staff member, type or day and dates among those not cancelled or declined; one shift per pattern and date) or a rule (one active record per
+  scheduled medication slot) the script looks for the key and leaves the person's row alone. A live shift a person has taken over, by starting it by hand, by a coordinator returning its completion for correction or by a
   coordinator moving it to other times or another date, is theirs: the script leaves it alone, the history's handover reads do not wait for it, and
   the history writes its window's doses, like any other day's, once the window (and the close-out buffer after it) is over and nobody has finished
   the shift. An as-needed dose is judged as the app's recorder judges one: the script writes none that would break the medication's minimum

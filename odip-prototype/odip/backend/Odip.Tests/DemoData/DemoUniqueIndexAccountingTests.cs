@@ -66,6 +66,56 @@ public class DemoUniqueIndexAccountingTests
             "IObligationTaskService.EnsureAsync."),
     };
 
+    /// <summary>
+    /// The audit of PR 1's packs, which are live: the keys of their tables that the app holds by a rule of its own and not by an index (the model has no index on these, and
+    /// no migration creates one by raw SQL), and the way the packs stay clear of each. Not found by reflection: a new controller rule is found by reading, as this was.
+    /// </summary>
+    private static readonly Dictionary<string, Account> AppRules = new(StringComparer.Ordinal)
+    {
+        ["LeaveRequest|(staff member, type, first day, last day) among those not cancelled or declined (LeaveController.HasDuplicateLeaveAsync, PortalController.CreateMyLeaveRequest)"] = new(
+            "The leave pack asks for the keys of the staff members it would write for (DemoQueries.ActiveLeaveKeysOf) and writes no request whose key a person's holds; a request of its own that is " +
+            "cancelled or declined is outside the key and is written as ever.",
+            "DemoPr1HumanRowsTests.APriyaAnnualLeaveRequestAPersonMadeFirst_HoldsTheKeyUnlessItIsCancelledOrDeclined",
+            "DemoPr1HumanRowsTests.APendingRequestAPersonMade_IdenticalToTheTopUpsDeclinedOne_DoesNotStopItBeingWritten"),
+
+        ["RecurringUnavailability|(staff member, day, start, end, effective from, effective to) among those not cancelled or declined (LeaveController.HasDuplicateUnavailabilityAsync, PortalController)"] = new(
+            "The same lookup (DemoQueries.ActiveRuleKeysOf).",
+            "DemoPr1HumanRowsTests.AnEmilyTuesdayRuleAPersonMadeFirst_HoldsTheKeyUnlessItIsCancelledOrDeclined"),
+
+        ["Shift|(pattern, date) (RosteringController.GeneratePattern skips a date that already carries a shift of the pattern, whatever its status)"] = new(
+            "The roster pack asks for the dates its pattern shifts would land on (DemoQueries.PatternDatesOf) and places none where a shift of the pattern stands, and moves forward only the shifts it made.",
+            "DemoRosterBesideAppShiftsTests.ADraftTheAppGeneratedForADemoPatternBeyondTheWindow_IsNotDoubledWhenTheWindowReachesIt",
+            "DemoRosterBesideAppShiftsTests.APastDraftTheAppGeneratedForADemoPattern_IsNotCancelledByTheTopUp"),
+
+        ["ProviderSettings|one row per tenant (the settings page makes the row when there is none, every reader takes the first)"] = new(
+            "The pack writes only when the tenant has no row, and asks for its id under any tenant as well.",
+            "DemoStaticPacksTests.ProviderSettings_NeverChangeAnExistingRow_AndAddNoSecondOne",
+            "DemoStaticPacksEdgeTests.ProviderSettings_ARowAnotherTenantHoldsTheIdOf_IsNotInsertedAgain_AndTheTickRunsClean"),
+
+        ["ParticipantContactRole|at most one active Plan Manager and one primary Next of Kin per participant (ContactRoleRules.ValidateUniqueness)"] = new(
+            "The pack writes Emergency Contact roles only, which the rule does not govern, and leaves a participant who already has an active one alone, whoever made it.",
+            "DemoStaticPacksTests.EmergencyContacts_LeaveAParticipantWhoAlreadyHasOneAlone"),
+
+        ["ShiftCompletion|one active completion per shift: the index, and the app's Return (inactive, counted) and Start (a new one under a random id)"] = new(
+            "The roster pack writes a completion only with a shift it has just made, or for a Published shift that was never returned and has no completion at all, active or not (CompletionsOf).",
+            "DemoPr1HumanRowsTests.ARosterShiftWithACompletionAPersonMade_IsNotClosedOutByTheTopUp_AndTheDayRollRunsClean"),
+
+        ["BookingTask|one task per source key: the index, and the app's own EnsureAsync"] = new(
+            "The coverage pack asks for the keys it wants first (DemoQueries.ExistingTaskKeys) and raises through the app's own service.",
+            "DemoPr1HumanRowsTests.ACoverageTaskAPersonsActionRaised_ForAKeyTheTopUpWouldRaise_IsKept_AndNoSecondTaskIsWritten"),
+
+        ["StaffParticipantCompatibility|one cell per staff member and participant: the index; the app's UpsertCompatibility finds a cell by that pair"] = new(
+            "The compatibility pack skips a pair that has a cell, by id or by pair, and does not put back an auto-linked cell beside a pick that moved.",
+            "DemoStaticPacksTests.Compatibility_NeverOverwritesAnExistingCell_AndNeverAddsADuplicate",
+            "DemoStaticPacksEdgeTests.Compatibility_AnAutoLinkedCellTheAppRemovedWhenThePreferredStaffMoved_IsNotPutBack"),
+
+        ["StaffAvailability|none: the app allows identical rows (VehiclesStaffController.Create)"] = new("Written by id; nothing holds a row back."),
+        ["ShiftPattern|none: CreatePattern checks nothing"] = new("Written by id; nothing holds a row back."),
+        ["Person|none: a person is free-form, and an emergency contact brings its own"] = new("Written by id, with its role."),
+        ["User|not inserted: the staff credentials pack changes the credential columns of existing users, and the guard refuses every other column (Email and Username carry the only unique indexes)"] = new(
+            "No insert, and no key column is written.", "DemoStaticPacksTests.Credentials_NeverTouchIdentityEmailRoleOrFlags"),
+    };
+
     private static MethodInfo? Find(string reference)
     {
         var (className, method) = (reference[..reference.IndexOf('.', StringComparison.Ordinal)], reference[(reference.IndexOf('.', StringComparison.Ordinal) + 1)..]);
@@ -99,7 +149,8 @@ public class DemoUniqueIndexAccountingTests
         Assert.True(stale.Count == 0, "stale entries (the index is gone or renamed): " + string.Join("; ", stale));
         Assert.All(Accounted.Values, account => Assert.False(string.IsNullOrWhiteSpace(account.How)));
 
-        var dangling = Accounted.Values.SelectMany(a => a.Tests).Where(t => Find(t) is null).ToList();
+        var dangling = Accounted.Values.Concat(AppRules.Values).SelectMany(a => a.Tests).Where(t => Find(t) is null).ToList();
         Assert.True(dangling.Count == 0, "tests named as evidence that do not exist: " + string.Join("; ", dangling));
+        Assert.All(AppRules.Values, account => Assert.False(string.IsNullOrWhiteSpace(account.How)));
     }
 }

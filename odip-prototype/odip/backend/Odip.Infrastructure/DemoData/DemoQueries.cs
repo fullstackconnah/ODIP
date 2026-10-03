@@ -98,6 +98,25 @@ public static class DemoQueries
 
     // ── leave ────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// What the app holds a leave request to: one per staff member, type, first day and last day among those not cancelled or declined (LeaveController.HasDuplicateLeaveAsync,
+    /// the staff portal's own check: 409 "An identical request already exists.").
+    /// </summary>
+    public sealed record LeaveKey(Guid UserId, LeaveType LeaveType, DateOnly StartDate, DateOnly EndDate);
+
+    /// <summary>What the app holds a recurring rule to: one per staff member, day, times and effective dates among those not cancelled or declined.</summary>
+    public sealed record RuleKey(Guid UserId, DayOfWeek DayOfWeek, TimeOnly StartTime, TimeOnly EndTime, DateOnly EffectiveFrom, DateOnly? EffectiveTo);
+
+    /// <summary>Read only: the keys these staff members' leave requests hold, whoever made them (PR 1 audit).</summary>
+    public static IQueryable<LeaveKey> ActiveLeaveKeysOf(OdipDbContext db, List<Guid> userIds) =>
+        db.LeaveRequests.AsNoTracking().Where(l => userIds.Contains(l.UserId) && l.Status != LeaveStatus.Cancelled && l.Status != LeaveStatus.Declined)
+            .Select(l => new LeaveKey(l.UserId, l.LeaveType, l.StartDate, l.EndDate));
+
+    /// <summary>Read only: the keys these staff members' recurring rules hold, whoever made them (PR 1 audit).</summary>
+    public static IQueryable<RuleKey> ActiveRuleKeysOf(OdipDbContext db, List<Guid> userIds) =>
+        db.RecurringUnavailabilities.AsNoTracking().Where(r => userIds.Contains(r.UserId) && r.Status != LeaveStatus.Cancelled && r.Status != LeaveStatus.Declined)
+            .Select(r => new RuleKey(r.UserId, r.DayOfWeek, r.StartTime, r.EndTime, r.EffectiveFrom, r.EffectiveTo));
+
     /// <summary>Still Pending, with a first day before today: the few requests nobody decided in time.</summary>
     public static IQueryable<LeaveRequest> LapsedLeave(OdipDbContext db, DateOnly today) =>
         db.LeaveRequests.Where(l => l.Status == LeaveStatus.Pending && l.StartDate < today);
