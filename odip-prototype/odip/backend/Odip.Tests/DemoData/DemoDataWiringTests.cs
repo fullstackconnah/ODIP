@@ -103,6 +103,65 @@ public class DemoDataWiringTests
         Assert.True(provider.GetRequiredService<DemoDataOptions>().Enabled);
     }
 
+    // ── the pack list at startup, with the flag On (PR 2 verification F1) ───
+
+    /// <summary>The hosted service's startup log with the flag On and the given pack list: started and stopped before its first tick (an hour away), so nothing else is logged.</summary>
+    private static async Task<IReadOnlyList<(LogLevel Level, string Message)>> StartupLogAsync(string? packs)
+    {
+        var log = new CapturingLogger<DemoDataHostedService>();
+        var settings = new List<(string Key, string Value)> { (DemoDataOptions.FirstRunDelaySecondsKey, "3600") };
+        if (packs is not null) settings.Add((DemoDataOptions.PacksKey, packs));
+        var options = DemoDataOptions.FromConfiguration(Config("On", settings.ToArray()));
+        var service = new DemoDataHostedService(new ThrowingScopeFactory(), MaintainerFor(options), options, log);
+
+        await service.StartAsync(CancellationToken.None);
+        await service.StopAsync(CancellationToken.None);
+        return log.Entries;
+    }
+
+    [Fact]
+    public async Task On_ATypoInThePackList_IsLoggedAsAWarningBesideTheStartupLine_NamingTheTypo_AndWhatWillRun()
+    {
+        var entries = (await StartupLogAsync("provider-settings, live-sett ,incidents")).ToList();
+
+        var startup = Assert.Single(entries, e => e.Message.StartsWith("Demo data top-up is On", StringComparison.Ordinal));
+        var warning = Assert.Single(entries, e => e.Level == LogLevel.Warning);
+        Assert.Equal(entries.IndexOf(startup) + 1, entries.IndexOf(warning));                                 // beside the startup line
+        Assert.Contains("'live-sett'", warning.Message, StringComparison.Ordinal);                            // it names the typo
+        Assert.Contains(DemoDataOptions.PacksKey, warning.Message, StringComparison.Ordinal);
+
+        // What will run is read from the filter: the two real packs, in the order the code runs them (not the order they were typed), and not the typed text.
+        var willRun = "provider-settings, incidents";
+        Assert.Contains($"will run (2 of {DemoPacks.Names.Count}): {willRun}", warning.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("live-sett", warning.Message[warning.Message.IndexOf("will run", StringComparison.Ordinal)..], StringComparison.Ordinal);
+        Assert.Contains(willRun, startup.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("live-sett", startup.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task On_ACorrectPackList_LogsNoWarning_AndTheStartupLineListsWhatWillRun_InTheOrderTheyRun()
+    {
+        var entries = await StartupLogAsync("incidents,provider-settings");
+
+        Assert.DoesNotContain(entries, e => e.Level >= LogLevel.Warning);
+        var startup = Assert.Single(entries);
+        Assert.Contains($"2 of {DemoPacks.Names.Count}: provider-settings, incidents", startup.Message, StringComparison.Ordinal);       // the code's order, not the typed one
+    }
+
+    [Fact]
+    public async Task On_ANoListAtAll_LogsNoWarning_AndTheStartupLineListsEveryPack()
+    {
+        foreach (var packs in new string?[] { null, "" })
+        {
+            var entries = await StartupLogAsync(packs);
+
+            Assert.DoesNotContain(entries, e => e.Level >= LogLevel.Warning);
+            var startup = Assert.Single(entries);
+            Assert.Contains(string.Join(", ", DemoPacks.Names), startup.Message, StringComparison.Ordinal);
+            Assert.Contains($"{DemoPacks.Names.Count} of {DemoPacks.Names.Count}", startup.Message, StringComparison.Ordinal);
+        }
+    }
+
     // ── the hosted service's rhythm ──────────────────────────────────────────
 
     private static DemoDataMaintainer MaintainerFor(DemoDataOptions options, params IDemoPack[] packs) =>

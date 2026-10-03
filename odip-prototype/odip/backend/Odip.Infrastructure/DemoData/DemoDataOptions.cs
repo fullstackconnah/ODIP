@@ -46,7 +46,27 @@ public sealed class DemoDataOptions
     public IReadOnlyList<string> Packs { get; init; } = Array.Empty<string>();
 
     /// <summary>True when the pack may run: the list is empty (every pack), or it names the pack.</summary>
-    public bool Allows(string pack) => Packs.Count == 0 || Packs.Contains(pack, StringComparer.OrdinalIgnoreCase);
+    public bool Allows(string pack) => Allowed(Packs, pack);
+
+    private static bool Allowed(IReadOnlyList<string> list, string pack) => list.Count == 0 || list.Contains(pack, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The packs that will run, in the order they run: what the filter lets through (<see cref="Allows"/>), not the typed text, so a name that is not a pack is not here and a
+    /// pack typed in another order is where the code runs it.
+    /// </summary>
+    public IReadOnlyList<string> PacksThatRun => DemoPacks.Names.Where(Allows).ToList();
+
+    /// <summary>
+    /// What the startup line says of the packs: how many will run and which, from the filter ("8 of 14: provider-settings, ..."; with no list, "14 of 14 (DemoData:Packs is
+    /// empty, so every pack): ..."), so what the host reads there is what runs and not what was typed.
+    /// </summary>
+    public string DescribePacksThatRun()
+    {
+        var runs = PacksThatRun;
+        var count = $"{runs.Count} of {DemoPacks.Names.Count}";
+        var list = runs.Count == 0 ? "none" : string.Join(", ", runs);
+        return Packs.Count == 0 ? $"{count} ({PacksKey} is empty, so every pack): {list}" : $"{count}: {list}";
+    }
 
     /// <summary>Wait after the host starts before the first tick (the "startup run"): readiness never waits for it.</summary>
     public TimeSpan FirstRunDelay { get; init; } = DefaultFirstRunDelay;
@@ -54,7 +74,11 @@ public sealed class DemoDataOptions
     /// <summary>Gap between ticks.</summary>
     public TimeSpan Interval { get; init; } = DefaultInterval;
 
-    /// <summary>Set when the flag held something that is neither On nor Off, or the pack list named something that is not a pack. Log it once at startup.</summary>
+    /// <summary>
+    /// Set when the flag held something that is neither On nor Off, or the pack list named something that is not a pack. Log it once at startup: the notice does with the flag
+    /// Off (<see cref="DemoDataConfigNotice"/>), and with it On the hosted service does, as a warning beside its startup line, because an allow-list with a typo in it is a
+    /// pack that quietly stays off.
+    /// </summary>
     public string? Warning { get; init; }
 
     public static DemoDataOptions FromConfiguration(IConfiguration configuration)
@@ -74,9 +98,19 @@ public sealed class DemoDataOptions
         if (unknown.Count > 0)
         {
             var named = string.Join(", ", unknown.Select(name => $"'{name}'"));
-            var packsWarning = $"{PacksKey} names {named}, which {(unknown.Count == 1 ? "is" : "are")} not a pack and match{(unknown.Count == 1 ? "es" : "")} nothing"
-                + (unknown.Count == packs.Count ? ", so no pack will run" : string.Empty)
-                + $" (the packs are {string.Join(", ", DemoPacks.Names)}).";
+            var packsWarning = $"{PacksKey} names {named}, which {(unknown.Count == 1 ? "is" : "are")} not a pack and match{(unknown.Count == 1 ? "es" : "")} nothing";
+            var willRun = DemoPacks.Names.Where(name => Allowed(packs, name)).ToList();
+            if (on && willRun.Count > 0)
+            {
+                // With the flag On the typo is a pack that stays off while the others run: say which run, from the filter and not the typed text, and which stay off, so the
+                // one the typo was meant for is among them.
+                packsWarning += $". The packs that will run ({willRun.Count} of {DemoPacks.Names.Count}): {string.Join(", ", willRun)}."
+                    + $" The packs that stay off ({DemoPacks.Names.Count - willRun.Count}): {string.Join(", ", DemoPacks.Names.Except(willRun))}.";
+            }
+            else
+            {
+                packsWarning += (unknown.Count == packs.Count ? ", so no pack will run" : string.Empty) + $" (the packs are {string.Join(", ", DemoPacks.Names)}).";
+            }
             warning = warning is null ? packsWarning : warning + " " + packsWarning;
         }
 

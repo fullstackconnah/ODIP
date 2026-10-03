@@ -72,6 +72,28 @@ public class DemoPackAllowListTests
     }
 
     [Fact]
+    public void ThePacksThatRun_AreWhatTheFilterLetsThrough_InTheOrderTheCodeRunsThem()
+    {
+        Assert.Equal(DemoPacks.Names, From(null).PacksThatRun);
+        Assert.Equal(new[] { "live-set", "incidents" }, From("incidents, LIVE-SET").PacksThatRun);          // the code's order, not the typed one
+        Assert.Equal(new[] { "incidents" }, From("live-sett,incidents").PacksThatRun);                      // a name that is not a pack is not one that runs
+        Assert.Empty(From("live-sett").PacksThatRun);
+    }
+
+    [Fact]
+    public void WhenOn_TheTypoWarning_SaysWhatWillRunAndWhatStaysOff_AndWhenOff_WhatThePacksAre()
+    {
+        var text = From("live-sett,incidents").Warning!;
+        Assert.Contains($"will run (1 of {DemoPacks.Names.Count}): incidents.", text, StringComparison.Ordinal);
+        Assert.Contains("stay off", text, StringComparison.Ordinal);
+        Assert.Contains("live-set", text[text.IndexOf("stay off", StringComparison.Ordinal)..], StringComparison.Ordinal);                  // the pack the typo was meant for is among those that stay off
+
+        var off = From("live-sett,incidents", scenarios: "Off");                                            // nothing will run while it is Off, so it says what the packs are
+        Assert.Contains("(the packs are", off.Warning, StringComparison.Ordinal);
+        Assert.DoesNotContain("will run", off.Warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ABadFlagAndAMistypedPack_AreBothReported()
     {
         var both = From("live-sett", scenarios: "true");
