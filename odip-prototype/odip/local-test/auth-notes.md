@@ -172,7 +172,11 @@ For all practical "give me the widest access" testing, mint a token with
 - A strict CSP / security-headers middleware is applied to every response
   (`X-Frame-Options: DENY`, `Cache-Control: no-store`, etc.) — shouldn't affect
   API-only testing via curl/Postman but worth knowing if testing via a browser.
-- Login (`/api/v1/auth/exchange`) is rate-limited to 5 requests / 5 minutes per IP
-  (`"login"` policy); general API calls are limited to 100/minute per IP (`"api"`
-  policy) — irrelevant for our flow since we skip `/exchange` entirely and mint JWTs
-  directly, but could bite if any test script does call `/exchange`.
+- Login (`/api/v1/auth/exchange`) is limited two ways: a flood guard of 60 requests / 5
+  minutes per IP (`"login"` policy), and a lockout after 10 FAILED exchanges from one IP
+  in 15 minutes (a 429 with code `LockedOut` and a `Retry-After` header; a success clears
+  the count). General API calls are limited to 100/minute per IP (`"api"` policy). All
+  irrelevant for our flow since we skip `/exchange` entirely and mint JWTs directly, but
+  could bite if any test script does call `/exchange`. A refused exchange is a 401 whose
+  body's `code` says why (see the repo-root `docs/runbooks/sign-in-trouble.md`, not
+  `odip-prototype/odip/docs/`).

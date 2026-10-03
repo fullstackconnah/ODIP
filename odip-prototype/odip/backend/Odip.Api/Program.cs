@@ -403,13 +403,7 @@ builder.Services.AddSwaggerGen(c =>
 var allowedOrigins = Environment.GetEnvironmentVariable("ALLOWED_ORIGINS")?.Split(',') ?? new[] { "http://localhost:5173", "http://localhost:3000" };
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.WithOrigins(allowedOrigins)
-              .WithHeaders("Authorization", "Content-Type", "Accept", "X-Requested-With", "X-View-As-Tenant", "X-View-As-User")
-              .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-              .AllowCredentials();
-    });
+    options.AddDefaultPolicy(policy => Odip.Api.Middleware.ApiCorsPolicy.Configure(policy, allowedOrigins));
 });
 
 // ── Controllers ──────────────────────────────────────────────
