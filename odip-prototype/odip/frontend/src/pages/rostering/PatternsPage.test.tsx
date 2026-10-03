@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import PatternsPage from './PatternsPage'
 import type { ShiftPatternDto } from '@/api/types'
@@ -176,5 +176,48 @@ describe('PatternsPage — deactivating a pattern the server refuses', () => {
     expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+// Plan builder phase D: the patterns an approved agreement made are in the list like any other, badged with the version they came from and with what they ask of a worker.
+describe('PatternsPage — patterns made by an agreement', () => {
+  const agreement = (overrides: Partial<ShiftPatternDto> = {}) => makePattern({
+    id: 'pattern-agreement', dayOfWeek: 'Tuesday', notes: 'From agreement v2: Community access, community',
+    sourceDraftId: 'draft-2', sourceBlockKey: 'mornings', sourceDraftVersion: 2, workerSlot: 1, requirements: { workerGender: 'Female', driver: true, skills: ['FirstAid', 'ManualHandling'] },
+    ...overrides,
+  })
+
+  it('badges a pattern with the version of the agreement it came from, and shows what it asks of a worker, on its own row', () => {
+    mockUsePatterns.mockReturnValue({ data: [agreement(), makePattern({ id: 'pattern-hand', dayOfWeek: 'Wednesday' })], isLoading: false, isError: false, refetch: vi.fn() })
+    render(<PatternsPage />)
+
+    const row = screen.getByText('From agreement v2').closest('tr')!
+    expect(row).toHaveTextContent('Tuesday')
+    const chips = within(row).getByRole('list', { name: 'Asks for' })
+    expect(within(chips).getAllByRole('listitem').map(item => item.textContent)).toEqual(['Female worker', 'Driver', 'First aid', 'Manual handling'])
+    // the hand-made pattern beside it has no badge and no chips
+    const handMade = screen.getAllByRole('row').find(r => r.textContent?.includes('Wednesday'))!
+    expect(within(handMade).queryByText(/From agreement/)).not.toBeInTheDocument()
+    expect(within(handMade).queryByRole('list', { name: 'Asks for' })).not.toBeInTheDocument()
+  })
+
+  it('says "an agreement" when the revision is not known, and draws no chips for a pattern that asks for nothing', () => {
+    mockUsePatterns.mockReturnValue({ data: [agreement({ sourceDraftVersion: undefined, requirements: { workerGender: 'NoPreference', driver: false, skills: [] } })], isLoading: false, isError: false, refetch: vi.fn() })
+    render(<PatternsPage />)
+
+    expect(screen.getByText('From an agreement')).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Asks for' })).not.toBeInTheDocument()
+  })
+
+  it('deactivates an agreement pattern with the fields the page always sends and none of its source: nothing about it is locked', async () => {
+    const user = userEvent.setup()
+    mockUsePatterns.mockReturnValue({ data: [agreement()], isLoading: false, isError: false, refetch: vi.fn() })
+    mockUpdateMutateAsync.mockResolvedValue({})
+    render(<PatternsPage />)
+
+    await user.click(screen.getByRole('button', { name: /Deactivate Mia Chen's Tuesday pattern/ }))
+    await user.click(screen.getByRole('button', { name: 'Deactivate' }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'pattern-agreement', data: fullPayload(agreement(), false) })
   })
 })

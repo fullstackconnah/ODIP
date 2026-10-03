@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PatternSlideOver } from './PatternSlideOver'
 import type { ShiftPatternDto } from '@/api/types'
@@ -362,5 +362,63 @@ describe('PatternSlideOver as a dialog', () => {
     expect(screen.getByRole('dialog', { name: 'Edit pattern' })).toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Delete' })).toHaveFocus()
+  })
+})
+
+// Plan builder phase D: a pattern an approved agreement made stays editable, and says so when it is edited (nothing is locked).
+describe('PatternSlideOver — a pattern an agreement made', () => {
+  const agreementPattern = () => makePattern({
+    sourceDraftId: 'draft-2', sourceBlockKey: 'mornings', sourceDraftVersion: 2, workerSlot: 1, notes: 'From agreement v2: Community access, community',
+    requirements: { workerGender: 'Female', driver: true, skills: ['FirstAid'] },
+  })
+
+  const open = (pattern: ShiftPatternDto | null) => render(
+    <PatternSlideOver
+      target={pattern ? { mode: 'edit', pattern } : { mode: 'create' }}
+      onClose={noop}
+      canWrite
+      participantOptions={participantOptions}
+      staffOptions={staffOptions}
+    />,
+  )
+
+  it('warns, in the agreement\'s own version, that changing it here makes the roster differ from the agreement', () => {
+    open(agreementPattern())
+
+    expect(screen.getByText('This pattern came from agreement v2; changing it here makes the roster differ from the agreement.')).toBeInTheDocument()
+  })
+
+  it('says nothing of the kind about a hand-made pattern, or when making a new one', () => {
+    const { unmount } = open(makePattern())
+    expect(screen.queryByText(/came from agreement/)).not.toBeInTheDocument()
+    unmount()
+
+    open(null)
+    expect(screen.queryByText(/came from agreement/)).not.toBeInTheDocument()
+  })
+
+  it('shows what the agreement asks of a worker as chips, which are information and not a field to change', () => {
+    open(agreementPattern())
+
+    const chips = within(screen.getByRole('list', { name: 'Asks for' }))
+    expect(chips.getAllByRole('listitem').map(item => item.textContent)).toEqual(['Female worker', 'Driver', 'First aid'])
+  })
+
+  it('still saves a change, and sends only the fields it always sent: where the pattern came from is not the form\'s to change', async () => {
+    const user = userEvent.setup()
+    mockUpdateMutateAsync.mockResolvedValue({})
+    open(agreementPattern())
+
+    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({
+      id: 'pattern-1',
+      data: {
+        participantId: 'participant-1', defaultStaffId: 'staff-1', dayOfWeek: 'Monday', startTime: '10:00', endTime: '17:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
+        effectiveFrom: '2026-01-01', effectiveTo: null, isActive: true, notes: 'From agreement v2: Community access, community',
+      },
+    })
   })
 })

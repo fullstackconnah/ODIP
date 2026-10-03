@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import RosterBoardPage from './RosterBoardPage'
-import { makeParticipantBoard, makeParticipantRow, makeShift } from './test-fixtures'
+import { makeParticipantBoard, makeParticipantRow, makeShift, makeStaffBoard, makeStaffRow } from './test-fixtures'
 import type { RosterBoardDto } from '@/api/types'
 import { weekStartOf } from './lib/roster'
 
@@ -429,5 +429,88 @@ describe('RosterBoardPage — ?date= opens the week that contains it', () => {
       for (const call of mockUseRosterBoard.mock.calls) expect(call[0], entry).toBe(current)
       unmount()
     }
+  })
+})
+
+// Plan builder phase D: approving an agreement revision links to /rostering?date=<Monday>&participant=<id>&unfilled=1, and the "Review them" link in the confirm dialog to the same without
+// unfilled. The board used to read only ?date=; the participant filter and the unfilled-only toggle were local state, so the link opened a board for everybody.
+describe('RosterBoardPage — ?participant= and ?unfilled= open the board already filtered', () => {
+  const twoParticipants = () => makeParticipantBoard({
+    participantRows: [
+      makeParticipantRow({ participantId: 'p-1', fullName: 'Amy Ng' }),
+      makeParticipantRow({ participantId: 'p-2', fullName: 'Ben Ito' }),
+    ],
+  })
+  const staffBoard = () => makeStaffBoard({
+    staffRows: [makeStaffRow({ staffId: 'staff-1', fullName: 'Casey Roe' })],
+    unfilled: [
+      makeShift({ id: 'open-amy', participantId: 'p-1', participantName: 'Amy Ng', staffId: null, staffName: null }),
+      makeShift({ id: 'open-ben', participantId: 'p-2', participantName: 'Ben Ito', staffId: null, staffName: null }),
+    ],
+  })
+
+  // A name is on screen when the board draws it (the toolbar's filter also says the chosen participant's name, so a name can be there twice).
+  const shown = (name: string) => screen.queryAllByText(new RegExp(name)).length > 0
+
+  beforeEach(() => {
+    mockUseParticipants.mockReturnValue({ data: [{ id: 'p-1', fullName: 'Amy Ng' }, { id: 'p-2', fullName: 'Ben Ito' }] })
+    sessionStorage.clear()
+  })
+
+  it('shows only that participant\'s row, and the filter says whose it is', () => {
+    mockUseRosterBoard.mockReturnValue({ data: twoParticipants(), isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage('/rostering?date=2026-10-14&participant=p-1')
+
+    expect(shown('Amy Ng')).toBe(true)
+    expect(shown('Ben Ito')).toBe(false)
+    expect(mockUseRosterBoard.mock.calls.at(-1)?.[0]).toBe('2026-10-12')       // and the week is the one the link named
+  })
+
+  it('shows every participant when the address names none, or names one the board does not know', () => {
+    mockUseRosterBoard.mockReturnValue({ data: twoParticipants(), isLoading: false, isError: false, refetch: vi.fn() })
+    const { unmount } = renderPage('/rostering?date=2026-10-14')
+    expect(shown('Ben Ito')).toBe(true)
+    unmount()
+
+    renderPage('/rostering?participant=')
+    expect(shown('Amy Ng')).toBe(true)
+    expect(shown('Ben Ito')).toBe(true)
+  })
+
+  it('opens the staff board with "Unfilled only" pressed and only that participant\'s open shifts when ?unfilled=1', () => {
+    sessionStorage.setItem('odip.roster.boardView', 'staff')
+    mockUseRosterBoard.mockReturnValue({ data: staffBoard(), isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage('/rostering?date=2026-10-14&participant=p-1&unfilled=1')
+
+    expect(screen.getByRole('button', { name: 'Unfilled only' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByText('Casey Roe')).not.toBeInTheDocument()            // the staff rows are out of the way, the open shifts are the board
+    expect(shown('Amy Ng')).toBe(true)
+    expect(shown('Ben Ito')).toBe(false)
+  })
+
+  it('leaves "Unfilled only" off unless the address asks for it', () => {
+    sessionStorage.setItem('odip.roster.boardView', 'staff')
+    mockUseRosterBoard.mockReturnValue({ data: staffBoard(), isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage('/rostering?date=2026-10-14&participant=p-1')
+
+    expect(screen.getByRole('button', { name: 'Unfilled only' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByText('Casey Roe')).toBeInTheDocument()
+  })
+
+  it('follows a later change of the address on a board that is already open, and lets the toolbar own the filters in between', async () => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({ data: twoParticipants(), isLoading: false, isError: false, refetch: vi.fn() })
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const router = createMemoryRouter([{ path: '/rostering', element: <RosterBoardPage /> }], { initialEntries: ['/rostering?date=2026-10-14&participant=p-1'] })
+    render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>)
+    expect(shown('Ben Ito')).toBe(false)
+
+    await act(async () => { await router.navigate('/rostering?date=2026-10-14&participant=p-2') })
+    expect(shown('Ben Ito')).toBe(true)
+    expect(shown('Amy Ng')).toBe(false)
+
+    await user.click(screen.getAllByRole('button').find(button => button.getAttribute('aria-haspopup') === 'listbox')!)     // the toolbar's own filter still works
+    await user.click(await screen.findByRole('option', { name: 'All participants' }))
+    expect(shown('Amy Ng')).toBe(true)
   })
 })

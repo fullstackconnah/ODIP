@@ -4,7 +4,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ShiftSlideOver } from './ShiftSlideOver'
 import { makeShift, makeFinding } from '../test-fixtures'
-import type { ParticipantRoutineDto, CompatibilityRowDto, ShiftNoteDto } from '@/api/types'
+import type { ParticipantRoutineDto, CompatibilityRowDto, ShiftDto, ShiftNoteDto } from '@/api/types'
 
 const {
   mockCheckMutate, mockCreateMutateAsync, mockUpdateMutateAsync, mockDeleteMutateAsync, mockGetRosterFindings,
@@ -1380,5 +1380,35 @@ describe('ShiftSlideOver as a dialog', () => {
       <ShiftSlideOver {...props} target={{ mode: 'create', participantId: 'participant-1', serviceDate: '2026-08-17', focusField: 'staff' }} onClose={noop} />,
     )
     expect(screen.getByRole('combobox', { name: 'Staff' })).toHaveFocus()
+  })
+})
+
+// Plan builder phase D: a shift generated from an agreement's pattern carries what the agreement asks of a worker, and the panel shows it (informational: nothing checks it against the worker yet).
+describe('ShiftSlideOver — what the shift asks of a worker', () => {
+  const openShift = (requirements?: ShiftDto['requirements']) => render(
+    <ShiftSlideOver
+      target={{ mode: 'edit', shift: makeShift({ requirements }) }}
+      onClose={noop}
+      canWrite
+      participantOptions={participantOptions}
+      staffOptions={staffOptions}
+    />,
+  )
+
+  it('shows a chip for each thing the shift asks of a worker, with a note that it is not checked yet', () => {
+    openShift({ workerGender: 'Female', driver: true, skills: ['MedicationCompetent'] })
+
+    const chips = within(screen.getByRole('list', { name: 'Asks for' }))
+    expect(chips.getAllByRole('listitem').map(item => item.textContent)).toEqual(['Female worker', 'Driver', 'Medication competent'])
+    expect(screen.getByText('From the agreement. Shown, not checked against the worker yet.')).toBeInTheDocument()
+  })
+
+  it('shows nothing for a shift that asks for nothing, or has no requirements (a one-off, an older shift)', () => {
+    const { unmount } = openShift({ workerGender: 'NoPreference', driver: false, skills: [] })
+    expect(screen.queryByRole('list', { name: 'Asks for' })).not.toBeInTheDocument()
+    unmount()
+
+    openShift(undefined)
+    expect(screen.queryByText('Asks for')).not.toBeInTheDocument()
   })
 })

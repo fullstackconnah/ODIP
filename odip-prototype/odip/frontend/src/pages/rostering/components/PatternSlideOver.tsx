@@ -8,7 +8,10 @@ import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useCreatePattern, useUpdatePattern, useDeletePattern } from '@/api/hooks'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
+import { RequirementChips } from '@/components/RequirementChips'
 import { SlideOver } from '@/components/SlideOver'
+import { requirementLabels } from '@/lib/workerRequirements'
 import { extractErrorMessage } from '@/lib/utils'
 import { modalGrid } from '@/lib/formGrid'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS } from '../lib/roster'
@@ -142,6 +145,17 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
           </>
         ) : undefined}
       >
+        {existing?.sourceDraftId && (
+          <Callout tone="warning">
+            {`This pattern came from agreement v${existing.sourceDraftVersion ?? '?'}; changing it here makes the roster differ from the agreement.`}
+          </Callout>
+        )}
+        {existing?.requirements && requirementLabels(existing.requirements).length > 0 && (
+          <FormField label="Asks for" hint="From the agreement. Shown, not checked against the worker yet.">
+            <RequirementChips requirements={existing.requirements} />
+          </FormField>
+        )}
+
         <FormField label="Participant" required>
           <Dropdown
             variant="form"

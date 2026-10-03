@@ -13,6 +13,7 @@ import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { usePatterns, useUpdatePattern, useParticipants, useStaff } from '@/api/hooks'
 import type { ShiftPatternDto, CreateShiftPatternDto } from '@/api/types'
 import { PatternSlideOver, GeneratePatternDialog, type PatternSlideOverTarget } from './components'
+import { PatternSource } from './components/PatternSource'
 import { formatShiftRange, formatEffectiveRange, RATIO_LABELS, NIGHT_TYPE_LABELS, DAY_OF_WEEK_INDEX } from './lib/roster'
 
 /** The write fields off a loaded pattern, for round-tripping through update without re-typing every field. */
@@ -79,8 +80,8 @@ function PatternRowActions({
 function PatternsSkeleton() {
   const { prefs } = useUiPreferences()
   const dividerClass = prefs.tableVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
-  const headers = ['Participant', 'Day', 'Time', 'Ratio', 'Night type', 'Default staff', 'Effective range', 'Status', '']
-  const widths = ['w-28', 'w-16', 'w-20', 'w-10', 'w-16', 'w-24', 'w-32', 'w-14', 'w-8']
+  const headers = ['Participant', 'Day', 'Time', 'Ratio', 'Night type', 'Default staff', 'Effective range', 'From agreement', 'Status', '']
+  const widths = ['w-28', 'w-16', 'w-20', 'w-10', 'w-16', 'w-24', 'w-32', 'w-24', 'w-14', 'w-8']
   return (
     <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-card" aria-hidden="true">
       <table className="w-full text-sm">
@@ -162,6 +163,8 @@ export default function PatternsPage() {
     { key: 'nightType', header: 'Night type', render: p => NIGHT_TYPE_LABELS[p.nightType] ?? p.nightType },
     { key: 'defaultStaffName', header: 'Default staff', render: p => p.defaultStaffName ?? 'Unfilled' },
     { key: 'effectiveRange', header: 'Effective range', render: p => formatEffectiveRange(p.effectiveFrom, p.effectiveTo) },
+    // Plan builder phase D: a pattern an approved agreement made says which version, and what the agreement asks of a worker. Information only.
+    { key: 'source', header: 'From agreement', wrap: true, render: p => <PatternSource pattern={p} /> },
     { key: 'isActive', header: 'Status', render: p => <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} /> },
   ]
 

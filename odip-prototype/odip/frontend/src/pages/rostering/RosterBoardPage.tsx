@@ -47,9 +47,19 @@ export default function RosterBoardPage() {
     if (dateParam !== null) setWeekStart(weekStartFromDateParam(dateParam))
   }
   const [groupBy, setGroupBy] = useBoardViewMode()
-  const [participantFilter, setParticipantFilter] = useState('')
+  // `?participant=<id>` and `?unfilled=1` (plan builder phase D: the links an approval and its confirm dialog give) open the board already filtered to that participant, and to open shifts, through the same
+  // local filters the toolbar owns. Read like `date`: they open the filter, a later change of the address moves it, and a missing one never resets what the toolbar chose in between.
+  const participantParam = searchParams.get('participant')
+  const unfilledParam = searchParams.get('unfilled')
+  const [participantFilter, setParticipantFilter] = useState(participantParam ?? '')
   const [regionFilter, setRegionFilter] = useState('')
-  const [unfilledOnly, setUnfilledOnly] = useState(false)
+  const [unfilledOnly, setUnfilledOnly] = useState(unfilledParam === '1')
+  const [seenFilterParams, setSeenFilterParams] = useState({ participantParam, unfilledParam })
+  if (seenFilterParams.participantParam !== participantParam || seenFilterParams.unfilledParam !== unfilledParam) {
+    setSeenFilterParams({ participantParam, unfilledParam })
+    if (participantParam !== null) setParticipantFilter(participantParam)
+    if (unfilledParam !== null) setUnfilledOnly(unfilledParam === '1')
+  }
   const [exceptionsOpen, setExceptionsOpen] = useState(false)
   const [slideOverTarget, setSlideOverTarget] = useState<ShiftSlideOverTarget | null>(null)
   const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<ShiftDto | null>(null)
