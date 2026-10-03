@@ -26,7 +26,7 @@ public record FundingPeriodDto
     public DateOnly PeriodStart { get; init; }
     public DateOnly PeriodEnd { get; init; }
     public decimal PlanAmount { get; init; }
-    /// <summary>Oassist's share of the amount; omitted when none is recorded (then the limit is the plan amount).</summary>
+    /// <summary>The organisation's share of the amount; omitted when none is recorded (then the limit is the plan amount).</summary>
     public decimal? SetAside { get; init; }
 }
 

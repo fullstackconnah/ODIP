@@ -356,7 +356,7 @@ public class FundingPlanValidatorTests
     }
 
     [Fact]
-    public void AZeroPlanAmount_IsAccepted_APoolRecordedButNotUsedByOassist()
+    public void AZeroPlanAmount_IsAccepted_APoolRecordedButNotUsedByTheProvider()
     {
         Assert.Empty(FundingPlanValidator.Validate(Plan(Core(periods: Quarters(0m)))));
     }
@@ -432,6 +432,23 @@ public class FundingPlanValidatorTests
         var days = Enumerable.Range(0, 365).Select(i => P(D(2026, 7, 1).AddDays(i), D(2026, 7, 1).AddDays(i), 1m)).ToList();
         var plan = Plan(Core(periods: days)) with { PlanEnd = D(2027, 6, 30), PeriodLengthMonths = 1 };
         AssertRefused(FundingPlanValidator.Validate(plan), "at most 60 periods");
+    }
+
+    // ── The set-aside belongs to whichever organisation records it ───────────
+
+    [Fact]
+    public void TheSetAsideMessages_NameNoOrganisation_BecauseEveryTenantReadsThem()
+    {
+        var above = FundingPlanValidator.Validate(Plan(Core(periods: Quarters(2000m, setAside: 2500m))));
+        var someNotAll = FundingPlanValidator.Validate(Plan(Core(periods: new List<SaveFundingPeriodDto>
+        {
+            P(D(2026, 7, 1), D(2026, 9, 30), 2000m, 500m), P(D(2026, 10, 1), D(2026, 12, 31), 2000m),
+            P(D(2027, 1, 1), D(2027, 3, 31), 2000m), P(D(2027, 4, 1), D(2027, 6, 30), 2000m),
+        })));
+
+        Assert.Contains(above, e => e.StartsWith("The set-aside ($2,500.00) is more than the plan amount ($2,000.00)", StringComparison.Ordinal));
+        Assert.Contains(someNotAll, e => e.Contains(", the set-aside is given for some periods but not all. Give it for every period or for none.", StringComparison.Ordinal));
+        Assert.DoesNotContain(above.Concat(someNotAll), e => e.Contains("Oassist", StringComparison.OrdinalIgnoreCase));
     }
 
     // ── A crafted body is refused in plain words, never with an exception (a 500) ──

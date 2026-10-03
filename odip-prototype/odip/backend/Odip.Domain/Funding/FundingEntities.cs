@@ -103,7 +103,7 @@ public class FundingPeriod : ITenantEntity
     public decimal PlanAmount { get; set; }
 
     /// <summary>
-    /// Oassist's share of <see cref="PlanAmount"/> when the participant also uses other providers: zero or more, and no more than the plan amount. Set on every
+    /// The organisation's share of <see cref="PlanAmount"/> when the participant also uses other providers: zero or more, and no more than the plan amount. Set on every
     /// period of a pool or on none; null everywhere means the limit is the plan amount.
     /// </summary>
     public decimal? SetAside { get; set; }

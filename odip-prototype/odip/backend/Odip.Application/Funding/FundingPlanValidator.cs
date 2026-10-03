@@ -218,13 +218,13 @@ public static class FundingPlanValidator
                 if (setAside < 0m) errors.Add($"A set-aside cannot be negative ({where}).");
                 else if (decimal.Round(setAside, 2) != setAside) errors.Add($"A set-aside is in dollars and cents ({where}).");
                 else if (period.PlanAmount is { } planAmount && setAside > planAmount)
-                    errors.Add($"Oassist's set-aside (${Money(setAside)}) is more than the plan amount (${Money(planAmount)}) for {where}.");
+                    errors.Add($"The set-aside (${Money(setAside)}) is more than the plan amount (${Money(planAmount)}) for {where}.");
             }
         }
 
         var withSetAside = periods.Count(p => p.SetAside is not null);
         if (withSetAside > 0 && withSetAside < periods.Count)
-            errors.Add($"In {label}, Oassist's set-aside is given for some periods but not all. Give it for every period or for none.");
+            errors.Add($"In {label}, the set-aside is given for some periods but not all. Give it for every period or for none.");
     }
 
     /// <summary>A null character in free text: PostgreSQL refuses it in a text column, and an unchecked one would reach it as an error instead of a reason.</summary>
