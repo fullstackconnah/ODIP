@@ -28,6 +28,11 @@ Rules `Validate()` enforces beyond the obvious ranges (each is an `InvalidInput`
   null entry is a message, not an exception, and the list then counts as empty.
 - **Sleepover window:** a block of more than 12 hours where the worker may sleep must give the window (without one the whole block is the night, and a 24
   hour block was one 311.79 item). 12 hours exactly is fine.
+- **Id:** at most 64 characters. A longer id is refused, and every message and issue about a block shows only its first 64 characters and an ellipsis (a
+  request under 1 MiB can carry one block with a million-character id that is wrong in a couple of dozen ways: repeating the id in each message and each
+  issue made about 56 MB of answer).
+- **Numbers are checked in their own units:** any decimal or integer a request can carry is a message and never an overflow (the sleepover's active hours
+  are compared with the window in hours, not multiplied into minutes), so one bad block is one block's issue and never a 500 for the quote.
 - **Sharing:** `participantsSharing` on provider travel and on activity-based transport is optional. Left out, it is the participants present (the trip is one
   claim, not one per participant's plan); giving 1 still means one participant takes the whole trip. It cannot be more than the most participants present at
   any time in the block.
@@ -112,9 +117,11 @@ has edited).
 
 `POST api/v1/plan-pricing/quote` (SuperAdmin, Admin, Coordinator; **internal**, phase C's builder is the only caller): body `blocks`, `periodFrom`,
 `periodTo`, `includeLines`. The server reads the caller's tenant's settings, the catalogue rows that touch the period and the holidays; the client sends
-no price and no policy. At most 200 blocks, 800 days, 25,000 dated occurrences and about 100,000 lines (each block's occurrences times an upper bound of its lines: a plain block is 3, and every headcount change, up to 10 a block, adds one); a bigger plan is an issue in the answer, not work done. `includeLines: false` keeps the answer small. `GET` and `PUT api/v1/plan-pricing/settings` (PUT: Admin and SuperAdmin; only the fields sent
+no price and no policy. At most 200 blocks, 800 days, 25,000 dated occurrences and about 100,000 lines (each block's occurrences times an upper bound of its lines: a plain block is 3, and every headcount change, up to 10 a block, adds one); a bigger plan is an issue in the answer, not work done. The bound is tight (the heaviest short-term accommodation shape makes 20 lines, 22 with a mid-day part-day holiday, against a bound of 22; a test sweeps it) as long as a date has at most one part-day holiday row. `includeLines: false` keeps the answer small. `GET` and `PUT api/v1/plan-pricing/settings` (PUT: Admin and SuperAdmin; only the fields sent
 change; sending the registration groups confirms them). An answer with `includeLines` true is refused above 60,000 lines (ask for the totals only, or shorten
-the period); the quote is rate limited with the app's `api` policy (100 a minute a client) and stops when the client cancels it.
+the period); the quote is rate limited with the app's `api` policy (100 a minute a client), has at most two quotes in flight per organisation (a third is
+refused at once with a 429, "Try again shortly" and `Retry-After: 1`, never queued; the key is the tenant, or the user when there is none) and stops when the
+client cancels it.
 
 ## Known limits
 
