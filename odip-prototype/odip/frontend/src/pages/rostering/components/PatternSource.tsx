@@ -3,7 +3,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { RequirementChips } from '@/components/RequirementChips'
 
 /** The words for where an agreement pattern came from: the version when the server knows it. */
-export function patternSourceLabel(pattern: Pick<ShiftPatternDto, 'sourceDraftId' | 'sourceDraftVersion'>): string | null {
+function patternSourceLabel(pattern: Pick<ShiftPatternDto, 'sourceDraftId' | 'sourceDraftVersion'>): string | null {
   if (!pattern.sourceDraftId) return null
   return pattern.sourceDraftVersion !== undefined ? `From agreement v${pattern.sourceDraftVersion}` : 'From an agreement'
 }
