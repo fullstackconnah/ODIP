@@ -112,6 +112,62 @@ public class DemoHandoverSourceTests
         Assert.Equal(withHourlyTicks, await FridayReadsAsync(gap));
     }
 
+    /// <summary>
+    /// Second independent review X3: the live set starts, scripts and finishes shifts only between 06:00 and 23:00, while the history closes readers at any hour. A tick
+    /// outside the live hours that follows a gap computes the history's read against sources the live set has not finished yet; at the first tick after 06:00 the live set
+    /// finishes the shift with its scripted submit time, the choice moves, and the history wrote a second read for the same reader (a different handover, so a new id).
+    /// A reader is held back while a live shift of their participant that started before theirs is not finished.
+    /// </summary>
+    [Fact]
+    public async Task AHistoryReadIsTheSame_WhetherTheLiveShiftBeforeItFinishedByHourlyTicksOrAtTheFirstTickAfterSix()
+    {
+        var fridayMorning = Utc("2026-10-01T20:30:00Z");                                           // Fri 06:30 AEST: Thursday's shifts are finished, Friday's are cast
+        var zone = Zone();
+
+        // Harrison's shift of Friday afternoon (15:00 to 19:00), closed with a handover: its reader is a coordinator the live insulin shift (08:00 to 14:00) does not use, and
+        // reads after that shift was submitted. The id is one whose read is not among the one in eight the history leaves unread.
+        var shiftId = Enumerable.Range(0, 400).Select(i => DemoIds.For("fixture", "harrison-afternoon", i)).First(id => DemoIds.Pick(DemoIds.For("shift-completion", id), "unread", 0, 99) >= 12);
+        void AddAfternoonShift(Microsoft.EntityFrameworkCore.DbContext db)
+        {
+            var start = ProviderLocalTime.LocalToUtc(At(Friday, 15, 2), zone);
+            var end = ProviderLocalTime.LocalToUtc(At(Friday, 19, 3), zone);
+            db.Add(new Odip.Domain.Rostering.Shift
+            {
+                Id = shiftId, TenantId = DemoTestEnv.DemoTenantId, ParticipantId = DemoFixture.ParticipantId("harrison"), UserId = DemoFixture.StaffId("sarah"), ServiceDate = Friday,
+                StartTime = new TimeOnly(15, 0), EndTime = new TimeOnly(19, 0), Status = Odip.Domain.Rostering.ShiftStatus.Completed,
+                CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+            });
+            db.Add(new Odip.Domain.Rostering.ShiftCompletion
+            {
+                Id = DemoIds.For("shift-completion", shiftId), TenantId = DemoTestEnv.DemoTenantId, ShiftId = shiftId, ActualStart = start, ActualEnd = end, StartedAt = start,
+                SubmittedAt = end.AddMinutes(6), TimeZoneId = zone.Id, SubmittedByUserId = DemoFixture.StaffId("sarah"), NothingToNoteConfirmed = true, IsActive = true,
+                CreatedAt = end.AddMinutes(6), UpdatedAt = end.AddMinutes(6),
+            });
+        }
+
+        // Hourly ticks: the live insulin shift is finished by 14:35, and the afternoon shift is closed and read at 20:00.
+        var hourly = await TickAsync(fridayMorning);
+        await RunAsync(hourly, Utc("2026-10-02T04:35:00Z"));                                         // Fri 14:35
+        await using (var db = hourly.AdminDb()) { AddAfternoonShift(db); await db.SaveChangesAsync(); }
+        await RunAsync(hourly, Utc("2026-10-02T10:00:00Z"));                                         // Fri 20:00
+
+        // The host was down all day: the first tick back is at 23:30 (outside the live hours), the next at 06:30.
+        var gap = await TickAsync(fridayMorning);
+        await using (var db = gap.AdminDb()) { AddAfternoonShift(db); await db.SaveChangesAsync(); }
+        await RunAsync(gap, Utc("2026-10-02T13:30:00Z"));                                            // Fri 23:30 (UTC+10), after the live hours
+        await RunAsync(gap, Utc("2026-10-02T20:30:00Z"));                                            // Sat 06:30
+
+        async Task<List<(Guid Source, Guid Reader)>> ReadsOfTheAfternoonAsync(DemoTestEnv env)
+        {
+            await using var db = env.AdminDb();
+            return (await db.HandoverAcknowledgements.Where(a => a.ShiftId == shiftId).ToListAsync()).Select(a => (a.SourceCompletionId, a.UserId)).OrderBy(a => a.SourceCompletionId).ToList();
+        }
+
+        var withHourlyTicks = await ReadsOfTheAfternoonAsync(hourly);
+        Assert.Single(withHourlyTicks);                                                              // the live insulin shift's handover, which the portal showed at the read
+        Assert.Equal(withHourlyTicks, await ReadsOfTheAfternoonAsync(gap));
+    }
+
     [Fact]
     public async Task AMondayMorningWorker_ReadsTheNightShiftsHandover_NotLastSundaysMorning()
     {

@@ -19,8 +19,9 @@ What it will and will not do, because the production host has it switched on:
   layer writes about them have random ids and are found by the id of the row they describe. A row a person makes in the portal has a random id;
   where the app holds a row to a natural key (one acknowledgement per reader and handover, one running break per completion, one tick per
   completion, routine and occurrence) or a rule (one active record per scheduled medication slot) the script looks for the key and leaves the
-  person's row alone. The one exception is the finish of a live shift, which ends a break that is still running, whoever started it, as the app's
-  Finish requires.
+  person's row alone. A live shift a person has taken over, by starting it by hand or by a coordinator returning its completion for correction,
+  is theirs: the script leaves it alone. The one exception to "leaves the person's row alone" is the finish of a live shift the script itself is
+  working, which ends a break that is still running, whoever started it, as the app's Finish requires.
 
 ## Switches
 
@@ -84,8 +85,9 @@ Before you run it:
    line to `COMMIT` and run it again.
 3. It does not undo what the top-up changed on rows it did not create: the staff expiry dates (the status of a shift the roster pack moved goes
    with the shift). It does remove, besides the rows the top-up wrote: the people, contact roles and provider settings row it created (so the
-   tenant has no state or time zone until the next tick writes one), rows people made that hang on demo rows, and the audit history of everything
-   it removes. It does not touch the Demo tenant's staff, its participants or the old seed's shifts.
+   tenant has no state or time zone until the next tick writes one) and rows people made that hang on demo rows. It removes the audit history of the
+   rows with a demo id; the audit rows of the rows people made (a person's acknowledgement, tick or break on a demo shift, a dose on a demo medication)
+   have no demo id to find them by and stay. It does not touch the Demo tenant's staff, its participants or the old seed's shifts.
 4. After a purge, `DEMO_DATA_SCENARIOS=On` starts the demo over from the date of the next tick; it does not bring back the previous rows.
 5. If the Demo tenant was ever billed, `ClaimLineItems` rows that name a demo shift (`Restrict`) stop the delete of that shift. Clear them
    first, after checking they belong to the Demo tenant: `DELETE FROM "ClaimLineItems" WHERE "ShiftId" IN (SELECT "Id" FROM demo_shift);`
@@ -180,7 +182,8 @@ DELETE FROM "People"
 DELETE FROM "ProviderSettings"
   WHERE "TenantId" IN (SELECT "Id" FROM demo_tenant) AND substr("Id"::text, 15, 1) = '8';
 
--- The audit rows that describe the rows above (an audit row has no foreign key, so it can go last).
+-- The audit rows that describe the rows with a demo id (an audit row has no foreign key, so it can go last). The table has no tenant column: a version-8 id is only
+-- ever made by the top-up, which only ever wrote to the Demo tenant, so these are its.
 DELETE FROM "AuditLogs"
   WHERE substr("EntityId"::text, 15, 1) = '8';
 

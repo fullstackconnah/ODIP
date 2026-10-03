@@ -344,7 +344,8 @@ public sealed class LiveSetPack : IDemoPack
             {
                 // The occurrence is the old seed's own 07:00. A presenter who moves the routine in the portal and ticks it there makes a tick for the moved
                 // occurrence, and this one for 07:00 is then a second tick of the completion and routine that no index refuses (the history pack takes its
-                // occurrences from the portal's matcher; the live set's is fixed, as its script is). Known, and harmless: the tick card shows both.
+                // occurrences from the portal's matcher; the live set's is fixed, as its script is). Known: the portal shows one tick per routine, the earliest, so a
+                // person's tick of the moved occurrence is hidden behind this one on the shift's card.
                 if (_routines.FirstOrDefault(r => r.Id == MorningRoutine) is { } routine && At(live, 7, 40) > actualStartLocal)
                 {
                     var tick = PackageRows.Tick(_run, completion, routine, At(live, 7, 0), worker, At(live, 7, 40));

@@ -101,7 +101,7 @@ public sealed class MedicationHistoryPack : IDemoPack
             foreach (var slot in MedicationSlotCalculator.EnumerateSlots(med, from, to))
             {
                 if (recorded.Contains((med.Id, slot))) continue;
-                if (live.Any(w => w.Participant == med.ParticipantId && slot >= w.Start && slot < w.End)) continue;
+                if (live.Any(w => w.OwnsSlots && w.Participant == med.ParticipantId && slot >= w.Start && slot < w.End)) continue;
                 ScheduledDose(run, med, slot, staff, Add);
             }
         }
@@ -240,7 +240,7 @@ public sealed class MedicationHistoryPack : IDemoPack
     // ── as-needed doses ──
 
     private async Task PrnDosesAsync(DemoRun run, List<ParticipantMedication> chart, IReadOnlyDictionary<string, User> staff, DateOnly firstDay,
-        List<(Guid Participant, DateTime Start, DateTime End)> live, Action<MedicationAdministration, ParticipantMedication, User, bool> add, CancellationToken ct)
+        List<LiveWindow> live, Action<MedicationAdministration, ParticipantMedication, User, bool> add, CancellationToken ct)
     {
         var anchors = run.Anchors;
         var candidates = new List<(ParticipantMedication Med, DateOnly Date, DateTime Given, Guid Id)>();
@@ -250,7 +250,7 @@ public sealed class MedicationHistoryPack : IDemoPack
             {
                 if (med.StartDate > PackageRows.Local(date, new TimeOnly(23, 59))) continue;
                 if (med.EndDate is { } end && end < PackageRows.Local(date, TimeOnly.MinValue)) continue;
-                if (live.Any(w => w.Participant == med.ParticipantId && DateOnly.FromDateTime(w.Start) == date)) continue;       // the live set's own day
+                if (live.Any(w => w.OwnsPrnDay && w.Participant == med.ParticipantId && DateOnly.FromDateTime(w.Start) == date)) continue;       // the live set's own day
 
                 var key = DemoIds.For("prn-day", med.Id, date);
                 if (DemoIds.Pick(key, "has-dose", 0, 99) >= PrnDayPercent) continue;
@@ -293,28 +293,40 @@ public sealed class MedicationHistoryPack : IDemoPack
 
     // ── the live set's windows ──
 
-    private static async Task<List<(Guid Participant, DateTime Start, DateTime End)>> LiveWindowsAsync(DemoRun run, IReadOnlyDictionary<string, User> staff, CancellationToken ct)
+    /// <summary>
+    /// One live shift's window on a participant's day. The scheduled slots inside it are the live set's while it works the shift or has (<see cref="OwnsSlots"/>); the
+    /// day's as-needed dose is its too once the shift has been worked at all, whoever has it now (<see cref="OwnsPrnDay"/>): a shift that was worked and then given to
+    /// somebody else keeps its day, because its as-needed dose is already written and a second one could fall inside the minimum interval.
+    /// </summary>
+    private sealed record LiveWindow(Guid Participant, DateTime Start, DateTime End, bool OwnsSlots, bool OwnsPrnDay);
+
+    private static async Task<List<LiveWindow>> LiveWindowsAsync(DemoRun run, IReadOnlyDictionary<string, User> staff, CancellationToken ct)
     {
         // Every day of the history window, not only the two the live set builds: a live shift of three days ago still owns its day (its as-needed dose,
         // its closing doses), and a history dose written beside them could fall inside the minimum interval of one.
         var anchors = run.Anchors;
         var dates = Enumerable.Range(0, HistoryDays + 1).Select(i => anchors.D0.AddDays(-i)).ToArray();
 
-        // A window is the live set's only while its shift is being worked: one the owner cancelled, or that was never published, is nobody's, and so is one with
-        // nobody on it or with somebody the stories do not name, which the live set leaves alone; counting any of them would leave the day's doses unrecorded for
-        // good (PR 2 review L2, independent review N1).
+        // A window is the live set's only while its shift is being worked: one the owner cancelled, or that was never published, is nobody's, and so is a shift
+        // that has not been worked and has nobody on it or somebody the stories do not name, which the live set leaves alone; counting any of them would leave the
+        // day's doses unrecorded for good (PR 2 review L2, independent review N1). A shift that HAS been worked (finished, waiting for review or approved) keeps its
+        // window whoever has it now, and so does an in-progress one for the as-needed dose, though not for the slots that remain, which nobody will record
+        // (second independent review X4). The window is the shift's own participant's (Y4), whatever the story says.
         var workers = staff.Values.Select(u => u.Id).ToHashSet();
         var states = (await DemoQueries.ShiftStatesOf(run.Db, LiveSetCatalog.ShiftIds(dates).ToList()).ToListAsync(ct)).ToDictionary(s => s.Id);
 
-        var windows = new List<(Guid, DateTime, DateTime)>();
+        var windows = new List<LiveWindow>();
         foreach (var date in dates)
         {
             foreach (var story in LiveSetCatalog.Stories)
             {
                 if (!states.TryGetValue(LiveSetCatalog.ShiftId(story, date), out var state) || state.Status is ShiftStatus.Cancelled or ShiftStatus.Draft) continue;
-                if (state.UserId is not { } worker || !workers.Contains(worker)) continue;
-                if (run.Directory.Participant(story.Participant) is not { } participant) continue;
-                windows.Add((participant.Id, PackageRows.Local(date, story.Start), PackageRows.Local(date, story.End)));
+                var finished = state.Status is ShiftStatus.PendingReview or ShiftStatus.Completed;
+                var scripted = state.UserId is { } worker && workers.Contains(worker);                      // the live set works it (or did)
+                var ownsSlots = finished || scripted;
+                var ownsPrnDay = ownsSlots || state.Status == ShiftStatus.InProgress;
+                if (!ownsSlots && !ownsPrnDay) continue;
+                windows.Add(new LiveWindow(state.ParticipantId, PackageRows.Local(date, story.Start), PackageRows.Local(date, story.End), ownsSlots, ownsPrnDay));
             }
         }
         return windows;

@@ -49,7 +49,7 @@ public class DemoShiftPackageHistoryTests
         foreach (var c in closed)
         {
             var (start, end) = ProviderLocalTime.RosteredWindowLocal(c.Shift);
-            if ((end - start).TotalHours < 5) { Assert.Empty(c.Breaks); continue; }
+            if ((end - start).TotalHours < 5 || c.Completion.StartWasManual) { Assert.Empty(c.Breaks); continue; }            // a start typed in at the Finish was never in progress: no break
 
             var brk = Assert.Single(c.Breaks);
             Assert.InRange((brk.EndedAt!.Value - brk.StartedAt).TotalMinutes, 15, 45);
@@ -297,6 +297,57 @@ public class DemoShiftPackageHistoryTests
         Assert.True(late.Count == 0, $"{late.Count} of {ticks.Count} ticks were made after the worker finished, e.g. {(late.Count == 0 ? "" : $"{late[0].CheckedAt:O} against a finish of {completions[late[0].ShiftCompletionId].ActualEnd:O}")}");
     }
 
+    /// <summary>
+    /// Second independent review X5: one completion in ten has its start entered by hand at the Finish (the worker forgot to tap Start): the shift was never in progress,
+    /// the completion is made at the Finish, and the portal takes a tick or a break only from an in-progress shift. The history wrote both for them, timed before the
+    /// completion existed.
+    /// </summary>
+    [Fact]
+    public async Task ACompletionWhoseStartWasTypedInAtTheFinish_HasNoTickAndNoBreak_ButOneThatWasStartedDoes()
+    {
+        var env = new DemoTestEnv(Friday1030);
+        await DemoFixture.SeedPeopleAsync(env);
+        await env.SetProviderStateAsync("NSW");
+        var zone = Zone();
+        var manual = new HashSet<Guid>();
+        await using (var db = env.AdminDb())
+        {
+            for (var i = 0; i < 40; i++)
+            {
+                var date = Friday.AddDays(-2 - i % 20);
+                var shiftId = DemoIds.For("fixture", "manual-start", i);
+                var start = ProviderLocalTime.LocalToUtc(At(date, 7, 2), zone);
+                var end = ProviderLocalTime.LocalToUtc(At(date, 13, 3), zone);
+                var typedIn = i % 2 == 0;
+                db.Shifts.Add(new Shift
+                {
+                    Id = shiftId, TenantId = DemoTestEnv.DemoTenantId, ParticipantId = DemoFixture.ParticipantId("sophie"), UserId = DemoFixture.StaffId("james"), ServiceDate = date,
+                    StartTime = new TimeOnly(7, 0), EndTime = new TimeOnly(13, 0), Status = ShiftStatus.Completed,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                });
+                var completionId = DemoIds.For("shift-completion", shiftId);
+                if (typedIn) manual.Add(completionId);
+                db.ShiftCompletions.Add(new ShiftCompletion
+                {
+                    Id = completionId, TenantId = DemoTestEnv.DemoTenantId, ShiftId = shiftId, ActualStart = start, ActualEnd = end, StartedAt = typedIn ? end.AddMinutes(6) : start, StartWasManual = typedIn,
+                    SubmittedAt = end.AddMinutes(6), TimeZoneId = zone.Id, SubmittedByUserId = DemoFixture.StaffId("james"), NothingToNoteConfirmed = true, IsActive = true,
+                    ReviewOutcome = ReviewOutcome.Approved, ReviewedByUserId = DemoFixture.StaffId("sarah"), ReviewedAt = end.AddDays(1), CreatedAt = end.AddMinutes(6), UpdatedAt = end.AddDays(1),
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        await RunAsync(env, Friday1030);
+
+        await using var check = env.AdminDb();
+        var ticks = await check.ShiftRoutineChecks.ToListAsync();
+        var breaks = await check.ShiftBreaks.ToListAsync();
+        Assert.Empty(ticks.Where(t => manual.Contains(t.ShiftCompletionId)));
+        Assert.Empty(breaks.Where(b => manual.Contains(b.ShiftCompletionId)));
+        Assert.True(ticks.Count(t => !manual.Contains(t.ShiftCompletionId) && t.CheckedAt > DateTime.MinValue) > 10, "the completions that were started got no ticks, so the test could not see the defect");
+        Assert.True(breaks.Count(b => !manual.Contains(b.ShiftCompletionId)) > 5, "the completions that were started got no breaks, so the test could not see the defect");
+    }
+
     // ── the handover read ──
 
     /// <summary>A closed shift of the top-up's making (the completion id is the one the roster pack would give), for a participant, by a worker, on a date.</summary>
@@ -478,6 +529,37 @@ public class DemoShiftPackageHistoryTests
         await using var check = env.AdminDb();
         var ticks = await check.ShiftRoutineChecks.Where(t => t.ParticipantRoutineId == routineId).ToListAsync();
         Assert.All(ticks.GroupBy(t => t.ShiftCompletionId), g => Assert.Single(g));                // one tick per completion and routine, as written
+    }
+
+    /// <summary>
+    /// Second independent review X2: an acknowledgement's id is a function of the handover and the reader, not of the reader's shift, like the app's unique index. Two
+    /// closed shifts of one participant and one worker that cannot see each other (they start together, or the earlier is not submitted by the read) pick the same
+    /// handover, build two acknowledgements with the same id in one tick, and the second Add throws: the whole pack rolled back on every tick after.
+    /// </summary>
+    [Fact]
+    public async Task TwoClosedShiftsOfOneWorkerThatReadTheSameHandover_AreOneAcknowledgement_NotAFailedPack()
+    {
+        var env = new DemoTestEnv(Friday1030);
+        await DemoFixture.SeedPeopleAsync(env);
+        await env.SetProviderStateAsync("NSW");
+        var first = ClosedShift(DemoIds.For("fixture", "dup-source"), "noah", "james", Friday.AddDays(-5), "Settled morning. Out for coffee, back by noon.");
+        var second = ClosedShift(ShiftIdWhoseHandoverIs(true, "dup-b"), "noah", "brendan", Friday.AddDays(-4), "Quiet day.");
+        var alongside = ClosedShift(ShiftIdWhoseHandoverIs(true, "dup-c"), "noah", "brendan", Friday.AddDays(-4), "Quiet day, too.");            // the same day and hours: neither is before the other
+        await using (var db = env.AdminDb())
+        {
+            foreach (var (shift, completion) in new[] { first, second, alongside })
+            {
+                db.Shifts.Add(shift);
+                db.ShiftCompletions.Add(completion);
+            }
+            await db.SaveChangesAsync();
+        }
+
+        await RunAsync(env, Friday1030);                                                          // must run clean: the same id twice in one tick fails the pack for good
+
+        await using var check = env.AdminDb();
+        var reads = await check.HandoverAcknowledgements.Where(a => a.SourceCompletionId == first.Completion.Id && a.UserId == DemoFixture.StaffId("brendan")).ToListAsync();
+        Assert.Single(reads);
     }
 
     [Fact]

@@ -137,6 +137,67 @@ public class DemoMedicationHistoryTests
         Assert.False(await check.ShiftCompletions.AnyAsync(c => c.ShiftId == LiveSetCatalog.ShiftId(LiveSetCatalog.Insulin, Friday) || c.ShiftId == LiveSetCatalog.ShiftId(LiveSetCatalog.Morning, Friday)));
     }
 
+    /// <summary>
+    /// Second independent review X4: N1 dropped the window of a shift whose worker is not one the stories name, whatever its status. A shift that has been worked
+    /// (finished and waiting for review, or approved) and is then given to somebody else has had its slots and its as-needed dose written by the live set, so its day is
+    /// still the live set's: dropping it let the history add an as-needed dose beside the live set's own, on a third of such days inside the minimum interval.
+    /// </summary>
+    [Fact]
+    public async Task AFinishedLiveShiftGivenToSomebodyElse_KeepsItsDay_SoTheHistoryAddsNoSecondAsNeededDose()
+    {
+        var first = new DateTimeOffset(2026, 10, 2, 12, 55, 0, TimeSpan.Zero);                                    // Fri 22:55: the day's three shifts are finished
+        var env = await TickAsync(first);
+        var nonStory = Guid.Parse("b2000000-0000-0000-0000-000000000004");
+        async Task GiveEveryFinishedMorningAwayAsync()
+        {
+            await using var db = env.AdminDb();
+            var mornings = Enumerable.Range(-1, 16).Select(d => LiveSetCatalog.ShiftId(LiveSetCatalog.Morning, Friday.AddDays(d))).ToList();
+            foreach (var shift in await db.Shifts.Where(s => mornings.Contains(s.Id) && s.Status == ShiftStatus.PendingReview).ToListAsync()) shift.UserId = nonStory;     // given away after the day was worked
+            await db.SaveChangesAsync();
+        }
+        await GiveEveryFinishedMorningAwayAsync();
+        for (var day = 1; day <= 12; day++)
+        {
+            await RunAsync(env, first.AddDays(day));                                                               // the history looks at the last week again, those days included
+            await GiveEveryFinishedMorningAwayAsync();
+        }
+
+        var daysThatWouldGetAHistoryDose = Enumerable.Range(0, 13).Select(d => Friday.AddDays(d))
+            .Count(date => DemoIds.Pick(DemoIds.For("prn-day", MedicationCatalog.Paracetamol, date), "has-dose", 0, 99) < 33);
+        Assert.True(daysThatWouldGetAHistoryDose >= 3, $"only {daysThatWouldGetAHistoryDose} of the days are ones the history would give a dose, so this test could not see the defect");
+
+        await using var check = env.AdminDb();
+        var perDay = (await check.MedicationAdministrations.Where(a => a.ParticipantMedicationId == MedicationCatalog.Paracetamol && a.ScheduledAt == null).ToListAsync())
+            .Where(a => a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:", StringComparison.Ordinal))
+            .GroupBy(a => DateOnly.FromDateTime(Local(a.AdministeredAt!.Value))).ToList();
+        Assert.True(perDay.Count >= 10, $"only {perDay.Count} days with a paracetamol dose");
+        Assert.All(perDay.Where(d => d.Key >= Friday && d.Key <= Friday.AddDays(11)), day => Assert.True(day.Count() == 1, $"{day.Count()} as-needed doses on {day.Key:yyyy-MM-dd}"));
+    }
+
+    /// <summary>
+    /// Second independent review Y4: a shift edit can move a live shift to another participant, and the live set then works it for that participant (its close uses the
+    /// shift's participant). The window is the new participant's, and the story participant's day is nobody's.
+    /// </summary>
+    [Fact]
+    public async Task ALiveShiftMovedToAnotherParticipant_IsTheNewParticipantsWindow_AndTheStoryParticipantsSlotsAreTheHistorys()
+    {
+        var env = await TickAsync(new DateTimeOffset(2026, 10, 1, 20, 30, 0, TimeSpan.Zero));              // Fri 06:30 AEST: cast, nobody has started
+        await using (var db = env.AdminDb())
+        {
+            (await db.Shifts.SingleAsync(s => s.Id == LiveSetCatalog.ShiftId(LiveSetCatalog.Morning, Friday))).ParticipantId = DemoFixture.ParticipantId("charlotte");
+            await db.SaveChangesAsync();
+        }
+
+        await RunAsync(env, Friday1030);
+
+        await using var check = env.AdminDb();
+        foreach (var (medication, hour) in new[] { (MedicationCatalog.Levetiracetam, 8), (MedicationCatalog.IdOf("sophie-omeprazole"), 10) })
+        {
+            var only = Assert.Single(await check.MedicationAdministrations.Where(a => a.ParticipantMedicationId == medication && a.ScheduledAt == At(Friday, hour, 0)).ToListAsync());
+            Assert.StartsWith("demo-v1:", only.IdempotencyKey, StringComparison.Ordinal);
+        }
+    }
+
     // ── the plan's mix ──
 
     [Fact]

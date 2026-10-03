@@ -149,6 +149,18 @@ public static class DemoQueries
         db.Shifts.Where(s => s.ShiftPatternId == null && (s.Status == ShiftStatus.Published || s.Status == ShiftStatus.InProgress) && s.ReturnCount == 0
                              && s.ServiceDate < before && participantIds.Contains(s.ParticipantId));
 
+    public sealed record UnfinishedStart(Guid Id, Guid ParticipantId, DateOnly ServiceDate, TimeOnly StartTime, Guid? UserId);
+
+    /// <summary>
+    /// Read only: the shifts of these participants that are still Published or InProgress, are not the roster's and were never returned, with when they start and who is on
+    /// them. The live set finishes its shifts only between 06:00 and 23:00, so a history reader who would read a live shift's handover has to wait for it (second independent
+    /// review X3).
+    /// </summary>
+    public static IQueryable<UnfinishedStart> UnfinishedStartsOf(OdipDbContext db, List<Guid> participantIds) =>
+        db.Shifts.AsNoTracking().Where(s => s.ShiftPatternId == null && (s.Status == ShiftStatus.Published || s.Status == ShiftStatus.InProgress) && s.ReturnCount == 0
+                                            && participantIds.Contains(s.ParticipantId))
+            .Select(s => new UnfinishedStart(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.UserId));
+
     /// <summary>Tracked: a high-risk dose this top-up recorded whose staff witness has not answered yet.</summary>
     public static IQueryable<MedicationAdministration> PendingWitnessDoses(OdipDbContext db) =>
         db.MedicationAdministrations.Where(a => a.WitnessStatus == WitnessStatus.Pending && a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:"));
@@ -218,14 +230,15 @@ public static class DemoQueries
         where participantIds.Contains(s.ParticipantId) && c.IsActive && c.SubmittedAt != null && s.ServiceDate >= since
         select new HandoverSource(c.Id, s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, c.SubmittedAt!.Value, c.HandoverText, c.NothingToHandOver, s.UserId);
 
-    public sealed record ShiftState(Guid Id, ShiftStatus Status, Guid? UserId);
+    public sealed record ShiftState(Guid Id, ShiftStatus Status, Guid? UserId, Guid ParticipantId);
 
     /// <summary>
     /// Read only: the status and the worker of those of these shifts that exist, so a live window is counted only while the live set works its shift (PR 2 review L2:
-    /// not a cancelled or draft one; independent review N1: nor one with nobody on it, or somebody the stories do not name, which the live set leaves alone).
+    /// not a cancelled or draft one; independent review N1: nor one with nobody on it, or somebody the stories do not name, which the live set leaves alone). The shift's own
+    /// participant is read too: a shift edit can move a live shift to another participant, and the live set then works it for that one (second independent review Y4).
     /// </summary>
     public static IQueryable<ShiftState> ShiftStatesOf(OdipDbContext db, List<Guid> ids) =>
-        db.Shifts.AsNoTracking().Where(s => ids.Contains(s.Id)).Select(s => new ShiftState(s.Id, s.Status, s.UserId));
+        db.Shifts.AsNoTracking().Where(s => ids.Contains(s.Id)).Select(s => new ShiftState(s.Id, s.Status, s.UserId, s.ParticipantId));
 
     /// <summary>Read only: the active routines of these participants, which the shift package matches against a shift's window.</summary>
     public static IQueryable<ParticipantRoutine> ActiveRoutinesOf(OdipDbContext db, List<Guid> participantIds) =>
