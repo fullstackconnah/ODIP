@@ -91,7 +91,11 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
     onChange(next)
     open({ mode: 'edit', index: index + 1, entry: JSON.parse(JSON.stringify(copy)) as DraftBlock, step: 'times', templateKey: null, hasBlock: true })
   }
-  const remove = (index: number) => onChange(entries.filter((_, i) => i !== index))
+  const removedAt = useRef<number | null>(null)
+  const remove = (index: number) => {
+    removedAt.current = index
+    onChange(entries.filter((_, i) => i !== index))
+  }
 
   const chooseTemplate = (template: PlanTemplate) => {
     if (!session) return
@@ -124,6 +128,17 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
     const target = root?.querySelector<HTMLElement>('form h2') ?? headingRef.current
     target?.focus({ preventScroll: true })
   }, [viewKey])
+
+  // A removed block takes the button that opened the confirmation with it, so the dialog has nowhere to return focus to and it would fall to the top of the page. It goes to the
+  // block that took the removed one's place (or the one before it, or the heading when none is left).
+  useEffect(() => {
+    const index = removedAt.current
+    if (index === null) return
+    removedAt.current = null
+    const place = Math.min(index, entries.length - 1)
+    const chip = place >= 0 ? sectionRef.current?.querySelector<HTMLElement>(`button[aria-label="Edit times of block ${place + 1}"]`) : null
+    ;(chip ?? headingRef.current)?.focus()
+  }, [entries])
 
   return (
     // scroll-mb: a control the keyboard moves focus to is scrolled clear of the budget bar (and, on a phone, the bottom nav) docked beneath it, never behind them.

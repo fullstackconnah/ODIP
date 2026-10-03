@@ -246,6 +246,41 @@ describe('PlanBuilder and where focus goes', () => {
     expect(screen.getByRole('heading', { name: 'Support plan' })).toHaveFocus()
   })
 
+  it('keeps a keyboard user in the list when a block is removed: the block that took its place has focus, not the top of the page', async () => {
+    const user = userEvent.setup()
+    render(<Page initial={[...twoBlocks(), draftBlock(mondayWednesday('b3', { days: ['Friday'] }))]} />)
+
+    await user.click(screen.getByRole('button', { name: 'Remove block 2' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Remove block' }))
+
+    // The old block 3 is block 2 now, and its first chip has focus.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Edit times of block 2' })).toHaveFocus())
+    expect(screen.getByText('Fri · 09:00–13:00 · Community access 1:1')).toBeInTheDocument()
+  })
+
+  it('goes to the block before it when the last one is removed, and to the heading when none is left', async () => {
+    const user = userEvent.setup()
+    render(<Page initial={twoBlocks()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Remove block 2' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Remove block' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Edit times of block 1' })).toHaveFocus())
+
+    await user.click(screen.getByRole('button', { name: 'Remove block 1' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Remove block' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Support plan' })).toHaveFocus())
+  })
+
+  it('does not move focus when a removal is called off', async () => {
+    const user = userEvent.setup()
+    render(<Page initial={twoBlocks()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Remove block 1' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.getByRole('button', { name: 'Remove block 1' })).toHaveFocus()    // the dialog's own return to its opener
+  })
+
   it('does not take focus from a person who has not changed the view: nothing is focused when the page loads', () => {
     render(<Page initial={twoBlocks()} />)
     expect(screen.getByRole('heading', { name: 'Support plan' })).not.toHaveFocus()
