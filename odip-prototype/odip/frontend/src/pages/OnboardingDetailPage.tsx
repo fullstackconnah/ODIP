@@ -103,7 +103,8 @@ export default function OnboardingDetailPage() {
     { label: 'Intake completed', state: gateState(d.intakeComplete) },
     { label: 'Participant Profile', state: gateState(d.profileComplete), fixRoute: { to: `/participants/${id}/profile`, label: 'Edit profile' } },
     { label: 'Service needs and provisional lines', state: gateState(d.serviceTypeConfirmed), fixRoute: { to: `/participants/${id}?tab=support`, label: 'Edit service needs' } },
-    { label: 'Current agreement evidence', state: gateState(d.serviceAgreementSigned), context: 'Agreements are signed and approved elsewhere.', fixRoute: { to: `/participants/${id}/agreement-draft`, label: 'Open agreement draft' } },
+    // The draft carries money, so only the roles the API admits to it are sent there (a ReadOnly or SupportWorker who can read this page would only meet a redirect or a 403).
+    { label: 'Current agreement evidence', state: gateState(d.serviceAgreementSigned), context: 'Agreements are signed and approved elsewhere.', fixRoute: canAccessPage('agreement-drafts') ? { to: `/participants/${id}/agreement-draft`, label: 'Open agreement draft' } : undefined },
     { label: 'Schedule review', state: 'Blocked', context: 'Shows the proposed schedule only — no shifts are created.', fixRoute: canAccessPage('rostering') ? { to: '/rostering/patterns', label: 'Open shift patterns' } : undefined },
   ]
   const completedGateCount = gates.filter(gate => gate.state === 'Complete').length

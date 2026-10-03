@@ -40,6 +40,11 @@ function renderSettingsPage() {
   return { router, ...render(<RouterProvider router={router} />) }
 }
 
+function renderSettingsPageAt(url: string) {
+  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: [url] })
+  return { router, ...render(<RouterProvider router={router} />) }
+}
+
 // The Support Catalogue tab invalidates queries after an import, so it needs a QueryClient the other tabs don't.
 function renderSettingsPageWithQueryClient() {
   const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: ['/settings'] })
@@ -79,6 +84,9 @@ vi.mock('@/api/hooks', () => ({
   useAdminNotifications: () => ({ data: [], isLoading: false, isError: false }),
   useRetryNotification: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSendTestEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  // The Plan Pricing tab (Admin and SuperAdmin).
+  usePlanPricingSettings: () => ({ data: { registrationGroupsHeld: ['0107', '0104', '0125', '0136', '0115', '0108'], registrationGroupsConfirmed: false, crossingPolicy: 'Split', claimProviderTravel: true, travelKmRateStandard: 0.99, travelKmRateAccessible: 2.76, travelRatesProvisional: true, groupOutings: 'GroupActivities', staUsesHourlyAndAccommodation: true, approverRoles: ['Admin', 'Coordinator'], isDefault: true }, isLoading: false }),
+  useUpdatePlanPricingSettings: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 // TenantFormPanel (also mounted unconditionally) imports its mutations from this sibling
@@ -649,5 +657,53 @@ describe('SettingsPage — the timer that puts a confirmation away dies with its
 
     expect(mockSyncMutate).toHaveBeenCalledTimes(2)
     expect(pending).toEqual({ afterSecond: 1, afterUnmount: 0 })
+  })
+})
+
+describe('SettingsPage — Plan Pricing tab and the tab in the URL', () => {
+  const asAdmin = () => mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+
+  it('gives an Admin and a SuperAdmin the Plan Pricing tab, and a Coordinator none', () => {
+    asAdmin()
+    const admin = renderSettingsPage()
+    expect(screen.getByRole('tab', { name: 'Plan Pricing' })).toBeInTheDocument()
+    admin.unmount()
+
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, isAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    const superAdmin = renderSettingsPage()
+    expect(screen.getByRole('tab', { name: 'Plan Pricing' })).toBeInTheDocument()
+    superAdmin.unmount()
+
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: false, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false })
+    renderSettingsPage()
+    expect(screen.queryByRole('tab', { name: 'Plan Pricing' })).not.toBeInTheDocument()
+  })
+
+  it('opens on the tab the URL names, so "Confirm in Settings" in the plan builder lands on the registration groups', () => {
+    asAdmin()
+    renderSettingsPageAt('/settings?tab=pricing')
+
+    expect(screen.getByRole('tab', { name: 'Plan Pricing', selected: true })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Registration groups you hold' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirm these groups' })).toBeInTheDocument()
+  })
+
+  it('writes the tab it switches to into the URL, and keeps the URL of the default tab clean', async () => {
+    const user = userEvent.setup()
+    asAdmin()
+    const { router } = renderSettingsPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Plan Pricing' }))
+    expect(router.state.location.search).toBe('?tab=pricing')
+    await user.click(screen.getByRole('tab', { name: 'Event Templates' }))
+    expect(router.state.location.search).toBe('')
+  })
+
+  it('reads a tab the person cannot see as the first tab, instead of opening it', () => {
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: false, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false })
+    renderSettingsPageAt('/settings?tab=pricing')
+
+    expect(screen.getByRole('tab', { name: 'Event Templates', selected: true })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Registration groups you hold' })).not.toBeInTheDocument()
   })
 })

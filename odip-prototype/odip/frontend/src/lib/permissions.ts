@@ -20,7 +20,8 @@ export type PageKey =
   | 'leave-approvals'
   | 'settings'
   | 'medications'
-  | 'caregiver-submissions';
+  | 'caregiver-submissions'
+  | 'agreement-drafts';
 
 const SUPPORT_WORKER_PAGES: PageKey[] = [
   'dashboard',
@@ -38,7 +39,8 @@ const SUPPORT_WORKER_PAGES: PageKey[] = [
  * The pages ReadOnly cannot open. ReadOnly reads most of the app, but each of these sits behind a controller that admits only
  * SuperAdmin, Admin and Coordinator for EVERY request, reads included (ReadOnlyMiddleware, which 403s writes, never gets that far):
  * RosteringController (the five Rostering pages, and the flagged-notes read that Incidents makes), LeaveController, BillingController
- * and ClaimsController (billing, claims), CaregiverSubmissionsController, and SettingsController / ProviderSettingsController.
+ * and ClaimsController (billing, claims), CaregiverSubmissionsController, SettingsController / ProviderSettingsController, and the GETs of ServiceAgreementDraftsController (the agreement draft
+ * page: a draft carries unit prices, totals and the pricing answer, and money is never visible to ReadOnly or SupportWorker; SupportWorker's allow-list above does not name it either).
  * Listing them here keeps the menu, the routes and the in-page links from offering ReadOnly a page that can only answer 403.
  */
 const READ_ONLY_REFUSED_PAGES: PageKey[] = [
@@ -48,6 +50,7 @@ const READ_ONLY_REFUSED_PAGES: PageKey[] = [
   'claims',
   'settings',
   'caregiver-submissions',
+  'agreement-drafts',
 ];
 
 function getCurrentUser(): Record<string, unknown> {

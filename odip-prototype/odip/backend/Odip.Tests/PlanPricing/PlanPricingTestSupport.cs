@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
 using Odip.Tests.Catalogue;
+using Xunit;
 
 namespace Odip.Tests.PlanPricing;
 
@@ -41,10 +43,10 @@ internal static class PlanPricingTestSupport
     }
 
     /// <summary>The database behind <see cref="WithDecemberPriceSetAsync"/>: the 2026-27 catalogue and then the December price set, imported as a SuperAdmin would. The caller disposes it.</summary>
-    public static async Task<OdipDbContext> DecemberDatabaseAsync(Func<string, bool> raised, decimal increase = 1m)
+    public static async Task<OdipDbContext> DecemberDatabaseAsync(Func<string, bool> raised, decimal increase = 1m, string? databaseName = null)
     {
         var december1 = new DateOnly(2026, 12, 1);
-        var db = CatalogueImportTestSupport.CreateDb();
+        var db = CatalogueImportTestSupport.CreateDb(databaseName);
         await CatalogueImportTestSupport.ImportAsync(db, CatalogueFixtures.File2026_27);
         var rows = (await CatalogueImportTestSupport.PreviewAsync(db, CatalogueFixtures.File2026_27)).Rows
             .Select(r => raised(r.ItemNumber) && r.PriceNational is not null && (r.EffectiveTo is null || r.EffectiveTo >= december1) ? Raised(r, december1, increase) : r)
@@ -139,4 +141,30 @@ internal static class PlanPricingTestSupport
 
     /// <summary>A value as the JSON the API would send: the outputs hold lists, which a record compares by reference, so "the same output" is compared as text.</summary>
     public static string Json(object value) => JsonSerializer.Serialize(value, JsonOptions);
+
+    // ── Stored lines against a re-quote ───────────────────────────────────────────
+
+    private static (string Field, object? Value)[] LineFields(ServiceAgreementDraftLine l) =>
+    [
+        ("BlockKey", l.BlockKey), ("ItemCode", l.ItemCode), ("Band", l.Band), ("Unit", l.Unit), ("UnitPrice", l.UnitPrice), ("Hours", l.Hours), ("Total", l.Total), ("Occurrences", l.Occurrences),
+        ("Flags", l.Flags), ("CatalogueVersion", l.CatalogueVersion), ("CatalogueEffectiveFrom", l.CatalogueEffectiveFrom),
+    ];
+
+    /// <summary>
+    /// The lines a revision stored against the lines the engine gives now, field by field and by VALUE. A decimal compares by what it is worth, not by its text: the columns are numeric(12,2) and
+    /// numeric(14,2), so 8 hours reads back from PostgreSQL as 8.00, the same number as the 8 a fresh quote has and not the same JSON. (A first version serialised both sides and compared strings:
+    /// "Hours":8 against "Hours":8.00 failed in CI, where the sibling test that compares tuples passed.) A value the column would round, 0.333 hours say, still differs, which is right: a stored line
+    /// has to be exactly what the engine says. Each field is its own assertion that names the line and the field, so a failure says what differs and not a truncated string.
+    /// </summary>
+    public static void AssertSameLinesByValue(IReadOnlyList<ServiceAgreementDraftLine> stored, IReadOnlyList<ServiceAgreementDraftLine> requoted)
+    {
+        Assert.True(stored.Count == requoted.Count, string.Create(CultureInfo.InvariantCulture, $"{stored.Count} lines stored, {requoted.Count} from the re-quote"));
+        for (var line = 0; line < stored.Count; line++)
+        {
+            var (was, now) = (LineFields(stored[line]), LineFields(requoted[line]));
+            for (var field = 0; field < was.Length; field++)
+                Assert.True(Equals(was[field].Value, now[field].Value),
+                    string.Create(CultureInfo.InvariantCulture, $"line {line} ({stored[line].BlockKey} {stored[line].ItemCode}), {was[field].Field}: stored {was[field].Value}, re-quoted {now[field].Value}"));
+        }
+    }
 }

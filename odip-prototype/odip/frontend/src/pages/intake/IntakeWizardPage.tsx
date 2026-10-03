@@ -447,6 +447,7 @@ export default function IntakeWizardPage() {
             visitedSteps={wizard.visitedSteps}
             currentKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
             onSelect={wizard.goToStep}
+            filled
           />
         }
       >

@@ -130,7 +130,7 @@ const router = createBrowserRouter(
         <Route path="/participants/new" element={<PrivateRoute page="participants" requiresParticipantLifecycleMutation><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/new-inquiry" element={<PrivateRoute page="participants" requiresParticipantLifecycleMutation><InquiryFormPage /></PrivateRoute>} />
         <Route path="/participants/:id" element={<PrivateRoute page="participants"><ParticipantDetailPage /></PrivateRoute>} />
-        <Route path="/participants/:id/agreement-draft" element={<PrivateRoute page="participants" requiresWrite><ServiceAgreementDraftPage /></PrivateRoute>} />
+        <Route path="/participants/:id/agreement-draft" element={<PrivateRoute page="agreement-drafts"><ServiceAgreementDraftPage /></PrivateRoute>} />
         <Route path="/participants/:id/intake" element={<PrivateRoute page="participants" requiresParticipantLifecycleMutation><IntakeWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/profile" element={<PrivateRoute page="participants" requiresWrite><ProfileWizardPage /></PrivateRoute>} />
         <Route path="/participants/:id/edit" element={<PrivateRoute page="participants" requiresWrite><ParticipantEditRedirect /></PrivateRoute>} />

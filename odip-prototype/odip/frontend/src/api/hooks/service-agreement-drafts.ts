@@ -12,6 +12,17 @@ export function useServiceAgreementDrafts(participantId: string | undefined) {
   })
 }
 
+/** One revision in full: how an older one's blocks, lines and answer are read (the list leaves them out). */
+export function useServiceAgreementDraft(participantId: string | undefined, id: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['service-agreement-draft', participantId, id],
+    queryFn: () => apiGet<ServiceAgreementDraftDto>(`${path(participantId!)}/${id}`),
+    enabled: enabled && !!participantId && !!id,
+    // A revision is never edited, so what was read once is what it is.
+    staleTime: Infinity,
+  })
+}
+
 export function useCreateServiceAgreementDraft() {
   const queryClient = useQueryClient()
   return useMutation({

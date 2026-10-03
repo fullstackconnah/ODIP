@@ -77,4 +77,65 @@ public class CatalogueAgreementDraftTests
         Assert.Equal($"No active effective weekday catalogue price exists for {code}.", error);
         Assert.Empty(db.ServiceAgreementDrafts);
     }
+
+    // Round 3, L4 (the residue of review N13): the hand-typed path writes free text to the same columns and onto the same PDF as the representative, and queries the catalogue with the item code. The
+    // representative was filtered for control characters; these were not, so a NUL in one of them met the same PostgreSQL refusal as a block id did (a 500). ServiceTypes also had no limit at all, and
+    // the column that holds it is varchar(4000).
+    public static IEnumerable<object[]> FreeTextWithAControlCharacter()
+    {
+        foreach (var bad in new[] { "Com\0munity", "Com\nmunity", "Com\tmunity" })
+            foreach (var field in new[] { "ServiceTypes", "ServiceType", "ItemCode" })
+                yield return new object[] { field, bad };
+    }
+
+    [Theory]
+    [MemberData(nameof(FreeTextWithAControlCharacter))]
+    public async Task Free_text_with_a_control_character_is_refused_in_words_and_nothing_is_saved_whichever_field_it_is_in(string field, string text)
+    {
+        var (db, participantId) = await ImportedDbAsync();
+        await using var _ = db;
+        var request = Request("04_104_0125_6_1");
+        request = field switch
+        {
+            "ServiceTypes" => request with { ServiceTypes = [text] },
+            "ServiceType" => request with { Lines = [new CreateServiceAgreementDraftLineDto { ServiceType = text, ItemCode = "04_104_0125_6_1", Hours = 2.5m }] },
+            _ => request with { Lines = [new CreateServiceAgreementDraftLineDto { ServiceType = "Community access", ItemCode = text, Hours = 2.5m }] },
+        };
+
+        var result = await new ServiceAgreementDraftService(db).SaveAsync(TenantId, participantId, request, "actor", CancellationToken.None);
+
+        Assert.Null(result.Draft);
+        var error = Assert.Single(result.Errors);
+        Assert.Contains("control character", error);
+        Assert.DoesNotContain(error, c => char.IsControl(c)); // and the character is not repeated in the message that says so
+        Assert.Empty(db.ServiceAgreementDrafts);
+    }
+
+    [Fact]
+    public async Task The_service_types_have_a_limit_in_number_and_in_length_and_in_what_the_column_holds()
+    {
+        var (db, participantId) = await ImportedDbAsync();
+        await using var _ = db;
+        var service = new ServiceAgreementDraftService(db);
+        async Task<string> Refusal(List<string> types) => Assert.Single((await service.SaveAsync(TenantId, participantId, Request("04_104_0125_6_1") with { ServiceTypes = types }, "actor", CancellationToken.None)).Errors);
+
+        Assert.Equal("A draft has at most 20 service types.", await Refusal(Enumerable.Range(0, 21).Select(i => $"Type {i}").ToList()));
+        Assert.Equal("A service type is at most 100 characters.", await Refusal([new string('x', 101)]));
+        Assert.Equal("A service type cannot be empty.", await Refusal(["Community access", "  "]));
+        // Twenty labels of a hundred characters outside ASCII: each is twelve characters of JSON once it is written, and the column holds 4000.
+        Assert.Equal("The service types are too long to save.", await Refusal(Enumerable.Range(0, 20).Select(_ => string.Concat(Enumerable.Repeat("\U0001F600", 50))).ToList()));
+        Assert.Empty(db.ServiceAgreementDrafts);
+    }
+
+    [Fact]
+    public async Task Twenty_ordinary_service_types_and_a_line_with_ordinary_text_still_save()
+    {
+        var (db, participantId) = await ImportedDbAsync();
+        await using var _ = db;
+
+        var result = await new ServiceAgreementDraftService(db).SaveAsync(TenantId, participantId, Request("04_104_0125_6_1") with { ServiceTypes = Enumerable.Range(0, 20).Select(i => new string((char)('a' + i), 100)).ToList() }, "actor", CancellationToken.None);
+
+        Assert.Empty(result.Errors);
+        Assert.Equal(20, System.Text.Json.JsonSerializer.Deserialize<List<string>>(Assert.IsType<ServiceAgreementDraft>(result.Draft).ServiceTypesJson)!.Count);
+    }
 }

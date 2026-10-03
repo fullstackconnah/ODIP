@@ -3687,6 +3687,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly>("PlanStartDate")
                         .HasColumnType("date");
 
+                    b.Property<string>("PricingJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("Representative")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -3717,11 +3720,55 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("ServiceAgreementDrafts");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementDraftBlock", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BlockJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("BlockKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("DraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RequirementsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DraftId", "BlockKey")
+                        .IsUnique();
+
+                    b.HasIndex("DraftId", "Position")
+                        .IsUnique();
+
+                    b.ToTable("ServiceAgreementDraftBlocks");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementDraftLine", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Band")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("BlockKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<DateOnly>("CatalogueEffectiveFrom")
                         .HasColumnType("date");
@@ -3737,6 +3784,11 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid>("DraftId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Flags")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<decimal>("Hours")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
@@ -3746,10 +3798,31 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<int>("Occurrences")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("Position")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("ServiceType")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<decimal?>("Total")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(1)
+                        .HasColumnType("character varying(1)")
+                        .HasDefaultValue("H");
 
                     b.Property<decimal>("UnitPrice")
                         .HasPrecision(12, 2)
@@ -6177,6 +6250,17 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Participant");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementDraftBlock", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.ServiceAgreementDraft", "Draft")
+                        .WithMany("Blocks")
+                        .HasForeignKey("DraftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Draft");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementDraftLine", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.ServiceAgreementDraft", "Draft")
@@ -6658,6 +6742,8 @@ namespace Odip.Infrastructure.Migrations
 
             modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementDraft", b =>
                 {
+                    b.Navigation("Blocks");
+
                     b.Navigation("Lines");
                 });
 

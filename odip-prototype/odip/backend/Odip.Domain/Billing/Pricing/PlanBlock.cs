@@ -133,9 +133,16 @@ public sealed record PlanBlock
     public static string ShortId(string? id)
     {
         if (id is null) return string.Empty;
-        if (id.Length <= MaxIdLength) return id;
-        var cut = char.IsHighSurrogate(id[MaxIdLength - 1]) ? MaxIdLength - 1 : MaxIdLength;
-        return string.Concat(id.AsSpan(0, cut), "…");
+        string shown;
+        if (id.Length <= MaxIdLength) shown = id;
+        else
+        {
+            var cut = char.IsHighSurrogate(id[MaxIdLength - 1]) ? MaxIdLength - 1 : MaxIdLength;
+            shown = string.Concat(id.AsSpan(0, cut), "…");
+        }
+
+        // A control character (a NUL, a line break) is refused in an id (see Validate) and is not repeated in the message that says so.
+        return shown.Any(char.IsControl) ? string.Concat(shown.Select(c => char.IsControl(c) ? '?' : c)) : shown;
     }
 
     /// <summary>The client's own key for the block (unique in a request): lines and totals are attributed to it.</summary>
@@ -222,6 +229,8 @@ public sealed record PlanBlock
 
         if (string.IsNullOrWhiteSpace(Id)) messages.Add("A block needs an id.");
         if (Id is { Length: > MaxIdLength }) Add(string.Create(CultureInfo.InvariantCulture, $"the id is longer than {MaxIdLength} characters."));
+        // The id is the block's key in the stored revision (a varchar) and sits inside its jsonb: PostgreSQL refuses a NUL in either (22021, 22P05), which a test on EF InMemory never sees.
+        if (Id is not null && Id.Any(char.IsControl)) Add("the id has a control character in it (a line break, a tab, a NUL); use letters, digits and punctuation.");
 
         if (!Enum.IsDefined(SupportType)) Add("the support type is not one of the known types.");
         if (!Enum.IsDefined(Intensity)) Add("the intensity is not one of the known levels.");

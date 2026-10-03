@@ -1,13 +1,17 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Odip.Api.Controllers;
 using Odip.Api.Middleware;
 using Xunit;
 
 namespace Odip.Tests.Services;
 
-/// <summary>Signing snapshot and evidence writes are coordinator actions: SupportWorker and ReadOnly must get 403.</summary>
+/// <summary>
+/// Signing snapshot and evidence writes are coordinator actions: SupportWorker and ReadOnly must get 403. So are the reads: an agreement draft carries money (unit prices, totals, the pricing answer, the
+/// PDF's figures), and money is never visible to SupportWorker or ReadOnly (Claims and Billing refuse them for every request, reads included).
+/// </summary>
 public class ServiceAgreementDraftsControllerRoleTests
 {
     private static readonly string[] Writers = ["Admin", "Coordinator", "SuperAdmin"];
@@ -17,6 +21,23 @@ public class ServiceAgreementDraftsControllerRoleTests
         nameof(ServiceAgreementDraftsController.CreateSigningSnapshot),
         nameof(ServiceAgreementDraftsController.SubmitSigningEvidence),
     };
+
+    private static readonly string[] PriceReads =
+    [
+        nameof(ServiceAgreementDraftsController.List),
+        nameof(ServiceAgreementDraftsController.Get),
+        nameof(ServiceAgreementDraftsController.Pdf),
+    ];
+
+    public static TheoryData<string> PriceReadActions
+    {
+        get
+        {
+            var data = new TheoryData<string>();
+            foreach (var name in PriceReads) data.Add(name);
+            return data;
+        }
+    }
 
     private static bool Allows(string action, string role)
     {
@@ -32,6 +53,25 @@ public class ServiceAgreementDraftsControllerRoleTests
         foreach (var role in Writers) Assert.True(Allows(action, role), role);
         Assert.False(Allows(action, "SupportWorker"));
         Assert.False(Allows(action, "ReadOnly"));
+    }
+
+    [Theory, MemberData(nameof(PriceReadActions))]
+    public void ReadsOfPrices_AreRestrictedToAdminCoordinatorSuperAdmin(string action)
+    {
+        foreach (var role in Writers) Assert.True(Allows(action, role), role);
+        Assert.False(Allows(action, "SupportWorker"));
+        Assert.False(Allows(action, "ReadOnly"));
+    }
+
+    [Fact]
+    public void NoGetOnTheController_IsLeftOpenToEveryRole_SoANewReadOfPricesCannotBeAddedOpen()
+    {
+        var gets = typeof(ServiceAgreementDraftsController).GetMethods()
+            .Where(m => m.GetCustomAttributes(typeof(HttpGetAttribute), false).Length > 0).Select(m => m.Name).OrderBy(name => name).ToList();
+
+        // The three above are all of them: a new GET fails here until somebody has decided who may read what it returns.
+        Assert.Equal(PriceReads.OrderBy(name => name), gets);
+        foreach (var name in gets) Assert.False(Allows(name, "SupportWorker") || Allows(name, "ReadOnly"), name);
     }
 
     [Theory]

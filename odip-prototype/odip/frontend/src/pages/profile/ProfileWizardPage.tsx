@@ -490,6 +490,7 @@ export default function ProfileWizardPage() {
             visitedSteps={wizard.visitedSteps}
             currentKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
             onSelect={wizard.goToStep}
+            filled
           />
         }
       >

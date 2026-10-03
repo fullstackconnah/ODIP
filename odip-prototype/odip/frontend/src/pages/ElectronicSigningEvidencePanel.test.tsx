@@ -9,7 +9,7 @@ vi.mock('@/api/hooks', () => ({
   useSubmitElectronicSigningEvidence: () => ({ mutate: evidenceMutate, isPending: false }),
 }))
 
-const draft = { id: 'draft-1', participantId: 'p-1', version: 4, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27', templateDocxSha256: 'docx-hash', templatePdfSha256: 'pdf-hash', state: 'NSW' as const, agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', lines: [] }
+const draft = { id: 'draft-1', participantId: 'p-1', version: 4, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27', templateDocxSha256: 'docx-hash', templatePdfSha256: 'pdf-hash', state: 'NSW' as const, planStartDate: '2026-07-01', planEndDate: '2027-06-30', blocks: [], agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', lines: [], isSummary: false, blockCount: 0, lineCount: 0, total: 0, caveats: [] }
 
 describe('ElectronicSigningEvidencePanel', () => {
   it('does not expose signing actions or call mutation hooks for an unapproved agreement source', () => {

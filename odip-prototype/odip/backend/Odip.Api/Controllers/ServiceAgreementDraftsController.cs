@@ -1,9 +1,12 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.RateLimiting;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
@@ -22,32 +25,86 @@ public class ServiceAgreementDraftsController : ControllerBase
     private readonly ElectronicSigningEvidenceService _evidence;
     private readonly DemoJourneySimulationService _simulation;
     private readonly IConfiguration _configuration;
-    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IConfiguration? configuration = null)
+    private readonly PlanQuoteConcurrencyLimiter? _saveLimiter;
+    public const string SaveBusyMessage = "Another plan is already being saved for your organisation. Try again in a moment.";
+    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IConfiguration? configuration = null, PlanQuoteConcurrencyLimiter? saveLimiter = null)
     {
+        _saveLimiter = saveLimiter;
         _db = db; _tenant = tenant; _service = service; _evidence = evidence ?? new ElectronicSigningEvidenceService(db);
         _simulation = simulation ?? new DemoJourneySimulationService(db);
         _configuration = configuration ?? new ConfigurationBuilder().Build();
     }
 
+    // Every GET here returns money (unit prices, totals, the pricing answer, the PDF's figures), and money is never visible to SupportWorker or ReadOnly: Claims and Billing refuse them for every
+    // request, reads included. So the reads are admitted to the same roles as the writes (ServiceAgreementDraftsControllerRoleTests holds every GET to it).
     [HttpGet]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<List<ServiceAgreementDraftDto>>>> List(Guid participantId, CancellationToken ct)
     {
-        var drafts = await _db.ServiceAgreementDrafts.Include(x => x.Lines).Where(x => x.ParticipantId == participantId).OrderByDescending(x => x.Version).ToListAsync(ct);
-        return Ok(ApiResponse<List<ServiceAgreementDraftDto>>.Ok(drafts.Select(ToDto).ToList()));
+        // The newest revision in full (a plan is started from it) and the older ones as summaries: every save adds a revision of tens of kilobytes (blocks, answer, lines), so a long onboarding
+        // made a multi-megabyte response on every page load. GET {id} has an older revision's details. The two collections of the newest are loaded as separate queries, not a cross product.
+        var newest = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery()
+            .Where(x => x.ParticipantId == participantId).OrderByDescending(x => x.Version).FirstOrDefaultAsync(ct);
+        if (newest is null) return Ok(ApiResponse<List<ServiceAgreementDraftDto>>.Ok([]));
+
+        // The older ones: their lines (for what they add up to) but no blocks and no stored answer in the response; the block counts come from one grouped query.
+        var older = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines)
+            .Where(x => x.ParticipantId == participantId && x.Version < newest.Version).OrderByDescending(x => x.Version).ToListAsync(ct);
+        var olderIds = older.Select(x => x.Id).ToList();
+        var blockCounts = olderIds.Count == 0 ? new Dictionary<Guid, int>()
+            : await _db.ServiceAgreementDraftBlocks.AsNoTracking().Where(x => olderIds.Contains(x.DraftId)).GroupBy(x => x.DraftId).Select(g => new { Id = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Id, x => x.Count, ct);
+
+        var listed = new List<ServiceAgreementDraftDto> { ToDto(newest) };
+        listed.AddRange(older.Select(x => ToSummary(x, blockCounts.GetValueOrDefault(x.Id))));
+        return Ok(ApiResponse<List<ServiceAgreementDraftDto>>.Ok(listed));
     }
 
+    /// <summary>One revision in full: how an older one's blocks, lines and answer are read (the list leaves them out). Not found for another participant's or another tenant's.</summary>
+    [HttpGet("{id:guid}")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ServiceAgreementDraftDto>>> Get(Guid participantId, Guid id, CancellationToken ct)
+    {
+        var draft = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery()
+            .FirstOrDefaultAsync(x => x.Id == id && x.ParticipantId == participantId, ct);
+        return draft is null ? NotFound(ApiResponse<ServiceAgreementDraftDto>.Fail("Draft not found.")) : Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(draft)));
+    }
+
+    /// <summary>
+    /// Saves a new revision from support blocks (priced here by the pricing engine: the client sends no price and no catalogue code) or, for a caller that predates the builder,
+    /// from hand-typed lines. Every reason a save is refused is in <c>errors</c>.
+    /// </summary>
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    [RequestSizeLimit(1_048_576)]
+    [EnableRateLimiting("api")]
     public async Task<ActionResult<ApiResponse<ServiceAgreementDraftDto>>> Create(Guid participantId, CreateServiceAgreementDraftDto dto, CancellationToken ct)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail("A tenant context is required."));
         var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown";
-        var (draft, error) = await _service.CreateAsync(tenantId, participantId, dto, actor, ct);
-        if (error != null) return error == "Participant not found." ? NotFound(ApiResponse<ServiceAgreementDraftDto>.Fail(error)) : BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail(error));
-        return Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(draft!)));
+
+        // Saving blocks prices them: the same heavy work as a quote, which the quote holds to a few at a time for each organisation. A save holds one of the organisation's SAVE permits,
+        // a partition of its own, so a save is never refused because the screen's own quotes are running and a burst of saves cannot keep every core busy. Hand-typed lines are not heavy.
+        using var lease = _saveLimiter is not null && dto.Blocks is { Count: > 0 } ? _saveLimiter.TryEnter("save:tenant:" + tenantId.ToString("N")) : null;
+        if (lease is { IsAcquired: false })
+        {
+            Response.Headers.RetryAfter = "1";
+            return StatusCode(StatusCodes.Status429TooManyRequests, ApiResponse<ServiceAgreementDraftDto>.Fail(SaveBusyMessage));
+        }
+
+        var result = await _service.SaveAsync(tenantId, participantId, dto, actor, ct);
+        if (result.Draft is null)
+        {
+            if (result.ConflictVersion is int newest)
+                return Conflict(new ApiResponse<DraftVersionConflictDto> { Success = false, Data = new DraftVersionConflictDto { CurrentVersion = newest }, Errors = result.Errors.ToList(), Code = "draft-version-conflict" });
+            return result.NotFound
+                ? NotFound(ApiResponse<ServiceAgreementDraftDto>.Fail(result.Errors.First()))
+                : BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail(result.Errors.ToList()));
+        }
+        return Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(result.Draft)));
     }
 
     [HttpGet("{id:guid}/pdf")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<IActionResult> Pdf(Guid participantId, Guid id, CancellationToken ct)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<object>.Fail("A tenant context is required."));
@@ -96,12 +153,32 @@ public class ServiceAgreementDraftsController : ControllerBase
         return Ok(ApiResponse<DemoJourneySimulationDto>.Ok(result!));
     }
 
-    private static ServiceAgreementDraftDto ToDto(ServiceAgreementDraft draft) => new()
+    /// <summary>What a line adds up to: the engine's total for a line it generated, hours times unit price floored to the cent for one typed by hand.</summary>
+    private static decimal LineTotal(ServiceAgreementDraftLine x) => x.Total ?? Math.Floor(x.Hours * x.UnitPrice * 100m) / 100m;
+
+    /// <summary>The revision without its blocks, lines and answer: who, when, which template, and what it came to.</summary>
+    private static ServiceAgreementDraftDto Header(ServiceAgreementDraft draft, int blockCount) => new()
     {
         Id = draft.Id, ParticipantId = draft.ParticipantId, Version = draft.Version, State = draft.State,
         Status = ProvisionalAgreementTemplate.State, TemplateVersion = ProvisionalAgreementTemplate.Version,
         TemplateDocxSha256 = ProvisionalAgreementTemplate.DocxSha256, TemplatePdfSha256 = ProvisionalAgreementTemplate.PdfSha256,
+        PlanStartDate = draft.PlanStartDate, PlanEndDate = draft.PlanEndDate, Representative = draft.Representative,
         AgreementStartDate = draft.AgreementStartDate, AgreementEndDate = draft.AgreementEndDate,
-        Lines = draft.Lines.Select(x => new ServiceAgreementDraftLineDto { ServiceType = x.ServiceType, Hours = x.Hours, ItemCode = x.ItemCode, UnitPrice = x.UnitPrice, CatalogueVersion = x.CatalogueVersion, CatalogueEffectiveFrom = x.CatalogueEffectiveFrom, CatalogueEffectiveTo = x.CatalogueEffectiveTo }).ToList()
+        BlockCount = blockCount, LineCount = draft.Lines.Count, Total = draft.Lines.Sum(LineTotal), Caveats = DraftPricingCaveats.For(draft).ToList(),
+    };
+
+    private static ServiceAgreementDraftDto ToSummary(ServiceAgreementDraft draft, int blockCount) => Header(draft, blockCount) with { IsSummary = true };
+
+    private static ServiceAgreementDraftDto ToDto(ServiceAgreementDraft draft) => Header(draft, draft.Blocks.Count) with
+    {
+        Blocks = draft.Blocks.OrderBy(x => x.Position).Select(DraftJson.ToDto).ToList(),
+        Pricing = DraftJson.ReadQuote(draft.PricingJson),
+        Lines = draft.Lines.OrderBy(x => x.Position).ThenBy(x => x.Id).Select(x => new ServiceAgreementDraftLineDto
+        {
+            ServiceType = x.ServiceType, Hours = x.Hours, ItemCode = x.ItemCode, UnitPrice = x.UnitPrice, CatalogueVersion = x.CatalogueVersion,
+            CatalogueEffectiveFrom = x.CatalogueEffectiveFrom, CatalogueEffectiveTo = x.CatalogueEffectiveTo,
+            BlockId = x.BlockKey, Band = x.Band, Unit = x.Unit, Occurrences = x.Occurrences, Flags = (PlannedLineFlags)x.Flags,
+            Total = LineTotal(x),
+        }).ToList(),
     };
 }

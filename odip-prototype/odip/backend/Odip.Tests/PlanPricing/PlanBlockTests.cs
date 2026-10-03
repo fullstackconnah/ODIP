@@ -300,6 +300,29 @@ public class PlanBlockTests
         Assert.Equal(new string('a', 63) + "…", PlanBlock.ShortId(new string('a', 63) + "😀" + "tail"));
     }
 
+    // ── Review F6: a control character in an id is a 400, never a database error ──
+
+    [Theory]
+    [InlineData("a\0b")]            // a NUL: PostgreSQL's jsonb refuses it (22P05) and so does a varchar (22021), which InMemory never shows
+    [InlineData("line\nbreak")]
+    [InlineData("tab\there")]
+    [InlineData("\u007f")]
+    public void An_id_with_a_control_character_is_refused_and_is_not_echoed_back_in_the_message(string id)
+    {
+        var messages = Valid(b => b with { Id = id }).Validate();
+
+        var message = Assert.Single(messages);
+        Assert.Contains("control character", message);
+        Assert.DoesNotContain(message, c => char.IsControl(c));          // the message that names the block shows the id without it
+        Assert.DoesNotContain(PlanBlock.ShortId(id), c => char.IsControl(c));
+    }
+
+    [Fact]
+    public void An_ordinary_id_with_spaces_dots_dashes_and_accents_is_still_fine()
+    {
+        Assert.Empty(Valid(b => b with { Id = "Mon–Wed café 1.2_a-b" }).Validate());
+    }
+
     // ── Verification of fix round 1, N3: a huge number is a message, never an OverflowException ──
 
     [Fact]

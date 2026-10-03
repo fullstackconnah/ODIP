@@ -40,12 +40,25 @@ public static class ServiceAgreementDraftPdfRenderer
                 {
                     table.ColumnsDefinition(columns => { columns.RelativeColumn(2); columns.RelativeColumn(); columns.RelativeColumn(); columns.RelativeColumn(); });
                     table.Header(header => { header.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text("Support type").Bold(); header.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text("Hours").Bold(); header.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text("Catalogue code").Bold(); header.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text("Server price / provenance").Bold(); });
-                    foreach (var line in draft.Lines)
+                    foreach (var line in draft.Lines.OrderBy(x => x.Position))
                     {
-                        table.Cell().Padding(4).Text(line.ServiceType); table.Cell().Padding(4).Text(line.Hours.ToString("0.##", CultureInfo.InvariantCulture)); table.Cell().Padding(4).Text(line.ItemCode);
-                        table.Cell().Padding(4).Text($"{line.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture)} ({line.CatalogueVersion}, {line.CatalogueEffectiveFrom:dd MMM yyyy})");
+                        // A line the pricing engine generated from a block says its band, its unit and what it totals over the agreement; a hand-typed line prints exactly as it always did.
+                        table.Cell().Padding(4).Text(line.Band is null ? line.ServiceType : $"{line.ServiceType} — {line.Band}");
+                        table.Cell().Padding(4).Text(line.Hours.ToString("0.##", CultureInfo.InvariantCulture) + (line.Unit switch { "E" => " each", "D" => " nights", _ => string.Empty }));
+                        table.Cell().Padding(4).Text(line.ItemCode);
+                        table.Cell().Padding(4).Text($"{line.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture)} ({line.CatalogueVersion}, {line.CatalogueEffectiveFrom:dd MMM yyyy})"
+                            + (line.Total is { } total ? $" — {total.ToString("0.00", CultureInfo.InvariantCulture)} for {line.Occurrences} shifts" : string.Empty));
                     }
                 });
+                if (draft.Lines.Any(x => x.Total is not null))
+                    column.Item().PaddingTop(6).Text($"Total of the priced lines over the agreement period: {draft.Lines.Sum(x => x.Total ?? 0m).ToString("0.00", CultureInfo.InvariantCulture)}. Prices are the catalogue maximums on each service date and are not a quote.").FontColor(Colors.Grey.Darken1);
+                // A total that leaves work out says so beside the total: what was not priced, what a person has to look at and what rests on a rate nobody has confirmed.
+                var caveats = DraftPricingCaveats.For(draft);
+                if (caveats.Count > 0)
+                {
+                    column.Item().PaddingTop(8).Text("Read before relying on these totals").Bold().FontColor(Colors.Orange.Darken3);
+                    foreach (var caveat in caveats) column.Item().PaddingTop(2).Text("• " + caveat).FontColor(Colors.Orange.Darken3);
+                }
                 column.Item().PaddingTop(18).Text("Agreement review sections (all fields require approved, participant-specific completion)").Bold().FontSize(12);
                 Section(column, "1. Parties and representatives", "Participant, authorised representative authority, provider legal entity, ABN, registration status and notices contacts are placeholders pending review.");
                 Section(column, "2. Supports, delivery and schedule", "Select eligible support code, arrangement/ratio, service delivery state or territory, location, dates, times, recurrence, exceptions and accessibility requirements per line. Standard 1:1 community access is only a suggestion, never a default charge.");

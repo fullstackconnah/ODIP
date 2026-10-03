@@ -32,6 +32,7 @@ public class OdipDbContext : DbContext
     public DbSet<ParticipantIntakeSnapshot> ParticipantIntakeSnapshots => Set<ParticipantIntakeSnapshot>();
     public DbSet<ServiceAgreementDraft> ServiceAgreementDrafts => Set<ServiceAgreementDraft>();
     public DbSet<ServiceAgreementDraftLine> ServiceAgreementDraftLines => Set<ServiceAgreementDraftLine>();
+    public DbSet<ServiceAgreementDraftBlock> ServiceAgreementDraftBlocks => Set<ServiceAgreementDraftBlock>();
     public DbSet<ElectronicSigningSnapshot> ElectronicSigningSnapshots => Set<ElectronicSigningSnapshot>();
     public DbSet<ElectronicSigningEvidence> ElectronicSigningEvidence => Set<ElectronicSigningEvidence>();
     public DbSet<Contact> Contacts => Set<Contact>();
@@ -1693,8 +1694,19 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.ParticipantNameSnapshot).HasMaxLength(300).IsRequired();
             entity.Property(e => e.NdisNumberSnapshot).HasMaxLength(100);
             entity.Property(e => e.CreatedBy).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.PricingJson).HasColumnType("jsonb");
             entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => new { e.TenantId, e.ParticipantId, e.Version }).IsUnique();
+        });
+        modelBuilder.Entity<ServiceAgreementDraftBlock>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.BlockKey).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.BlockJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(e => e.RequirementsJson).HasColumnType("jsonb").IsRequired();
+            entity.HasOne(e => e.Draft).WithMany(e => e.Blocks).HasForeignKey(e => e.DraftId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.DraftId, e.Position }).IsUnique();
+            entity.HasIndex(e => new { e.DraftId, e.BlockKey }).IsUnique();
         });
         modelBuilder.Entity<ServiceAgreementDraftLine>(entity =>
         {
@@ -1704,6 +1716,13 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.CatalogueVersion).HasMaxLength(50).IsRequired();
             entity.Property(e => e.Hours).HasPrecision(12, 2);
             entity.Property(e => e.UnitPrice).HasPrecision(12, 2);
+            entity.Property(e => e.BlockKey).HasMaxLength(64);
+            entity.Property(e => e.Band).HasMaxLength(100);
+            entity.Property(e => e.Unit).HasMaxLength(1).IsRequired().HasDefaultValue("H");
+            entity.Property(e => e.Total).HasPrecision(14, 2);
+            entity.Property(e => e.Occurrences).HasDefaultValue(0);
+            entity.Property(e => e.Flags).HasDefaultValue(0);
+            entity.Property(e => e.Position).HasDefaultValue(0);
             entity.HasOne(e => e.Draft).WithMany(e => e.Lines).HasForeignKey(e => e.DraftId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => e.DraftId);
         });

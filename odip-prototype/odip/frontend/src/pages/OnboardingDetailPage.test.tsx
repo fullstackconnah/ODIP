@@ -135,6 +135,30 @@ describe('OnboardingDetailPage', () => {
     expect(screen.queryByRole('button', { name: 'Validate profile data' })).not.toBeInTheDocument()
   })
 
+  // An agreement draft carries money, and the API admits only Admin, Coordinator and SuperAdmin to it: a role that can read this page is not sent to a page it would meet a redirect or a 403 on.
+  it('offers the agreement draft to the roles the API admits to it, in the gate list and as the next action', () => {
+    mockUseQuery.mockReturnValue({ data: { ...incomplete, profileComplete: true, serviceTypeConfirmed: true }, isLoading: false })     // the agreement is the next thing to do
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator']) {
+      localStorage.setItem('odip_user', JSON.stringify({ role }))
+      const { unmount } = renderDetail()
+      expect(screen.getByRole('link', { name: 'Open agreement draft' }), role).toHaveAttribute('href', '/participants/p-1/agreement-draft')
+      expect(screen.getByRole('link', { name: 'Review agreement evidence' }), role).toHaveAttribute('href', '/participants/p-1/agreement-draft')
+      unmount()
+    }
+  })
+
+  it('does not send a ReadOnly or SupportWorker reader of the page to the agreement draft', () => {
+    mockUseQuery.mockReturnValue({ data: { ...incomplete, profileComplete: true, serviceTypeConfirmed: true }, isLoading: false })
+    for (const role of ['ReadOnly', 'SupportWorker']) {
+      localStorage.setItem('odip_user', JSON.stringify({ role }))
+      const { unmount } = renderDetail()
+      expect(screen.getByRole('heading', { level: 1, name: 'Jamie Rivers' }), role).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: /agreement draft/i }), role).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Review agreement evidence' }), role).not.toBeInTheDocument()
+      unmount()
+    }
+  })
+
   it('routes the Back control to the Participants hub Onboarding tab on direct deep-link', async () => {
     // Deep-link entry — no prior history. The Back control must fall back to the hub's
     // Onboarding tab (a real, current route) rather than the removed /onboarding list screen.
