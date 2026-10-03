@@ -37,7 +37,7 @@ export interface FundingPeriodDto {
   periodStart: string
   periodEnd: string
   planAmount: number
-  /** Oassist's share; absent when none is recorded (the limit is then the plan amount). */
+  /** The organisation's share; absent when none is recorded (the limit is then the plan amount). */
   setAside?: number
 }
 
