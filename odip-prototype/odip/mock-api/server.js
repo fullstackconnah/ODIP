@@ -2292,13 +2292,12 @@ const routes = [
     // p-0004 is the participant whose checklist is complete but for the schedule: the page then shows the last step, before and after the agreement draft is approved for rostering.
     const approved = (serviceAgreementDrafts[id] || []).filter((d) => d.approval).sort((a, b) => b.version - a.version)[0]
     const schedule = approved ? { scheduleApprovedVersion: approved.version, scheduleApprovedAt: approved.approval.approvedAt } : {}
-    const scheduleReason = approved
-      ? `Version ${approved.version} of the agreement was approved for rostering: its weekly patterns and shifts are on the roster. Nothing is created from onboarding itself.`
-      : 'The schedule is made when an agreement revision is approved for rostering, from its draft page; nothing is created from onboarding itself.'
-    if (id === 'p-0004') return { participantId: id, intakeComplete: true, profileComplete: true, serviceTypeConfirmed: true, serviceAgreementSigned: true, isReady: false, reasons: [scheduleReason], ...schedule }
+    // Like the server: a gap until a revision is approved, and no line at all after (the checklist row names the revision).
+    const scheduleReasons = approved ? [] : ['The schedule is made when an agreement revision is approved for rostering, from its draft page; nothing is created from onboarding itself.']
+    if (id === 'p-0004') return { participantId: id, intakeComplete: true, profileComplete: true, serviceTypeConfirmed: true, serviceAgreementSigned: true, isReady: false, reasons: scheduleReasons, ...schedule }
     return {
       participantId: id, intakeComplete: true, profileComplete: false, serviceTypeConfirmed: false, serviceAgreementSigned: false, isReady: false,
-      reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', scheduleReason], ...schedule,
+      reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', ...scheduleReasons], ...schedule,
     }
   }],
   ['participants/:id/bookings', (id) => bookings.filter((b) => b.participantId === id)],

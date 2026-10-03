@@ -632,7 +632,7 @@ public class ParticipantHubFlowTests
     }
 
     [Fact]
-    public async Task Lifecycle_TheChecklistSaysWhichRevisionWasApprovedForRosteringOnceOneHasBeen_AndWhereTheScheduleIsMadeUntilThen()
+    public async Task Lifecycle_TheChecklistNamesTheRevisionApprovedForRosteringOnceOneHasBeen_AndListsWhereTheScheduleIsMadeAsAGapUntilThen()
     {
         var tenantId = Guid.NewGuid();
         using var caller = NewCaller(tenantId);
@@ -652,8 +652,9 @@ public class ParticipantHubFlowTests
         Assert.Equal((null, null), (before.ScheduleApprovedVersion, before.ScheduleApprovedAt));
         Assert.Contains(before.Reasons, reason => reason.StartsWith("The schedule is made when an agreement revision is approved for rostering", StringComparison.Ordinal));
         Assert.Equal((2, new DateTime(2026, 10, 19, 3, 0, 0, DateTimeKind.Utc)), (after.ScheduleApprovedVersion, after.ScheduleApprovedAt));
-        Assert.Contains(after.Reasons, reason => reason == "Version 2 of the agreement was approved for rostering: its weekly patterns and shifts are on the roster. Nothing is created from onboarding itself.");
-        Assert.DoesNotContain(after.Reasons, reason => reason.StartsWith("The schedule is made when", StringComparison.Ordinal));
+        // Once a revision is approved nothing about the schedule is missing, so the "what is still missing" list does not mention it at all (the other lines stay).
+        Assert.DoesNotContain(after.Reasons, reason => reason.Contains("rostering", StringComparison.OrdinalIgnoreCase) || reason.Contains("schedule", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(before.Reasons.Count - 1, after.Reasons.Count);
     }
 
     [Fact]
