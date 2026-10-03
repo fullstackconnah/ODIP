@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Odip.Api.Controllers;
 using Odip.Api.RateLimiting;
@@ -171,6 +172,24 @@ public class PlanQuoteConcurrencyTests
         // The routes that are light stay as they were.
         Assert.Null(typeof(PlanPricingController).GetMethod(nameof(PlanPricingController.GetSettings))!.GetCustomAttribute<ServiceFilterAttribute>());
         Assert.Null(typeof(PlanPricingController).GetMethod(nameof(PlanPricingController.PutSettings))!.GetCustomAttribute<ServiceFilterAttribute>());
+    }
+
+    [Fact]
+    public void The_container_can_build_the_filter_from_the_registrations_Program_cs_makes()
+    {
+        // The same two registrations Program.cs has (the singleton limiter, the scoped filter) and the scoped tenant: the limiter's optional permit count must not stop the
+        // container constructing it, and the scoped filter must not be captured by the singleton.
+        var services = new ServiceCollection();
+        services.AddSingleton<PlanQuoteConcurrencyLimiter>();
+        services.AddScoped<PlanQuoteConcurrencyFilter>();
+        services.AddScoped(_ => Mock.Of<ICurrentTenant>());
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        using var scope = provider.CreateScope();
+
+        var filter = scope.ServiceProvider.GetRequiredService<PlanQuoteConcurrencyFilter>();
+
+        Assert.NotNull(filter);
+        Assert.Same(provider.GetRequiredService<PlanQuoteConcurrencyLimiter>(), provider.GetRequiredService<PlanQuoteConcurrencyLimiter>());
     }
 
     [Fact]
