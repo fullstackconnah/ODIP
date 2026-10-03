@@ -298,6 +298,64 @@ public class DemoShiftPackageGuardTests
         Assert.Contains(nameof(IncidentReport), ex.Message);
     }
 
+    // ── a reference that is changed is checked like one that is added (PR 2 review L6) ──
+    // The guard asked "does the Demo tenant own this person?" only of a row being added. A column the top-up may change can hold a person (who reviewed a
+    // completion, who reviewed an incident), and a later pack that set one from another tenant's directory would have passed.
+
+    [Fact]
+    public async Task AReviewerSetOnACompletion_IsAcceptedForAnOwnedUser_AndRefusedForOneTheDemoTenantDoesNotOwn()
+    {
+        var completion = Completion();
+        await using var db = await DbWithAsync(NewOptions(), completion);
+        var tracked = await db.ShiftCompletions.SingleAsync(c => c.Id == completion.Id);
+        tracked.ReviewOutcome = ReviewOutcome.Approved;
+        tracked.ReviewedAt = DateTime.UtcNow;
+        tracked.UpdatedAt = DateTime.UtcNow;
+
+        tracked.ReviewedByUserId = Guid.NewGuid();                                              // somebody the Demo tenant does not own
+        var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(db.ChangeTracker));
+        Assert.Contains(nameof(ShiftCompletion.ReviewedByUserId), ex.Message, StringComparison.Ordinal);
+        Assert.Contains("does not own", ex.Message, StringComparison.Ordinal);
+
+        tracked.ReviewedByUserId = OwnedUser;
+        NewGuard().Verify(db.ChangeTracker);
+    }
+
+    [Fact]
+    public async Task AReviewerSetOnAnIncident_IsAcceptedForAnOwnedUser_AndRefusedForOneTheDemoTenantDoesNotOwn()
+    {
+        var incident = Incident(OwnedUser, OwnedParticipant);
+        await using var db = await DbWithAsync(NewOptions(), incident);
+        var tracked = await db.IncidentReports.SingleAsync(i => i.Id == incident.Id);
+        tracked.Status = IncidentStatus.UnderReview;
+        tracked.ReviewedAt = DateTime.UtcNow;
+        tracked.UpdatedAt = DateTime.UtcNow;
+
+        tracked.ReviewedByUserId = Guid.NewGuid();
+        var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(db.ChangeTracker));
+        Assert.Contains(nameof(IncidentReport.ReviewedByUserId), ex.Message, StringComparison.Ordinal);
+        Assert.Contains("does not own", ex.Message, StringComparison.Ordinal);
+
+        tracked.ReviewedByUserId = OwnedUser;
+        NewGuard().Verify(db.ChangeTracker);
+    }
+
+    [Fact]
+    public async Task AReferenceThatIsNotChanged_IsNotCheckedAgain_AndAReviewerPutBackToNobodyIsNotAReference()
+    {
+        var completion = Completion();
+        completion.ReviewedByUserId = Guid.NewGuid();                                           // written earlier by something that is no longer in the directory
+        await using var db = await DbWithAsync(NewOptions(), completion);
+        var tracked = await db.ShiftCompletions.SingleAsync(c => c.Id == completion.Id);
+
+        tracked.HandoverText = "An edit to another column, which leaves the reviewer alone.";
+        tracked.UpdatedAt = DateTime.UtcNow;
+        NewGuard().Verify(db.ChangeTracker);
+
+        tracked.ReviewedByUserId = null;
+        NewGuard().Verify(db.ChangeTracker);
+    }
+
     // ── an existing row changes only what its day needs ──
 
     [Theory]

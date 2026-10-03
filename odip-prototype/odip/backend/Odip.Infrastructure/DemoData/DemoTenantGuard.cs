@@ -220,7 +220,10 @@ public sealed class DemoTenantGuard
                 continue;
             }
 
-            if (entry.State == EntityState.Added) VerifyReferences(entry, label, inSave, violations);
+            // A person a row points at is checked when the row is added, and again when the column that holds one is changed (PR 2 review L6: a reviewer
+            // taken from another tenant's directory would otherwise pass, because the row itself is the Demo tenant's).
+            if (entry.State == EntityState.Added) VerifyReferences(entry, label, inSave, violations, modifiedOnly: false);
+            else if (entry.State == EntityState.Modified) VerifyReferences(entry, label, inSave, violations, modifiedOnly: true);
 
             if (entry.Entity is ITenantEntity tenantEntity)
             {
@@ -262,12 +265,14 @@ public sealed class DemoTenantGuard
     /// added in this save. A reference is any foreign key to a user or a participant, and any plain Guid column that is a person by its
     /// name (<c>...UserId</c>, <c>...StaffId</c>, <c>...ParticipantId</c>): the model keeps many of those without a constraint (who requested,
     /// recorded or decided), and a constraint would not know about tenants anyway. An empty reference (an unfilled shift) points at nobody.
-    /// Other kinds of row are not checked here: they come out of queries that only see Demo rows, and are Demo rows themselves.
+    /// Other kinds of row are not checked here: they come out of queries that only see Demo rows, and are Demo rows themselves. On a row that
+    /// already exists only the references that are being changed are checked (<paramref name="modifiedOnly"/>): one written earlier is not asked about again.
     /// </summary>
-    private void VerifyReferences(EntityEntry entry, string label, Dictionary<Type, HashSet<Guid>> inSave, List<string> violations)
+    private void VerifyReferences(EntityEntry entry, string label, Dictionary<Type, HashSet<Guid>> inSave, List<string> violations, bool modifiedOnly)
     {
         foreach (var property in entry.Properties)
         {
+            if (modifiedOnly && !property.IsModified) continue;
             var kind = ReferenceKind(property.Metadata);
             if (kind is null) continue;
             if (property.CurrentValue is not Guid value || value == Guid.Empty) continue;
