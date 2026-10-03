@@ -319,6 +319,8 @@ owner decision (collected under Open Flags at the end).
     `custom` is a token minted with the service-account key, which
     only its holder can do. Before deploy, check the Firebase console: only Email/Password
     should be enabled today.
+  - A refused sign-in says why on the login page (a code on the exchange's 401). What each
+    message means and how to verify an account safely: `docs/runbooks/sign-in-trouble.md`.
   - The SSO plan above retires this whole flow. With the email/password provider disabled
     there is no password to set, so the set-password emails, the two sign-in-account
     routes, the temporary-password option and the verified-at-creation rule go with it.
