@@ -87,6 +87,17 @@ public record ServiceAgreementDraftDto
     /// <summary>What the engine answered when the revision was saved (totals, issues, notices, holiday occurrences, open questions; no per-occurrence lines). Absent on a hand-typed draft.</summary>
     public PlanQuote? Pricing { get; init; }
     public List<ServiceAgreementDraftLineDto> Lines { get; init; } = [];
+    /// <summary>
+    /// True on an older revision in the list: its blocks, lines and answer are left out (a long onboarding is many revisions, each tens of kilobytes) and <c>GET .../{id}</c> has them. The newest
+    /// revision, the one a plan is started from, is always in full.
+    /// </summary>
+    public bool IsSummary { get; init; }
+    public int BlockCount { get; init; }
+    public int LineCount { get; init; }
+    /// <summary>What the revision's lines add up to over the agreement (a hand-typed line is hours times unit price, floored to the cent).</summary>
+    public decimal Total { get; init; }
+    /// <summary>What a reader must not miss, a sentence each: shift lines not priced, to review, and on provisional rates. Empty for a revision priced in full or typed by hand.</summary>
+    public List<string> Caveats { get; init; } = [];
 }
 
 public record ServiceAgreementDraftLineDto

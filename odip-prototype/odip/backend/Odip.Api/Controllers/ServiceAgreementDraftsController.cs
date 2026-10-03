@@ -38,9 +38,31 @@ public class ServiceAgreementDraftsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<ServiceAgreementDraftDto>>>> List(Guid participantId, CancellationToken ct)
     {
-        // Two collections (the blocks and the lines) are loaded beside each draft: as separate queries, so a draft with many of each is not a cross product of them.
-        var drafts = await _db.ServiceAgreementDrafts.Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery().Where(x => x.ParticipantId == participantId).OrderByDescending(x => x.Version).ToListAsync(ct);
-        return Ok(ApiResponse<List<ServiceAgreementDraftDto>>.Ok(drafts.Select(ToDto).ToList()));
+        // The newest revision in full (a plan is started from it) and the older ones as summaries: every save adds a revision of tens of kilobytes (blocks, answer, lines), so a long onboarding
+        // made a multi-megabyte response on every page load. GET {id} has an older revision's details. The two collections of the newest are loaded as separate queries, not a cross product.
+        var newest = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery()
+            .Where(x => x.ParticipantId == participantId).OrderByDescending(x => x.Version).FirstOrDefaultAsync(ct);
+        if (newest is null) return Ok(ApiResponse<List<ServiceAgreementDraftDto>>.Ok([]));
+
+        // The older ones: their lines (for what they add up to) but no blocks and no stored answer in the response; the block counts come from one grouped query.
+        var older = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines)
+            .Where(x => x.ParticipantId == participantId && x.Version < newest.Version).OrderByDescending(x => x.Version).ToListAsync(ct);
+        var olderIds = older.Select(x => x.Id).ToList();
+        var blockCounts = olderIds.Count == 0 ? new Dictionary<Guid, int>()
+            : await _db.ServiceAgreementDraftBlocks.AsNoTracking().Where(x => olderIds.Contains(x.DraftId)).GroupBy(x => x.DraftId).Select(g => new { Id = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Id, x => x.Count, ct);
+
+        var listed = new List<ServiceAgreementDraftDto> { ToDto(newest) };
+        listed.AddRange(older.Select(x => ToSummary(x, blockCounts.GetValueOrDefault(x.Id))));
+        return Ok(ApiResponse<List<ServiceAgreementDraftDto>>.Ok(listed));
+    }
+
+    /// <summary>One revision in full: how an older one's blocks, lines and answer are read (the list leaves them out). Not found for another participant's or another tenant's.</summary>
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<ApiResponse<ServiceAgreementDraftDto>>> Get(Guid participantId, Guid id, CancellationToken ct)
+    {
+        var draft = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery()
+            .FirstOrDefaultAsync(x => x.Id == id && x.ParticipantId == participantId, ct);
+        return draft is null ? NotFound(ApiResponse<ServiceAgreementDraftDto>.Fail("Draft not found.")) : Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(draft)));
     }
 
     /// <summary>
@@ -126,13 +148,24 @@ public class ServiceAgreementDraftsController : ControllerBase
         return Ok(ApiResponse<DemoJourneySimulationDto>.Ok(result!));
     }
 
-    private static ServiceAgreementDraftDto ToDto(ServiceAgreementDraft draft) => new()
+    /// <summary>What a line adds up to: the engine's total for a line it generated, hours times unit price floored to the cent for one typed by hand.</summary>
+    private static decimal LineTotal(ServiceAgreementDraftLine x) => x.Total ?? Math.Floor(x.Hours * x.UnitPrice * 100m) / 100m;
+
+    /// <summary>The revision without its blocks, lines and answer: who, when, which template, and what it came to.</summary>
+    private static ServiceAgreementDraftDto Header(ServiceAgreementDraft draft, int blockCount) => new()
     {
         Id = draft.Id, ParticipantId = draft.ParticipantId, Version = draft.Version, State = draft.State,
         Status = ProvisionalAgreementTemplate.State, TemplateVersion = ProvisionalAgreementTemplate.Version,
         TemplateDocxSha256 = ProvisionalAgreementTemplate.DocxSha256, TemplatePdfSha256 = ProvisionalAgreementTemplate.PdfSha256,
         PlanStartDate = draft.PlanStartDate, PlanEndDate = draft.PlanEndDate, Representative = draft.Representative,
         AgreementStartDate = draft.AgreementStartDate, AgreementEndDate = draft.AgreementEndDate,
+        BlockCount = blockCount, LineCount = draft.Lines.Count, Total = draft.Lines.Sum(LineTotal), Caveats = DraftPricingCaveats.For(draft).ToList(),
+    };
+
+    private static ServiceAgreementDraftDto ToSummary(ServiceAgreementDraft draft, int blockCount) => Header(draft, blockCount) with { IsSummary = true };
+
+    private static ServiceAgreementDraftDto ToDto(ServiceAgreementDraft draft) => Header(draft, draft.Blocks.Count) with
+    {
         Blocks = draft.Blocks.OrderBy(x => x.Position).Select(DraftJson.ToDto).ToList(),
         Pricing = DraftJson.ReadQuote(draft.PricingJson),
         Lines = draft.Lines.OrderBy(x => x.Position).ThenBy(x => x.Id).Select(x => new ServiceAgreementDraftLineDto
@@ -140,7 +173,7 @@ public class ServiceAgreementDraftsController : ControllerBase
             ServiceType = x.ServiceType, Hours = x.Hours, ItemCode = x.ItemCode, UnitPrice = x.UnitPrice, CatalogueVersion = x.CatalogueVersion,
             CatalogueEffectiveFrom = x.CatalogueEffectiveFrom, CatalogueEffectiveTo = x.CatalogueEffectiveTo,
             BlockId = x.BlockKey, Band = x.Band, Unit = x.Unit, Occurrences = x.Occurrences, Flags = (PlannedLineFlags)x.Flags,
-            Total = x.Total ?? Math.Floor(x.Hours * x.UnitPrice * 100m) / 100m,
-        }).ToList()
+            Total = LineTotal(x),
+        }).ToList(),
     };
 }

@@ -463,6 +463,88 @@ public class DraftBlocksTests
         Assert.Equal(4, Assert.Single(quote.Totals.ByCategory).PaceCategory);
     }
 
+    // ── The list: the newest revision in full, the older ones as summaries (review F12) ──
+
+    private static async Task<List<ServiceAgreementDraftDto>> ListedAsync(ServiceAgreementDraftsController controller, Guid participantId) =>
+        Assert.IsType<ApiResponse<List<ServiceAgreementDraftDto>>>(Assert.IsType<OkObjectResult>((await controller.List(participantId, CancellationToken.None)).Result).Value).Data!;
+
+    [Fact]
+    public async Task The_list_has_the_newest_revision_in_full_and_older_ones_as_summaries_with_no_blocks_lines_or_answer()
+    {
+        await using var f = await SetUpAsync();
+        var saturday = Block("sat", PlanSupportType.GroupActivity, DayOfWeek.Saturday, T(9), T(15), b => b with { ParticipantsPresent = 3 });
+        await SaveFrom(f, 0, Entry(MonWed()));
+        await SaveFrom(f, 1, Entry(MonWed()), Entry(saturday));
+        await SaveFrom(f, 2, Entry(MonWed()), Entry(saturday));
+
+        var listed = await ListedAsync(Controller(f), f.Participant.Id);
+
+        Assert.Equal(new[] { 3, 2, 1 }, listed.Select(d => d.Version));
+        var newest = listed[0];
+        Assert.False(newest.IsSummary);
+        Assert.Equal(2, newest.Blocks.Count);
+        Assert.Equal(2, newest.Lines.Count);
+        Assert.NotNull(newest.Pricing);
+        Assert.Equal((2, 2), (newest.BlockCount, newest.LineCount));
+        Assert.Equal(newest.Lines.Sum(l => l.Total), newest.Total);
+        foreach (var older in listed.Skip(1))
+        {
+            Assert.True(older.IsSummary);
+            Assert.Empty(older.Blocks);
+            Assert.Empty(older.Lines);
+            Assert.Null(older.Pricing);
+            Assert.True(older.Total > 0m);                                     // but it still says what it came to
+        }
+        Assert.Equal((2, 2), (listed[1].BlockCount, listed[1].LineCount));      // version 2 had both blocks
+        Assert.Equal((1, 1), (listed[2].BlockCount, listed[2].LineCount));      // version 1 had one
+        Assert.Equal(588.64m, listed[2].Total);
+    }
+
+    [Fact]
+    public async Task A_summary_carries_the_caveats_of_its_answer_and_a_hand_typed_one_says_what_it_is()
+    {
+        await using var f = await SetUpAsync();
+        f.Db.ServiceAgreementDrafts.Add(new ServiceAgreementDraft
+        {
+            Id = Guid.NewGuid(), TenantId = f.TenantId, ParticipantId = f.Participant.Id, Version = 1, State = "NSW", ServiceTypesJson = "[]", ParticipantNameSnapshot = "Synthetic Participant", CreatedBy = "t",
+            PlanStartDate = new DateOnly(2026, 7, 1), PlanEndDate = new DateOnly(2027, 6, 30), AgreementStartDate = new DateOnly(2026, 7, 1), AgreementEndDate = new DateOnly(2027, 6, 30),
+            Lines = { new ServiceAgreementDraftLine { Id = Guid.NewGuid(), ServiceType = "x", ItemCode = "TEST", Hours = 2.5m, UnitPrice = 20.55m, CatalogueVersion = "t", CatalogueEffectiveFrom = new DateOnly(2026, 7, 1) } },
+        });
+        await f.Db.SaveChangesAsync();
+        await SaveFrom(f, 1, Entry(MonWed()));
+
+        var listed = await ListedAsync(Controller(f), f.Participant.Id);
+
+        var byHand = listed[1];
+        Assert.True(byHand.IsSummary);
+        Assert.Equal((0, 1, 51.37m), (byHand.BlockCount, byHand.LineCount, byHand.Total));       // floor(2.5 x 20.55 = 51.375), as for a full hand-typed line
+        Assert.Empty(byHand.Caveats);
+        Assert.Contains(listed[0].Pricing!.Notices, n => n.Message.Contains("registration groups"));   // the newest keeps its notices in full
+    }
+
+    [Fact]
+    public async Task One_revision_in_full_is_one_get_away_for_an_older_one_and_only_for_its_own_participant_and_tenant()
+    {
+        await using var f = await SetUpAsync();
+        await SaveFrom(f, 0, Entry(MonWed()));
+        await SaveFrom(f, 1, Entry(MonWed()));
+        var older = (await ListedAsync(Controller(f), f.Participant.Id)).Single(d => d.Version == 1);
+
+        var result = await Controller(f).Get(f.Participant.Id, older.Id, CancellationToken.None);
+
+        var full = Assert.IsType<ApiResponse<ServiceAgreementDraftDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        Assert.False(full.IsSummary);
+        Assert.Single(full.Blocks);
+        Assert.Single(full.Lines);
+        Assert.NotNull(full.Pricing);
+        // another participant's id under this participant, an id that does not exist, and another tenant's user: not found
+        Assert.IsType<NotFoundObjectResult>((await Controller(f).Get(Guid.NewGuid(), older.Id, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await Controller(f).Get(f.Participant.Id, Guid.NewGuid(), CancellationToken.None)).Result);
+        await using var other = NewContext(f.DbName, TenantB);
+        var asB = new ServiceAgreementDraftsController(other, TenantOf(TenantB), new ServiceAgreementDraftService(other));
+        Assert.IsType<NotFoundObjectResult>((await asB.Get(f.Participant.Id, older.Id, CancellationToken.None)).Result);
+    }
+
     // ── A save holds a permit of its own (review F12) ─────────────────────────────
 
     [Fact]
