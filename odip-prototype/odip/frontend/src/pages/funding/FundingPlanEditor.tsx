@@ -17,7 +17,7 @@ import { categoriesLabel, managementLabel, paceNumber, writtenSpan } from '@/lib
 import { apiErrorCode, apiErrorMessages, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { cn, formatCurrency } from '@/lib/utils'
 import {
-  addCorePool, addStatedPool, editorStateFromPlan, hasPool, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, startFromBilling, toSaveBody, updatePool, validate,
+  addCorePool, addStatedPool, editorStateFromPlan, hasPool, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, startFromBilling, toSaveBody, updatePool, validate,
   withPeriodEdit, withPlanFields, withPoolTotals, type EditorPool, type EditorState, type PoolProblems, type Problems,
 } from './fundingEditorState'
 
@@ -55,8 +55,20 @@ function failureOf(error: unknown): Failure {
   return { kind: 'messages', messages: messages.length > 0 ? messages : ['The plan budget was not saved. Check your connection and try again.'] }
 }
 
-/** Where focus goes after the form changes under the person's hands: into a new pool's amount, onto the pool before a removed one, or onto the Pools heading when none is left. */
-type FocusTarget = { kind: 'amount'; key: string } | { kind: 'pool'; key: string } | { kind: 'heading' }
+/**
+ * Where focus goes after the form changes under the person's hands: into a new pool's amount, onto the pool before a removed one, onto the Pools heading when none is left, or onto the
+ * form's first field when the button that had focus went with the sentence it was under ("Load the latest").
+ */
+type FocusTarget = { kind: 'amount'; key: string } | { kind: 'pool'; key: string } | { kind: 'heading' } | { kind: 'first' }
+
+/** Where an element that was scrolled to stops: 0.75rem (scroll-mt-3) clear of the panel's header rule. "nearest" alone leaves it flush under the rule, its top edge touching it. */
+const SCROLL_CLEARANCE = '0.75rem'
+
+function reveal(element: HTMLElement | null | undefined) {
+  if (!element) return
+  element.style.scrollMarginTop = SCROLL_CLEARANCE
+  element.scrollIntoView({ block: 'nearest' })
+}
 
 /**
  * The form's own content, for "has anything changed": what the person can see and type, not the bookkeeping (a pool's key and flags, the revision). Two forms with the same content are the
@@ -101,6 +113,9 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
   // What "unsaved changes" is measured against: the form as it opened, or as it was last loaded from the server ("Load the latest").
   const [baseline, setBaseline] = useState<EditorState>(initial)
   const [attempted, setAttempted] = useState(false)
+  // The pools whose problems are shown: all of them once a save has been tried, and one that was added since only once the person starts on it or the next save is tried (a pool added after
+  // a failed check would otherwise open with an error under the very field that has just taken focus).
+  const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set())
   const [failure, setFailure] = useState<Failure | null>(null)
   const [rewrote, setRewrote] = useState(false)
   const [management, setManagement] = useState<PlanType>(defaultManagement)
@@ -120,15 +135,19 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
   const coreHeld = hasPool(state, 0, management)
   const statedHeld = chosen ? hasPool(state, chosen.number, management) : false
   const periodsReason = useMemo(() => noPeriodsReason(state), [state])
+  // "Some fields need attention. Each has a message beside it." is said only while that is true: a pool nobody has started on has a problem but no message yet.
+  const problemsShown = attempted && Boolean(
+    problems.planStart || problems.planEnd || problems.confirmedByName || problems.notes || problems.general.length > 0 || state.pools.some(pool => revealed.has(pool.key) && problems.pools[pool.key]),
+  )
 
   // A refused save puts its reason where the person is looking: the failure is scrolled into view and takes focus (the Save button is at the bottom of a long form, and it is disabled while saving).
   useEffect(() => {
     if (!failure) return
     failureRef.current?.focus({ preventScroll: true })
-    failureRef.current?.scrollIntoView({ block: 'nearest' })
+    reveal(failureRef.current)
   }, [failure])
 
-  // Focus that was asked for by a handler (a pool added or removed) lands once the form has re-rendered.
+  // Focus that was asked for by a handler (a pool added or removed, the latest plan loaded) lands once the form has re-rendered.
   useEffect(() => {
     const target = pendingFocus.current
     if (!target) return
@@ -136,11 +155,13 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
     const root = bodyRef.current
     const element = target.kind === 'heading'
       ? root?.querySelector<HTMLElement>('#funding-pools-heading')
-      : target.kind === 'pool'
-        ? root?.querySelector<HTMLElement>(`[data-pool-key="${target.key}"]`)
-        : root?.querySelector<HTMLElement>(`[data-pool-key="${target.key}"] input[inputmode="decimal"]`)
+      : target.kind === 'first'
+        ? root?.querySelector<HTMLElement>('input, select, textarea')
+        : target.kind === 'pool'
+          ? root?.querySelector<HTMLElement>(`[data-pool-key="${target.key}"]`)
+          : root?.querySelector<HTMLElement>(`[data-pool-key="${target.key}"] input[inputmode="decimal"]`)
     element?.focus({ preventScroll: true })
-    element?.scrollIntoView({ block: 'nearest' })
+    reveal(element)
   })
 
   const change = (patch: Partial<EditorState>) => {
@@ -166,12 +187,15 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
   const focusFirstProblem = () => {
     const first = bodyRef.current?.querySelector<HTMLElement>('[aria-invalid="true"], [data-problem]')
     first?.focus({ preventScroll: true })
-    first?.scrollIntoView({ block: 'nearest' })
+    reveal(first)
   }
 
+  // Before any save is tried nothing is shown, as ever. After one, a pool the person starts on shows its problems from then on (the pools that were there for the try already do).
+  const startedOn = (key: string) => { if (attempted) setRevealed(held => (held.has(key) ? held : new Set(held).add(key))) }
+
   const save = () => {
-    // The messages must be on screen before focus goes to the first of them.
-    if (!attempted) flushSync(() => setAttempted(true))
+    // The messages must be on screen before focus goes to the first of them: every pool's, including one added since the last try.
+    if (!attempted || state.pools.some(pool => !revealed.has(pool.key))) flushSync(() => { setAttempted(true); setRevealed(new Set(state.pools.map(pool => pool.key))) })
     if (problems.any) {
       focusFirstProblem()
       return
@@ -193,13 +217,16 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
       setFailure({ kind: 'messages', messages: ['That plan could not be found any more. Close this panel and look at the participant’s Funding tab.'] })
       return
     }
-    // The newer plan is the form's new starting point, so closing straight afterwards does not ask to discard what the person never typed.
+    // The newer plan is the form's new starting point, so closing straight afterwards does not ask to discard what the person never typed. The button that had focus goes with its sentence:
+    // focus goes to the form's first field, not to the page behind the panel.
     const loaded = editorStateFromPlan(newer)
+    pendingFocus.current = { kind: 'first' }
     setState(loaded)
     setBaseline(loaded)
     setFailure(null)
     setRewrote(false)
     setAttempted(false)
+    setRevealed(new Set())
   }
 
   return (
@@ -211,9 +238,11 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
       size="lg"
       dirty={dirty}
       footer={
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[13px] text-[var(--color-muted-foreground)]" aria-live="polite">{attempted && problems.any ? 'Some fields need attention. Each has a message beside it.' : ''}</p>
-          <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* The sentence has a row of its own while it has text, so Save and Cancel stay at the right whatever it says. Empty, it takes no room (sr-only is out of the flow) and is still the live
+              region its text is announced from. */}
+          <p className={problemsShown ? 'basis-full text-[13px] text-[var(--color-muted-foreground)]' : 'sr-only'} aria-live="polite">{problemsShown ? 'Some fields need attention. Each has a message beside it.' : ''}</p>
+          <div className="ml-auto flex gap-2">
             <Button variant="secondary" onClick={onClose}>{dirty ? 'Cancel' : skipLabel ?? 'Cancel'}</Button>
             <Button onClick={save} disabled={saving}>{saving ? 'Saving…' : plan ? 'Save changes' : 'Save plan budget'}</Button>
           </div>
@@ -255,10 +284,10 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
               key={pool.key}
               pool={pool}
               state={state}
-              problems={attempted ? problems.pools[pool.key] : undefined}
+              problems={revealed.has(pool.key) ? problems.pools[pool.key] : undefined}
               defaultName={defaultNameOf(pool)}
               noPeriodsReason={periodsReason}
-              onState={setState}
+              onState={next => { setState(next); startedOn(pool.key) }}
               onRemove={() => remove(pool.key)}
             />
           ))}
@@ -322,8 +351,10 @@ function PoolCard(
   const sums = poolSums(pool)
   const periodic = state.periodLengthMonths !== null
   const note = periodic && pool.periods.length > 0 ? periodsNote(pool) : null
-  // "Split again" rewrites the periods from the typed totals, so it is offered when there is something to undo: an amount was changed in this session, or the periods and the box disagree.
+  // "Split again" rewrites the periods from the typed totals, so it is offered when there is something to undo: an amount was changed in this session, or the periods and the boxes disagree.
+  // (A set-aside that no period carries is only ever so after an amount was cleared by hand, so the pool is touched and the button, which is how that line says it is applied, is there.)
   const canSplitAgain = pool.touched || sums.planMismatch || sums.setAsideMismatch
+  const notApplied = problems?.general.includes(SET_ASIDE_NOT_APPLIED) === true
 
   return (
     <section aria-label={label} data-pool-key={pool.key} tabIndex={-1} className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
@@ -338,14 +369,14 @@ function PoolCard(
       </div>
 
       <TextField label="Name on the plan" placeholder={shownName} value={pool.name} onChange={event => onState(updatePool(state, pool.key, { name: event.target.value }))} error={problems?.name} />
-      {/* One column at every width: the set-aside's label is long enough to wrap in half of the panel, which put its box lower than the plan amount's beside it. */}
-      <div className="grid grid-cols-1 gap-y-[var(--field-gap-y)]">
+      {/* Two columns from sm, like the plan's own fields: the labels are short enough not to wrap (the hint under the set-aside box says whose it is), so the boxes sit level. */}
+      <div className="grid grid-cols-1 gap-x-3 gap-y-[var(--field-gap-y)] sm:grid-cols-2">
         <TextField
           label="Plan amount for the whole plan" inputMode="decimal" placeholder="0.00" value={pool.totalText}
           onChange={event => onState(withPoolTotals(state, pool.key, { totalText: event.target.value }))} error={problems?.total}
         />
         <TextField
-          label="Set-aside for your organisation (optional)" inputMode="decimal" placeholder="0.00" value={pool.setAsideText}
+          label="Set-aside (optional)" inputMode="decimal" placeholder="0.00" value={pool.setAsideText}
           onChange={event => onState(withPoolTotals(state, pool.key, { setAsideText: event.target.value }))} error={problems?.setAside}
           hint="The part of this pool kept for your organisation when the participant also uses other providers. Leave blank if none is set aside."
         />
@@ -362,6 +393,13 @@ function PoolCard(
             )}
             {sums.setAsideMismatch && sums.periodsSetAside !== null && sums.typedSetAside !== null && (
               <p className="text-[var(--color-on-warning-container)]">The set-asides add up to {formatCurrency(sums.periodsSetAside)}, not the {formatCurrency(sums.typedSetAside)} you typed. The periods are what is saved.</p>
+            )}
+            {/* One line that is a warning while the person is working, and the error to put right once a save was tried (the same element, so it is announced once). */}
+            {sums.setAsideMissing && (
+              <p
+                data-problem={notApplied ? '' : undefined} tabIndex={notApplied ? -1 : undefined}
+                className={notApplied ? 'text-[var(--color-destructive)] focus:outline-none' : 'text-[var(--color-on-warning-container)]'}
+              >{SET_ASIDE_NOT_APPLIED}</p>
             )}
             {canSplitAgain && (
               <Button variant="ghost" size="sm" className="w-fit" onClick={() => onState({ ...state, pools: state.pools.map(p => (p.key === pool.key ? resplit(state, p) : p)) })}>Split again from the plan amount</Button>

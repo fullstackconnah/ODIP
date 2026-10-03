@@ -86,7 +86,7 @@ describe('editor: a new plan', () => {
     const card = coreCard()
     expect(within(card).getByText('01–04')).toBeInTheDocument()
     expect(within(card).getByLabelText('Plan amount for the whole plan')).toBeInTheDocument()
-    expect(within(card).getByLabelText("Set-aside for your organisation (optional)")).toBeInTheDocument()
+    expect(within(card).getByLabelText("Set-aside (optional)")).toBeInTheDocument()
   })
 
   it('offers stated supports from the served list, never 01 to 04 or Recurring Transport (18)', async () => {
@@ -199,7 +199,7 @@ describe('editor: the periods are proposed, and stay editable', () => {
     typeYear()
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
     await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '4000')
-    await user.type(within(coreCard()).getByLabelText("Set-aside for your organisation (optional)"), '2000')
+    await user.type(within(coreCard()).getByLabelText("Set-aside (optional)"), '2000')
 
     expect(within(coreCard()).getByLabelText('Set-aside, 1 Jul – 30 Sep 2026')).toHaveValue('504.11')
     expect(within(coreCard()).getByLabelText('Set-aside, 1 Apr – 30 Jun 2027')).toHaveValue('498.63')
@@ -262,7 +262,7 @@ describe('editor: saving', () => {
     typeYear()
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
     await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
-    await user.type(within(coreCard()).getByLabelText("Set-aside for your organisation (optional)"), '4000')
+    await user.type(within(coreCard()).getByLabelText("Set-aside (optional)"), '4000')
     await user.selectOptions(screen.getByLabelText('Stated support category'), '15')
     await user.selectOptions(screen.getByLabelText('Management type'), 'AgencyManaged')
     await user.click(screen.getByRole('button', { name: 'Add a stated support' }))
@@ -613,7 +613,7 @@ describe('editor: the set-aside is the organisation’s, and says so without nam
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
 
     const card = coreCard()
-    expect(within(card).getByLabelText('Set-aside for your organisation (optional)')).toBeInTheDocument()
+    expect(within(card).getByLabelText('Set-aside (optional)')).toBeInTheDocument()
     expect(within(card).getByText('The part of this pool kept for your organisation when the participant also uses other providers. Leave blank if none is set aside.')).toBeInTheDocument()
     await user.type(within(card).getByLabelText('Plan amount for the whole plan'), '8000')
     expect(within(card).getByRole('columnheader', { name: 'Set-aside' })).toBeInTheDocument()
@@ -625,7 +625,7 @@ describe('editor: the set-aside is the organisation’s, and says so without nam
     typeYear()
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
     await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '1000')
-    await user.type(within(coreCard()).getByLabelText('Set-aside for your organisation (optional)'), '1500')
+    await user.type(within(coreCard()).getByLabelText('Set-aside (optional)'), '1500')
 
     await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
 
@@ -651,7 +651,7 @@ describe('editor: a set-aside typed after a period was edited is saved, in eithe
     const { user } = renderEditor()
     await startPool(user)
     await editPeriod(user, 'Plan amount, 1 Jul – 30 Sep 2026', '1000')
-    await user.type(within(coreCard()).getByLabelText('Set-aside for your organisation (optional)'), '800')
+    await user.type(within(coreCard()).getByLabelText('Set-aside (optional)'), '800')
 
     expect(within(coreCard()).getByLabelText('Set-aside, 1 Jul – 30 Sep 2026')).not.toHaveValue('')   // it shows on the periods: nothing is saved that is not seen
     await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
@@ -665,7 +665,7 @@ describe('editor: a set-aside typed after a period was edited is saved, in eithe
   it('saves a set-aside typed BEFORE a period was edited, unchanged by the edit', async () => {
     const { user } = renderEditor()
     await startPool(user)
-    await user.type(within(coreCard()).getByLabelText('Set-aside for your organisation (optional)'), '800')
+    await user.type(within(coreCard()).getByLabelText('Set-aside (optional)'), '800')
     await editPeriod(user, 'Plan amount, 1 Jul – 30 Sep 2026', '1000')
 
     await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
@@ -676,10 +676,10 @@ describe('editor: a set-aside typed after a period was edited is saved, in eithe
   it('saves no set-aside at all once the box is cleared, even after periods were edited', async () => {
     const { user } = renderEditor()
     await startPool(user)
-    await user.type(within(coreCard()).getByLabelText('Set-aside for your organisation (optional)'), '800')
+    await user.type(within(coreCard()).getByLabelText('Set-aside (optional)'), '800')
     await editPeriod(user, 'Plan amount, 1 Jul – 30 Sep 2026', '1000')
 
-    await user.clear(within(coreCard()).getByLabelText('Set-aside for your organisation (optional)'))
+    await user.clear(within(coreCard()).getByLabelText('Set-aside (optional)'))
     await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
 
     expect(savedPeriods().some(period => 'setAside' in period)).toBe(false)
@@ -811,5 +811,272 @@ describe('editor: a first plan starts from the dates the profile already holds',
     plans.mockReturnValue({ data: { plans: [plan()], profilePlanDates: { start: '2020-01-01', end: '2020-12-31' } }, refetch: vi.fn() })
     renderEditor({ previousPlan: plan({ planEnd: '2027-06-30' }) })
     expect(screen.getByLabelText(/^Plan start/)).toHaveValue('2027-07-01')
+  })
+})
+
+// ── What the second reviews found (budget fix round 2) ───────────────────────
+
+const SOME_FIELDS = 'Some fields need attention. Each has a message beside it.'
+const NOT_APPLIED = 'The set-aside is not on any period yet. Split again from the plan amount to apply it.'
+
+describe('editor: Save and Cancel stay at the right whatever the footer says', () => {
+  const buttons = () => screen.getByRole('button', { name: 'Save plan budget' }).parentElement as HTMLElement
+
+  it('keeps the buttons in a group pushed to the right, with the sentence on its own row only while it has text', async () => {
+    const { user } = renderEditor()
+    const live = buttons().previousElementSibling as HTMLElement
+    expect(buttons()).toHaveClass('ml-auto')
+    expect(live).toHaveAttribute('aria-live', 'polite')
+    expect(live).toHaveClass('sr-only')   // empty: it takes no room, and is still there to be announced from
+    expect(live).toHaveTextContent('')
+
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    expect(live).toHaveTextContent(SOME_FIELDS)
+    expect(live).toHaveClass('basis-full')
+    expect(live).not.toHaveClass('sr-only')
+    expect(buttons()).toHaveClass('ml-auto')
+    expect(buttons().previousElementSibling).toBe(live)   // the same live region throughout, so what it says is announced
+  })
+})
+
+describe('editor: the pool amounts sit side by side from the small breakpoint, under a short label', () => {
+  it('puts the plan amount and the set-aside in one two-column grid, the set-aside labelled "Set-aside (optional)" with its hint', async () => {
+    const { user } = renderEditor()
+    typeYear()
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+
+    const amount = within(coreCard()).getByLabelText('Plan amount for the whole plan')
+    const setAside = within(coreCard()).getByLabelText('Set-aside (optional)')
+    const grid = amount.closest('.grid') as HTMLElement
+    expect(grid).toHaveClass('grid-cols-1', 'sm:grid-cols-2')
+    expect(grid).toContainElement(setAside)
+    expect(within(coreCard()).queryByLabelText(/for your organisation/)).not.toBeInTheDocument()   // the hint says whose it is; the label need not
+    expect(setAside).toHaveAccessibleDescription(/kept for your organisation/)
+  })
+})
+
+describe('editor: a pool shows its problems once the person has started on it, or on the next Save', () => {
+  const ASK = 'Give the plan amount for the whole plan.'
+  async function afterAFailedCheck() {
+    const view = renderEditor()
+    typeYear()
+    await view.user.click(screen.getByRole('button', { name: 'Save plan budget' }))   // fails: no pool yet
+    await view.user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    return view
+  }
+
+  it('does not say a pool added after a failed check is missing its amount before anyone has typed in it', async () => {
+    await afterAFailedCheck()
+    const amount = within(coreCard()).getByLabelText('Plan amount for the whole plan')
+
+    expect(amount).toHaveFocus()
+    expect(amount).not.toHaveAttribute('aria-invalid')
+    expect(within(coreCard()).queryByText(ASK)).not.toBeInTheDocument()
+    expect(screen.queryByText(SOME_FIELDS)).not.toBeInTheDocument()   // nothing on screen has a message to point to
+  })
+
+  it('says it on the next Save, and takes the person to it', async () => {
+    const { user } = await afterAFailedCheck()
+
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    expect(within(coreCard()).getByText(ASK)).toBeInTheDocument()
+    expect(within(coreCard()).getByLabelText('Plan amount for the whole plan')).toHaveFocus()
+    expect(screen.getByText(SOME_FIELDS)).toBeInTheDocument()
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('says it as soon as the person starts on another field of that pool', async () => {
+    const { user } = await afterAFailedCheck()
+    const card = coreCard()   // (its name is the pool's name, so it is looked up before that is typed over)
+
+    await user.type(within(card).getByLabelText('Name on the plan'), 'C')
+
+    expect(within(card).getByText(ASK)).toBeInTheDocument()
+    expect(screen.getByText(SOME_FIELDS)).toBeInTheDocument()
+  })
+
+  it('shows nothing of a pool before any save was tried, however much the person has typed in it', async () => {
+    const { user } = renderEditor()
+    typeYear()
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    const card = coreCard()
+    await user.type(within(card).getByLabelText('Plan amount for the whole plan'), '4000')
+
+    await user.type(within(card).getByLabelText('Name on the plan'), 'C')
+    const second = within(card).getByLabelText('Plan amount, 1 Oct – 31 Dec 2026')
+    await user.clear(second)   // a blank amount in a period, mid-edit
+    await user.clear(within(card).getByLabelText('Plan amount for the whole plan'))
+
+    expect(within(card).queryByText(ASK)).not.toBeInTheDocument()
+    expect(within(card).queryByText('Enter an amount.')).not.toBeInTheDocument()
+    expect(second).not.toHaveAttribute('aria-invalid')
+    expect(screen.queryByText(SOME_FIELDS)).not.toBeInTheDocument()
+  })
+
+  it('shows the messages of every pool on the first Save, as before', async () => {
+    const { user } = renderEditor()
+    typeYear()
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.selectOptions(screen.getByLabelText('Stated support category'), '15')
+    await user.click(screen.getByRole('button', { name: 'Add a stated support' }))
+
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    expect(screen.getAllByText(ASK)).toHaveLength(2)
+  })
+})
+
+describe('editor: what a refused save scrolls to, and where focus goes after "Load the latest"', () => {
+  it('keeps the 409 sentence clear of the panel’s header rule when it is scrolled into view', async () => {
+    update.mockImplementation((_variables, options) => options.onError(staleReply))
+    const { user } = renderEditor({ plan: plan({ revision: 4 }) })
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const region = screen.getByRole('alert').parentElement as HTMLElement
+    expect(region.style.scrollMarginTop).toBe('0.75rem')   // scroll-mt-3: "nearest" alone leaves it flush under the rule
+    expect(scrollIntoView.mock.contexts).toContain(region)
+  })
+
+  it('keeps the first field that needs attention clear of it too', async () => {
+    const { user } = renderEditor()
+
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    const first = screen.getByLabelText(/^Plan start/)
+    expect(first).toHaveFocus()
+    expect(first.style.scrollMarginTop).toBe('0.75rem')
+    expect(scrollIntoView.mock.contexts).toContain(first)
+  })
+
+  it('keeps a pool, and the Pools heading, clear of it when focus is sent to them', async () => {
+    const { user } = renderEditor()
+    typeYear()
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.selectOptions(screen.getByLabelText('Stated support category'), '15')
+    await user.click(screen.getByRole('button', { name: 'Add a stated support' }))
+
+    await user.click(screen.getByRole('button', { name: 'Remove Improved Daily Living Skills, Plan Managed' }))
+    expect(coreCard()).toHaveFocus()
+    expect(coreCard().style.scrollMarginTop).toBe('0.75rem')
+
+    await user.click(screen.getByRole('button', { name: 'Remove Core (flexible), Plan Managed' }))
+    const heading = screen.getByRole('heading', { name: 'Pools' })
+    expect(heading).toHaveFocus()
+    expect(heading.style.scrollMarginTop).toBe('0.75rem')
+  })
+
+  it('sends focus to the first field after "Load the latest", since the button that had it is gone with its sentence', async () => {
+    update.mockImplementation((_variables, options) => options.onError(staleReply))
+    const newer = plan({ revision: 5, confirmedByName: 'Somebody Else' })
+    plans.mockReturnValue({ data: { plans: [plan({ revision: 4 })], profilePlanDates: {} }, refetch: vi.fn().mockResolvedValue({ data: { plans: [newer], profilePlanDates: {} } }) })
+    const { user } = renderEditor({ plan: plan({ revision: 4 }) })
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await user.click(screen.getByRole('button', { name: 'Load the latest' }))
+
+    await waitFor(() => expect(screen.getByLabelText('Confirmed by')).toHaveValue('Somebody Else'))
+    expect(screen.queryByRole('button', { name: 'Load the latest' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/^Plan start/)).toHaveFocus()
+  })
+})
+
+describe('editor: a set-aside the person typed into a period is not overwritten by the box', () => {
+  const setAsideBox = (card: HTMLElement) => within(card).getByLabelText('Set-aside (optional)')
+  const periodSetAsides = (card: HTMLElement) => within(card).getAllByLabelText(/^Set-aside, /).map(input => (input as HTMLInputElement).value)
+
+  it('leaves it when the box is corrected, says the periods no longer add up to the box, and applies the box on "Split again"', async () => {
+    const { user } = renderEditor()
+    typeYear()
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '4000')
+    await user.type(setAsideBox(coreCard()), '400')                  // spread over the periods
+    const first = within(coreCard()).getByLabelText('Set-aside, 1 Jul – 30 Sep 2026')
+    await user.clear(first)
+    await user.type(first, '10')                                      // the person's own figure
+    const others = periodSetAsides(coreCard()).slice(1)
+
+    fireEvent.change(setAsideBox(coreCard()), { target: { value: '200' } })   // the box is corrected over it
+
+    expect(first).toHaveValue('10')
+    expect(periodSetAsides(coreCard()).slice(1)).toEqual(others)   // nothing was overwritten
+    expect(within(coreCard()).getByText(/^The set-asides add up to \$3\d\d\.\d\d, not the \$200\.00 you typed\. The periods are what is saved\.$/)).toBeInTheDocument()
+
+    await user.click(within(coreCard()).getByRole('button', { name: 'Split again from the plan amount' }))
+
+    expect(periodSetAsides(coreCard())).toEqual(['50.41', '50.41', '49.32', '49.86'])   // the box, applied
+    expect(within(coreCard()).queryByText(/set-asides add up to/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+    expect((create.mock.calls[0][0].pools[0].periods as { setAside: number }[]).map(period => period.setAside)).toEqual([50.41, 50.41, 49.32, 49.86])
+  })
+
+  it('keeps the set-asides of a saved plan when its box is corrected, and saves them as they are', async () => {
+    const { user } = renderEditor({ plan: plan() })   // Core: 1000.00 set aside on each of four periods
+    const core = screen.getByRole('region', { name: /^Core \(flexible\), Plan Managed/ })
+
+    fireEvent.change(setAsideBox(core), { target: { value: '4100' } })
+
+    expect(periodSetAsides(core)).toEqual(['1000.00', '1000.00', '1000.00', '1000.00'])
+    expect(within(core).getByText('The set-asides add up to $4,000.00, not the $4,100.00 you typed. The periods are what is saved.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect((update.mock.calls[0][0].body.pools[0].periods as { setAside: number }[]).map(period => period.setAside)).toEqual([1000, 1000, 1000, 1000])
+  })
+
+  it('still follows the box digit by digit while the cells are its own shares', async () => {
+    const { user } = renderEditor()
+    typeYear()
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '4000')
+
+    await user.type(setAsideBox(coreCard()), '800')
+
+    expect(periodSetAsides(coreCard()).reduce((sum, text) => sum + Math.round(Number(text) * 100), 0)).toBe(80000)
+    expect(within(coreCard()).queryByText(/set-asides add up to/)).not.toBeInTheDocument()
+  })
+})
+
+describe('editor: a set-aside that no period carries is said, and "Split again" applies it', () => {
+  async function typedOverABlank() {
+    const view = renderEditor()
+    typeYear()
+    await view.user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await view.user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '4000')
+    const second = within(coreCard()).getByLabelText('Plan amount, 1 Oct – 31 Dec 2026')
+    await view.user.clear(second)                                                              // an amount cleared to retype it
+    await view.user.type(within(coreCard()).getByLabelText('Set-aside (optional)'), '4000')   // the box typed meanwhile: nothing to spread over
+    await view.user.type(second, '1008.22')                                                    // and the amount retyped
+    return view
+  }
+
+  it('says so as soon as it is so, as a warning, not yet as an error', async () => {
+    await typedOverABlank()
+
+    const line = within(coreCard()).getByText(NOT_APPLIED)
+    expect(line).not.toHaveAttribute('data-problem')
+    expect(within(coreCard()).getByRole('button', { name: 'Split again from the plan amount' })).toBeInTheDocument()
+  })
+
+  it('refuses the save in the same words, beside the periods, and takes the person to it', async () => {
+    const { user } = await typedOverABlank()
+
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    expect(create).not.toHaveBeenCalled()
+    expect(within(coreCard()).getAllByText(NOT_APPLIED)).toHaveLength(1)   // the one line: the warning becomes the error
+    expect(within(coreCard()).getByText(NOT_APPLIED)).toHaveFocus()
+    expect(screen.getByText(SOME_FIELDS)).toBeInTheDocument()
+  })
+
+  it('goes away on "Split again", which puts the set-aside on every period so that it is saved', async () => {
+    const { user } = await typedOverABlank()
+
+    await user.click(within(coreCard()).getByRole('button', { name: 'Split again from the plan amount' }))
+
+    expect(within(coreCard()).queryByText(NOT_APPLIED)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+    const periods = create.mock.calls[0][0].pools[0].periods as { planAmount: number; setAside?: number }[]
+    expect(periods.every(period => period.setAside === period.planAmount)).toBe(true)   // the whole 4000 is set aside
   })
 })
