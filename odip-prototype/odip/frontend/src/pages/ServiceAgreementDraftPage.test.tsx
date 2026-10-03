@@ -126,6 +126,21 @@ describe('ServiceAgreementDraftPage: saving a plan built from blocks', () => {
     expect(createMutate.mock.calls[0][0].data).toMatchObject({ state: 'VIC', serviceTypes: ['Group activity'] })
   })
 
+  // Code review N13: the server refuses a representative with a control character (it goes to a Postgres text column and onto the PDF); a name pasted with a tab or a NUL should not come back as a
+  // refusal about a character nobody can see. A tab or a line break is the space it stands for, and any other control character is dropped.
+  it('turns a tab or a line break pasted into the representative box into a space, and drops any other control character, so what is sent can be saved', async () => {
+    renderPage()
+    const user = await fillDetails()
+    await addBlockFromTemplate(user)
+    const tab = String.fromCharCode(9), nul = String.fromCharCode(0), bell = String.fromCharCode(7)
+
+    fireEvent.change(screen.getByLabelText('Representative'), { target: { value: `A.${tab}Rep${nul}resen${bell}tative` } })
+
+    expect(screen.getByLabelText('Representative')).toHaveValue('A. Representative')
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(createMutate.mock.calls[0][0].data.representative).toBe('A. Representative')
+  })
+
   it('says it was saved as the next version, and then there is nothing to lose', async () => {
     createMutate.mockImplementation((_request, options) => options.onSuccess({ version: 3 }))
     renderPage()

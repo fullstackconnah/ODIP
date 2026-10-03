@@ -40,6 +40,12 @@ const EMPTY_DETAILS: Details = { state: 'NSW', zone: 'National', planStartDate: 
 
 const snapshotOf = (details: Details, plan: readonly DraftBlock[]) => JSON.stringify({ details, plan })
 
+/**
+ * A tab or a line break pasted into a one-line box becomes the space it stands for, and any other control character (a NUL) is dropped: the server refuses a representative that has one (it is written to a
+ * Postgres text column and onto the PDF), and a name that was pasted should not come back as a refusal about a character nobody can see (review N13).
+ */
+const withoutControlCharacters = (text: string) => text.replace(/[\t\r\n]+/g, ' ').replace(/\p{Cc}/gu, '')
+
 /** "Block 1", "Blocks 1 and 3", "Blocks 1, 3 and 4". */
 function blocksNamed(places: readonly number[]): string {
   if (places.length === 1) return `Block ${places[0]}`
@@ -266,7 +272,7 @@ function DraftPage() {
             <input type="date" min={DATE_MIN} max={DATE_MAX} value={details.agreementEndDate} onChange={e => edit({ agreementEndDate: e.target.value })} />
           </FormField>
           <FormField label="Representative" className={span.medium}>
-            <input value={details.representative} maxLength={500} onChange={e => edit({ representative: e.target.value })} />
+            <input value={details.representative} maxLength={500} onChange={e => edit({ representative: withoutControlCharacters(e.target.value) })} />
           </FormField>
         </div>
       </fieldset>
