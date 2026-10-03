@@ -295,7 +295,7 @@ public class PortalController : ControllerBase
 
     /// <summary>
     /// Worker taps Start on one of their own Published shifts. ActualStart/StartedAt are the
-    /// server's own DateTime.UtcNow — the client never supplies the "real" timestamp, only an
+    /// server's own clock (<see cref="NowUtc"/>) — the client never supplies the "real" timestamp, only an
     /// optional geolocation stamp and decline flag (spec ruling 1). Same 404-never-403
     /// ownership scoping as every other portal action.
     /// </summary>
@@ -332,7 +332,7 @@ public class PortalController : ControllerBase
         }
 
         var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
-        var now = DateTime.UtcNow;
+        var now = NowUtc;
         var timeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State);
 
         // F7: variance-at-start, computed once here so the coordinator queue can show it before
