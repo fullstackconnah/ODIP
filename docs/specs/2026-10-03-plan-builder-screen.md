@@ -23,7 +23,8 @@ saves it whole.
   words when a block cannot be priced at all (`InvalidInput`, `RegistrationGroupNotHeld`, `StaLegacyNotSupported`). Anything softer (a Review line, a catalogue gap) is saved
   with the revision. The body is capped at 1 MiB and rate limited like the other API routes. A representative with a control character (a NUL, a line break, a tab) is refused with a 400 that says
   so, after the participant is found, and nothing is saved: the database would have refused it as a 500, as it did a control character in a block id; the screen turns a tab or a line break pasted
-  into the box into a space and drops any other, so a person never meets it.
+  into the box into a space and drops any other, so a person never meets it. The same refusal covers the hand-typed path's free text (a line's service type and item code, and the service types, which
+  also have limits: 20, 100 characters each, and what the 4000-character column holds once written as JSON); the blocks path derives its service types from the blocks.
 - **Two coordinators.** The body may carry `baseVersion`, the version the working copy started from (0 for a participant with none). If a newer one has been saved since, the answer is a 409
   with `code: "draft-version-conflict"` and the newer version in `data.currentVersion`, and nothing is saved, so a save never makes one coordinator's plan the newest over another's. Two saves
   racing past that check meet the unique index on (tenant, participant, version) and get the same 409, not a 500. A body without `baseVersion` is saved as before.
@@ -56,8 +57,14 @@ not typed, no day, or an end before the start, the bar says so ("Enter the agree
 the dates before is shown. Below 1280px the bar is one line with Details (it was a third of a tablet's screen), "Not fully priced" and "Over budget" chips beside it, and, while the plan has changes nobody
 has saved, "Not saved" with a Save: Add to plan does not save, and the save row is a long scroll below the blocks. What a save said is drawn with the bar, docked in the overview and through every
 step of a block, so a Save pressed from the stepper is answered where the person is looking: the problems found, the server's refusal, a newer version somebody else saved (with Load and Keep editing),
-and "Saved as version N" in the bar's one polite status. The bar has no other live region but a visually hidden "Over the plan budget." that changes only when the plan crosses its budget. The sentence
-that the draft can still be saved is left out while a block is refused. A quote error and its Try again are outside Details, where a phone sees them.
+and "Saved as version N" in the bar's one polite status. Each notice has a close button ("Close this message"), and an edit to the details or the plan lets go of the problems and the failure
+(the newer-version notice is not about what was typed, and stays until it is answered or closed); closing returns focus to the Save that asked. While a newer version is being read to be loaded, Save and
+the notice's own buttons are held. The bar has no other live region but a visually hidden "Over the plan budget." that changes only when the plan crosses its budget and a visually hidden "The plan has
+changes that are not saved." that is said once, when it becomes so. While a block is refused the reason is an alert in the same dock, beside the Save it switches off ("Block 1 cannot be priced yet, so the
+plan cannot be saved."), in the overview and in every step, and the sentence that the draft can still be saved is left out. A week that prices to nothing in an agreement that does not is an en dash.
+The dock is as tall as its notice, up to 40vh, so a control the keyboard moves focus to is scrolled clear of it by the dock's own measured height (a ResizeObserver, `--plan-dock-h` on the plan
+builder's section), plus the bottom nav below lg, and never by a fixed margin (WCAG 2.4.11). Loading another version closes the block that is open in the stepper (it is a copy from the plan that is
+replaced) and the dialog says so first. A quote error and its Try again are outside Details, where a phone sees them.
 
 "An ordinary week" is the first whole week counted from the agreement's start in which no block meets a public holiday, else the first seven days; there is none when the agreement
 is shorter than a week. The budget is two quotes, one after the other because the week needs the period's holiday dates: the period without lines, then that week. A quote is
