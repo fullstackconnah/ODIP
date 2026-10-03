@@ -149,7 +149,7 @@ export function PlanOverview({ entries, readOnly = false, budget, budgetStatus, 
         return (
           <div className="flex min-w-0 flex-col gap-0.5 py-0.5">
             <span className="text-sm font-medium"><span className="tabular-nums text-[var(--color-muted-foreground)]">{row.index + 1}.</span> {describeBlock(block)}</span>
-            {asks.length > 0 && <span className="text-[13px] text-[var(--color-muted-foreground)]">Asks for {asks.join(', ').toLowerCase().replace(/^./, c => c.toUpperCase())}</span>}
+            {asks.length > 0 && <span className="text-[13px] text-[var(--color-muted-foreground)]">Asks for {asks.join(', ').toLowerCase()}</span>}
             {row.issues.map(issue => {
               const refusal = isRefusal(issue.reason)
               const copy = REASON_COPY[issue.reason]

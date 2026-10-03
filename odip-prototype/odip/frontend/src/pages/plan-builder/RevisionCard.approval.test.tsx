@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import type { DraftApprovalDto, ServiceAgreementDraftDto } from '@/api/types'
-import { draftBlock, mondayWednesday, settings as makeSettings } from '@/test/fixtures/planPricing'
+import { draftBlock, mondayWednesday, quote, settings as makeSettings } from '@/test/fixtures/planPricing'
 import { RevisionCard } from './RevisionCard'
 
 const { previewState, settingsState, approveMutate } = vi.hoisted(() => ({
@@ -58,15 +58,17 @@ describe('RevisionCard: Mark approved', () => {
     setUp()
 
     expect(screen.getByRole('button', { name: 'Mark approved' })).toBeEnabled()
-    expect(screen.getByText(/Makes this plan's weekly roster patterns and open shifts/)).toBeInTheDocument()
+    expect(screen.getByText(/Makes this plan's weekly roster patterns and unfilled shifts/)).toBeInTheDocument()
     expect(screen.getByText(/Separate from signing/)).toBeInTheDocument()
   })
 
   it('keeps the e-signing status where it was: approval for rostering is a different thing from the template\'s state', () => {
     setUp()
 
-    expect(screen.getByText('Unapproved draft')).toBeInTheDocument()
+    expect(screen.getByText('Not approved for e-signing')).toBeInTheDocument()
     expect(screen.queryByText('Approved for rostering')).not.toBeInTheDocument()
+    expect(screen.queryByText('Unapproved draft')).not.toBeInTheDocument()
+    expect(screen.getByText(/until this agreement template is approved for e-signing/)).toBeInTheDocument()
   })
 
   it('opens the confirm dialog, which reads what approval would do, and stays open until it is answered', async () => {
@@ -75,9 +77,9 @@ describe('RevisionCard: Mark approved', () => {
 
     await user.click(screen.getByRole('button', { name: 'Mark approved' }))
 
-    expect(screen.getByRole('dialog', { name: 'Approve for rostering?' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Approve version 2 for rostering?' })).toBeInTheDocument()
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('dialog', { name: 'Approve for rostering?' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Approve version 2 for rostering?' })).not.toBeInTheDocument()
   })
 
   it('stays enabled and says why when the preview says no: the reasons are in the dialog, the button is not hidden or disabled', async () => {
@@ -136,9 +138,11 @@ describe('RevisionCard: approved', () => {
     setUp({ draft: draft({ approval: approval() }) })
 
     expect(screen.getByText('Approved for rostering by Alex Admin on 10 Oct 2026')).toBeInTheDocument()
-    expect(screen.getByText('5 weekly patterns, open shifts to Sat 5 Dec 2026.')).toBeInTheDocument()
-    expect(screen.getByText(/Approved for rostering, separate from signing/)).toBeInTheDocument()
-    expect(screen.getByText('Unapproved draft')).toBeInTheDocument()                         // the template's own e-signing state is untouched
+    expect(screen.getByText('5 weekly patterns, unfilled shifts to Sat 5 Dec 2026.')).toBeInTheDocument()
+    expect(screen.getByText('Separate from signing: the agreement itself is not signed.')).toBeInTheDocument()
+    // the header says both, each for what it is: approved for rostering, and (the template's own state, untouched) not approved for e-signing
+    expect(screen.getByText('Approved for rostering')).toBeInTheDocument()
+    expect(screen.getByText('Not approved for e-signing')).toBeInTheDocument()
   })
 
   it('links to the roster at the first week of shifts, for the participant, open shifts only', () => {
@@ -150,21 +154,97 @@ describe('RevisionCard: approved', () => {
   it('agrees its nouns with the counts', () => {
     setUp({ draft: draft({ approval: approval({ patternsCreated: 1 }) }) })
 
-    expect(screen.getByText('1 weekly pattern, open shifts to Sat 5 Dec 2026.')).toBeInTheDocument()
+    expect(screen.getByText('1 weekly pattern, unfilled shifts to Sat 5 Dec 2026.')).toBeInTheDocument()
   })
 
   it('says when shifts will come for a participant who was not active yet, and has no roster link to go to', () => {
     setUp({ draft: draft({ approval: approval({ shiftsCreated: 0, horizonEnd: undefined, firstShiftDate: undefined }) }) })
 
-    expect(screen.getByText(/Open shifts are created each day as the dates come within 8 weeks, once the participant is active/)).toBeInTheDocument()
+    expect(screen.getByText("5 weekly patterns. Unfilled shifts are added each day, once the participant is active and the agreement's dates come near.")).toBeInTheDocument()
+    expect(screen.queryByText(/weeks/)).not.toBeInTheDocument()                                // no number of weeks: the organisation sets how far ahead
     expect(screen.queryByRole('link', { name: 'Open on the roster' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open the shift patterns' })).toHaveAttribute('href', '/rostering/patterns')
+  })
+
+  it('puts the way to the roster on a line of its own, so the main follow-up is a target a thumb can hit', () => {
+    setUp({ draft: draft({ approval: approval() }) })
+
+    const link = screen.getByRole('link', { name: 'Open on the roster' })
+    expect(link.closest('p')).toHaveTextContent(/^Open on the roster$/)
   })
 
   it('shows the approval on an older revision\'s summary too, so the list says which revision was approved', () => {
     setUp({ isNewest: false, draft: draft({ version: 1, isSummary: true, blocks: [], approval: approval() }) })
 
     expect(screen.getByText('Approved for rostering by Alex Admin on 10 Oct 2026')).toBeInTheDocument()
+    expect(screen.getByText('Approved for rostering')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Mark approved' })).not.toBeInTheDocument()
+  })
+
+  it('says a newer approved revision replaced it, and when its patterns end, instead of offering the roster as if they were live', () => {
+    setUp({
+      isNewest: false,
+      draft: draft({ version: 1, approval: approval() }),
+      replacedBy: { version: 2, approvedAt: '2026-10-19T03:00:00Z', agreementStartDate: '2026-10-20' },
+    })
+
+    expect(screen.getByText('Replaced by version 2 on 19 Oct 2026: these patterns end on Mon 19 Oct 2026.')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Open on the roster' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Approved for rostering')).not.toBeInTheDocument()                   // the live badge is for the live approval
+    expect(screen.getByText('Replaced')).toBeInTheDocument()
+  })
+})
+
+describe('RevisionCard: the dates and the way a plan that is not ready looks', () => {
+  it('says the agreement dates the way the rest of the screen does, not as ISO text', () => {
+    setUp()
+
+    expect(screen.getByText('NSW · Mon 12 Oct 2026 to Wed 31 Mar 2027')).toBeInTheDocument()
+  })
+
+  it('says it is not ready and makes the button secondary when the stored pricing needs a decision, and still opens the dialog', async () => {
+    const user = userEvent.setup()
+    setUp({ draft: draft({ pricing: quote({ needsReview: true }) }) })
+
+    expect(screen.getByText('Not ready yet: some lines need fixing or a decision. Select to see which.')).toBeInTheDocument()
+    expect(screen.queryByText(/Makes this plan's weekly roster patterns/)).not.toBeInTheDocument()
+    const button = screen.getByRole('button', { name: 'Mark approved' })
+    expect(button.className).toContain('--color-card')                                           // secondary, not the primary colour that promises an approval
+    await user.click(button)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('keeps the primary button and the promise for a plan that needs nothing', () => {
+    setUp({ draft: draft({ pricing: quote({ needsReview: false }) }) })
+
+    expect(screen.getByRole('button', { name: 'Mark approved' }).className).toContain('--color-primary')
+    expect(screen.queryByText(/Not ready yet/)).not.toBeInTheDocument()
+  })
+})
+
+describe('RevisionCard: where focus goes', () => {
+  const renderIn = (value: ServiceAgreementDraftDto) => (
+    <MemoryRouter>
+      <RevisionCard participantId="p-1" draft={value} onDownload={vi.fn()} downloading={false} isNewest />
+    </MemoryRouter>
+  )
+
+  it('moves to the approval when the approval appears while the dialog is open: the button and the dialog go with it, and focus must not fall to the top of the page', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(renderIn(draft()))
+    await user.click(screen.getByRole('button', { name: 'Mark approved' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    rerender(renderIn(draft({ approval: approval() })))                                         // the drafts were read again: this one is approved
+
+    const note = screen.getByRole('group', { name: 'Approved for rostering by Alex Admin on 10 Oct 2026' })
+    expect(note).toHaveFocus()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('does not take focus when the page simply loads a revision that was approved already', () => {
+    render(renderIn(draft({ approval: approval() })))
+
+    expect(screen.getByRole('group', { name: /Approved for rostering by Alex Admin/ })).not.toHaveFocus()
   })
 })

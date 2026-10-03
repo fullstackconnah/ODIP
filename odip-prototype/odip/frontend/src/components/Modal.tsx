@@ -14,6 +14,8 @@ export type ModalProps = {
   /** Whether clicking the backdrop closes the modal. Defaults to `true`. Set to `false` for a
    * modal tracking unsaved/dirty input, so an accidental outside click doesn't discard it. */
   closeOnBackdrop?: boolean
+  /** Keeps the footer (the buttons) in view while a long body scrolls under it: the dialog scrolls as a whole, so on a phone a long list would otherwise push the buttons below the fold. */
+  stickyFooter?: boolean
   /** ARIA role for the dialog element. Use `'alertdialog'` for a modal that blocks on a
    * decision (e.g. a confirm prompt) — it gets the same labelledby/describedby wiring as the
    * default `'dialog'` role. Defaults to `'dialog'`. */
@@ -27,7 +29,7 @@ const SIZE_MAP = {
   xl: 'max-w-4xl',
 }
 
-export function Modal({ open, onClose, title, size = 'md', footer, children, className, closeOnBackdrop = true, role = 'dialog' }: ModalProps) {
+export function Modal({ open, onClose, title, size = 'md', footer, children, className, closeOnBackdrop = true, stickyFooter = false, role = 'dialog' }: ModalProps) {
   const titleId = useId()
   const descriptionId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -61,9 +63,10 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
         </div>
         <div id={descriptionId}>{children}</div>
         {footer && (
-          <div className="flex justify-end gap-3 mt-4">
-            {footer}
-          </div>
+          stickyFooter
+            // Pulled out over the dialog's own padding so its background covers the edge-to-edge strip it sticks as; the border says the body goes on under it.
+            ? <div className="sticky bottom-0 -mx-4 -mb-4 mt-4 flex justify-end gap-3 rounded-b-[var(--radius-lg)] border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3">{footer}</div>
+            : <div className="flex justify-end gap-3 mt-4">{footer}</div>
         )}
       </div>
     </div>

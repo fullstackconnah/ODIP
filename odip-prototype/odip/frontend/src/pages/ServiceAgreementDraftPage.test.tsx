@@ -376,7 +376,7 @@ describe('ServiceAgreementDraftPage: starting from the newest revision', () => {
     expect(screen.getByLabelText('Agreement end')).toHaveValue('2027-03-31')
     expect(screen.getByLabelText('Representative')).toHaveValue('R. Tran')
     expect(within(screen.getByRole('region', { name: 'Support plan' })).getByText('Mon, Wed · 09:00–13:00 · Community access 1:1 · +20 km transport')).toBeInTheDocument()
-    expect(screen.getByText('Asks for Female worker, driver, first aid')).toBeInTheDocument()
+    expect(screen.getByText('Asks for female worker, driver, first aid')).toBeInTheDocument()
   })
 
   it('sends the loaded plan back unchanged as the next version, with the requirements it had', async () => {
@@ -847,7 +847,8 @@ describe('ServiceAgreementDraftPage: what is on the page around the plan', () =>
     expect(screen.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Edit times/ })).not.toBeInTheDocument()
     expect(screen.getByText('You can read this plan; Admins and Coordinators change it.')).toBeInTheDocument()
-    expect(screen.getByLabelText('Representative').closest('fieldset')).toBeDisabled()
+    expect(screen.queryByLabelText('Representative')).not.toBeInTheDocument()               // the details are facts here, not a form of greyed-out boxes
+    expect(screen.getByText('Representative')).toBeInTheDocument()
   })
 
   it('has a Draft versions section that says so when there are none', () => {

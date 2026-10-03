@@ -7,6 +7,7 @@ import { BackButton } from '@/components/BackButton'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { FactList } from '@/components/FactList'
 import { FormField } from '@/components/FormField'
 import { PageHeader } from '@/components/PageHeader'
 import { PageState } from '@/components/PageState'
@@ -15,9 +16,9 @@ import { formGrid, span } from '@/lib/formGrid'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
 import { SUPPORT_LABEL, blockProblems, normaliseBlock, stampLocation, type PlanStepKey } from '@/lib/planBlocks'
-import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, conflictVersionOf, describeSaveError, friendlyMessage, isPricingDate, type SaveFailure } from '@/lib/planQuote'
+import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, conflictVersionOf, describeSaveError, formatServiceDate, friendlyMessage, isPricingDate, type SaveFailure } from '@/lib/planQuote'
 import { PlanBuilder } from './plan-builder/PlanBuilder'
-import { RevisionCard } from './plan-builder/RevisionCard'
+import { RevisionCard, type ReplacedBy } from './plan-builder/RevisionCard'
 
 const states: AgreementState[] = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA']
 const ZONES: { value: PlanPriceZone; label: string }[] = [
@@ -262,6 +263,20 @@ function DraftPage() {
     }, 0)
   }
 
+  // Start a new revision: the button is gone as soon as the page unlocks, and focus would fall to the top of the page. It goes to the plan's heading, where the button was (nothing is saved by pressing it).
+  const startRevision = () => {
+    if (!newest) return
+    setRevisingFrom(newest.id)
+    document.getElementById('plan-heading')?.focus()
+  }
+
+  // A revision approved before a newer one was is replaced by the NEXT approved one: its approval ended these patterns the day before that revision starts. The roster link belongs to the live one only.
+  const replacedBy = (draft: { version: number; approval?: unknown }): ReplacedBy | undefined => {
+    if (!draft.approval) return undefined
+    const next = (drafts.data ?? []).filter(other => other.approval && other.version > draft.version).sort((a, b) => a.version - b.version)[0]
+    return next?.approval ? { version: next.version, approvedAt: next.approval.approvedAt, agreementStartDate: next.agreementStartDate } : undefined
+  }
+
   const saveRow = ({ refused }: { refused: readonly PlanIssue[] }) => canEdit && !locked ? (
     <div className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -289,13 +304,23 @@ function DraftPage() {
     </div>
 
     <div role="note" className="rounded-[var(--radius-md)] border border-[var(--color-warning)]/40 bg-[var(--color-warning-container)] p-[var(--card-pad)] text-sm text-[var(--color-on-warning-container)] space-y-2">
-      <p><strong>Draft only</strong> — not approved for signing or use. Approving a revision for rostering makes its weekly patterns and open shifts, and nothing else: it is separate from signing, and it can't be used to activate the participant, invoice or claim.</p>
+      <p><strong>Draft only:</strong> not approved for signing or use. It can&apos;t activate the participant, invoice or claim. Approving a revision for rostering is separate: it only makes that revision&apos;s weekly patterns and unfilled shifts.</p>
       <p><strong>Participant identifiers come from the participant record.</strong> NDIS number: {canonicalIdentifiers.ndis}; date of birth: {canonicalIdentifiers.dob}. <Link className="underline font-medium" to={`/participants/${participantId}/profile`}>View or edit participant details</Link>. A snapshot of both is stored with this draft and printed on its PDF, which any signed-in user can open; a later change to the record does not change an existing draft.</p>
     </div>
 
     <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] flex flex-col gap-[var(--section-gap)]">
       <h2 className="font-semibold">Draft details</h2>
-      <fieldset disabled={!canEdit || locked} className="min-w-0">
+      {/* A revision nobody may change (approved for rostering, or read by somebody who cannot edit) shows its details as facts, not as a form of greyed-out boxes that look broken. */}
+      {!canEdit || locked ? (
+        <FactList items={[
+          { label: 'State', value: details.state },
+          { label: 'Price zone', value: ZONES.find(zone => zone.value === details.zone)?.label ?? details.zone },
+          { label: 'Plan', value: `${formatServiceDate(details.planStartDate)} to ${formatServiceDate(details.planEndDate)}` },
+          { label: 'Agreement', value: `${formatServiceDate(details.agreementStartDate)} to ${formatServiceDate(details.agreementEndDate)}` },
+          { label: 'Representative', value: details.representative },
+        ]} />
+      ) : (
+      <fieldset className="min-w-0">
         <div className={formGrid}>
           <FormField label="State" className={span.short}>
             <select value={details.state} onChange={e => edit({ state: e.target.value as AgreementState })}>{states.map(value => <option key={value} value={value}>{value}</option>)}</select>
@@ -320,6 +345,7 @@ function DraftPage() {
           </FormField>
         </div>
       </fieldset>
+      )}
     </section>
 
     {unreadableVersion !== null && (
@@ -341,7 +367,7 @@ function DraftPage() {
       readOnlyNote={locked ? 'Approved for rostering. Start a new revision to change.' : 'You can read this plan; Admins and Coordinators change it.'}
       // A locked plan shows what the revision was approved at, as it was saved: no live quote is asked for.
       stored={locked && newest?.pricing ? { period: newest.pricing, weekly: null, week: null } : undefined}
-      readOnlyAction={locked && newest ? <Button onClick={() => setRevisingFrom(newest.id)}>Start a new revision</Button> : undefined}
+      readOnlyAction={locked && newest ? <Button onClick={startRevision}>Start a new revision</Button> : undefined}
       footer={saveRow}
       onBuildingChange={setBuilding}
       onOpenChange={setBlockOpen}
@@ -353,7 +379,7 @@ function DraftPage() {
     <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] flex flex-col gap-[var(--section-gap)]">
       <h2 className="font-semibold">Draft versions</h2>
       {(drafts.data ?? []).length === 0 ? <p className="text-sm text-[var(--color-muted-foreground)]">No draft versions yet.</p> : (drafts.data ?? []).map((draft, index) => (
-        <RevisionCard key={draft.id} participantId={participantId} draft={draft} onDownload={id => download.mutate({ participantId, id })} downloading={download.isPending} isNewest={index === 0} onGoToBlock={goToBlock} />
+        <RevisionCard key={draft.id} participantId={participantId} draft={draft} onDownload={id => download.mutate({ participantId, id })} downloading={download.isPending} isNewest={index === 0} onGoToBlock={goToBlock} replacedBy={replacedBy(draft)} />
       ))}
       {download.isError && <Callout tone="error">Could not download this draft PDF. Try again.</Callout>}
       <p className="text-xs text-[var(--color-muted-foreground)] flex gap-2"><FileText className="w-4 h-4 shrink-0" /> Draft PDFs are informational only — not signed and not billing authority.</p>

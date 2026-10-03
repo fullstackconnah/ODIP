@@ -537,7 +537,7 @@ public class ServiceAgreementApprovalServiceTests
         var preview = (await PreviewAsync(f, draft)).Preview!;
         var outcome = await ApproveAsync(f, draft);
 
-        Assert.Equal((true, 5, 0, "Open shifts are created once Jordan is active."), (preview.CanApprove, preview.PatternsToCreate, preview.ShiftsToCreate, preview.ShiftsNote));
+        Assert.Equal((true, 5, 0, "Unfilled shifts are created once Jordan is active."), (preview.CanApprove, preview.PatternsToCreate, preview.ShiftsToCreate, preview.ShiftsNote));
         Assert.Equal(ApprovalStatus.Approved, outcome.Status);
         Assert.Equal((5, 0, (DateOnly?)null, (DateOnly?)null), (outcome.Approval!.PatternsCreated, outcome.Approval.ShiftsCreated, outcome.Approval.FirstShiftDate, outcome.Approval.HorizonEnd));
         Assert.Equal(5, await f.Db.ShiftPatterns.CountAsync());

@@ -5,7 +5,8 @@ import { useFundingSources, usePlanBudget, usePlanPricingSettings, type PlanBudg
 import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
-import { blockProblems, describeBlock, duplicateBlock, nextBlockId, normaliseBlock, stampLocation, type PlanStepKey } from '@/lib/planBlocks'
+import { formatCurrency } from '@/lib/utils'
+import { blockProblems, describeBlock, duplicateBlock, formatHours, nextBlockId, normaliseBlock, stampLocation, type PlanStepKey } from '@/lib/planBlocks'
 import { periodProblem, periodPrompt, planBudgetFor, refusalSentence, refusals } from '@/lib/planQuote'
 import { templateByKey, type PlanTemplate } from '@/lib/planTemplates'
 import { BudgetBar } from './BudgetBar'
@@ -246,6 +247,11 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
           onRemove={remove}
           footer={typeof footer === 'function' ? footer({ refused }) : footer}
         />
+      )}
+
+      {/* A plan nobody can change has no budget bar: its stored total is said once, under the blocks it adds up. */}
+      {readOnly && stored && !session && entries.length > 0 && (
+        <p className="text-sm tabular-nums">The agreement: <span className="font-medium">{formatCurrency(stored.period.totals.amount)}</span>, {formatHours(stored.period.totals.supportHours)} h of support.</p>
       )}
 
       {!readOnly && (entries.length > 0 || session !== null) && (

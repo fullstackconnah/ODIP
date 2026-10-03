@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import type { ApprovalReasonDto, DraftApprovalPreviewDto, ServiceAgreementDraftDto } from '@/api/types'
+import { REASON_COPY } from '@/lib/planQuote'
 import { draftBlock, mondayWednesday } from '@/test/fixtures/planPricing'
 import { ApprovalDialog } from './ApprovalDialog'
 
@@ -56,50 +57,79 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
-  it('says it makes the weekly patterns and the open shifts up to the horizon, and that it is not signing', () => {
+  it('names the version, says what it makes and up to when, that it keeps adding shifts, that it is not signing, and that it cannot be undone', () => {
     setUp()
 
-    const dialog = screen.getByRole('dialog', { name: 'Approve for rostering?' })
-    expect(within(dialog).getByText('Creates 5 weekly patterns and the open shifts up to Sat 5 Dec 2026.')).toBeInTheDocument()
-    expect(within(dialog).getByText(/separate from signing/)).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: 'Approve version 2 for rostering?' })
+    expect(within(dialog).getByText('Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027, and 40 unfilled shifts up to Sat 5 Dec 2026. After that, unfilled shifts are added each day until the agreement ends.')).toBeInTheDocument()
+    expect(within(dialog).getByText(/separate from signing: nothing is signed or sent/)).toBeInTheDocument()
+    expect(within(dialog).getByText("You can't undo an approval. To change the roster later, save a new revision and approve that.")).toBeInTheDocument()
     expect(previewCall).toHaveBeenCalledWith('p-1', 'd-2', true)
+  })
+
+  it('does not promise later shifts when the agreement ends inside the horizon: everything is made now', () => {
+    ready(preview({ horizonEnd: '2027-03-31' }))
+    setUp()
+
+    expect(screen.getByText('Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027, and 40 unfilled shifts up to Wed 31 Mar 2027.')).toBeInTheDocument()
+    expect(screen.queryByText(/After that/)).not.toBeInTheDocument()
   })
 
   it('says how many patterns of the revision before it end, and the day before this one starts', () => {
     ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01' }))
     setUp()
 
-    expect(screen.getByText('Creates 5 weekly patterns and the open shifts up to Sat 5 Dec 2026. Ends 5 patterns from version 1 the day before Mon 2 Nov 2026.')).toBeInTheDocument()
+    expect(screen.getByText(/Ends 5 patterns from version 1 the day before Mon 2 Nov 2026\./)).toBeInTheDocument()
   })
 
   it('agrees its nouns with its counts', () => {
-    ready(preview({ patternsToCreate: 1, patternsToEnd: 1, endsFromVersion: 3, endsOn: '2026-11-01' }))
+    ready(preview({ patternsToCreate: 1, shiftsToCreate: 1, patternsToEnd: 1, endsFromVersion: 3, endsOn: '2026-11-01' }))
     setUp()
 
-    expect(screen.getByText('Creates 1 weekly pattern and the open shifts up to Sat 5 Dec 2026. Ends 1 pattern from version 3 the day before Mon 2 Nov 2026.')).toBeInTheDocument()
+    expect(screen.getByText(/Creates 1 weekly pattern, Mon 2 Nov 2026 to Wed 31 Mar 2027, and 1 unfilled shift up to Sat 5 Dec 2026\./)).toBeInTheDocument()
+    expect(screen.getByText(/Ends 1 pattern from version 3 the day before Mon 2 Nov 2026\./)).toBeInTheDocument()
   })
 
-  it('names the old version\'s shifts that stay, open and assigned apart, and links to the roster at that week for the participant', () => {
+  it("names the old version's shifts that stay, unfilled and assigned apart, says the new ones will sit beside them, and offers them on the roster in a new tab", () => {
     ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', oldShiftsRemaining: { open: 21, assigned: 3, firstDate: '2026-11-04', fromVersion: 1 } }))
     setUp()
 
-    expect(screen.getByText(/21 open and 3 assigned shifts from version 1 on or after Mon 2 Nov 2026 stay on the roster\./)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Review them' })).toHaveAttribute('href', '/rostering?date=2026-11-02&participant=p-1')
+    expect(screen.getByText(/21 unfilled and 3 assigned shifts from version 1, from Wed 4 Nov 2026 on, stay on the roster\. The new version's unfilled shifts will sit beside them at the same times\./)).toBeInTheDocument()
+    const link = screen.getByRole('link', { name: /See them on the roster/ })
+    expect(link).toHaveAttribute('href', '/rostering?date=2026-11-02&participant=p-1')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link.getAttribute('rel')).toContain('noopener')
+  })
+
+  it('says it in the singular for one old shift', () => {
+    ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', oldShiftsRemaining: { open: 1, assigned: 0, firstDate: '2026-11-04', fromVersion: 1 } }))
+    setUp()
+
+    expect(screen.getByText(/1 unfilled and 0 assigned shift from version 1, from Wed 4 Nov 2026 on, stays on the roster. The new version's unfilled shifts will sit beside it at the same times./)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /See it on the roster/ })).toBeInTheDocument()
   })
 
   it('draws no sentence about old shifts when there are none', () => {
     setUp()
 
     expect(screen.queryByText(/stay on the roster/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Review them' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /on the roster/ })).not.toBeInTheDocument()
   })
 
   it('says when shifts will come for a participant who is not active yet, and makes only the patterns', () => {
-    ready(preview({ shiftsToCreate: 0, horizonEnd: '2026-12-05', shiftsNote: 'Open shifts are created once Jordan is active.' }))
+    ready(preview({ shiftsToCreate: 0, horizonEnd: '2026-12-05', shiftsNote: 'Unfilled shifts are created once Jordan is active.' }))
     setUp()
 
-    expect(screen.getByText('Creates 5 weekly patterns.')).toBeInTheDocument()
-    expect(screen.getByText('Open shifts are created once Jordan is active.')).toBeInTheDocument()
+    expect(screen.getByText('Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027.')).toBeInTheDocument()
+    expect(screen.getByText('Unfilled shifts are created once Jordan is active.')).toBeInTheDocument()
+  })
+
+  it('says when no shifts are due yet because the agreement starts beyond the horizon, without a number of weeks', () => {
+    ready(preview({ shiftsToCreate: 0, horizonEnd: undefined }))
+    setUp()
+
+    expect(screen.getByText("No unfilled shifts yet. They are added each day as the agreement's dates come near.")).toBeInTheDocument()
+    expect(screen.queryByText(/weeks/)).not.toBeInTheDocument()
   })
 })
 
@@ -129,6 +159,17 @@ describe('ApprovalDialog: hand-made patterns that overlap', () => {
     await user.click(approve)
     expect(approveMutate).toHaveBeenCalledTimes(1)
     expect(approveMutate.mock.calls[0][0]).toEqual({ participantId: 'p-1', draftId: 'd-2', acknowledgeOverlaps: true })
+  })
+
+  it('says it in the singular for one overlapping pattern, down to the box and its label', async () => {
+    ready(preview({ overlappingPatterns: [overlapping.overlappingPatterns[0]] }))
+    const user = userEvent.setup()
+    setUp()
+
+    expect(screen.getByText('1 hand-made pattern overlaps')).toBeInTheDocument()
+    expect(screen.getByText('It is not ended or changed. The new patterns are made beside it, so the roster will ask for both until you decide.')).toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: 'This hand-made pattern stays as it is. I have checked it.' }))
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled()
   })
 
   it('shows no box when nothing overlaps and sends the acknowledgement as false', async () => {
@@ -177,15 +218,41 @@ describe('ApprovalDialog: approving', () => {
     expect(within(screen.getByRole('alert')).getByText('A newer revision of this agreement draft exists. Approve the latest revision instead.')).toBeInTheDocument()
   })
 
-  it('holds the button while it is working, and Cancel closes without approving', async () => {
+  it('runs the server\'s sentences for a refusal through the screen\'s own words: block numbers and dates a person reads', async () => {
+    approveMutate.mockImplementation((_vars, options) => options.onError({ response: { status: 400, data: { success: false, errors: ["Block 'b2': no item on 2026-11-03."] } } }))
+    const user = userEvent.setup()
+    setUp()
+
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+
+    expect(within(screen.getByRole('alert')).getByText('Block 2: no item on Tue 3 Nov 2026.')).toBeInTheDocument()
+  })
+
+  it('holds everything that would close it while the approval is on its way: the button, Cancel, the cross, Escape and the backdrop', async () => {
     approveState.current = { isPending: true }
     const user = userEvent.setup()
     const { onClose } = setUp()
 
     expect(screen.getByRole('button', { name: 'Approving…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Close dialog' }))
+    await user.click(screen.getByRole('dialog').parentElement!)                    // the backdrop
 
-    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onClose).not.toHaveBeenCalled()
+    expect(approveMutate).not.toHaveBeenCalled()
+  })
+
+  it('closes with Cancel, Escape and the backdrop when nothing is on its way', async () => {
+    const user = userEvent.setup()
+    const { onClose } = setUp()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('dialog').parentElement!)
+
+    expect(onClose).toHaveBeenCalledTimes(3)
     expect(approveMutate).not.toHaveBeenCalled()
   })
 })
@@ -222,6 +289,32 @@ describe('ApprovalDialog: when it cannot be approved yet', () => {
     const item = within(screen.getByRole('dialog', { name: 'Not ready to approve' })).getByRole('listitem')
     expect(within(item).getByText(/^Block 1: 5 public holidays have no decision yet \(the first is Labour Day on Mon 5 Oct 2026\)\. Choose Charge or Skip for each, then save a new revision\.$/)).toBeInTheDocument()
     expect(item).not.toHaveTextContent('5 shifts')
+  })
+
+  it('writes what to do under each engine reason, and a next step under the time zones, in muted words; the approval-only sentences already say it', () => {
+    ready(preview({ canApprove: false, reasons }))
+    setUp()
+
+    const items = within(screen.getByRole('dialog', { name: 'Not ready to approve' })).getAllByRole('listitem')
+    expect(within(items[0]).getByText(REASON_COPY.NoItem.advice)).toBeInTheDocument()
+    expect(within(items[2]).getByText("Check the delivery state of this draft, or ask an Admin to check the organisation's state in Settings.")).toBeInTheDocument()
+    // a sentence that already says what to do gets no second line under it: the badge, the sentence and the way to the block, and nothing else
+    expect(items[1].textContent).toBe('ReviewBlock 1: a public holiday has no decision yet (Labour Day on Mon 5 Oct 2026). Choose Charge or Skip for it, then save a new revision.Go to block 1')
+  })
+
+  it('opens with what the person does next, and says nothing has been changed', () => {
+    ready(preview({ canApprove: false, reasons }))
+    setUp()
+
+    expect(screen.getByText('Nothing has been changed. Fix each item, then approve the version you save.')).toBeInTheDocument()
+  })
+
+  it('drops that preface for a revision that has been superseded: the thing to do is a different one', () => {
+    ready(preview({ canApprove: false, reasons: [{ code: 'Superseded', message: 'A newer revision of this agreement draft exists. Approve the latest revision instead.' }] }))
+    setUp()
+
+    expect(screen.queryByText(/Fix each item/)).not.toBeInTheDocument()
+    expect(screen.getByText('A newer revision of this agreement draft exists. Approve the latest revision instead.')).toBeInTheDocument()
   })
 
   it('takes you to the block a reason is about, at the step that fixes it, and closes', async () => {

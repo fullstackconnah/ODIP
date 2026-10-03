@@ -292,7 +292,7 @@ public sealed class ServiceAgreementApprovalService
         plan.Ready = await _gate.MayPlaceAsync(_db, draft.ParticipantId, ct);
         if (!plan.Ready)
         {
-            plan.ShiftsNote = $"Open shifts are created once {(string.IsNullOrWhiteSpace(participant.FirstName) ? "the participant" : participant.FirstName)} is active.";
+            plan.ShiftsNote = $"Unfilled shifts are created once {(string.IsNullOrWhiteSpace(participant.FirstName) ? "the participant" : participant.FirstName)} is active.";
         }
         else if (quote is not null && plan.From <= plan.HorizonEnd)
         {

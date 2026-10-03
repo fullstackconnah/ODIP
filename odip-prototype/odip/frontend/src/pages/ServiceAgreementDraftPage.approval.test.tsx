@@ -68,13 +68,43 @@ describe('ServiceAgreementDraftPage: when the newest revision is approved', () =
     const plan = screen.getByRole('region', { name: 'Support plan' })
     expect(within(plan).getByText('Approved for rostering. Start a new revision to change.')).toBeInTheDocument()
     expect(within(plan).getByText('Mon, Wed · 09:00–13:00 · Community access 1:1')).toBeInTheDocument()
-    expect(within(plan).getByText('$30,610.28')).toBeInTheDocument()                    // the stored answer, not the live quote's $1.23
+    expect(within(plan).getAllByText('$30,610.28')).toHaveLength(2)                    // the stored answer (the block, and the total under the blocks), not the live quote's $1.23
     expect(within(plan).queryByText('$1.23')).not.toBeInTheDocument()
     expect(budgetCall.mock.calls.every(call => call[3] === false)).toBe(true)           // nothing is priced live while it is locked
     expect(screen.queryByRole('button', { name: 'Add block' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Agreement start')).toBeDisabled()
-    expect(screen.getByLabelText('Representative')).toBeDisabled()
+    // the details are facts, not a form of greyed-out inputs
+    expect(screen.queryByLabelText('Agreement start')).not.toBeInTheDocument()
+    expect(screen.getByText('Mon 12 Oct 2026 to Wed 31 Mar 2027')).toBeInTheDocument()
+    expect(screen.getByText('Wed 1 Jul 2026 to Wed 30 Jun 2027')).toBeInTheDocument()
+  })
+
+  it("gives the plan the agreement's total as its stored figures say it, since the budget bar is not drawn for a plan that cannot change", () => {
+    show(revision({ approval: approval() }))
+    renderPage()
+
+    expect(within(screen.getByRole('region', { name: 'Support plan' })).getByText(/^The agreement:/).textContent).toBe('The agreement: $30,610.28, 416 h of support.')
+  })
+
+  it("puts focus on the plan's heading when Start a new revision is pressed: the button it was on is gone", async () => {
+    show(revision({ approval: approval() }))
+    renderPage()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Start a new revision' }))
+
+    await waitFor(() => expect(document.activeElement).toBe(document.getElementById('plan-heading')))
+  })
+
+  it('says on an older approved revision that a newer one replaced it, and keeps the roster link for the live one only', () => {
+    show(
+      revision({ id: 'd-3', version: 3, agreementStartDate: '2026-10-20', approval: approval({ approvedAt: '2026-10-19T03:00:00Z', approvedByName: 'Casey Coordinator' }) }),
+      revision({ approval: approval() }),
+    )
+    renderPage()
+
+    expect(screen.getByText('Replaced by version 3 on 19 Oct 2026: these patterns end on Mon 19 Oct 2026.')).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'Open on the roster' })).toHaveLength(1)
   })
 
   it('says who approved it, and where to see the shifts, on the revision\'s card', () => {
@@ -168,9 +198,8 @@ describe('ServiceAgreementDraftPage: what the banner says now that approval exis
     renderPage()
 
     const banner = screen.getByRole('note')
-    expect(banner).toHaveTextContent('Draft only — not approved for signing or use.')
-    expect(banner).toHaveTextContent('Approving a revision for rostering makes its weekly patterns and open shifts, and nothing else')
-    expect(banner).toHaveTextContent('separate from signing')
+    expect(banner).toHaveTextContent("Draft only: not approved for signing or use. It can't activate the participant, invoice or claim.")
+    expect(banner).toHaveTextContent("Approving a revision for rostering is separate: it only makes that revision's weekly patterns and unfilled shifts.")
     expect(banner).not.toHaveTextContent(/can't be used to activate the participant, roster shifts/)
   })
 })

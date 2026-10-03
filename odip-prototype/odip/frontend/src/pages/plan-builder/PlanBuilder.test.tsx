@@ -612,7 +612,8 @@ describe('PlanBuilder when it cannot be changed', () => {
     render(<Page initial={twoBlocks()} readOnly stored={stored} readOnlyNote="Approved for rostering. Start a new revision to change." />)
 
     expect(screen.getByText('Approved for rostering. Start a new revision to change.')).toBeInTheDocument()
-    expect(screen.getByText('$30,610.28')).toBeInTheDocument()                      // what block 1 came to over the agreement, as it was saved
+    expect(screen.getAllByText('$30,610.28')).toHaveLength(2)                      // what block 1 came to over the agreement, as it was saved, and the total line under the blocks
+    expect(screen.getByText(/^The agreement:/).textContent).toBe('The agreement: $30,610.28, 416 h of support.')
     expect(screen.queryByText('An ordinary week')).not.toBeInTheDocument()          // the stored answer has no lines to rebuild a week from
     expect(budgetCall.mock.calls.every(call => call[3] === false)).toBe(true)
     expect(screen.queryByRole('region', { name: 'Running budget' })).not.toBeInTheDocument()

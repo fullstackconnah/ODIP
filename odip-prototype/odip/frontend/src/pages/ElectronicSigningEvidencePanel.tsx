@@ -72,7 +72,7 @@ export default function ElectronicSigningEvidencePanel({ participantId, draft }:
       <h3 id={`signing-evidence-${draft.id}`} className="font-semibold">In-app electronic signing evidence</h3>
       <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Records signing evidence for review. It stays pending verification and doesn't create a signed agreement, approval, billing authority or permission to schedule.</p>
     </div>
-    {!evidencePermitted && <p role="status" className="text-sm text-[var(--color-muted-foreground)]">Signing evidence can't be recorded until this agreement template is approved.</p>}
+    {!evidencePermitted && <p role="status" className="text-sm text-[var(--color-muted-foreground)]">Signing evidence can't be recorded until this agreement template is approved for e-signing.</p>}
     {evidencePermitted && !snapshot && <Button variant="secondary" size="md" onClick={showDocument} disabled={createSnapshot.isPending} className="self-start">
       {createSnapshot.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Display immutable document before recording evidence
     </Button>}
