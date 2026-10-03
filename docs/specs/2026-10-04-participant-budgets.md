@@ -45,7 +45,7 @@ Four new tables in one additive migration, `AddParticipantBudgetRecord`. All are
 - `FundingPeriods`: a pool's dates and money for one funding period: the plan amount, and Oassist's set-aside when there is one. Money is `decimal(18,2)`; the client works in whole cents.
 - `BudgetSettings`: one row per organisation, holding the budget mode and the "approaching" percentage, with constant defaults (Warn, 80) so a missing row means the defaults.
 
-Money never travels on the participant DTO, and every funding endpoint is closed to SupportWorker and ReadOnly.
+Money never travels on the participant DTO, and every endpoint that carries money is closed to SupportWorker and ReadOnly (the category list holds none, so any signed-in role can read it).
 
 ### Rules
 
@@ -85,8 +85,8 @@ An NDIS-funded participant has funding recorded when a plan's end is on or after
 
 It is deliberately an activation-only item. `ParticipantReadiness.IssuesAsync` is the operational list that feeds the roster, the pickers and the register, and a missing budget must not take anyone off those. So:
 
-- `ActivationIssuesAsync` is that list plus "Funding not recorded". It supplies the warn-mode notes when someone changes a status or completes a profile, and the onboarding checklist (`ParticipantOnboardingDto.FundingRecorded`, null when the participant is not NDIS-funded; the worklist counts six steps instead of five).
-- `ActivationBlockAsync` and `MayActivateAsync` decide an activation in Enforce mode: the missing agreement evidence is refused first, then the missing budget, each with its own sentence. They take a `TimeProvider`, so tests fix the clock.
+- `ActivationIssuesAsync` is that list plus "Funding not recorded". It supplies the notes that come back, in Warn mode, when someone activates a participant from the status control, and the onboarding checklist (`ParticipantOnboardingDto.FundingRecorded`, null when the participant is not NDIS-funded; the worklist counts six steps instead of five). Warn mode never blocks.
+- `ActivationBlockAsync` and `MayActivateAsync` decide an activation in Enforce mode. From the status control and from completing the profile, the missing agreement evidence is refused first and then the missing budget, each with its own sentence; the full participant update just leaves the participant inactive. They take a `TimeProvider`, so tests fix the clock.
 - The participant detail and list DTOs keep the operational issues only.
 
 Today the agreement-evidence gate is closed for everyone (the provisional agreement template has no approved source), so an Enforce-mode tenant is refused on the evidence reason before the budget one is reached. The funding rule is tested through `ParticipantReadiness.Decide` and will begin to show once that gate can open.
