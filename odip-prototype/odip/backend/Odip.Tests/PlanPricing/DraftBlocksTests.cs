@@ -311,6 +311,152 @@ public class DraftBlocksTests
         });
     }
 
+    // ── A save names the version it started from (review F3) ──────────────────────
+
+    private static Task<DraftSaveResult> SaveFrom(Fixture f, int? baseVersion, params DraftBlockDto[] blocks) =>
+        f.Service.SaveAsync(f.TenantId, f.Participant.Id, Request(blocks) with { BaseVersion = baseVersion }, "actor", CancellationToken.None);
+
+    [Fact]
+    public async Task A_save_that_started_from_an_older_version_is_refused_with_the_newer_version_and_stores_nothing()
+    {
+        await using var f = await SetUpAsync();
+        var saturday = Block("sat", PlanSupportType.GroupActivity, DayOfWeek.Saturday, T(9), T(15), b => b with { ParticipantsPresent = 3 });
+        Assert.Equal(1, (await SaveFrom(f, 0, Entry(MonWed()))).Draft!.Version);                         // the first save starts from nothing
+        Assert.Equal(2, (await SaveFrom(f, 1, Entry(MonWed()), Entry(saturday))).Draft!.Version);        // A started from version 1 and saves version 2
+
+        var stale = await SaveFrom(f, 1, Entry(MonWed()));                                               // B also started from version 1
+
+        Assert.Null(stale.Draft);
+        Assert.Equal(2, stale.ConflictVersion);
+        Assert.Contains("Version 2", Assert.Single(stale.Errors));
+        Assert.Equal(new[] { 1, 2 }, f.Db.ServiceAgreementDrafts.OrderBy(d => d.Version).Select(d => d.Version).ToList());   // B's plan was not stored as version 3
+    }
+
+    [Fact]
+    public async Task A_save_that_started_from_the_newest_version_is_accepted_and_one_that_names_no_version_is_not_checked()
+    {
+        await using var f = await SetUpAsync();
+
+        var first = await SaveFrom(f, 0, Entry(MonWed()));
+        var second = await SaveFrom(f, 1, Entry(MonWed()));
+        var unchecked_ = await SaveFrom(f, null, Entry(MonWed()));       // a caller that predates the builder
+
+        Assert.Equal(new[] { 1, 2, 3 }, new[] { first.Draft!.Version, second.Draft!.Version, unchecked_.Draft!.Version });
+        Assert.Null(unchecked_.ConflictVersion);
+    }
+
+    [Fact]
+    public async Task A_base_version_ahead_of_the_newest_is_a_conflict_too_it_names_a_version_that_does_not_exist()
+    {
+        await using var f = await SetUpAsync();
+        await SaveFrom(f, 0, Entry(MonWed()));
+
+        var ahead = await SaveFrom(f, 5, Entry(MonWed()));
+
+        Assert.Equal(1, ahead.ConflictVersion);
+        Assert.Single(f.Db.ServiceAgreementDrafts);
+    }
+
+    /// <summary>On the first save that inserts a draft, commits the competing save's draft through another context and then fails the way PostgreSQL does (the unique index on tenant, participant and version refuses the second one).</summary>
+    private sealed class DraftVersionRaceInterceptor(Func<Task> beforeThrow) : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+    {
+        private bool _fired;
+
+        public override async ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+            Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var inserting = eventData.Context!.ChangeTracker.Entries<ServiceAgreementDraft>().Any(entry => entry.State == EntityState.Added);
+            if (_fired || !inserting) return result;
+            _fired = true;
+            await beforeThrow();
+            throw new DbUpdateException("duplicate key value violates unique constraint", new Npgsql.PostgresException(
+                messageText: "duplicate key value violates unique constraint", severity: "ERROR", invariantSeverity: "ERROR",
+                sqlState: Npgsql.PostgresErrorCodes.UniqueViolation, tableName: "ServiceAgreementDrafts", constraintName: "IX_ServiceAgreementDrafts_TenantId_ParticipantId_Version"));
+        }
+    }
+
+    [Fact]
+    public async Task Two_saves_racing_for_one_version_answer_the_loser_with_a_conflict_not_a_server_error()
+    {
+        await using var f = await SetUpAsync();
+        var winner = new DraftVersionRaceInterceptor(async () =>
+        {
+            await using var other = NewContext(f.DbName, f.TenantId);
+            await new ServiceAgreementDraftService(other).SaveAsync(f.TenantId, f.Participant.Id, Request(new[] { Entry(MonWed("winner")) }), "someone-else", CancellationToken.None);
+        });
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(f.TenantId);
+        await using var loserDb = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(f.DbName).AddInterceptors(winner).Options, tenant.Object);
+
+        var loser = await new ServiceAgreementDraftService(loserDb).SaveAsync(f.TenantId, f.Participant.Id, Request(new[] { Entry(MonWed("loser")) }), "me", CancellationToken.None);
+
+        Assert.Null(loser.Draft);
+        Assert.Equal(1, loser.ConflictVersion);                      // the winner's version is the newest now
+        var stored = Assert.Single(await f.Db.ServiceAgreementDrafts.Include(d => d.Blocks).ToListAsync());
+        Assert.Equal("winner", Assert.Single(stored.Blocks).BlockKey);   // and the loser stored nothing
+    }
+
+    [Fact]
+    public async Task The_409_is_the_apps_envelope_with_a_code_the_newer_version_and_words_for_a_person()
+    {
+        await using var f = await SetUpAsync();
+        await SaveFrom(f, 0, Entry(MonWed()));
+        await SaveFrom(f, 1, Entry(MonWed()));
+
+        var result = await Controller(f).Create(f.Participant.Id, Request(new[] { Entry(MonWed()) }) with { BaseVersion = 1 }, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<DraftVersionConflictDto>>(conflict.Value);
+        Assert.False(body.Success);
+        Assert.Equal("draft-version-conflict", body.Code);
+        Assert.Equal(2, body.Data!.CurrentVersion);
+        Assert.Contains("Version 2 was saved after the version this plan started from", Assert.Single(body.Errors!));
+        var json = JsonSerializer.Serialize(body, ApiOptions());
+        Assert.Contains("\"data\":{\"currentVersion\":2}", json);
+        Assert.Contains("\"code\":\"draft-version-conflict\"", json);
+    }
+
+    // ── A save holds a permit of its own (review F12) ─────────────────────────────
+
+    [Fact]
+    public async Task Saving_blocks_takes_one_of_the_organisations_save_permits_and_a_burst_is_told_to_try_again()
+    {
+        await using var f = await SetUpAsync();
+        using var limiter = new Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter(permits: 1);
+        var inFlight = limiter.TryEnter("save:tenant:" + f.TenantId.ToString("N"));   // another save of this organisation is being priced
+        var controller = Controller(f, limiter);
+
+        var busy = await controller.Create(f.Participant.Id, Request(new[] { Entry(MonWed()) }), CancellationToken.None);
+
+        var refused = Assert.IsType<ObjectResult>(busy.Result);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, refused.StatusCode);
+        Assert.Equal("1", controller.Response.Headers.RetryAfter.ToString());
+        Assert.False(Assert.IsType<ApiResponse<ServiceAgreementDraftDto>>(refused.Value).Success);
+        Assert.Empty(f.Db.ServiceAgreementDrafts);
+        // The quote's own permits are a different partition: a save does not use them up, and they do not hold a save back.
+        using var quote = limiter.TryEnter("tenant:" + f.TenantId.ToString("N"));
+        Assert.True(quote.IsAcquired);
+        // Once the other save has finished the permit is free again, and this save releases it when it ends.
+        inFlight.Dispose();
+        var saved = await controller.Create(f.Participant.Id, Request(new[] { Entry(MonWed()) }), CancellationToken.None);
+        Assert.IsType<OkObjectResult>(saved.Result);
+        using var after = limiter.TryEnter("save:tenant:" + f.TenantId.ToString("N"));
+        Assert.True(after.IsAcquired);
+    }
+
+    [Fact]
+    public async Task A_hand_typed_save_does_not_need_a_permit_it_is_not_the_heavy_work()
+    {
+        await using var f = await SetUpAsync();
+        using var limiter = new Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter(permits: 1);
+        using var inFlight = limiter.TryEnter("save:tenant:" + f.TenantId.ToString("N"));
+        var request = new CreateServiceAgreementDraftDto { PlanStartDate = new DateOnly(2026, 7, 1), PlanEndDate = new DateOnly(2027, 6, 30), AgreementStartDate = new DateOnly(2026, 7, 1), AgreementEndDate = new DateOnly(2027, 6, 30), State = "NSW", Lines = [new CreateServiceAgreementDraftLineDto { ServiceType = "x", ItemCode = "nope", Hours = 1m }] };
+
+        var result = await Controller(f, limiter).Create(f.Participant.Id, request, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);   // refused for its own reason (no such item), not told to wait
+    }
+
     // ── Hand-typed drafts keep working ────────────────────────────────────────────
 
     [Fact]
@@ -375,7 +521,7 @@ public class DraftBlocksTests
         const string body = """
         {
           "planStartDate": "2026-07-01", "planEndDate": "2027-06-30", "agreementStartDate": "2026-07-01", "agreementEndDate": "2027-06-30",
-          "state": "NSW", "serviceTypes": ["Community access"], "representative": "A. Representative",
+          "state": "NSW", "serviceTypes": ["Community access"], "representative": "A. Representative", "baseVersion": 3,
           "blocks": [ {
             "block": {
               "id": "b1", "supportType": "CommunityAccess", "intensity": "Standard", "days": ["Monday", "Wednesday"], "start": "09:00:00", "end": "13:00:00",
@@ -391,6 +537,7 @@ public class DraftBlocksTests
 
         var dto = JsonSerializer.Deserialize<CreateServiceAgreementDraftDto>(body, ApiOptions())!;
 
+        Assert.Equal(3, dto.BaseVersion);   // the version of the newest revision the page loaded
         var entry = Assert.Single(dto.Blocks!);
         Assert.Equal(("b1", PlanSupportType.CommunityAccess, T(9), T(13)), (entry.Block.Id, entry.Block.SupportType, entry.Block.Start, entry.Block.End));
         Assert.Equal(new[] { DayOfWeek.Monday, DayOfWeek.Wednesday }, entry.Block.Days);
@@ -465,7 +612,7 @@ public class DraftBlocksTests
         return tenant.Object;
     }
 
-    private static ServiceAgreementDraftsController Controller(Fixture f) => new(f.Db, TenantOf(f.TenantId), new ServiceAgreementDraftService(f.Db))
+    private static ServiceAgreementDraftsController Controller(Fixture f, Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter? limiter = null) => new(f.Db, TenantOf(f.TenantId), new ServiceAgreementDraftService(f.Db), saveLimiter: limiter)
     {
         ControllerContext = new ControllerContext
         {

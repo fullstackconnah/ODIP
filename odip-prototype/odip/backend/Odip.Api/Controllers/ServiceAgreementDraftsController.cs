@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.RateLimiting;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Pricing;
@@ -24,8 +25,11 @@ public class ServiceAgreementDraftsController : ControllerBase
     private readonly ElectronicSigningEvidenceService _evidence;
     private readonly DemoJourneySimulationService _simulation;
     private readonly IConfiguration _configuration;
-    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IConfiguration? configuration = null)
+    private readonly PlanQuoteConcurrencyLimiter? _saveLimiter;
+    public const string SaveBusyMessage = "Another plan is already being saved for your organisation. Try again in a moment.";
+    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IConfiguration? configuration = null, PlanQuoteConcurrencyLimiter? saveLimiter = null)
     {
+        _saveLimiter = saveLimiter;
         _db = db; _tenant = tenant; _service = service; _evidence = evidence ?? new ElectronicSigningEvidenceService(db);
         _simulation = simulation ?? new DemoJourneySimulationService(db);
         _configuration = configuration ?? new ConfigurationBuilder().Build();
@@ -51,11 +55,25 @@ public class ServiceAgreementDraftsController : ControllerBase
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail("A tenant context is required."));
         var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown";
+
+        // Saving blocks prices them: the same heavy work as a quote, which the quote holds to a few at a time for each organisation. A save holds one of the organisation's SAVE permits,
+        // a partition of its own, so a save is never refused because the screen's own quotes are running and a burst of saves cannot keep every core busy. Hand-typed lines are not heavy.
+        using var lease = _saveLimiter is not null && dto.Blocks is { Count: > 0 } ? _saveLimiter.TryEnter("save:tenant:" + tenantId.ToString("N")) : null;
+        if (lease is { IsAcquired: false })
+        {
+            Response.Headers.RetryAfter = "1";
+            return StatusCode(StatusCodes.Status429TooManyRequests, ApiResponse<ServiceAgreementDraftDto>.Fail(SaveBusyMessage));
+        }
+
         var result = await _service.SaveAsync(tenantId, participantId, dto, actor, ct);
         if (result.Draft is null)
+        {
+            if (result.ConflictVersion is int newest)
+                return Conflict(new ApiResponse<DraftVersionConflictDto> { Success = false, Data = new DraftVersionConflictDto { CurrentVersion = newest }, Errors = result.Errors.ToList(), Code = "draft-version-conflict" });
             return result.NotFound
                 ? NotFound(ApiResponse<ServiceAgreementDraftDto>.Fail(result.Errors.First()))
                 : BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail(result.Errors.ToList()));
+        }
         return Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(result.Draft)));
     }
 

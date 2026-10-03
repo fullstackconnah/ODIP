@@ -11,11 +11,15 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Services;
 
 /// <summary>The outcome of saving a draft revision: the saved draft, or every reason it was refused. <see cref="NotFound"/> means the participant is not the caller's.</summary>
-public sealed record DraftSaveResult(ServiceAgreementDraft? Draft, IReadOnlyList<string> Errors, bool NotFound = false)
+public sealed record DraftSaveResult(ServiceAgreementDraft? Draft, IReadOnlyList<string> Errors, bool NotFound = false, int? ConflictVersion = null)
 {
     public static DraftSaveResult Saved(ServiceAgreementDraft draft) => new(draft, Array.Empty<string>());
     public static DraftSaveResult Refused(params string[] errors) => new(null, errors);
     public static DraftSaveResult Refused(IReadOnlyList<string> errors) => new(null, errors);
+    /// <summary>Somebody else saved a newer version than the one this plan started from (or took the same version number a moment ago): <paramref name="newestVersion"/> is the participant's newest now.</summary>
+    public static DraftSaveResult Conflicted(int newestVersion) => new(null,
+        new[] { string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Version {newestVersion} was saved after the version this plan started from. Load version {newestVersion} to see what changed, then make your changes again.") },
+        ConflictVersion: newestVersion);
 }
 
 /// <summary>Creates quote-only snapshots. This service never produces billable events or signed status.</summary>
@@ -58,15 +62,39 @@ public sealed class ServiceAgreementDraftService
         if (blocks.Count == 0 && request.Lines.Count == 0)
             return DraftSaveResult.Refused("Add at least one support block.");
 
+        // The version this plan started from is checked before the work of pricing it, and again once it is priced and has its number (a save can land while the engine is working):
+        // a second coordinator's save must not quietly become the newest version over the first one's work.
+        if (request.BaseVersion is int baseVersion && await NewestVersionAsync(participantId, ct) is var newest && newest != baseVersion)
+            return DraftSaveResult.Conflicted(newest);
+
         var draft = blocks.Count > 0
             ? await BuildFromBlocksAsync(tenantId, participant, request, blocks, actor, ct)
             : await BuildFromLinesAsync(tenantId, participant, request, actor, ct);
         if (draft.Draft is null) return draft;
+        if (request.BaseVersion is int started && draft.Draft.Version - 1 != started) return DraftSaveResult.Conflicted(draft.Draft.Version - 1);
 
         _db.ServiceAgreementDrafts.Add(draft.Draft);
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsVersionRace(ex))
+        {
+            // Another save took this version number between the reading of the newest and this insert: the unique index on tenant, participant and version refused ours (it was a 500).
+            // Nothing of ours is kept; the caller is told which version is newest now.
+            _db.ChangeTracker.Clear();
+            return DraftSaveResult.Conflicted(await NewestVersionAsync(participantId, ct));
+        }
         return draft;
     }
+
+    private async Task<int> NewestVersionAsync(Guid participantId, CancellationToken ct) =>
+        await _db.ServiceAgreementDrafts.Where(x => x.ParticipantId == participantId).MaxAsync(x => (int?)x.Version, ct) ?? 0;
+
+    /// <summary>A unique violation on the draft version index: the one insert in a save that another save can beat.</summary>
+    private static bool IsVersionRace(DbUpdateException ex) =>
+        ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation } pg
+        && (pg.ConstraintName ?? string.Empty).Contains("ServiceAgreementDrafts_TenantId_ParticipantId_Version", StringComparison.Ordinal);
 
     // ── From blocks (the plan builder) ────────────────────────────────────────────
 

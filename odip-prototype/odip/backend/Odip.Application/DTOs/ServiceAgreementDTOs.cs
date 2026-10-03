@@ -22,6 +22,18 @@ public record CreateServiceAgreementDraftDto
     /// as it always was, and is shown read-only with a note to rebuild it from blocks.
     /// </summary>
     public List<CreateServiceAgreementDraftLineDto> Lines { get; init; } = [];
+    /// <summary>
+    /// The version of the newest revision the caller started from (0 when it had none). When the participant's newest version is not that one by the time the save is made, somebody
+    /// else saved in between and this save would silently replace their work as the newest: it is refused with 409 and the newer version number instead. Left out, nothing is checked
+    /// (callers that predate the builder).
+    /// </summary>
+    [Range(0, int.MaxValue)] public int? BaseVersion { get; init; }
+}
+
+/// <summary>The body of the 409 a save answers when somebody else saved a newer version first: the version that is the participant's newest now.</summary>
+public record DraftVersionConflictDto
+{
+    public int CurrentVersion { get; init; }
 }
 
 /// <summary>One block of a revision: the block exactly as the pricing engine takes it, and what its shifts will ask of a worker.</summary>
