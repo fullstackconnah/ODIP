@@ -131,12 +131,14 @@ describe('ServiceAgreementDraftPage: saving a plan built from blocks', () => {
     renderPage()
     const user = await fillDetails()
     await addBlockFromTemplate(user)
-    expect(screen.getByRole('status', { name: '' })).toHaveTextContent('You have unsaved changes.')
+    expect(screen.getByText(/You have unsaved changes\./)).toHaveTextContent('Every save is a new version: earlier versions never change.')
 
     await user.click(screen.getByRole('button', { name: 'Save draft' }))
 
-    expect(await screen.findByText(/Saved as version 3\./)).toBeInTheDocument()
-    expect(screen.getByText(/Saved as version 3\./)).toHaveTextContent('Every save is a new version: earlier versions never change.')
+    // The answer is drawn with the budget bar, in its one polite status (see the describe on saving from the bar, below), and the save row goes back to what is always true of it.
+    expect(await screen.findByText('Saved as version 3.')).toBeInTheDocument()
+    expect(screen.getByText('Saved as version 3.').closest('[role="status"]')).not.toBeNull()
+    expect(screen.getByText('Every save is a new version: earlier versions never change.')).toBeInTheDocument()
     expect(screen.queryByText(/You have unsaved changes/)).not.toBeInTheDocument()
   })
 
@@ -256,18 +258,21 @@ describe('ServiceAgreementDraftPage: a plan the engine cannot price', () => {
     drafts.mockReturnValue({ data: [draft({ version: 4, blocks: [draftBlock(mondayWednesday('b1')), draftBlock(mondayWednesday('b2', { days: ['Saturday'] }))], pricing: quote() })], isLoading: false, isError: false, refetch: vi.fn() })
     budget.mockReturnValue({ data: { ...budgetOf('b1'), period: quote({ ...budgetOf('b1').period, issues: issues as never[] }) }, isError: false, isFetching: false, error: null, refetch: vi.fn() })
   }
-  const refusalCallout = (title: string) => screen.getByText(title).closest('div[class*="rounded-lg"]') as HTMLElement
+  const refusalCallout = (sentence: string) => screen.getByText(sentence).closest('[role="alert"]') as HTMLElement
 
   it('says which blocks cannot be priced and holds Save back, instead of sending a plan the server will refuse', async () => {
     planWith({ blockId: 'b1', reason: 'RegistrationGroupNotHeld', message: "Block 'b1': needs registration group 0125, which the provider does not hold.", count: 1 })
     renderPage()
     const user = userEvent.setup()
 
-    // Design review 5: it names the block by its place and says what to do, not who found the fault ("The pricing engine priced nothing from a block").
-    const callout = refusalCallout('Block 1 cannot be priced yet')
-    expect(callout).toHaveTextContent('The plan cannot be saved until it can be.')
-    expect(callout).toHaveTextContent('Choose another support type, or an Admin can record the groups you hold in Settings, Plan pricing.')
+    // Design review 5, and D5 of the second one: ONE sentence, naming the block by its place and not who found the fault ("The pricing engine priced nothing from a block"). What to do is on the block's own
+    // row, with the step that does it: said once, there, and not again in the Callout.
+    const callout = refusalCallout('Block 1 cannot be priced yet, so the plan cannot be saved.')
+    expect(callout).toHaveTextContent(/^Block 1 cannot be priced yet, so the plan cannot be saved\.$/)
     expect(callout).not.toHaveTextContent(/pricing engine/i)
+    expect(callout).not.toHaveTextContent('Choose another support type')
+    expect(screen.getAllByText(/Choose another support type/)).toHaveLength(1)
+    expect(screen.getByText(/Choose another support type/).closest('tr')).toHaveTextContent('Your organisation does not hold this registration group')
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Save draft' }))
     expect(createMutate).not.toHaveBeenCalled()
@@ -285,24 +290,23 @@ describe('ServiceAgreementDraftPage: a plan the engine cannot price', () => {
     expect(screen.getByRole('heading', { level: 3, name: 'Requirements' })).toBeInTheDocument()
   })
 
-  it('names several blocks by their places, and points at the rows when they were refused for different reasons', () => {
+  it('names several blocks by their places in the same one sentence, whatever they were refused for', () => {
     planWith(
       { blockId: 'b1', reason: 'RegistrationGroupNotHeld', message: "Block 'b1': needs registration group 0125.", count: 1 },
       { blockId: 'b2', reason: 'InvalidInput', message: "Block 'b2': choose at least one day.", count: 1 },
     )
     renderPage()
 
-    const callout = refusalCallout('Blocks 1 and 2 cannot be priced yet')
-    expect(callout).toHaveTextContent('The plan cannot be saved until they can be.')
-    expect(callout).toHaveTextContent('Each one is marked above with what to do about it.')
+    const callout = refusalCallout('Blocks 1 and 2 cannot be priced yet, so the plan cannot be saved.')
+    expect(callout).toHaveTextContent(/^Blocks 1 and 2 cannot be priced yet, so the plan cannot be saved\.$/)
   })
 
-  it('says the plan itself cannot be priced when the refusal names no block (the dates, say), and still says what to do', () => {
+  it('says the plan itself cannot be priced when the refusal names no block (the dates, say), and the list above says what to do', () => {
     planWith({ blockId: '', reason: 'InvalidInput', message: 'The agreement period ends before it starts.', count: 1 })
     renderPage()
 
-    const callout = refusalCallout('This plan cannot be priced yet')
-    expect(callout).toHaveTextContent('Fix the field the message names.')
+    refusalCallout('This plan cannot be priced yet, so it cannot be saved.')
+    expect(within(screen.getByRole('list', { name: 'Things to look at' })).getByText(/Fix the field the message names./)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled()
   })
 
@@ -425,6 +429,92 @@ describe('ServiceAgreementDraftPage: starting from the newest revision', () => {
 
     expect(screen.getByRole('heading', { name: 'Start the week from a template' })).toBeInTheDocument()
     expect(screen.queryByText(/You have unsaved changes/)).not.toBeInTheDocument()
+  })
+})
+
+// Design review D2: a Save pressed from the budget bar, with a block open, was answered nowhere. The save row, with the problems, the refusal, the newer version and "Saved as version N", is the overview's
+// footer; the stepper has none, and the bar is the one place that is in view in both, so the answer is drawn with the bar.
+describe('ServiceAgreementDraftPage: a Save pressed from the budget bar, with a block open', () => {
+  const block: DraftBlock = draftBlock(mondayWednesday('b1'))
+  const saved = draft({ version: 4, state: 'NSW', representative: 'R. Tran', agreementStartDate: '2026-10-01', agreementEndDate: '2027-03-31', blocks: [block], pricing: quote() })
+
+  /** The plan has an unsaved change (Friday is added to block 1), and block 1 is open again in the stepper: the footer's Save draft is not in the page, the bar's Save is. */
+  async function openWithUnsavedChange() {
+    drafts.mockReturnValue({ data: [saved], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Edit times of block 1' }))
+    await user.click(screen.getByRole('button', { name: 'Friday' }))
+    await user.click(screen.getByRole('button', { name: 'Save block' }))
+    await user.click(screen.getByRole('button', { name: 'Edit times of block 1' }))
+    expect(screen.getByRole('heading', { name: 'Edit block 1' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument()
+    const bar = screen.getByRole('region', { name: 'Running budget' })
+    return { user, bar, dock: bar.parentElement as HTMLElement }
+  }
+
+  it('says why when the server refuses it, in the bar, and keeps the stepper and the plan', async () => {
+    createMutate.mockImplementation((_request, options) => options.onError({ response: { status: 400, data: { errors: ["Block 'b1': workers must be between 1 and 10."] } } }))
+    const { user, bar, dock } = await openWithUnsavedChange()
+
+    await user.click(within(bar).getByRole('button', { name: 'Save' }))
+
+    const alert = (await screen.findByText('The draft was not saved')).closest('[role="alert"]') as HTMLElement
+    expect(alert).toHaveTextContent('Block 1: workers must be between 1 and 10.')
+    expect(dock).toContainElement(alert) // drawn with the bar, which is docked: in view wherever the person is in the stepper
+    expect(screen.getByRole('heading', { name: 'Edit block 1' })).toBeInTheDocument()
+    expect(within(bar).getByRole('button', { name: 'Save' })).toBeEnabled() // and Save is there to try again
+  })
+
+  it('says a newer version was saved by somebody else, and what to do about it, in the bar', async () => {
+    createMutate.mockImplementation((_request, options) => options.onError({ response: { status: 409, data: { success: false, code: 'draft-version-conflict', data: { currentVersion: 5 }, errors: ['Version 5 was saved.'] } } }))
+    const { user, bar, dock } = await openWithUnsavedChange()
+
+    await user.click(within(bar).getByRole('button', { name: 'Save' }))
+
+    const callout = (await screen.findByText('Version 5 was saved by somebody else')).closest('[role="alert"]') as HTMLElement
+    expect(dock).toContainElement(callout)
+    expect(within(callout).getByRole('button', { name: 'Load version 5' })).toBeInTheDocument()
+    await user.click(within(callout).getByRole('button', { name: 'Keep editing' }))
+    expect(screen.queryByText('Version 5 was saved by somebody else')).not.toBeInTheDocument()
+  })
+
+  it('lists the problems it found, in the bar, before anything is sent', async () => {
+    const { user, bar, dock } = await openWithUnsavedChange()
+    fireEvent.change(screen.getByLabelText('Agreement end'), { target: { value: '2026-09-01' } })
+
+    await user.click(within(bar).getByRole('button', { name: 'Save' }))
+
+    expect(createMutate).not.toHaveBeenCalled()
+    expect(dock).toContainElement(screen.getByText('Fix these before saving'))
+    expect(screen.getByText('An end date cannot come before its start date.')).toBeInTheDocument()
+  })
+
+  it("says it was saved, in the bar's polite status, and the Not saved chip goes with it", async () => {
+    createMutate.mockImplementation((_request, options) => options.onSuccess({ version: 5 }))
+    const { user, bar, dock } = await openWithUnsavedChange()
+
+    await user.click(within(bar).getByRole('button', { name: 'Save' }))
+
+    const note = await screen.findByText('Saved as version 5.')
+    expect(note.closest('[role="status"]')).not.toBeNull()
+    expect(dock).toContainElement(note)
+    expect(within(bar).queryByText('Not saved')).not.toBeInTheDocument()
+  })
+
+  it('does not draw the answer a second time in the overview, where the save row is: once, with the bar', async () => {
+    createMutate.mockImplementation((_request, options) => options.onError({ response: { status: 429, data: {} } }))
+    drafts.mockReturnValue({ data: [saved], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Edit times of block 1' }))
+    await user.click(screen.getByRole('button', { name: 'Friday' }))
+    await user.click(screen.getByRole('button', { name: 'Save block' }))
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    expect(await screen.findAllByText('The server is busy')).toHaveLength(1)
+    expect(screen.getByRole('region', { name: 'Running budget' }).parentElement).toContainElement(screen.getByText('The server is busy'))
   })
 })
 

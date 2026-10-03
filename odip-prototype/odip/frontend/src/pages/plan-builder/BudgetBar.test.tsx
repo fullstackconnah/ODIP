@@ -40,10 +40,56 @@ describe('BudgetBar', () => {
     expect(warning).toHaveTextContent('You can still save the draft.')
     expect(screen.getByText('122% used')).toBeInTheDocument()
     expect(screen.getByText('Over budget')).toBeInTheDocument()   // and on the one-line form a phone shows
-    // Design 2: the cell takes the warning tint, and the sentence is text, not a pill. Design 8: nothing here is a live region, so nothing speaks on every recalculation.
+    // Design 2: the cell takes the warning tint, and the sentence is text, not a pill. Design 8: the figures are not live regions, so nothing speaks on every recalculation.
     expect(screen.getByText('Plan budget').parentElement).toHaveClass('bg-[var(--color-warning-container)]')
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(warning.closest('[role="status"]')).toBeNull()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  // Code review N11: at ae279094 the over-budget line was a status; design 8 took the live regions off the figures, and a screen reader that adds the block that tips the plan over was told nothing.
+  describe('the plan crossing its budget', () => {
+    const over = { planBudget: { total: 25000, count: 1 } }
+    const under = { planBudget: { total: 40000, count: 1 } }
+
+    it('has one polite status, visually hidden, that says so when the plan is over and is empty when it is not', () => {
+      const { rerender } = ready(under)
+      const region = screen.getByRole('status')
+      expect(region.textContent).toBe('')
+
+      rerender(<BudgetBar status="ready" budget={budget()} {...over} />)
+      expect(screen.getByRole('status')).toHaveTextContent('Over the plan budget.')
+      expect(screen.getByRole('status').querySelector('p')).toHaveClass('sr-only')
+      expect(screen.getAllByRole('status')).toHaveLength(1)
+    })
+
+    it('says it when it crosses, and says nothing new while the amount over changes, so it does not speak on every recalculation', () => {
+      const { rerender } = ready(under)
+      rerender(<BudgetBar status="ready" budget={budget()} {...over} />)
+      const sentence = screen.getByRole('status').textContent
+
+      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 20000, count: 1 }} />)    // more over: the figure in the bar moves, the announcement does not
+      expect(screen.getByRole('status').textContent).toBe(sentence)
+      expect(screen.getByRole('status').textContent).not.toMatch(/\$|\d/)
+    })
+
+    it('puts the status in the page empty before it is filled, so that the change is announced', () => {
+      const { rerender } = ready(under)
+      const region = screen.getByRole('status')
+      expect(region.textContent).toBe('')
+
+      rerender(<BudgetBar status="ready" budget={budget()} {...over} />)
+      expect(screen.getByRole('status')).toBe(region)             // the same node: filled in place, not inserted already holding its text
+      expect(region).toHaveTextContent('Over the plan budget.')
+    })
+  })
+
+  // Design review D3: the amber cell said "You can still save the draft" while the Callout said the plan cannot be saved and Save draft was off.
+  it('does not say the draft can still be saved while a block is refused', () => {
+    const { rerender } = ready({ planBudget: { total: 25000, count: 1 } })
+    expect(screen.getByText(/Over the plan budget by/)).toHaveTextContent('You can still save the draft.')
+
+    rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 25000, count: 1 }} blocked />)
+    expect(screen.getByText(/Over the plan budget by \$5,610\.28/)).not.toHaveTextContent(/save the draft/)
   })
 
   it('shows the totals on their own, and says so, when no plan budget is recorded or it could not be read', () => {
@@ -132,7 +178,8 @@ describe('BudgetBar', () => {
     render(<BudgetBar status="loading" planBudget={null} />)
 
     expect(screen.getByRole('region', { name: 'Running budget' })).toHaveAttribute('aria-busy', 'true')
-    expect(screen.getByRole('status')).toHaveTextContent('Pricing the plan…')
+    expect(screen.getAllByText('Pricing the plan…')).toHaveLength(2)                 // the one line, and the details; aria-busy says it to a screen reader
+    expect(screen.getByRole('status').textContent).toBe('')                            // nothing is announced by it: a status that is inserted holding its text is not reliably spoken
     expect(screen.queryByText('$0.00')).not.toBeInTheDocument()
   })
 
@@ -161,7 +208,7 @@ describe('BudgetBar', () => {
     it('says Not saved on the one-line form with a Save that saves, named by its own visible word so it is not the save row\'s Save draft', async () => {
       const user = userEvent.setup()
       const onSave = vi.fn()
-      ready({ unsaved: { onSave, saving: false, blocked: false } })
+      ready({ unsaved: { onSave, saving: false } })
 
       const line = screen.getByText('8 h · $588.64 a week · $30,610.28 in all').parentElement as HTMLElement
       expect(within(line).getByText('Not saved')).toBeInTheDocument()
@@ -170,10 +217,10 @@ describe('BudgetBar', () => {
     })
 
     it('holds Save back while it saves, and when the plan cannot be saved as it is', () => {
-      const { rerender } = ready({ unsaved: { onSave: vi.fn(), saving: true, blocked: false } })
+      const { rerender } = ready({ unsaved: { onSave: vi.fn(), saving: true } })
       expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled()
 
-      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} unsaved={{ onSave: vi.fn(), saving: false, blocked: true }} />)
+      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} unsaved={{ onSave: vi.fn(), saving: false }} blocked />)
       expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
     })
 

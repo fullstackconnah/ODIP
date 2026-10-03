@@ -15,7 +15,7 @@ import { formGrid, span } from '@/lib/formGrid'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
 import { SUPPORT_LABEL, blockProblems, normaliseBlock, stampLocation } from '@/lib/planBlocks'
-import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, REASON_COPY, conflictVersionOf, describeSaveError, friendlyMessage, isPricingDate, type SaveFailure } from '@/lib/planQuote'
+import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, conflictVersionOf, describeSaveError, friendlyMessage, isPricingDate, type SaveFailure } from '@/lib/planQuote'
 import { PlanBuilder } from './plan-builder/PlanBuilder'
 import { RevisionCard } from './plan-builder/RevisionCard'
 
@@ -164,8 +164,10 @@ function DraftPage() {
     setBaseline(null)
   }
 
-  const saveRow = ({ refused }: { refused: readonly PlanIssue[] }) => canEdit ? (
-    <div className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-3">
+  // What the last save said when it did not go through. It is drawn with the budget bar (PlanBuilder's `saveNotice`), which is docked in the overview and through every step of a block: the bar's Save
+  // can be pressed from the stepper, where the save row below is not, and a Save from there that met a refusal, a conflict or a failure used to go back to "Save" without a word.
+  const saveNotice = canEdit ? (
+    <>
       {problems.length > 0 && (
         <Callout tone="warning" className="max-w-prose" title="Fix these before saving">
           <ul className="list-disc pl-5">{problems.map(problem => <li key={problem}>{problem}</li>)}</ul>
@@ -185,22 +187,23 @@ function DraftPage() {
           </span>
         </Callout>
       )}
+    </>
+  ) : null
+
+  const saveRow = ({ refused }: { refused: readonly PlanIssue[] }) => canEdit ? (
+    <div className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-3">
       {refused.length > 0 && (() => {
-        // Names the blocks by their places and says what to do, not who found the fault: the reasons' own advice when they are one reason, else where to look.
+        // Names the blocks by their places: what to do is on each block's own row, with the step that does it, so it is not said twice.
         const places = [...new Set(refused.map(issue => plan.findIndex(entry => entry.block.id === issue.blockId)).filter(at => at >= 0))].sort((a, b) => a - b).map(at => at + 1)
-        const advice = [...new Set(refused.map(issue => REASON_COPY[issue.reason]?.advice))]
         return (
-          <Callout tone="error" className="max-w-prose" title={places.length > 0 ? `${blocksNamed(places)} cannot be priced yet` : 'This plan cannot be priced yet'}>
-            <span className="block">The plan cannot be saved until {places.length > 1 ? 'they can' : 'it can'} be.</span>
-            <span className="mt-1 block">{advice.length === 1 && advice[0] ? advice[0] : 'Each one is marked above with what to do about it.'}</span>
+          <Callout tone="error" className="max-w-prose">
+            {places.length > 0 ? `${blocksNamed(places)} cannot be priced yet, so the plan cannot be saved.` : 'This plan cannot be priced yet, so it cannot be saved.'}
           </Callout>
         )
       })()}
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={save} disabled={create.isPending || refused.length > 0}>{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}{create.isPending ? 'Saving draft…' : 'Save draft'}</Button>
-        <p role="status" className="text-sm text-[var(--color-muted-foreground)]">
-          {savedVersion !== null ? `Saved as version ${savedVersion}. ` : dirty ? 'You have unsaved changes. ' : ''}Every save is a new version: earlier versions never change.
-        </p>
+        <p className="text-sm text-[var(--color-muted-foreground)]">{dirty ? 'You have unsaved changes. ' : ''}Every save is a new version: earlier versions never change.</p>
       </div>
     </div>
   ) : null
@@ -275,6 +278,8 @@ function DraftPage() {
       footer={saveRow}
       onBuildingChange={setBuilding}
       unsaved={canEdit && dirty ? { onSave: save, saving: create.isPending } : undefined}
+      saveNotice={saveNotice}
+      savedNote={canEdit && savedVersion !== null ? `Saved as version ${savedVersion}.` : null}
     />
 
     <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] flex flex-col gap-[var(--section-gap)]">

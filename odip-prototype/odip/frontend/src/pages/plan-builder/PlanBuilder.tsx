@@ -60,6 +60,13 @@ type PlanBuilderProps = {
    * save or nobody to save it.
    */
   unsaved?: { onSave: () => void; saving: boolean }
+  /**
+   * What the last save said when it did not go through (the problems found, the server's refusal, a newer version somebody else made), and what it said when it did ("Saved as version 3."). They
+   * are drawn with the budget bar, which is docked in the overview and through every step of a block: the bar's Save can be pressed from the stepper, where the save row is not, and the answer has to be where
+   * the person is looking.
+   */
+  saveNotice?: ReactNode
+  savedNote?: string | null
 }
 
 /**
@@ -67,7 +74,7 @@ type PlanBuilderProps = {
  * block being added or changed; the plan itself is the page's, and changes by whole blocks. The figures are the pricing engine's, asked for when the person pauses, for the plan as it
  * would be saved (the block being changed stands in for its saved self, and a block that is not complete yet is left out and said to be).
  */
-export function PlanBuilder({ participantId, state, zone, from, to, entries, onChange, readOnly = false, readOnlyNote, footer, onBuildingChange, unsaved }: PlanBuilderProps) {
+export function PlanBuilder({ participantId, state, zone, from, to, entries, onChange, readOnly = false, readOnlyNote, footer, onBuildingChange, unsaved, saveNotice, savedNote }: PlanBuilderProps) {
   const [session, setSession] = useState<Session | null>(null)
   const building = session !== null && session.hasBlock && JSON.stringify(session.entry) !== session.began
   useEffect(() => { onBuildingChange?.(building) }, [building, onBuildingChange])
@@ -221,7 +228,10 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
           planBudget={planBudget}
           planBudgetUnreadable={funding.isError}
           incompleteBlocks={blocksNow.incomplete}
-          unsaved={unsaved ? { ...unsaved, blocked: refusals(planIssues).length > 0 } : undefined}
+          blocked={refusals(planIssues).length > 0}
+          unsaved={unsaved}
+          notice={saveNotice}
+          saved={savedNote}
         />
       )}
 
