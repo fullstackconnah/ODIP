@@ -176,6 +176,46 @@ describe('Plan pricing settings', () => {
   })
 })
 
+// Design review 10: ticking a group made the footer say "Unsaved changes" beside a disabled Save settings, while the button that saves a group is a screen higher.
+describe('Plan pricing settings: two ways to save, and which one has something to save', () => {
+  it('says Unsaved changes to the groups beside their own button, and points there from the footer, when only a group was ticked', async () => {
+    const user = userEvent.setup()
+    setUp()
+
+    await user.click(screen.getByRole('checkbox', { name: /0136/ }))
+
+    const groupsButton = screen.getByRole('button', { name: 'Save groups' })
+    expect(groupsButton).toBeEnabled()
+    expect(groupsButton.parentElement).toHaveTextContent('Unsaved changes to the groups')
+    expect(screen.getByRole('button', { name: 'Save settings' })).toBeDisabled()
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument()                           // the footer's own words are for the settings below
+    expect(screen.getByText('The registration groups are saved with their own button, above.')).toBeInTheDocument()
+  })
+
+  it('says Unsaved changes in the footer for a setting, and not beside the groups, which have nothing to save', async () => {
+    const user = userEvent.setup()
+    setUp()
+
+    await user.click(screen.getByRole('radio', { name: 'B: higher of' }))
+
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
+    expect(screen.queryByText('Unsaved changes to the groups')).not.toBeInTheDocument()
+    expect(screen.queryByText(/saved with their own button/)).not.toBeInTheDocument()
+  })
+
+  it('says both when both have something to save, and the footer does not send anyone to the groups for what it can save itself', async () => {
+    const user = userEvent.setup()
+    setUp()
+
+    await user.click(screen.getByRole('checkbox', { name: /0136/ }))
+    await user.click(screen.getByRole('radio', { name: 'B: higher of' }))
+
+    expect(screen.getByText('Unsaved changes to the groups')).toBeInTheDocument()
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
+    expect(screen.queryByText(/saved with their own button/)).not.toBeInTheDocument()
+  })
+})
+
 describe('Plan pricing settings while they load', () => {
   it('says it is loading, and says when it could not load, with a way to try again', async () => {
     const user = userEvent.setup()
@@ -191,5 +231,23 @@ describe('Plan pricing settings while they load', () => {
     expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this plan pricing tab")
     await user.click(screen.getByRole('button', { name: 'Try again' }))
     expect(refetch).toHaveBeenCalled()
+  })
+
+  // Review F20: a SuperAdmin with no organisation chosen is told so by the server (a 400); the tab said only that it could not load, and Try again could not fix it.
+  it("shows the server's sentence when it says what to do (choose an organisation to view as), and offers no Try again for it", () => {
+    query.current = { data: undefined, isLoading: false, isError: true, refetch: vi.fn(), error: { response: { status: 400, data: { success: false, message: 'Choose an organisation to view as before using the plan pricing engine: its settings belong to one organisation.' } } } }
+    render(<RouterProvider router={createMemoryRouter([{ path: '/settings', element: <PlanPricingSettingsTab /> }], { initialEntries: ['/settings'] })} />)
+
+    expect(screen.getByText('Choose an organisation to view as before using the plan pricing engine: its settings belong to one organisation.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Couldn't load/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the plain failure, with its Try again, for anything else that goes wrong', () => {
+    query.current = { data: undefined, isLoading: false, isError: true, refetch: vi.fn(), error: { response: { status: 500, data: { message: 'Boom' } } } }
+    render(<RouterProvider router={createMemoryRouter([{ path: '/settings', element: <PlanPricingSettingsTab /> }], { initialEntries: ['/settings'] })} />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this plan pricing tab")
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
 })

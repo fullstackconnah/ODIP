@@ -11,6 +11,7 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { formGrid, span } from '@/lib/formGrid'
 import { REGISTRATION_GROUP_NAME } from '@/lib/planBlocks'
+import { apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { extractErrorMessage } from '@/lib/utils'
 import { NumberField } from '@/pages/plan-builder/NumberField'
 
@@ -88,11 +89,17 @@ export default function PlanPricingSettingsTab() {
   const heldNow = groups ?? settings?.registrationGroupsHeld ?? []
   const changes = settings && current ? changesOf(settings, current) : {}
   const groupsChanged = settings ? !sameList(heldNow, settings.registrationGroupsHeld) : false
-  const dirty = Object.keys(changes).length > 0 || groupsChanged
+  const settingsChanged = Object.keys(changes).length > 0
+  // Leaving the page loses either, so either asks first; but the groups are saved by their own button and the rest by Save settings, so each says which of them has something to save.
+  const dirty = settingsChanged || groupsChanged
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(dirty)
 
   if (query.isLoading) return <PageState kind="loading" noun="plan pricing tab" />
-  if (!settings || !current) return <PageState kind="error" noun="plan pricing tab" onRetry={() => { void query.refetch() }} />
+  if (!settings || !current) {
+    // A SuperAdmin who has not chosen an organisation to view as is told so by the server (a 400): that is an instruction, not a failure, and Try again cannot fix it.
+    const told = apiErrorStatus(query.error) === 400 ? extractErrorMessage(query.error, '') : ''
+    return told ? <Callout tone="info" className="max-w-prose">{told}</Callout> : <PageState kind="error" noun="plan pricing tab" onRetry={() => { void query.refetch() }} />
+  }
 
   const edit = (patch: Partial<Form>) => { setForm({ ...current, ...patch }); setMessage(null) }
   const toggleGroup = (code: string) => { setGroups(heldNow.includes(code) ? heldNow.filter(held => held !== code) : ALL_GROUPS.filter(group => heldNow.includes(group) || group === code)); setMessage(null) }
@@ -110,7 +117,7 @@ export default function PlanPricingSettingsTab() {
   return (
     <div className="flex max-w-3xl flex-col gap-[var(--section-gap)]">
       {unsavedChangesDialog}
-      {settings.isDefault && <Callout tone="info">Nothing has been saved yet: these are the defaults the plan builder assumes. Confirm the registration groups below, then check the rest.</Callout>}
+      {settings.isDefault && <Callout tone="info" className="max-w-prose">Nothing has been saved yet: these are the defaults the plan builder assumes. Confirm the registration groups below, then check the rest.</Callout>}
 
       <section className="flex flex-col gap-[var(--field-gap-y)]" aria-labelledby="pricing-groups-heading">
         <div className="flex flex-wrap items-center gap-2">
@@ -124,8 +131,9 @@ export default function PlanPricingSettingsTab() {
           ))}
         </div>
         {heldNow.length === 0 && <p role="alert" className="text-sm text-[var(--color-destructive)]">With no registration group, nothing can be priced.</p>}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Button onClick={confirmGroups} disabled={update.isPending || (settings.registrationGroupsConfirmed && !groupsChanged)}>{settings.registrationGroupsConfirmed ? 'Save groups' : 'Confirm these groups'}</Button>
+          {groupsChanged && <span className="text-[13px] text-[var(--color-muted-foreground)]">Unsaved changes to the groups</span>}
         </div>
       </section>
 
@@ -170,10 +178,11 @@ export default function PlanPricingSettingsTab() {
         <p className="text-[13px] text-[var(--color-muted-foreground)]">Approval itself arrives with the next release; this is saved for it.</p>
       </section>
 
-      {message && <Callout tone={message.tone}>{message.text}</Callout>}
+      {message && <Callout tone={message.tone} className="max-w-prose">{message.text}</Callout>}
       <div className="flex items-center gap-3">
         <Button onClick={save} disabled={!canSave}>{update.isPending ? 'Saving...' : 'Save settings'}</Button>
-        {dirty && <span className="text-[13px] text-[var(--color-muted-foreground)]">Unsaved changes</span>}
+        {settingsChanged && <span className="text-[13px] text-[var(--color-muted-foreground)]">Unsaved changes</span>}
+        {groupsChanged && !settingsChanged && <span className="text-[13px] text-[var(--color-muted-foreground)]">The registration groups are saved with their own button, above.</span>}
       </div>
     </div>
   )
