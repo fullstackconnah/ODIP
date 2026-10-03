@@ -119,7 +119,7 @@ public sealed class DemoDataPostgresFixture : IAsyncLifetime
     }
 }
 
-public class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixture>
+public partial class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixture>
 {
     private readonly DemoDataPostgresFixture _pg;
 
@@ -289,7 +289,7 @@ public class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixture>
     // ── T8 ───────────────────────────────────────────────────────────────────
 
     [SkippableFact]
-    public async Task Postgres_T8_TheFirstTickIsWithinFifteenSeconds_AndAnIdleTickIsUnder500msAndFortyQueries()
+    public async Task Postgres_T8_TheFirstTickIsWithinFifteenSeconds_AndAnIdleTickIsUnder500msAndAHundredQueries()
     {
         Require();
         // Pooled, as production runs (review L5): unpooled, every one of an idle tick's dozen queries opens and authenticates a connection of
@@ -318,7 +318,11 @@ public class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixture>
 
             Assert.Equal(DemoTickStatus.Ran, result.Status);
             Assert.Equal(0, result.RowsAdded.Values.Sum() + result.RowsChanged.Values.Sum());
-            Assert.True(env.Counter.Count <= 40, $"idle tick {i + 1} sent {env.Counter.Count} commands (budget 40)");
+            // The plan's 40 was for the roster packs of PR 1 (about 22 queries). PR 2's live set, medication chart, shift package and incidents add about 56
+            // (78 in all, counted on EF InMemory by DemoIdleTickTests, which also proves the number does not grow as the demo ages), and a server sends a few
+            // more (the advisory lock). So the budget is a hundred, which leaves about twenty of headroom: a tripwire for a query that runs per row, not a design
+            // limit. The 500 ms below is the one that matters, and it is unchanged.
+            Assert.True(env.Counter.Count <= 100, $"idle tick {i + 1} sent {env.Counter.Count} commands (budget 100)");
             millis.Add(idle.ElapsedMilliseconds);
         }
 

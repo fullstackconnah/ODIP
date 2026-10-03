@@ -1,0 +1,354 @@
+using Microsoft.EntityFrameworkCore;
+using Odip.Domain.Entities;
+using Odip.Domain.Enums;
+using Odip.Domain.Medications;
+using Odip.Domain.Rostering;
+
+namespace Odip.Infrastructure.DemoData.Packs;
+
+/// <summary>
+/// The medication chart's history (plan 3a, 1b rows 24 to 26): for the last seven days and today, every scheduled dose of the story participants'
+/// active medications has a record, written as its time passes (so a first run fills the week at once and every later tick adds what has come
+/// due, and a host that was off catches up with the same rows). A record is a function of its slot (<see cref="PackageRows.DoseId"/>), so it is
+/// found again whatever its values have become, and a slot that already has an active record, whoever wrote it (the old seed's aged rows, a worker,
+/// the live set), is never given a second.
+///
+/// What the records say: out of every thousand slots about 871 were given a little after their time, 50 refused, 36 withheld and 43 missed (the
+/// plan's proportions of about 140: 118 / 7 / 5 / 6), a third of the missed ones were later given and the missed record is kept as history linked to
+/// the one that replaced it, and one in sixty was recorded by somebody whose competency is not current (Emily has none, Priya's lapsed): the flagged
+/// records. A high-risk dose has a staff witness who answers the next morning (<see cref="WitnessAnswers"/>), its task open until then. As-needed
+/// medications are given on about a third of the days, outcome recorded on three in four, the rest left for the viewer to notice. One record is
+/// the plan's wrong-medication story (Mia given the wrong strength of sertraline on the day before the first run, which the incident story files
+/// from). Slots inside a live shift's window on the two days the live set works are left to it: those are its stories, with the dose that is due,
+/// overdue or about to be.
+///
+/// Time (plan 2.0): slots are provider-local wall-clock values, every instant on a record is the one conversion of a local time, and "today" is
+/// the provider's date, so the week is the same in Sydney, Brisbane and Adelaide and across both clock changes.
+/// </summary>
+public sealed class MedicationHistoryPack : IDemoPack
+{
+    public string Name => "medication-history";
+
+    private const int HistoryDays = 7;
+    private const int GraceMinutes = 2;
+
+    // Per thousand slots (plan 3a: of about 140, 7 refused, 5 withheld, 6 missed).
+    private const int RefusedBelow = 50;
+    private const int WithheldBelow = 86;
+    private const int MissedBelow = 129;
+
+    private const int PrnDayPercent = 33;
+
+    private static readonly string[] CompetentRecorders = { "james", "brendan", "rachel", "marcus", "jade", "sarah", "daniel" };
+    private static readonly string[] Witnesses = { "james", "sarah", "rachel", "brendan", "marcus" };
+
+    private static readonly string[] RefusedReasons =
+    {
+        "Declined the dose at the time and again when it was offered later.",
+        "Said she felt sick and did not want it. Offered again after a snack and declined.",
+        "Was asleep and could not be woken properly. Offered again later and declined.",
+        "Did not want to take it today. Prompted twice, with a drink, and still declined.",
+    };
+
+    private static readonly string[] WithheldReasons =
+    {
+        "Held because of drowsiness on waking. The pharmacist's advice was followed and the family was told.",
+        "Withheld before the blood test this morning, as the prescriber's instructions say. Given at the next dose.",
+        "Held while a temperature was being watched. The on-call GP was phoned and agreed.",
+    };
+
+    private static readonly string[] MissedReasons =
+    {
+        "Away from home on a community outing at the scheduled time and the pack was left behind.",
+        "The pharmacy delivery was late, so there was no pack to give from.",
+        "Nobody was on shift for this participant at the scheduled time. Noticed at the next handover.",
+    };
+
+    private static readonly string[] PrnOutcomes =
+    {
+        "Settled within the hour with rest and a drink.",
+        "Eased after about 45 minutes. No further dose needed.",
+        "Some relief; rested quietly for the afternoon.",
+        "Settled. Checked again at the end of the shift and no further concerns.",
+    };
+
+    public async Task RunAsync(DemoRun run, CancellationToken ct)
+    {
+        var anchors = run.Anchors;
+        var participantIds = run.Directory.AllParticipants.Where(p => p.Key.Length > 0 && p.IsActive && !p.IsDraft).Select(p => p.Id).ToList();
+        if (participantIds.Count == 0) return;
+
+        var chart = await DemoQueries.ActiveMedicationsOf(run.Db, participantIds).ToListAsync(ct);
+        if (chart.Count == 0) return;
+
+        var staff = await run.FreshStaffAsync(ct);
+        var firstDay = anchors.D0.AddDays(-HistoryDays);
+        var from = PackageRows.Local(firstDay, TimeOnly.MinValue);
+        var to = PackageRows.Local(anchors.D0.AddDays(1), TimeOnly.MinValue);
+
+        var recorded = (await DemoQueries.SlotsRecorded(run.Db, chart.Select(m => m.Id).ToList(), from, to).ToListAsync(ct))
+            .Select(s => (s.MedicationId, s.ScheduledAt)).ToHashSet();
+        var live = await LiveWindowsAsync(run, staff, ct);
+
+        var doses = new List<(MedicationAdministration Dose, ParticipantMedication Med, User Recorder, bool Witnessed)>();
+        void Add(MedicationAdministration dose, ParticipantMedication med, User recorder, bool witnessed) => doses.Add((dose, med, recorder, witnessed));
+
+        // The wrong-medication story, once: Mia's sertraline slot on the day before the first run (while that day is still in the week).
+        WrongMedication(run, chart, staff, recorded, from, to, Add);
+
+        foreach (var med in chart.Where(m => m.Type == MedicationType.Regular))
+        {
+            foreach (var slot in MedicationSlotCalculator.EnumerateSlots(med, from, to))
+            {
+                if (recorded.Contains((med.Id, slot))) continue;
+                if (live.Any(w => w.OwnsSlots && w.Participant == med.ParticipantId && slot >= w.Start && slot < w.End)) continue;
+                ScheduledDose(run, med, slot, staff, Add);
+            }
+        }
+
+        await PrnDosesAsync(run, chart, staff, firstDay, live, Add, ct);
+        if (doses.Count == 0)
+        {
+            await WitnessAnswers.RunAsync(run, ct);
+            return;
+        }
+
+        foreach (var (dose, med, recorder, witnessed) in doses)
+        {
+            run.Db.MedicationAdministrations.Add(dose);
+            run.StampAudit(dose.Id, dose.CreatedAt, recorder);
+            if (witnessed) run.Db.BookingTasks.Add(PackageRows.WitnessTask(run, med, dose, DateOnly.FromDateTime(ProviderLocal(run, dose.CreatedAt))));
+        }
+        await run.SaveAsync(ct);
+        run.Added("medication history doses", doses.Count);
+
+        await WitnessAnswers.RunAsync(run, ct);
+    }
+
+    private static DateTime ProviderLocal(DemoRun run, DateTime utc) => ProviderLocalTime.UtcToLocal(ProviderLocalTime.AsUtc(utc), run.Anchors.Zone);
+
+    /// <summary>True once the local time is at least two minutes past, on the provider's clock.</summary>
+    private static bool Due(DemoRun run, DateTime local) => run.Anchors.LocalToUtc(local).AddMinutes(GraceMinutes) <= run.Anchors.NowUtc;
+
+    // ── scheduled doses ──
+
+    private static void ScheduledDose(DemoRun run, ParticipantMedication med, DateTime slot, IReadOnlyDictionary<string, User> staff,
+        Action<MedicationAdministration, ParticipantMedication, User, bool> add)
+    {
+        var id = PackageRows.DoseId(med.Id, slot);
+        var date = DateOnly.FromDateTime(slot);
+        // A high-risk dose (insulin, warfarin) is always written as given, with its witness: the stories do not have it refused or missed.
+        var outcome = med.IsHighRisk ? 999 : DemoIds.Pick(id, "outcome", 0, 999);
+        var recorder = Recorder(staff, id, slot, med);
+        if (recorder is null) return;
+
+        if (outcome < MissedBelow)
+        {
+            var status = outcome < RefusedBelow ? MedicationAdministrationStatus.Refused
+                : outcome < WithheldBelow ? MedicationAdministrationStatus.Withheld : MedicationAdministrationStatus.Missed;
+            var recordedLocal = slot.AddMinutes(DemoIds.Pick(id, "recorded", 8, 45));
+            var reasons = status == MedicationAdministrationStatus.Refused ? RefusedReasons : status == MedicationAdministrationStatus.Withheld ? WithheldReasons : MissedReasons;
+            var reason = reasons[DemoIds.Pick(id, "reason", 0, reasons.Length - 1)];
+
+            // A missed dose is, a third of the time, given later once somebody notices: the later record replaces it and the missed one is kept as history.
+            if (status == MedicationAdministrationStatus.Missed && DemoIds.Pick(id, "later", 0, 2) == 0)
+            {
+                var lateGiven = slot.AddMinutes(DemoIds.Pick(id, "late-given", 150, 300));
+                var lateRecorded = lateGiven.AddMinutes(2);
+                if (!Due(run, lateRecorded)) return;                                         // both records appear together, once the later one is written
+
+                var lateId = DemoIds.For("administration", med.Id, slot, "late");
+                var later = PackageRows.Dose(run, med, slot, MedicationAdministrationStatus.Administered, recorder, lateGiven, lateRecorded,
+                    doseGiven: med.DoseDescription, notes: "Given late once the missed dose was noticed.", idOverride: lateId);
+                var missed = PackageRows.Dose(run, med, slot, MedicationAdministrationStatus.Missed, recorder, null, recordedLocal, reason: reason);
+                missed.SupersededByAdministrationId = later.Id;
+                missed.UpdatedAt = later.CreatedAt;
+                add(missed, med, recorder, false);
+                add(later, med, recorder, false);
+                return;
+            }
+
+            if (!Due(run, recordedLocal)) return;
+            add(PackageRows.Dose(run, med, slot, status, recorder, null, recordedLocal, reason: reason), med, recorder, false);
+            return;
+        }
+
+        var given = slot.AddMinutes(DemoIds.Pick(id, "given", 0, 25));
+        var recordedAt = given.AddMinutes(DemoIds.Pick(id, "recorded-after", 1, 3));
+        if (!Due(run, recordedAt)) return;
+
+        User? witness = null;
+        if (med.IsHighRisk)
+        {
+            witness = Witness(staff, recorder, id, date);
+            if (witness is null) return;                                                      // no colleague to witness it: the stories do not give it
+        }
+        var dose = PackageRows.Dose(run, med, slot, MedicationAdministrationStatus.Administered, recorder, given, recordedAt, doseGiven: med.DoseDescription, witness: witness);
+        add(dose, med, recorder, witness is not null);
+    }
+
+    /// <summary>
+    /// Who recorded a dose: one in sixty by somebody whose competency is not current (Emily or Priya), otherwise somebody whose is that day. The
+    /// worker is a function of the participant, the date and the part of the day (morning, afternoon, evening), as a shift would be, so one person
+    /// gives a participant's morning doses.
+    /// </summary>
+    private static User? Recorder(IReadOnlyDictionary<string, User> staff, Guid id, DateTime at, ParticipantMedication med)
+    {
+        var date = DateOnly.FromDateTime(at);
+        if (!med.IsHighRisk && DemoIds.Pick(id, "flagged-recorder", 0, 59) == 0)
+        {
+            var key = DemoIds.Pick(id, "flagged-who", 0, 1) == 0 ? "emily" : "priya";
+            if (staff.TryGetValue(key, out var flagged)) return flagged;
+        }
+
+        var pool = CompetentRecorders.Where(k => staff.TryGetValue(k, out var u) && MedicationCompetencyGate.Evaluate(u, date).IsCurrent).ToArray();
+        var part = at.Hour < 12 ? "morning" : at.Hour < 17 ? "afternoon" : "evening";
+        var shift = DemoIds.For("dose-shift", med.ParticipantId, date, part);
+        return pool.Length == 0 ? null : staff[pool[DemoIds.Pick(shift, "recorder", 0, pool.Length - 1)]];
+    }
+
+    private static User? Witness(IReadOnlyDictionary<string, User> staff, User recorder, Guid id, DateOnly date)
+    {
+        var pool = Witnesses.Where(k => staff.TryGetValue(k, out var u) && u.Id != recorder.Id && MedicationCompetencyGate.Evaluate(u, date).IsCurrent).ToArray();
+        return pool.Length == 0 ? null : staff[pool[DemoIds.Pick(id, "witness", 0, pool.Length - 1)]];
+    }
+
+    // ── the wrong-medication story ──
+
+    private static void WrongMedication(DemoRun run, List<ParticipantMedication> chart, IReadOnlyDictionary<string, User> staff,
+        HashSet<(Guid, DateTime)> recorded, DateTime from, DateTime to, Action<MedicationAdministration, ParticipantMedication, User, bool> add)
+    {
+        var med = chart.FirstOrDefault(m => m.Id == MedicationCatalog.MiaSertraline);
+        if (med is null || MedicationCatalog.FirstRunDay(chart) is not { } firstRun) return;
+        if (!staff.TryGetValue("daniel", out var daniel)) return;
+
+        var slot = PackageRows.Local(firstRun.AddDays(-1), new TimeOnly(8, 0));
+        if (slot < from || slot >= to || recorded.Contains((med.Id, slot))) return;           // out of the week by now, or already there
+
+        var given = slot.AddMinutes(9);
+        var recordedLocal = given.AddMinutes(3);
+        if (!Due(run, recordedLocal)) return;
+
+        const string notes = "A 100mg tablet was given from a pack meant for another person; Mia's prescribed dose is 50mg. "
+            + "The GP was phoned and advised watching her for drowsiness and nausea today, and an incident report was started.";
+        var dose = PackageRows.Dose(run, med, slot, MedicationAdministrationStatus.WrongMedication, daniel, given, recordedLocal,
+            doseGiven: "1 tablet (100mg), double the prescribed dose", notes: notes);
+        recorded.Add((med.Id, slot));
+        add(dose, med, daniel, false);
+    }
+
+    // ── as-needed doses ──
+
+    private async Task PrnDosesAsync(DemoRun run, List<ParticipantMedication> chart, IReadOnlyDictionary<string, User> staff, DateOnly firstDay,
+        List<LiveWindow> live, Action<MedicationAdministration, ParticipantMedication, User, bool> add, CancellationToken ct)
+    {
+        var anchors = run.Anchors;
+        var candidates = new List<(ParticipantMedication Med, DateOnly Date, DateTime Given, Guid Id)>();
+        foreach (var med in chart.Where(m => m.Type == MedicationType.Prn && !m.IsChemicalRestraint))
+        {
+            for (var date = firstDay; date <= anchors.D0; date = date.AddDays(1))
+            {
+                if (med.StartDate > PackageRows.Local(date, new TimeOnly(23, 59))) continue;
+                if (med.EndDate is { } end && end < PackageRows.Local(date, TimeOnly.MinValue)) continue;
+                if (live.Any(w => w.OwnsPrnDay && w.Participant == med.ParticipantId && DateOnly.FromDateTime(w.Start) == date)) continue;       // the live set's own day
+
+                var key = DemoIds.For("prn-day", med.Id, date);
+                if (DemoIds.Pick(key, "has-dose", 0, 99) >= PrnDayPercent) continue;
+
+                var given = PackageRows.Local(date, new TimeOnly(9, 0)).AddMinutes(DemoIds.Pick(key, "time", 0, 600));
+                candidates.Add((med, date, given, PackageRows.PrnDoseId(med.Id, given)));
+            }
+        }
+        if (candidates.Count == 0) return;
+
+        var existing = await run.ExistingIdsAsync<MedicationAdministration>(candidates.Select(c => c.Id), ct);
+        var due = candidates.Where(c => !existing.Contains(c.Id))
+            .Select(c => (c.Med, c.Date, c.Given, c.Id,
+                HasOutcome: DemoIds.Pick(c.Id, "has-outcome", 0, 99) < 75,
+                RecordedLocal: c.Given.AddMinutes(DemoIds.Pick(c.Id, "recorded-after", 1, 3)),
+                OutcomeLocal: c.Given.AddMinutes(DemoIds.Pick(c.Id, "outcome-after", 40, 120))))
+            .Where(c => Due(run, c.HasOutcome ? c.OutcomeLocal : c.RecordedLocal))               // a dose and its outcome appear together, once both are written
+            .ToList();
+        if (due.Count == 0) return;
+
+        // The doses of these medications already on the chart, whoever recorded them: the recorder refuses an as-needed dose that breaks the medication's minimum interval or its
+        // daily maximum beside them unless the worker acknowledges the breach, and a row of the top-up's carries no acknowledgement, so the history writes none that would
+        // (third independent review R4). The doses it writes itself count for the days after them. Asked for only once a dose is due, so a tick with nothing to write asks nothing.
+        var beside = (await DemoQueries.PrnGivenIn(run.Db, due.Select(c => c.Med.Id).Distinct().ToList(),
+                anchors.LocalToUtc(due.Min(c => c.Given)).AddHours(-24), anchors.LocalToUtc(due.Max(c => c.Given)).AddHours(24)).ToListAsync(ct))
+            .GroupBy(g => g.MedicationId).ToDictionary(g => g.Key, g => g.Select(x => x.AdministeredAt).ToList());
+
+        foreach (var (med, date, given, id, hasOutcome, recordedLocal, outcomeLocal) in due)
+        {
+            var recorder = Recorder(staff, id, given, med);
+            if (recorder is null) continue;
+            if (!beside.TryGetValue(med.Id, out var doses)) beside[med.Id] = doses = new List<DateTime>();
+            if (PrnLimits.WouldBreach(med, anchors.LocalToUtc(given), doses)) continue;
+            doses.Add(anchors.LocalToUtc(given));
+            var reason = PrnReasonFor(med, id);
+            var dose = PackageRows.Dose(run, med, null, MedicationAdministrationStatus.Administered, recorder, given, recordedLocal,
+                doseGiven: med.DoseDescription, prnReason: reason);
+            if (hasOutcome) PackageRows.PrnOutcome(run, dose, PrnOutcomes[DemoIds.Pick(id, "outcome", 0, PrnOutcomes.Length - 1)], outcomeLocal);
+            add(dose, med, recorder, false);
+        }
+    }
+
+    private static string PrnReasonFor(ParticipantMedication med, Guid id)
+    {
+        var options = med.Name switch
+        {
+            "Paracetamol" => new[] { "Headache after a busy morning", "Sore back after the long walk", "Feeling hot and unwell this afternoon" },
+            "Ibuprofen" => new[] { "Aching knee after the stairs", "Sore shoulder after the gym session", "Joint pain after sitting for a long time" },
+            "Salbutamol" => new[] { "Wheeze after the morning walk", "Short of breath after the stairs" },
+            _ => new[] { med.PrnIndication ?? "As needed" },
+        };
+        return options[DemoIds.Pick(id, "prn-reason", 0, options.Length - 1)];
+    }
+
+    // ── the live set's windows ──
+
+    /// <summary>
+    /// One live shift's window on a participant's day. The scheduled slots inside it are the live set's while it works the shift or has (<see cref="OwnsSlots"/>); the
+    /// day's as-needed dose is its too once the shift has been worked at all, whoever has it now (<see cref="OwnsPrnDay"/>): a shift that was worked and then given to
+    /// somebody else keeps its day, because its as-needed dose is already written and a second one could fall inside the minimum interval. A shift somebody took over
+    /// (<see cref="LiveSetCatalog.TakenOver(LiveStory, DateOnly, DemoQueries.ShiftState)"/>) and did not finish keeps its window only until the window is over.
+    /// </summary>
+    private sealed record LiveWindow(Guid Participant, DateTime Start, DateTime End, bool OwnsSlots, bool OwnsPrnDay);
+
+    private static async Task<List<LiveWindow>> LiveWindowsAsync(DemoRun run, IReadOnlyDictionary<string, User> staff, CancellationToken ct)
+    {
+        // Every day of the history window, not only the two the live set builds: a live shift of three days ago still owns its day (its as-needed dose,
+        // its closing doses), and a history dose written beside them could fall inside the minimum interval of one.
+        var anchors = run.Anchors;
+        var dates = Enumerable.Range(0, HistoryDays + 1).Select(i => anchors.D0.AddDays(-i)).ToArray();
+
+        // A window is the live set's only while its shift is being worked: one the owner cancelled, or that was never published, is nobody's, and so is a shift
+        // that has not been worked and has nobody on it or somebody the stories do not name, which the live set leaves alone; counting any of them would leave the
+        // day's doses unrecorded for good (PR 2 review L2, independent review N1). A shift that HAS been worked (finished, waiting for review or approved) keeps its
+        // window whoever has it now, and so does an in-progress one for the as-needed dose, though not for the slots that remain, which nobody will record
+        // (second independent review X4). The window is the shift's own participant's (Y4), whatever the story says.
+        var workers = staff.Values.Select(u => u.Id).ToHashSet();
+        var states = (await DemoQueries.ShiftStatesOf(run.Db, LiveSetCatalog.ShiftIds(dates).ToList()).ToListAsync(ct)).ToDictionary(s => s.Id);
+
+        var windows = new List<LiveWindow>();
+        foreach (var date in dates)
+        {
+            foreach (var story in LiveSetCatalog.Stories)
+            {
+                if (!states.TryGetValue(LiveSetCatalog.ShiftId(story, date), out var state) || state.Status is ShiftStatus.Cancelled or ShiftStatus.Draft) continue;
+                var finished = state.Status is ShiftStatus.PendingReview or ShiftStatus.Completed;
+                // A shift somebody took over (started by hand, or moved) is not the live set's to work, so while its window runs the doses are the person's to record; once the
+                // window and the close-out buffer have passed with the shift unfinished the window is nobody's, and the history writes it like any other day (third independent
+                // review R1, R2). A returned shift keeps its window: the script worked it, and wrote its doses, before it was returned.
+                if (!finished && state.ReturnCount == 0 && LiveSetCatalog.TakenOver(story, date, state)
+                    && PackageRows.Local(date, story.End).AddMinutes(ShiftLifecycle.CloseOutBufferMinutes) <= anchors.NowLocal) continue;
+                var scripted = state.UserId is { } worker && workers.Contains(worker);                      // the live set works it (or did)
+                var ownsSlots = finished || scripted;
+                var ownsPrnDay = ownsSlots || state.Status == ShiftStatus.InProgress;
+                if (!ownsSlots && !ownsPrnDay) continue;
+                windows.Add(new LiveWindow(state.ParticipantId, PackageRows.Local(date, story.Start), PackageRows.Local(date, story.End), ownsSlots, ownsPrnDay));
+            }
+        }
+        return windows;
+    }
+}

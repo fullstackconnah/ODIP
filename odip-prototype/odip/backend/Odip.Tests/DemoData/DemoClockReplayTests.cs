@@ -84,8 +84,17 @@ public class DemoClockReplayTests
             var (start, end) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, completion.TimeZoneId);
             Assert.Equal(anchors.Provider.Id, completion.TimeZoneId);
             Assert.Equal(ShiftVarianceCalculator.VarianceMinutes(completion.ActualStart, start), completion.VarianceMinutesStart);
-            Assert.Equal(ShiftVarianceCalculator.VarianceMinutes(completion.ActualEnd!.Value, end), completion.VarianceMinutesEnd);
-            Assert.True(completion.SubmittedAt <= anchors.NowUtc, $"{where}: a completion is in the future");
+            Assert.True(completion.StartedAt <= anchors.NowUtc, $"{where}: a completion started in the future");
+            if (completion.ActualEnd is { } actualEnd)
+            {
+                Assert.Equal(ShiftVarianceCalculator.VarianceMinutes(actualEnd, end), completion.VarianceMinutesEnd);
+                Assert.True(completion.SubmittedAt <= anchors.NowUtc, $"{where}: a completion is in the future");
+            }
+            else
+            {
+                Assert.Null(completion.SubmittedAt);                           // a shift in progress (the live set): not finished, so nothing of the end yet
+                Assert.Equal(ShiftStatus.InProgress, byShift[completion.ShiftId].Status);
+            }
         }
 
         // The pending queue always has somebody waiting, and only for dates still ahead.
@@ -191,10 +200,52 @@ public class DemoClockReplayTests
             previousUtc = utc;
         }
 
-        // About a day's worth of rows a day: well under a hundred (the plan expects about forty, three times that with audit history).
+        // About a day's worth of rows a day: well under a hundred (the plan expects about forty, three times that with audit history). This is an average
+        // over gaps of one to a hundred days, each long gap capped by the fixed windows, so it cannot see the steady state: the day-by-day test below does.
         var totalDays = growth.Sum(g => g.Days);
         var totalRows = growth.Sum(g => g.Rows);
         Assert.True(totalRows / totalDays < 100, $"{totalRows} rows added over {totalDays:0} days is {totalRows / totalDays:0.0} a day");
-        Assert.All(growth, g => Assert.True(g.Rows < 800, $"one tick added {g.Rows} rows"));
+        // A tick after a gap of a month or more builds every history window at once (four weeks of the shift package, a week of medication), the live
+        // days and the roster weeks ahead, audit rows included: the biggest possible tick, about 1,100 rows here, so under 1,500.
+        Assert.All(growth, g => Assert.True(g.Rows < 1500, $"one tick added {g.Rows} rows"));
+    }
+
+    /// <summary>
+    /// PR 2 review L5: the check above averages over gaps of one to a hundred days, and a long gap is capped by the fixed windows (a tick after a gap builds
+    /// every window at once), so a steady growth several times too high could still pass it. This is the steady state itself: one tick a day, for four weeks
+    /// after the windows are built, with the growth read day by day (every table, the audit history included) so a pack that adds more each day than it
+    /// should shows at once.
+    /// </summary>
+    [Fact]
+    public async Task T2_OnConsecutiveDays_TheDatabaseGrowsByADaysRows_AndNoDayAddsMoreThanABoundedNumber()
+    {
+        var first = new DateTimeOffset(2026, 10, 2, 0, 30, 0, TimeSpan.Zero);                                   // Fri 10:30 AEST; the clocks go forward on the Sunday
+        var env = new DemoTestEnv(first);
+        await DemoFixture.SeedPeopleAsync(env);
+        await env.SetProviderStateAsync("NSW");
+        var perDay = new List<(DateTimeOffset Day, int Rows)>();
+        DemoSnapshot? previous = null;
+
+        for (var day = 0; day <= 7 + 28; day++)                                                                  // a week for the windows to fill, then four weeks
+        {
+            var utc = first.AddDays(day);
+            env.Clock.Set(utc);
+            var result = await env.Maintainer(DemoPacks.Default()).RunAsync(env.Options, CancellationToken.None);
+            Assert.True(result.Status == DemoTickStatus.Ran && result.Failures.Count == 0, $"day {day}: {result.Status} " + string.Join("; ", result.Failures.Select(f => f.Pack + ": " + f.Message)));
+
+            DemoSnapshot now;
+            await using (var db = env.AdminDb()) now = DemoSnapshot.Take(db);
+            if (previous is not null) perDay.Add((utc, previous.Diff(now).Count(c => c.Kind == "added")));
+            previous = now;
+        }
+
+        // Measured on this fixture (PR 2 fix round 1): 105 to 182 rows a day, 127 on average, the high days being the day a new roster week comes into the
+        // window. That is about 46 thousand rows a year with AuditLogs, about half of them audit history (R13: decide the retention sweep within the year). The
+        // bounds are the measurement with room: a pack that adds a day's rows twice, or a window that no longer closes, breaks one of them.
+        var steady = perDay.Skip(7).ToList();                                                                    // after the windows are built
+        var description = "per day: " + string.Join(" ", perDay.Select(d => d.Rows));
+        Assert.InRange(steady.Average(d => d.Rows), 60, 160);                                                    // and not zero: the check has to see the growth it bounds
+        Assert.True(steady.All(d => d.Rows < 250), description);
+        Assert.True(steady.Count(d => d.Rows < 30) == 0, description);                                           // every day adds something (the live set alone writes a day's rows)
     }
 }

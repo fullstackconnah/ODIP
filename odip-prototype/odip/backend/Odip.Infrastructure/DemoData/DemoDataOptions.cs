@@ -12,12 +12,15 @@ public enum DemoScenarioMode { Off, On }
 /// (<see cref="FirstRunDelaySecondsKey"/> to 0-3600, <see cref="IntervalMinutesKey"/> to 1-1440): Task.Delay throws above about 49.7 days,
 /// and a hosted service that throws stops the host, so a typo in a knob must never be able to take the API down. Anything that is not a
 /// whole number falls back to the default.
+///
+/// <c>DemoData:Packs</c> is an allow-list of pack names (see <see cref="Packs"/>): empty, the default, is every pack, so nothing changes until it is set.
 /// </summary>
 public sealed class DemoDataOptions
 {
     public const string ScenariosKey = "DemoData:Scenarios";
     public const string FirstRunDelaySecondsKey = "DemoData:FirstRunDelaySeconds";
     public const string IntervalMinutesKey = "DemoData:IntervalMinutes";
+    public const string PacksKey = "DemoData:Packs";
 
     public const int MinFirstRunDelaySeconds = 0;
     public const int MaxFirstRunDelaySeconds = 3600;
@@ -34,13 +37,48 @@ public sealed class DemoDataOptions
 
     public bool Enabled => Scenarios == DemoScenarioMode.On;
 
+    /// <summary>
+    /// <c>DemoData:Packs</c>: the packs that may run, by name (<see cref="DemoPacks.Names"/>), comma-separated, in any case ("live-set, incidents"). Empty, the default, is every
+    /// pack. It exists so a new pack can ship Off: a pack writes into a live tenant every hour and nothing it writes is ever deleted, so the host lists every pack but the
+    /// new one, the new code deploys dark, and a later change of the list brings it up (or <c>DemoData:Scenarios</c> Off stops the lot). A name that is not a pack matches
+    /// nothing and is reported through <see cref="Warning"/>: an allow-list with a typo in it is a pack that quietly stays off.
+    /// </summary>
+    public IReadOnlyList<string> Packs { get; init; } = Array.Empty<string>();
+
+    /// <summary>True when the pack may run: the list is empty (every pack), or it names the pack.</summary>
+    public bool Allows(string pack) => Allowed(Packs, pack);
+
+    private static bool Allowed(IReadOnlyList<string> list, string pack) => list.Count == 0 || list.Contains(pack, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The packs that will run, in the order they run: what the filter lets through (<see cref="Allows"/>), not the typed text, so a name that is not a pack is not here and a
+    /// pack typed in another order is where the code runs it.
+    /// </summary>
+    public IReadOnlyList<string> PacksThatRun => DemoPacks.Names.Where(Allows).ToList();
+
+    /// <summary>
+    /// What the startup line says of the packs: how many will run and which, from the filter ("8 of 14: provider-settings, ..."; with no list, "14 of 14 (DemoData:Packs
+    /// names no pack, so every pack): ..."), so what the host reads there is what runs and not what was typed.
+    /// </summary>
+    public string DescribePacksThatRun()
+    {
+        var runs = PacksThatRun;
+        var count = $"{runs.Count} of {DemoPacks.Names.Count}";
+        var list = runs.Count == 0 ? "none" : string.Join(", ", runs);
+        return Packs.Count == 0 ? $"{count} ({PacksKey} names no pack, so every pack): {list}" : $"{count}: {list}";
+    }
+
     /// <summary>Wait after the host starts before the first tick (the "startup run"): readiness never waits for it.</summary>
     public TimeSpan FirstRunDelay { get; init; } = DefaultFirstRunDelay;
 
     /// <summary>Gap between ticks.</summary>
     public TimeSpan Interval { get; init; } = DefaultInterval;
 
-    /// <summary>Set when the flag held something that is neither On nor Off. Log it once at startup.</summary>
+    /// <summary>
+    /// Set when the flag held something that is neither On nor Off, or the pack list named something that is not a pack. Log it once at startup: the notice does with the flag
+    /// Off (<see cref="DemoDataConfigNotice"/>), and with it On the hosted service does, as a warning beside its startup line, because an allow-list with a typo in it is a
+    /// pack that quietly stays off.
+    /// </summary>
     public string? Warning { get; init; }
 
     public static DemoDataOptions FromConfiguration(IConfiguration configuration)
@@ -51,9 +89,45 @@ public sealed class DemoDataOptions
             ? $"{ScenariosKey} is '{value}', which is neither On nor Off: treated as Off."
             : null;
 
+        var rawPacks = configuration[PacksKey];
+        var packs = (rawPacks ?? string.Empty)
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(name => name.ToLowerInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var unknown = packs.Where(name => !DemoPacks.Names.Contains(name, StringComparer.Ordinal)).ToList();
+        if (unknown.Count > 0)
+        {
+            var named = string.Join(", ", unknown.Select(name => $"'{name}'"));
+            var packsWarning = $"{PacksKey} names {named}, which {(unknown.Count == 1 ? "is" : "are")} not a pack and match{(unknown.Count == 1 ? "es" : "")} nothing";
+            var willRun = DemoPacks.Names.Where(name => Allowed(packs, name)).ToList();
+            if (on && willRun.Count > 0)
+            {
+                // With the flag On the typo is a pack that stays off while the others run: say which run, from the filter and not the typed text, and which stay off, so the
+                // one the typo was meant for is among them.
+                packsWarning += $". The packs that will run ({willRun.Count} of {DemoPacks.Names.Count}): {string.Join(", ", willRun)}."
+                    + $" The packs that stay off ({DemoPacks.Names.Count - willRun.Count}): {string.Join(", ", DemoPacks.Names.Except(willRun))}.";
+            }
+            else
+            {
+                packsWarning += (unknown.Count == packs.Count ? ", so no pack will run" : string.Empty) + $" (the packs are {string.Join(", ", DemoPacks.Names)}).";
+            }
+            warning = warning is null ? packsWarning : warning + " " + packsWarning;
+        }
+
+        // A value that is set but names no pack (a stray comma, a space) means every pack, as the empty value does: kept, because compose passes the empty string when the
+        // variable is unset and the two must mean the same. But only the empty string is the default, so anything else that comes to no names is said aloud: a person who
+        // meant a list and left it blank has switched every pack on (PR 2 verification F5).
+        if (!string.IsNullOrEmpty(rawPacks) && packs.Count == 0)
+        {
+            var emptyWarning = $"{PacksKey} (the DEMO_DATA_PACKS variable) is set but names no pack, so every pack {(on ? "runs" : "would run once the flag is On")}; its value is '{rawPacks}'.";
+            warning = warning is null ? emptyWarning : warning + " " + emptyWarning;
+        }
+
         return new DemoDataOptions
         {
             Scenarios = on ? DemoScenarioMode.On : DemoScenarioMode.Off,
+            Packs = packs,
             FirstRunDelay = TimeSpan.FromSeconds(ReadInt(configuration, FirstRunDelaySecondsKey, (int)DefaultFirstRunDelay.TotalSeconds,
                 MinFirstRunDelaySeconds, MaxFirstRunDelaySeconds)),
             Interval = TimeSpan.FromMinutes(ReadInt(configuration, IntervalMinutesKey, (int)DefaultInterval.TotalMinutes,

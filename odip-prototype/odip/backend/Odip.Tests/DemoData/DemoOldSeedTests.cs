@@ -47,6 +47,58 @@ public class DemoOldSeedTests
         return (env, DemoSnapshot.Take(read));
     }
 
+    /// <summary>
+    /// What the Postgres-backed T1 asserts, run here on the real seed at the plan's worked-example clock (Fri 10:30 AEST) so a regression is
+    /// seen without a server: the first tick builds the demo with nothing skipped (every person every story needs is in the real seed, and the live
+    /// shifts could all be cast), and a second tick at the same clock changes nothing.
+    /// </summary>
+    [Fact]
+    public async Task T1_TheFirstTickOnTheRealSeed_SkipsNothing_AndASecondTickAtTheSameClockChangesNothing()
+    {
+        var env = new DemoTestEnv(new DateTimeOffset(2026, 10, 2, 0, 30, 0, TimeSpan.Zero));
+        await using (var db = env.AdminDb()) await RunOldSeedAsync(db);
+
+        var first = await env.Maintainer(DemoPacks.Default()).RunAsync(env.Options, CancellationToken.None);
+        DemoSnapshot afterFirst;
+        await using (var read = env.AdminDb()) afterFirst = DemoSnapshot.Take(read);
+        var second = await env.Maintainer(DemoPacks.Default()).RunAsync(env.Options, CancellationToken.None);
+        DemoSnapshot afterSecond;
+        await using (var read = env.AdminDb()) afterSecond = DemoSnapshot.Take(read);
+
+        Assert.Equal(DemoTickStatus.Ran, first.Status);
+        Assert.True(first.Failures.Count == 0, string.Join("; ", first.Failures.Select(f => f.Pack + ": " + f.Message)));
+        Assert.True(first.SkippedStories.Count == 0, "skipped: " + string.Join(" | ", first.SkippedStories));
+        Assert.True(first.RowsAdded.Values.Sum() > 150);
+        Assert.Equal(0, second.RowsAdded.Values.Sum());
+        Assert.Equal(0, second.RowsChanged.Values.Sum());
+        var changes = afterFirst.Diff(afterSecond);
+        Assert.True(changes.Count == 0, "a second tick changed: " + DemoSnapshot.Describe(changes));
+    }
+
+    /// <summary>
+    /// The relational rules PostgreSQL enforces and EF InMemory does not (a value that fits its column, a foreign key that points at a row, a unique
+    /// index that holds), checked on the REAL seed's rows beside everything the top-up writes beside them on the first tick and again on one two
+    /// months later: the fixture has six of the old seed's fifteen medications and none of its notes, so only here do the real doses, routines and
+    /// notes meet the new rows. (The Postgres-backed tests repeat it on a server, where CI has one.)
+    /// </summary>
+    [Fact]
+    public async Task T3_TheRealSeedAndTheTopUp_FitEveryColumn_EveryKeyAndEveryUniqueIndex_OnTheFirstTickAndTwoMonthsLater()
+    {
+        var env = new DemoTestEnv(new DateTimeOffset(2026, 10, 2, 0, 35, 0, TimeSpan.Zero));
+        await using (var db = env.AdminDb()) await RunOldSeedAsync(db);
+        Assert.Empty((await env.Maintainer(DemoPacks.Default()).RunAsync(env.Options, CancellationToken.None)).Failures);
+
+        await DemoRelationalRulesTests.AssertValuesFitAsync(env);
+        await DemoRelationalRulesTests.AssertForeignKeysAsync(env, typeof(Tenant));
+        await DemoRelationalRulesTests.AssertUniqueIndexesAsync(env);
+
+        env.Clock.Set(TwoMonthsOn);
+        Assert.Empty((await env.Maintainer(DemoPacks.Default()).RunAsync(env.Options, CancellationToken.None)).Failures);
+        await DemoRelationalRulesTests.AssertValuesFitAsync(env);
+        await DemoRelationalRulesTests.AssertForeignKeysAsync(env, typeof(Tenant));
+        await DemoRelationalRulesTests.AssertUniqueIndexesAsync(env);
+    }
+
     [Fact]
     public async Task T3_EveryOldRowSurvives_ExceptTheCredentialColumnsOnTheStaff_AndTheNewDataIsThere()
     {
@@ -156,7 +208,7 @@ public class DemoOldSeedTests
         // The old seeds that open with "if (await ctx.X.AnyAsync()) return;" must still find X empty if the top-up ran first on a database the
         // old seed has not touched: here, a bare Demo tenant with only the people (as a half-restored database would be).
         var env = new DemoTestEnv(TwoMonthsOn);
-        await DemoFixture.SeedPeopleAsync(env);
+        await DemoFixture.SeedPeopleAsync(env, oldSeed: false);
 
         await env.Maintainer(DemoPacks.Default()).RunAsync(env.Options, CancellationToken.None);
 

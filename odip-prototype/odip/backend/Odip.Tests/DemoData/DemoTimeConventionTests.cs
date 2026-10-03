@@ -83,7 +83,7 @@ public class DemoTimeConventionTests
         await using var db = env.AdminDb();
         Assert.All(await db.ShiftCompletions.ToListAsync(), c =>
         {
-            Assert.True(c.ActualStart <= now && c.ActualEnd <= now && c.SubmittedAt <= now && (c.ReviewedAt ?? now) <= now, $"completion {c.Id} has an instant in the future");
+            Assert.True(c.ActualStart <= now && (c.ActualEnd ?? now) <= now && (c.SubmittedAt ?? now) <= now && (c.ReviewedAt ?? now) <= now, $"completion {c.Id} has an instant in the future");
             Assert.True(c.CreatedAt <= now && c.UpdatedAt <= now);
         });
         Assert.All(await db.LeaveRequests.ToListAsync(), l => Assert.True(l.RequestedAt <= now && (l.DecidedAt ?? now) <= now, $"leave {l.Id} has an instant in the future"));
@@ -109,7 +109,7 @@ public class DemoTimeConventionTests
         {
             var (startLocal, endLocal) = ProviderLocalTime.RosteredWindowLocal(shifts[c.ShiftId]);
             Assert.Equal(startLocal.AddMinutes(c.VarianceMinutesStart), ProviderLocalTime.UtcToLocal(c.ActualStart, zone));
-            Assert.Equal(endLocal.AddMinutes(c.VarianceMinutesEnd), ProviderLocalTime.UtcToLocal(c.ActualEnd!.Value, zone));
+            if (c.ActualEnd is { } actualEnd) Assert.Equal(endLocal.AddMinutes(c.VarianceMinutesEnd), ProviderLocalTime.UtcToLocal(actualEnd, zone));
             Assert.Equal(DateTimeKind.Unspecified, ProviderLocalTime.UtcToLocal(c.ActualStart, zone).Kind);
         }
     }

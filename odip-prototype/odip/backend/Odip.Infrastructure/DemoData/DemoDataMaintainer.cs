@@ -79,7 +79,7 @@ public sealed class DemoDataMaintainer
         _options = options;
         _clock = clock;
         _logger = logger;
-        _packs = (packs ?? DemoPacks.Default()).ToList();
+        _packs = (packs ?? DemoPacks.Default()).Where(pack => options.Allows(pack.Name)).ToList();           // DemoData:Packs: a pack left off never runs
         _tickLock = tickLock ?? new PostgresAdvisoryTickLock();
     }
 
@@ -122,14 +122,18 @@ public sealed class DemoDataMaintainer
         // 2. The working context: tenant-scoped (query filters on, TenantId stamped), with the guard attached after the audit interceptor.
         var tenantId = demo[0].Id;
         var owned = new DemoOwnedIds();
+        var stamps = new DemoAuditStamps();
         var guarded = new DbContextOptionsBuilder<OdipDbContext>(dbOptions)
-            .AddInterceptors(new DemoGuardInterceptor(new DemoTenantGuard(tenantId, owned)))
+            .AddInterceptors(new DemoAuditStampInterceptor(stamps), new DemoGuardInterceptor(new DemoTenantGuard(tenantId, owned)))
             .Options;
         await using var db = new OdipDbContext(guarded, new ScopedTenantOverride { TenantId = tenantId, IsSuperAdmin = false });
 
         // 3. The provider clock (the same lookup the app's own date rules use) and the day-roll cadence.
         var state = await DemoQueries.ProviderState(db).FirstOrDefaultAsync(ct);
         var anchors = DemoAnchors.Create(_clock.GetUtcNow().UtcDateTime, state);
+        stamps.NowUtc = anchors.NowUtc;
+        // Between 00:00 and 05:00 local only the day's first tick runs, so whatever falls due in those hours is written at the first tick after 05:00 (an event
+        // scripted for 00:30 appears at 05:xx; it carries its scripted time, so the row is not wrong, only late to appear).
         if (anchors.NowLocal.Hour < QuietHoursEndLocal && _lastRunLocalDate == anchors.D0)
         {
             return new DemoTickResult { Status = DemoTickStatus.QuietHours, Anchors = anchors, Elapsed = Stopwatch.GetElapsedTime(started) };
@@ -145,7 +149,7 @@ public sealed class DemoDataMaintainer
 
         var directory = await DemoDirectory.LoadAsync(db, ct);
         directory.FillOwned(owned);
-        var run = new DemoRun(db, anchors, tenantId, directory, _clock, _logger);
+        var run = new DemoRun(db, anchors, tenantId, directory, _clock, _logger, stamps);
 
         var failures = new List<DemoPackFailure>();
         foreach (var pack in _packs)
@@ -186,6 +190,7 @@ public sealed class DemoDataMaintainer
 
             if (transaction is not null) await transaction.CommitAsync(ct);
             EndStreak(pack.Name);
+            ReportPieceFailures(pack.Name, run, failures);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -193,6 +198,7 @@ public sealed class DemoDataMaintainer
         }
         catch (Exception ex)
         {
+            run.ClearUnitFailures();                                          // the pack is rolled back whole: its pieces' failures are part of that
             ReportFailure(pack.Name, ex, failures);
         }
         finally
@@ -237,19 +243,20 @@ public sealed class DemoDataMaintainer
     /// key, Error for anything else, and Error for any conflict once the same pack has conflicted on <see cref="ConflictEscalationTicks"/>
     /// ticks in a row, because a conflict that does not go away is not a race.
     /// </summary>
-    private void ReportFailure(string pack, Exception ex, List<DemoPackFailure> failures)
+    private void ReportFailure(string pack, Exception ex, List<DemoPackFailure> failures, bool piece = false)
     {
         var (kind, constraint) = Classify(ex);
         var constraintName = constraint ?? "(unknown)";
         var message = ex is DemoGuardViolationException ? ex.Message
-            : kind == ConflictKind.Duplicate ? $"UniqueViolation on constraint {constraintName}: {ex.Message}"
+            : kind == ConflictKind.Duplicate ? $"UniqueViolation on constraint {constraintName}: {DatabaseText(ex)}"
             : $"{ex.GetType().Name}: {ex.Message}";
         failures.Add(new DemoPackFailure(pack, message, kind == ConflictKind.Race));
 
         if (kind == ConflictKind.None)
         {
             EndStreak(pack);
-            _logger.LogError(ex, "Demo data: pack {Pack} failed and was rolled back; the other packs continue", pack);
+            if (piece) _logger.LogError(ex, "Demo data: {Piece} failed and was undone; the rest of its pack carried on", pack);
+            else _logger.LogError(ex, "Demo data: pack {Pack} failed and was rolled back; the other packs continue", pack);
             return;
         }
 
@@ -257,18 +264,56 @@ public sealed class DemoDataMaintainer
         if (ticks >= ConflictEscalationTicks)
         {
             var what = kind == ConflictKind.Duplicate ? $"duplicate key on constraint {constraintName}" : "serialization failure or deadlock";
-            _logger.LogError(ex, "Demo data: pack {Pack} has conflicted on {Ticks} consecutive ticks and is not recovering by itself ({What}); it was rolled back and the other packs continue",
-                pack, ticks, what);
+            if (piece)
+                _logger.LogError(ex, "Demo data: {Piece} has conflicted on {Ticks} consecutive ticks and is not recovering by itself ({What}); it was undone and the rest of its pack carried on", pack, ticks, what);
+            else
+                _logger.LogError(ex, "Demo data: pack {Pack} has conflicted on {Ticks} consecutive ticks and is not recovering by itself ({What}); it was rolled back and the other packs continue",
+                    pack, ticks, what);
         }
         else if (kind == ConflictKind.Duplicate)
         {
-            _logger.LogWarning("Demo data: pack {Pack} hit a duplicate key on constraint {Constraint} and was rolled back; it will retry next tick (conflict {Ticks} in a row)",
-                pack, constraintName, ticks);
+            if (piece)
+                _logger.LogWarning("Demo data: {Piece} hit a duplicate key on constraint {Constraint} and was undone; it will retry next tick (conflict {Ticks} in a row)", pack, constraintName, ticks);
+            else
+                _logger.LogWarning("Demo data: pack {Pack} hit a duplicate key on constraint {Constraint} and was rolled back; it will retry next tick (conflict {Ticks} in a row)",
+                    pack, constraintName, ticks);
         }
         else
         {
-            _logger.LogInformation("Demo data: pack {Pack} lost a race with another writer and was rolled back; it will retry next tick", pack);
+            if (piece) _logger.LogInformation("Demo data: {Piece} lost a race with another writer and was undone; it will retry next tick", pack);
+            else _logger.LogInformation("Demo data: pack {Pack} lost a race with another writer and was rolled back; it will retry next tick", pack);
         }
+    }
+
+    /// <summary>
+    /// A pack's pieces that failed and were undone (a live shift) are failures of the pack for the tick's result and the log, named by pack and piece, but the
+    /// pack itself committed what the other pieces wrote. A piece that did not fail this tick has no conflict streak to keep.
+    /// </summary>
+    private void ReportPieceFailures(string pack, DemoRun run, List<DemoPackFailure> failures)
+    {
+        var pieces = run.UnitFailures.ToList();
+        run.ClearUnitFailures();
+        foreach (var (unit, error) in pieces) ReportFailure($"{pack}: {unit}", error, failures, piece: true);
+
+        var failedNow = pieces.Select(p => $"{pack}: {p.Unit}").ToHashSet(StringComparer.Ordinal);
+        lock (_streakLock)
+        {
+            foreach (var key in _conflictStreak.Keys.Where(k => k.StartsWith(pack + ": ", StringComparison.Ordinal) && !failedNow.Contains(k)).ToList())
+                _conflictStreak.Remove(key);
+        }
+    }
+
+    /// <summary>
+    /// What the database said about a conflict, which the exception around it does not repeat: its message (which names the constraint) and, only when the connection
+    /// string says Include Error Detail, the key that was taken (Npgsql leaves the detail out otherwise, as the production connection string does).
+    /// </summary>
+    private static string DatabaseText(Exception ex)
+    {
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is PostgresException pg) return string.IsNullOrWhiteSpace(pg.Detail) ? pg.MessageText : $"{pg.MessageText}. {pg.Detail}";
+        }
+        return ex.Message;
     }
 
     private int ExtendStreak(string pack)
@@ -289,6 +334,12 @@ public sealed class DemoDataMaintainer
             anchors.D0, anchors.Provider.Id, ProviderLocalTime.TzDataAvailable ? "present" : "MISSING, fixed +10:00",
             result.RowsAdded.Values.Sum(), result.RowsChanged.Values.Sum(), result.SkippedStories.Count, result.Failures.Count,
             (long)result.Elapsed.TotalMilliseconds);
+
+        // A piece of a pack that committed (a live shift undone and tried again next tick) counts among the "packs failed" above; say how many of them are.
+        var pieces = result.Failures.Count(f => f.Pack.Contains(": ", StringComparison.Ordinal));
+        if (pieces > 0)
+            _logger.LogInformation("Demo data: {Pieces} of those failures are pieces of a pack that committed (undone, and tried again at the next tick): {Names}",
+                pieces, string.Join("; ", result.Failures.Where(f => f.Pack.Contains(": ", StringComparison.Ordinal)).Select(f => f.Pack)));
 
         if (result.SkippedStories.Count > 0)
             _logger.LogInformation("Demo data: skipped stories: {Stories}", string.Join("; ", result.SkippedStories));

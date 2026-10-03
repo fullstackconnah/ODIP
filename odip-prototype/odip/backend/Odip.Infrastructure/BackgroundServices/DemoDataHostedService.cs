@@ -39,7 +39,11 @@ public sealed class DemoDataHostedService : BackgroundService
     {
         if (!_options.Enabled) return;
 
-        _logger.LogInformation("Demo data top-up is On: first tick in {Delay}, then every {Interval}", _options.FirstRunDelay, _options.Interval);
+        // The packs that will run, from the filter and not the typed text (PR 2 verification F1 and F6), and, beside it, what is wrong with the list if anything is: a name
+        // that is not a pack matches nothing, and an allow-list with a typo in it is a pack that quietly stays off.
+        _logger.LogInformation("Demo data top-up is On: first tick in {Delay}, then every {Interval}; packs that will run, {Packs}", _options.FirstRunDelay, _options.Interval,
+            _options.DescribePacksThatRun());
+        if (_options.Warning is not null) _logger.LogWarning("{Warning}", _options.Warning);
 
         var delay = _options.FirstRunDelay;
         while (!stoppingToken.IsCancellationRequested)

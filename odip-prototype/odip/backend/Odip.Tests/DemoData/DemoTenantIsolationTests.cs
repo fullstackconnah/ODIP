@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
+using Odip.Infrastructure.Data;
 using Odip.Infrastructure.DemoData;
 using Xunit;
 
@@ -36,6 +38,17 @@ public class DemoTenantIsolationTests
             db.LeaveRequests.Add(new LeaveRequest { Id = Guid.NewGuid(), TenantId = tenant, UserId = user.Id, LeaveType = LeaveType.Annual, StartDate = new DateOnly(2026, 10, 1), EndDate = new DateOnly(2026, 10, 3), Status = LeaveStatus.Pending, RequestedByUserId = user.Id, RequestedAt = new DateTime(2026, 9, 20, 0, 0, 0, DateTimeKind.Utc) });
             db.StaffAvailabilities.Add(new StaffAvailability { Id = Guid.NewGuid(), UserId = user.Id, StartDateTime = new DateTime(2026, 10, 7), EndDateTime = new DateTime(2026, 10, 7, 23, 59, 59), AvailabilityType = AvailabilityType.Unavailable });
             db.AuditLogs.Add(new AuditLog { Id = Guid.NewGuid(), EntityType = nameof(User), EntityId = user.Id, Action = AuditAction.Created, ChangedAt = DateTimeOffset.UtcNow.AddDays(-30), Changes = "[]" });
+
+            // An incident has no tenant column: it is another tenant's by its reporter, and so are its injuries and witnesses.
+            var incident = new IncidentReport
+            {
+                Id = Guid.NewGuid(), ReportedByUserId = user.Id, InvolvedParticipantId = participant.Id, IncidentType = IncidentType.Injury, Severity = IncidentSeverity.Low,
+                Status = IncidentStatus.Submitted, Title = $"{tag} graze", Description = "A graze at another provider.", IncidentDateTime = new DateTime(2026, 9, 30, 10, 0, 0),
+                CreatedAt = new DateTime(2026, 9, 30, 0, 30, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2026, 9, 30, 0, 30, 0, DateTimeKind.Utc),
+            };
+            db.IncidentReports.Add(incident);
+            db.IncidentInjuries.Add(new IncidentInjury { Id = Guid.NewGuid(), IncidentReportId = incident.Id, Region = BodyRegion.LeftKnee, InjuryType = InjuryType.Abrasion, Description = "Grazed." });
+            db.IncidentWitnesses.Add(new IncidentWitness { Id = Guid.NewGuid(), IncidentReportId = incident.Id, WitnessName = "A bystander", WitnessStatus = WitnessStatus.NotRequired });
         }
         db.PublicHolidays.Add(new PublicHoliday { Id = Guid.NewGuid(), Date = new DateOnly(2026, 10, 5), Name = "Labour Day", State = "NSW" });
         db.SupportActivityGroups.Add(new SupportActivityGroup { Id = Guid.NewGuid(), GroupCode = "01", DisplayName = "Assistance with daily life" });
@@ -67,8 +80,11 @@ public class DemoTenantIsolationTests
         var after = await SnapshotAsync(env);
         var demoUsers = after.Keys.Where(k => DemoSnapshot.TypeOf(k) == nameof(User) && IsTenantRow(after, k, DemoTestEnv.DemoTenantId))
             .Select(k => k[(k.IndexOf('|') + 1)..]).ToHashSet();
+        var demoIncidents = after.Keys.Where(k => DemoSnapshot.TypeOf(k) == nameof(IncidentReport) && demoUsers.Contains(after.Row(k)!["ReportedByUserId"]))
+            .Select(k => k[(k.IndexOf('|') + 1)..]).ToHashSet();
         var demoIds = after.Keys.Where(k => after.Row(k)!.ContainsKey("TenantId") && IsTenantRow(after, k, DemoTestEnv.DemoTenantId)).Select(k => k[(k.IndexOf('|') + 1)..])
             .Concat(after.Keys.Where(k => DemoSnapshot.TypeOf(k) == nameof(StaffAvailability) && demoUsers.Contains(after.Row(k)!["UserId"])).Select(k => k[(k.IndexOf('|') + 1)..]))
+            .Concat(demoIncidents)
             .ToHashSet();
 
         var changes = before.Diff(after);
@@ -82,6 +98,8 @@ public class DemoTenantIsolationTests
             {
                 nameof(AuditLog) => demoIds.Contains(row["EntityId"]),
                 nameof(StaffAvailability) => demoUsers.Contains(row["UserId"]),
+                nameof(IncidentReport) => demoUsers.Contains(row["ReportedByUserId"]),
+                nameof(IncidentInjury) or nameof(IncidentWitness) => demoIncidents.Contains(row["IncidentReportId"]),
                 _ => IsTenantRow(after, change.Key, DemoTestEnv.DemoTenantId),
             };
             Assert.True(allowed, $"{change.Key} was {change.Kind} but is not a Demo row");
@@ -96,6 +114,13 @@ public class DemoTenantIsolationTests
         }
         foreach (var type in new[] { nameof(Tenant), nameof(PublicHoliday), nameof(SupportActivityGroup), nameof(EarlyAccessRequest) })
             Assert.Empty(before.Where(k => DemoSnapshot.TypeOf(k) == type).Diff(after.Where(k => DemoSnapshot.TypeOf(k) == type)));
+        // Every incident, injury and witness that was there before is another tenant's, and is exactly as it was.
+        foreach (var type in new[] { nameof(IncidentReport), nameof(IncidentInjury), nameof(IncidentWitness) })
+        {
+            var foreign = before.Keys.Where(k => DemoSnapshot.TypeOf(k) == type).ToList();
+            Assert.Equal(2, foreign.Count);
+            foreach (var key in foreign) Assert.Empty(before.Where(k => k == key).Diff(after.Where(k => k == key)));
+        }
         Assert.Empty(before.Where(k => DemoSnapshot.TypeOf(k) == nameof(AuditLog)).Diff(after.Where(k => before.Row(k) is not null && DemoSnapshot.TypeOf(k) == nameof(AuditLog))));
     }
 
@@ -119,19 +144,28 @@ public class DemoTenantIsolationTests
         Assert.Equal(2, await db.StaffAvailabilities.CountAsync(a => foreignUsers.Contains(a.UserId)));
 
         var demoEntityIds = new HashSet<Guid>(demoUsers.Concat(demoAvailability));
-        demoEntityIds.UnionWith(await db.Shifts.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.ShiftCompletions.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.ShiftPatterns.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.LeaveRequests.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.RecurringUnavailabilities.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.StaffParticipantCompatibilities.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.BookingTasks.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.People.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
-        demoEntityIds.UnionWith(await db.ParticipantContactRoles.Where(s => s.TenantId == DemoTestEnv.DemoTenantId).Select(s => s.Id).ToListAsync());
+        demoEntityIds.UnionWith(await db.IncidentReports.Where(i => demoUsers.Contains(i.ReportedByUserId)).Select(i => i.Id).ToListAsync());      // an incident is the Demo tenant's by its reporter
+        demoEntityIds.UnionWith(DemoTenantEntityIds(db));                      // every row of every tenant table that carries the Demo tenant
         var newAudit = (await db.AuditLogs.ToListAsync()).Where(a => !auditBefore.Contains(a.Id)).ToList();
         Assert.True(newAudit.Count > 100, "the top-up's rows are audited like anyone's");
         Assert.All(newAudit, a => Assert.Contains(a.EntityId, demoEntityIds));
     }
+
+    /// <summary>The ids of every row, of every table that has a tenant column, that belongs to the Demo tenant: audit history may describe any of them.</summary>
+    private static List<Guid> DemoTenantEntityIds(OdipDbContext db)
+    {
+        var ids = new List<Guid>();
+        foreach (var type in db.Model.GetEntityTypes().Select(t => t.ClrType).Where(t => typeof(ITenantEntity).IsAssignableFrom(t) && t.GetProperty("Id")?.PropertyType == typeof(Guid)))
+        {
+            var found = (IEnumerable<Guid>)typeof(DemoTenantIsolationTests).GetMethod(nameof(IdsOf), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+                .MakeGenericMethod(type).Invoke(null, new object[] { db })!;
+            ids.AddRange(found);
+        }
+        return ids;
+    }
+
+    private static List<Guid> IdsOf<T>(OdipDbContext db) where T : class, ITenantEntity =>
+        db.Set<T>().IgnoreQueryFilters().Where(e => e.TenantId == DemoTestEnv.DemoTenantId).Select(e => EF.Property<Guid>(e, "Id")).ToList();
 
     [Fact]
     public async Task T5_WithNoDemoTenant_NothingAtAllIsWritten()

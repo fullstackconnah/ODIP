@@ -8,6 +8,7 @@ using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.DemoData;
+using Odip.Infrastructure.Services;
 using Odip.Tests.EarlyAccess;
 using Odip.Tests.Medications;
 
@@ -16,8 +17,10 @@ namespace Odip.Tests.DemoData;
 /// <summary>
 /// One scratch database plus a settable clock, wired the way production wires it: the maintainer gets the same
 /// <see cref="DbContextOptions{TContext}"/> a request would (audit interceptor included) and builds its own tenant-scoped context from them.
-/// The store is EF InMemory, so unique and partial indexes, advisory locks and SQL translation are NOT exercised here: the Postgres-backed
-/// tests (DemoDataPostgresTests) repeat the ones that matter.
+/// The store is EF InMemory, so foreign keys, advisory locks, transaction isolation and SQL translation are NOT exercised here, and the Postgres-backed
+/// tests (DemoDataPostgresTests) repeat the ones that matter. Unique indexes are: a <see cref="UniqueIndexEmulator"/> refuses, at every save, what
+/// the database would (a second acknowledgement for one reader and handover, a second running break, a second tick), so a pack that ignores a person's
+/// own row fails here as it would on the server.
 /// </summary>
 internal sealed class DemoTestEnv
 {
@@ -28,12 +31,17 @@ internal sealed class DemoTestEnv
     public CapturingLogger<DemoDataMaintainer> Log { get; } = new();
 
     /// <param name="nowUtc">The tick clock. 2026-10-02T00:30Z is Fri 10:30 AEST, the plan's worked example.</param>
-    public DemoTestEnv(DateTimeOffset nowUtc, bool audit = true)
+    /// <param name="countQueries">Counts every query the environment's contexts run in <see cref="CountingQueryProvider"/> (see its remarks).</param>
+    public DemoTestEnv(DateTimeOffset nowUtc, bool audit = true, bool countQueries = false)
     {
         Clock = new FakeClock(nowUtc);
         var builder = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase("demo-" + Guid.NewGuid().ToString("N"));
+        var uniqueIndexes = new UniqueIndexEmulator();
         if (audit) builder.AddInterceptors((IInterceptor)new AuditInterceptor(new HttpContextAccessor()));
+        builder.AddInterceptors(uniqueIndexes);
+        if (countQueries) builder.ReplaceService<Microsoft.EntityFrameworkCore.Query.IAsyncQueryProvider, CountingQueryProvider>();
         Options = builder.Options;
+        uniqueIndexes.Options = Options;
     }
 
     public static DemoTestEnv At(int y, int mo, int d, int h, int mi, bool audit = true) =>
@@ -45,6 +53,15 @@ internal sealed class DemoTestEnv
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns((Guid?)null);
         tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        return new OdipDbContext(Options, tenant.Object);
+    }
+
+    /// <summary>A context as a request of the Demo tenant's own sees the database: query filters on, new rows stamped with its tenant.</summary>
+    public OdipDbContext DemoTenantDb()
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(DemoTenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
         return new OdipDbContext(Options, tenant.Object);
     }
 
@@ -62,6 +79,9 @@ internal sealed class DemoTestEnv
         {
             Id = Guid.NewGuid(), TenantId = DemoTenantId, State = state, OrganisationName = "Existing Provider", ABN = "00 000 000 000",
         });
+        // The fixture's aged completion was placed in the default (Sydney) zone: move it into this one, so it is a closed-out 09:00-13:05 shift in every zone.
+        var aged = await db.ShiftCompletions.FirstOrDefaultAsync(c => c.Id == DemoFixture.OldCompletionId);
+        if (aged is not null) DemoFixture.PlaceOldCompletion(aged, ProviderTimeZoneResolver.FromState(state));
         await db.SaveChangesAsync();
     }
 

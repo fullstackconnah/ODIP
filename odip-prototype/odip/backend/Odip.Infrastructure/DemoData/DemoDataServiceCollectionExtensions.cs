@@ -14,7 +14,8 @@ public static class DemoDataServiceCollectionExtensions
     /// build use, this adds NOTHING to the host, so startup and every request behave exactly as they did without the feature. A
     /// value that is neither On nor Off (a typo) is treated as Off, and the only thing added is a hosted notice that says so in the
     /// log, because a silently ignored flag is a presenter wondering why the demo data never arrives. With it On, one
-    /// <see cref="DemoDataMaintainer"/> and one <see cref="DemoDataHostedService"/> are registered.
+    /// <see cref="DemoDataMaintainer"/> and one <see cref="DemoDataHostedService"/> are registered, and the hosted service says in its startup line which packs will run and,
+    /// as a warning beside it, what is wrong with the pack list (a typo is a pack that quietly stays off).
     /// </summary>
     public static IServiceCollection AddDemoData(this IServiceCollection services, IConfiguration configuration)
     {
@@ -35,7 +36,7 @@ public static class DemoDataServiceCollectionExtensions
     }
 }
 
-/// <summary>Logs, once at startup, that <c>DemoData:Scenarios</c> held something that is neither On nor Off and is being treated as Off.</summary>
+/// <summary>Logs, once at startup, that <c>DemoData:Scenarios</c> held something that is neither On nor Off and is being treated as Off, or that <c>DemoData:Packs</c> named something that is not a pack.</summary>
 public sealed class DemoDataConfigNotice : IHostedService
 {
     private readonly DemoDataOptions _options;

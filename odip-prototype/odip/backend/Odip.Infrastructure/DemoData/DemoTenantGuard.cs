@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
 
 namespace Odip.Infrastructure.DemoData;
@@ -41,6 +43,9 @@ public sealed class DemoOwnedIds
 ///    holidays, early-access requests) can never be written and a stray child row can never point at another tenant's parent;
 ///  - an existing row may change only the columns on <see cref="ModifiableProperties"/>: credential dates on a user (never identity,
 ///    email, role or flags), a status on a shift or leave request, the review stamp on a completion;
+///  - a row being added may only point at users and participants the Demo tenant owns (review finding L4): its own TenantId is stamped by
+///    the context and proves nothing about the row it points at, so a pack that copied a person's id from another tenant's data would
+///    otherwise write a Demo row pointing at somebody else's person;
 ///  - nothing is ever deleted;
 ///  - audit rows (which the audit interceptor writes by itself) may only describe entities of this save or ones the Demo tenant owns.
 ///
@@ -62,6 +67,18 @@ public sealed class DemoTenantGuard
         typeof(BookingTask),
         typeof(Person),
         typeof(ParticipantContactRole),
+        typeof(ParticipantMedication),
+
+        // The shift package and the medication chart (PR 2).
+        typeof(ShiftBreak),
+        typeof(ShiftNote),
+        typeof(ShiftRoutineCheck),
+        typeof(HandoverAcknowledgement),
+        typeof(MedicationAdministration),
+
+        // What the incident form, the portal and the dose recorder would have sent, written as the terminal rows they end as (PR 2); never Pending.
+        typeof(NotificationOutbox),
+        typeof(NotificationLog),
     };
 
     /// <summary>Non-tenant tables the top-up may add rows to, and which parent each row must hang off.</summary>
@@ -69,6 +86,12 @@ public sealed class DemoTenantGuard
         new Dictionary<Type, Func<object, (DemoParentKind, Guid)>>
         {
             [typeof(StaffAvailability)] = row => (DemoParentKind.User, ((StaffAvailability)row).UserId),
+
+            // Incidents have no tenant column: an incident belongs to the Demo tenant through the user who reported it, its injuries and witnesses
+            // through the incident (which must be one this save adds or a tracked one of a Demo reporter).
+            [typeof(IncidentReport)] = row => (DemoParentKind.User, ((IncidentReport)row).ReportedByUserId),
+            [typeof(IncidentInjury)] = row => (DemoParentKind.Incident, ((IncidentInjury)row).IncidentReportId),
+            [typeof(IncidentWitness)] = row => (DemoParentKind.Incident, ((IncidentWitness)row).IncidentReportId),
         };
 
     /// <summary>The only columns the top-up may change on an existing row (plan 4.3: all compare-and-set, forward-only).</summary>
@@ -82,10 +105,37 @@ public sealed class DemoTenantGuard
                 nameof(User.UpdatedAt),
             },
             [typeof(Shift)] = new HashSet<string> { nameof(Shift.Status), nameof(Shift.UpdatedAt) },
+            // The review stamp, and the finish of a live shift (its completion is made when the worker starts and filled in when they finish).
             [typeof(ShiftCompletion)] = new HashSet<string>
             {
                 nameof(ShiftCompletion.ReviewedByUserId), nameof(ShiftCompletion.ReviewedAt), nameof(ShiftCompletion.ReviewOutcome),
-                nameof(ShiftCompletion.UpdatedAt),
+                nameof(ShiftCompletion.ActualEnd), nameof(ShiftCompletion.SubmittedAt), nameof(ShiftCompletion.VarianceMinutesEnd),
+                nameof(ShiftCompletion.HandoverText), nameof(ShiftCompletion.NothingToHandOver), nameof(ShiftCompletion.NothingToNoteConfirmed),
+                nameof(ShiftCompletion.EndLatitude), nameof(ShiftCompletion.EndLongitude), nameof(ShiftCompletion.UpdatedAt),
+            },
+            // A running break is ended when its shift is finished.
+            [typeof(ShiftBreak)] = new HashSet<string> { nameof(ShiftBreak.EndedAt), nameof(ShiftBreak.EditedAt), nameof(ShiftBreak.UpdatedAt) },
+            // An as-needed dose gets its outcome, and a witness answers, after the record was made.
+            [typeof(MedicationAdministration)] = new HashSet<string>
+            {
+                nameof(MedicationAdministration.PrnOutcome), nameof(MedicationAdministration.PrnOutcomeAt), nameof(MedicationAdministration.WitnessStatus),
+                nameof(MedicationAdministration.WitnessRespondedAt), nameof(MedicationAdministration.UpdatedAt),
+            },
+            // An incident moves along its script: it is reviewed (and who had been told is recorded), escalated, resolved and closed, and its report to
+            // the Commission is made (never what happened, who was involved, how serious it was or what was found).
+            [typeof(IncidentReport)] = new HashSet<string>
+            {
+                nameof(IncidentReport.Status), nameof(IncidentReport.ReviewedByUserId), nameof(IncidentReport.ReviewedAt), nameof(IncidentReport.ReviewNotes),
+                nameof(IncidentReport.CorrectiveActions), nameof(IncidentReport.ResolvedAt), nameof(IncidentReport.QscReportingStatus),
+                nameof(IncidentReport.QscReportedAt), nameof(IncidentReport.QscReferenceNumber),
+                nameof(IncidentReport.FamilyNotified), nameof(IncidentReport.FamilyNotifiedAt),
+                nameof(IncidentReport.SupportCoordinatorNotified), nameof(IncidentReport.SupportCoordinatorNotifiedAt), nameof(IncidentReport.UpdatedAt),
+            },
+            // A medication that was ceased or put on hold was prescribed first: the pack adds it Active and replays the change as a save of its own, to the
+            // rows it has just added (plan 4.4). Never the dose, the schedule or who it is for.
+            [typeof(ParticipantMedication)] = new HashSet<string>
+            {
+                nameof(ParticipantMedication.Status), nameof(ParticipantMedication.EndDate), nameof(ParticipantMedication.Notes), nameof(ParticipantMedication.UpdatedAt),
             },
             [typeof(LeaveRequest)] = new HashSet<string>
             {
@@ -128,14 +178,23 @@ public sealed class DemoTenantGuard
             }
         }
 
-        // Rows of this save that audit history may describe: the tenant rows above, and the listed non-tenant children whose parent is owned.
+        // Rows of this save that audit history may describe: the tenant rows above, and the listed non-tenant children whose parent is owned. Two
+        // passes, so a child of an incident (an injury, a witness) finds its incident whatever order the entries come in.
         var touched = new HashSet<Guid>(inSave.Values.SelectMany(ids => ids));
-        foreach (var entry in tracker.Entries())
+        foreach (var pass in new[] { false, true })
         {
-            if (entry.Entity is not ITenantEntity && NonTenantParents.TryGetValue(entry.Entity.GetType(), out var parentOf) && TryGetId(entry, out var childId))
+            foreach (var entry in tracker.Entries())
             {
+                var entryType = entry.Entity.GetType();
+                if (entry.Entity is ITenantEntity || !NonTenantParents.TryGetValue(entryType, out var parentOf) || !TryGetId(entry, out var childId)) continue;
+
                 var (kind, parentId) = parentOf(entry.Entity);
-                if (ParentIsOwned(kind, parentId, inSave)) touched.Add(childId);
+                if ((kind == DemoParentKind.Incident) != pass) continue;
+                if (!ParentIsOwned(kind, parentId, inSave)) continue;
+
+                touched.Add(childId);
+                if (!inSave.TryGetValue(entryType, out var set)) inSave[entryType] = set = new HashSet<Guid>();
+                set.Add(childId);
             }
         }
 
@@ -161,6 +220,11 @@ public sealed class DemoTenantGuard
                 continue;
             }
 
+            // A person a row points at is checked when the row is added, and again when the column that holds one is changed (PR 2 review L6: a reviewer
+            // taken from another tenant's directory would otherwise pass, because the row itself is the Demo tenant's).
+            if (entry.State == EntityState.Added) VerifyReferences(entry, label, inSave, violations, modifiedOnly: false);
+            else if (entry.State == EntityState.Modified) VerifyReferences(entry, label, inSave, violations, modifiedOnly: true);
+
             if (entry.Entity is ITenantEntity tenantEntity)
             {
                 if (tenantEntity.TenantId != _demoTenantId)
@@ -178,12 +242,14 @@ public sealed class DemoTenantGuard
                 continue;
             }
 
-            // A table with no tenant column: only a listed child table, and only under a parent the Demo tenant owns.
-            if (entry.State == EntityState.Added && NonTenantParents.TryGetValue(type, out var childOf))
+            // A table with no tenant column: only a listed child table, and only under a parent the Demo tenant owns. An existing row of such a
+            // table may change only if it is on the modifiable list too (an incident ages), and then in those columns only.
+            if (NonTenantParents.TryGetValue(type, out var childOf) && (entry.State == EntityState.Added || ModifiableProperties.ContainsKey(type)))
             {
                 var (kind, parentId) = childOf(entry.Entity);
                 if (!ParentIsOwned(kind, parentId, inSave))
                     violations.Add($"{label}: it hangs off {kind} {parentId}, which the Demo tenant does not own.");
+                if (entry.State == EntityState.Modified) VerifyModification(entry, type, label, violations);
             }
             else
             {
@@ -192,6 +258,44 @@ public sealed class DemoTenantGuard
         }
 
         if (violations.Count > 0) throw new DemoGuardViolationException(violations);
+    }
+
+    /// <summary>
+    /// The users and participants a new row points at must be ones the Demo tenant owns: loaded from its own tenant-filtered directory, or
+    /// added in this save. A reference is any foreign key to a user or a participant, and any plain Guid column that is a person by its
+    /// name (<c>...UserId</c>, <c>...StaffId</c>, <c>...ParticipantId</c>): the model keeps many of those without a constraint (who requested,
+    /// recorded or decided), and a constraint would not know about tenants anyway. An empty reference (an unfilled shift) points at nobody.
+    /// Other kinds of row are not checked here: they come out of queries that only see Demo rows, and are Demo rows themselves. On a row that
+    /// already exists only the references that are being changed are checked (<paramref name="modifiedOnly"/>): one written earlier is not asked about again.
+    /// </summary>
+    private void VerifyReferences(EntityEntry entry, string label, Dictionary<Type, HashSet<Guid>> inSave, List<string> violations, bool modifiedOnly)
+    {
+        foreach (var property in entry.Properties)
+        {
+            if (modifiedOnly && !property.IsModified) continue;
+            var kind = ReferenceKind(property.Metadata);
+            if (kind is null) continue;
+            if (property.CurrentValue is not Guid value || value == Guid.Empty) continue;
+            if (!ParentIsOwned(kind.Value, value, inSave))
+                violations.Add($"{label}: {property.Metadata.Name} points at {kind} {value}, which the Demo tenant does not own.");
+        }
+    }
+
+    private static DemoParentKind? ReferenceKind(IReadOnlyProperty property)
+    {
+        if (property.ClrType != typeof(Guid) && property.ClrType != typeof(Guid?)) return null;
+
+        foreach (var foreignKey in property.GetContainingForeignKeys())
+        {
+            var principal = foreignKey.PrincipalEntityType.ClrType;
+            if (principal == typeof(User)) return DemoParentKind.User;
+            if (principal == typeof(Participant)) return DemoParentKind.Participant;
+        }
+
+        var name = property.Name;
+        if (name.EndsWith("UserId", StringComparison.Ordinal) || name.EndsWith("StaffId", StringComparison.Ordinal)) return DemoParentKind.User;
+        if (name.EndsWith("ParticipantId", StringComparison.Ordinal)) return DemoParentKind.Participant;
+        return null;
     }
 
     private static void VerifyModification(EntityEntry entry, Type type, string label, List<string> violations)
@@ -215,7 +319,7 @@ public sealed class DemoTenantGuard
         {
             DemoParentKind.User => _owned.Users,
             DemoParentKind.Participant => _owned.Participants,
-            _ => new HashSet<Guid>(),
+            _ => new HashSet<Guid>(),                                   // an incident is owned only by being in this save, through its reporter
         };
         if (owned.Contains(parentId)) return true;
 
@@ -223,6 +327,7 @@ public sealed class DemoTenantGuard
         {
             DemoParentKind.User => typeof(User),
             DemoParentKind.Participant => typeof(Participant),
+            DemoParentKind.Incident => typeof(IncidentReport),
             _ => null,
         };
         return parentType is not null && inSave.TryGetValue(parentType, out var ids) && ids.Contains(parentId);
@@ -256,6 +361,7 @@ public enum DemoParentKind
 {
     User,
     Participant,
+    Incident,
 }
 
 /// <summary>

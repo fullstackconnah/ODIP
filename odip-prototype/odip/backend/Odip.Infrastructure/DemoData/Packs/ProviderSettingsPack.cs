@@ -9,7 +9,8 @@ namespace Odip.Infrastructure.DemoData.Packs;
 /// invoices all refused with "Provider settings are not configured", and the app treated the provider as Victorian for holidays and prices
 /// while times used the Sydney fallback. NSW (Sydney) equals that fallback and the CI browser zone, and shows daylight saving in the window.
 ///
-/// Inserted only when the tenant has no row at all, and an existing row is never changed, whoever made it. Every identifier is obviously
+/// Inserted only when the tenant has no row at all and nobody holds the id (a row of another tenant does: the old Demo tenant's, when the tenant was recreated, and an id that
+/// exists under any tenant is taken, as for every other pack), and an existing row is never changed, whoever made it. Every identifier is obviously
 /// fictional (all-zero ABN and BSB, "DEMO" in the registration number). Both modes stay on Warn, as for any new organisation.
 /// </summary>
 public sealed class ProviderSettingsPack : IDemoPack
@@ -20,9 +21,16 @@ public sealed class ProviderSettingsPack : IDemoPack
     {
         if (await run.Db.ProviderSettings.AnyAsync(ct)) return;
 
+        var id = DemoIds.For("provider-settings");
+        if ((await run.ExistingIdsAsync<ProviderSettings>(new[] { id }, ct)).Count > 0)
+        {
+            run.Skipped("provider settings", "another tenant's row holds the id (a recreated Demo tenant: the old one's rows are removed by the runbook's purge)");
+            return;
+        }
+
         run.Db.ProviderSettings.Add(new ProviderSettings
         {
-            Id = DemoIds.For("provider-settings"),
+            Id = id,
             TenantId = run.TenantId,
             OrganisationName = "Demo Disability Services (DEMO)",
             ABN = "00 000 000 000",

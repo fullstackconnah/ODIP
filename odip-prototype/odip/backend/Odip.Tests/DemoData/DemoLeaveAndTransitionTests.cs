@@ -212,7 +212,7 @@ public class DemoLeaveAndTransitionTests
         Assert.Equal(week.AddDays(3), task.DueDate);                                                 // the Thursday
         Assert.Equal(shiftId, task.ShiftId);
         Assert.Equal(leaveId, task.LeaveRequestId);
-        Assert.Equal($"/rostering?date={week.AddDays(3):yyyy-MM-dd}", task.LinkTo);
+        Assert.Equal($"/rostering?date={week.AddDays(3).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}", task.LinkTo);
         Assert.Equal(DemoTestEnv.DemoTenantId, task.TenantId);
         Assert.Contains("Thomas Patel", task.Title);
         Assert.Contains("Priya Sharma is on leave", task.Title);
