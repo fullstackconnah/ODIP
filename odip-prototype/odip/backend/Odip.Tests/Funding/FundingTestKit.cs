@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.DTOs;
@@ -46,7 +47,8 @@ internal sealed class FundingTestKit : IDisposable
         TenantId = tenantId;
     }
 
-    public static FundingTestKit Create(Guid? tenantId = null, bool isSuperAdmin = false, string role = "Admin", string? database = null)
+    /// <param name="interceptors">Extra save interceptors, registered after the audit interceptor as in the app (a test that makes a save fail the way PostgreSQL would).</param>
+    public static FundingTestKit Create(Guid? tenantId = null, bool isSuperAdmin = false, string role = "Admin", string? database = null, params IInterceptor[] interceptors)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(tenantId ?? (isSuperAdmin ? null : TenantA));
@@ -59,7 +61,7 @@ internal sealed class FundingTestKit : IDisposable
 
         var options = new DbContextOptionsBuilder<OdipDbContext>()
             .UseInMemoryDatabase(database ?? Guid.NewGuid().ToString())
-            .AddInterceptors(new AuditInterceptor(accessor.Object))
+            .AddInterceptors(new IInterceptor[] { new AuditInterceptor(accessor.Object) }.Concat(interceptors).ToArray())
             .Options;
         var db = new OdipDbContext(options, tenant.Object);
         var clock = new FakeClock(Now);
