@@ -299,14 +299,17 @@ public sealed class MedicationHistoryPack : IDemoPack
         // its closing doses), and a history dose written beside them could fall inside the minimum interval of one.
         var anchors = run.Anchors;
         var dates = Enumerable.Range(0, HistoryDays + 1).Select(i => anchors.D0.AddDays(-i)).ToArray();
-        var existing = await run.ExistingIdsAsync<Shift>(LiveSetCatalog.ShiftIds(dates), ct);
+
+        // A window is the live set's only while its shift is being worked: one the owner cancelled, or that was never published, is nobody's, and counting
+        // it would leave the day's doses unrecorded for good (PR 2 review L2).
+        var states = (await DemoQueries.ShiftStatesOf(run.Db, LiveSetCatalog.ShiftIds(dates).ToList()).ToListAsync(ct)).ToDictionary(s => s.Id, s => s.Status);
 
         var windows = new List<(Guid, DateTime, DateTime)>();
         foreach (var date in dates)
         {
             foreach (var story in LiveSetCatalog.Stories)
             {
-                if (!existing.Contains(LiveSetCatalog.ShiftId(story, date))) continue;
+                if (!states.TryGetValue(LiveSetCatalog.ShiftId(story, date), out var status) || status is ShiftStatus.Cancelled or ShiftStatus.Draft) continue;
                 if (run.Directory.Participant(story.Participant) is not { } participant) continue;
                 windows.Add((participant.Id, PackageRows.Local(date, story.Start), PackageRows.Local(date, story.End)));
             }

@@ -75,6 +75,40 @@ public class DemoMedicationHistoryTests
         Assert.Single(yesterday);
     }
 
+    /// <summary>
+    /// PR 2 review L2: a live shift's window is the live set's, so the history leaves its slots alone; but a shift the owner cancels (or that was never
+    /// published) is not worked by anybody, so counting its window would leave the day's doses unrecorded for good.
+    /// </summary>
+    [Fact]
+    public async Task ASlotInsideACancelledLiveShiftsWindow_IsRecordedByTheHistory_WhileAnotherShiftsWindowIsStillTheLiveSets()
+    {
+        var env = await TickAsync(new DateTimeOffset(2026, 10, 1, 20, 30, 0, TimeSpan.Zero));              // Fri 06:30 AEST: cast, nobody has started
+        var sophiesShift = LiveSetCatalog.ShiftId(LiveSetCatalog.Morning, Friday);
+        await using (var db = env.AdminDb())
+        {
+            (await db.Shifts.SingleAsync(s => s.Id == sophiesShift)).Status = ShiftStatus.Cancelled;          // the owner cancels Sophie's morning
+            await db.SaveChangesAsync();
+        }
+
+        await RunAsync(env, Friday1030);
+
+        await using var check = env.AdminDb();
+        foreach (var (medication, hour) in new[] { (MedicationCatalog.Levetiracetam, 8), (MedicationCatalog.IdOf("sophie-omeprazole"), 10) })
+        {
+            var records = await check.MedicationAdministrations.Where(a => a.ParticipantMedicationId == medication && a.ScheduledAt == At(Friday, hour, 0)).ToListAsync();
+            var only = Assert.Single(records);
+            Assert.StartsWith("demo-v1:", only.IdempotencyKey, StringComparison.Ordinal);
+            Assert.Null(only.SupersededByAdministrationId);
+        }
+        Assert.Empty(await check.MedicationAdministrations.Where(a => a.ParticipantMedicationId == MedicationCatalog.IdOf("sophie-clobazam") && a.ScheduledAt == At(Friday, 12, 0)).ToListAsync());   // 12:00 is not due yet
+        Assert.Equal(ShiftStatus.Cancelled, (await check.Shifts.SingleAsync(s => s.Id == sophiesShift)).Status);
+
+        // Harrison's shift the same day runs as ever: his live slots are the live set's, one record each.
+        var harrison = await RequireDayAsync(env, LiveSetCatalog.Insulin, Friday);
+        Assert.NotNull(harrison.Slot(MedicationCatalog.InsulinGlargine, 8, 0));
+        Assert.Single(await check.MedicationAdministrations.Where(a => a.ParticipantMedicationId == MedicationCatalog.InsulinGlargine && a.ScheduledAt == At(Friday, 8, 0)).ToListAsync());
+    }
+
     // ── the plan's mix ──
 
     [Fact]

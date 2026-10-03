@@ -218,6 +218,12 @@ public static class DemoQueries
         where participantIds.Contains(s.ParticipantId) && c.IsActive && c.SubmittedAt != null && s.ServiceDate >= since
         select new HandoverSource(c.Id, s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, c.SubmittedAt!.Value, c.HandoverText, c.NothingToHandOver, s.UserId);
 
+    public sealed record ShiftState(Guid Id, ShiftStatus Status);
+
+    /// <summary>Read only: the status of those of these shifts that exist, so a live window is counted only while its shift is being worked (PR 2 review L2).</summary>
+    public static IQueryable<ShiftState> ShiftStatesOf(OdipDbContext db, List<Guid> ids) =>
+        db.Shifts.AsNoTracking().Where(s => ids.Contains(s.Id)).Select(s => new ShiftState(s.Id, s.Status));
+
     /// <summary>Read only: the active routines of these participants, which the shift package matches against a shift's window.</summary>
     public static IQueryable<ParticipantRoutine> ActiveRoutinesOf(OdipDbContext db, List<Guid> participantIds) =>
         db.ParticipantRoutines.AsNoTracking().Where(r => participantIds.Contains(r.ParticipantId) && r.IsActive);
