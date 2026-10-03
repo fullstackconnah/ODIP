@@ -95,7 +95,7 @@ export default function OnboardingDetailPage() {
             }
           : {
               label: 'Review schedule proposal',
-              reason: 'Schedule review is proposal-only. No schedule coverage has been approved and no shifts are created here.',
+              reason: 'The schedule is made when an agreement revision is approved for rostering, from its draft page: that makes the weekly patterns and the open shifts. Check them under shift patterns. Nothing is created from this page.',
               action: canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
             }
 
@@ -105,7 +105,7 @@ export default function OnboardingDetailPage() {
     { label: 'Service needs and provisional lines', state: gateState(d.serviceTypeConfirmed), fixRoute: { to: `/participants/${id}?tab=support`, label: 'Edit service needs' } },
     // The draft carries money, so only the roles the API admits to it are sent there (a ReadOnly or SupportWorker who can read this page would only meet a redirect or a 403).
     { label: 'Current agreement evidence', state: gateState(d.serviceAgreementSigned), context: 'Agreements are signed and approved elsewhere.', fixRoute: canAccessPage('agreement-drafts') ? { to: `/participants/${id}/agreement-draft`, label: 'Open agreement draft' } : undefined },
-    { label: 'Schedule review', state: 'Blocked', context: 'Shows the proposed schedule only — no shifts are created.', fixRoute: canAccessPage('rostering') ? { to: '/rostering/patterns', label: 'Open shift patterns' } : undefined },
+    { label: 'Schedule review', state: 'Blocked', context: 'The schedule is made when the agreement draft is approved for rostering. Nothing is created from this page.', fixRoute: canAccessPage('rostering') ? { to: '/rostering/patterns', label: 'Open shift patterns' } : undefined },
   ]
   const completedGateCount = gates.filter(gate => gate.state === 'Complete').length
   // Finishing onboarding is the Profile wizard's Complete Profile: it finalises the participant, and when the organisation's readiness rule allows it they

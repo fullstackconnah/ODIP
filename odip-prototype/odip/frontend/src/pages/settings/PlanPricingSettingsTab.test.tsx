@@ -141,6 +141,15 @@ describe('Plan pricing settings', () => {
     expect(within(section).queryByRole('radio')).not.toBeInTheDocument()
   })
 
+  it('says what approving does now that it exists, and no longer says it is coming', () => {
+    setUp()
+
+    const section = screen.getByRole('group', { name: 'Approver roles' }).closest('section')!
+    expect(section).toHaveTextContent('These roles may mark a plan approved for rostering, on the newest revision of an agreement draft.')
+    expect(section).toHaveTextContent('separate from signing')
+    expect(section).not.toHaveTextContent(/arrives with the next release/)
+  })
+
   it('needs at least one approver role', async () => {
     const user = userEvent.setup()
     setUp(makeSettings({ approverRoles: ['Admin'] }))

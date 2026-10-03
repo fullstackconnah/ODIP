@@ -626,6 +626,9 @@ public class ParticipantHubFlowTests
         Assert.Empty(await ArchivedAsync(caller));
         var checklist = Ok(await caller.Inquiries.GetOnboarding(participantId, CancellationToken.None));
         Assert.Contains(checklist.Reasons, reason => reason.Contains("agreement evidence", StringComparison.OrdinalIgnoreCase));
+        // Plan builder phase D: an approved revision makes the patterns and the shifts, so the checklist no longer says that no shifts can be created; it says where they are made.
+        Assert.Contains(checklist.Reasons, reason => reason.Contains("approved for rostering", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(checklist.Reasons, reason => reason.Contains("no shifts are created", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

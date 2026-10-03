@@ -86,6 +86,9 @@ describe('OnboardingDetailPage', () => {
     expect(screen.getByText('Intake completed').parentElement).toHaveTextContent('Complete')
     expect(screen.getByText('Participant Profile').parentElement).toHaveTextContent('Needs attention')
     expect(screen.getByText('Schedule review').parentElement).toHaveTextContent('Blocked')
+    // approving an agreement revision for rostering makes the patterns and shifts, so this gate no longer says that none can be made; it says where they are
+    expect(screen.getByText('The schedule is made when the agreement draft is approved for rostering. Nothing is created from this page.')).toBeInTheDocument()
+    expect(screen.queryByText(/no shifts are created/)).not.toBeInTheDocument()
     expect(screen.getByText("What's still missing")).toBeInTheDocument()
     expect(screen.getByText('Profile requires date of birth.')).toBeInTheDocument()
   })
@@ -124,6 +127,8 @@ describe('OnboardingDetailPage', () => {
 
     const recommendation = screen.getByRole('heading', { name: 'Review schedule proposal' }).closest('section')!
     expect(within(recommendation).getByRole('link', { name: 'Open shift patterns' })).toHaveAttribute('href', '/rostering/patterns')
+    expect(within(recommendation).getByText(/The schedule is made when an agreement revision is approved for rostering, from its draft page/)).toBeInTheDocument()
+    expect(within(recommendation).queryByText(/proposal-only|no shifts are created here/)).not.toBeInTheDocument()
   })
 
   it('preserves readable status but suppresses mutation controls when lifecycle capability is absent', () => {
