@@ -33,7 +33,7 @@ export function PlanRecord({ plan, poolsLabel = 'Pools' }: { plan: FundingPlanDt
           { label: 'Funding periods', value: periodLengthLabel(plan.periodLengthMonths) },
           { label: 'Reassessment', value: plan.reassessmentDate ? writtenDay(plan.reassessmentDate) : null },
           { label: 'Source', value: BUDGET_EVIDENCE_LABELS[plan.evidence] ?? plan.evidence },
-          { label: 'Confirmed', value: confirmedLabel(plan, writtenDay) },
+          { label: 'Figures', value: confirmedLabel(plan, writtenDay) },
           { label: 'Notes', value: plan.notes ? <span className="whitespace-pre-line">{plan.notes}</span> : null },
         ]}
       />

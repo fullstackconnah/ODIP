@@ -292,17 +292,17 @@ function PeriodsTable({ pool, problems, onEdit }: { pool: EditorPool; problems: 
           const row = problems?.periods[index]
           return (
             <tr key={period.periodStart} className="align-top">
-              <td className="py-1 pr-2 tabular-nums">{span}</td>
-              <td className="px-1 py-1">
+              <td className="py-1 pr-2 tabular-nums sm:whitespace-nowrap">{span}</td>
+              <td className="w-[6.5rem] px-1 py-1 sm:w-28">
                 <input
-                  className={`${inputClass} tabular-nums`} inputMode="decimal" aria-label={`Plan amount, ${span}`} aria-invalid={row?.planAmount ? true : undefined}
+                  className={`${inputClass} px-2 tabular-nums`} inputMode="decimal" aria-label={`Plan amount, ${span}`} aria-invalid={row?.planAmount ? true : undefined}
                   value={period.planAmount} onChange={event => onEdit(index, { planAmount: event.target.value })}
                 />
                 {row?.planAmount && <p className="mt-0.5 text-[13px] text-[var(--color-destructive)]">{row.planAmount}</p>}
               </td>
-              <td className="px-1 py-1">
+              <td className="w-[6.5rem] px-1 py-1 sm:w-28">
                 <input
-                  className={`${inputClass} tabular-nums`} inputMode="decimal" aria-label={`Set-aside, ${span}`} aria-invalid={row?.setAside ? true : undefined}
+                  className={`${inputClass} px-2 tabular-nums`} inputMode="decimal" aria-label={`Set-aside, ${span}`} aria-invalid={row?.setAside ? true : undefined}
                   value={period.setAside} onChange={event => onEdit(index, { setAside: event.target.value })}
                 />
                 {row?.setAside && <p className="mt-0.5 text-[13px] text-[var(--color-destructive)]">{row.setAside}</p>}
