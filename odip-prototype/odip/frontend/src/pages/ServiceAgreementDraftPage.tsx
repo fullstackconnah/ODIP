@@ -6,6 +6,7 @@ import type { AgreementState, CreateServiceAgreementDraftDto, DraftBlock, PlanIs
 import { BackButton } from '@/components/BackButton'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
 import { PageHeader } from '@/components/PageHeader'
 import { PageState } from '@/components/PageState'
@@ -15,7 +16,7 @@ import { plural } from '@/lib/format'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
 import { SUPPORT_LABEL, blockProblems, normaliseBlock, stampLocation } from '@/lib/planBlocks'
-import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, describeSaveError, friendlyMessage, isPricingDate, type SaveFailure } from '@/lib/planQuote'
+import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, conflictVersionOf, describeSaveError, friendlyMessage, isPricingDate, type SaveFailure } from '@/lib/planQuote'
 import { PlanBuilder } from './plan-builder/PlanBuilder'
 import { RevisionCard } from './plan-builder/RevisionCard'
 
@@ -44,7 +45,16 @@ const snapshotOf = (details: Details, plan: readonly DraftBlock[]) => JSON.strin
 const DATE_MIN = `${PRICING_FIRST_YEAR}-01-01`
 const DATE_MAX = `${PRICING_LAST_YEAR}-12-31`
 
+/**
+ * The working copy belongs to one participant and is seeded once from that participant's newest revision, so the page is keyed by participant: a change of the route's id without a
+ * remount would show, and then save, one participant's blocks under another.
+ */
 export default function ServiceAgreementDraftPage() {
+  const { id } = useParams<{ id: string }>()
+  return <DraftPage key={id} />
+}
+
+function DraftPage() {
   const { id: participantId } = useParams<{ id: string }>()
   const participant = useParticipant(participantId)
   const drafts = useServiceAgreementDrafts(participantId)
@@ -60,10 +70,18 @@ export default function ServiceAgreementDraftPage() {
   const [failure, setFailure] = useState<SaveFailure | null>(null)
   const [problems, setProblems] = useState<string[]>([])
   const [savedVersion, setSavedVersion] = useState<number | null>(null)
+  // The version of the newest revision this working copy started from (0 when there was none), sent with a save: if somebody else has saved a newer one since, the server says so (409)
+  // instead of making this plan the newest over their work, and `conflict` is the version they made.
+  const [baseVersion, setBaseVersion] = useState(0)
+  const [conflict, setConflict] = useState<number | null>(null)
+  const [confirmingLoad, setConfirmingLoad] = useState(false)
+  // A block is being built that has been changed and is not in the plan yet: leaving would lose it too.
+  const [building, setBuilding] = useState(false)
 
   const loaded = drafts.data !== undefined
   if (loaded && baseline === null) {
     const latest = drafts.data?.[0]
+    setBaseVersion(latest?.version ?? 0)
     if (latest && latest.blocks.length > 0) {
       const next: Details = {
         state: latest.state, zone: latest.blocks[0].block.location.zone, planStartDate: latest.planStartDate, planEndDate: latest.planEndDate,
@@ -79,7 +97,7 @@ export default function ServiceAgreementDraftPage() {
 
   // Dates typed over an empty plan are nothing to lose: there is nothing to save until there is a block.
   const dirty = baseline !== null && plan.length > 0 && snapshotOf(details, plan) !== baseline
-  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(dirty)
+  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(dirty || building)
   const canonicalIdentifiers = useMemo(() => ({
     ndis: participant.data?.ndisNumber ? 'Recorded on participant' : 'Not recorded on participant',
     dob: participant.data?.dateOfBirth || 'Not recorded on participant',
@@ -112,12 +130,29 @@ export default function ServiceAgreementDraftPage() {
     const blocks = plan.map(entry => ({ block: stampLocation(normaliseBlock(entry.block), details.state, details.zone), requirements: entry.requirements }))
     const data: CreateServiceAgreementDraftDto = {
       planStartDate: details.planStartDate, planEndDate: details.planEndDate, agreementStartDate: details.agreementStartDate, agreementEndDate: details.agreementEndDate,
-      state: details.state, serviceTypes: [...new Set(blocks.map(entry => SUPPORT_LABEL[entry.block.supportType]))], representative: details.representative.trim() || undefined, blocks,
+      state: details.state, serviceTypes: [...new Set(blocks.map(entry => SUPPORT_LABEL[entry.block.supportType]))], representative: details.representative.trim() || undefined, baseVersion, blocks,
     }
     create.mutate({ participantId, data }, {
-      onSuccess: saved => { setPlan(blocks); setBaseline(snapshotOf(details, blocks)); setSavedVersion(saved?.version ?? null) },
-      onError: error => setFailure(describeSaveError(error)),
+      onSuccess: saved => { setPlan(blocks); setBaseline(snapshotOf(details, blocks)); setSavedVersion(saved?.version ?? null); setBaseVersion(saved?.version ?? baseVersion); setConflict(null) },
+      onError: error => {
+        const newer = conflictVersionOf(error)
+        if (newer === null) { setFailure(describeSaveError(error)); return }
+        // Somebody else saved a newer version: nothing on screen is touched, and theirs is fetched so that it is there to load.
+        setConflict(newer)
+        void drafts.refetch()
+      },
     })
+  }
+
+  // Replaces the working copy with the newest revision's, once it has been read again: the details and the plan on screen are given up for it.
+  const loadNewest = async () => {
+    setConfirmingLoad(false)
+    await drafts.refetch()
+    setConflict(null)
+    setFailure(null)
+    setProblems([])
+    setSavedVersion(null)
+    setBaseline(null)
   }
 
   const saveRow = ({ refused }: { refused: readonly PlanIssue[] }) => canEdit ? (
@@ -130,6 +165,15 @@ export default function ServiceAgreementDraftPage() {
       {failure && (
         <Callout tone="error" title={failure.title}>
           <ul className="list-disc pl-5">{failure.messages.map(message => <li key={message}>{friendlyMessage(message, plan.map(entry => entry.block))}</li>)}</ul>
+        </Callout>
+      )}
+      {conflict !== null && (
+        <Callout tone="warning" title={`Version ${conflict} was saved by somebody else`}>
+          <span className="block">It was saved after the version this plan started from, so saving this plan now would replace their work as the newest version. Load version {conflict} to see what changed, then make your changes again. Nothing on this page is lost until you do.</span>
+          <span className="mt-2 flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => setConfirmingLoad(true)}>Load version {conflict}</Button>
+            <Button size="sm" variant="secondary" onClick={() => setConflict(null)}>Keep editing</Button>
+          </span>
         </Callout>
       )}
       {refused.length > 0 && (
@@ -148,6 +192,14 @@ export default function ServiceAgreementDraftPage() {
 
   return <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-6xl">
     {unsavedChangesDialog}
+    <ConfirmDialog
+      open={confirmingLoad}
+      onCancel={() => setConfirmingLoad(false)}
+      onConfirm={() => { void loadNewest() }}
+      title={`Load version ${conflict ?? ''}?`}
+      message="Loading it replaces the plan and the details on screen with that version's. What you changed here since this page opened is not kept."
+      confirmLabel={`Load version ${conflict ?? ''}`}
+    />
     <div className="flex items-start gap-4">
       <BackButton to={`/participants/${participantId}`} label="participant" variant="icon" history={false} className="mt-1" />
       <div className="flex-1">
@@ -200,6 +252,7 @@ export default function ServiceAgreementDraftPage() {
       readOnly={!canEdit}
       readOnlyNote="You can read this plan; Admins and Coordinators change it."
       footer={saveRow}
+      onBuildingChange={setBuilding}
     />
 
     <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] flex flex-col gap-[var(--section-gap)]">

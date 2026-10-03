@@ -26,6 +26,17 @@ export interface ServiceAgreementDraftDto {
   /** What the engine answered when the revision was saved: totals, issues, notices, holiday occurrences and open questions, with no per-occurrence lines. */
   pricing?: PlanQuote
   lines: ServiceAgreementDraftLineDto[]
+  /**
+   * True on an older revision in the list: its blocks, lines and answer are left out (a long onboarding is many revisions) and `GET .../{id}` has them. The newest revision, the one a
+   * plan is started from, is always in full.
+   */
+  isSummary: boolean
+  blockCount: number
+  lineCount: number
+  /** What the revision's lines add up to over the agreement. */
+  total: number
+  /** What a reader must not miss, a sentence each: shift lines not priced, to review, and on provisional rates. Empty for a revision priced in full or typed by hand. */
+  caveats: string[]
 }
 
 export interface ServiceAgreementDraftLineDto {
@@ -62,6 +73,16 @@ export interface CreateServiceAgreementDraftDto {
   serviceTypes: string[]
   representative?: string
   blocks: DraftBlock[]
+  /**
+   * The version of the newest revision the plan was started from (0 when there was none). If somebody saved a newer one in the meantime the server refuses with 409 and the newer
+   * version number, instead of making this plan the newest over their work.
+   */
+  baseVersion?: number
+}
+
+/** The body of the 409 a save answers when somebody else saved a newer version first (`code` is "draft-version-conflict"). */
+export interface DraftVersionConflictDto {
+  currentVersion: number
 }
 
 /** An immutable, development-only document capture. It remains PendingVerification. */

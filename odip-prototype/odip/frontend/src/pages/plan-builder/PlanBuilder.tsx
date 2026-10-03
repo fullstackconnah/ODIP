@@ -44,6 +44,11 @@ type PlanBuilderProps = {
    * a plan with a refusal cannot be saved, and the row can say so before the server does.
    */
   footer?: ReactNode | ((state: { refused: readonly PlanIssue[] }) => ReactNode)
+  /**
+   * Told whether a block is being built that has been changed and is not in the plan yet (nothing of it is in `entries` until "Add to plan"): leaving the page now would lose it, so the
+   * page counts it with its own unsaved changes.
+   */
+  onBuildingChange?: (changed: boolean) => void
 }
 
 /**
@@ -51,8 +56,10 @@ type PlanBuilderProps = {
  * block being added or changed; the plan itself is the page's, and changes by whole blocks. The figures are the pricing engine's, asked for when the person pauses, for the plan as it
  * would be saved (the block being changed stands in for its saved self, and a block that is not complete yet is left out and said to be).
  */
-export function PlanBuilder({ participantId, state, zone, from, to, entries, onChange, readOnly = false, readOnlyNote, footer }: PlanBuilderProps) {
+export function PlanBuilder({ participantId, state, zone, from, to, entries, onChange, readOnly = false, readOnlyNote, footer, onBuildingChange }: PlanBuilderProps) {
   const [session, setSession] = useState<Session | null>(null)
+  const building = session !== null && session.hasBlock && JSON.stringify(session.entry) !== session.began
+  useEffect(() => { onBuildingChange?.(building) }, [building, onBuildingChange])
   const [nextSession, setNextSession] = useState(1)
   const [discarding, setDiscarding] = useState(false)
   const sectionRef = useRef<HTMLElement>(null)

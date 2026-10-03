@@ -409,6 +409,14 @@ export function describeQuoteError(error: unknown): FriendlyError {
   return { title: 'The plan could not be priced', detail: 'Check your connection and try again. Nothing you entered is lost.', retryable: true }
 }
 
+/** The newer version a save was refused for (409, code "draft-version-conflict": somebody else saved first), or null for any other failure, including any other 409. */
+export function conflictVersionOf(error: unknown): number | null {
+  const response = (error as AxiosError<{ code?: string; data?: { currentVersion?: unknown } }> | undefined)?.response
+  if (response?.status !== 409 || response.data?.code !== 'draft-version-conflict') return null
+  const version = response.data.data?.currentVersion
+  return typeof version === 'number' && Number.isInteger(version) && version >= 0 ? version : null
+}
+
 export interface SaveFailure {
   title: string
   /** Every reason the server gave, one line each. */

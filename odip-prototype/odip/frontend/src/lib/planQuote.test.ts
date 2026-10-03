@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { FundingSourceDto, PlannedLine, PlanBlock, PlanFailureReason, PlanIssue } from '@/api/types'
 import { emptyBlock } from './planBlocks'
 import {
-  CATEGORY_SHORT, REASON_COPY, addDays, agreementWeeks, bandLabel, categoryLabel, compareBudget, describeQuoteError, describeSaveError, flagSummary, formatServiceDate, friendlyMessage, groupLines,
+  CATEGORY_SHORT, REASON_COPY, addDays, agreementWeeks, bandLabel, categoryLabel, compareBudget, conflictVersionOf, describeQuoteError, describeSaveError, flagSummary, formatServiceDate, friendlyMessage, groupLines,
   groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, planBudgetFor, quantityLabel, questionShort, referenceWeek, refusals, ruleWords,
 } from './planQuote'
 
@@ -332,6 +332,19 @@ describe('when a request fails', () => {
     expect(() => describeSaveError(error)).not.toThrow()
     expect(describeQuoteError(error)).toEqual({ title: 'This plan cannot be priced yet', detail: CLEARED_BOX, retryable: false })
     expect(describeSaveError(error)).toEqual({ title: 'The draft was not saved', messages: [CLEARED_BOX, 'The agreement period ends before it starts.'] })
+  })
+
+  it('finds the newer version in a 409 that says somebody else saved first, and nothing in any other failure', () => {
+    const conflict = (data: unknown, status = 409) => axiosError(status, data)
+    expect(conflictVersionOf(conflict({ success: false, code: 'draft-version-conflict', data: { currentVersion: 5 }, errors: ['Version 5 …'] }))).toBe(5)
+    expect(conflictVersionOf(conflict({ success: false, code: 'draft-version-conflict', data: { currentVersion: 0 } }))).toBe(0)
+    expect(conflictVersionOf(conflict({ success: false, errors: ['Something else.'] }))).toBeNull()                                     // another 409
+    expect(conflictVersionOf(conflict({ success: false, code: 'draft-version-conflict', data: { currentVersion: 'five' } }))).toBeNull()
+    expect(conflictVersionOf(conflict({ success: false, code: 'draft-version-conflict', data: { currentVersion: 2.5 } }))).toBeNull()
+    expect(conflictVersionOf(conflict({ success: false, code: 'draft-version-conflict' }))).toBeNull()
+    expect(conflictVersionOf(conflict({ code: 'draft-version-conflict', data: { currentVersion: 5 } }, 400))).toBeNull()
+    expect(conflictVersionOf(new Error('Network Error'))).toBeNull()
+    expect(conflictVersionOf(undefined)).toBeNull()
   })
 
   it('reads every other shape a failed call can have: a field with one message, no errors at all, null, a string body, nothing', () => {

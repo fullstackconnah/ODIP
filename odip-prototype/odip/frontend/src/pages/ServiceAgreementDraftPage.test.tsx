@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import * as React from 'react'
@@ -43,7 +43,7 @@ const asRole = (role: string) => localStorage.setItem('odip_user', JSON.stringif
 /** A revision as the server sends it. */
 const draft = (changes: Partial<ServiceAgreementDraftDto> = {}): ServiceAgreementDraftDto => ({
   id: 'd-1', participantId: 'p-1', version: 2, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27', templateDocxSha256: 'docx-hash', templatePdfSha256: 'pdf-hash',
-  state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', blocks: [], lines: [], ...changes,
+  state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-07-01', agreementEndDate: '2027-06-30', blocks: [], lines: [], isSummary: false, blockCount: 0, lineCount: 0, total: 0, caveats: [], ...changes,
 })
 
 const legacyLine = { serviceType: 'Daily support', itemCode: 'configured-code', hours: 2, unitPrice: 72.34, catalogueVersion: '2026-07', catalogueEffectiveFrom: '2026-07-01', catalogueEffectiveTo: null, unit: 'H', total: 144.68, occurrences: 0, flags: 'None' }
@@ -95,6 +95,7 @@ describe('ServiceAgreementDraftPage: saving a plan built from blocks', () => {
       participantId: 'p-1',
       data: {
         planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-10-01', agreementEndDate: '2027-06-30', state: 'NSW', serviceTypes: ['Community access'], representative: 'A. Representative',
+        baseVersion: 0,
         blocks: [{
           block: {
             id: 'b1', supportType: 'CommunityAccess', intensity: 'Standard', days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], start: '09:00:00', end: '13:00:00', workers: 1,
@@ -304,7 +305,7 @@ describe('ServiceAgreementDraftPage: starting from the newest revision', () => {
     await user.click(screen.getByRole('button', { name: 'Save draft' }))
 
     const data = createMutate.mock.calls[0][0].data
-    expect(data).toMatchObject({ state: 'QLD', planStartDate: '2026-07-01', agreementEndDate: '2027-03-31', representative: 'R. Tran', serviceTypes: ['Community access'] })
+    expect(data).toMatchObject({ state: 'QLD', planStartDate: '2026-07-01', agreementEndDate: '2027-03-31', representative: 'R. Tran', serviceTypes: ['Community access'], baseVersion: 4 })
     expect(data.blocks).toHaveLength(1)
     expect(data.blocks[0].block.location).toEqual({ state: 'QLD', zone: 'Remote' })
     expect(data.blocks[0].requirements).toEqual({ workerGender: 'Female', driver: true, skills: ['FirstAid'] })
@@ -476,5 +477,133 @@ describe('ServiceAgreementDraftPage: what is on the page around the plan', () =>
     expect(within(card).getByText('Personal care, Sleepover')).toBeInTheDocument()
     expect(within(card).getByText('Provisional')).toBeInTheDocument()
     expect(line().itemCode).toBe('04_104_0125_6_1')   // the fixtures agree with the engine's brief example
+  })
+})
+
+describe('ServiceAgreementDraftPage: a second coordinator, and a block in progress', () => {
+  const saturday = draftBlock(mondayWednesday('b1', { supportType: 'GroupActivity', days: ['Saturday'], start: '09:00:00', end: '15:00:00', participantsPresent: 3 }))
+  const newer = () => draft({ id: 'd-5', version: 5, representative: 'Their Rep', blocks: [saturday], pricing: quote() })
+  const older = () => draft({ id: 'd-4', version: 4, representative: 'R. Tran', blocks: [draftBlock(mondayWednesday('b1'))], pricing: quote() })
+
+  it('names the version it started from: 0 for a participant with none, and the one it has just made for the next save', async () => {
+    createMutate.mockImplementation((_request, options) => options.onSuccess({ version: 1 }))
+    renderPage()
+    const user = await fillDetails()
+    await addBlockFromTemplate(user)
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(createMutate.mock.calls[0][0].data.baseVersion).toBe(0)
+
+    await user.type(screen.getByLabelText('Representative'), ' (again)')
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(createMutate.mock.calls[1][0].data.baseVersion).toBe(1)      // the next save starts from the version this one made
+  })
+
+  it('starts from the newest revision it loaded', async () => {
+    drafts.mockReturnValue({ data: [draft({ version: 7, blocks: [draftBlock(mondayWednesday('b1'))], pricing: quote() }), draft({ id: 'd-6', version: 6 })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    expect(createMutate.mock.calls[0][0].data.baseVersion).toBe(7)
+  })
+
+  it('says a newer version was saved by somebody else, keeps everything on screen, and loads theirs only when asked and confirmed', async () => {
+    const refetch = vi.fn(async () => { drafts.mockReturnValue({ data: [newer(), older()], isLoading: false, isError: false, refetch }); return {} })
+    drafts.mockReturnValue({ data: [older()], isLoading: false, isError: false, refetch })
+    createMutate.mockImplementationOnce((_request, options) => options.onError({ response: { status: 409, data: { success: false, code: 'draft-version-conflict', data: { currentVersion: 5 }, errors: ['Version 5 was saved after the version this plan started from. Load version 5 to see what changed, then make your changes again.'] } } }))
+    renderPage()
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Representative'), ' (mine)')
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    const callout = (await screen.findByText('Version 5 was saved by somebody else')).closest('[role="alert"]') as HTMLElement
+    expect(callout).toHaveTextContent('replace their work')
+    expect(screen.getByLabelText('Representative')).toHaveValue('R. Tran (mine)')           // nothing on screen was touched
+    const plan = within(screen.getByRole('region', { name: 'Support plan' }))
+    expect(plan.getByText('Mon, Wed · 09:00–13:00 · Community access 1:1')).toBeInTheDocument()
+    expect(refetch).toHaveBeenCalled()                                                          // so that theirs is there to load
+
+    await user.click(within(callout).getByRole('button', { name: 'Load version 5' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(dialog).toHaveTextContent('replaces the plan and the details on screen')
+    await user.click(within(dialog).getByRole('button', { name: 'Load version 5' }))
+
+    expect(await plan.findByText('Sat · 09:00–15:00 · Group activity 1:3')).toBeInTheDocument()
+    expect(screen.getByLabelText('Representative')).toHaveValue('Their Rep')
+    expect(screen.queryByText('Version 5 was saved by somebody else')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(createMutate.mock.calls[1][0].data.baseVersion).toBe(5)                              // and the next save starts from it
+  })
+
+  it('lets a person keep editing instead, and says it again if they save again', async () => {
+    drafts.mockReturnValue({ data: [older()], isLoading: false, isError: false, refetch: vi.fn() })
+    createMutate.mockImplementation((_request, options) => options.onError({ response: { status: 409, data: { success: false, code: 'draft-version-conflict', data: { currentVersion: 5 }, errors: ['Version 5 was saved.'] } } }))
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    await user.click(await screen.findByRole('button', { name: 'Keep editing' }))
+    expect(screen.queryByText('Version 5 was saved by somebody else')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    expect(await screen.findByText('Version 5 was saved by somebody else')).toBeInTheDocument()
+  })
+
+  it('treats a 409 for any other reason as the failure it is, with no offer to load anything', async () => {
+    createMutate.mockImplementation((_request, options) => options.onError({ response: { status: 409, data: { success: false, errors: ['Something else is in the way.'] } } }))
+    renderPage()
+    const user = await fillDetails()
+    await addBlockFromTemplate(user)
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+
+    expect(await screen.findByText('The draft was not saved')).toBeInTheDocument()
+    expect(screen.queryByText(/saved by somebody else/)).not.toBeInTheDocument()
+  })
+
+  // Review F4: a block being built is not in the plan until "Add to plan", so nothing used to say it would be lost.
+  it('asks before leaving once the block in progress has been changed, and keeps it when the person says keep editing', async () => {
+    renderPage()
+    const user = await fillDetails()
+    await addBlockFromTemplate(user)
+    await user.click(screen.getByRole('button', { name: 'Add block' }))
+    await user.click(screen.getByRole('radio', { name: /Community access weekdays/ }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(screen.getByRole('button', { name: 'Friday' }))             // the block in progress is now changed, and is not in the plan
+
+    await user.click(screen.getByRole('link', { name: /Back to participant/i }))
+
+    expect(screen.getByText('Leave without saving?')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByRole('heading', { name: 'Days and times' })).toBeInTheDocument()   // still in the stepper, on the same step
+  })
+
+  it('does not ask when the block in progress is exactly as its template made it, or when the person has cancelled it', async () => {
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /Community access weekdays/ }))   // as the template made it: nothing to lose
+
+    await user.click(screen.getByRole('link', { name: /Back to participant/i }))
+
+    expect(screen.queryByText('Leave without saving?')).not.toBeInTheDocument()
+  })
+
+  // Review F15: the working copy is seeded once, so a change of participant without a remount would post one participant's blocks under another.
+  it('starts again for another participant: the first one\'s plan is not the second one\'s working copy', async () => {
+    const router = createMemoryRouter([{ path: '/participants/:id/agreement-draft', element: <ServiceAgreementDraftPage /> }], { initialEntries: ['/participants/p-1/agreement-draft'] })
+    render(<RouterProvider router={router} />)
+    createMutate.mockImplementation((_request, options) => options.onSuccess({ version: 1 }))
+    const user = await fillDetails()
+    await addBlockFromTemplate(user)
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))        // saved, so leaving is not blocked
+    expect(screen.getByText('Mon–Fri · 09:00–13:00 · Community access 1:1')).toBeInTheDocument()
+
+    await act(async () => { await router.navigate('/participants/p-2/agreement-draft') })
+
+    expect(screen.queryByRole('button', { name: 'Edit times of block 1' })).not.toBeInTheDocument()       // block 1 of the first participant's plan is gone
+    expect(screen.getByRole('heading', { name: 'Start the week from a template' })).toBeInTheDocument()   // and the second participant has an empty plan
+    expect(screen.getByLabelText('Representative')).toHaveValue('')
   })
 })
