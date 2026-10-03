@@ -262,23 +262,24 @@ public sealed class MedicationHistoryPack : IDemoPack
         if (candidates.Count == 0) return;
 
         var existing = await run.ExistingIdsAsync<MedicationAdministration>(candidates.Select(c => c.Id), ct);
-        var fresh = candidates.Where(c => !existing.Contains(c.Id)).ToList();
-        if (fresh.Count == 0) return;
+        var due = candidates.Where(c => !existing.Contains(c.Id))
+            .Select(c => (c.Med, c.Date, c.Given, c.Id,
+                HasOutcome: DemoIds.Pick(c.Id, "has-outcome", 0, 99) < 75,
+                RecordedLocal: c.Given.AddMinutes(DemoIds.Pick(c.Id, "recorded-after", 1, 3)),
+                OutcomeLocal: c.Given.AddMinutes(DemoIds.Pick(c.Id, "outcome-after", 40, 120))))
+            .Where(c => Due(run, c.HasOutcome ? c.OutcomeLocal : c.RecordedLocal))               // a dose and its outcome appear together, once both are written
+            .ToList();
+        if (due.Count == 0) return;
 
         // The doses of these medications already on the chart, whoever recorded them: the recorder refuses an as-needed dose that breaks the medication's minimum interval or its
         // daily maximum beside them unless the worker acknowledges the breach, and a row of the top-up's carries no acknowledgement, so the history writes none that would
-        // (third independent review R4). The doses it writes itself count for the days after them.
-        var beside = (await DemoQueries.PrnGivenIn(run.Db, fresh.Select(c => c.Med.Id).Distinct().ToList(),
-                anchors.LocalToUtc(fresh.Min(c => c.Given)).AddHours(-24), anchors.LocalToUtc(fresh.Max(c => c.Given)).AddHours(24)).ToListAsync(ct))
+        // (third independent review R4). The doses it writes itself count for the days after them. Asked for only once a dose is due, so a tick with nothing to write asks nothing.
+        var beside = (await DemoQueries.PrnGivenIn(run.Db, due.Select(c => c.Med.Id).Distinct().ToList(),
+                anchors.LocalToUtc(due.Min(c => c.Given)).AddHours(-24), anchors.LocalToUtc(due.Max(c => c.Given)).AddHours(24)).ToListAsync(ct))
             .GroupBy(g => g.MedicationId).ToDictionary(g => g.Key, g => g.Select(x => x.AdministeredAt).ToList());
 
-        foreach (var (med, date, given, id) in fresh)
+        foreach (var (med, date, given, id, hasOutcome, recordedLocal, outcomeLocal) in due)
         {
-            var hasOutcome = DemoIds.Pick(id, "has-outcome", 0, 99) < 75;
-            var recordedLocal = given.AddMinutes(DemoIds.Pick(id, "recorded-after", 1, 3));
-            var outcomeLocal = given.AddMinutes(DemoIds.Pick(id, "outcome-after", 40, 120));
-            if (!Due(run, hasOutcome ? outcomeLocal : recordedLocal)) continue;                // a dose and its outcome appear together, once both are written
-
             var recorder = Recorder(staff, id, given, med);
             if (recorder is null) continue;
             if (!beside.TryGetValue(med.Id, out var doses)) beside[med.Id] = doses = new List<DateTime>();
