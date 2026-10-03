@@ -459,6 +459,7 @@ public sealed class LiveSetPack : IDemoPack
         private async Task<HashSet<Guid>> AlreadyThereAsync(Type type, List<Event> events, CancellationToken ct)
         {
             var there = await ExistingAsync(type, events.Select(e => e.Id).ToList(), ct);
+            if (events.All(e => there.Contains(e.Id))) return there;                              // every row is the script's own, already written: nothing to look for by key (an idle tick stays cheap)
 
             if (type == typeof(HandoverAcknowledgement))
             {
