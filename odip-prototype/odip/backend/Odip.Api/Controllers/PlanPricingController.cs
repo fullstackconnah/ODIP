@@ -3,6 +3,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.RateLimiting;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Pricing;
@@ -48,6 +49,7 @@ public class PlanPricingController : ControllerBase
     [HttpPost("quote")]
     [RequestSizeLimit(1_048_576)]
     [EnableRateLimiting("api")]
+    [ServiceFilter(typeof(PlanQuoteConcurrencyFilter))]
     public async Task<ActionResult<ApiResponse<PlanQuote>>> Quote([FromBody] PlanQuoteRequestDto dto, CancellationToken ct)
     {
         if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<PlanQuote>.Fail(ChooseOrganisation));
