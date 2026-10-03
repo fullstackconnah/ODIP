@@ -34,6 +34,8 @@ public sealed class FundingSaveResult
 ///   (tenant, participant, plan start) is the backstop for two plans starting the same day, and a unique violation is answered as the same overlap.</item>
 /// <item><b>Stale saves.</b> A replace carries the revision it was made from; under the same lock, a mismatch is a 409 carrying the current revision. Revision goes up by one on
 ///   every replace.</item>
+/// <item><b>Every writer takes the lock.</b> A delete and "use this plan's dates" take <see cref="FundingPlanLock"/> too and read under it, so neither races a replace in flight (a delete
+///   committing between a replace's read and its UPDATE would have failed the replace with a concurrency error, a 500, instead of "plan not found").</item>
 /// <item><b>Replace is a merge.</b> The pools and periods of a replaced plan are matched to the stored ones by what they are (pool: category and management type; period: its first
 ///   day), so a pool or period that stays keeps its id and an edit is audited as the fields that changed, not as a delete and re-insert of everything.</item>
 /// </list>
@@ -205,9 +207,17 @@ public sealed class FundingPlanService
         return await RefuseAfterRaceAsync(tenantId, participantId, dto, exceptPlanId: planId, overlapAfterRace, ct);
     }
 
-    /// <summary>Deletes the plan with its pools and periods, each audited (they are loaded first so the audit sees every row). False when there is no such plan for this participant in this tenant.</summary>
+    /// <summary>
+    /// Deletes the plan with its pools and periods, each audited (they are loaded first so the audit sees every row). False when there is no such plan for this participant in this
+    /// tenant. Like every other writer it takes <see cref="FundingPlanLock"/> and reads under it: a replace that is in flight holds the participant, so the delete waits for it and then
+    /// finds the plan as the replace left it, instead of removing a plan the replace's UPDATE was about to touch (which would fail it with a concurrency error, a 500).
+    /// </summary>
     public async Task<bool> DeleteAsync(Guid tenantId, Guid participantId, Guid planId, CancellationToken ct)
     {
+        // The participant is checked in this tenant before the lock's raw SQL runs: the lock names a row by id and knows nothing of tenants.
+        if (await FindProfileDatesAsync(tenantId, participantId, ct) is null) return false;
+
+        await using var gate = await FundingPlanLock.AcquireAsync(_db, participantId, ct);
         var plan = await _db.FundingPlans
             .Include(p => p.Pools).ThenInclude(p => p.Periods)
             .AsSplitQuery()
@@ -216,6 +226,7 @@ public sealed class FundingPlanService
 
         _db.FundingPlans.Remove(plan);
         await _db.SaveChangesAsync(ct);
+        await gate.CommitAsync(ct);
         return true;
     }
 
@@ -225,6 +236,11 @@ public sealed class FundingPlanService
     /// </summary>
     public async Task<ApplyPlanDatesResultDto?> ApplyDatesToProfileAsync(Guid tenantId, Guid participantId, Guid planId, CancellationToken ct)
     {
+        // Checked in this tenant before the lock's raw SQL runs, as in DeleteAsync.
+        if (await FindProfileDatesAsync(tenantId, participantId, ct) is null) return null;
+
+        // Under the lock, so the dates copied are those of the plan as an in-flight replace left it, never of a version that replace is about to supersede.
+        await using var gate = await FundingPlanLock.AcquireAsync(_db, participantId, ct);
         var plan = await _db.FundingPlans.AsNoTracking()
             .Where(p => p.Id == planId && p.ParticipantId == participantId && p.TenantId == tenantId)
             .Select(p => new { p.PlanStart, p.PlanEnd })
@@ -243,6 +259,7 @@ public sealed class FundingPlanService
             await _db.SaveChangesAsync(ct);
         }
 
+        await gate.CommitAsync(ct);
         return new ApplyPlanDatesResultDto { Start = plan.PlanStart, End = plan.PlanEnd, Changed = changed };
     }
 

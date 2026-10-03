@@ -393,4 +393,76 @@ public class FundingPostgresTests : IClassFixture<PostgresFixture>
             Assert.Equal(2L, await CountAsync(connectionString, "SELECT \"Revision\" FROM \"FundingPlans\" WHERE \"Id\" = @id", ("id", planId)));
         }
     }
+
+    // ── Every writer waits for the participant's row ────────────────────────
+    //
+    // The two-task races above are only probabilistic proof of the lock. These hold FOR NO KEY UPDATE on the participant's row from a connection of the test's own (what an in-flight
+    // create or replace holds) and check, deterministically, that each writer WAITS for it and then completes: so a writer that forgot to take the lock goes straight through and fails here.
+
+    private static async Task<NpgsqlTransaction> HoldTheParticipantAsync(NpgsqlConnection connection, Guid participantId)
+    {
+        var transaction = await connection.BeginTransactionAsync();
+        await using var command = new NpgsqlCommand("SELECT \"Id\" FROM \"Participants\" WHERE \"Id\" = @id FOR NO KEY UPDATE", connection, transaction);
+        command.Parameters.AddWithValue("id", participantId);
+        await command.ExecuteScalarAsync();
+        return transaction;
+    }
+
+    /// <summary>The writer must still be waiting after a while; once the held row is released it completes, and its result is returned.</summary>
+    private static async Task<T> WaitsForTheHeldRowAsync<T>(Task<T> writer, NpgsqlTransaction held, string what)
+    {
+        await Task.Delay(1500);
+        Assert.False(writer.IsCompleted, $"{what} went ahead while another request held the participant's row: it does not take the lock.");
+        await held.CommitAsync();
+        await held.DisposeAsync();
+        return await writer.WaitAsync(TimeSpan.FromSeconds(30));
+    }
+
+    [SkippableFact]
+    public async Task EveryWriter_CreateReplaceDeleteAndApplyDates_WaitsForTheParticipantsRow_ThenCompletes()
+    {
+        RequirePostgres();
+        var (connectionString, tenantId, participants) = await SetUpAsync();
+        var participantId = participants[0];
+        Guid planId;
+        await using (var setup = Open(connectionString, tenantId))
+        {
+            planId = (await new FundingPlanService(setup, TimeProvider.System).CreateAsync(tenantId, participantId, WholePlan(D(2026, 7, 1), D(2027, 6, 30)), "setup", default)).Plan!.Id;
+            // The profile already says what the plan says, so apply-dates has nothing to write: only the lock can make it wait.
+            var participant = await setup.Participants.SingleAsync(p => p.Id == participantId);
+            participant.PlanStartDate = D(2026, 7, 1);
+            participant.PlanEndDate = D(2027, 6, 30);
+            await setup.SaveChangesAsync();
+        }
+
+        await using var holder = new NpgsqlConnection(connectionString);
+        await holder.OpenAsync();
+
+        // The row is held BEFORE the writer starts (an argument list would start it first), so a writer that does not take the lock cannot slip in ahead of the hold.
+        var heldForCreate = await HoldTheParticipantAsync(holder, participantId);
+        await using var forCreate = Open(connectionString, tenantId);
+        var created = await WaitsForTheHeldRowAsync(
+            Task.Run(() => new FundingPlanService(forCreate, TimeProvider.System).CreateAsync(tenantId, participantId, NextYearsPlan(), "a", default)), heldForCreate, "A create");
+        Assert.NotNull(created.Plan);
+
+        var heldForReplace = await HoldTheParticipantAsync(holder, participantId);
+        await using var forReplace = Open(connectionString, tenantId);
+        var replaced = await WaitsForTheHeldRowAsync(
+            Task.Run(() => new FundingPlanService(forReplace, TimeProvider.System).UpdateAsync(tenantId, participantId, planId, WholePlan(D(2026, 7, 1), D(2027, 6, 30), 5m) with { Revision = 1, Notes = "edited" }, "b", default)),
+            heldForReplace, "A replace");
+        Assert.Equal(2, replaced.Plan!.Revision);
+
+        var heldForApply = await HoldTheParticipantAsync(holder, participantId);
+        await using var forApply = Open(connectionString, tenantId);
+        var applied = await WaitsForTheHeldRowAsync(
+            Task.Run(() => new FundingPlanService(forApply, TimeProvider.System).ApplyDatesToProfileAsync(tenantId, participantId, planId, default)), heldForApply, "Apply-dates");
+        Assert.False(applied!.Changed);
+
+        var heldForDelete = await HoldTheParticipantAsync(holder, participantId);
+        await using var forDelete = Open(connectionString, tenantId);
+        var deleted = await WaitsForTheHeldRowAsync(
+            Task.Run(() => new FundingPlanService(forDelete, TimeProvider.System).DeleteAsync(tenantId, participantId, created.Plan!.Id, default)), heldForDelete, "A delete");
+        Assert.True(deleted);
+        Assert.Equal(1, await CountAsync(connectionString, "SELECT COUNT(*) FROM \"FundingPlans\" WHERE \"ParticipantId\" = @id", ("id", participantId)));
+    }
 }
