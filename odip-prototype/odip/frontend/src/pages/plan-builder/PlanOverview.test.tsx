@@ -107,6 +107,21 @@ describe('PlanOverview with blocks', () => {
     expect(screen.queryByText('$0.00')).not.toBeInTheDocument()
   })
 
+  // Code review N6: the overview treated a refused block with en dashes, and a block whose every line was short of its item (it is in the quote, with 0 h and $0.00) with a figure that reads as a price.
+  it('draws an en dash for a block that came to nothing, and money for the block beside it that did not', () => {
+    const base = budget()
+    const zero = (totals: typeof base.period.totals) => ({ ...totals, byBlock: totals.byBlock.map(total => (total.blockId === 'b2' ? { ...total, amount: 0, supportHours: 0 } : total)) })
+    setUp({ budget: { ...base, period: { ...base.period, totals: zero(base.period.totals) }, weekly: { ...base.weekly, totals: zero(base.weekly.totals) } } })
+
+    const second = screen.getByText(/Sat · 09:00–15:00/).closest('tr') as HTMLElement
+    expect(second).not.toHaveTextContent('$0.00')
+    expect(second).not.toHaveTextContent('0 h')
+    expect(within(second).getAllByText('–')).toHaveLength(2)
+    const first = screen.getByText(/Mon, Wed · 09:00–13:00/).closest('tr') as HTMLElement
+    expect(first).toHaveTextContent('8 h · $588.64')
+    expect(first).toHaveTextContent('$30,610.28')
+  })
+
   it('draws an en dash for a block the quote left out', () => {
     setUp({ budget: { ...budget(), weekly: null, week: null, period: quote() }, budgetStatus: 'ready' })
     expect(screen.getAllByText('–').length).toBeGreaterThanOrEqual(4)

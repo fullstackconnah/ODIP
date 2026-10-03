@@ -129,8 +129,11 @@ export function PlanOverview({ entries, readOnly = false, budget, budgetStatus, 
     return { key: entry.block.id, index, entry, issues: own, refused: own.some(issue => isRefusal(issue.reason)) }
   })
   const planLevel = issues.filter(issue => !blocks.some(block => block.id === issue.blockId))
-  const weeklyOf = (id: string) => budget?.weekly?.totals.byBlock.find(total => total.blockId === id)
-  const periodOf = (id: string) => budget?.period.totals.byBlock.find(total => total.blockId === id)
+  // A price is never $0.00, so a block that comes to nothing has had nothing priced from it (every line short of its item): its figure is an en dash, as a refused block's is, and not a "0 h · $0.00" that
+  // reads as a price (review N6, as the budget bar does).
+  const priced = (total: { amount: number } | undefined) => (total && total.amount > 0 ? total : undefined)
+  const weeklyOf = (id: string) => priced(budget?.weekly?.totals.byBlock.find(total => total.blockId === id))
+  const periodOf = (id: string) => priced(budget?.period.totals.byBlock.find(total => total.blockId === id))
   const pending = budgetStatus === 'loading'
   // Somebody who can only read the plan cannot ask the pricing engine anything: with no figures to show, the columns for them are left out and the saved versions below carry the prices.
   const showFigures = !readOnly || !!budget
