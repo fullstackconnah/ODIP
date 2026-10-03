@@ -64,7 +64,7 @@ type PlanBuilderProps = {
    * The plan has changes nobody has saved, and how to save them: the budget bar says so on a phone, where the save row is a long scroll below the blocks. Not given when there is nothing to
    * save or nobody to save it.
    */
-  unsaved?: { onSave: () => void; saving: boolean }
+  unsaved?: { onSave: () => void; saving: boolean; holding?: boolean }
   /**
    * What the last save said when it did not go through (the problems found, the server's refusal, a newer version somebody else made), and what it said when it did ("Saved as version 3."). They
    * are drawn with the budget bar, which is docked in the overview and through every step of a block: the bar's Save can be pressed from the stepper, where the save row is not, and the answer has to be where

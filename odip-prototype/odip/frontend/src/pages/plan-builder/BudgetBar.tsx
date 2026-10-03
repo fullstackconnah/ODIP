@@ -28,9 +28,10 @@ type BudgetBarProps = {
   /** Blocks left out of the figures because they are not complete yet. */
   incompleteBlocks?: number
   /**
-   * The plan has changes nobody has saved. The one-line form says so with a Save beside it: "Add to plan" does not save, and the save row is a long scroll away under the blocks.
+   * The plan has changes nobody has saved. The one-line form says so with a Save beside it: "Add to plan" does not save, and the save row is a long scroll away under the blocks. `holding`: something
+   * the save would race with is under way (another version is being loaded over this plan), so Save is held without saying it is saving.
    */
-  unsaved?: { onSave: () => void; saving: boolean }
+  unsaved?: { onSave: () => void; saving: boolean; holding?: boolean }
   /**
    * The plan cannot be saved as it is: the engine refused a block, and the save row says why. Save is off, and the over-budget sentence does not say the draft can still be saved. It is the plan's
    * state and not the Save button's, so it is given whether or not there is anything unsaved.
@@ -110,7 +111,7 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
                   {unsaved && (
                     <span className="inline-flex items-center gap-1.5">
                       <span className={CHIP}><AlertTriangle className="h-3 w-3" aria-hidden="true" />Not saved</span>
-                      <Button variant="secondary" size="sm" disabled={unsaved.saving || blocked} onClick={unsaved.onSave}>{unsaved.saving ? 'Saving…' : 'Save'}</Button>
+                      <Button variant="secondary" size="sm" disabled={unsaved.saving || unsaved.holding || blocked} onClick={unsaved.onSave}>{unsaved.saving ? 'Saving…' : 'Save'}</Button>
                     </span>
                   )}
                   {notFullyPriced && <span className={CHIP}><AlertTriangle className="h-3 w-3" aria-hidden="true" />Not fully priced</span>}

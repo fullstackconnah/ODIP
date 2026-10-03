@@ -93,6 +93,9 @@ function DraftPage() {
   // Counts the versions loaded over the working copy. The plan builder is keyed by it, so that what it holds in flight (the open block, its step, its copy) is not carried over to the plan that replaced it:
   // Save block would write that old copy over whatever block is at its place in the loaded version (review M3).
   const [loadCount, setLoadCount] = useState(0)
+  // The newer version is being read to be loaded. A save pressed meanwhile would be made on the version this plan started from and meet the 409 again, for the version that has just been loaded
+  // (review L5): Save is held, and so are the buttons that would answer the notice a second time.
+  const [loadingNewest, setLoadingNewest] = useState(false)
 
   const loaded = drafts.data !== undefined
   if (loaded && baseline === null) {
@@ -142,6 +145,7 @@ function DraftPage() {
   const changePlan = (next: DraftBlock[]) => { setPlan(next); setSavedVersion(null); setProblems([]) }
 
   const save = () => {
+    if (create.isPending || loadingNewest) return
     setFailure(null)
     setSavedVersion(null)
     const found: string[] = []
@@ -177,22 +181,27 @@ function DraftPage() {
   const loadNewest = async () => {
     setConfirmingLoad(false)
     setFailure(null)
-    const read = await drafts.refetch()
-    const newest = read.isError ? undefined : read.data?.[0]
-    if (!newest || newest.version !== conflict) {
-      if (newest && conflict !== null && newest.version > conflict) {
-        setConflict(newest.version)
-        setFailure({ title: `Version ${conflict} is not the newest any more`, messages: [`Version ${newest.version} has been saved since. Nothing on this page was replaced: load version ${newest.version} instead.`] })
-      } else {
-        setFailure({ title: `Version ${conflict ?? ''} could not be loaded`, messages: ['It could not be read just now. Nothing on this page was replaced; the version is still there to load. Try again.'] })
+    setLoadingNewest(true)
+    try {
+      const read = await drafts.refetch()
+      const newest = read.isError ? undefined : read.data?.[0]
+      if (!newest || newest.version !== conflict) {
+        if (newest && conflict !== null && newest.version > conflict) {
+          setConflict(newest.version)
+          setFailure({ title: `Version ${conflict} is not the newest any more`, messages: [`Version ${newest.version} has been saved since. Nothing on this page was replaced: load version ${newest.version} instead.`] })
+        } else {
+          setFailure({ title: `Version ${conflict ?? ''} could not be loaded`, messages: ['It could not be read just now. Nothing on this page was replaced; the version is still there to load. Try again.'] })
+        }
+        return
       }
-      return
+      setConflict(null)
+      setProblems([])
+      setSavedVersion(null)
+      setBaseline(null)
+      setLoadCount(count => count + 1)
+    } finally {
+      setLoadingNewest(false)
     }
-    setConflict(null)
-    setProblems([])
-    setSavedVersion(null)
-    setBaseline(null)
-    setLoadCount(count => count + 1)
   }
 
   // What the last save said when it did not go through. It is drawn with the budget bar (PlanBuilder's `saveNotice`), which is docked in the overview and through every step of a block: the bar's Save
@@ -213,8 +222,8 @@ function DraftPage() {
         <Callout tone="warning" className="max-w-prose" title={`Version ${conflict} was saved by somebody else`}>
           <span className="block">It was saved after the version this plan started from, so saving this plan now would replace their work as the newest version. Load version {conflict} to see what changed, then make your changes again. Nothing on this page is lost until you do.</span>
           <span className="mt-2 flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => setConfirmingLoad(true)}>Load version {conflict}</Button>
-            <Button size="sm" variant="secondary" onClick={() => setConflict(null)}>Keep editing</Button>
+            <Button size="sm" disabled={loadingNewest} onClick={() => setConfirmingLoad(true)}>{loadingNewest && <Loader2 className="w-3.5 h-3.5 animate-spin" />}{loadingNewest ? `Loading version ${conflict}…` : `Load version ${conflict}`}</Button>
+            <Button size="sm" variant="secondary" disabled={loadingNewest} onClick={() => setConflict(null)}>Keep editing</Button>
           </span>
         </Callout>
       )}
@@ -233,7 +242,7 @@ function DraftPage() {
         )
       })()}
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={save} disabled={create.isPending || refused.length > 0}>{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}{create.isPending ? 'Saving draft…' : 'Save draft'}</Button>
+        <Button onClick={save} disabled={create.isPending || loadingNewest || refused.length > 0}>{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}{create.isPending ? 'Saving draft…' : 'Save draft'}</Button>
         <p className="text-sm text-[var(--color-muted-foreground)]">{dirty ? 'You have unsaved changes. ' : ''}Every save is a new version: earlier versions never change.</p>
       </div>
     </div>
@@ -310,7 +319,7 @@ function DraftPage() {
       footer={saveRow}
       onBuildingChange={setBuilding}
       onOpenChange={setBlockOpen}
-      unsaved={canEdit && dirty ? { onSave: save, saving: create.isPending } : undefined}
+      unsaved={canEdit && dirty ? { onSave: save, saving: create.isPending, holding: loadingNewest } : undefined}
       saveNotice={saveNotice}
       savedNote={canEdit && savedVersion !== null ? `Saved as version ${savedVersion}.` : null}
     />

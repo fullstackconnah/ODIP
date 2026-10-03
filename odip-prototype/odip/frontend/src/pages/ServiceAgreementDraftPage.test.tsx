@@ -861,7 +861,8 @@ describe('ServiceAgreementDraftPage: a second coordinator, and a block in progre
     expect(dialog).toHaveTextContent('replaces the plan and the details on screen')
     await user.click(within(dialog).getByRole('button', { name: 'Load version 5' }))
 
-    expect(await plan.findByText('Sat · 09:00–15:00 · Group activity 1:3')).toBeInTheDocument()
+    // the plan builder is keyed by the version loaded, so the section is a new one (round 3, M3): it is asked for again, and not through the one that was held before
+    expect(await within(await screen.findByRole('region', { name: 'Support plan' })).findByText('Sat · 09:00–15:00 · Group activity 1:3')).toBeInTheDocument()
     expect(screen.getByLabelText('Representative')).toHaveValue('Their Rep')
     expect(screen.queryByText('Version 5 was saved by somebody else')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save draft' }))
@@ -994,6 +995,62 @@ describe('ServiceAgreementDraftPage: a second coordinator, and a block in progre
 
       expect(screen.getByRole('alertdialog')).toHaveTextContent('The block you have open is closed.')
       expect(screen.getByRole('alertdialog')).not.toHaveTextContent('its changes')
+    })
+  })
+
+  // Round 3, L5: a save pressed while the newer version is being read was made on the version this plan started from, and met the 409 again for the version that had just been loaded.
+  describe('while the newer version is being read', () => {
+    it('holds both Saves and the notice\'s own buttons until it has been read, and then lets the loaded plan be saved', async () => {
+      let release: () => void = () => {}
+      const reading = new Promise<{ data: unknown[]; isError: boolean }>(resolve => { release = () => resolve({ data: [newer(), older()], isError: false }) })
+      const refetch = vi.fn()
+        .mockImplementationOnce(async () => ({ data: [older()], isError: false }))        // the read the 409 asks for straight away
+        .mockImplementationOnce(() => reading)                                               // the one that loading waits on
+      drafts.mockReturnValue({ data: [older()], isLoading: false, isError: false, refetch })
+      createMutate.mockImplementationOnce((_request, options) => options.onError({ response: { status: 409, data: { success: false, code: 'draft-version-conflict', data: { currentVersion: 5 }, errors: ['Version 5 was saved.'] } } }))
+      renderPage()
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Representative'), ' (mine)')
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      const callout = (await screen.findByText('Version 5 was saved by somebody else')).closest('[role="alert"]') as HTMLElement
+      await user.click(within(callout).getByRole('button', { name: 'Load version 5' }))
+      await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Load version 5' }))
+
+      // under way: nothing that saves, nothing that answers the notice a second time
+      expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled()
+      expect(within(screen.getByRole('region', { name: 'Running budget' })).getByRole('button', { name: 'Save' })).toBeDisabled()
+      expect(within(callout).getByRole('button', { name: 'Loading version 5…' })).toBeDisabled()
+      expect(within(callout).getByRole('button', { name: 'Keep editing' })).toBeDisabled()
+      createMutate.mockClear()
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      expect(createMutate).not.toHaveBeenCalled()
+
+      drafts.mockReturnValue({ data: [newer(), older()], isLoading: false, isError: false, refetch })
+      await act(async () => { release(); await reading })
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Save draft' })).toBeEnabled())
+      expect(screen.queryByText('Version 5 was saved by somebody else')).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      expect(createMutate.mock.calls[0][0].data.baseVersion).toBe(5)                         // a save made after the load starts from the version that was loaded
+    })
+
+    it('lets go of Save when the read fails, so the person can save, or try again, and is not left holding', async () => {
+      const refetch = vi.fn()
+        .mockImplementationOnce(async () => ({ data: [older()], isError: false }))
+        .mockImplementationOnce(async () => ({ data: [older()], isError: true }))
+      drafts.mockReturnValue({ data: [older()], isLoading: false, isError: false, refetch })
+      createMutate.mockImplementationOnce((_request, options) => options.onError({ response: { status: 409, data: { success: false, code: 'draft-version-conflict', data: { currentVersion: 5 }, errors: ['Version 5 was saved.'] } } }))
+      renderPage()
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Representative'), ' (mine)')
+      await user.click(screen.getByRole('button', { name: 'Save draft' }))
+      const callout = (await screen.findByText('Version 5 was saved by somebody else')).closest('[role="alert"]') as HTMLElement
+      await user.click(within(callout).getByRole('button', { name: 'Load version 5' }))
+      await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Load version 5' }))
+
+      expect(await screen.findByText('Version 5 could not be loaded')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Save draft' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Load version 5' })).toBeEnabled()
     })
   })
 
