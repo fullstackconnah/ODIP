@@ -45,6 +45,21 @@ describe('WizardStepHeading', () => {
     expect(screen.queryByRole('heading', { name: 'Key Identifiers' })).not.toBeInTheDocument()
   })
 
+  // Review F14: under a section's own h2 (the plan builder's "Add a block") the step is an h3; the three older wizards keep their h2.
+  it('is an h2 unless the wizard sits under an h2 of its own, which asks for an h3', () => {
+    const { rerender } = render(<WizardStepHeading stepKey="a" label="Step A" />)
+    expect(screen.getByRole('heading', { name: 'Step A' }).tagName).toBe('H2')
+
+    rerender(<WizardStepHeading stepKey="a" label="Step A" level={3} />)
+    expect(screen.getByRole('heading', { name: 'Step A', level: 3 })).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('takes classes of its own, so a wizard can keep the heading for focus and the announcement and hide its text on a small screen', () => {
+    render(<WizardStepHeading stepKey="a" label="Step A" className="max-lg:sr-only" />)
+
+    expect(screen.getByRole('heading', { name: 'Step A' })).toHaveClass('max-lg:sr-only', 'font-semibold')
+  })
+
   it('announces the step change through a polite, atomic, visually hidden live region', () => {
     const { container } = render(<WizardStepHeading stepKey="keyIdentifiers" label="Key Identifiers" />)
 

@@ -9,6 +9,13 @@ export type WizardStepHeadingProps = {
   /** The step's display label — reuses whatever `WizardStepRail`'s pill already shows for this
    * step so the visible heading and the announcement never drift from the rail. */
   label: string
+  /**
+   * The heading level, 2 unless said (the Caregiver, Intake and Profile wizards are the page's own sections). A wizard inside a section that has an h2 of its own passes 3, so the page's
+   * outline has neither a repeat nor a gap.
+   */
+  level?: 2 | 3
+  /** Added to the heading's classes: a wizard that says the step in a line of its own on a small screen hides the heading there (sr-only) and keeps it for focus and the announcement. */
+  className?: string
 }
 
 /**
@@ -30,7 +37,8 @@ export type WizardStepHeadingProps = {
  * tests assert on there being exactly one/zero status-role elements) — reusing that shape here
  * rather than inventing a second live-region pattern.
  */
-export function WizardStepHeading({ stepKey, label }: WizardStepHeadingProps) {
+export function WizardStepHeading({ stepKey, label, level = 2, className }: WizardStepHeadingProps) {
+  const Heading = level === 3 ? 'h3' : 'h2'
   const headingRef = useRef<HTMLHeadingElement>(null)
   const hasMounted = useRef(false)
 
@@ -47,13 +55,13 @@ export function WizardStepHeading({ stepKey, label }: WizardStepHeadingProps) {
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {`Now on step: ${label}`}
       </div>
-      <h2
+      <Heading
         ref={headingRef}
         tabIndex={-1}
-        className="text-base font-semibold text-[var(--color-foreground)] mb-2 focus:outline-none"
+        className={`text-base font-semibold text-[var(--color-foreground)] mb-2 focus:outline-none${className ? ` ${className}` : ''}`}
       >
         {label}
-      </h2>
+      </Heading>
     </>
   )
 }
