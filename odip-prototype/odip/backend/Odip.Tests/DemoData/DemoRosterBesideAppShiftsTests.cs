@@ -70,15 +70,17 @@ public class DemoRosterBesideAppShiftsTests
         Assert.Equal(ShiftStatus.Draft, (await check.Shifts.SingleAsync(s => s.Id == draft)).Status);        // a person's shift: nothing of the top-up's to move
     }
 
-    [Fact]
-    public async Task AShiftACoordinatorReturnedAndTheWorkerFinishedAgain_IsNotApprovedBySarahAtThreeDays()
+    [Theory]
+    [InlineData(true)]                                                                               // a coordinator returned it, and the worker finished it again
+    [InlineData(false)]                                                                              // the worker started and finished it themselves
+    public async Task AShiftFinishedUnderACompletionTheTopUpDidNotMake_IsNotApprovedBySarahAtThreeDays(bool returned)
     {
         var env = await TickAsync(Utc("2026-10-02T00:30:00Z"));                                      // Fri 10:30
         Guid again;
         Guid shiftId;
         await using (var db = env.AdminDb())
         {
-            // A roster shift the top-up closed out for review, then returned by a coordinator and finished again by its worker.
+            // A roster shift the top-up closed out for review, whose completion is now one of the worker's own (after a return, or in place of the top-up's).
             var shift = await db.Shifts.Where(s => s.ShiftPatternId != null && s.Status == ShiftStatus.PendingReview && s.ServiceDate >= new DateOnly(2026, 9, 30))
                 .OrderBy(s => s.ServiceDate).FirstAsync();
             shiftId = shift.Id;
@@ -93,7 +95,7 @@ public class DemoRosterBesideAppShiftsTests
             };
             again = completion.Id;
             db.ShiftCompletions.Add(completion);
-            shift.ReturnCount = 1;
+            shift.ReturnCount = returned ? 1 : 0;
             await db.SaveChangesAsync();
         }
 

@@ -217,9 +217,10 @@ public sealed class RosterWeeksPack : IDemoPack
                     moved++;
                     break;
 
-                case ShiftStatus.PendingReview when reviewer is not null && shift.ReturnCount == 0
+                case ShiftStatus.PendingReview when reviewer is not null
                                                      && anchors.D0.DayNumber - shift.ServiceDate.DayNumber >= ShiftLifecycle.ApproveAfterDays:
-                    // The completion this top-up closed it out with, and no other: a shift a coordinator returned, or a worker finished themselves, is left to its reviewer (Q1).
+                    // The completion this top-up closed it out with, and no other: a shift a coordinator returned (its worker finishes it again under a completion of their own), or a
+                    // worker started and finished themselves, is left to its reviewer (third independent review Q1).
                     var waiting = mine.SingleOrDefault(c => c.Id == DemoIds.For("shift-completion", shift.Id) && c.IsActive && c.ReviewOutcome is null && c.ReviewedByUserId is null
                                                             && c.SubmittedAt is not null);
                     if (waiting is null) break;
