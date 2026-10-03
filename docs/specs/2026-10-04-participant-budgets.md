@@ -85,7 +85,7 @@ An NDIS-funded participant has funding recorded when a plan's end is on or after
 
 It is deliberately an activation-only item. `ParticipantReadiness.IssuesAsync` is the operational list that feeds the roster, the pickers and the register, and a missing budget must not take anyone off those. So:
 
-- `ActivationIssuesAsync` is that list plus "Funding not recorded". It supplies the notes that come back, in Warn mode, when someone activates a participant from the status control, and the onboarding checklist (`ParticipantOnboardingDto.FundingRecorded`, null when the participant is not NDIS-funded; the worklist counts six steps instead of five). Warn mode never blocks.
+- `ActivationIssuesAsync` is that list plus "Funding not recorded". It supplies the notes that come back, in Warn mode, when someone activates a participant from the status control, and the onboarding checklist (`ParticipantOnboardingDto.FundingRecorded`, null when the participant is not NDIS-funded; the worklist counts six steps instead of five, and the checklist page shows a "Funding recorded" gate before Schedule review, linking to the Funding tab for the roles that may open it). Warn mode never blocks.
 - `ActivationBlockAsync` and `MayActivateAsync` decide an activation in Enforce mode. From the status control and from completing the profile, the missing agreement evidence is refused first and then the missing budget, each with its own sentence; the full participant update just leaves the participant inactive. They take a `TimeProvider`, so tests fix the clock.
 - The participant detail and list DTOs keep the operational issues only.
 
@@ -101,7 +101,7 @@ Today the agreement-evidence gate is closed for everyone (the provisional agreem
 
 ## Trying it offline
 
-`mock-api/funding.js` keeps plans in memory, so a save shows on the next read. Demo participants: `p-0002` has a 3-monthly plan (Core (flexible) and a stated Improved Daily Living Skills pool), a past 6-monthly plan, and profile dates that differ from the plan; `p-0004` has a plan with no funding periods; every other participant has none. Open `/participants/p-0002?tab=funding` and `/settings?tab=budgets`. Routes and roles are listed in `odip-prototype/odip/local-test/endpoints.md`.
+`mock-api/funding.js` keeps plans in memory, so a save shows on the next read. Demo participants: `p-0002` has a 3-monthly plan (Core (flexible) and a stated Improved Daily Living Skills pool), a past 6-monthly plan, and profile dates that differ from the plan; `p-0004` has a plan with no funding periods; every other participant has none. Open `/participants/p-0002?tab=funding`, `/settings?tab=budgets` and `/onboarding/p-0103` (a sixth gate, "Funding recorded", needing attention). Routes and roles are listed in `odip-prototype/odip/local-test/endpoints.md`.
 
 ## Tests
 
