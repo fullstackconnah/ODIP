@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Plus } from 'lucide-react'
 import type { AgreementState, DraftBlock, PlanIssue, PlanPriceZone } from '@/api/types'
 import { useFundingSources, usePlanBudget, usePlanPricingSettings } from '@/api/hooks'
@@ -89,6 +89,8 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
   const [discarding, setDiscarding] = useState(false)
   const sectionRef = useRef<HTMLElement>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
+  // How tall the docked bar is now, with the notice above it: a control the keyboard moves focus to is scrolled clear of it by that much, whatever the bar is showing (review M1).
+  const [dockHeight, setDockHeight] = useState(0)
   const canQuote = !readOnly
   const settings = usePlanPricingSettings(canQuote).data
   const funding = useFundingSources({ participantId })
@@ -176,8 +178,14 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
   }, [entries])
 
   return (
-    // scroll-mb: a control the keyboard moves focus to is scrolled clear of the budget bar (and, on a phone, the bottom nav) docked beneath it, never behind them.
-    <section ref={sectionRef} aria-labelledby="plan-heading" className="flex flex-col gap-[var(--section-gap)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] [&_input]:scroll-mt-20 [&_input]:scroll-mb-40 [&_select]:scroll-mt-20 [&_select]:scroll-mb-40 [&_button]:scroll-mt-20 [&_button]:scroll-mb-40">
+    // scroll-mb: a control the keyboard moves focus to is scrolled clear of the budget bar docked beneath it and, below lg, the bottom nav under that, never behind them (WCAG 2.4.11). The bar is as
+    // tall as it is (a line, chips, a notice of up to 40vh, Details open), so the margin is its measured height (`--plan-dock-h`, set from the bar's own ResizeObserver) plus the nav and some air.
+    <section
+      ref={sectionRef}
+      aria-labelledby="plan-heading"
+      style={{ '--plan-dock-h': `${dockHeight}px` } as CSSProperties}
+      className="flex flex-col gap-[var(--section-gap)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] [--plan-clear:calc(var(--plan-dock-h)_+_1.5rem)] max-lg:[--plan-clear:calc(var(--plan-dock-h)_+_var(--mobile-nav-h)_+_1.5rem)] [&_input]:scroll-mt-20 [&_input]:scroll-mb-(--plan-clear) [&_select]:scroll-mt-20 [&_select]:scroll-mb-(--plan-clear) [&_button]:scroll-mt-20 [&_button]:scroll-mb-(--plan-clear)"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 id="plan-heading" ref={headingRef} tabIndex={-1} className="font-semibold focus:outline-none">{title}</h2>
@@ -244,6 +252,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
           unsaved={unsaved}
           notice={saveNotice}
           saved={savedNote}
+          onDockHeight={setDockHeight}
         />
       )}
 

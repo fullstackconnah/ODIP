@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { PlanBudget } from '@/api/hooks'
@@ -10,6 +10,19 @@ const budget = (): PlanBudget => budgetOf()
 
 const ready = (props: Partial<Parameters<typeof BudgetBar>[0]> = {}) =>
   render(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} {...props} />)
+
+/** A ResizeObserver the test drives: nothing is measured until it says the size changed. */
+class FakeResizeObserver {
+  static all: FakeResizeObserver[] = []
+  disconnected = false
+  readonly targets: Element[] = []
+  readonly callback: () => void
+  constructor(callback: () => void) { this.callback = callback; FakeResizeObserver.all.push(this) }
+  observe(target: Element) { this.targets.push(target) }
+  unobserve() { /* nothing */ }
+  disconnect() { this.disconnected = true }
+  fire() { this.callback() }
+}
 
 describe('BudgetBar', () => {
   it('says what an ordinary week and the whole agreement come to, and the agreement by budget category', () => {
@@ -349,6 +362,77 @@ describe('BudgetBar', () => {
 
       const line = screen.getByText('8 h · $588.64 a week · $30,610.28 in all').parentElement as HTMLElement
       expect(line).not.toHaveTextContent(/updating|left out/)
+    })
+  })
+
+  // Round 3, M1 (WCAG 2.4.11 Focus Not Obscured): the dock is the bar and whatever notice is above it, 57 to 123 px as a bar and up to 40vh more with a notice, and the plan builder keeps focus clear of
+  // it with a margin that has to be its real height.
+  describe('the height of the dock it reports', () => {
+    afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); FakeResizeObserver.all = [] })
+    /** The dock is 120 px, and 420 px with the notice in it (jsdom has no layout). */
+    const measure = () => vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return { height: this.textContent?.includes('The draft was not saved') ? 420 : 120 } as DOMRect
+    })
+    const dockOf = () => screen.getByRole('region', { name: 'Running budget' }).parentElement as HTMLElement
+
+    it('says how tall it is when it is drawn, and again each time its size changes, and 0 when it goes', () => {
+      vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+      measure()
+      const onDockHeight = vi.fn()
+      const { rerender, unmount } = ready({ onDockHeight })
+      expect(onDockHeight).toHaveBeenLastCalledWith(120)
+      expect(FakeResizeObserver.all).toHaveLength(1)
+
+      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} onDockHeight={onDockHeight} notice={<p>The draft was not saved</p>} />)
+      FakeResizeObserver.all[0].fire()                      // the notice made the dock taller
+      expect(onDockHeight).toHaveBeenLastCalledWith(420)
+
+      unmount()
+      expect(onDockHeight).toHaveBeenLastCalledWith(0)
+      expect(FakeResizeObserver.all[0].disconnected).toBe(true)
+    })
+
+    it('measures the dock itself, the wrapper around the region and the notice, and not only the figures', () => {
+      vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+      measure()
+      ready({ onDockHeight: vi.fn(), notice: <p>The draft was not saved</p> })
+
+      expect(dockOf()).toHaveTextContent('The draft was not saved')
+      expect(dockOf()).toContainElement(screen.getByRole('region', { name: 'Running budget' }))
+    })
+
+    it('reports once and does not fail where there is no ResizeObserver', () => {
+      vi.stubGlobal('ResizeObserver', undefined)
+      measure()
+      const onDockHeight = vi.fn()
+      const { unmount } = ready({ onDockHeight })
+
+      expect(onDockHeight).toHaveBeenCalledTimes(1)
+      unmount()
+      expect(onDockHeight).toHaveBeenLastCalledWith(0)
+    })
+  })
+
+  // Round 3, L2: when only the reference week prices to nothing (an agreement that starts before the first catalogue date) the week printed "0 h . $0.00 a week" beside an agreement that is priced.
+  describe('a week that prices to nothing in an agreement that does not', () => {
+    const noPricedWeek = (): PlanBudget => {
+      const base = budget()
+      return { ...base, weekly: { ...base.weekly!, totals: { ...emptyTotals(), lineCount: 2, unpricedLines: 2 } } }
+    }
+
+    it('shows an en dash for the week, in the one line and in Details, and money for the agreement', () => {
+      ready({ budget: noPricedWeek() })
+
+      expect(screen.getByText('– h · – a week · $30,610.28 in all')).toBeInTheDocument()
+      expect(screen.getByText('An ordinary week').nextElementSibling).toHaveTextContent('– h · –')
+      expect(screen.getByText('The agreement period').nextElementSibling).toHaveTextContent('$30,610.28')
+      expect(screen.getByRole('region', { name: 'Running budget' })).not.toHaveTextContent('$0.00')
+    })
+
+    it('still prints a week that has a price as money', () => {
+      ready()
+
+      expect(screen.getByText('8 h · $588.64 a week · $30,610.28 in all')).toBeInTheDocument()
     })
   })
 })

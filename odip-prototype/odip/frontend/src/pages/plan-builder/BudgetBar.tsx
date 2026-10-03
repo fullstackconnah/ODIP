@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
 import type { PlanBudget } from '@/api/hooks'
 import { Button } from '@/components/Button'
@@ -44,6 +44,11 @@ type BudgetBarProps = {
   notice?: ReactNode
   /** What a save that worked said ("Saved as version 3."): a polite status in a region that is always in the page, so it is announced when it is filled. */
   saved?: string | null
+  /**
+   * Told how tall the dock is (the bar with whatever notice is above it) now and each time that changes, and 0 when the bar goes. The plan builder keeps a control the keyboard moves focus to clear of the
+   * dock with it (WCAG 2.4.11): the dock is 57 to 123 px as a bar and a notice adds up to 40vh, so no fixed margin can be right.
+   */
+  onDockHeight?: (px: number) => void
 }
 
 const LABEL = 'text-xs text-[var(--color-muted-foreground)]'
@@ -58,8 +63,19 @@ const CHIP = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
  * totals stand alone and say so. A total that leaves work out says so beside the figure, in shifts, and a chip says it on the one-line form. Below 1280px it is one line and a Details
  * toggle (the full bar is a third of a tablet's screen). Every figure is the pricing engine's, for the plan as it would be saved.
  */
-export function BudgetBar({ status, budget, refreshing = false, idleNote, error, onRetry, planBudget, planBudgetUnreadable = false, incompleteBlocks = 0, blocked = false, unsaved, notice, saved = null }: BudgetBarProps) {
+export function BudgetBar({ status, budget, refreshing = false, idleNote, error, onRetry, planBudget, planBudgetUnreadable = false, incompleteBlocks = 0, blocked = false, unsaved, notice, saved = null, onDockHeight }: BudgetBarProps) {
   const [open, setOpen] = useState(false)
+  const dock = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const element = dock.current
+    if (!element || !onDockHeight) return
+    const report = () => onDockHeight(Math.ceil(element.getBoundingClientRect().height))
+    report()
+    if (typeof ResizeObserver === 'undefined') return () => onDockHeight(0)
+    const observer = new ResizeObserver(report)
+    observer.observe(element)
+    return () => { observer.disconnect(); onDockHeight(0) }
+  }, [onDockHeight])
   const period = budget?.period
   const weekly = budget?.weekly ?? null
   const comparison = compareBudget(period?.totals.amount ?? 0, planBudget?.total)
@@ -69,16 +85,16 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
   const failure = status === 'error' ? describeQuoteError(error) : null
   // A plan that prices to nothing has no total to show: $0.00 would read as a price, and the whole plan budget as left (review N6).
   const nothingPriced = status === 'ready' && !!period && pricedNothing(period)
+  // The reference week can price to nothing while the agreement does not (an agreement that starts before the first catalogue date): its figure is an en dash too, not "0 h . $0.00 a week" (review L2).
+  const weekNothing = nothingPriced || (status === 'ready' && !!weekly && pricedNothing(weekly))
   const updating = status === 'ready' && refreshing
 
   const oneLine = status === 'ready' && period
-    ? nothingPriced
-      ? `${weekly ? `${NO_FIGURE} h · ${NO_FIGURE} a week · ` : ''}${NO_FIGURE} in all`
-      : `${weekly ? `${formatHours(weekly.totals.supportHours)} h · ${formatCurrency(weekly.totals.amount)} a week · ` : ''}${formatCurrency(period.totals.amount)} in all`
+    ? `${weekly ? (weekNothing ? `${NO_FIGURE} h · ${NO_FIGURE} a week · ` : `${formatHours(weekly.totals.supportHours)} h · ${formatCurrency(weekly.totals.amount)} a week · `) : ''}${nothingPriced ? NO_FIGURE : formatCurrency(period.totals.amount)} in all`
     : status === 'loading' ? 'Pricing the plan…' : idleNote ?? 'Add a block to see the budget'
 
   return (
-    <div className="sticky bottom-[var(--mobile-nav-h)] z-30 -mx-[var(--card-pad)] -mb-[var(--card-pad)] border-t border-[var(--color-border)] bg-[var(--color-card)] px-[var(--card-pad)] py-2 lg:bottom-0">
+    <div ref={dock} className="sticky bottom-[var(--mobile-nav-h)] z-30 -mx-[var(--card-pad)] -mb-[var(--card-pad)] border-t border-[var(--color-border)] bg-[var(--color-card)] px-[var(--card-pad)] py-2 lg:bottom-0">
       {/* The last save's answer, above the figures it is about, capped so a long list of problems scrolls and never takes the screen. */}
       <div className="mb-2 flex max-h-[40vh] flex-col gap-2 overflow-y-auto empty:hidden">{notice}</div>
       {/* The bar's one polite live region, in the page from the start so that what is put into it is announced: the answer of a save that worked, and, visually hidden, the plan crossing its budget (it
@@ -136,7 +152,7 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
                 <div>
                   <p className={LABEL}>An ordinary week</p>
                   {weekly ? (
-                    <p className={HEADLINE}>{nothingPriced ? NO_FIGURE : formatHours(weekly.totals.supportHours)} h <span className="font-normal text-[var(--color-muted-foreground)]">·</span> {nothingPriced ? NO_FIGURE : formatCurrency(weekly.totals.amount)}</p>
+                    <p className={HEADLINE}>{weekNothing ? NO_FIGURE : formatHours(weekly.totals.supportHours)} h <span className="font-normal text-[var(--color-muted-foreground)]">·</span> {weekNothing ? NO_FIGURE : formatCurrency(weekly.totals.amount)}</p>
                   ) : (
                     <p className="text-sm text-[var(--color-muted-foreground)]">The agreement is shorter than a week.</p>
                   )}

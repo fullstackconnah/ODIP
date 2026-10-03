@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as React from 'react'
 import { useState } from 'react'
@@ -29,13 +29,13 @@ const source = (changes: Partial<FundingSourceDto> = {}): FundingSourceDto => ({
 })
 
 /** The plan belongs to the page; this is the smallest page. */
-function Page({ initial = [] as DraftBlock[], readOnly = false, onPlan, footer, unsaved, from = '2026-10-01', to = '2027-06-30' }: { initial?: DraftBlock[]; readOnly?: boolean; onPlan?: (entries: DraftBlock[]) => void; footer?: React.ComponentProps<typeof PlanBuilder>['footer']; unsaved?: React.ComponentProps<typeof PlanBuilder>['unsaved']; from?: string; to?: string }) {
+function Page({ initial = [] as DraftBlock[], readOnly = false, onPlan, footer, unsaved, from = '2026-10-01', to = '2027-06-30', saveNotice }: { initial?: DraftBlock[]; readOnly?: boolean; onPlan?: (entries: DraftBlock[]) => void; footer?: React.ComponentProps<typeof PlanBuilder>['footer']; unsaved?: React.ComponentProps<typeof PlanBuilder>['unsaved']; from?: string; to?: string; saveNotice?: React.ReactNode }) {
   const [entries, setEntries] = useState(initial)
   return (
     <MemoryRouter>
       <PlanBuilder
         participantId="p-1" state="NSW" zone="National" from={from} to={to} entries={entries}
-        onChange={next => { setEntries(next); onPlan?.(next) }} readOnly={readOnly} footer={footer ?? <button type="button">Save draft</button>} unsaved={unsaved}
+        onChange={next => { setEntries(next); onPlan?.(next) }} readOnly={readOnly} footer={footer ?? <button type="button">Save draft</button>} unsaved={unsaved} saveNotice={saveNotice}
       />
     </MemoryRouter>
   )
@@ -497,6 +497,62 @@ describe('PlanBuilder and what the engine refused', () => {
     render(<Page initial={twoBlocks()} footer={footer} />)
 
     expect(footer).toHaveBeenCalledWith({ refused: [] })
+  })
+})
+
+// Round 3, M1 (WCAG 2.4.11 Focus Not Obscured): the margin that keeps a focused control clear of the docked bar was a fixed 160 px, and the bar with a notice is taller than that. It is the bar's measured height now.
+describe('PlanBuilder and the margin that keeps focus clear of the dock', () => {
+  class FakeResizeObserver {
+    static all: FakeResizeObserver[] = []
+    readonly targets: Element[] = []
+    readonly callback: () => void
+    constructor(callback: () => void) { this.callback = callback; FakeResizeObserver.all.push(this) }
+    observe(target: Element) { this.targets.push(target) }
+    unobserve() { /* nothing */ }
+    disconnect() { /* nothing */ }
+    fire() { this.callback() }
+  }
+  /** The observer of the dock: the table of blocks has its own, and which is first is nobody's business. */
+  const dockObserver = () => FakeResizeObserver.all.find(observer => observer.targets.some(target => target.contains(screen.getByRole('region', { name: 'Running budget' }))))!
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); FakeResizeObserver.all = [] })
+  const measure = () => vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    return { height: this.textContent?.includes('The draft was not saved') ? 420 : 120 } as DOMRect
+  })
+  const section = () => screen.getByRole('region', { name: 'Support plan' })
+
+  it('sets the measured height of the dock on the section, and follows it when a notice makes the dock taller', () => {
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+    measure()
+    const { rerender } = render(<Page initial={twoBlocks()} />)
+    expect(section().style.getPropertyValue('--plan-dock-h')).toBe('120px')
+
+    rerender(<Page initial={twoBlocks()} saveNotice={<p>The draft was not saved</p>} />)
+    act(() => { dockObserver().fire() })
+
+    expect(section().style.getPropertyValue('--plan-dock-h')).toBe('420px')
+  })
+
+  it('clears a control by that height, plus the bottom nav below lg, and not by a fixed margin', () => {
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+    measure()
+    render(<Page initial={twoBlocks()} />)
+
+    const classes = section().className
+    for (const control of ['input', 'select', 'button']) expect(classes).toContain(`[&_${control}]:scroll-mb-(--plan-clear)`)
+    expect(classes).not.toMatch(/scroll-mb-40/)
+    expect(classes).toContain('[--plan-clear:calc(var(--plan-dock-h)_+_1.5rem)]')                                          // from lg up there is no bottom nav
+    expect(classes).toContain('max-lg:[--plan-clear:calc(var(--plan-dock-h)_+_var(--mobile-nav-h)_+_1.5rem)]')           // below it the nav sits under the dock
+  })
+
+  it('lets the margin go when the bar goes (a plan with no blocks has no dock)', () => {
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+    measure()
+    const { rerender } = render(<Page initial={twoBlocks()} />)
+    expect(section().style.getPropertyValue('--plan-dock-h')).toBe('120px')
+
+    rerender(<Page initial={twoBlocks()} readOnly />)
+
+    expect(section().style.getPropertyValue('--plan-dock-h')).toBe('0px')
   })
 })
 
