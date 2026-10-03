@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import type { DraftBlock, PlanBlock, PlanIssue, PlanQuote } from '@/api/types'
 import { blockProblems } from '@/lib/planBlocks'
-import { draftBlock, emptyTotals, line, mondayWednesday, quote } from '@/test/fixtures/planPricing'
+import { draftBlock, emptyTotals, golden, line, mondayWednesday, quote } from '@/test/fixtures/planPricing'
 import { ReviewStep } from './ReviewStep'
 
 const { state, refetch, requested } = vi.hoisted(() => ({
@@ -536,5 +536,38 @@ describe('ReviewStep holidays as a decision with its dates under it', () => {
 
     const hint = screen.getByText(/one choice for every shift of the block that falls on a public holiday/)
     expect(hint).toHaveTextContent('There is no choice to move a shift to another day: to move one, change the block\'s days under Days and times.')
+  })
+})
+
+// Review F11: these read quotes the engine wrote (test/fixtures/planPricing.ts), so the screen is tested against the shapes the API sends and not the ones a test's author imagined.
+describe('ReviewStep on quotes the engine wrote', () => {
+  const dawn = () => draftBlock(mondayWednesday('b1', { start: '05:00:00', end: '08:00:00', days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], transport: { km: 20, vehicle: 'Standard', tolls: 0, parking: 0 } }))
+
+  it('shows a block with a part that has no item: one issue in ten shifts, a row with no item and en dashes, the hours that are priced and the hours that are not, and what the total leaves out', () => {
+    state.current = { data: golden.noItemDawn, isLoading: false, isError: false }
+    setUp({ entry: dawn(), week: null, from: '2026-10-05', to: '2026-10-16' })
+
+    const lookAt = screen.getByRole('region', { name: 'To look at' })
+    expect(within(lookAt).getAllByText('Part of this block has no price item')).toHaveLength(1)
+    expect(lookAt).toHaveTextContent('10 shifts, the first on Mon 5 Oct 2026')
+    const unpriced = within(linesTable()).getAllByRole('row').find(row => within(row).queryByText('No item'))!
+    expect(unpriced).toHaveTextContent('Weekday night')
+    expect(unpriced).toHaveTextContent('10 shifts')
+    expect(unpriced).not.toHaveTextContent('$0.00')
+    expect(within(unpriced).getByText('Not priced')).toBeInTheDocument()
+    const week = screen.getByText(/10 h and \$834\.80 in an ordinary week/)
+    expect(week.closest('p')).toHaveTextContent('10 h and $834.80 in an ordinary week · 5 h not priced.')
+    expect(screen.getByText('$1,669.60')).toHaveClass('font-bold')
+    expect(screen.getByText('10 shifts with a part not priced · some lines use provisional rates.')).toBeInTheDocument()
+  })
+
+  it('shows the brief\'s block over a fortnight: eight hours and $588.64 in the week that has no holiday in it, one holiday to decide, no registration notice', () => {
+    state.current = { data: golden.briefFortnight, isLoading: false, isError: false }
+    setUp({ week: null, from: '2026-10-01', to: '2026-10-14' })
+
+    expect(screen.getByText(/8 h and \$588\.64 in an ordinary week/)).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Public holidays' })).toHaveTextContent('1 shift falls on a public holiday, adding $359.52 over ordinary days.')
+    expect(screen.queryByText(/Registration groups are not confirmed/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'To look at' })).not.toBeInTheDocument()
   })
 })

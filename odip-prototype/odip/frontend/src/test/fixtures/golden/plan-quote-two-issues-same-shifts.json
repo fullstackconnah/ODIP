@@ -1,0 +1,435 @@
+{
+  "periodFrom": "2026-10-05",
+  "periodTo": "2026-10-16",
+  "lines": [
+    {
+      "blockId": "b1",
+      "kind": "Support",
+      "itemCode": "01_011_0107_1_1",
+      "unit": "H",
+      "qty": 3,
+      "unitPrice": 73.58,
+      "total": 220.74,
+      "serviceDate": "2026-10-05",
+      "startTime": "09:00:00",
+      "endDate": "2026-10-05",
+      "endTime": "12:00:00",
+      "band": "Weekday Daytime",
+      "dayType": "Weekday",
+      "paceCategory": 1,
+      "flags": "None",
+      "shortNoticeCancellationAllowed": true,
+      "trace": {
+        "rules": [
+          "bands:weekday-daytime",
+          "price:catalogue-by-service-date"
+        ],
+        "why": "Weekday Daytime (Mon-Fri 06:00-20:00) on Mon 5 Oct 2026, 09:00 to 12:00; one worker for one participant; catalogue 2026-27, price from 1 Jul 2026 (01_011_0107_1_1, $73.58 a unit maximum).",
+        "catalogueVersion": "2026-27",
+        "priceBasisFrom": "2026-07-01",
+        "sourceDocument": "support-catalogue-2026-27.xlsx",
+        "zone": "National",
+        "maximumUnitPrice": 73.58,
+        "workers": 1,
+        "participantsPresent": 1,
+        "openQuestions": []
+      },
+      "isPriced": true,
+      "review": false,
+      "holidayExposure": false,
+      "provisional": false
+    },
+    {
+      "blockId": "b1",
+      "kind": "Support",
+      "itemCode": "01_011_0107_1_1",
+      "unit": "H",
+      "qty": 3,
+      "unitPrice": 73.58,
+      "total": 220.74,
+      "serviceDate": "2026-10-06",
+      "startTime": "09:00:00",
+      "endDate": "2026-10-06",
+      "endTime": "12:00:00",
+      "band": "Weekday Daytime",
+      "dayType": "Weekday",
+      "paceCategory": 1,
+      "flags": "None",
+      "shortNoticeCancellationAllowed": true,
+      "trace": {
+        "rules": [
+          "bands:weekday-daytime",
+          "price:catalogue-by-service-date"
+        ],
+        "why": "Weekday Daytime (Mon-Fri 06:00-20:00) on Tue 6 Oct 2026, 09:00 to 12:00; one worker for one participant; catalogue 2026-27, price from 1 Jul 2026 (01_011_0107_1_1, $73.58 a unit maximum).",
+        "catalogueVersion": "2026-27",
+        "priceBasisFrom": "2026-07-01",
+        "sourceDocument": "support-catalogue-2026-27.xlsx",
+        "zone": "National",
+        "maximumUnitPrice": 73.58,
+        "workers": 1,
+        "participantsPresent": 1,
+        "openQuestions": []
+      },
+      "isPriced": true,
+      "review": false,
+      "holidayExposure": false,
+      "provisional": false
+    },
+    {
+      "blockId": "b1",
+      "kind": "Support",
+      "itemCode": "01_011_0107_1_1",
+      "unit": "H",
+      "qty": 3,
+      "unitPrice": 73.58,
+      "total": 220.74,
+      "serviceDate": "2026-10-07",
+      "startTime": "09:00:00",
+      "endDate": "2026-10-07",
+      "endTime": "12:00:00",
+      "band": "Weekday Daytime",
+      "dayType": "Weekday",
+      "paceCategory": 1,
+      "flags": "None",
+      "shortNoticeCancellationAllowed": true,
+      "trace": {
+        "rules": [
+          "bands:weekday-daytime",
+          "price:catalogue-by-service-date"
+        ],
+        "why": "Weekday Daytime (Mon-Fri 06:00-20:00) on Wed 7 Oct 2026, 09:00 to 12:00; one worker for one participant; catalogue 2026-27, price from 1 Jul 2026 (01_011_0107_1_1, $73.58 a unit maximum).",
+        "catalogueVersion": "2026-27",
+        "priceBasisFrom": "2026-07-01",
+        "sourceDocument": "support-catalogue-2026-27.xlsx",
+        "zone": "National",
+        "maximumUnitPrice": 73.58,
+        "workers": 1,
+        "participantsPresent": 1,
+        "openQuestions": []
+      },
+      "isPriced": true,
+      "review": false,
+      "holidayExposure": false,
+      "provisional": false
+    },
+    {
+      "blockId": "b1",
+      "kind": "Support",
+      "itemCode": "01_011_0107_1_1",
+      "unit": "H",
+      "qty": 3,
+      "unitPrice": 73.58,
+      "total": 220.74,
+      "serviceDate": "2026-10-08",
+      "startTime": "09:00:00",
+      "endDate": "2026-10-08",
+      "endTime": "12:00:00",
+      "band": "Weekday Daytime",
+      "dayType": "Weekday",
+      "paceCategory": 1,
+      "flags": "None",
+      "shortNoticeCancellationAllowed": true,
+      "trace": {
+        "rules": [
+          "bands:weekday-daytime",
+          "price:catalogue-by-service-date"
+        ],
+        "why": "Weekday Daytime (Mon-Fri 06:00-20:00) on Thu 8 Oct 2026, 09:00 to 12:00; one worker for one participant; catalogue 2026-27, price from 1 Jul 2026 (01_011_0107_1_1, $73.58 a unit maximum).",
+        "catalogueVersion": "2026-27",
+        "priceBasisFrom": "2026-07-01",
+        "sourceDocument": "support-catalogue-2026-27.xlsx",
+        "zone": "National",
+        "maximumUnitPrice": 73.58,
+        "workers": 1,
+        "participantsPresent": 1,
+        "openQuestions": []
+      },
+      "isPriced": true,
+      "review": false,
+      "holidayExposure": false,
+      "provisional": false
+    },
+    {
+      "blockId": "b1",
+      "kind": "Support",
+      "itemCode": "01_011_0107_1_1",
+      "unit": "H",
+      "qty": 3,
+      "unitPrice": 73.58,
+      "total": 220.74,
+      "serviceDate": "2026-10-09",
+      "startTime": "09:00:00",
+      "endDate": "2026-10-09",
+      "endTime": "12:00:00",
+      "band": "Weekday Daytime",
+      "dayType": "Weekday",
+      "paceCategory": 1,
+      "flags": "None",
+      "shortNoticeCancellationAllowed": true,
+      "trace": {
+        "rules": [
+          "bands:weekday-daytime",
+          "price:catalogue-by-service-date"
+        ],
+        "why": "Weekday Daytime (Mon-Fri 06:00-20:00) on Fri 9 Oct 2026, 09:00 to 12:00; one worker for one participant; catalogue 2026-27, price from 1 Jul 2026 (01_011_0107_1_1, $73.58 a unit maximum).",
+        "catalogueVersion": "2026-27",
+        "priceBasisFrom": "2026-07-01",
+        "sourceDocument": "support-catalogue-2026-27.xlsx",
+        "zone": "National",
+        "maximumUnitPrice": 73.58,
+        "workers": 1,
+        "participantsPresent": 1,
+        "openQuestions": []
+      },
+      "isPriced": true,
+      "review": false,
+      "holidayExposure": false,
+      "provisional": false
+    },
+    {
+      "blockId": "b1",
+      "kind": "Support",
+      "itemCode": "01_011_0107_1_1",
+      "unit": "H",
+      "qty": 3,
+      "unitPrice": 73.58,
+      "total": 220.74,
+      "serviceDate": "2026-10-12",
+      "startTime": "09:00:00",
+      "endDate": "2026-10-12",
+      "endTime": "12:00:00",
+      "band": "Weekday Daytime",
+      "dayType": "Weekday",
+      "paceCategory": 1,
+      "flags": "None",
+      "shortNoticeCancellationAllowed": true,
+      "trace": {
+        "rules": [
+          "bands:weekday-daytime",
+          "price:catalogue-by-service-date"
+        ],
+        "why": "Weekday Daytime (Mon-Fri 06:00-20:00) on Mon 12 Oct 2026, 09:00 to 12:00; one worker for one participant; catalogue 2026-27, price from 1 Jul 2026 (01_011_0107_1_1, $73.58 a unit maximum).",
+        "catalogueVersion": "2026-27",
+        "priceBasisFrom": "2026-07-01",
+        "sourceDocument": "support-catalogue-2026-27.xlsx",
+        "zone": "National",
+        "maximumUnitPrice": 73.58,
+        "workers": 1,
+        "participantsPresent": 1,
+        "openQuestions": []
+      },
+      "isPriced": true,
+      "review": false,
+      "holidayExposure": false,
+      "provisional": false
+    },
+    {
+      "blockId": "b1",
+      "kind": "Support",
+      "itemCode": "01_011_0107_1_1",
+      "unit": "H",
+      "qty": 3,
+      "unitPrice": 73.58,
+      "total": 220.74,
+      "serviceDate": "2026-10-13",
+      "startTime": "09:00:00",
+      "endDate": "2026-10-13",
+      "endTime": "12:00:00",
+      "band": "Weekday Daytime",
+      "dayType": "Weekday",
+      "paceCategory": 1,
+      "flags": "None",
+      "shortNoticeCancellationAllowed": true,
+      "trace": {
+        "rules": [
+          "bands:weekday-daytime",
+          "price:catalogue-by-service-date"
+        ],
+        "why": "Weekday Daytime (Mon-Fri 06:00-20:00) on Tue 13 Oct 2026, 09:00 to 12:00; one worker for one participant; catalogue 2026-27, price from 1 Jul 2026 (01_011_0107_1_1, $73.58 a unit maximum).",
+        "catalogueVersion": "2026-27",
+        "priceBasisFrom": "2026-07-01",
+        "sourceDocument": "support-catalogue-2026-27.xlsx",
+        "zone": "National",
+        "maximumUnitPrice": 73.58,
+        "workers": 1,
+        "participantsPresent": 1,
+        "openQuestions": []
+      },
+      "isPriced": true,
+      "review": false,
+      "holidayExposure": false,
+      "provisional": false
+    },
+    {
+      "blockId": "b1",
+      "kind": "Support",
+      "itemCode": "01_011_0107_1_1",
+      "unit": "H",
+      "qty": 3,
+      "unitPrice": 73.58,
+      "total": 220.74,
+      "serviceDate": "2026-10-14",
+      "startTime": "09:00:00",
+      "endDate": "2026-10-14",
+      "endTime": "12:00:00",
+      "band": "Weekday Daytime",
+      "dayType": "Weekday",
+      "paceCategory": 1,
+      "flags": "None",
+      "shortNoticeCancellationAllowed": true,
+      "trace": {
+        "rules": [
+          "bands:weekday-daytime",
+          "price:catalogue-by-service-date"
+        ],
+        "why": "Weekday Daytime (Mon-Fri 06:00-20:00) on Wed 14 Oct 2026, 09:00 to 12:00; one worker for one participant; catalogue 2026-27, price from 1 Jul 2026 (01_011_0107_1_1, $73.58 a unit maximum).",
+        "catalogueVersion": "2026-27",
+        "priceBasisFrom": "2026-07-01",
+        "sourceDocument": "support-catalogue-2026-27.xlsx",
+        "zone": "National",
+        "maximumUnitPrice": 73.58,
+        "workers": 1,
+        "participantsPresent": 1,
+        "openQuestions": []
+      },
+      "isPriced": true,
+      "review": false,
+      "holidayExposure": false,
+      "provisional": false
+    },
+    {
+      "blockId": "b1",
+      "kind": "Support",
+      "itemCode": "01_011_0107_1_1",
+      "unit": "H",
+      "qty": 3,
+      "unitPrice": 73.58,
+      "total": 220.74,
+      "serviceDate": "2026-10-15",
+      "startTime": "09:00:00",
+      "endDate": "2026-10-15",
+      "endTime": "12:00:00",
+      "band": "Weekday Daytime",
+      "dayType": "Weekday",
+      "paceCategory": 1,
+      "flags": "None",
+      "shortNoticeCancellationAllowed": true,
+      "trace": {
+        "rules": [
+          "bands:weekday-daytime",
+          "price:catalogue-by-service-date"
+        ],
+        "why": "Weekday Daytime (Mon-Fri 06:00-20:00) on Thu 15 Oct 2026, 09:00 to 12:00; one worker for one participant; catalogue 2026-27, price from 1 Jul 2026 (01_011_0107_1_1, $73.58 a unit maximum).",
+        "catalogueVersion": "2026-27",
+        "priceBasisFrom": "2026-07-01",
+        "sourceDocument": "support-catalogue-2026-27.xlsx",
+        "zone": "National",
+        "maximumUnitPrice": 73.58,
+        "workers": 1,
+        "participantsPresent": 1,
+        "openQuestions": []
+      },
+      "isPriced": true,
+      "review": false,
+      "holidayExposure": false,
+      "provisional": false
+    },
+    {
+      "blockId": "b1",
+      "kind": "Support",
+      "itemCode": "01_011_0107_1_1",
+      "unit": "H",
+      "qty": 3,
+      "unitPrice": 73.58,
+      "total": 220.74,
+      "serviceDate": "2026-10-16",
+      "startTime": "09:00:00",
+      "endDate": "2026-10-16",
+      "endTime": "12:00:00",
+      "band": "Weekday Daytime",
+      "dayType": "Weekday",
+      "paceCategory": 1,
+      "flags": "None",
+      "shortNoticeCancellationAllowed": true,
+      "trace": {
+        "rules": [
+          "bands:weekday-daytime",
+          "price:catalogue-by-service-date"
+        ],
+        "why": "Weekday Daytime (Mon-Fri 06:00-20:00) on Fri 16 Oct 2026, 09:00 to 12:00; one worker for one participant; catalogue 2026-27, price from 1 Jul 2026 (01_011_0107_1_1, $73.58 a unit maximum).",
+        "catalogueVersion": "2026-27",
+        "priceBasisFrom": "2026-07-01",
+        "sourceDocument": "support-catalogue-2026-27.xlsx",
+        "zone": "National",
+        "maximumUnitPrice": 73.58,
+        "workers": 1,
+        "participantsPresent": 1,
+        "openQuestions": []
+      },
+      "isPriced": true,
+      "review": false,
+      "holidayExposure": false,
+      "provisional": false
+    }
+  ],
+  "issues": [
+    {
+      "blockId": "b1",
+      "reason": "TransportNotAvailable",
+      "message": "Block \u0027b1\u0027: activity-based transport only goes with community access and group activities.",
+      "count": 10,
+      "firstDate": "2026-10-05"
+    },
+    {
+      "blockId": "b1",
+      "reason": "AccommodationNotAvailable",
+      "message": "Block \u0027b1\u0027: accommodation nights are a short-term accommodation item. Use a short-term accommodation block.",
+      "count": 10,
+      "firstDate": "2026-10-05"
+    }
+  ],
+  "notices": [
+    {
+      "code": "registration-groups-not-confirmed",
+      "message": "The registration groups the provider holds have not been confirmed: the builder assumes all six (0107, 0104, 0125, 0136, 0115, 0108). Confirm them in the provider settings.",
+      "openQuestion": 1
+    }
+  ],
+  "holidayOccurrences": [],
+  "openQuestions": [
+    {
+      "number": 1,
+      "text": "Which registration groups does the provider hold (0107, 0104, 0125, 0136, 0115, 0108)? The builder assumes all six until somebody confirms."
+    }
+  ],
+  "totals": {
+    "amount": 2207.40,
+    "supportHours": 30,
+    "lineCount": 10,
+    "unpricedLines": 0,
+    "reviewLines": 0,
+    "provisionalLines": 0,
+    "holidayOccurrences": 0,
+    "holidayUplift": 0,
+    "byCategory": [
+      {
+        "paceCategory": 1,
+        "name": "Assistance with Daily Life",
+        "amount": 2207.40,
+        "hours": 30
+      }
+    ],
+    "byBlock": [
+      {
+        "blockId": "b1",
+        "amount": 2207.40,
+        "supportHours": 30,
+        "occurrences": 10,
+        "skippedOccurrences": 0
+      }
+    ]
+  },
+  "timeBasis": "tz-database",
+  "needsReview": true
+}

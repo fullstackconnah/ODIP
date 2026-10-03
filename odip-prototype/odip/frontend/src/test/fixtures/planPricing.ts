@@ -1,5 +1,8 @@
 import type { DraftBlock, PlanBlock, PlanPricingSettingsDto, PlannedLine, PlanQuote } from '@/api/types'
 import { emptyBlock } from '@/lib/planBlocks'
+import briefFortnight from './golden/plan-quote-brief-fortnight.json'
+import noItemDawn from './golden/plan-quote-no-item-dawn.json'
+import twoIssuesSameShifts from './golden/plan-quote-two-issues-same-shifts.json'
 
 /**
  * Fixtures for the plan builder's tests: blocks as the engine takes them, lines and quotes as it answers (the brief's own numbers: Monday and Wednesday 09:00 to 13:00 is 8 hours at
@@ -50,4 +53,18 @@ export function budgetOf(blockId = 'b1'): { period: PlanQuote; weekly: PlanQuote
     }),
     week: { from: '2026-10-12', to: '2026-10-18' },
   }
+}
+
+/**
+ * Quotes written by the pricing engine itself, not by a test's author. The C# test PlanQuoteFrontendFixtureTests prices each scenario against the real 2026-27 catalogue and fails if the file
+ * here is no longer what the engine says (and writes it again under ODIP_REGENERATE_GOLDEN=1), so what the screen's tests read is what the API sends. A hand-made quote holds what its author
+ * believed: for a long time the screen's tests had one issue for every date, a message with the date in it, and counts that meant something else (review F11).
+ */
+export const golden = {
+  /** The brief's block (Monday and Wednesday 09:00 to 13:00) over 2026-10-01 to 2026-10-14, with NSW's Labour Day on Monday 5 October: priced, one public holiday to decide, the registration notice. */
+  briefFortnight: briefFortnight as unknown as PlanQuote,
+  /** A weekday 05:00 to 08:00 community access block with a vehicle over 2026-10-05 to 2026-10-16: one NoItem issue counting ten shifts, ten lines with no price, the rest priced. */
+  noItemDawn: noItemDawn as unknown as PlanQuote,
+  /** A personal care block that asks for transport and accommodation nights over the same fortnight: two issues, each counting the same ten shifts. */
+  twoIssuesSameShifts: twoIssuesSameShifts as unknown as PlanQuote,
 }

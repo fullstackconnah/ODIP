@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import type { PlanBudget } from '@/api/hooks'
 import type { DraftBlock, PlanIssue } from '@/api/types'
-import { budgetOf, draftBlock, mondayWednesday, quote } from '@/test/fixtures/planPricing'
+import { budgetOf, draftBlock, golden, mondayWednesday, quote } from '@/test/fixtures/planPricing'
 import { PlanOverview } from './PlanOverview'
 
 const asRole = (role: string) => localStorage.setItem('odip_user', JSON.stringify({ role }))
@@ -357,5 +357,18 @@ describe('PlanOverview with no blocks', () => {
 
     expect(screen.getByText('This draft has no blocks.')).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+})
+
+// Review F11: a quote the engine wrote (test/fixtures/planPricing.ts). A block that asks for two things its support type has no item for has two issues counting the same ten shifts.
+describe('PlanOverview on a quote the engine wrote', () => {
+  it('says each of two things that cannot be priced once, with the shifts it touches, beside the block, and the refusals apart', () => {
+    const personalCare = draftBlock(mondayWednesday('b1', { supportType: 'PersonalCare', days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], start: '09:00:00', end: '12:00:00' }))
+    setUp({ entries: [personalCare], issues: golden.twoIssuesSameShifts.issues })
+
+    expect(screen.getByText('Transport does not go with this support type, 10 shifts')).toBeInTheDocument()
+    expect(screen.getByText('Accommodation nights are a short-term accommodation item, 10 shifts')).toBeInTheDocument()
+    expect(screen.queryByText(/20 shifts/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Open / })).not.toBeInTheDocument()       // neither stops a save: no recovery to offer on the row
   })
 })

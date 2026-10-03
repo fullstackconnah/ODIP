@@ -7,6 +7,8 @@
 
 const CATALOGUE_VERSION = '2026-27'
 const PRICE_BASIS_FROM = '2026-07-01'
+// How the engine names a support family in its sentences (OccurrencePricer.IssueText): the message names the item and never a date, so one gap in fifty weeks is one issue with a count.
+const FAMILY_WORDS = { PersonalCare: 'personal care', CommunityAccess: 'community access', GroupActivity: 'group activities', StaSupport: 'short-term accommodation support' }
 const CATALOGUE_FROM = '2026-07-01'
 const CATALOGUE_TO = '2027-06-30'
 
@@ -199,7 +201,7 @@ function quote(request, settings) {
       const sleeper = block.workerMaySleep && durationOf(block) >= 480 && block.supportType !== 'CommunityAccess' && block.supportType !== 'GroupActivity'
       const occurrenceLines = []
       if (iso < CATALOGUE_FROM || iso > CATALOGUE_TO) {
-        addIssue(block.id, 'CatalogueNotFound', `Block '${block.id}': no catalogue row is valid on ${iso}, so the support on that date is not priced.`, iso)
+        addIssue(block.id, 'CatalogueNotFound', `No catalogue row for ${FAMILY_WORDS[block.supportType] || block.supportType} is valid for part of the period. Import the catalogue for that period.`, iso)
         occurrenceLines.push(finish(lineBase(block, iso, { itemCode: undefined, unpriced: 'CatalogueNotFound', band: 'Weekday Daytime', review: true, isPriced: false, trace: traceOf(block, ['unpriced:catalogue-not-found'], 'No catalogue row is valid on this date.', undefined, []) })))
       } else if (sleeper) {
         const sta = block.supportType === 'StaSupport'
@@ -219,7 +221,7 @@ function quote(request, settings) {
         for (const part of parts) {
           const item = itemFor(block.supportType, part.band, block.intensity)
           if (!item) {
-            addIssue(block.id, 'NoItem', `Block '${block.id}': the catalogue has no ${block.supportType === 'CommunityAccess' ? 'community access' : 'group activity'} item for ${part.band} (${describeTime(part.from)} to ${describeTime(part.to)}); it is not priced and is never mapped to another family.`, part.date)
+            addIssue(block.id, 'NoItem', `The catalogue has no item for ${FAMILY_WORDS[block.supportType] || block.supportType} standard ${part.band} (registration group ${group}). A weekday night support has no item in this family, and it is not mapped to another family: a person must decide how it is claimed.`, part.date)
             occurrenceLines.push(finish(lineBase(block, part.date, { itemCode: undefined, unpriced: 'NoItem', qty: part.minutes / 60, band: part.band, review: true, isPriced: false, startTime: clockOf(part.from), endDate: part.date, endTime: clockOf(part.to), trace: traceOf(block, ['unpriced:no-item'], 'No catalogue item exists for this band.', undefined, []) })))
             continue
           }
