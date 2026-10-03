@@ -7,6 +7,9 @@ import { formatDayNumber, parseDateOnly } from './dateOnly'
 export const PERIOD_LENGTHS = [1, 3, 6, 12] as const
 export type PeriodLengthMonths = typeof PERIOD_LENGTHS[number]
 
+/** The longest a plan may run, in days, both ends counted. The server refuses a longer one, so nothing is proposed for it. */
+export const MAX_PLAN_DAYS = 800
+
 export interface ProposedPeriod {
   periodStart: string
   periodEnd: string
@@ -24,7 +27,7 @@ export interface ProposeInput {
   lengthMonths: number | null
   /** The pool's amount for the whole plan, in dollars. */
   planAmount: number
-  /** Oassist's share of it, in dollars, when the participant also uses other providers. */
+  /** The organisation's share of it, in dollars, when the participant also uses other providers. */
   setAside?: number
 }
 
@@ -76,15 +79,51 @@ function splitCents(totalCents: number, weights: readonly number[]): number[] {
 }
 
 /**
+ * Splits a set-aside over periods the way the plan amount was, then moves any cent that rounding left above its period's plan amount onto an earlier period that has room. Two totals
+ * a few cents apart can round differently (11 cents over three months is 4, 4, 3 and 10 cents is 3, 3, 4: the last set-aside would be a cent above its plan amount, which the server
+ * refuses). There is always room for it when the set-aside is no more than the plan amount, so it still adds up to what was asked for.
+ */
+function fitSetAsides(amounts: readonly number[], setAsides: readonly number[]): number[] {
+  const fitted = [...setAsides]
+  let excess = 0
+  for (let i = fitted.length - 1; i >= 0; i--) {
+    if (fitted[i] > amounts[i]) {
+      excess += fitted[i] - amounts[i]
+      fitted[i] = amounts[i]
+    }
+  }
+  for (let i = fitted.length - 1; i >= 0 && excess > 0; i--) {
+    const moved = Math.min(amounts[i] - fitted[i], excess)
+    fitted[i] += moved
+    excess -= moved
+  }
+  return fitted
+}
+
+/**
+ * A set-aside spread over periods in proportion to their plan amounts (all in whole cents), for a pool whose periods were worked on by hand and so no longer follow the days' split: each
+ * period sets aside the same share of its amount, as near to the cent as a split allows, the last taking what is left, and never above a period's plan amount while the set-aside is no
+ * more than the plan amount in all. All zeros when there is nothing to weigh by (no periods, or plan amounts of $0).
+ */
+export function spreadSetAside(setAsideCents: number, amountCents: readonly number[]): number[] {
+  const total = amountCents.reduce((sum, amount) => sum + amount, 0)
+  if (amountCents.length === 0 || total === 0) return amountCents.map(() => 0)
+  const plain = splitCents(setAsideCents, amountCents)
+  return setAsideCents <= total ? fitSetAsides(amountCents, plain) : plain
+}
+
+/**
  * The periods of a pool: each runs from the day after the one before it for the period length in calendar months, and the last ends on the plan's last day (a short last period
  * when the plan is not a whole number of lengths). Boundaries are counted from the plan's first day, so a plan that starts on the 31st does not drift a day each period. Amounts
  * are the plan amount, and the set-aside when given, split in proportion to the days each period covers. A plan with no funding periods is one period equal to the plan. Nothing
- * is proposed (an empty list) for dates that are not real days, a plan that ends before it starts, or a length the NDIS does not use.
+ * is proposed (an empty list) for dates that are not real days, a plan that ends before it starts, a plan longer than the server accepts (a year typed into a date input digit by
+ * digit passes through years like 0002, which would be thousands of periods drawn for each keystroke), or a length the NDIS does not use.
  */
 export function proposePeriods({ planStart, planEnd, lengthMonths, planAmount, setAside }: ProposeInput): ProposedPeriod[] {
   const first = parseDateOnly(planStart)
   const last = parseDateOnly(planEnd)
   if (first === null || last === null || last < first) return []
+  if (last - first + 1 > MAX_PLAN_DAYS) return []
   if (lengthMonths !== null && !(PERIOD_LENGTHS as readonly number[]).includes(lengthMonths)) return []
 
   const bounds: { start: number; end: number }[] = []
@@ -101,7 +140,12 @@ export function proposePeriods({ planStart, planEnd, lengthMonths, planAmount, s
 
   const weights = bounds.map(({ start, end }) => end - start + 1)
   const amounts = splitCents(toCents(planAmount), weights)
-  const setAsides = setAside === undefined ? null : splitCents(toCents(setAside), weights)
+  let setAsides: number[] | null = null
+  if (setAside !== undefined) {
+    const plain = splitCents(toCents(setAside), weights)
+    // A set-aside above the plan amount has no valid split: it is split plainly, and the editor says it is too much beside the field.
+    setAsides = toCents(setAside) <= toCents(planAmount) ? fitSetAsides(amounts, plain) : plain
+  }
   return bounds.map(({ start, end }, i) => ({
     periodStart: formatDayNumber(start),
     periodEnd: formatDayNumber(end),

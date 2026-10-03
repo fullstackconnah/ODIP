@@ -1,14 +1,13 @@
 import type { BillingSourcesHintDto, BudgetEvidenceSource, FundingPlanDto, FundingPoolKind, PaceCategoryDto, SaveFundingPlanDto } from '@/api/types'
 import type { PlanType } from '@/api/types/enums'
-import { addMonthsIso, proposePeriods, sumAmounts, toCents } from '@/lib/fundingPeriods'
+import { addMonthsIso, MAX_PLAN_DAYS, proposePeriods, spreadSetAside, sumAmounts, toCents } from '@/lib/fundingPeriods'
 import { formatDayNumber, parseDateOnly } from '@/lib/dateOnly'
 
 // The plan budget editor's form, as plain data: what the person typed (money stays text until it is saved, so clearing a box to type another figure does not snap to 0), how the
 // periods follow the plan's dates and the typed totals, what is wrong in plain words, and the request body. No React in here, so every rule has a test. The server checks the same
 // rules again and is the authority; these only say so earlier, beside the field.
 
-/** The longest a plan may run, in days. The server refuses a longer one. */
-export const MAX_PLAN_DAYS = 800
+export { MAX_PLAN_DAYS }
 /** The largest amount one period may hold: the server's own ceiling, a guard against a slipped decimal point. */
 export const MAX_AMOUNT = 99_999_999.99
 
@@ -33,11 +32,15 @@ export interface EditorPool {
   notes: string
   /** Typed: this pool's amount for the whole plan. */
   totalText: string
-  /** Typed: Oassist's share of it. '' = none. */
+  /** Typed: the organisation's share of it. '' = none. */
   setAsideText: string
   periods: EditorPeriod[]
-  /** A period amount was changed by hand: the proposal no longer rewrites the amounts, until the person asks for it again. */
+  /** The amounts are not a plain proposal: they were read from a saved plan, or changed by hand. The proposal no longer rewrites them, until the person asks for it again. */
   edited: boolean
+  /** The periods were read from a saved plan, not worked out here (so they are what the plan says, not a split by days). */
+  fromPlan: boolean
+  /** An amount was changed by hand in this session. Only then is the proposal's "edited" note true, and only then is "Split again" worth offering by itself. */
+  touched: boolean
 }
 
 export interface EditorState {
@@ -84,11 +87,15 @@ export function emptyEditorState(): EditorState {
 
 /**
  * The form for recording the next plan: the day after the last one ended, a year long, with the same funding period length. Pools and amounts are left for the person to fill in:
- * a reassessment is a new set of figures, not a copy of the old ones.
+ * a reassessment is a new set of figures, not a copy of the old ones. A FIRST plan (nothing recorded before it) starts from the plan dates the profile already holds when it has both,
+ * so a coordinator who typed them at intake does not type them again; the plan after that follows the plan before it, never the profile.
  */
-export function nextPlanState(previous: Pick<FundingPlanDto, 'planEnd' | 'periodLengthMonths'> | undefined): EditorState {
+export function nextPlanState(previous: Pick<FundingPlanDto, 'planEnd' | 'periodLengthMonths'> | undefined, profileDates?: { start?: string; end?: string }): EditorState {
   const state = emptyEditorState()
-  if (!previous) return state
+  if (!previous) {
+    const readable = profileDates?.start && profileDates.end && parseDateOnly(profileDates.start) !== null && parseDateOnly(profileDates.end) !== null
+    return readable ? { ...state, planStart: profileDates.start as string, planEnd: profileDates.end as string } : state
+  }
   const endDay = parseDateOnly(previous.planEnd)
   if (endDay === null) return state
   const start = formatDayNumber(endDay + 1)
@@ -107,7 +114,7 @@ export function editorStateFromPlan(plan: FundingPlanDto): EditorState {
       periods: pool.periods.map(period => ({
         periodStart: period.periodStart, periodEnd: period.periodEnd, planAmount: moneyText(period.planAmount), setAside: period.setAside === undefined ? '' : moneyText(period.setAside),
       })),
-      edited: true,
+      edited: true, fromPlan: true, touched: false,
     })),
   }
 }
@@ -131,7 +138,7 @@ export function proposedPeriods(state: Pick<EditorState, 'planStart' | 'planEnd'
 
 /** The pool with its periods worked out again from the plan's dates and the totals it holds. */
 export function resplit(state: EditorState, pool: EditorPool): EditorPool {
-  return { ...pool, periods: proposedPeriods(state, pool.totalText, pool.setAsideText), edited: false }
+  return { ...pool, periods: proposedPeriods(state, pool.totalText, pool.setAsideText), edited: false, fromPlan: false, touched: false }
 }
 
 /** Every pool's periods worked out again (the plan's dates or funding period length changed). True in `rewroteEdits` when some pool had amounts typed by hand that this replaced. */
@@ -148,23 +155,42 @@ export function withPlanFields(state: EditorState, patch: Partial<EditorState>):
   return sameDates(state, next) ? { state: next, rewroteEdits: false } : resplitAll(next)
 }
 
-/** A change to what was typed for a pool's totals: until a period has been edited by hand the periods follow it. */
+/**
+ * A change to what was typed for a pool's totals. Until a period has been edited by hand (or the periods were read from a saved plan) the periods follow the totals. After that the
+ * plan amounts are left as they are, but the SET-ASIDE box still has to agree with the periods, or the figure typed would silently not be saved (a pool's limit is its set-aside when
+ * it has one, so a lost set-aside would make the limit the whole plan amount): typing a set-aside spreads it over the periods in proportion to their plan amounts, and clearing the box
+ * clears it from every period (a pool has a set-aside on every period or on none). A half-typed amount ("4.") changes nothing until it is a whole one.
+ */
 export function withPoolTotals(state: EditorState, key: string, patch: Partial<Pick<EditorPool, 'totalText' | 'setAsideText'>>): EditorState {
   return {
     ...state,
     pools: state.pools.map(pool => {
       if (pool.key !== key) return pool
       const next = { ...pool, ...patch }
-      return next.edited ? next : resplit(state, next)
+      if (!next.edited) return resplit(state, next)
+      return patch.setAsideText === undefined ? next : agreeSetAside(pool, next)
     }),
   }
+}
+
+/** The set-aside box of an edited pool, as the periods should read once it changed. */
+function agreeSetAside(before: EditorPool, next: EditorPool): EditorPool {
+  if (isBlank(next.setAsideText)) {
+    // Cleared: no set-aside, on every period too. A box that was blank already, with set-asides typed into the periods, is not "cleared": they are the person's own.
+    return isBlank(before.setAsideText) ? next : { ...next, periods: next.periods.map(period => ({ ...period, setAside: '' })) }
+  }
+  const typed = moneyOf(next.setAsideText)
+  const amounts = next.periods.map(period => moneyOf(period.planAmount))
+  if (typed === null || next.periods.length === 0 || amounts.some(amount => amount === null)) return next
+  const shares = spreadSetAside(toCents(typed), amounts.map(amount => toCents(amount as number)))
+  return { ...next, periods: next.periods.map((period, index) => ({ ...period, setAside: moneyText(shares[index] / 100) })) }
 }
 
 /** A period's amount changed by hand: the pool's periods stop following the typed totals. */
 export function withPeriodEdit(state: EditorState, key: string, index: number, patch: Partial<Pick<EditorPeriod, 'planAmount' | 'setAside'>>): EditorState {
   return {
     ...state,
-    pools: state.pools.map(pool => (pool.key !== key ? pool : { ...pool, edited: true, periods: pool.periods.map((period, i) => (i === index ? { ...period, ...patch } : period)) })),
+    pools: state.pools.map(pool => (pool.key !== key ? pool : { ...pool, edited: true, touched: true, periods: pool.periods.map((period, i) => (i === index ? { ...period, ...patch } : period)) })),
   }
 }
 
@@ -177,9 +203,9 @@ export function hasPool(state: EditorState, paceCategory: number, managementType
   return state.pools.some(pool => pool.paceCategory === paceCategory && pool.managementType === managementType)
 }
 
-function addPool(state: EditorState, pool: Omit<EditorPool, 'key' | 'periods' | 'edited' | 'totalText' | 'setAsideText' | 'notes'> & Partial<Pick<EditorPool, 'totalText' | 'setAsideText'>>): EditorState {
+function addPool(state: EditorState, pool: Omit<EditorPool, 'key' | 'periods' | 'edited' | 'fromPlan' | 'touched' | 'totalText' | 'setAsideText' | 'notes'> & Partial<Pick<EditorPool, 'totalText' | 'setAsideText'>>): EditorState {
   if (hasPool(state, pool.paceCategory, pool.managementType)) return state
-  const base: EditorPool = { totalText: '', setAsideText: '', ...pool, key: newPoolKey(), notes: '', periods: [], edited: false }
+  const base: EditorPool = { totalText: '', setAsideText: '', ...pool, key: newPoolKey(), notes: '', periods: [], edited: false, fromPlan: false, touched: false }
   return { ...state, pools: [...state.pools, resplit(state, base)] }
 }
 
@@ -263,7 +289,7 @@ export interface Problems {
 }
 
 const NOT_AN_AMOUNT = 'Enter dollars and cents, like 8000.00.'
-const TOO_LARGE = 'That is more than a plan amount can be: at most $99,999,999.99.'
+const TOO_LARGE = 'The most a plan amount can be is $99,999,999.99.'
 
 function amountProblem(text: string, required: boolean, requiredMessage: string): string | undefined {
   if (isBlank(text)) return required ? requiredMessage : undefined
@@ -300,7 +326,7 @@ export function validate(state: EditorState): Problems {
     found.setAside = amountProblem(pool.setAsideText, false, '')
     const total = moneyOf(pool.totalText)
     const setAside = moneyOf(pool.setAsideText)
-    if (!found.setAside && total !== null && setAside !== null && toCents(setAside) > toCents(total)) found.setAside = "Oassist's set-aside cannot be more than the plan amount."
+    if (!found.setAside && total !== null && setAside !== null && toCents(setAside) > toCents(total)) found.setAside = 'The set-aside cannot be more than the plan amount.'
 
     // With funding periods each one carries its own amounts, and they are what is saved. With none the single period is the totals themselves, so there is nothing more to check.
     if (state.periodLengthMonths !== null) {

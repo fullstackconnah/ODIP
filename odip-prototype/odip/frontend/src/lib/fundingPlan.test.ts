@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { FundingPlanDto } from '@/api/types'
-import { categoriesLabel, confirmedLabel, currentPlanOf, managementLabel, paceNumber, planStatus, planTotal, writtenDay, writtenSpan } from './fundingPlan'
+import { categoriesLabel, confirmedLabel, currentPlanOf, managementLabel, paceNumber, planStatus, planTitle, planTotal, writtenDay, writtenSpan } from './fundingPlan'
+
+/** A written date as an ordinary string: its non-breaking spaces (kept so a date does not split across lines) read as the spaces they look like. */
+const plain = (text: string): string => text.split(String.fromCharCode(160)).join(' ')
 
 const plan = (id: string, planStart: string, planEnd: string, extra: Partial<FundingPlanDto> = {}): FundingPlanDto => ({
   id, participantId: 'p1', planStart, planEnd, evidence: 'PlanCopy', revision: 1, createdAt: '2026-10-04T00:00:00Z', updatedAt: '2026-10-04T00:00:00Z', pools: [], ...extra,
@@ -59,13 +62,31 @@ describe('how a plan reads', () => {
   })
 
   it('writes a day and a span out in full, the same in every browser', () => {
-    expect(writtenDay('2026-07-01')).toBe('1 Jul 2026')
-    expect(writtenDay('2026-09-30')).toBe('30 Sep 2026')   // never "Sept"
-    expect(writtenDay('2028-02-29')).toBe('29 Feb 2028')
+    expect(plain(writtenDay('2026-07-01'))).toBe('1 Jul 2026')
+    expect(plain(writtenDay('2026-09-30'))).toBe('30 Sep 2026')   // never "Sept"
+    expect(plain(writtenDay('2028-02-29'))).toBe('29 Feb 2028')
     expect(writtenDay(undefined)).toBe('–')
     expect(writtenDay('soon')).toBe('–')
-    expect(writtenSpan('2026-07-01', '2027-06-30')).toBe('1 Jul 2026 – 30 Jun 2027')
-    expect(writtenSpan('2026-07-01', '2026-09-30')).toBe('1 Jul 2026 – 30 Sep 2026')
+    expect(writtenDay('2026-02-31')).toBe('–')   // not a real day
+    expect(plain(writtenSpan('2026-07-01', '2027-06-30'))).toBe('1 Jul 2026 – 30 Jun 2027')
+  })
+
+  it('writes a span the way the rest of the hub does: the year once when both ends are in it, the month once when they share it (lib/dateRange.ts)', () => {
+    expect(plain(writtenSpan('2026-07-01', '2026-09-30'))).toBe('1 Jul – 30 Sep 2026')
+    expect(plain(writtenSpan('2026-08-14', '2026-08-17'))).toBe('14–17 Aug 2026')
+    expect(plain(writtenSpan('2026-12-28', '2027-01-02'))).toBe('28 Dec 2026 – 2 Jan 2027')
+    expect(plain(writtenSpan('2026-08-14', '2026-08-14'))).toBe('14 Aug 2026')
+  })
+
+  it('keeps the day, month and year of a date together, so a line can only break at the dash between two dates', () => {
+    const nbsp = String.fromCharCode(160)
+    expect(writtenDay('2026-07-01')).toBe(`1${nbsp}Jul${nbsp}2026`)
+    expect(writtenSpan('2026-07-01', '2027-06-30')).toBe(`1${nbsp}Jul${nbsp}2026 – 30${nbsp}Jun${nbsp}2027`)   // ordinary spaces round the dash, where it may break
+    expect(writtenSpan('2026-07-01', '2026-09-30')).toBe(`1${nbsp}Jul – 30${nbsp}Sep${nbsp}2026`)
+  })
+
+  it('titles a plan by its span', () => {
+    expect(plain(planTitle({ planStart: '2025-07-01', planEnd: '2026-06-30' }))).toBe('Plan 1 Jul 2025 – 30 Jun 2026')
   })
 
   it('adds up the pools to the cent', () => {

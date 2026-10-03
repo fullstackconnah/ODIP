@@ -226,13 +226,13 @@ describe('what is wrong, in plain words', () => {
     expect(validate(state).pools[state.pools[0].key].total).toBe('Give the plan amount for the whole plan.')
     expect(validate(state).pools[state.pools[1].key].total).toBe('Enter dollars and cents, like 8000.00.')
     const big = withTotal(good(), 0, '100000000')
-    expect(validate(big).pools[big.pools[0].key].total).toMatch(/at most \$99,999,999\.99/)
+    expect(validate(big).pools[big.pools[0].key].total).toBe('The most a plan amount can be is $99,999,999.99.')
   })
 
   it('says a set-aside cannot be more than the plan amount, at the pool and on a period', () => {
     let state = withTotal(good(), 1, '1000')
     state = withPoolTotals(state, state.pools[1].key, { setAsideText: '1500' })
-    expect(validate(state).pools[state.pools[1].key].setAside).toBe("Oassist's set-aside cannot be more than the plan amount.")
+    expect(validate(state).pools[state.pools[1].key].setAside).toBe('The set-aside cannot be more than the plan amount.')
 
     let edited = withTotal(good(), 1, '1000')
     edited = withPeriodEdit(edited, edited.pools[1].key, 0, { setAside: '999999' })
@@ -258,6 +258,153 @@ describe('what is wrong, in plain words', () => {
     const state = { ...good(), notes: 'x'.repeat(2001), confirmedByName: 'y'.repeat(201) }
 
     expect(validate(state)).toMatchObject({ notes: 'At most 2000 characters.', confirmedByName: 'At most 200 characters.' })
+  })
+})
+
+/** A typed amount as a number, 0 for none, for comparing two columns of figures. */
+const toNumber = (text: string): number => moneyOf(text) ?? 0
+
+describe('the set-aside box agrees with the periods, in whichever order it is typed', () => {
+  /** A Core (flexible) pool whose four periods were all set by hand, to the amounts given, so the expected set-asides are exact. */
+  const byHand = (amounts: string[], setAsideText = ''): EditorState => {
+    let state = addCorePool(yearPlan(), 'PlanManaged', { totalText: '4000' })
+    amounts.forEach((planAmount, index) => { state = withPeriodEdit(state, state.pools[0].key, index, { planAmount }) })
+    return withPoolTotals(state, state.pools[0].key, { setAsideText })
+  }
+  const asides = (state: EditorState) => state.pools[0].periods.map(period => period.setAside)
+
+  it('spreads a set-aside typed AFTER a period was edited over every period, in proportion to their plan amounts', () => {
+    const state = byHand(['1000.00', '2000.00', '500.00', '500.00'], '800')
+
+    expect(asides(state)).toEqual(['200.00', '400.00', '100.00', '100.00'])
+    expect(poolSums(state.pools[0])).toMatchObject({ periodsSetAside: 800, typedSetAside: 800, setAsideMismatch: false })
+    expect(toSaveBody(state).pools[0].periods.map(p => p.setAside)).toEqual([200, 400, 100, 100])   // the box is what is saved: never dropped
+  })
+
+  it('keeps a set-aside typed BEFORE a period was edited, and spreads a new one over the amounts as they are now', () => {
+    let state = addCorePool(yearPlan(), 'PlanManaged', { totalText: '4000', setAsideText: '800' })
+    state = withPeriodEdit(state, state.pools[0].key, 1, { planAmount: '3000.00' })
+
+    expect(poolSums(state.pools[0]).periodsSetAside).toBe(800)   // the edit changed an amount, not the set-aside
+    state = withPoolTotals(state, state.pools[0].key, { setAsideText: '600' })
+
+    expect(poolSums(state.pools[0])).toMatchObject({ periodsSetAside: 600, typedSetAside: 600, setAsideMismatch: false })
+    expect(state.pools[0].periods.every(p => toNumber(p.setAside) <= toNumber(p.planAmount))).toBe(true)
+  })
+
+  it('re-spreads when the box is retyped, even over set-asides that were typed into the periods by hand: the box is the pool\'s set-aside', () => {
+    let state = byHand(['1000.00', '1000.00', '1000.00', '1000.00'], '400')
+    state = withPeriodEdit(state, state.pools[0].key, 0, { setAside: '10.00' })
+    expect(poolSums(state.pools[0]).setAsideMismatch).toBe(true)   // the box says 400, the periods add up to 310: said in words
+
+    state = withPoolTotals(state, state.pools[0].key, { setAsideText: '200' })
+
+    expect(asides(state)).toEqual(['50.00', '50.00', '50.00', '50.00'])
+  })
+
+  it('removes the set-aside from every period of an edited pool when the box is cleared, and from a pool that still follows its totals', () => {
+    const edited = byHand(['1000.00', '2000.00', '500.00', '500.00'], '800')
+    expect(asides(edited)).toEqual(['200.00', '400.00', '100.00', '100.00'])   // there is something to clear
+    const cleared = withPoolTotals(edited, edited.pools[0].key, { setAsideText: '' })
+    expect(asides(cleared)).toEqual(['', '', '', ''])
+    expect(poolSums(cleared.pools[0])).toMatchObject({ periodsSetAside: null, typedSetAside: null, setAsideMismatch: false })
+    expect(toSaveBody(cleared).pools[0].periods.some(p => 'setAside' in p)).toBe(false)   // the saved plan has no set-aside, which is what clearing the box says
+
+    const following = addCorePool(yearPlan(), 'PlanManaged', { totalText: '4000', setAsideText: '800' })
+    const followingCleared = withPoolTotals(following, following.pools[0].key, { setAsideText: '' })
+    expect(asides(followingCleared)).toEqual(['', '', '', ''])
+  })
+
+  it('leaves set-asides typed into the periods alone while the box was never filled in', () => {
+    let state = byHand(['1000.00', '1000.00', '1000.00', '1000.00'])
+    state = [0, 1, 2, 3].reduce((next, index) => withPeriodEdit(next, next.pools[0].key, index, { setAside: '100.00' }), state)
+
+    const same = withPoolTotals(state, state.pools[0].key, { setAsideText: '' })   // blank to blank: nothing was cleared
+
+    expect(asides(same)).toEqual(['100.00', '100.00', '100.00', '100.00'])
+    expect(poolSums(same.pools[0])).toMatchObject({ periodsSetAside: 400, typedSetAside: null, setAsideMismatch: false })
+  })
+
+  it('waits for a whole amount: a half-typed one changes nothing, and the finished one is applied', () => {
+    let state = byHand(['1000.00', '1000.00', '1000.00', '1000.00'])
+
+    state = withPoolTotals(state, state.pools[0].key, { setAsideText: '4.' })
+    expect(asides(state)).toEqual(['', '', '', ''])
+    state = withPoolTotals(state, state.pools[0].key, { setAsideText: '4.5' })
+    expect(asides(state)).toEqual(['1.13', '1.13', '1.13', '1.11'])   // 450 cents over four equal amounts: each but the last rounds to 113, the last takes the 111 left
+    expect(poolSums(state.pools[0]).periodsSetAside).toBe(4.5)
+  })
+
+  it('says a set-aside above the plan amount is too much, and never puts more on a period than its plan amount when it is not', () => {
+    const tooMuch = byHand(['1000.00', '1000.00', '1000.00', '1000.00'], '5000')
+    expect(validate(tooMuch).pools[tooMuch.pools[0].key].setAside).toBe('The set-aside cannot be more than the plan amount.')
+
+    const all = byHand(['1000.00', '1000.00', '1000.00', '1000.00'], '4000')
+    expect(asides(all)).toEqual(['1000.00', '1000.00', '1000.00', '1000.00'])
+    expect(validate(all).any).toBe(false)
+  })
+
+  it('spreads a set-aside typed on a stored pool over the periods as saved', () => {
+    const stored: FundingPlanDto = {
+      id: 'plan-1', participantId: 'p1', planStart: '2026-07-01', planEnd: '2027-06-30', periodLengthMonths: 6, evidence: 'PlanCopy', revision: 1, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z',
+      pools: [{
+        id: 'pool-1', position: 0, kind: 'CoreFlexible', paceCategory: 0, managementType: 'PlanManaged', name: 'Core (flexible)', planTotal: 8000,
+        periods: [
+          { id: 'a', position: 0, periodStart: '2026-07-01', periodEnd: '2026-12-31', planAmount: 5000 },
+          { id: 'b', position: 1, periodStart: '2027-01-01', periodEnd: '2027-06-30', planAmount: 3000 },
+        ],
+      }],
+    }
+    const loaded = editorStateFromPlan(stored)
+    expect(loaded.pools[0].periods.map(p => p.setAside)).toEqual(['', ''])   // the plan records none
+
+    const typed = withPoolTotals(loaded, loaded.pools[0].key, { setAsideText: '4000' })
+
+    expect(typed.pools[0].periods.map(p => p.setAside)).toEqual(['2500.00', '1500.00'])   // 4000 in proportion to 5000 and 3000
+  })
+})
+
+describe('what the form remembers about a pool\'s periods', () => {
+  it('knows periods read from a saved plan from periods worked out here, and whether an amount was changed by hand since', () => {
+    const proposed = addCorePool(yearPlan(), 'PlanManaged', { totalText: '8000' })
+    expect(proposed.pools[0]).toMatchObject({ edited: false, fromPlan: false, touched: false })
+
+    const changed = withPeriodEdit(proposed, proposed.pools[0].key, 0, { planAmount: '1.00' })
+    expect(changed.pools[0]).toMatchObject({ edited: true, fromPlan: false, touched: true })
+
+    const again = resplit(changed, changed.pools[0])
+    expect(again).toMatchObject({ edited: false, fromPlan: false, touched: false })
+  })
+
+  it('loads a stored pool as edited (its amounts are the plan\'s own) but not touched, until an amount is changed', () => {
+    const stored = { id: 'plan-1', participantId: 'p1', planStart: '2026-07-01', planEnd: '2027-06-30', evidence: 'PlanCopy', revision: 1, createdAt: '', updatedAt: '', pools: [{
+      id: 'pool-1', position: 0, kind: 'CoreFlexible', paceCategory: 0, managementType: 'PlanManaged', name: 'Core (flexible)', planTotal: 100,
+      periods: [{ id: 'a', position: 0, periodStart: '2026-07-01', periodEnd: '2027-06-30', planAmount: 100 }],
+    }] } as FundingPlanDto
+
+    const loaded = editorStateFromPlan(stored)
+    expect(loaded.pools[0]).toMatchObject({ edited: true, fromPlan: true, touched: false })
+    expect(withPeriodEdit(loaded, loaded.pools[0].key, 0, { planAmount: '90.00' }).pools[0]).toMatchObject({ edited: true, fromPlan: true, touched: true })
+  })
+})
+
+describe('a first plan starts from the dates the profile already holds', () => {
+  it('prefills the plan dates from the profile when it has both, and not otherwise', () => {
+    expect(nextPlanState(undefined, { start: '2026-07-01', end: '2027-06-30' })).toMatchObject({ planStart: '2026-07-01', planEnd: '2027-06-30', periodLengthMonths: 3, pools: [] })
+    expect(nextPlanState(undefined, { start: '2026-07-01' })).toMatchObject({ planStart: '', planEnd: '' })
+    expect(nextPlanState(undefined, { end: '2027-06-30' })).toMatchObject({ planStart: '', planEnd: '' })
+    expect(nextPlanState(undefined, {})).toMatchObject({ planStart: '', planEnd: '' })
+    expect(nextPlanState(undefined, { start: 'soon', end: '2027-06-30' })).toMatchObject({ planStart: '', planEnd: '' })
+  })
+
+  it('lets the next plan follow the last one instead: the profile\'s dates are for a first plan only', () => {
+    expect(nextPlanState({ planEnd: '2027-06-30', periodLengthMonths: 3 }, { start: '2020-01-01', end: '2020-12-31' })).toMatchObject({ planStart: '2027-07-01', planEnd: '2028-06-30' })
+  })
+
+  it('then proposes the periods as soon as a pool is added, with no dates typed', () => {
+    const state = addCorePool(nextPlanState(undefined, { start: '2026-07-01', end: '2027-06-30' }), 'PlanManaged', { totalText: '8000' })
+
+    expect(state.pools[0].periods).toHaveLength(4)
   })
 })
 

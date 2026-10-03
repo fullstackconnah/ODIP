@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addMonthsIso, periodLengthLabel, proposePeriods, sumAmounts, toCents } from './fundingPeriods'
+import { addMonthsIso, MAX_PLAN_DAYS, periodLengthLabel, proposePeriods, spreadSetAside, sumAmounts, toCents } from './fundingPeriods'
 
 // The editor proposes a pool's release periods from the plan's dates and the period length; the server only checks the invariants. Expected figures below are worked out by hand
 // from the rule (not by running the function): amounts split in proportion to the days each period covers, each rounded to the cent, the remainder on the last period.
@@ -162,6 +162,78 @@ describe('the helpers', () => {
     expect(periodLengthLabel(3)).toBe('3-monthly')
     expect(periodLengthLabel(6)).toBe('6-monthly')
     expect(periodLengthLabel(12)).toBe('12-monthly')
+  })
+})
+
+describe('proposePeriods: a plan the server would refuse is not drawn', () => {
+  it('proposes nothing beyond the 800 days a plan may run, the way the server refuses it (a year typed digit by digit passes through 0002)', () => {
+    // Typing "2026" into a date input fires a change per digit: the start is 0002-07-01, then 0020-07-01, then 0202-07-01, before it is 2026-07-01.
+    for (const planStart of ['0002-07-01', '0020-07-01', '0202-07-01', '1026-07-01']) {
+      expect(proposePeriods({ planStart, planEnd: '2027-06-30', lengthMonths: 3, planAmount: 8000 }), planStart).toEqual([])
+      expect(proposePeriods({ planStart, planEnd: '2027-06-30', lengthMonths: 1, planAmount: 8000 }), planStart).toEqual([])
+      expect(proposePeriods({ planStart, planEnd: '2027-06-30', lengthMonths: null, planAmount: 8000 }), planStart).toEqual([])
+    }
+  })
+
+  it('still proposes for a plan of exactly 800 days, and stops at 801', () => {
+    // 800 days from 1 Jul 2026 (both ends counted) end on 7 Sep 2028.
+    expect(MAX_PLAN_DAYS).toBe(800)
+    expect(proposePeriods({ planStart: '2026-07-01', planEnd: '2028-09-07', lengthMonths: 12, planAmount: 100 }).length).toBeGreaterThan(0)
+    expect(proposePeriods({ planStart: '2026-07-01', planEnd: '2028-09-08', lengthMonths: 12, planAmount: 100 })).toEqual([])
+  })
+})
+
+describe('proposePeriods: a set-aside is never above its period\'s plan amount', () => {
+  it('moves the cent that rounding put on the last period onto an earlier one with room (11 cents and a 10 cent set-aside over three months)', () => {
+    // July, August, September: 31, 31 and 30 days. 11 cents split by days is 4, 4, 3 and 10 cents is 3, 3, 4: the last set-aside would be a cent above its plan amount.
+    const periods = proposePeriods({ planStart: '2026-07-01', planEnd: '2026-09-30', lengthMonths: 1, planAmount: 0.11, setAside: 0.1 })
+
+    expect(periods.map(p => p.planAmount)).toEqual([0.04, 0.04, 0.03])
+    expect(periods.map(p => p.setAside)).toEqual([0.03, 0.04, 0.03])
+    for (const period of periods) expect(toCents(period.setAside!)).toBeLessThanOrEqual(toCents(period.planAmount))
+    expect(sumAmounts(periods.map(p => p.setAside!))).toBe(0.1)
+  })
+
+  it('holds for every pair of small totals over four quarters, and the set-aside always adds up to what was asked for', () => {
+    for (let total = 1; total <= 40; total++) {
+      for (let aside = 0; aside <= total; aside++) {
+        const periods = proposePeriods({ planStart: '2026-07-01', planEnd: '2027-06-30', lengthMonths: 3, planAmount: total / 100, setAside: aside / 100 })
+
+        expect(periods.reduce((sum, p) => sum + toCents(p.planAmount), 0), `${total}/${aside}`).toBe(total)
+        expect(periods.reduce((sum, p) => sum + toCents(p.setAside ?? 0), 0), `${total}/${aside}`).toBe(aside)
+        for (const period of periods) expect(toCents(period.setAside ?? 0), `${total}/${aside}`).toBeLessThanOrEqual(toCents(period.planAmount))
+      }
+    }
+  })
+
+  it('leaves a set-aside that is above the plan amount as it is (the editor says so beside the field)', () => {
+    const periods = proposePeriods({ planStart: '2026-07-01', planEnd: '2026-09-30', lengthMonths: 3, planAmount: 100, setAside: 150 })
+
+    expect(periods).toEqual([{ periodStart: '2026-07-01', periodEnd: '2026-09-30', planAmount: 100, setAside: 150 }])
+  })
+})
+
+describe('spreadSetAside: a set-aside over periods whose amounts were set by hand', () => {
+  it('sets aside the same share of every period, to the cent', () => {
+    expect(spreadSetAside(80000, [100000, 200000, 50000, 50000])).toEqual([20000, 40000, 10000, 10000])
+    expect(spreadSetAside(10, [4, 4, 3])).toEqual([4, 4, 2])   // 10 cents over 4, 4 and 3: 4, 4, and the 2 left, never above a period's amount
+  })
+
+  it('never puts more on a period than its plan amount, and the parts add up to the set-aside', () => {
+    for (let aside = 0; aside <= 30; aside++) {
+      const shares = spreadSetAside(aside, [11, 7, 5, 7])   // 30 cents of plan amounts
+      expect(shares.reduce((sum, share) => sum + share, 0), String(aside)).toBe(aside)
+      shares.forEach((share, i) => expect(share, `${aside} #${i}`).toBeLessThanOrEqual([11, 7, 5, 7][i]))
+    }
+  })
+
+  it('splits plainly a set-aside above the plan amount (nothing fits it; the editor says it is too much)', () => {
+    expect(spreadSetAside(500, [100, 100])).toEqual([250, 250])
+  })
+
+  it('is all zeros when there is nothing to weigh by', () => {
+    expect(spreadSetAside(500, [])).toEqual([])
+    expect(spreadSetAside(500, [0, 0])).toEqual([0, 0])
   })
 })
 

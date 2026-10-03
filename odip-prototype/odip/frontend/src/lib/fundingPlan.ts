@@ -1,26 +1,41 @@
 import { PLAN_TYPE_LABELS, type PlanType } from '@/api/types/enums'
 import type { FundingPlanDto, FundingPoolDto } from '@/api/types'
 import { periodLengthLabel } from './fundingPeriods'
-import { formatDayNumber, parseDateOnly } from './dateOnly'
+import { parseDateOnly } from './dateOnly'
+import { formatDateRange } from './dateRange'
 
 // How a recorded plan budget reads on screen: which plan is the current one, what a pool's categories are called, and the plan's own facts in words. Pure, so the Funding
 // tab, the intake card and the tests say the same thing.
 
 export type PlanStatus = 'Current' | 'Upcoming' | 'Ended'
 
-// Fixed abbreviations, not Intl: en-AU renders September as "Sept" in some ICU builds and "Sep" in others, and a plan's dates must not change with the browser.
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
+const NBSP = String.fromCharCode(160)
 
-/** A calendar day written out: "1 Jul 2026". The year is never dropped (a plan crosses years), and an empty or unreadable date is an en dash. */
-export function writtenDay(iso: string | null | undefined): string {
-  const day = parseDateOnly(iso)
-  if (day === null) return '–'
-  const [year, month, dayOfMonth] = formatDayNumber(day).split('-').map(Number)
-  return `${dayOfMonth} ${MONTHS[month - 1]} ${year}`
+/**
+ * Keeps a written date in one piece: the spaces between its day, month and year become non-breaking, so a line can only break at the dash between two dates (never "1 Jul 2026 – 30 Jun /
+ * 2027" or "30 / Sep 2026"). The spaces round a dash stay ordinary, which is where a break is wanted. Text matchers normalise a non-breaking space to a plain one.
+ */
+function keepTogether(text: string): string {
+  const dash = '–'
+  return text.replace(/ /g, (space, offset: number) => (text[offset - 1] === dash || text[offset + 1] === dash ? space : NBSP))
 }
 
-/** A span of days, both ends written out: "1 Jul 2026 – 30 Jun 2027". */
-export const writtenSpan = (start: string, end: string): string => `${writtenDay(start)} – ${writtenDay(end)}`
+/**
+ * A calendar day written out: "1 Jul 2026". The year is never dropped (a plan crosses years), and an empty or unreadable date is an en dash. The wording is lib/dateRange.ts's (fixed
+ * month abbreviations, never Intl: en-AU renders September as "Sept" in some ICU builds and "Sep" in others), which is what the trip header uses.
+ */
+export function writtenDay(iso: string | null | undefined): string {
+  return parseDateOnly(iso) === null ? '–' : keepTogether(formatDateRange(iso, iso))
+}
+
+/** A span of days written the way the rest of the hub writes a range: "1 Jul 2026 – 30 Jun 2027", "1 Jul – 30 Sep 2026" inside one year, "14–17 Aug 2026" inside one month. */
+export function writtenSpan(start: string, end: string): string {
+  if (parseDateOnly(start) === null || parseDateOnly(end) === null) return `${writtenDay(start)} – ${writtenDay(end)}`
+  return keepTogether(formatDateRange(start, end))
+}
+
+/** "Plan 1 Jul 2025 – 30 Jun 2026": how an earlier or later plan is titled, so a list of plans says which is which. */
+export const planTitle = (plan: Pick<FundingPlanDto, 'planStart' | 'planEnd'>): string => `Plan ${writtenSpan(plan.planStart, plan.planEnd)}`
 
 /** "01", "04", "15": the two-digit number the plan prints for a support category. */
 export function paceNumber(category: number): string {

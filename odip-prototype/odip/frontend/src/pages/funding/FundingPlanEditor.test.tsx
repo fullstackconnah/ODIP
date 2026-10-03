@@ -132,10 +132,10 @@ describe('editor: the periods are proposed, and stay editable', () => {
     await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
 
     const card = coreCard()
-    expect(within(card).getByLabelText('Plan amount, 1 Jul 2026 – 30 Sep 2026')).toHaveValue('2016.44')
-    expect(within(card).getByLabelText('Plan amount, 1 Oct 2026 – 31 Dec 2026')).toHaveValue('2016.44')
-    expect(within(card).getByLabelText('Plan amount, 1 Jan 2027 – 31 Mar 2027')).toHaveValue('1972.60')
-    expect(within(card).getByLabelText('Plan amount, 1 Apr 2027 – 30 Jun 2027')).toHaveValue('1994.52')
+    expect(within(card).getByLabelText('Plan amount, 1 Jul – 30 Sep 2026')).toHaveValue('2016.44')
+    expect(within(card).getByLabelText('Plan amount, 1 Oct – 31 Dec 2026')).toHaveValue('2016.44')
+    expect(within(card).getByLabelText('Plan amount, 1 Jan – 31 Mar 2027')).toHaveValue('1972.60')
+    expect(within(card).getByLabelText('Plan amount, 1 Apr – 30 Jun 2027')).toHaveValue('1994.52')
     expect(within(card).getByText('The periods add up to $8,000.00')).toBeInTheDocument()
   })
 
@@ -149,7 +149,7 @@ describe('editor: the periods are proposed, and stay editable', () => {
 
     const card = coreCard()
     expect(within(card).getAllByLabelText(/^Plan amount, /)).toHaveLength(2)
-    expect(within(card).getByLabelText('Plan amount, 1 Jul 2026 – 31 Dec 2026')).toHaveValue('4032.88')
+    expect(within(card).getByLabelText('Plan amount, 1 Jul – 31 Dec 2026')).toHaveValue('4032.88')
   })
 
   it('shows no periods for a plan with no funding periods: the whole plan is one period', async () => {
@@ -168,7 +168,7 @@ describe('editor: the periods are proposed, and stay editable', () => {
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
     await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
 
-    const last = within(coreCard()).getByLabelText('Plan amount, 1 Apr 2027 – 30 Jun 2027')
+    const last = within(coreCard()).getByLabelText('Plan amount, 1 Apr – 30 Jun 2027')
     await user.clear(last)
     await user.type(last, '2004.52')   // $10 more than the proposal
 
@@ -176,7 +176,7 @@ describe('editor: the periods are proposed, and stay editable', () => {
     // Editing a period stops the proposal rewriting the others: typing a new total leaves them alone.
     await user.clear(within(coreCard()).getByLabelText('Plan amount for the whole plan'))
     await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '9000')
-    expect(within(coreCard()).getByLabelText('Plan amount, 1 Jul 2026 – 30 Sep 2026')).toHaveValue('2016.44')
+    expect(within(coreCard()).getByLabelText('Plan amount, 1 Jul – 30 Sep 2026')).toHaveValue('2016.44')
   })
 
   it('splits the amounts again on request, which drops the edit and the message', async () => {
@@ -184,13 +184,13 @@ describe('editor: the periods are proposed, and stay editable', () => {
     typeYear()
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
     await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
-    const last = within(coreCard()).getByLabelText('Plan amount, 1 Apr 2027 – 30 Jun 2027')
+    const last = within(coreCard()).getByLabelText('Plan amount, 1 Apr – 30 Jun 2027')
     await user.clear(last)
     await user.type(last, '1')
 
     await user.click(within(coreCard()).getByRole('button', { name: 'Split again from the plan amount' }))
 
-    expect(within(coreCard()).getByLabelText('Plan amount, 1 Apr 2027 – 30 Jun 2027')).toHaveValue('1994.52')
+    expect(within(coreCard()).getByLabelText('Plan amount, 1 Apr – 30 Jun 2027')).toHaveValue('1994.52')
     expect(within(coreCard()).queryByText(/you typed/)).not.toBeInTheDocument()
   })
 
@@ -201,8 +201,8 @@ describe('editor: the periods are proposed, and stay editable', () => {
     await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '4000')
     await user.type(within(coreCard()).getByLabelText("Oassist's set-aside (optional)"), '2000')
 
-    expect(within(coreCard()).getByLabelText('Set-aside, 1 Jul 2026 – 30 Sep 2026')).toHaveValue('504.11')
-    expect(within(coreCard()).getByLabelText('Set-aside, 1 Apr 2027 – 30 Jun 2027')).toHaveValue('498.63')
+    expect(within(coreCard()).getByLabelText('Set-aside, 1 Jul – 30 Sep 2026')).toHaveValue('504.11')
+    expect(within(coreCard()).getByLabelText('Set-aside, 1 Apr – 30 Jun 2027')).toHaveValue('498.63')
   })
 
   it('tells the person when changing the dates replaced amounts they had edited', async () => {
@@ -210,7 +210,7 @@ describe('editor: the periods are proposed, and stay editable', () => {
     typeYear()
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
     await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
-    const first = within(coreCard()).getByLabelText('Plan amount, 1 Jul 2026 – 30 Sep 2026')
+    const first = within(coreCard()).getByLabelText('Plan amount, 1 Jul – 30 Sep 2026')
     await user.clear(first)
     await user.type(first, '1')
 

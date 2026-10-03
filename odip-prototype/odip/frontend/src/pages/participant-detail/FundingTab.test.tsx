@@ -114,7 +114,7 @@ describe('Funding tab: a recorded plan', () => {
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     const periods = within(screen.getByRole('region', { name: /Periods of Core \(flexible\)/ })).getByRole('table')
-    expect(within(periods).getByText('1 Jul 2026 – 30 Sep 2026')).toBeInTheDocument()
+    expect(within(periods).getByText('1 Jul – 30 Sep 2026')).toBeInTheDocument()
     expect(within(periods).getAllByText('$2,000.00')).toHaveLength(4)
     expect(within(periods).getAllByText('$1,000.00')).toHaveLength(4)
 
@@ -159,7 +159,7 @@ describe('Funding tab: the profile says something else', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
 
     const note = screen.getByRole('status')
-    expect(note).toHaveTextContent("The profile says the plan runs 1 Jan 2026 – 31 Dec 2026. Use this plan's dates on the profile?")
+    expect(note).toHaveTextContent("The profile says the plan runs 1 Jan – 31 Dec 2026. Use this plan's dates on the profile?")
     expect(apply).not.toHaveBeenCalled()
 
     await user.click(within(note).getByRole('button', { name: "Use this plan's dates" }))
