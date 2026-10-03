@@ -10,6 +10,12 @@ public sealed record DemoParticipantRow(Guid Id, string? NdisNumber, string Firs
 
 public sealed record RecordedSlot(Guid MedicationId, DateTime ScheduledAt);
 
+/// <summary>The key the app holds an acknowledgement to (a unique index): one per reader and handover, whoever wrote it and whatever its id is.</summary>
+public sealed record AckKey(Guid SourceCompletionId, Guid UserId);
+
+/// <summary>The key the app holds a routine tick to (two partial unique indexes): one per completion, routine and occurrence; a routine with no time has the one.</summary>
+public sealed record TickKey(Guid CompletionId, Guid RoutineId, DateTime? ScheduledAt);
+
 public sealed record TakenCell(Guid Id, Guid UserId, Guid ParticipantId);
 
 public sealed record ActiveContactRole(Guid Id, Guid ParticipantId);
@@ -228,8 +234,27 @@ public static class DemoQueries
                                                 && a.PrnOutcome == null && a.AdministeredAt != null && a.AdministeredAt >= sinceUtc
                                                 && a.IdempotencyKey != null && a.IdempotencyKey.StartsWith("demo-v1:"));
 
+    /// <summary>
+    /// Tracked: the running breaks of these completions, whoever started them. The app holds one running break per completion (a unique index), so a break
+    /// the script would start waits for a person's to end, and the shift's end ends whichever is running.
+    /// </summary>
     public static IQueryable<ShiftBreak> RunningBreaksOf(OdipDbContext db, List<Guid> completionIds) =>
         db.ShiftBreaks.Where(b => completionIds.Contains(b.ShiftCompletionId) && b.EndedAt == null);
+
+    /// <summary>
+    /// Read only: the acknowledgements already recorded for these handovers by these readers, whoever wrote them. A person's own row has a random id where the
+    /// script's is deterministic, so "is it there" is asked of the pair (<see cref="AckKey"/>), never only of the script's own id: a second row for the pair
+    /// is refused by the database and, inside a pack's one transaction, rolls the whole pack back. Query filters are ignored on purpose, as in
+    /// <see cref="ExistingIds{T}"/>: the unique index sees every row whatever its tenant, so a row that would collide is "already there" wherever it is.
+    /// </summary>
+    public static IQueryable<AckKey> HandoverAcksOf(OdipDbContext db, List<Guid> sourceCompletionIds, List<Guid> userIds) =>
+        db.HandoverAcknowledgements.IgnoreQueryFilters().AsNoTracking().Where(a => sourceCompletionIds.Contains(a.SourceCompletionId) && userIds.Contains(a.UserId))
+            .Select(a => new AckKey(a.SourceCompletionId, a.UserId));
+
+    /// <summary>Read only: the routine ticks already on these completions, whoever made them (<see cref="TickKey"/>), for the same reason, and filters ignored for the same one, as <see cref="HandoverAcksOf"/>.</summary>
+    public static IQueryable<TickKey> RoutineTicksOf(OdipDbContext db, List<Guid> completionIds) =>
+        db.ShiftRoutineChecks.IgnoreQueryFilters().AsNoTracking().Where(t => completionIds.Contains(t.ShiftCompletionId))
+            .Select(t => new TickKey(t.ShiftCompletionId, t.ParticipantRoutineId, t.ScheduledAt));
 
     public static IQueryable<ShiftNote> NotesOf(OdipDbContext db, List<Guid> shiftIds) =>
         db.ShiftNotes.AsNoTracking().Where(n => shiftIds.Contains(n.ShiftId));

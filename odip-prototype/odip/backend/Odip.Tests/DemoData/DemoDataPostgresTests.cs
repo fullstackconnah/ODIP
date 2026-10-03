@@ -119,7 +119,7 @@ public sealed class DemoDataPostgresFixture : IAsyncLifetime
     }
 }
 
-public class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixture>
+public partial class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixture>
 {
     private readonly DemoDataPostgresFixture _pg;
 

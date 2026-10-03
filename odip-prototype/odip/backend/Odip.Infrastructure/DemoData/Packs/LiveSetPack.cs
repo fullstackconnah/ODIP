@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -152,7 +153,12 @@ public sealed class LiveSetPack : IDemoPack
         var script = new Script(run, await run.FreshStaffAsync(ct), meds, routines, lives);
         foreach (var live in open.OrderBy(l => l.Date).ThenBy(l => l.Shift.StartTime))
         {
-            await script.RunAsync(live, ct);
+            // One live shift, whole or not at all: a person's own row the script did not foresee, a race with somebody editing the same shift, a bug in one
+            // day's story. It is undone and reported, and the other shifts are worked as if it had not been there (PR 2 review H1).
+            if (await run.TryUnitAsync($"{live.Story.Key} {live.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}", () => script.RunAsync(live, ct), ct)) continue;
+
+            // What the shift has in the database now: a completion the undone piece had made is gone, one it only changed is as it was.
+            live.Completion = (await DemoQueries.ActiveCompletionsOf(run.Db, new List<Guid> { live.Shift.Id }).ToListAsync(ct)).FirstOrDefault();
         }
     }
 
@@ -400,8 +406,7 @@ public sealed class LiveSetPack : IDemoPack
             foreach (var group in events.GroupBy(e => e.Type))
             {
                 if (group.Key == typeof(ShiftNote) && !await OldSeedNotesThereAsync(ct)) continue;
-                var ids = group.Select(e => e.Id).ToList();
-                var existing = await ExistingAsync(group.Key, ids, ct);
+                var existing = await AlreadyThereAsync(group.Key, group.ToList(), ct);
                 foreach (var e in group.Where(e => !existing.Contains(e.Id)))
                 {
                     _run.Db.Add(e.Entity);
@@ -424,6 +429,48 @@ public sealed class LiveSetPack : IDemoPack
         /// <summary>Every row of the type the context holds (saved ones it has loaded, and ones this run has added), so a step sees what an earlier step did.</summary>
         private IEnumerable<T> Pending<T>() where T : class =>
             _run.Db.ChangeTracker.Entries<T>().Where(e => e.State != EntityState.Deleted).Select(e => e.Entity);
+
+        /// <summary>
+        /// The events of one type whose row is already there, by id (the script's own row from an earlier tick) AND by the key the app holds the row to
+        /// (PR 2 review H1). A row a person makes in the portal has a random id where the script's is deterministic, but the app allows one
+        /// acknowledgement per reader and handover, one running break per completion, and one tick per completion, routine and occurrence, so a person's row
+        /// is "already there" and the script writes nothing beside it: a second row for the key is refused by the database and, inside a pack's one
+        /// transaction, rolls the whole pack back for good.
+        /// </summary>
+        private async Task<HashSet<Guid>> AlreadyThereAsync(Type type, List<Event> events, CancellationToken ct)
+        {
+            var there = await ExistingAsync(type, events.Select(e => e.Id).ToList(), ct);
+
+            if (type == typeof(HandoverAcknowledgement))
+            {
+                var acks = events.Select(e => (Event: e, Row: (HandoverAcknowledgement)e.Entity)).ToList();
+                var users = acks.Select(a => a.Row.UserId).Distinct().ToList();
+                var have = (await _run.ChunkedAsync(acks.Select(a => a.Row.SourceCompletionId), sources => DemoQueries.HandoverAcksOf(_run.Db, sources, users), ct))
+                    .Select(k => (k.SourceCompletionId, k.UserId)).ToHashSet();
+                have.UnionWith(Pending<HandoverAcknowledgement>().Select(a => (a.SourceCompletionId, a.UserId)));
+                there.UnionWith(acks.Where(a => have.Contains((a.Row.SourceCompletionId, a.Row.UserId))).Select(a => a.Event.Id));
+            }
+            else if (type == typeof(ShiftBreak))
+            {
+                // Only one break of a completion may be running: the script's own running break waits for a person's (the shift's end ends it).
+                var running = events.Where(e => ((ShiftBreak)e.Entity).EndedAt is null).ToList();
+                if (running.Count > 0)
+                {
+                    await DemoQueries.RunningBreaksOf(_run.Db, running.Select(e => ((ShiftBreak)e.Entity).ShiftCompletionId).Distinct().ToList()).ToListAsync(ct);   // attaches the saved ones
+                    var held = Pending<ShiftBreak>().Where(b => b.EndedAt == null).Select(b => b.ShiftCompletionId).ToHashSet();
+                    there.UnionWith(running.Where(e => held.Contains(((ShiftBreak)e.Entity).ShiftCompletionId)).Select(e => e.Id));
+                }
+            }
+            else if (type == typeof(ShiftRoutineCheck))
+            {
+                var ticks = events.Select(e => (Event: e, Row: (ShiftRoutineCheck)e.Entity)).ToList();
+                var have = (await _run.ChunkedAsync(ticks.Select(t => t.Row.ShiftCompletionId), completions => DemoQueries.RoutineTicksOf(_run.Db, completions), ct))
+                    .Select(k => (k.CompletionId, k.RoutineId, k.ScheduledAt)).ToHashSet();
+                have.UnionWith(Pending<ShiftRoutineCheck>().Select(t => (t.ShiftCompletionId, t.ParticipantRoutineId, t.ScheduledAt)));
+                there.UnionWith(ticks.Where(t => have.Contains((t.Row.ShiftCompletionId, t.Row.ParticipantRoutineId, t.Row.ScheduledAt))).Select(t => t.Event.Id));
+            }
+            return there;
+        }
 
         private Task<HashSet<Guid>> ExistingAsync(Type type, List<Guid> ids, CancellationToken ct)
         {

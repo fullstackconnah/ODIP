@@ -26,6 +26,7 @@ public sealed class DemoRun
     private readonly Dictionary<string, int> _added = new();
     private readonly Dictionary<string, int> _changed = new();
     private readonly List<string> _skipped = new();
+    private readonly List<(string Unit, Exception Error)> _unitFailures = new();
 
     internal DemoRun(OdipDbContext db, DemoAnchors anchors, Guid tenantId, DemoDirectory directory, TimeProvider clock, ILogger logger,
         DemoAuditStamps? stamps = null)
@@ -107,6 +108,16 @@ public sealed class DemoRun
     internal IReadOnlyList<string> SkippedStories => _skipped;
 
     /// <summary>
+    /// A lookup over ids in chunks of 500 (the chunk <see cref="ExistingIdsAsync{T}"/> uses), so a list of ids never makes one statement grow without bound.
+    /// </summary>
+    public async Task<List<T>> ChunkedAsync<T>(IEnumerable<Guid> ids, Func<List<Guid>, IQueryable<T>> query, CancellationToken ct)
+    {
+        var found = new List<T>();
+        foreach (var chunk in ids.Distinct().Chunk(LookupChunk)) found.AddRange(await query(chunk.ToList()).ToListAsync(ct));
+        return found;
+    }
+
+    /// <summary>
     /// Which of these ids already exist as <typeparamref name="T"/> rows: the "insert-if-missing" lookup (plan 4.2), a primary-key probe
     /// (<c>WHERE "Id" = ANY(@ids)</c>) in chunks of 500. Query filters are ignored on purpose: an id that exists under any tenant is taken,
     /// so a collision shows up as "already there" rather than as a failed insert.
@@ -126,6 +137,66 @@ public sealed class DemoRun
     /// throws <see cref="DemoGuardViolationException"/> here, before anything is sent to the database.
     /// </summary>
     public Task SaveAsync(CancellationToken ct) => Db.SaveChangesAsync(ct);
+
+    /// <summary>The pieces of a pack that failed and were skipped (see <see cref="TryUnitAsync"/>): the maintainer reports each as a failure of the pack.</summary>
+    internal IReadOnlyList<(string Unit, Exception Error)> UnitFailures => _unitFailures;
+
+    internal void ClearUnitFailures() => _unitFailures.Clear();
+
+    private const string UnitSavepoint = "demo_unit";
+
+    /// <summary>
+    /// Runs one independent piece of a pack (one live shift) whole or not at all, so a piece that cannot be written never takes the others with it. A pack is one
+    /// transaction, and on PostgreSQL a failed statement poisons it, so the piece runs inside a savepoint: on failure the database is put back to the savepoint,
+    /// what the tracker holds of the piece is forgotten (rows it added are detached, rows it changed or saved are read again, so nothing in memory describes
+    /// a write that was rolled back) and the failure is kept for the maintainer to report; the pack goes on with its next piece. On a store with no
+    /// transactions (EF InMemory) the saves the piece had made stay, which the next tick finds as rows already there.
+    /// </summary>
+    /// <returns>True when the piece was written; false when it failed and was undone.</returns>
+    public async Task<bool> TryUnitAsync(string unit, Func<Task> work, CancellationToken ct)
+    {
+        if (Db.ChangeTracker.HasChanges()) await SaveAsync(ct);                       // nothing from before the piece is inside its savepoint
+
+        var transaction = Db.Database.CurrentTransaction;
+        var savepoint = transaction is { SupportsSavepoints: true } ? UnitSavepoint : null;
+        var (added, changed) = (new Dictionary<string, int>(_added), new Dictionary<string, int>(_changed));
+        if (savepoint is not null) await transaction!.CreateSavepointAsync(savepoint, ct);
+        try
+        {
+            await work();
+            if (Db.ChangeTracker.HasChanges()) await SaveAsync(ct);                   // whole or not at all
+            if (savepoint is not null) await transaction!.ReleaseSavepointAsync(savepoint, ct);
+            return true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            if (savepoint is not null)
+            {
+                await transaction!.RollbackToSavepointAsync(savepoint, ct);
+                await transaction.ReleaseSavepointAsync(savepoint, ct);                  // rolling back keeps the savepoint defined: pop it, so the next piece starts level
+            }
+            await ForgetUnsavedAndReloadAsync(ct);
+            _added.Clear();
+            _changed.Clear();
+            foreach (var (key, count) in added) _added[key] = count;                     // the counts say what is written, not what was undone
+            foreach (var (key, count) in changed) _changed[key] = count;
+            _unitFailures.Add((unit, ex));
+            return false;
+        }
+    }
+
+    private async Task ForgetUnsavedAndReloadAsync(CancellationToken ct)
+    {
+        foreach (var entry in Db.ChangeTracker.Entries().ToList())
+            if (entry.State == EntityState.Added) entry.State = EntityState.Detached;      // the audit rows of the failed save too
+
+        foreach (var entry in Db.ChangeTracker.Entries().ToList())
+            await entry.ReloadAsync(ct);                                                  // as the database has it now, or gone (detached)
+    }
 
     private void Bump(Dictionary<string, int> counts, string kind, int count)
     {

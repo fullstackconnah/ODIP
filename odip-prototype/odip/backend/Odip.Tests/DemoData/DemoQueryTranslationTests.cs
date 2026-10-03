@@ -66,6 +66,8 @@ public class DemoQueryTranslationTests
         yield return Q(nameof(DemoQueries.RoutinesByIds), db => DemoQueries.RoutinesByIds(db, Ids), "\"Id\" = ANY (");
         yield return Q(nameof(DemoQueries.AdministrationsByIds), db => DemoQueries.AdministrationsByIds(db, Ids), "\"Id\" = ANY (");
         yield return Q(nameof(DemoQueries.RunningBreaksOf), db => DemoQueries.RunningBreaksOf(db, Ids), "\"ShiftCompletionId\" = ANY (", "\"EndedAt\" IS NULL");
+        yield return Q(nameof(DemoQueries.HandoverAcksOf), db => DemoQueries.HandoverAcksOf(db, Ids, Ids), "\"SourceCompletionId\" = ANY (", "\"UserId\" = ANY (");
+        yield return Q(nameof(DemoQueries.RoutineTicksOf), db => DemoQueries.RoutineTicksOf(db, Ids), "\"ShiftCompletionId\" = ANY (", "\"ScheduledAt\"");
         yield return Q(nameof(DemoQueries.NotesOf), db => DemoQueries.NotesOf(db, Ids), "\"ShiftId\" = ANY (");
         yield return Q(nameof(DemoQueries.IncidentsByIds), db => DemoQueries.IncidentsByIds(db, Ids), "\"Id\" = ANY (");
         yield return Q(nameof(DemoQueries.WitnessedDosesBetween), db => DemoQueries.WitnessedDosesBetween(db, new DateTime(2026, 10, 1), new DateTime(2026, 10, 3)), "\"WitnessUserId\" IS NOT NULL", "LIKE 'demo-v1:%'", "\"CreatedAt\" >=", "\"CreatedAt\" <");

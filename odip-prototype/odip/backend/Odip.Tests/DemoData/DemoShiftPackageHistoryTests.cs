@@ -219,6 +219,64 @@ public class DemoShiftPackageHistoryTests
         Assert.True(unreadView.RequiresAcknowledgement);
     }
 
+    // PR 2 review finding H1: a person's own row beside the history's. The app allows one acknowledgement per reader and handover and one tick per
+    // completion, routine and occurrence, and a row a person makes has a random id where the pack's is deterministic.
+    [Fact]
+    public async Task APersonsOwnAcknowledgement_OfTheHandoverTheHistoryWouldHaveReadForThem_IsKept_AndThePackGoesOn()
+    {
+        var env = new DemoTestEnv(Friday1030);
+        await DemoFixture.SeedPeopleAsync(env);
+        await env.SetProviderStateAsync("NSW");
+        var first = ClosedShift(DemoIds.For("fixture", "ack-source"), "noah", "james", Friday.AddDays(-5), "Settled morning. Out for coffee, back by noon.");
+        var read = ClosedShift(ShiftIdWhoseHandoverIs(true, "ack-read"), "noah", "brendan", Friday.AddDays(-4), "Quiet day, helped with the garden.");
+        var theirs = new HandoverAcknowledgement
+        {
+            Id = Guid.NewGuid(), TenantId = DemoTestEnv.DemoTenantId, SourceCompletionId = first.Completion.Id, ShiftId = read.Shift.Id, UserId = DemoFixture.StaffId("brendan"),
+            AcknowledgedAt = read.Completion.ActualStart.AddMinutes(10),
+        };
+        await using (var db = env.AdminDb())
+        {
+            db.Shifts.AddRange(first.Shift, read.Shift);
+            db.ShiftCompletions.AddRange(first.Completion, read.Completion);
+            db.HandoverAcknowledgements.Add(theirs);                                     // Brendan opened the handover in the portal before the history was written
+            await db.SaveChangesAsync();
+        }
+
+        await RunAsync(env, Friday1030);
+
+        await using var check = env.AdminDb();
+        Assert.Equal(theirs.Id, (await check.HandoverAcknowledgements.SingleAsync(a => a.SourceCompletionId == first.Completion.Id && a.UserId == DemoFixture.StaffId("brendan"))).Id);
+        Assert.NotEmpty(await check.ShiftBreaks.ToListAsync());                             // and the rest of the history was still written
+    }
+
+    [Fact]
+    public async Task APersonsOwnTick_OfARoutineTheHistoryWouldHaveTicked_IsKept_AndThePackGoesOn()
+    {
+        var env = await TickAsync(Friday1030);
+        Guid completion, routine;
+        DateTime? scheduled;
+        await using (var db = env.AdminDb())
+        {
+            var live = (await db.ShiftCompletions.ToListAsync()).Where(c => LiveSetCatalog.Stories.Any(s => LiveSetCatalog.ShiftId(s, Friday) == c.ShiftId || LiveSetCatalog.ShiftId(s, Friday.AddDays(-1)) == c.ShiftId)).Select(c => c.Id).ToHashSet();
+            var scripted = (await db.ShiftRoutineChecks.ToListAsync()).First(t => !live.Contains(t.ShiftCompletionId));
+            (completion, routine, scheduled) = (scripted.ShiftCompletionId, scripted.ParticipantRoutineId, scripted.ScheduledAt);
+            // The state a person's tick first would have left: the pack's own row away, theirs (random id, same occurrence) in its place.
+            db.ShiftRoutineChecks.Remove(scripted);
+            db.ShiftRoutineChecks.Add(new ShiftRoutineCheck
+            {
+                Id = Guid.NewGuid(), TenantId = scripted.TenantId, ShiftCompletionId = completion, ParticipantRoutineId = routine, ScheduledAt = scheduled, RoutineTitle = scripted.RoutineTitle,
+                CheckedByUserId = scripted.CheckedByUserId, CheckedAt = scripted.CheckedAt.AddMinutes(1),
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await RunAsync(env, Friday1030.AddMinutes(5));
+
+        await using var check = env.AdminDb();
+        var tick = Assert.Single(await check.ShiftRoutineChecks.Where(t => t.ShiftCompletionId == completion && t.ParticipantRoutineId == routine && t.ScheduledAt == scheduled).ToListAsync());
+        Assert.NotEqual(DemoIds.For("shift-routine-check", completion, routine), tick.Id);
+    }
+
     [Fact]
     public async Task AWorkerWhoGivesTheirOwnHandoverToThemselvesAWeekLater_ReadsNothing()
     {

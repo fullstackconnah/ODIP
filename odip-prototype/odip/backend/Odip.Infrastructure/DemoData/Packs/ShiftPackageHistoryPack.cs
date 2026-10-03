@@ -85,12 +85,17 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
         }
         AcknowledgementsOf(run, closed, staff, acks);
 
-        // Only what is not there yet.
+        // Only what is not there yet. A person's own acknowledgement or tick has a random id, but the app allows one acknowledgement per reader and handover and one
+        // tick per completion, routine and occurrence, so those two are looked up by that key (which finds the pack's own row too): a second row for the key is
+        // refused by the database and rolls the pack back for good (PR 2 review H1).
         var have = new HashSet<Guid>();
         have.UnionWith(await run.ExistingIdsAsync<ShiftBreak>(breaks.Select(b => b.Row.Id), ct));
         have.UnionWith(await run.ExistingIdsAsync<ShiftNote>(notes.Select(n => n.Row.Id), ct));
-        have.UnionWith(await run.ExistingIdsAsync<ShiftRoutineCheck>(ticks.Select(t => t.Row.Id), ct));
-        have.UnionWith(await run.ExistingIdsAsync<HandoverAcknowledgement>(acks.Select(a => a.Row.Id), ct));
+        var ackReaders = acks.Select(a => a.Row.UserId).Distinct().ToList();
+        var ackKeys = (await run.ChunkedAsync(acks.Select(a => a.Row.SourceCompletionId), sources => DemoQueries.HandoverAcksOf(run.Db, sources, ackReaders), ct))
+            .Select(k => (k.SourceCompletionId, k.UserId)).ToHashSet();
+        var tickKeys = (await run.ChunkedAsync(ticks.Select(t => t.Row.ShiftCompletionId), completions => DemoQueries.RoutineTicksOf(run.Db, completions), ct))
+            .Select(k => (k.CompletionId, k.RoutineId, k.ScheduledAt)).ToHashSet();
 
         var added = 0;
         foreach (var (row, worker) in breaks.Where(b => !have.Contains(b.Row.Id)))
@@ -99,13 +104,13 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
             run.StampAudit(row.Id, row.CreatedAt, worker);
             added++;
         }
-        foreach (var (row, worker) in ticks.Where(t => !have.Contains(t.Row.Id)))
+        foreach (var (row, worker) in ticks.Where(t => !tickKeys.Contains((t.Row.ShiftCompletionId, t.Row.ParticipantRoutineId, t.Row.ScheduledAt))))
         {
             run.Db.ShiftRoutineChecks.Add(row);
             run.StampAudit(row.Id, row.CheckedAt, worker);
             added++;
         }
-        foreach (var (row, worker) in acks.Where(a => !have.Contains(a.Row.Id)))
+        foreach (var (row, worker) in acks.Where(a => !ackKeys.Contains((a.Row.SourceCompletionId, a.Row.UserId))))
         {
             run.Db.HandoverAcknowledgements.Add(row);
             run.StampAudit(row.Id, row.AcknowledgedAt, worker);

@@ -188,6 +188,7 @@ public sealed class DemoDataMaintainer
 
             if (transaction is not null) await transaction.CommitAsync(ct);
             EndStreak(pack.Name);
+            ReportPieceFailures(pack.Name, run, failures);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -195,6 +196,7 @@ public sealed class DemoDataMaintainer
         }
         catch (Exception ex)
         {
+            run.ClearUnitFailures();                                          // the pack is rolled back whole: its pieces' failures are part of that
             ReportFailure(pack.Name, ex, failures);
         }
         finally
@@ -239,19 +241,20 @@ public sealed class DemoDataMaintainer
     /// key, Error for anything else, and Error for any conflict once the same pack has conflicted on <see cref="ConflictEscalationTicks"/>
     /// ticks in a row, because a conflict that does not go away is not a race.
     /// </summary>
-    private void ReportFailure(string pack, Exception ex, List<DemoPackFailure> failures)
+    private void ReportFailure(string pack, Exception ex, List<DemoPackFailure> failures, bool piece = false)
     {
         var (kind, constraint) = Classify(ex);
         var constraintName = constraint ?? "(unknown)";
         var message = ex is DemoGuardViolationException ? ex.Message
-            : kind == ConflictKind.Duplicate ? $"UniqueViolation on constraint {constraintName}: {ex.Message}"
+            : kind == ConflictKind.Duplicate ? $"UniqueViolation on constraint {constraintName}: {DatabaseText(ex)}"
             : $"{ex.GetType().Name}: {ex.Message}";
         failures.Add(new DemoPackFailure(pack, message, kind == ConflictKind.Race));
 
         if (kind == ConflictKind.None)
         {
             EndStreak(pack);
-            _logger.LogError(ex, "Demo data: pack {Pack} failed and was rolled back; the other packs continue", pack);
+            if (piece) _logger.LogError(ex, "Demo data: {Piece} failed and was undone; the rest of its pack carried on", pack);
+            else _logger.LogError(ex, "Demo data: pack {Pack} failed and was rolled back; the other packs continue", pack);
             return;
         }
 
@@ -259,18 +262,53 @@ public sealed class DemoDataMaintainer
         if (ticks >= ConflictEscalationTicks)
         {
             var what = kind == ConflictKind.Duplicate ? $"duplicate key on constraint {constraintName}" : "serialization failure or deadlock";
-            _logger.LogError(ex, "Demo data: pack {Pack} has conflicted on {Ticks} consecutive ticks and is not recovering by itself ({What}); it was rolled back and the other packs continue",
-                pack, ticks, what);
+            if (piece)
+                _logger.LogError(ex, "Demo data: {Piece} has conflicted on {Ticks} consecutive ticks and is not recovering by itself ({What}); it was undone and the rest of its pack carried on", pack, ticks, what);
+            else
+                _logger.LogError(ex, "Demo data: pack {Pack} has conflicted on {Ticks} consecutive ticks and is not recovering by itself ({What}); it was rolled back and the other packs continue",
+                    pack, ticks, what);
         }
         else if (kind == ConflictKind.Duplicate)
         {
-            _logger.LogWarning("Demo data: pack {Pack} hit a duplicate key on constraint {Constraint} and was rolled back; it will retry next tick (conflict {Ticks} in a row)",
-                pack, constraintName, ticks);
+            if (piece)
+                _logger.LogWarning("Demo data: {Piece} hit a duplicate key on constraint {Constraint} and was undone; it will retry next tick (conflict {Ticks} in a row)", pack, constraintName, ticks);
+            else
+                _logger.LogWarning("Demo data: pack {Pack} hit a duplicate key on constraint {Constraint} and was rolled back; it will retry next tick (conflict {Ticks} in a row)",
+                    pack, constraintName, ticks);
         }
         else
         {
-            _logger.LogInformation("Demo data: pack {Pack} lost a race with another writer and was rolled back; it will retry next tick", pack);
+            if (piece) _logger.LogInformation("Demo data: {Piece} lost a race with another writer and was undone; it will retry next tick", pack);
+            else _logger.LogInformation("Demo data: pack {Pack} lost a race with another writer and was rolled back; it will retry next tick", pack);
         }
+    }
+
+    /// <summary>
+    /// A pack's pieces that failed and were undone (a live shift) are failures of the pack for the tick's result and the log, named by pack and piece, but the
+    /// pack itself committed what the other pieces wrote. A piece that did not fail this tick has no conflict streak to keep.
+    /// </summary>
+    private void ReportPieceFailures(string pack, DemoRun run, List<DemoPackFailure> failures)
+    {
+        var pieces = run.UnitFailures.ToList();
+        run.ClearUnitFailures();
+        foreach (var (unit, error) in pieces) ReportFailure($"{pack}: {unit}", error, failures, piece: true);
+
+        var failedNow = pieces.Select(p => $"{pack}: {p.Unit}").ToHashSet(StringComparer.Ordinal);
+        lock (_streakLock)
+        {
+            foreach (var key in _conflictStreak.Keys.Where(k => k.StartsWith(pack + ": ", StringComparison.Ordinal) && !failedNow.Contains(k)).ToList())
+                _conflictStreak.Remove(key);
+        }
+    }
+
+    /// <summary>What the database said about a conflict (its message and the key that was taken), which the exception around it does not repeat.</summary>
+    private static string DatabaseText(Exception ex)
+    {
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is PostgresException pg) return string.IsNullOrWhiteSpace(pg.Detail) ? pg.MessageText : $"{pg.MessageText}. {pg.Detail}";
+        }
+        return ex.Message;
     }
 
     private int ExtendStreak(string pack)
