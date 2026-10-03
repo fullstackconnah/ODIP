@@ -143,6 +143,13 @@ function traceOf(block, rules, why, maximum, questions, holidayName, crossing) {
 
 const bandRule = (band) => 'bands:' + band.toLowerCase().replace(/ /g, '-')
 const describeTime = (m) => clockOf(m).slice(0, 5)
+// The engine writes the dates in its reasoning the way the screen does ("Mon 5 Oct 2026"), never as 2026-10-05.
+const WEEKDAY_WORDS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTH_WORDS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const dateWords = (iso, withWeekday = true) => {
+  const d = new Date(`${iso}T00:00:00Z`)
+  return `${withWeekday ? `${WEEKDAY_WORDS[d.getUTCDay()]} ` : ''}${d.getUTCDate()} ${MONTH_WORDS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+}
 
 function lineBase(block, iso, patch) {
   return { blockId: block.id, kind: 'Support', unit: 'H', qty: 0, unitPrice: 0, total: 0, serviceDate: iso, band: '', flags: 'None', shortNoticeCancellationAllowed: true, isPriced: true, review: false, holidayExposure: false, provisional: false, ...patch }
@@ -237,7 +244,7 @@ function quote(request, settings) {
           occurrenceLines.push(finish(lineBase(block, part.date, {
             itemCode: item[0], qty: Math.round(part.minutes / 60 * 10000) / 10000, unitPrice: unit, total, band: part.band, paceCategory: FAMILY[block.supportType].pace,
             startTime: clockOf(part.from), endDate: part.date, endTime: clockOf(part.to), holidayExposure: holiday, review: holiday && block.onPublicHoliday === 'Review', provisional: false,
-            trace: traceOf(block, rules, `${part.band} on ${part.date}, ${describeTime(part.from)} to ${describeTime(part.to)}; ${block.workers === 1 && block.participantsPresent === 1 ? '1 worker for 1 participant' : `${block.workers} worker(s) for ${block.participantsPresent} participant(s)`}; price from catalogue ${CATALOGUE_VERSION} (row from ${PRICE_BASIS_FROM}).`, item[1], questionsHere, part.holiday, crossing),
+            trace: traceOf(block, rules, `${part.band} on ${dateWords(part.date)}, ${describeTime(part.from)} to ${describeTime(part.to)}; ${block.workers === 1 && block.participantsPresent === 1 ? '1 worker for 1 participant' : `${block.workers} worker(s) for ${block.participantsPresent} participant(s)`}; price from catalogue ${CATALOGUE_VERSION} (row from ${dateWords(PRICE_BASIS_FROM, false)}).`, item[1], questionsHere, part.holiday, crossing),
           })))
         }
       }

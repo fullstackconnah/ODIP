@@ -561,6 +561,19 @@ describe('ReviewStep on quotes the engine wrote', () => {
     expect(screen.getByText('10 shifts with a part not priced · some lines use provisional rates.')).toBeInTheDocument()
   })
 
+  // The engine's own reasoning in the Why panel already writes its dates the way the screen does ("Mon 5 Oct 2026"): the golden quote is the proof, and the mock says it the same way.
+  it("reads the engine's own reasoning for a line with dates the way the rest of the screen writes them", async () => {
+    const user = userEvent.setup()
+    state.current = { data: golden.noItemDawn, isLoading: false, isError: false }
+    setUp({ entry: dawn(), week: null, from: '2026-10-05', to: '2026-10-16' })
+
+    await user.click(screen.getByRole('button', { name: 'Why 04_104_0125_6_1, Weekday daytime' }))
+
+    const panel = screen.getByRole('region', { name: 'Why this price' })
+    expect(panel).toHaveTextContent('Weekday Daytime (Mon-Fri 06:00-20:00) on Mon 5 Oct 2026, 06:00 to 08:00')
+    expect(panel).not.toHaveTextContent(/\d{4}-\d{2}-\d{2}/)
+  })
+
   it('shows the brief\'s block over a fortnight: eight hours and $588.64 in the week that has no holiday in it, one holiday to decide, no registration notice', () => {
     state.current = { data: golden.briefFortnight, isLoading: false, isError: false }
     setUp({ week: null, from: '2026-10-01', to: '2026-10-14' })
