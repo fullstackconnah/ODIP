@@ -64,6 +64,11 @@ public record ParticipantOnboardingDto
     public DateTime? ServiceTypeConfirmedAt { get; init; }
     public string? ServiceTypeConfirmedBy { get; init; }
     public bool ServiceAgreementSigned { get; init; }
+    /// <summary>
+    /// The "Funding recorded" step of the activation checklist: whether an NDIS-funded participant has a plan budget on record that has not ended (provider time). Null when the step
+    /// does not apply, because the participant is not NDIS-funded: the checklist does not show it. Money is not here, only whether a plan is recorded.
+    /// </summary>
+    public bool? FundingRecorded { get; init; }
     public bool IsReady { get; init; }
     public List<string> Reasons { get; init; } = [];
 }

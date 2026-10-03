@@ -2,8 +2,12 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Services;
+
+/// <summary>Why an activation is refused in Enforce mode (None when it is not).</summary>
+public enum ActivationBlock { None, EvidenceRequired, FundingNotRecorded }
 
 /// <summary>What a readiness check decided for one participant, and what is missing.</summary>
 /// <param name="Allowed">
@@ -43,6 +47,11 @@ public static class ParticipantReadiness
     public const string OnboardingProfileNotComplete = "Onboarding not complete: profile";
     public const string OnboardingServiceTypeNotComplete = "Onboarding not complete: service type";
     public const string NoSignedServiceAgreement = "No signed service agreement";
+    /// <summary>
+    /// The activation checklist's extra item: an NDIS-funded participant with no plan budget on record that has not ended. It is listed by <see cref="ActivationIssuesAsync"/> and
+    /// by the onboarding checklist, and it is deliberately NOT one of <see cref="IssuesAsync"/>'s: those travel on every shift and picker row of the roster.
+    /// </summary>
+    public const string FundingNotRecorded = "Funding not recorded";
 
     // ── Mode ────────────────────────────────────────────────────────────────
 
@@ -123,20 +132,64 @@ public static class ParticipantReadiness
     }
 
     /// <summary>
-    /// May an inactive, non-draft participant be activated? Warn: yes. Enforce: only when persisted,
-    /// tenant-matched evidence exists (<see cref="ParticipantReadinessGate.HasActivationEvidenceAsync"/>).
-    /// The caller still decides draft state; this answers the readiness question only.
+    /// May an inactive, non-draft participant be activated? Warn: yes. Enforce: only when persisted, tenant-matched evidence exists
+    /// (<see cref="ParticipantReadinessGate.HasActivationEvidenceAsync"/>) AND, for an NDIS-funded participant, a plan budget is recorded that has not ended
+    /// (<see cref="ParticipantReadinessGate.HasFundingRecordedAsync"/>, judged on the provider's calendar date). The caller still decides draft state; this answers the
+    /// readiness question only. Activation is the ONLY place the plan budget is asked for: placement (<see cref="CheckAsync"/>) never is.
     /// </summary>
-    public static async Task<bool> MayActivateAsync(OdipDbContext db, Participant participant, CancellationToken ct) =>
-        !await IsEnforcedAsync(db, participant.TenantId, ct)
-        || await ParticipantReadinessGate.HasActivationEvidenceAsync(db, participant.Id, ct);
+    public static async Task<bool> MayActivateAsync(OdipDbContext db, Participant participant, TimeProvider clock, CancellationToken ct) =>
+        await ActivationBlockAsync(db, participant, clock, ct) == ActivationBlock.None;
+
+    /// <summary>What stops this activation, for the refusal message: nothing (<see cref="ActivationBlock.None"/>), the missing agreement evidence, or the missing plan budget.</summary>
+    public static async Task<ActivationBlock> ActivationBlockAsync(OdipDbContext db, Participant participant, TimeProvider clock, CancellationToken ct)
+    {
+        if (!await IsEnforcedAsync(db, participant.TenantId, ct)) return ActivationBlock.None;
+
+        var evidence = await ParticipantReadinessGate.HasActivationEvidenceAsync(db, participant.Id, ct);
+        if (!evidence) return Decide(enforced: true, evidencePresent: false, fundingRecorded: true);
+
+        var today = await ProviderTimeZoneResolver.TodayAsync(db, clock, ct);
+        var funding = await ParticipantReadinessGate.HasFundingRecordedAsync(db, participant.Id, today, ct);
+        return Decide(enforced: true, evidencePresent: true, fundingRecorded: funding);
+    }
+
+    /// <summary>
+    /// The rule on its own: Warn never blocks; Enforce needs the evidence first (that is the refusal an organisation has always had) and then the plan budget.
+    /// <paramref name="fundingRecorded"/> is true for a participant who has none to record.
+    /// </summary>
+    internal static ActivationBlock Decide(bool enforced, bool evidencePresent, bool fundingRecorded) =>
+        !enforced ? ActivationBlock.None
+        : !evidencePresent ? ActivationBlock.EvidenceRequired
+        : !fundingRecorded ? ActivationBlock.FundingNotRecorded
+        : ActivationBlock.None;
+
+    /// <summary>
+    /// What is missing before this participant can be ACTIVATED: everything <see cref="IssuesAsync"/> lists, then <see cref="FundingNotRecorded"/> for an NDIS-funded participant with no plan budget
+    /// on record that has not ended. The activation path (the status endpoint's notes) uses this; the roster, the pickers and the participant register keep <see cref="IssuesAsync"/>.
+    /// </summary>
+    public static async Task<Dictionary<Guid, List<string>>> ActivationIssuesAsync(
+        OdipDbContext db, IReadOnlyCollection<Guid> participantIds, TimeProvider clock, CancellationToken ct)
+    {
+        var issues = await IssuesAsync(db, participantIds, ct);
+        if (issues.Count == 0) return issues;
+
+        var today = await ProviderTimeZoneResolver.TodayAsync(db, clock, ct);
+        var ids = issues.Keys.ToList();
+        var missing = await ParticipantReadinessGate.FundingMissingParticipants(db, today)
+            .Where(p => ids.Contains(p.Id))
+            .Select(p => p.Id)
+            .ToListAsync(ct);
+        foreach (var id in missing) issues[id].Add(FundingNotRecorded);
+        return issues;
+    }
 
     // ── Issues ──────────────────────────────────────────────────────────────
 
     /// <summary>
     /// What is missing for each participant, computed from data that exists today. One entry per
     /// participant found (an empty list when nothing is missing); ids that do not exist in the
-    /// caller's tenant are absent. Three queries however many participants there are.
+    /// caller's tenant are absent. Three queries however many participants there are. These are the issues every OPERATIONAL surface carries (the roster, the pickers, the register):
+    /// the activation checklist adds the plan budget on top, in <see cref="ActivationIssuesAsync"/>, and nothing here ever lists it.
     /// </summary>
     public static async Task<Dictionary<Guid, List<string>>> IssuesAsync(
         OdipDbContext db, IReadOnlyCollection<Guid> participantIds, CancellationToken ct)

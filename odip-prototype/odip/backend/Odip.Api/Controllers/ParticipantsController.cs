@@ -717,7 +717,7 @@ public class ParticipantsController : ControllerBase
         // Intake must be complete in every mode. It used to be implied by IsDraft (an intake-incomplete record was always a draft);
         // now that a legacy non-draft record stays non-draft, it is stated here, so editing one never activates it by the side.
         if (!p.IsActive)
-            p.IsActive = !p.IsDraft && p.IntakeCompletedAt.HasValue && await ParticipantReadiness.MayActivateAsync(_db, p, ct);
+            p.IsActive = !p.IsDraft && p.IntakeCompletedAt.HasValue && await ParticipantReadiness.MayActivateAsync(_db, p, _clock, ct);
 
         // A full profile submission can change identity, DOB, gender, or NDIS details. It never
         // preserves a prior onboarding attestation: staff must re-run the separate server-side
@@ -971,6 +971,11 @@ public class ParticipantsController : ControllerBase
 
     private const string DraftCannotBeActivated = "A draft participant cannot be activated. Complete their intake and profile first.";
     private const string ActivationEvidenceRequired = "This participant cannot be activated until their signed service agreement evidence is recorded.";
+    private const string ActivationFundingRequired = "This participant cannot be activated until their plan budget is recorded on the Funding tab.";
+
+    /// <summary>The 400 message for an activation the organisation's readiness rule refuses.</summary>
+    private static string ActivationRefusal(ActivationBlock block) =>
+        block == ActivationBlock.FundingNotRecorded ? ActivationFundingRequired : ActivationEvidenceRequired;
 
     /// <summary>
     /// The one way a screen changes whether a participant is active: the flag and an optional reason, nothing else (a partial
@@ -1008,10 +1013,12 @@ public class ParticipantsController : ControllerBase
         if (activate)
         {
             if (p.IsDraft) return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail(DraftCannotBeActivated));
-            if (!await ParticipantReadiness.MayActivateAsync(_db, p, ct))
-                return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail(ActivationEvidenceRequired));
-            // Warn mode activates, and what is still missing comes back as notes for the screen: never blocking.
-            var issues = await ParticipantReadiness.IssuesAsync(_db, new[] { p.Id }, ct);
+            var block = await ParticipantReadiness.ActivationBlockAsync(_db, p, _clock, ct);
+            if (block != ActivationBlock.None)
+                return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail(ActivationRefusal(block)));
+            // Warn mode activates, and what is still missing comes back as notes for the screen: never blocking. This is the ACTIVATION checklist, so it also lists
+            // that the plan budget is not recorded (an NDIS-funded participant with no current plan); the roster and the pickers never list that.
+            var issues = await ParticipantReadiness.ActivationIssuesAsync(_db, new[] { p.Id }, _clock, ct);
             if (issues.TryGetValue(p.Id, out var missing))
                 warnings.AddRange(missing.Select(issue => $"Not yet fully ready: {issue}."));
         }
@@ -1082,8 +1089,8 @@ public class ParticipantsController : ControllerBase
             if (!p.IntakeCompletedAt.HasValue)
                 return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Complete the participant's intake before completing their profile."));
             // The activation rule the full PUT applied to a record that has just been finalised: Warn (the default) activates, Enforce needs evidence.
-            if (!p.IsActive && !await ParticipantReadiness.MayActivateAsync(_db, p, ct))
-                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(ActivationEvidenceRequired));
+            if (!p.IsActive && await ParticipantReadiness.ActivationBlockAsync(_db, p, _clock, ct) is var block && block != ActivationBlock.None)
+                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(ActivationRefusal(block)));
             p.IsDraft = false;
             p.UpdatedAt = DateTime.UtcNow;
             p.IsActive = true;
