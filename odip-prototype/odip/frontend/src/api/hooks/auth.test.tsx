@@ -90,6 +90,19 @@ describe('useLogin', () => {
     expect(signOut).toHaveBeenCalledTimes(1)
   })
 
+  it('sends no link, and says one went a moment ago, when the page says to hold the send back (the hold across attempts)', async () => {
+    mockApiPostRaw.mockRejectedValue(refusal('EmailNotVerified'))
+    const { result } = renderHook(() => useLogin(), { wrapper })
+
+    const failure = await result.current.mutateAsync({ email: 'jane.smith@acme.example.com', password: 'a-password', sendVerification: false }).catch((err: unknown) => err)
+
+    expect(failure).toBeInstanceOf(SignInRefused)
+    expect((failure as SignInRefused).refusal.code).toBe('EmailNotVerified')
+    expect((failure as SignInRefused).verification).toBe('recent')
+    expect(sendEmailVerification).not.toHaveBeenCalled()
+    expect(signOut).toHaveBeenCalledTimes(1)
+  })
+
   it.each(['NoOdipAccount', 'TenantInactive', 'ProviderNotAllowed', 'Ambiguous', 'InvalidToken'])(
     'throws the %s refusal and signs out of Firebase, without sending any email',
     async code => {

@@ -7,10 +7,8 @@ import type { AuthResponseDto, ApiResponse } from '@/api/types'
 import { Callout } from '@/components/Callout'
 import { Button } from '@/components/Button'
 import { SignInRefused, describeSignInRefusal, type RefusalWords } from '@/lib/signInRefusal'
+import { VERIFICATION_HOLD_MS, holdLeftMs, readVerificationSend, writeVerificationSend, type VerificationSendRecord } from '@/lib/verificationSend'
 import { Map, Eye, EyeOff } from 'lucide-react'
-
-// After the verification link goes out, "Send it again" is held for this long. Firebase rate-limits verification emails and every click costs one.
-const RESEND_HOLD_MS = 30_000
 
 /** What the person is told: one plain sentence, and what to do next when the sentence does not already say. */
 type Problem = RefusalWords
@@ -27,6 +25,9 @@ export default function LoginPage() {
   const [resend, setResend] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle')
   const [resendHeld, setResendHeld] = useState(false)
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The last verification send ATTEMPT (to whom, when, and whether it went). Firebase rate-limits these, so one goes at most once per hold across attempts, not just
+  // per attempt. A ref, because every new attempt starts with clearResend() and this must outlive it; sessionStorage behind it, because a reload must too.
+  const lastSend = useRef<VerificationSendRecord | null>(null)
   const [devUsernameOverride, setDevUsernameOverride] = useState<string | null>(null)
   const navigate = useNavigate()
   const login = useLogin()
@@ -44,10 +45,19 @@ export default function LoginPage() {
     if (holdTimer.current) clearTimeout(holdTimer.current)
   }, [])
 
-  const holdResend = () => {
+  const lastSendAttempt = () => lastSend.current ?? readVerificationSend()
+
+  const noteSendAttempt = (address: string, went: boolean) => {
+    const record = { email: address, at: Date.now(), went }
+    lastSend.current = record
+    writeVerificationSend(record)
+  }
+
+  // "Send it again" waits for what is left of the hold after a send (all of it for one just made, less for one made a moment ago).
+  const holdResend = (ms: number = VERIFICATION_HOLD_MS) => {
     if (holdTimer.current) clearTimeout(holdTimer.current)
-    setResendHeld(true)
-    holdTimer.current = setTimeout(() => setResendHeld(false), RESEND_HOLD_MS)
+    setResendHeld(ms > 0)
+    holdTimer.current = ms > 0 ? setTimeout(() => setResendHeld(false), ms) : null
   }
 
   const clearResend = () => {
@@ -75,21 +85,28 @@ export default function LoginPage() {
     setProblem(null)
     setResetSent(false)
     clearResend()
+    // A link was attempted for this address a moment ago: if the exchange refuses an unverified email again, the sign-in is told not to send another.
+    const sendHeldBack = holdLeftMs(lastSendAttempt(), email) > 0
     try {
-      const res = await login.mutateAsync({ email, password })
+      const res = await login.mutateAsync(sendHeldBack ? { email, password, sendVerification: false } : { email, password })
       if (!applyLoginSuccess(res)) {
         setProblem({ sentence: res.errors?.[0] || 'Login failed' })
       }
     } catch (err) {
       // The exchange refused the sign-in and said why: the mutation rejects with a SignInRefused, having already ended the Firebase session and, for an
-      // unverified email, sent the verification link once. Anything else is a Firebase AuthError from signInWithEmailAndPassword (has a `.code`) or a
-      // network failure from the exchange call (`.code === 'ERR_NETWORK'`, or a request that got no response).
+      // unverified email, sent the verification link (unless told not to). Anything else is a Firebase AuthError from signInWithEmailAndPassword (has a `.code`)
+      // or a network failure from the exchange call (`.code === 'ERR_NETWORK'`, or a request that got no response).
       if (err instanceof SignInRefused) {
-        setProblem(describeSignInRefusal(err.refusal, email, err.verification))
+        let verification = err.verification
         if (err.refusal.code === 'EmailNotVerified') {
+          if (verification === 'sent' || verification === 'not-sent') noteSendAttempt(email, verification === 'sent')
+          // A link only "went a moment ago" if that attempt went. After one that failed, say so, as for any send that failed.
+          else if (verification === 'recent' && lastSendAttempt()?.went === false) verification = 'not-sent'
           setUnverified({ email, password })
-          if (err.verification === 'sent') holdResend()
+          // Send it again waits out the hold after a send that went; after one that failed it stays free, so the person can try again.
+          if (verification === 'sent' || verification === 'recent') holdResend(holdLeftMs(lastSendAttempt(), email))
         }
+        setProblem(describeSignInRefusal(err.refusal, email, verification))
         return
       }
 
@@ -118,12 +135,16 @@ export default function LoginPage() {
   const handleResend = async () => {
     if (!unverified || resendHeld || resend === 'sending') return
     setResend('sending')
+    let went = true
     try {
       await resendVerification.mutateAsync(unverified)
       setResend('sent')
     } catch {
+      went = false
       setResend('failed')
     }
+    // Sent or not, this was an attempt: the next Sign In inside the hold sends no other, and the button waits.
+    noteSendAttempt(unverified.email, went)
     holdResend()
   }
 

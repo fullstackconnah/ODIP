@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import LoginPage from './LoginPage'
@@ -46,6 +46,7 @@ beforeEach(() => {
   mockDevLogin.mockReset()
   sendPasswordResetEmail.mockReset().mockResolvedValue(undefined)
   localStorage.clear()
+  sessionStorage.clear()
 })
 
 afterEach(() => {
@@ -326,5 +327,120 @@ describe('LoginPage: developer sign-in', () => {
 
     await u.click(screen.getByRole('button', { name: 'Sign in as selected user' }))
     expect(await screen.findByText('Too many sign-in attempts. Wait a few minutes and try again.')).toBeInTheDocument()
+  })
+})
+
+// The verification link goes out once per hold, however many times Sign In is pressed with an unverified account: Firebase rate-limits these, and "Send it
+// again" has no lockout of its own. The page remembers the last attempt (in memory and in sessionStorage) and tells the sign-in not to send inside the hold.
+describe('LoginPage: the verification link is sent at most once per hold', () => {
+  const unverified = (verification: 'sent' | 'not-sent' | 'recent') => new SignInRefused(refusal('EmailNotVerified'), verification)
+  const heldButton = () => screen.getByRole('button', { name: 'Send it again' })
+
+  function renderWithTimers() {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    render(<MemoryRouter><LoginPage /></MemoryRouter>)
+    return userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime })
+  }
+
+  const signInAgain = (u: ReturnType<typeof userEvent.setup>) => u.click(screen.getByRole('button', { name: 'Sign In' }))
+
+  it('asks the sign-in to send the first time, and not to send on a second attempt inside the hold, saying a link went a moment ago', async () => {
+    mockLogin.mockRejectedValueOnce(unverified('sent')).mockRejectedValueOnce(unverified('recent'))
+    const u = renderWithTimers()
+    await signIn(u)
+    await alert()
+
+    await signInAgain(u)
+
+    await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(2))
+    expect(mockLogin).toHaveBeenNthCalledWith(1, { email: EMAIL, password: 'a-password' })
+    expect(mockLogin).toHaveBeenNthCalledWith(2, { email: EMAIL, password: 'a-password', sendVerification: false })
+    expect(await screen.findByText(`Your email address isn't verified yet. We sent a verification link to ${EMAIL} a moment ago. Open it, then sign in again.`)).toBeInTheDocument()
+  })
+
+  it('holds Send it again for what is left of the hold, not a fresh 30 seconds, after a second attempt', async () => {
+    mockLogin.mockRejectedValueOnce(unverified('sent')).mockRejectedValueOnce(unverified('recent'))
+    const u = renderWithTimers()
+    await signIn(u)
+    await alert()
+    await act(async () => { vi.advanceTimersByTime(20_000) })
+
+    await signInAgain(u)
+    await screen.findByText(/a moment ago/)
+
+    expect(heldButton()).toHaveAttribute('aria-disabled', 'true')
+    await act(async () => { vi.advanceTimersByTime(11_000) })
+    await waitFor(() => expect(heldButton()).not.toHaveAttribute('aria-disabled', 'true'))
+  })
+
+  it('asks the sign-in to send again on an attempt after the hold is over', async () => {
+    mockLogin.mockRejectedValue(unverified('sent'))
+    const u = renderWithTimers()
+    await signIn(u)
+    await alert()
+    await act(async () => { vi.advanceTimersByTime(31_000) })
+
+    await signInAgain(u)
+
+    await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(2))
+    expect(mockLogin).toHaveBeenNthCalledWith(2, { email: EMAIL, password: 'a-password' })
+  })
+
+  it('does not hold the send back for a different address', async () => {
+    mockLogin.mockRejectedValue(unverified('sent'))
+    const u = renderWithTimers()
+    await signIn(u)
+    await alert()
+
+    await u.clear(screen.getByLabelText('Email'))
+    await u.type(screen.getByLabelText('Email'), 'someone.else@acme.example.com')
+    await signInAgain(u)
+
+    await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(2))
+    expect(mockLogin).toHaveBeenNthCalledWith(2, { email: 'someone.else@acme.example.com', password: 'a-password' })
+  })
+
+  it('remembers the send across a reload of the page, so reloading and pressing Sign In again does not send another', async () => {
+    mockLogin.mockRejectedValueOnce(unverified('sent')).mockRejectedValueOnce(unverified('recent'))
+    const first = renderWithTimers()
+    await signIn(first)
+    await alert()
+    cleanup()
+
+    const second = renderWithTimers()
+    await signIn(second)
+
+    await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(2))
+    expect(mockLogin).toHaveBeenNthCalledWith(2, { email: EMAIL, password: 'a-password', sendVerification: false })
+  })
+
+  it('counts a send that failed as an attempt too, and then says truthfully that nothing went, with the button free', async () => {
+    mockLogin.mockRejectedValueOnce(unverified('not-sent')).mockRejectedValueOnce(unverified('recent'))
+    const u = renderWithTimers()
+    await signIn(u)
+    await alert()
+
+    await signInAgain(u)
+
+    await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(2))
+    expect(mockLogin).toHaveBeenNthCalledWith(2, { email: EMAIL, password: 'a-password', sendVerification: false })
+    expect(await screen.findByText("Your email address isn't verified yet, and we couldn't send the verification link just now.")).toBeInTheDocument()
+    expect(screen.queryByText(/a moment ago/)).not.toBeInTheDocument()
+    expect(heldButton()).not.toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('counts Send it again as a send: the next Sign In inside its hold does not send another', async () => {
+    mockLogin.mockRejectedValueOnce(unverified('not-sent')).mockRejectedValueOnce(unverified('recent'))
+    const u = renderWithTimers()
+    await signIn(u)
+    await alert()
+    await u.click(heldButton())
+    await waitFor(() => expect(mockResend).toHaveBeenCalledTimes(1))
+
+    await signInAgain(u)
+
+    await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(2))
+    expect(mockLogin).toHaveBeenNthCalledWith(2, { email: EMAIL, password: 'a-password', sendVerification: false })
+    expect(await screen.findByText(/a moment ago/)).toBeInTheDocument()
   })
 })

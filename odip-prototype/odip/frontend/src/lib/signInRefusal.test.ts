@@ -72,6 +72,11 @@ describe('describeSignInRefusal', () => {
       .toBe("Your email address isn't verified yet. We've sent a verification link to jane.smith@acme.example.com. Open it, then sign in again.")
   })
 
+  it('says a link was sent a moment ago when the page held the automatic send back, rather than that one is being sent now', () => {
+    expect(describeSignInRefusal(refused('EmailNotVerified'), email, 'recent').sentence)
+      .toBe("Your email address isn't verified yet. We sent a verification link to jane.smith@acme.example.com a moment ago. Open it, then sign in again.")
+  })
+
   it('does not claim a link was sent when it was not, and points at Send it again', () => {
     const words = describeSignInRefusal(refused('EmailNotVerified'), email, 'not-sent')
 

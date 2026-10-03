@@ -28,19 +28,23 @@ async function signOutOfFirebase(): Promise<void> {
 
 /**
  * Signs in to Firebase, then exchanges the ID token for an ODIP session. When the exchange REFUSES, it rejects with a `SignInRefused` that says why (the
- * login page words it): the exchange only refuses a token it has verified, and for an unverified email the verification link is sent once, here, while the
- * person is still signed in. Whatever the refusal, the Firebase session is ended. A Firebase error (wrong password) or a network failure is rethrown as it is.
+ * login page words it): the exchange only refuses a token it has verified, and for an unverified email the verification link is sent here, while the person
+ * is still signed in. Whatever the refusal, the Firebase session is ended. A Firebase error (wrong password) or a network failure is rethrown as it is.
+ *
+ * The link goes at most once per hold across attempts (Firebase rate-limits them): the page passes `sendVerification: false` when one was attempted a moment
+ * ago, and the refusal then says so ('recent') instead of sending another.
  */
 export function useLogin() {
   return useMutation({
-    mutationFn: async ({ email, password }: { email: string; password: string }) => {
+    mutationFn: async ({ email, password, sendVerification = true }: { email: string; password: string; sendVerification?: boolean }) => {
       const credential = await signInWithEmailAndPassword(auth!, email, password)
       const idToken = await credential.user.getIdToken()
       try {
         return await apiPostRaw<AuthResponseDto>('/auth/exchange', { idToken })
       } catch (err) {
         const refusal = signInRefusalOf(err)
-        const verification = refusal?.code === 'EmailNotVerified' ? await sendVerificationLink(credential.user) : undefined
+        let verification: VerificationSend | undefined
+        if (refusal?.code === 'EmailNotVerified') verification = sendVerification ? await sendVerificationLink(credential.user) : 'recent'
         await signOutOfFirebase()
         if (!refusal) throw err
         throw new SignInRefused(refusal, verification)

@@ -21,8 +21,11 @@ export interface SignInRefusal {
   retryAfterSeconds: number | null
 }
 
-/** Whether the verification link went out when the exchange said the email was not verified. Only meaningful for EmailNotVerified. */
-export type VerificationSend = 'sent' | 'not-sent'
+/**
+ * Whether the verification link went out when the exchange said the email was not verified. 'recent' is no send THIS time, because the page asked the sign-in not
+ * to (one was attempted a moment ago: see verificationSend.ts). Only meaningful for EmailNotVerified.
+ */
+export type VerificationSend = 'sent' | 'not-sent' | 'recent'
 
 /** What the sign-in mutation rejects with when the exchange refused: the refusal, and (for EmailNotVerified) whether the verification link went. */
 export class SignInRefused extends Error {
@@ -82,14 +85,18 @@ export interface RefusalWords {
 
 /**
  * The words for a refusal. `email` is what the person typed. For EmailNotVerified, `verification` says whether the verification link went out (the sign-in
- * mutation sends it once, automatically); the sentence is truthful about it either way.
+ * mutation sends it automatically, at most once per hold); the sentence is truthful about it either way.
  */
 export function describeSignInRefusal(refusal: SignInRefusal, email: string, verification?: VerificationSend): RefusalWords {
   switch (refusal.code) {
     case 'EmailNotVerified':
-      return verification === 'sent'
-        ? { sentence: `Your email address isn't verified yet. We've sent a verification link to ${email}. Open it, then sign in again.` }
-        : { sentence: "Your email address isn't verified yet, and we couldn't send the verification link just now.", nextStep: 'Wait a minute, then use Send it again.' }
+      if (verification === 'sent') {
+        return { sentence: `Your email address isn't verified yet. We've sent a verification link to ${email}. Open it, then sign in again.` }
+      }
+      if (verification === 'recent') {
+        return { sentence: `Your email address isn't verified yet. We sent a verification link to ${email} a moment ago. Open it, then sign in again.` }
+      }
+      return { sentence: "Your email address isn't verified yet, and we couldn't send the verification link just now.", nextStep: 'Wait a minute, then use Send it again.' }
     case 'NoOdipAccount':
       return { sentence: `${email} isn't set up in ODIP. Ask your administrator to add you.` }
     case 'TenantInactive':
