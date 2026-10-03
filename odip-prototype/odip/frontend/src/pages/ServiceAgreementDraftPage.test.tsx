@@ -323,21 +323,23 @@ describe('ServiceAgreementDraftPage: starting from the newest revision', () => {
     expect(within(card).getByText('04_104_0125_6_1')).toBeInTheDocument()
     expect(within(card).getAllByText('$588.64')).toHaveLength(2)    // the line's total, and the total of the lines
     expect(within(card).getByText('8 h')).toBeInTheDocument()
-    expect(within(card).getByText(/2 lines to review, 5 provisional/)).toBeInTheDocument()
+    expect(within(card).getByText('As priced when it was saved: 3 shifts with a part not priced · some lines use provisional rates.')).toBeInTheDocument()
     expect(within(card).getByText(/Part of this block has no price item: Block 1: no item for Weekday Night\. \(3 shifts, from Tue 13 Oct 2026\)/)).toBeInTheDocument()
     expect(within(card).getByText(/over the agreement, including 1 public holiday shift/)).toBeInTheDocument()
     expect(within(card).queryByText('Typed by hand')).not.toBeInTheDocument()
   })
 
-  it('reads a saved catalogue gap as one line with the shifts it touched, not a line for every date', () => {
-    const gap = (date: string) => ({ blockId: 'b1', reason: 'CatalogueNotFound' as const, message: `No catalogue row for Community access is valid on ${date}.`, count: 1, firstDate: date })
-    const gapped = draft({ ...priced, version: 5, pricing: quote({ ...pricing, issues: ['2027-07-03', '2027-07-01', '2027-07-02'].map(gap) }) })
+  // The engine keeps one issue for each block, reason and message, counting the shifts it met it on: a block short of two catalogue items has two, each counting the same three shifts.
+  it('reads a saved catalogue gap as one line with the shifts it touched, not a line for every item or a count of items', () => {
+    const gap = (need: string) => ({ blockId: 'b1', reason: 'CatalogueNotFound' as const, message: `No catalogue row for ${need} is valid for part of the period. Import the catalogue for that period.`, count: 3, firstDate: '2027-07-01' })
+    const gapped = draft({ ...priced, version: 5, pricing: quote({ ...pricing, issues: [gap('Community access, Weekday Daytime'), gap('Community access, Weekday Evening')] }) })
     drafts.mockReturnValue({ data: [gapped], isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
 
     const card = screen.getByText('Version 5').closest('article') as HTMLElement
     expect(within(card).getAllByText(/No catalogue prices for part of the agreement:/)).toHaveLength(1)
-    expect(within(card).getByText(/No catalogue prices for part of the agreement: No catalogue row for Community access is valid on 2027-07-01\. \(3 shifts, from Thu 1 Jul 2027\)/)).toBeInTheDocument()
+    expect(within(card).getByText(/No catalogue prices for part of the agreement: No catalogue row for Community access, Weekday Daytime is valid for part of the period\. Import the catalogue for that period\. \(3 shifts, from Thu 1 Jul 2027\)/)).toBeInTheDocument()
+    expect(within(card).getByText(/As priced when it was saved: 3 shifts with a part not priced/)).toBeInTheDocument()
   })
 
   it('is not dirty until the plan changes, and says so once it has', async () => {

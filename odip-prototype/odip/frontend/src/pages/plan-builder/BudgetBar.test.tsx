@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { PlanBudget } from '@/api/hooks'
+import type { PlanIssue } from '@/api/types'
 import { budgetOf, emptyTotals } from '@/test/fixtures/planPricing'
 import { BudgetBar } from './BudgetBar'
 
@@ -37,9 +38,12 @@ describe('BudgetBar', () => {
 
     const warning = screen.getByText(/Over the plan budget by \$5,610\.28/)
     expect(warning).toHaveTextContent('You can still save the draft.')
-    expect(warning).toHaveAttribute('role', 'status')       // polite: it is a warning, never an interruption or a block
     expect(screen.getByText('122% used')).toBeInTheDocument()
     expect(screen.getByText('Over budget')).toBeInTheDocument()   // and on the one-line form a phone shows
+    // Design 2: the cell takes the warning tint, and the sentence is text, not a pill. Design 8: nothing here is a live region, so nothing speaks on every recalculation.
+    expect(screen.getByText('Plan budget').parentElement).toHaveClass('bg-[var(--color-warning-container)]')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('shows the totals on their own, and says so, when no plan budget is recorded or it could not be read', () => {
@@ -54,12 +58,55 @@ describe('BudgetBar', () => {
 
   it('names the plans it cannot give a week for, and what is flagged, and what it left out', () => {
     const noWeek = budget()
-    ready({ budget: { ...noWeek, weekly: null, week: null, period: { ...noWeek.period, totals: { ...noWeek.period.totals, reviewLines: 2, provisionalLines: 3 } } }, incompleteBlocks: 1, refreshing: true })
+    const holiday = { blockId: 'b1', date: '2026-10-05', holidayName: 'Labour Day', decision: 'Review' as const, skipped: false }
+    ready({
+      budget: { ...noWeek, weekly: null, week: null, period: { ...noWeek.period, holidayOccurrences: [holiday, { ...holiday, date: '2026-12-25', holidayName: 'Christmas Day' }], totals: { ...noWeek.period.totals, provisionalLines: 3 } } },
+      incompleteBlocks: 1, refreshing: true,
+    })
 
     expect(screen.getByText('The agreement is shorter than a week.')).toBeInTheDocument()
-    expect(screen.getByText('2 lines to review, 3 provisional.')).toBeInTheDocument()
+    expect(screen.getByText('2 public holiday shifts to decide · some lines use provisional rates.')).toBeInTheDocument()
     expect(screen.getByText('1 block left out of these figures until it is complete.')).toBeInTheDocument()
     expect(screen.getByText(/updating…/)).toBeInTheDocument()
+    expect(screen.queryByText('Not fully priced')).not.toBeInTheDocument()   // a decision still to make is not work left out
+  })
+
+  // Design 1: the total is what a coordinator quotes to a family, so a total that leaves work out says so beside the figure, in shifts, and on the one-line form a phone shows.
+  describe('a total that leaves work out', () => {
+    const issue = (reason: PlanIssue['reason'], count: number, blockId = 'b1'): PlanIssue => ({ blockId, reason, message: `${reason} ${blockId}`, count, firstDate: '2026-10-13' })
+    const withIssues = (...issues: PlanIssue[]): PlanBudget => {
+      const base = budget()
+      return { ...base, period: { ...base.period, issues, totals: { ...base.period.totals, unpricedLines: 372, reviewLines: 219, provisionalLines: 0 } } }
+    }
+
+    it('counts the shifts with a part not priced, once, never the lines (shifts times items) the engine counts', () => {
+      ready({ budget: withIssues(issue('NoItem', 186), issue('CatalogueNotFound', 186), issue('CatalogueNotFound', 40, 'b2')) })
+
+      expect(screen.getByText('226 shifts with a part not priced.')).toBeInTheDocument()
+      expect(screen.queryByText(/372|219/)).not.toBeInTheDocument()
+    })
+
+    it('says Not fully priced on the one-line form, beside the figure a phone shows', () => {
+      ready({ budget: withIssues(issue('CatalogueNotFound', 4)) })
+
+      const line = screen.getByText('8 h · $588.64 a week · $30,610.28 in all')
+      expect(line.parentElement).toHaveTextContent('Not fully priced')
+      expect(line.parentElement).not.toHaveTextContent('Over budget')
+    })
+
+    it('counts a block that cannot be priced at all, and says the total is not complete', () => {
+      ready({ budget: withIssues(issue('RegistrationGroupNotHeld', 1, 'b2')) })
+
+      expect(screen.getByText('1 block cannot be priced.')).toBeInTheDocument()
+      expect(screen.getByText('Not fully priced')).toBeInTheDocument()
+    })
+
+    it('says nothing of it when every shift is priced', () => {
+      ready()
+
+      expect(screen.queryByText('Not fully priced')).not.toBeInTheDocument()
+      expect(screen.queryByText(/not priced/)).not.toBeInTheDocument()
+    })
   })
 
   it('counts the funding sources a plan budget is the sum of', () => {
@@ -73,7 +120,7 @@ describe('BudgetBar', () => {
 
     const details = screen.getByRole('button', { name: /Details/ })
     expect(details).toHaveAttribute('aria-expanded', 'false')
-    expect(document.getElementById('plan-budget-details')).toHaveClass('hidden', 'md:grid')
+    expect(document.getElementById('plan-budget-details')).toHaveClass('hidden', 'xl:grid')   // the one-line form is for everything below 1280px, a tablet included
     expect(screen.getByText('8 h · $588.64 a week · $30,610.28 in all')).toBeInTheDocument()
 
     await user.click(details)
@@ -94,6 +141,7 @@ describe('BudgetBar', () => {
     expect(screen.getByText('Add a block to see the weekly hours and cost, and what the agreement comes to.')).toBeInTheDocument()
   })
 
+  // Design 5: the error and Try again are not inside the Details a phone keeps shut, where they were display:none and never announced.
   it('says why a plan could not be priced, announced, with a way to try again only when trying again can help', async () => {
     const user = userEvent.setup()
     const onRetry = vi.fn()
@@ -106,6 +154,14 @@ describe('BudgetBar', () => {
     rerender(<BudgetBar status="error" error={{ response: { status: 400, data: { errors: ['The agreement period ends before it starts.'] } } }} onRetry={onRetry} planBudget={null} />)
     expect(screen.getByRole('alert')).toHaveTextContent('The agreement period ends before it starts.')
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+  })
+
+  it('shows the error outside the collapsible details, and only once', () => {
+    render(<BudgetBar status="error" error={{ response: { status: 429, data: {} } }} onRetry={vi.fn()} planBudget={null} />)
+
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    expect(screen.getByRole('alert').closest('#plan-budget-details')).toBeNull()
+    expect(document.getElementById('plan-budget-details')).toBeNull()
   })
 
   // Review F1: the framework's validation answer (errors as an object by field) threw inside render and emptied the page.

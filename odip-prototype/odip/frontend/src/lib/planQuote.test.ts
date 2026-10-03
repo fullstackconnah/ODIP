@@ -1,11 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { FundingSourceDto, PlannedLine, PlanBlock, PlanFailureReason, PlanIssue } from '@/api/types'
+import type { FundingSourceDto, PlannedLine, PlanBlock, PlanFailureReason, PlanIssue, PlanQuote } from '@/api/types'
 import { emptyBlock } from './planBlocks'
 import {
-  CATEGORY_SHORT, REASON_COPY, addDays, agreementWeeks, bandLabel, categoryLabel, compareBudget, conflictVersionOf, describeQuoteError, describeSaveError, flagSummary, formatServiceDate, friendlyMessage, groupLines,
-  groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, planBudgetFor, quantityLabel, questionShort, referenceWeek, refusals, ruleWords,
+  CATEGORY_SHORT, REASON_COPY, addDays, agreementWeeks, bandLabel, categoryLabel, compareBudget, conflictVersionOf, describeQuoteError, describeSaveError, formatServiceDate, friendlyMessage, groupLines,
+  groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, planBudgetFor, quantityLabel, questionShort, referenceWeek, refusals, ruleWords, shiftsNotPriced, totalsCaption,
 } from './planQuote'
 
 const line = (changes: Partial<PlannedLine>): PlannedLine => ({
@@ -200,50 +200,98 @@ describe('what each refusal means', () => {
     expect(friendlyMessage("Blocks 'b7' and 'gone' are on at the same time.", blocks)).toBe("Blocks 'b7' and 'gone' are on at the same time.")
   })
 
-  it('counts what is flagged in a plan', () => {
-    expect(flagSummary({ reviewLines: 2, provisionalLines: 3, unpricedLines: 1 })).toBe('1 line not priced, 2 lines to review, 3 provisional')
-    expect(flagSummary({ reviewLines: 1, provisionalLines: 0, unpricedLines: 0 })).toBe('1 line to review')
-    expect(flagSummary({ reviewLines: 0, provisionalLines: 0, unpricedLines: 0 })).toBe('')
+})
+
+// Review (design 1): a total that leaves work out has to say so beside the figure, in the unit a coordinator thinks in (shifts, not lines of items times shifts).
+describe('what is left out of a plan\'s totals', () => {
+  const issue = (blockId: string, reason: PlanFailureReason, count: number): PlanIssue => ({ blockId, reason, message: `${reason} ${blockId}`, count })
+  const answer = (changes: Partial<PlanQuote> = {}): Pick<PlanQuote, 'issues' | 'holidayOccurrences' | 'totals'> => ({
+    issues: [], holidayOccurrences: [], totals: { amount: 0, supportHours: 0, lineCount: 0, unpricedLines: 0, reviewLines: 0, provisionalLines: 0, holidayOccurrences: 0, holidayUplift: 0, byCategory: [], byBlock: [] }, ...changes,
+  })
+  const holiday = (decision: 'Review' | 'Charge' | 'Skip', skipped = false) => ({ blockId: 'b1', date: '2026-10-05', holidayName: 'Labour Day', decision, skipped })
+
+  it('counts the shifts that have a part nobody priced, once however many items of the block are missing', () => {
+    // One block with two unpriced items on the same 24 shifts is 24 shifts, not 48; two blocks add up.
+    const issues = [issue('b1', 'NoItem', 24), issue('b1', 'CatalogueNotFound', 24), issue('b2', 'CatalogueNotFound', 13)]
+
+    expect(shiftsNotPriced(issues)).toBe(24 + 13)
+    expect(shiftsNotPriced([])).toBe(0)
+  })
+
+  it('does not count a refusal, a flag that is only for review, or an overlap as a part that was not priced', () => {
+    const issues = [issue('b1', 'RegistrationGroupNotHeld', 1), issue('b1', 'SleepoverNotQualifying', 5), issue('b1', 'SleepoverClockChange', 1), issue('b1', 'NamedDateNotInCalendar', 2), issue('b1', 'BlocksOverlap', 3)]
+
+    expect(shiftsNotPriced(issues)).toBe(0)
+  })
+
+  it('says it all in one line in shifts with their nouns, and what it says is true of the plan', () => {
+    const caption = totalsCaption(answer({
+      issues: [issue('b1', 'NoItem', 186), issue('b2', 'RegistrationGroupNotHeld', 1)],
+      holidayOccurrences: [holiday('Review'), holiday('Review'), holiday('Charge'), holiday('Review', true)],
+      totals: { ...answer().totals, provisionalLines: 468, reviewLines: 219, unpricedLines: 186 },
+    }))
+
+    expect(caption.text).toBe('186 shifts with a part not priced · 1 block cannot be priced · 2 public holiday shifts to decide · some lines use provisional rates')
+    expect(caption.notFullyPriced).toBe(true)
+  })
+
+  it('uses the singular, and says nothing about what is not so', () => {
+    expect(totalsCaption(answer({ issues: [issue('b1', 'NoItem', 1)], holidayOccurrences: [holiday('Review')] })).text).toBe('1 shift with a part not priced · 1 public holiday shift to decide')
+    expect(totalsCaption(answer({ totals: { ...answer().totals, provisionalLines: 2 } }))).toEqual({ text: 'some lines use provisional rates', notFullyPriced: false })
+    expect(totalsCaption(answer())).toEqual({ text: '', notFullyPriced: false })
+  })
+
+  it('is not fully priced for a refused block as well as for a part that was left out, and for a holiday to decide it is still fully priced', () => {
+    expect(totalsCaption(answer({ issues: [issue('b1', 'RegistrationGroupNotHeld', 1)] })).notFullyPriced).toBe(true)
+    expect(totalsCaption(answer({ issues: [issue('b1', 'CatalogueNotFound', 3)] })).notFullyPriced).toBe(true)
+    expect(totalsCaption(answer({ holidayOccurrences: [holiday('Review')] })).notFullyPriced).toBe(false)
   })
 })
 
-describe('issues read as one thing, not one per date', () => {
-  const gap = (blockId: string, date: string, count = 1, item = 'Community access'): PlanIssue => ({
-    blockId, reason: 'CatalogueNotFound', message: `No catalogue row for ${item} is valid on ${date}. Import the catalogue for that period.`, count, firstDate: date,
+// The engine keeps ONE issue for each block, reason and message, with the shifts it met it on (the message has no date: "Either is free of dates, so one gap in fifty weeks is one issue").
+// The same shift can carry several items, one message each, so two issues of one reason in one block count the same shifts, and merging them takes the larger count, not the sum.
+describe('issues read as one thing, not one per item', () => {
+  const gap = (blockId: string, item: string, count: number, firstDate?: string): PlanIssue => ({
+    blockId, reason: 'CatalogueNotFound', message: `No catalogue row for ${item} is valid for part of the period. Import the catalogue for that period.`, count, ...(firstDate ? { firstDate } : {}),
   })
 
-  it('adds a catalogue gap met on a hundred dates up to one issue, with the message and the date of the earliest', () => {
-    const dates = Array.from({ length: 100 }, (_, i) => addDays('2027-07-01', i))
-    // The engine gives them in date order here, but the earliest is the earliest wherever it comes.
-    const grouped = groupIssues([...dates.slice(50), ...dates.slice(0, 50)].map(date => gap('b1', date)))
+  it('merges the items of one block that the same shifts are missing into one issue, counting those shifts once', () => {
+    // Two items missing on the same 26 shifts is 26 shifts, not 52. Where they touch different shifts the larger count is a lower bound, never an overstatement.
+    const grouped = groupIssues([gap('b1', 'Community access, weekday daytime', 26, '2027-07-05'), gap('b1', 'Provider travel time', 26, '2027-07-05'), gap('b1', 'Transport', 10, '2027-07-12')])
 
     expect(grouped).toHaveLength(1)
-    expect(grouped[0]).toEqual({ blockId: 'b1', reason: 'CatalogueNotFound', message: 'No catalogue row for Community access is valid on 2027-07-01. Import the catalogue for that period.', count: 100, firstDate: '2027-07-01' })
+    expect(grouped[0]).toEqual({ blockId: 'b1', reason: 'CatalogueNotFound', message: 'No catalogue row for Community access, weekday daytime is valid for part of the period. Import the catalogue for that period.', count: 26, firstDate: '2027-07-05' })
+  })
+
+  it('keeps the message and the first day of the earliest, wherever it comes in the list', () => {
+    const grouped = groupIssues([gap('b1', 'Later item', 3, '2027-08-01'), gap('b1', 'Earlier item', 2, '2027-07-01')])
+
+    expect(grouped.map(issue => [issue.message.includes('Earlier item'), issue.count, issue.firstDate])).toEqual([[true, 3, '2027-07-01']])
   })
 
   it('keeps one issue for each block, and the blocks in the order they came', () => {
-    const grouped = groupIssues([gap('b2', '2027-07-03'), gap('b1', '2027-07-02'), gap('b2', '2027-07-01'), gap('b1', '2027-07-09', 2)])
+    const grouped = groupIssues([gap('b2', 'A', 4, '2027-07-03'), gap('b1', 'A', 7, '2027-07-02'), gap('b2', 'B', 9, '2027-07-01'), gap('b1', 'B', 2, '2027-07-09')])
 
-    expect(grouped.map(issue => [issue.blockId, issue.count, issue.firstDate])).toEqual([['b2', 2, '2027-07-01'], ['b1', 3, '2027-07-02']])
+    expect(grouped.map(issue => [issue.blockId, issue.count, issue.firstDate])).toEqual([['b2', 9, '2027-07-01'], ['b1', 7, '2027-07-02']])
   })
 
   it('does not run two different problems together: a rule broken in two fields, or a block that overlaps two others', () => {
     const invalid = (message: string): PlanIssue => ({ blockId: 'b1', reason: 'InvalidInput', message, count: 1 })
-    const overlap = (other: string): PlanIssue => ({ blockId: 'b1', reason: 'BlocksOverlap', message: `Block 'b1' and Block '${other}' are on at the same time.`, count: 4, firstDate: '2026-10-12' })
+    const overlap = (other: string, count: number): PlanIssue => ({ blockId: 'b1', reason: 'BlocksOverlap', message: `Block 'b1' and Block '${other}' are on at the same time.`, count, firstDate: '2026-10-12' })
 
-    expect(groupIssues([invalid('Pick a day.'), invalid('The end is before the start.'), invalid('Pick a day.')]).map(issue => [issue.message, issue.count])).toEqual([['Pick a day.', 2], ['The end is before the start.', 1]])
-    expect(groupIssues([overlap('b2'), overlap('b3'), overlap('b2')]).map(issue => [issue.message, issue.count])).toEqual([["Block 'b1' and Block 'b2' are on at the same time.", 8], ["Block 'b1' and Block 'b3' are on at the same time.", 4]])
+    expect(groupIssues([invalid('Pick a day.'), invalid('The end is before the start.'), invalid('Pick a day.')]).map(issue => [issue.message, issue.count])).toEqual([['Pick a day.', 1], ['The end is before the start.', 1]])
+    expect(groupIssues([overlap('b2', 4), overlap('b3', 6), overlap('b2', 4)]).map(issue => [issue.message, issue.count])).toEqual([["Block 'b1' and Block 'b2' are on at the same time.", 4], ["Block 'b1' and Block 'b3' are on at the same time.", 6]])
   })
 
   it('keeps an issue with no date as it is, and takes the date from whichever issue has one', () => {
     const undated: PlanIssue = { blockId: 'b1', reason: 'NamedDateNotInCalendar', message: 'a day in this block', count: 2 }
 
     expect(groupIssues([undated])).toEqual([undated])
-    expect(groupIssues([undated, { ...undated, firstDate: '2026-12-26', count: 1 }])).toEqual([{ ...undated, count: 3, firstDate: '2026-12-26' }])
+    expect(groupIssues([undated, { ...undated, firstDate: '2026-12-26', count: 1 }])).toEqual([{ ...undated, count: 2, firstDate: '2026-12-26' }])
   })
 
   it('does not change what it is given', () => {
-    const given = [gap('b1', '2027-07-02'), gap('b1', '2027-07-01')]
+    const given = [gap('b1', 'A', 2, '2027-07-02'), gap('b1', 'B', 1, '2027-07-01')]
     const copy = JSON.parse(JSON.stringify(given))
 
     groupIssues(given)
@@ -253,11 +301,11 @@ describe('issues read as one thing, not one per date', () => {
 
   it('has a way to say only the reason once for a block, whatever the messages said', () => {
     const grouped = groupByReason([
-      gap('b1', '2027-07-01', 1, 'Community access'), gap('b1', '2027-07-02', 1, 'Group activities'),
+      gap('b1', 'Community access', 5), gap('b1', 'Group activities', 3),
       { blockId: 'b1', reason: 'BlocksOverlap', message: 'with b2', count: 2 }, { blockId: 'b1', reason: 'BlocksOverlap', message: 'with b3', count: 1 },
     ])
 
-    expect(grouped.map(issue => [issue.reason, issue.count])).toEqual([['CatalogueNotFound', 2], ['BlocksOverlap', 3]])
+    expect(grouped.map(issue => [issue.reason, issue.count])).toEqual([['CatalogueNotFound', 5], ['BlocksOverlap', 2]])
   })
 
   it('says where an issue was met in words: how many shifts and the first day, or only the day', () => {

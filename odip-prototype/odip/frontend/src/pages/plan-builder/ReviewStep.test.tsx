@@ -201,11 +201,11 @@ describe('ReviewStep what needs a person', () => {
     expect(onGoTo).toHaveBeenCalledWith('times')
   })
 
-  it('lists a catalogue gap once, not once for every date it meets, with the shifts it touches and the first of them', () => {
-    const issues: PlanIssue[] = Array.from({ length: 40 }, (_, i) => {
-      const date = new Date(Date.UTC(2027, 6, 1 + i)).toISOString().slice(0, 10)
-      return { blockId: 'b1', reason: 'CatalogueNotFound', message: `No catalogue row for Community access is valid on ${date}. Import the catalogue for that period.`, count: 1, firstDate: date }
-    })
+  // One issue for each block, reason and message, counting the shifts (see PlanOverview.test.tsx): two items missing from the catalogue are two issues counting the same 40 shifts.
+  it('lists a catalogue gap once, not once for every item it misses, with the shifts it touches and the first of them', () => {
+    const issues: PlanIssue[] = ['Community access, Weekday Daytime', 'Community access, Weekday Evening'].map(need => ({
+      blockId: 'b1', reason: 'CatalogueNotFound', message: `No catalogue row for ${need} is valid for part of the period. Import the catalogue for that period.`, count: 40, firstDate: '2027-07-01',
+    }))
     state.current = { data: blockQuote({ issues }), isLoading: false, isError: false }
     setUp()
 

@@ -2,7 +2,7 @@
 // lines of an agreement, what each flag, rule and refusal means in plain words, how a plan compares with its budget, and what a failed request says.
 // The engine is the authority on every number: nothing here prices anything, and a line's total is always the server's total.
 import type { AxiosError } from 'axios'
-import type { FundingSourceDto, PlanFailureReason, PlannedLine, PlannedLineKind, PlanIssue, PlanBlock } from '@/api/types'
+import type { FundingSourceDto, PlanFailureReason, PlannedLine, PlannedLineKind, PlanIssue, PlanBlock, PlanQuote } from '@/api/types'
 import { isDateOnly, parseDateOnly, formatDayNumber } from './dateOnly'
 import { formatHours, type PlanStepKey } from './planBlocks'
 import { plural } from './format'
@@ -266,7 +266,7 @@ export function refusals(issues: readonly PlanIssue[]): PlanIssue[] {
   return issues.filter(issue => isRefusal(issue.reason))
 }
 
-/** Reasons whose message says which thing is wrong (a field, a pair of blocks), so two of them are two problems. The rest repeat for every date, item or hour they meet. */
+/** Reasons whose message says which thing is wrong (a field, a pair of blocks), so two of them are two problems. The rest are one problem met on several items. */
 const ONE_PER_MESSAGE = new Set<PlanFailureReason>(['InvalidInput', 'BlocksOverlap'])
 
 function mergeIssues(issues: readonly PlanIssue[], keyOf: (issue: PlanIssue) => string): PlanIssue[] {
@@ -276,14 +276,15 @@ function mergeIssues(issues: readonly PlanIssue[], keyOf: (issue: PlanIssue) => 
     const seen = merged.get(key)
     if (!seen) { merged.set(key, issue); continue }
     const earlier = !!issue.firstDate && (!seen.firstDate || issue.firstDate < seen.firstDate)
-    merged.set(key, { ...(earlier ? issue : seen), count: seen.count + issue.count })
+    // The same shift can carry several items, one message each: the shifts are counted once, so the larger count stands (a lower bound where they touch different shifts, never more).
+    merged.set(key, { ...(earlier ? issue : seen), count: Math.max(seen.count, issue.count) })
   }
   return [...merged.values()]
 }
 
 /**
- * The engine keeps one issue per message, and a message that names a date makes one per date: a catalogue that stops in the middle of a year is a hundred issues. A person reads
- * them as one: the shifts added up, with the message and the date of the earliest.
+ * The engine keeps one issue for each block, reason and message, with the shifts it met it on; a block with two items missing from the catalogue has two, each counting the same shifts. A
+ * person reads them as one: the message and the first day of the earliest, and the shifts counted once.
  */
 export function groupIssues(issues: readonly PlanIssue[]): PlanIssue[] {
   return mergeIssues(issues, issue => `${issue.blockId}|${issue.reason}|${ONE_PER_MESSAGE.has(issue.reason) ? issue.message : ''}`)
@@ -311,13 +312,42 @@ export function friendlyMessage(message: string, blocks: readonly PlanBlock[]): 
     .replace(/Block '([^']+)'/g, (whole, id: string) => (place(id) > 0 ? `Block ${place(id)}` : whole))
 }
 
-/** A short count of what is flagged across a plan: "2 lines to review, 3 provisional". */
-export function flagSummary(counts: { reviewLines: number; provisionalLines: number; unpricedLines: number }): string {
+/**
+ * The reasons that mean something a person asked for has no price: a line, or a part of one, is not in any total. A refusal (nothing at all priced from the block), a flag that is only for
+ * review (a sleepover that does not qualify, a day the calendar lacks, a night when the clocks change) and an overlap are something else.
+ */
+const LEFT_OUT: ReadonlySet<PlanFailureReason> = new Set<PlanFailureReason>([
+  'NoItem', 'CatalogueNotFound', 'CatalogueAmbiguous', 'ZoneNotEligible', 'CatalogueNotPriced', 'UnexpectedUnit', 'SleepoverNotAvailable', 'TransportNotAvailable', 'AccommodationNotAvailable',
+  'TravelNotClaimable', 'SupportInSkippedHour',
+])
+
+/**
+ * How many shifts have a part that is not priced. A shift can be short of several items (one issue each, counting the same shifts), so a block counts its largest, and the blocks add up:
+ * a figure that is never more than the truth, in the unit a coordinator thinks in. (The engine's own count of lines is shifts times items, and means nothing on a screen.)
+ */
+export function shiftsNotPriced(issues: readonly PlanIssue[]): number {
+  const byBlock = new Map<string, number>()
+  for (const issue of groupIssues(issues)) {
+    if (LEFT_OUT.has(issue.reason)) byBlock.set(issue.blockId, Math.max(byBlock.get(issue.blockId) ?? 0, issue.count))
+  }
+  return [...byBlock.values()].reduce((sum, count) => sum + count, 0)
+}
+
+/**
+ * What the figures beside it leave out or cannot yet say, in one line, in shifts with their nouns: "186 shifts with a part not priced · 1 block cannot be priced · 15 public holiday
+ * shifts to decide · some lines use provisional rates". Nothing for what is not so. `notFullyPriced` is true when anything is missing from the totals (a part not priced, or a block
+ * that cannot be priced at all): a total that leaves work out has to say so beside the figure.
+ */
+export function totalsCaption(answer: Pick<PlanQuote, 'issues' | 'holidayOccurrences' | 'totals'>): { text: string; notFullyPriced: boolean } {
+  const notPriced = shiftsNotPriced(answer.issues)
+  const refused = new Set(refusals(answer.issues).map(issue => issue.blockId)).size
+  const holidays = answer.holidayOccurrences.filter(occurrence => occurrence.decision === 'Review' && !occurrence.skipped).length
   const parts: string[] = []
-  if (counts.unpricedLines > 0) parts.push(`${plural(counts.unpricedLines, 'line')} not priced`)
-  if (counts.reviewLines > 0) parts.push(`${plural(counts.reviewLines, 'line')} to review`)
-  if (counts.provisionalLines > 0) parts.push(`${counts.provisionalLines} provisional`)
-  return parts.join(', ')
+  if (notPriced > 0) parts.push(`${plural(notPriced, 'shift')} with a part not priced`)
+  if (refused > 0) parts.push(`${plural(refused, 'block')} cannot be priced`)
+  if (holidays > 0) parts.push(`${plural(holidays, 'public holiday shift')} to decide`)
+  if (answer.totals.provisionalLines > 0) parts.push('some lines use provisional rates')
+  return { text: parts.join(' · '), notFullyPriced: notPriced > 0 || refused > 0 }
 }
 
 /** Which block an issue is about, in the coordinator's words: its position and readable line, never its id. */

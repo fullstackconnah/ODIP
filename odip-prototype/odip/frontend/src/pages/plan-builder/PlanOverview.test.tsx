@@ -113,12 +113,13 @@ describe('PlanOverview with blocks', () => {
     expect(screen.getByRole('list', { name: 'Things to look at' })).toHaveTextContent('The agreement period must fall between the years 2000 and 2100.')
   })
 
-  it('says a catalogue gap once for a block however many dates it meets, with the number of shifts', () => {
-    const gap = (blockId: string, date: string): PlanIssue => ({ blockId, reason: 'CatalogueNotFound', message: `No catalogue row for Community access is valid on ${date}. Import the catalogue for that period.`, count: 1, firstDate: date })
-    const dates = Array.from({ length: 30 }, (_, i) => `2027-07-${String(i + 1).padStart(2, '0')}`)
-    setUp({ issues: [...dates.map(date => gap('b1', date)), gap('b2', '2027-07-05'), gap('b2', '2027-07-06')] })
+  // The engine keeps one issue for each block, reason and message, counting the shifts it met it on (a message names the item, never the date): a block short of two catalogue items has two
+  // issues counting the same shifts, and reads as one gap with that many shifts.
+  it('says a catalogue gap once for a block however many items it misses, with the number of shifts', () => {
+    const gap = (blockId: string, need: string, shifts: number): PlanIssue => ({ blockId, reason: 'CatalogueNotFound', message: `No catalogue row for ${need} is valid for part of the period. Import the catalogue for that period.`, count: shifts, firstDate: '2027-07-01' })
+    setUp({ issues: [gap('b1', 'Community access, Weekday Daytime', 30), gap('b1', 'Community access, Weekday Evening', 30), gap('b2', 'Community access, Weekday Daytime', 2)] })
 
-    expect(screen.getAllByText(/No catalogue prices for part of the agreement/)).toHaveLength(2)    // one under each block, not one a date
+    expect(screen.getAllByText(/No catalogue prices for part of the agreement/)).toHaveLength(2)    // one under each block, not one an item
     expect(screen.getByText('No catalogue prices for part of the agreement, 30 shifts')).toBeInTheDocument()
     expect(screen.getByText('No catalogue prices for part of the agreement, 2 shifts')).toBeInTheDocument()
   })

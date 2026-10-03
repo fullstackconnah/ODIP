@@ -7,7 +7,7 @@ import { Callout } from '@/components/Callout'
 import { DataTable, type Column } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { describeBlock, formatHours } from '@/lib/planBlocks'
-import { REASON_COPY, bandLabel, flagSummary, formatServiceDate, friendlyMessage, groupIssues, isRefusal } from '@/lib/planQuote'
+import { REASON_COPY, bandLabel, formatServiceDate, friendlyMessage, groupIssues, isRefusal, totalsCaption } from '@/lib/planQuote'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 import ElectronicSigningEvidencePanel from '@/pages/ElectronicSigningEvidencePanel'
@@ -129,6 +129,7 @@ function FullRevision({ participantId, draft, onDownload, downloading, onCollaps
   const pricing = draft.pricing
   const blocks = draft.blocks.map((entry: DraftBlock) => entry.block)
   const issues = groupIssues(pricing?.issues ?? [])
+  const caption = pricing ? totalsCaption(pricing).text : ''
   const total = lines.reduce((sum, line) => sum + line.total, 0)
 
   return <article className={CARD}>
@@ -165,9 +166,9 @@ function FullRevision({ participantId, draft, onDownload, downloading, onCollaps
 
     {fromBlocks && lines.length === 0 && <p className="text-sm text-[var(--color-muted-foreground)]">Nothing was priced from these blocks, so this version has no lines.</p>}
 
-    {pricing && (issues.length > 0 || flagSummary(pricing.totals)) && (
+    {pricing && (issues.length > 0 || caption) && (
       <div className="flex flex-col gap-1 text-sm">
-        {flagSummary(pricing.totals) && <p className="text-[var(--color-muted-foreground)]">As priced when it was saved: {flagSummary(pricing.totals)}.</p>}
+        {caption && <p className="text-[var(--color-muted-foreground)]">As priced when it was saved: {caption}.</p>}
         {issues.length > 0 && (
           <ul className="flex flex-col gap-0.5">
             {issues.map(issue => {
