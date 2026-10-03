@@ -232,8 +232,33 @@ owner decision (collected under Open Flags at the end).
   incident-suggestive keywords (falls, medication, injury, behaviours) and prompt toward
   filing an incident report. Depends on NOTES-01; same potential status.
 
+### M. Plan builder / service agreement approval
+
+- [x] **PLAN-D — "Mark approved" makes roster patterns and open shifts (phase D of the plan builder).**
+  Approving the newest revision of an agreement draft (Admin and Coordinator, or whatever
+  `PlanPricingSettings.ApproverRoles` says, and a SuperAdmin with a tenant) records who and when, makes
+  the weekly patterns of its blocks (a 2:1 support is two a day), ends the previous approved revision's
+  patterns the day before this one starts, and generates open shifts 56 days ahead for a participant who
+  may be rostered. Refused for anything the stored pricing flagged, a hand-typed revision, an ended
+  agreement, a delivery state in another time zone than the provider's and more than 100 patterns;
+  hand-made overlaps need a tick. No existing shift is changed: the confirm dialog and the result count
+  the old revision's remaining shifts and link to the roster. A daily job (`RosterTopUp:Enabled`, default
+  true; `RosterTopUp:HorizonDays`, default 56) keeps the horizon for agreement patterns only. Spec:
+  `docs/specs/2026-10-03-plan-builder-screen.md`, "Phase D".
+- [ ] **PLAN-D2 — match what a block asks of a worker.** The requirements travel onto patterns and shifts
+  and show as chips; nothing checks them yet. "Female worker" cannot be checked until staff have a gender
+  field. Reuse `COMPETENCY_MISSING` for the skills and the driver flag.
+- [ ] **PLAN-D3 — warn when a plan is over its budget.** Approval deliberately ignores budgets; the budget
+  feature will say it separately.
+- [ ] **PLAN-D4 — a participant who becomes active later gets their shifts the next provider day.** The
+  top-up runs once for each organisation's provider day, so activation at noon waits until tomorrow;
+  generating on activation would close the gap.
+
 ### Open Flags (owner decisions needed)
 
+- **PLAN-D defaults to confirm**: a 2:1 block makes two open patterns a day; a time-zone mismatch is
+  refused (no conversion); the cap is 100 patterns; hand-made overlaps are listed, never ended; a public
+  holiday the plan Skips gets no shift; an agreement pattern stays editable (badge and warning, no lock).
 - **LIVING-04**: what fields should Supported Accommodation capture? (Source bullet was
   empty.)
 - **DIAG-02**: what is the full HIDPA option list and where does it live in the wizard,

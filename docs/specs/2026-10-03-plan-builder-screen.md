@@ -149,9 +149,127 @@ screens, no horizontal overflow, nothing cut off, the whole flow with the keyboa
   onboarding gate offer the link only to the roles that may open it. (ReadOnly satisfies `canWrite`, so the route used to admit it and the page would now only meet a 403.) The page's read-only
   mode is therefore a guard no role reaches today. `Lines` is still accepted on save for old callers; phase D will refuse to approve a draft that has them ("Rebuild it from blocks to approve it").
 - The settings tab is the ninth on the Settings page, which wraps at 1440px and leaves the last tab alone on a second row: the page's tab bar, not this tab, is what would change.
-- What a Review issue stops, and who approves: phase D. Today an issue, a flag or an over-budget plan stops nothing; only an engine refusal holds a save back.
+- What a Review issue stops, and who approves: phase D (written below; it stops approving for rostering, never a save). In phase C an issue, a flag or an over-budget plan stopped nothing; only an engine refusal held a save back.
 - The plan budget is compared as a total. The funding sources keep their budget category as free text, so a category by category comparison needs the data to change first.
 - The owner's open questions (NDIS-CODES 11.3) are shown beside the lines that rest on them and are not decided here: whether all six registration groups may be assumed (1), how
   NDIA divides a group price (5), the 2026-27 travel time caps and per-kilometre rates (6), part-day and regional holidays and Boxing Day or Anzac Day missing from the calendar (8),
   the night the clocks change (13) and a sleepover's active hours at a weekend (14).
 - A plan whose every whole week meets a public holiday shows its first seven days as "an ordinary week", holiday included, and says nothing more: the Review step is where the holidays are priced.
+
+
+---
+
+# Plan builder phase D: "Mark approved" makes roster patterns and open shifts
+
+**Status:** implemented on `feat/plan-approval-patterns` (phase D of 4, after phase C). **Date:** 2026-10-04.
+**Not in this phase:** matching what a block asks of a worker to a person (the asks travel and show as chips), a way to un-approve, a warning for a plan that is over its budget (the budget feature), and
+making shifts the moment a participant becomes active (the daily job does it on the provider's next day).
+
+## What it does
+
+"Mark approved" on the NEWEST revision of an agreement draft records who approved it and when, makes the weekly roster patterns of its blocks, ends the patterns of the revision approved before it, and makes the
+open (unassigned) shifts from the provider's today to 56 days on. It is separate from signing: nothing is signed, the template `status` is untouched, and nothing here activates the participant, invoices or claims.
+There is no un-approve. To change anything, save a new revision and approve that: the old patterns end the day before the new revision starts. No shift that exists is changed, cancelled or deleted.
+
+- **Who.** A role in `PlanPricingSettings.ApproverRoles` (Admin and Coordinator by default; the settings tab now says what it is for), and a SuperAdmin with a tenant context. Any other role gets a 403 from both the preview
+  and the approval, and the card does not offer the button once the settings say so.
+- **What stops it.** Anything flagged in the STORED pricing (`PlanQuote.NeedsReview`: any issue, or any Review line), never a re-quote. The reasons, each with a code the screen has words for:
+  `HandTyped` (no blocks or no stored answer: "Rebuild it from blocks to approve it"), `BlockUnreadable`, `BlockInvalid`, the engine's own reasons (catalogue gap, overlapping blocks, travel or sleepover trouble) by name,
+  `HolidayUndecided` (a public holiday with no Charge or Skip choice), `ReviewFlag`, `AgreementEnded` (it ended before the provider's today), `TimeZoneMismatch` (the delivery state's zone is not the provider's; both are named,
+  nothing is converted), `TooManyPatterns` (more than 100; the count is in the message), `Superseded` and `AlreadyApproved`. Being over budget stops nothing. Unconfirmed registration groups are a notice, not an issue, so they
+  stop nothing either: phase C decided that only an Admin confirms them and that saves are not held back, and phase D changed neither (a test pins it).
+- **Approving twice** answers 200 with the existing approval and writes nothing, not even an audit row. Two approvals at once give one: the participant's roster lock makes them take turns (PostgreSQL), the unique approval
+  per revision and the partial unique pattern key decide a race that gets past it, and the loser reloads and answers with the winner's approval.
+- **Hand-made patterns that overlap** (same participant, same weekday, overlapping times and dates, no source) are listed and need `acknowledgeOverlaps: true`. They are never ended or changed.
+- **A participant who is not active yet** (an onboarding draft) gets the patterns and no shifts, and the dialog says "Open shifts are created once {first name} is active." The daily job makes them once the readiness
+  check allows it.
+- **Old shifts.** Shifts the previous approved revisions made, dated on or after this one starts, that still stand (not cancelled, not completed), are counted (open and assigned apart, with the first date and the version) in
+  the preview, the answer and the card, with a link to the roster board filtered to them. They are left alone: a coordinator tidies them by hand.
+
+## Endpoints (`ServiceAgreementDraftsController`, Admin, Coordinator, SuperAdmin)
+
+- `GET participants/:id/service-agreement-drafts/:draftId/approval-preview` is what approving would do and nothing done: `canApprove`, `alreadyApproved`, `reasons` (`code`, `message`, `blockId`, `count`, `firstDate`),
+  `patternsToCreate`, `patternsToEnd`, `endsFromVersion`, `endsOn`, `shiftsToCreate`, `shiftsNote`, `horizonEnd`, `oldShiftsRemaining` and `overlappingPatterns`. A read, so it sits with the money reads.
+- `POST participants/:id/service-agreement-drafts/:draftId/approve` takes `{ "acknowledgeOverlaps": bool }` (4 KiB cap, the "api" rate limit) and answers with the revision as the list shows it, `approval` and
+  `oldShiftsRemaining` included: 200 (first approval and repeat alike), 400 with the refusals in `errors` (or the overlaps not acknowledged), 403 not an approver, 404, 409 `code: "draft-superseded"` with the newest version in
+  `data.currentVersion`.
+- The list and the one-revision GET carry `approval` (who, when, the counts, the first shift day and the horizon's end) and `oldShiftsRemaining`. A pattern carries `sourceDraftId`, `sourceBlockKey`, `sourceDraftVersion`, `workerSlot` and
+  `requirements`; a shift carries `requirements`.
+
+## Block to pattern (the defaults the owner may overrule)
+
+| Block | Patterns |
+|---|---|
+| each listed day, each worker | one pattern per (day, worker slot): a 2:1 support (2 workers, 1 participant) is slots 1 and 2, both `TwoToOne`, both open |
+| ratio from (workers, participants present) | (1,1) OneToOne, (2,1) TwoToOne, (1,2) OneToTwo, (1,3) OneToThree, (1,4) OneToFour, (1,5) OneToFive, (1, more than 5) SharedSupport, anything else Other |
+| night type | the worker may sleep: Sleepover; else the block crosses midnight: ActiveNight; else None |
+| times | the block's start and end on its START day; a block whose start and end are the same time is 24 hours (ends the next day) |
+| dates | the revision's agreement start and end, both inclusive, never clamped to today |
+| the rest | no default worker, active, notes "From agreement v{n}: {support}, {setting}", the block's requirements copied, tenant taken from the revision |
+
+Pricing facts with no roster home (travel, transport, accommodation nights, headcount changes, the holiday decision) are not copied. A public holiday the plan SKIPS gets no shift: the generator leaves out the
+(block, date) pairs the stored pricing marks `skipped`.
+
+## Data (one additive migration, `AddServiceAgreementApprovalAndPatternSource`)
+
+- `ShiftPatterns` gets nullable `SourceDraftId` (FK to `ServiceAgreementDrafts`, Restrict), `SourceBlockKey` (64), `WorkerSlot` and `RequirementsJson` (`jsonb`), a plain index on `SourceDraftId`, and a PARTIAL UNIQUE
+  index `IX_ShiftPatterns_SourceDraft_Block_Day_Slot` on (`SourceDraftId`, `SourceBlockKey`, `DayOfWeek`, `WorkerSlot`) `WHERE "SourceDraftId" IS NOT NULL`, so a hand-made or demo pattern is outside it.
+- `Shifts` gets a nullable `RequirementsJson` (`jsonb`), copied from the pattern when a shift is made. There is NO unique index on `Shifts`: the demo pack places its shifts by deterministic id and a natural key
+  there would wedge it. The advisory lock below is what keeps generation from doubling a shift.
+- A new table `ServiceAgreementDraftApprovals`, unique on `DraftId`, FKs Restrict, audited: who, when (the injected clock), the counts (`PatternsCreated`, `PatternsEnded`, `ShiftsCreated`), the first day shifts were made for and the
+  end of the horizon they were made to (`FirstShiftDate`, `HorizonEnd`: two columns beyond the brief, so the card can say "open shifts to {date}" and link to the first one without counting). The revision rows are not touched, so a revision stays immutable.
+- Every new column is nullable, so every existing row is a hand-made pattern or a shift as it always was. The demo suites keep their pattern counts; the one test that accounts for unique indexes knows the new one.
+
+## One generator, a lock and a daily job
+
+- `RosterShiftGenerator` (Infrastructure) is the single place a pattern becomes shifts: the Generate button, the approval and the job all use it. On PostgreSQL it takes
+  `pg_advisory_xact_lock(hashtext('roster-generate:' || participantId))` (a no-op elsewhere, and it joins a transaction already open), reads the patterns again, looks up the shifts the pattern already has in one query
+  and adds the missing days. The Generate endpoint answers as it did.
+- `RosterTopUpBackgroundService` ticks hourly (the first run a minute after start). Once for each organisation's PROVIDER day, kept in memory (a restart does it again, which is harmless), it generates from the provider's
+  today to today plus the horizon for the active, not-ended agreement patterns of participants who may be rostered. Hand-made, demo, ended and switched-off patterns are never read. A participant who fails is logged and counted
+  without stopping the rest; each run logs one summary line (organisations, participants, patterns, shifts made, participants not ready, failures).
+- The readiness check lives in the API project, which Infrastructure cannot reference, so the approval and the job ask it through `IRosterPlacementGate`; the API registers it over `ParticipantReadiness.CheckAsync`.
+
+**Settings** (`appsettings.json`, the compose environment and `.env.example`):
+
+| Setting | Environment variable | Default | Meaning |
+|---|---|---|---|
+| `RosterTopUp:Enabled` | `ROSTER_TOP_UP_ENABLED` | `true` | the daily job runs; `false` stops it (approval still makes shifts) |
+| `RosterTopUp:HorizonDays` | `ROSTER_TOP_UP_HORIZON_DAYS` | `56` | how far ahead shifts are made, from the provider's today; 7 to 366, and an unusable value reads as 56 |
+
+Approval uses the same horizon. "Today" is always the PROVIDER's day (its state's zone), from the injected clock: at 2am UTC on Friday 2 October it is already Saturday 3 October in Sydney.
+
+## What the screens do
+
+- **The revision card.** A "Mark approved" row on the newest revision that was built from blocks, for a role that may approve; it opens the confirm dialog. A role the organisation does not let approve is told who may ("Your
+  organisation lets only Admin approve plans."), and an older or hand-typed revision offers nothing. An approved revision, newest or not, shows who and when, "{n} weekly patterns, open shifts to {date}." with "Open on the roster" (the board
+  filtered to this participant's open shifts from the first one; "Open the shift patterns" when no shift was made, with "Open shifts are created each day as the dates come within 8 weeks, once the participant is
+  active."), and "Approved for rostering, separate from signing: the agreement itself is not signed."
+- **The confirm dialog.** "Approve for rostering?" says what it will do ("Creates {n} weekly patterns and the open shifts up to {date}. Ends {m} patterns from version {k} the day before {start}."), the old shifts it leaves ("{o} open and {a} assigned shifts from
+  version {k} on or after {start} stay on the roster.") with a "Review them" link, and, when hand-made patterns overlap, each of them and a required "These hand-made patterns stay as they are. I have checked them." box. When something stops it, the title is "Not ready to approve"
+  and each reason is in plain words with a "Go to block N" that closes the dialog and puts focus on the step to fix. One place has the words, so the card does not print them a second time.
+- **The approved page is read only.** The plan shows as it was priced, without the "ordinary week" column when nothing was stored for it, and "Start a new revision" makes it editable again as a working copy of this
+  revision. The page's banner says approving makes patterns and open shifts and nothing else.
+- **The roster board** opens from an address: `/rostering?date=<Monday>&participant=<id>[&unfilled=1]`, filtered, so "Review them" and "Open on the roster" land on the right week. **Patterns** has a "From agreement" column
+  ("From agreement v2" and what the agreement asks as chips), and an agreement pattern stays editable, with a warning in its form: "This pattern came from agreement v{n}; changing it here makes the roster differ from the
+  agreement." The shift form shows the asks as chips too.
+- The mock API keeps approval stateful (`mock-api/planApproval.js`) so every screen above runs offline; `MOCK_TODAY` pins its date.
+
+## Tests and checks
+
+Backend: the schema (`PlanApprovalSchemaTests`), the generator (`RosterShiftGeneratorTests`: horizon, holidays skipped, the existing shifts left alone, 24-hour and overnight blocks), the mapper
+(`AgreementPatternMapperTests`: the ratio and night type tables, two patterns for 2:1, the cap), the service (`ServiceAgreementApprovalServiceTests`, on a fixed clock: every refusal, ending old patterns, overlaps, the
+horizon, a participant not ready, the Sydney versus UTC day, idempotence, roles, another tenant's draft), the endpoints (`ServiceAgreementApprovalControllerTests`), the DTOs, the job
+(`RosterTopUpBackgroundServiceTests`) and six PostgreSQL tests in `PlanApprovalPostgresTests` that SKIP where there is no database and run in CI: the migration over live rows, the partial unique index and the Restrict
+FKs, `jsonb`, four concurrent approvals giving one, a next revision ending the old patterns and the job topping up, and eight concurrent generations giving no duplicate shift. Frontend: the hooks (the exact request
+bodies, and which queries a success or an error refreshes), the card, the dialog, the page's whole approve flow, the read-only page, the roster board's address, the Patterns page and the two slide-overs. The
+demo-data suites are unchanged and stay green.
+
+## Known limits and open questions
+
+- Defaults the owner is asked to confirm (each is a test and one line of code): a 2:1 block makes two open patterns a day; a time-zone mismatch is refused, never converted; the cap is 100 patterns; hand-made overlaps are listed,
+  never ended; a public holiday the plan Skips gets no shift; an agreement pattern stays editable (badge and warning, no lock).
+- What a block asks of a worker (gender, driver, skills) is copied to the pattern and shown, and nothing matches it to a person. A "female worker" ask could not be checked today in any case: staff have no gender field.
+- A participant who is not active when the revision is approved gets the shifts from the job on the provider's next day after they become active (it does each organisation once a day), not at the moment of
+  activation. Making them at activation is a later change.
+- An approved revision cannot be un-approved, and an older approved revision's shifts past a new one's start are listed, not removed. A "clear future open shifts" action for them is the likely next ask.
