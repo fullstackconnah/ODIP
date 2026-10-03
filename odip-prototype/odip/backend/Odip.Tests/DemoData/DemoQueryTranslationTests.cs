@@ -75,8 +75,8 @@ public class DemoQueryTranslationTests
         yield return Q(nameof(DemoQueries.AgingIncidents), db => DemoQueries.AgingIncidents(db, Ids, new DateTime(2026, 8, 1)), "\"ReportedByUserId\" = ANY (", "\"IsActive\"", "\"CreatedAt\" >=", "\"QscReportingStatus\"");
         yield return Q(nameof(DemoQueries.ClosedCompletions), db => DemoQueries.ClosedCompletions(db, Today), "INNER JOIN", "\"IsActive\"", "\"SubmittedAt\" IS NOT NULL", "\"ServiceDate\" >=", "\"Status\"");
         yield return Q(nameof(DemoQueries.HandoverSourcesOf), db => DemoQueries.HandoverSourcesOf(db, Ids, Today), "INNER JOIN", "\"ParticipantId\" = ANY (", "\"IsActive\"", "\"SubmittedAt\" IS NOT NULL", "\"ServiceDate\" >=");
-        yield return Q(nameof(DemoQueries.ShiftStatesOf), db => DemoQueries.ShiftStatesOf(db, Ids), "\"Id\" = ANY (", "\"Status\"");
-        yield return Q(nameof(DemoQueries.UnfinishedStartsOf), db => DemoQueries.UnfinishedStartsOf(db, Ids), "\"ParticipantId\" = ANY (", "\"ReturnCount\" = 0", "\"ShiftPatternId\" IS NULL");
+        yield return Q(nameof(DemoQueries.ShiftStatesOf), db => DemoQueries.ShiftStatesOf(db, Ids), "\"Id\" = ANY (", "\"Status\"", "FROM \"ShiftCompletions\"", "\"IsActive\"");
+        yield return Q(nameof(DemoQueries.UnfinishedStartsOf), db => DemoQueries.UnfinishedStartsOf(db, Ids), "\"ParticipantId\" = ANY (", "\"ReturnCount\" = 0", "\"ShiftPatternId\" IS NULL", "FROM \"ShiftCompletions\"", "\"IsActive\"");
         yield return Q(nameof(DemoQueries.ActiveRoutinesOf), db => DemoQueries.ActiveRoutinesOf(db, Ids), "\"ParticipantId\" = ANY (", "\"IsActive\"");
         yield return Q(nameof(DemoQueries.SlotsRecorded), db => DemoQueries.SlotsRecorded(db, Ids, new DateTime(2026, 9, 25), new DateTime(2026, 10, 3)), "\"ParticipantMedicationId\" = ANY (", "\"ScheduledAt\" >=", "\"ScheduledAt\" <", "\"SupersededByAdministrationId\" IS NULL");
         yield return Q(nameof(DemoQueries.PrnDosesAwaitingOutcome), db => DemoQueries.PrnDosesAwaitingOutcome(db, Ids, DateTime.UtcNow.AddHours(-6), DateTime.UtcNow), "\"ParticipantMedicationId\" = ANY (", "\"PrnOutcome\" IS NULL", "\"AdministeredAt\" <", "LIKE 'demo-v1:%'");

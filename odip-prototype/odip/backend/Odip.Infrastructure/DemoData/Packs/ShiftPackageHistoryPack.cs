@@ -75,11 +75,13 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
         var sources = await DemoQueries.HandoverSourcesOf(run.Db, participants.Keys.ToList(), anchors.D0.AddDays(-LookbackDays - HandoverLookbackDays)).ToListAsync(ct);
 
         // The live shifts the live set has yet to finish (it works only between 06:00 and 23:00): a reader who would read one of them waits, so the read does not depend on
-        // whether the live set had caught up when the history looked (second independent review X3).
+        // whether the live set had caught up when the history looked (second independent review X3). Only the live set's own: a shift a person started by hand or a coordinator
+        // moved is not the live set's to finish, and waiting for it would be waiting for good (third independent review R1).
         var workers = staff.Values.Select(u => u.Id).ToHashSet();
         var liveParticipants = LiveSetCatalog.Stories.Select(s => run.Directory.Participant(s.Participant)?.Id).OfType<Guid>().Distinct().ToList();
         var unfinishedLive = (await DemoQueries.UnfinishedStartsOf(run.Db, liveParticipants).ToListAsync(ct))
-            .Where(u => u.UserId is { } worker && workers.Contains(worker) && LiveSetCatalog.Stories.Any(story => LiveSetCatalog.ShiftId(story, u.ServiceDate) == u.Id)).ToList();
+            .Where(u => u.UserId is { } worker && workers.Contains(worker)
+                        && LiveSetCatalog.Stories.FirstOrDefault(s => LiveSetCatalog.ShiftId(s, u.ServiceDate) == u.Id) is { } story && !LiveSetCatalog.TakenOver(story, u.ServiceDate, u)).ToList();
         var routines = await DemoQueries.ActiveRoutinesOf(run.Db, participants.Keys.ToList()).ToListAsync(ct);
         var notesAllowed = await OldSeedChecks.ShiftNotesThereAsync(run, "shift package history notes", ct);
 
@@ -254,7 +256,7 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
     /// The reader of each closed shift marks as read the handover the portal would have shown them (PR 2 review L3: the app's own rule across every shift of the
     /// participant, the live set's and the old seed's included, among those submitted by the time of the read), all but about one in eight, and never their own.
     /// </summary>
-    private static void AcknowledgementsOf(DemoRun run, List<DemoQueries.ClosedPair> closed, List<HandoverSource> sources, List<DemoQueries.UnfinishedStart> unfinishedLive,
+    private static void AcknowledgementsOf(DemoRun run, List<DemoQueries.ClosedPair> closed, List<HandoverSource> sources, List<DemoQueries.ShiftState> unfinishedLive,
         IReadOnlyDictionary<string, User> staff, List<(HandoverAcknowledgement, User)> acks)
     {
         var written = new HashSet<Guid>();                                                                  // an acknowledgement's id is its handover and reader, whatever the reader's shift
@@ -263,11 +265,15 @@ public sealed class ShiftPackageHistoryPack : IDemoPack
             var readerUser = staff.Values.FirstOrDefault(u => u.Id == reader.Shift.UserId);
             if (readerUser is null) continue;
             if (DemoIds.Pick(reader.Completion.Id, "unread", 0, 99) < UnreadPercent) continue;
-            if (unfinishedLive.Any(u => u.ParticipantId == reader.Shift.ParticipantId
-                                        && (u.ServiceDate < reader.Shift.ServiceDate || (u.ServiceDate == reader.Shift.ServiceDate && u.StartTime < reader.Shift.StartTime)))) continue;     // waits for the live shift before it
-
             var at = ProviderLocalTime.AsUtc(reader.Completion.ActualStart).AddMinutes(8 + DemoIds.Pick(reader.Completion.Id, "ack-after", 0, 32));
             var source = HandoverSourceRule.LatestBefore(sources.Where(s => ProviderLocalTime.AsUtc(s.SubmittedAt) < at), reader.Shift.ParticipantId, reader.Shift.Id, reader.Shift.ServiceDate, reader.Shift.StartTime);
+
+            // A live shift the live set has yet to finish that starts after the handover chosen, and before this shift, would be the one the portal showed once it is finished: the
+            // read waits for it. One that starts before the chosen handover is not in the way, so a shift the live set never finishes (it is off, or its piece fails at every tick)
+            // holds back only the readers between it and the participant's next submitted shift, and not every later one (third independent review R1).
+            if (unfinishedLive.Any(u => u.ParticipantId == reader.Shift.ParticipantId
+                                        && HandoverSourceRule.StartsBefore(u.ServiceDate, u.StartTime, reader.Shift.ServiceDate, reader.Shift.StartTime)
+                                        && (source is null || !HandoverSourceRule.StartsBefore(u.ServiceDate, u.StartTime, source.ServiceDate, source.StartTime)))) continue;
             if (source is not { HasHandover: true }) continue;                                              // nothing to read (and an older handover is never resurrected)
             if (reader.Shift.UserId == source.ShiftUserId) continue;                                        // the baton passes to somebody else
             var row = PackageRows.Acknowledgement(run, source.CompletionId, reader.Shift, readerUser, Local(run, at));

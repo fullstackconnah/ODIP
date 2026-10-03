@@ -55,6 +55,24 @@ public static class LiveSetCatalog
     /// <summary>The ids of every live shift of the given dates, so a lookup of which already exist is one primary-key probe.</summary>
     public static IEnumerable<Guid> ShiftIds(IEnumerable<DateOnly> dates) => dates.SelectMany(d => Stories.Select(s => ShiftId(s, d)));
 
+    /// <summary>
+    /// A live shift somebody else has taken over is theirs, not the script's ("it never touches a shift somebody else changed"), in one of three ways: a coordinator returned
+    /// it for correction (the app makes its completion inactive, puts the shift back to Published and counts the return, so a start would make a second completion under the
+    /// id the first still holds and fail on the primary key at every tick for good: second independent review X1); a person started it by hand (the script's times are placed
+    /// from its own start, and could come before theirs, and its close would finish a shift they are working); or a coordinator moved it, to other times or another date
+    /// (the script's break, tick and as-needed dose are placed at the story's wall-clock times, which may come before the start it would then have, and its doses are of the
+    /// story's window and not the shift's: third independent review R2). It is the one rule for every pack (R1): the live set does not work such a shift, and the history
+    /// neither waits for it to be finished nor counts its window as the live set's for good (<see cref="Packs.MedicationHistoryPack"/> releases the window once it is over).
+    /// <paramref name="date"/> is the date the shift's id was made for, which is its date until somebody changes it.
+    /// </summary>
+    public static bool TakenOver(LiveStory story, DateOnly date, Guid shiftId, DateOnly serviceDate, TimeOnly start, TimeOnly end, bool endsNextDay, int returnCount, Guid? activeCompletionId) =>
+        returnCount > 0
+        || (activeCompletionId is { } completion && completion != DemoIds.For("shift-completion", shiftId))
+        || serviceDate != date || start != story.Start || end != story.End || endsNextDay;
+
+    public static bool TakenOver(LiveStory story, DateOnly date, DemoQueries.ShiftState shift) =>
+        TakenOver(story, date, shift.Id, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.ReturnCount, shift.ActiveCompletionId);
+
     // ── the stories' own words ───────────────────────────────────────────────
 
     public static string MorningNote(DateOnly date) => (int)date.DayOfWeek switch

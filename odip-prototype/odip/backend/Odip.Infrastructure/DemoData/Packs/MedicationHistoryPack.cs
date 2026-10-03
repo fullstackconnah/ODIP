@@ -296,7 +296,8 @@ public sealed class MedicationHistoryPack : IDemoPack
     /// <summary>
     /// One live shift's window on a participant's day. The scheduled slots inside it are the live set's while it works the shift or has (<see cref="OwnsSlots"/>); the
     /// day's as-needed dose is its too once the shift has been worked at all, whoever has it now (<see cref="OwnsPrnDay"/>): a shift that was worked and then given to
-    /// somebody else keeps its day, because its as-needed dose is already written and a second one could fall inside the minimum interval.
+    /// somebody else keeps its day, because its as-needed dose is already written and a second one could fall inside the minimum interval. A shift somebody took over
+    /// (<see cref="LiveSetCatalog.TakenOver(LiveStory, DateOnly, DemoQueries.ShiftState)"/>) and did not finish keeps its window only until the window is over.
     /// </summary>
     private sealed record LiveWindow(Guid Participant, DateTime Start, DateTime End, bool OwnsSlots, bool OwnsPrnDay);
 
@@ -322,6 +323,11 @@ public sealed class MedicationHistoryPack : IDemoPack
             {
                 if (!states.TryGetValue(LiveSetCatalog.ShiftId(story, date), out var state) || state.Status is ShiftStatus.Cancelled or ShiftStatus.Draft) continue;
                 var finished = state.Status is ShiftStatus.PendingReview or ShiftStatus.Completed;
+                // A shift somebody took over (started by hand, or moved) is not the live set's to work, so while its window runs the doses are the person's to record; once the
+                // window and the close-out buffer have passed with the shift unfinished the window is nobody's, and the history writes it like any other day (third independent
+                // review R1, R2). A returned shift keeps its window: the script worked it, and wrote its doses, before it was returned.
+                if (!finished && state.ReturnCount == 0 && LiveSetCatalog.TakenOver(story, date, state)
+                    && PackageRows.Local(date, story.End).AddMinutes(ShiftLifecycle.CloseOutBufferMinutes) <= anchors.NowLocal) continue;
                 var scripted = state.UserId is { } worker && workers.Contains(worker);                      // the live set works it (or did)
                 var ownsSlots = finished || scripted;
                 var ownsPrnDay = ownsSlots || state.Status == ShiftStatus.InProgress;

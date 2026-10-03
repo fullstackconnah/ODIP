@@ -19,9 +19,11 @@ What it will and will not do, because the production host has it switched on:
   layer writes about them have random ids and are found by the id of the row they describe. A row a person makes in the portal has a random id;
   where the app holds a row to a natural key (one acknowledgement per reader and handover, one running break per completion, one tick per
   completion, routine and occurrence) or a rule (one active record per scheduled medication slot) the script looks for the key and leaves the
-  person's row alone. A live shift a person has taken over, by starting it by hand or by a coordinator returning its completion for correction,
-  is theirs: the script leaves it alone. The one exception to "leaves the person's row alone" is the finish of a live shift the script itself is
-  working, which ends a break that is still running, whoever started it, as the app's Finish requires.
+  person's row alone. A live shift a person has taken over, by starting it by hand, by a coordinator returning its completion for correction or by a
+  coordinator moving it to other times or another date, is theirs: the script leaves it alone, the history's handover reads do not wait for it, and
+  the history writes its window's doses, like any other day's, once the window (and the close-out buffer after it) is over and nobody has finished
+  the shift. The one exception to "leaves the person's row alone" is the finish of a live shift the script itself is working, which ends a break
+  that is still running, whoever started it, as the app's Finish requires.
 
 ## Switches
 

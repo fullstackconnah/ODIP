@@ -168,14 +168,9 @@ public sealed class LiveSetPack : IDemoPack
         }
     }
 
-    /// <summary>
-    /// A live shift somebody else has taken over is theirs, not the script's ("it never touches a shift somebody else changed"): one a coordinator returned for correction
-    /// (the app makes its completion inactive, puts the shift back to Published and counts the return, so a start would make a second completion under the id the first
-    /// still holds and fail on the primary key at every tick for good: second independent review X1), and one a person started by hand (the script's times are placed
-    /// from its own start, and could come before theirs, and its close would finish a shift they are working).
-    /// </summary>
+    /// <summary>A live shift somebody else has taken over (returned, started by hand or moved) is theirs, not the script's: the one rule of <see cref="LiveSetCatalog.TakenOver(LiveStory, DateOnly, Guid, DateOnly, TimeOnly, TimeOnly, bool, int, Guid?)"/>.</summary>
     private static bool TakenOver(Live live) =>
-        live.Shift.ReturnCount > 0 || (live.Completion is { } completion && completion.Id != DemoIds.For("shift-completion", live.Shift.Id));
+        LiveSetCatalog.TakenOver(live.Story, live.Date, live.Shift.Id, live.Shift.ServiceDate, live.Shift.StartTime, live.Shift.EndTime, live.Shift.EndsNextDay, live.Shift.ReturnCount, live.Completion?.Id);
 
     // ── 3. approval ──────────────────────────────────────────────────────────
 

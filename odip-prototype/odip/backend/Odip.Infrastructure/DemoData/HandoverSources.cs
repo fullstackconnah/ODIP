@@ -20,13 +20,16 @@ public sealed record HandoverSource(
 /// </summary>
 public static class HandoverSourceRule
 {
+    /// <summary>True when a shift (a date and a start time) starts before another: the order the app's rule goes by.</summary>
+    public static bool StartsBefore(DateOnly date, TimeOnly start, DateOnly otherDate, TimeOnly otherStart) => date < otherDate || (date == otherDate && start < otherStart);
+
     /// <summary>
     /// The handover shown to the reader of a shift (<paramref name="serviceDate"/>, <paramref name="startTime"/>) of the participant, or null when no earlier
     /// shift has a submitted completion.
     /// </summary>
     public static HandoverSource? LatestBefore(IEnumerable<HandoverSource> sources, Guid participantId, Guid shiftId, DateOnly serviceDate, TimeOnly startTime) =>
         sources
-            .Where(s => s.ParticipantId == participantId && s.ShiftId != shiftId && (s.ServiceDate < serviceDate || (s.ServiceDate == serviceDate && s.StartTime < startTime)))
+            .Where(s => s.ParticipantId == participantId && s.ShiftId != shiftId && StartsBefore(s.ServiceDate, s.StartTime, serviceDate, startTime))
             .OrderByDescending(s => s.ServiceDate).ThenByDescending(s => s.StartTime).ThenByDescending(s => s.SubmittedAt).ThenBy(s => s.CompletionId)
             .FirstOrDefault();
 }
