@@ -45,8 +45,9 @@ public class DemoSourceScanTests
     };
 
     /// <summary>
-    /// PR 2 review L12: the deploy image runs the whole suite under invariant globalization and a developer's machine does not, so a call that reads the current
-    /// culture passes in one place and fails (or worse, writes something different) in the other. Everything the top-up compares or formats is spelled out.
+    /// PR 2 review L12: the deploy image and CI run the suite with no regional culture (the current culture there is the invariant one) and a developer's machine runs it in
+    /// its own (en-AU here), so a call that reads the current culture passes in one place and fails (or worse, writes something different) in the other. Everything the
+    /// top-up compares or formats is spelled out.
     /// </summary>
     private static readonly Rule[] CultureRules =
     {
