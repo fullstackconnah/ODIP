@@ -2182,7 +2182,8 @@ function draftDto(participantId, version, body, quoteResult, lines) {
     templateDocxSha256: '9f2c1d0e', templatePdfSha256: '41ab77c3', state: body.state, planStartDate: body.planStartDate, planEndDate: body.planEndDate,
     agreementStartDate: body.agreementStartDate, agreementEndDate: body.agreementEndDate, ...(body.representative ? { representative: body.representative } : {}),
     blocks: (body.blocks || []).map((entry) => ({ block: entry.block, requirements: { workerGender: 'NoPreference', driver: false, skills: [], ...(entry.requirements || {}) } })),
-    ...(quoteResult ? { pricing: { ...quoteResult, lines: [] } } : {}), lines,
+    // The server's answer carries needsReview (PlanQuote.NeedsReview: an issue, or a line to review); the card reads it to say a plan is not ready before anybody presses Mark approved.
+    ...(quoteResult ? { pricing: { ...quoteResult, lines: [], needsReview: (quoteResult.issues || []).length > 0 || ((quoteResult.totals && quoteResult.totals.reviewLines) || 0) > 0 } } : {}), lines,
     ...draftSummaryFields(quoteResult, lines, (body.blocks || []).length),
   }
 }
@@ -2287,10 +2288,19 @@ const routes = [
     flagMatches(searchParams, 'isActive', p.isActive) && flagMatches(searchParams, 'isDraft', !!p.isDraft)))],
   ['inquiries', () => enquiryFeed],
   ['inquiries/onboarding-worklist', () => onboardingWorklist],
-  ['inquiries/:id/onboarding', (id) => ({
-    participantId: id, intakeComplete: true, profileComplete: false, serviceTypeConfirmed: false, serviceAgreementSigned: false, isReady: false,
-    reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.'],
-  })],
+  ['inquiries/:id/onboarding', (id) => {
+    // p-0004 is the participant whose checklist is complete but for the schedule: the page then shows the last step, before and after the agreement draft is approved for rostering.
+    const approved = (serviceAgreementDrafts[id] || []).filter((d) => d.approval).sort((a, b) => b.version - a.version)[0]
+    const schedule = approved ? { scheduleApprovedVersion: approved.version, scheduleApprovedAt: approved.approval.approvedAt } : {}
+    const scheduleReason = approved
+      ? `Version ${approved.version} of the agreement was approved for rostering: its weekly patterns and shifts are on the roster. Nothing is created from onboarding itself.`
+      : 'The schedule is made when an agreement revision is approved for rostering, from its draft page; nothing is created from onboarding itself.'
+    if (id === 'p-0004') return { participantId: id, intakeComplete: true, profileComplete: true, serviceTypeConfirmed: true, serviceAgreementSigned: true, isReady: false, reasons: [scheduleReason], ...schedule }
+    return {
+      participantId: id, intakeComplete: true, profileComplete: false, serviceTypeConfirmed: false, serviceAgreementSigned: false, isReady: false,
+      reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', scheduleReason], ...schedule,
+    }
+  }],
   ['participants/:id/bookings', (id) => bookings.filter((b) => b.participantId === id)],
   // NDIS Claims (shift-completion design spec §2/§4, PR 3) — see the `claims` fixture's own
   // comment for why this only ever returns Shift-kind rows, mirroring the real
@@ -2529,6 +2539,8 @@ const postRoutes = [
   }],
   ['participants/:id/service-agreement-drafts', (id, body) => saveDraft(id, body)],
   // Mark approved (phase D): makes the patterns and the open shifts, ends the old revision's patterns, and answers with the revision, its approval and the old shifts that remain.
+  // The Generate button on the Patterns page: it makes nothing here (the board already holds what an approval made); it only answers in the real shape so the result dialog can be seen. Skipped holds the plan's skipped public holidays too.
+  ['rostering/patterns/:id/generate', () => ({ created: 0, skipped: 3 })],
   ['participants/:id/service-agreement-drafts/:id/approve', (participantId, draftId, body) => {
     const result = planApproval.approve(approvalStore, participantId, draftId, body, { name: 'Demo Coordinator' })
     if (result.status === 409) return respond(409, failEnvelope({ currentVersion: result.currentVersion }, result.errors, 'draft-superseded'))
@@ -2669,6 +2681,11 @@ const putRoutes = [
   ['rostering/patterns/:id', (id, body) => {
     const pattern = rosterPatterns.find((p) => p.id === id)
     if (!pattern) return respond(404, failEnvelope(null, ['Pattern not found.']))
+    // An agreement pattern is one weekday of one block for one worker of one revision (a unique key): moving it to a weekday its block already has is a 409 in words, as the real server answers it.
+    if (pattern.sourceDraftId && body && body.dayOfWeek && body.dayOfWeek !== pattern.dayOfWeek
+      && rosterPatterns.some((p) => p.id !== pattern.id && p.sourceDraftId === pattern.sourceDraftId && p.sourceBlockKey === pattern.sourceBlockKey && p.workerSlot === pattern.workerSlot && p.dayOfWeek === body.dayOfWeek)) {
+      return respond(409, failEnvelope(null, ['This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.']))
+    }
     for (const key of ['dayOfWeek', 'startTime', 'endTime', 'endsNextDay', 'ratio', 'nightType', 'effectiveFrom', 'effectiveTo', 'isActive', 'notes', 'defaultStaffId']) if (body && key in body) pattern[key] = body[key]
     return pattern
   }],

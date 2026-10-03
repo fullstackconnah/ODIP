@@ -125,7 +125,10 @@ function earlierApproved(store, draft) {
 
 function oldShifts(store, draft) {
   const ids = new Set(store.patterns.filter((p) => earlierApproved(store, draft).some((d) => d.id === p.sourceDraftId)).map((p) => p.id))
-  const standing = store.shifts.filter((s) => ids.has(s.shiftPatternId) && s.serviceDate >= draft.agreementStartDate && s.status !== 'Cancelled' && s.status !== 'Completed')
+  // What a coordinator can still tidy: drafts and published shifts, from the day the new revision starts or today, whichever is later.
+  const today = providerToday()
+  const from = draft.agreementStartDate > today ? draft.agreementStartDate : today
+  const standing = store.shifts.filter((s) => ids.has(s.shiftPatternId) && s.serviceDate >= from && (s.status === 'Draft' || s.status === 'Published'))
   const versions = earlierApproved(store, draft).map((d) => d.version)
   return {
     open: standing.filter((s) => !s.staffId).length, assigned: standing.filter((s) => s.staffId).length,
@@ -159,7 +162,7 @@ function plan(store, participant, draft) {
   result.overlapping = store.patterns.filter((p) => p.participantId === draft.participantId && !p.sourceDraftId && p.isActive && result.newPatterns.some((made) => overlaps(p, made)))
   result.oldShifts = oldShifts(store, draft)
   result.ready = !!participant && participant.isActive !== false && !participant.isDraft
-  if (!result.ready) result.shiftsNote = `Open shifts are created once ${participant ? participant.firstName : 'the participant'} is active.`
+  if (!result.ready) result.shiftsNote = `Unfilled shifts are created once ${participant ? participant.firstName : 'the participant'} is active.`
   else if (result.from <= result.horizonEnd) result.shiftsToCreate = countShifts(draft, result.newPatterns, result.from, result.horizonEnd)
   return result
 }
