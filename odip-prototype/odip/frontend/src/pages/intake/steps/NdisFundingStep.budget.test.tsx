@@ -36,7 +36,7 @@ describe('Intake NDIS & Funding step: the plan budget card', () => {
     render(<Harness />)
 
     expect(screen.getByRole('heading', { name: 'Plan budget' })).toBeInTheDocument()
-    expect(screen.getByText('Save the participant first to record the plan budget')).toBeInTheDocument()
+    expect(screen.getByText('Save as draft first, then record the plan budget on the participant’s Funding tab.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Record plan budget' })).not.toBeInTheDocument()
   })
 

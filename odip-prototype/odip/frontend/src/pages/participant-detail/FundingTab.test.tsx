@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import FundingTab from './FundingTab'
@@ -85,41 +85,64 @@ describe('Funding tab: a recorded plan', () => {
     expect(screen.getByText('No funding periods')).toBeInTheDocument()
   })
 
-  it('shows each pool: name, categories, management, plan amount, Oassist set-aside (an en dash when none) and its periods', () => {
+  const poolCard = (name: string) => screen.getByRole('heading', { name }).closest('li')!
+
+  it('shows each pool as a card: name, categories, management, plan amount and set-aside (an en dash when none, which a line says)', () => {
     useFundingPlans.mockReturnValue(plansReply([plan()]))
     renderTab()
 
-    const table = within(screen.getByRole('region', { name: 'Pools' })).getByRole('table')
-    const core = within(table).getByRole('row', { name: /Core \(flexible\)/ })
+    const core = poolCard('Core (flexible)')
     expect(within(core).getByText('01–04')).toBeInTheDocument()
-    expect(within(core).getByText('Plan Managed')).toBeInTheDocument()
-    expect(within(core).getByText('$8,000.00')).toBeInTheDocument()
-    expect(within(core).getByText('$4,000.00')).toBeInTheDocument()   // the set-aside: 4 x $1,000
-    const stated = within(table).getByRole('row', { name: /Improved Daily Living Skills/ })
+    expect(within(core).getByText(/Plan Managed/)).toBeInTheDocument()
+    expect(within(core).getByText('Plan amount').nextElementSibling).toHaveTextContent('$8,000.00')
+    expect(within(core).getByText('Set-aside').nextElementSibling).toHaveTextContent('$4,000.00')   // the set-aside: 4 x $1,000
+    const stated = poolCard('Improved Daily Living Skills')
     expect(within(stated).getByText('15')).toBeInTheDocument()
-    expect(within(stated).getByText('Agency Managed')).toBeInTheDocument()
-    expect(within(stated).getByText('$2,000.00')).toBeInTheDocument()
-    expect(within(stated).getByText('–')).toBeInTheDocument()          // no set-aside on this pool: an en dash, never $0
+    expect(within(stated).getByText(/Agency Managed/)).toBeInTheDocument()
+    expect(within(stated).getByText('Plan amount').nextElementSibling).toHaveTextContent('$2,000.00')
+    expect(within(stated).getByText('Set-aside').nextElementSibling).toHaveTextContent('–')   // no set-aside on this pool: an en dash, never $0
+    expect(within(screen.getByRole('region', { name: 'Pools' })).getByText('A dash means no set-aside is recorded.')).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('Oassist')
   })
 
-  it('expands a pool to its periods: dates, plan amount and set-aside', async () => {
+  it('says nothing about a dash when every pool has a set-aside', () => {
+    useFundingPlans.mockReturnValue(plansReply([plan({ pools: [pool({ periods: quarters(2000, 1000) })] })]))
+    renderTab()
+
+    expect(screen.queryByText(/A dash means/)).not.toBeInTheDocument()
+  })
+
+  it('opens a pool’s periods directly under that pool, and the control always points at something in the page', async () => {
     useFundingPlans.mockReturnValue(plansReply([plan()]))
     renderTab()
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
 
-    expect(screen.queryByRole('region', { name: /Periods of Core/ })).not.toBeInTheDocument()
-    const toggle = screen.getByRole('button', { name: /4 periods.*Core \(flexible\)/ })
+    const core = poolCard('Core (flexible)')
+    expect(within(core).queryByRole('region', { name: /Periods of Core/ })).not.toBeInTheDocument()
+    const toggle = within(core).getByRole('button', { name: /4 periods of Core \(flexible\)/ })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(document.getElementById(toggle.getAttribute('aria-controls')!)).not.toBeNull()   // collapsed, it still names an element that exists
     await user.click(toggle)
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    const periods = within(screen.getByRole('region', { name: /Periods of Core \(flexible\)/ })).getByRole('table')
+    const periods = within(within(core).getByRole('region', { name: /Periods of Core \(flexible\)/ })).getByRole('table')   // inside THIS pool's card
     expect(within(periods).getByText('1 Jul – 30 Sep 2026')).toBeInTheDocument()
     expect(within(periods).getAllByText('$2,000.00')).toHaveLength(4)
     expect(within(periods).getAllByText('$1,000.00')).toHaveLength(4)
+    expect(within(periods).getByRole('columnheader', { name: 'Set-aside' })).toBeInTheDocument()
+    expect(within(poolCard('Improved Daily Living Skills')).queryByRole('region')).not.toBeInTheDocument()   // the other pool stays closed
 
     await user.click(toggle)
-    expect(screen.queryByRole('region', { name: /Periods of Core/ })).not.toBeInTheDocument()
+    expect(within(core).queryByRole('region', { name: /Periods of Core/ })).not.toBeInTheDocument()
+  })
+
+  it('left-aligns the amounts of a period below md, so they sit beside their labels on a phone', async () => {
+    useFundingPlans.mockReturnValue(plansReply([plan()]))
+    renderTab()
+    await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(within(poolCard('Core (flexible)')).getByRole('button', { name: /4 periods of Core/ }))
+
+    const amount = within(screen.getByRole('region', { name: /Periods of Core \(flexible\)/ })).getAllByText('$2,000.00')[0].closest('td')!
+    expect(amount).toHaveClass('text-right', 'max-md:text-left')
   })
 
   it('opens the editor on this plan with Edit', async () => {
@@ -147,7 +170,8 @@ describe('Funding tab: a recorded plan', () => {
     useFundingPlans.mockReturnValue(plansReply([plan()]))
     renderTab()
 
-    expect(screen.getByText('Spending and forecasts will appear here once budget tracking is switched on.')).toBeInTheDocument()
+    expect(screen.getByText('Spending and forecasts will appear here in a later release.')).toBeInTheDocument()
+    expect(screen.queryByText(/switched on/)).not.toBeInTheDocument()   // there is no switch: Settings holds a mode and a percentage, and says a later release uses them
     expect(screen.queryByText(/remaining|left of|forecast over|on track/i)).not.toBeInTheDocument()
   })
 })
@@ -161,11 +185,26 @@ describe('Funding tab: the profile says something else', () => {
     const note = screen.getByRole('status')
     expect(note).toHaveTextContent("The profile says the plan runs 1 Jan – 31 Dec 2026. Use this plan's dates on the profile?")
     expect(apply).not.toHaveBeenCalled()
+    const button = within(note).getByRole('button', { name: "Use this plan's dates" })
+    expect(within(note).getByText(/^The profile says the plan runs/).nextElementSibling).toContainElement(button)   // under the sentence, not squeezing it
 
-    await user.click(within(note).getByRole('button', { name: "Use this plan's dates" }))
+    await user.click(button)
 
     expect(apply).toHaveBeenCalledTimes(1)
     expect(apply.mock.calls[0][0]).toBe('plan-1')
+  })
+
+  it('says the dates now match once they were applied, and puts focus back on Edit rather than losing it with the callout', async () => {
+    useFundingPlans.mockReturnValue(plansReply([plan()], { start: '2026-01-01', end: '2026-12-31' }))
+    renderTab()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    expect(screen.queryByText("The profile's plan dates now match this plan.")).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: "Use this plan's dates" }))
+    act(() => { apply.mock.calls[0][1].onSuccess() })   // the server said yes
+
+    expect(screen.getByText("The profile's plan dates now match this plan.")).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toHaveFocus()
   })
 
   it('says so when the profile has no plan dates at all', () => {
@@ -200,8 +239,20 @@ describe('Funding tab: past plans', () => {
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('1 Jul 2025 – 30 Jun 2026')).toBeInTheDocument()
+    // Titled by its span, so a list of plans says which is which (not "Plan budget" over and over).
+    expect(screen.getByRole('heading', { name: /^Plan 1\s+Jul\s+2025 – 30\s+Jun\s+2026$/ })).toBeInTheDocument()
     // Read-only: the only Edit is the current plan's.
     expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(1)
+  })
+
+  it('titles an upcoming plan by its span too', async () => {
+    const next = plan({ id: 'plan-2', planStart: '2027-07-01', planEnd: '2028-06-30' })
+    useFundingPlans.mockReturnValue(plansReply([next, plan()]))
+    renderTab()
+
+    await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(screen.getByRole('button', { name: /Upcoming plans/ }))
+
+    expect(screen.getByRole('heading', { name: /^Plan 1\s+Jul\s+2027 – 30\s+Jun\s+2028$/ })).toBeInTheDocument()
   })
 
   it('has no past-plans section when there are none', () => {
@@ -217,6 +268,35 @@ describe('Funding tab: past plans', () => {
     renderTab()
 
     expect(screen.getByText('1 Jul 2026 – 30 Jun 2027')).toBeInTheDocument()
+  })
+})
+
+describe('Funding tab: a plan that has ended', () => {
+  const ended = plan({ id: 'plan-0', planStart: '2025-07-01', planEnd: '2026-06-30' })
+
+  it('says the plan ended and offers the new one under that sentence, with one "Record a new plan", not two', async () => {
+    useFundingPlans.mockReturnValue(plansReply([ended], { start: '2025-07-01', end: '2026-06-30' }))
+    renderTab()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+
+    const sentence = screen.getByText(/^This plan ended on 30\s+Jun\s+2026\. Record the new plan when the participant shares it\.$/)
+    const record = screen.getAllByRole('button', { name: 'Record a new plan' })
+    expect(record).toHaveLength(1)
+    expect(sentence.nextElementSibling).toContainElement(record[0])
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()   // an earlier plan can still be corrected here
+
+    await user.click(record[0])
+
+    expect(screen.getByTestId('editor')).toHaveAttribute('data-plan', 'new')
+    expect(screen.getByTestId('editor')).toHaveAttribute('data-previous', 'plan-0')
+  })
+
+  it('says nothing of an ending for a plan that is running, and keeps its own "Record a new plan"', () => {
+    useFundingPlans.mockReturnValue(plansReply([plan()]))
+    renderTab()
+
+    expect(screen.queryByText(/This plan ended/)).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Record a new plan' })).toHaveLength(1)
   })
 })
 

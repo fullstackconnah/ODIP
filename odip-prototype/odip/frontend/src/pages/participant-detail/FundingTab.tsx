@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useApplyPlanDatesToProfile, useFundingPlans } from '@/api/hooks'
 import type { FundingPlanDto } from '@/api/types'
@@ -9,7 +9,7 @@ import { Card } from '@/components/Card'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { localIsoDate } from '@/lib/dateOnly'
-import { currentPlanOf, planStatus, writtenSpan, type PlanStatus } from '@/lib/fundingPlan'
+import { currentPlanOf, planStatus, planTitle, writtenDay, writtenSpan, type PlanStatus } from '@/lib/fundingPlan'
 import { PlanRecord } from '@/pages/funding/PlanRecord'
 import { FundingPlanEditor } from '@/pages/funding/FundingPlanEditor'
 
@@ -29,13 +29,17 @@ function profileMismatch(profile: { start?: string; end?: string }, plan: Fundin
 /**
  * The participant hub's Funding tab (SuperAdmin, Admin and Coordinator: the money behind it is never shown to any other role). With nothing recorded it says so and where the figures
  * come from (a provider cannot see a participant's budget in the NDIA portal: the plan the participant shares, or their plan manager). With a plan it leads with the one running today:
- * its facts, its pools and their periods, an offer to copy its dates onto the profile when they differ (never done on its own), and Edit and "Record a new plan". Earlier plans are in a
- * collapsed read-only section. Phase 1 holds the record only: spending, forecasts and warnings arrive later, and the tab says so in one muted line rather than showing a figure it has not got.
+ * its facts, its pools and their periods, an offer to copy its dates onto the profile when they differ (never done on its own), and Edit and "Record a new plan". When the plan it leads
+ * with has ENDED it says so, with "Record a new plan" under that sentence (the readiness item says the budget has ended, so the tab must too). Earlier and later plans are in collapsed
+ * read-only sections, each titled by its dates. Phase 1 holds the record only: spending, forecasts and warnings arrive in a later release, and the tab says so in one muted line rather than
+ * showing a figure it has not got.
  */
 export default function FundingTab({ participantId, planType }: { participantId: string; planType: PlanType }) {
   const plansQuery = useFundingPlans(participantId)
   const applyDates = useApplyPlanDatesToProfile(participantId)
   const [editing, setEditing] = useState<Editing | null>(null)
+  const [applied, setApplied] = useState(false)
+  const actionsRef = useRef<HTMLDivElement>(null)
   const today = useMemo(() => localIsoDate(), [])
 
   const data = plansQuery.data
@@ -48,6 +52,7 @@ export default function FundingTab({ participantId, planType }: { participantId:
   const past = others.filter(plan => planStatus(plan, today) === 'Ended')
   const upcoming = others.filter(plan => planStatus(plan, today) === 'Upcoming')
   const mismatch = current ? profileMismatch(data.profilePlanDates ?? {}, current) : null
+  const ended = current !== undefined && planStatus(current, today) === 'Ended'
   const editor = (
     <FundingPlanEditor
       key={editing?.plan?.id ?? 'new'}
@@ -75,17 +80,31 @@ export default function FundingTab({ participantId, planType }: { participantId:
     )
   }
 
+  // When the callout that offered the dates goes (the plan was refetched with the profile's dates matching), focus would be lost with it: it goes back to Edit, and the person is told.
+  const applyThePlansDates = () => applyDates.mutate(current.id, {
+    onSuccess: () => {
+      setApplied(true)
+      actionsRef.current?.querySelector<HTMLElement>('[data-edit-plan]')?.focus()
+    },
+  })
+
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
       {mismatch && (
-        <Callout
-          tone="info"
-          actions={<Button variant="secondary" size="sm" disabled={applyDates.isPending} onClick={() => applyDates.mutate(current.id)}>Use this plan's dates</Button>}
-        >
-          {mismatch}
+        <Callout tone="info">
+          <p>{mismatch}</p>
+          <div className="mt-2"><Button variant="secondary" size="sm" disabled={applyDates.isPending} onClick={applyThePlansDates}>Use this plan's dates</Button></div>
         </Callout>
       )}
       {applyDates.isError && <Callout tone="danger">The profile's plan dates were not changed. Check your connection and try again.</Callout>}
+      <div aria-live="polite">{applied && <p className="text-[13px] text-[var(--color-muted-foreground)]">The profile's plan dates now match this plan.</p>}</div>
+
+      {ended && (
+        <Callout tone="info">
+          <p>This plan ended on {writtenDay(current.planEnd)}. Record the new plan when the participant shares it.</p>
+          <div className="mt-2"><Button variant="secondary" size="sm" onClick={() => setEditing({ previousPlan: current })}>Record a new plan</Button></div>
+        </Callout>
+      )}
 
       <Card>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -93,15 +112,15 @@ export default function FundingTab({ participantId, planType }: { participantId:
             <h3 className="text-sm font-semibold">Plan budget</h3>
             <StatusBadge tone={STATUS_TONE[planStatus(current, today)]} label={planStatus(current, today)} />
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setEditing({ plan: current })}>Edit</Button>
-            <Button variant="secondary" size="sm" onClick={() => setEditing({ previousPlan: current })}>Record a new plan</Button>
+          <div ref={actionsRef} className="flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" data-edit-plan="" onClick={() => setEditing({ plan: current })}>Edit</Button>
+            {!ended && <Button variant="secondary" size="sm" onClick={() => setEditing({ previousPlan: current })}>Record a new plan</Button>}
           </div>
         </div>
         <PlanRecord plan={current} />
       </Card>
 
-      <p className="text-[13px] text-[var(--color-muted-foreground)]">Spending and forecasts will appear here once budget tracking is switched on.</p>
+      <p className="text-[13px] text-[var(--color-muted-foreground)]">Spending and forecasts will appear here in a later release.</p>
 
       <PlanGroup title="Upcoming plans" plans={upcoming} today={today} />
       <PlanGroup title="Past plans" plans={past} today={today} />
@@ -111,7 +130,7 @@ export default function FundingTab({ participantId, planType }: { participantId:
   )
 }
 
-/** A collapsed, read-only list of other plans of the participant (the ones that have ended, or have not started): each as its own record, with no way to change it from here. */
+/** A collapsed, read-only list of other plans of the participant (the ones that have ended, or have not started): each as its own record titled by its dates, with no way to change it from here. */
 function PlanGroup({ title, plans, today }: { title: string; plans: FundingPlanDto[]; today: string }) {
   const [open, setOpen] = useState(false)
   if (plans.length === 0) return null
@@ -129,7 +148,7 @@ function PlanGroup({ title, plans, today }: { title: string; plans: FundingPlanD
       {open && plans.map(plan => (
         <Card key={plan.id}>
           <div className="mb-3 flex items-center gap-2">
-            <h3 className="text-sm font-semibold">Plan budget</h3>
+            <h3 className="text-sm font-semibold">{planTitle(plan)}</h3>
             <StatusBadge tone={STATUS_TONE[planStatus(plan, today)]} label={planStatus(plan, today)} />
           </div>
           <PlanRecord plan={plan} poolsLabel={`Pools of the plan ${writtenSpan(plan.planStart, plan.planEnd)}`} />
