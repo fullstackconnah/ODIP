@@ -94,17 +94,19 @@ export type ReplacedBy = { version: number; approvedAt: string; agreementStartDa
 const DATE_PARTS = { day: 'numeric', month: 'short', year: 'numeric' } as const
 
 /**
- * The two statuses a revision can carry, each said for what it is: approved for rostering (green, once somebody has approved it: or "Replaced", when a later revision's approval has taken its
- * place) and the template's own e-signing state, which approving for rostering does not touch.
+ * The version number and the two statuses a revision can carry, each said for what it is: approved for rostering (green, once somebody has approved it: or "Replaced", when a later revision's
+ * approval has taken its place) and the template's own e-signing state, which approving for rostering does not touch.
  */
-function RevisionBadges({ draft, replaced }: { draft: ServiceAgreementDraftDto; replaced: boolean }) {
+function RevisionTitle({ draft, replaced }: { draft: ServiceAgreementDraftDto; replaced: boolean }) {
+  // The version and its badges are one wrapping row, and each badge is one unit (nowrap): on a phone a badge that does not fit moves whole to the next line, where an inline pill used to split at the hyphen of "e-signing".
   return (
-    <>
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <strong>Version {draft.version}</strong>
       {draft.approval && (replaced
-        ? <StatusBadge tone="neutral" label="Replaced" className="ml-2" />
-        : <StatusBadge tone="success" label="Approved for rostering" className="ml-2" />)}
-      <StatusBadge status={draft.status} label={draftStatusLabel(draft.status)} className="ml-2" />
-    </>
+        ? <StatusBadge tone="neutral" label="Replaced" className="whitespace-nowrap" />
+        : <StatusBadge tone="success" label="Approved for rostering" className="whitespace-nowrap" />)}
+      <StatusBadge status={draft.status} label={draftStatusLabel(draft.status)} className="whitespace-nowrap" />
+    </div>
   )
 }
 
@@ -121,7 +123,8 @@ function ApprovalNote({ participantId, approval, replacedBy, noteRef }: { partic
     ? <Link className={`font-medium underline ${TAP_FLOOR}`} to={rosterLink(approval.firstShiftDate, participantId, { unfilled: true })}>Open on the roster</Link>
     : <Link className={`font-medium underline ${TAP_FLOOR}`} to="/rostering/patterns">Open the shift patterns</Link>
   return (
-    <div ref={noteRef} tabIndex={-1} role="group" aria-label={name} className="max-w-prose rounded-[var(--radius-md)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
+    // scroll-mt/-mb: when focus scrolls the page to the note, it stops clear of the sticky header and the phone's bottom bar (on a phone the first line was left under the header).
+    <div ref={noteRef} tabIndex={-1} role="group" aria-label={name} className="scroll-mt-20 scroll-mb-24 max-w-prose rounded-[var(--radius-md)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
       <Callout tone="success" title={name}>
         <p>
           {approval.shiftsCreated > 0 && approval.horizonEnd
@@ -161,7 +164,7 @@ export function RevisionCard(props: RevisionCardProps) {
     <article ref={summary} className={CARD}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <strong>Version {draft.version}</strong> <RevisionBadges draft={draft} replaced={props.replacedBy !== undefined} />
+          <RevisionTitle draft={draft} replaced={props.replacedBy !== undefined} />
           <p className="text-sm text-[var(--color-muted-foreground)]">{draft.state} · {formatServiceDate(draft.agreementStartDate)} to {formatServiceDate(draft.agreementEndDate)}</p>
           <p className="mt-1 text-sm tabular-nums">
             {draft.blockCount > 0 ? `${plural(draft.blockCount, 'block')} · ` : 'Typed by hand before the plan builder · '}{plural(draft.lineCount, 'line')} · <span className="font-medium">{formatCurrency(draft.total)}</span> over the agreement
@@ -235,7 +238,7 @@ function FullRevision({ participantId, draft, onDownload, downloading, onCollaps
   return <article ref={card} className={CARD}>
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <strong>Version {draft.version}</strong> <RevisionBadges draft={draft} replaced={replacedBy !== undefined} />
+        <RevisionTitle draft={draft} replaced={replacedBy !== undefined} />
         <p className="text-sm text-[var(--color-muted-foreground)]">{draft.state} · {formatServiceDate(draft.agreementStartDate)} to {formatServiceDate(draft.agreementEndDate)}</p>
         <details className="mt-1 text-xs text-[var(--color-muted-foreground)]"><summary className="cursor-pointer select-none">Template details</summary><p className="mt-1">Selected source: {draft.templateVersion} · DOCX SHA-256 {draft.templateDocxSha256} · PDF SHA-256 {draft.templatePdfSha256}</p></details>
       </div>

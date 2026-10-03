@@ -49,7 +49,8 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         tabIndex={-1}
-        className={`bg-[var(--color-card)] rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4 w-full ${SIZE_MAP[size]} max-h-[90vh] mx-2 overflow-y-auto ${className ?? ''}`}
+        // A sticky footer sticks to the scroll container's content box, so the dialog gives it no bottom padding: with it, the footer would float 16px above the dialog's edge and the body would show through the strip below.
+        className={`bg-[var(--color-card)] rounded-[var(--radius-lg)] border border-[var(--color-border)] ${footer && stickyFooter ? 'px-4 pt-4' : 'p-4'} w-full ${SIZE_MAP[size]} max-h-[90vh] mx-2 overflow-y-auto ${className ?? ''}`}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-3">
@@ -64,8 +65,8 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
         <div id={descriptionId}>{children}</div>
         {footer && (
           stickyFooter
-            // Pulled out over the dialog's own padding so its background covers the edge-to-edge strip it sticks as; the border says the body goes on under it.
-            ? <div className="sticky bottom-0 -mx-4 -mb-4 mt-4 flex justify-end gap-3 rounded-b-[var(--radius-lg)] border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3">{footer}</div>
+            // Pulled out sideways over the dialog's own padding so its background covers the edge-to-edge strip it sticks as; the border says the body goes on under it.
+            ? <div className="sticky bottom-0 -mx-4 mt-4 flex justify-end gap-3 rounded-b-[var(--radius-lg)] border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3">{footer}</div>
             : <div className="flex justify-end gap-3 mt-4">{footer}</div>
         )}
       </div>

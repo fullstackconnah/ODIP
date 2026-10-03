@@ -145,6 +145,17 @@ describe('RevisionCard: approved', () => {
     expect(screen.getByText('Not approved for e-signing')).toBeInTheDocument()
   })
 
+  it('lays the version and its badges out as one wrapping row of whole badges: on a phone a badge moves to the next line, it is not split at the hyphen of "e-signing"', () => {
+    setUp({ draft: draft({ approval: approval() }) })
+
+    const row = screen.getByText(/^Version \d+$/).parentElement!
+    expect(row).toHaveClass('flex', 'flex-wrap')
+    for (const label of ['Approved for rostering', 'Not approved for e-signing']) {
+      expect(screen.getByText(label)).toHaveClass('whitespace-nowrap')
+      expect(screen.getByText(label).parentElement).toBe(row)
+    }
+  })
+
   it('links to the roster at the first week of shifts, for the participant, open shifts only', () => {
     setUp({ draft: draft({ approval: approval({ firstShiftDate: '2026-10-14' }) }) })
 
@@ -240,6 +251,8 @@ describe('RevisionCard: where focus goes', () => {
     const note = screen.getByRole('group', { name: 'Approved for rostering by Alex Admin on 10 Oct 2026' })
     expect(note).toHaveFocus()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // Where the page scrolls for that focus it stops clear of the sticky header and the phone's bottom bar (the first line was left under the header at 390px).
+    expect(note).toHaveClass('scroll-mt-20', 'scroll-mb-24')
   })
 
   it('does not take focus when the page simply loads a revision that was approved already', () => {

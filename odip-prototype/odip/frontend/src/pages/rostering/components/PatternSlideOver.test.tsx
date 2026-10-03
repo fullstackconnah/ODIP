@@ -453,6 +453,34 @@ describe('PatternSlideOver — a pattern an agreement made', () => {
     expect(screen.getByText(/You have changed what agreement v2 set/)).toBeInTheDocument()
   })
 
+  it('brings a refused save into view: the message sits under the last field of a form that scrolls', async () => {
+    const user = userEvent.setup()
+    const scrolled: Element[] = []
+    // jsdom has no scrollIntoView: put one in for this test and take it out again.
+    const proto = Element.prototype as { scrollIntoView?: (arg?: boolean | ScrollIntoViewOptions) => void }
+    const original = proto.scrollIntoView
+    proto.scrollIntoView = function (this: Element, arg?: boolean | ScrollIntoViewOptions) {
+      scrolled.push(this)
+      expect(arg).toEqual({ block: 'nearest' })
+    }
+    try {
+      mockUpdateMutateAsync.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: ['This agreement already has a pattern for that block, day and worker.'] } } })
+      open(agreementPattern())
+
+      expect(scrolled).toHaveLength(0)                                                       // nothing wrong, nothing scrolled
+      fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+      await user.click(screen.getByRole('button', { name: 'Save' }))
+
+      // (The drift warning is an alert too, so the refusal is found by its words.)
+      const refusal = (await screen.findByText(/This agreement already has a pattern/)).closest('[role="alert"]')
+      expect(refusal).not.toBeNull()
+      expect(scrolled).toEqual([refusal])
+    } finally {
+      if (original) proto.scrollIntoView = original
+      else delete proto.scrollIntoView
+    }
+  })
+
   it('shows what the agreement asks of a worker as chips, which are information and not a field to change', () => {
     open(agreementPattern())
 

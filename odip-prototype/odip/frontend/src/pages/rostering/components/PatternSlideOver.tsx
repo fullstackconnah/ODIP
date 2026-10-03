@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import type { ShiftPatternDto, CreateShiftPatternDto, SupportRatio, SleepoverType } from '@/api/types'
 import { SUPPORT_RATIOS, SLEEPOVER_TYPES } from '@/api/types'
@@ -72,6 +72,12 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
   const definition = JSON.stringify([dayOfWeek, startTime, endTime, endsNextDay, ratio, nightType, effectiveFrom, effectiveTo])
   const [openedDefinition] = useState(definition)
   const redefined = definition !== openedDefinition
+
+  // The message sits under the last field of a form that scrolls, so a refused save (the "already has a pattern for that day" one included) would otherwise look like nothing happened.
+  const errorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [error])
 
   const createPattern = useCreatePattern()
   const updatePattern = useUpdatePattern()
@@ -234,7 +240,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
         </FormField>
 
         {error && (
-          <div role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
+          <div ref={errorRef} role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
             {error}
           </div>
         )}
