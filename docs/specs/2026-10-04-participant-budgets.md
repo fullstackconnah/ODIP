@@ -1,0 +1,120 @@
+# Participant budgets, phase 1: the budget record
+
+**Status:** implemented on `feat/budget-record` (phase 1 of 3). **Date:** 2026-10-04.
+**Not in this phase:** every figure that is worked out (Available, Used, Booked ahead, Forecast), the four statuses and the three alerts, claim figures, the dashboard tile and the Budgets list, the plan builder's budget bar, every check at the moment of action (roster findings, the hard limit, the Admin override, the emergency path) and the rejected-claim code. Phase 1 stores what the plan says and asks for it at activation. Nothing reads a number back yet, and the Funding tab says so.
+
+## Why
+
+The owner's goal (2026-10-03): capture each participant's funding limit at profile setup, keep the service agreement inside it, track the budget against every claim through the funding period, and warn when it is approaching, when the forecast to the end of the funding period goes over (ad-hoc shifts included) and when it is over. Warnings by default; hard limits can be switched on in Settings.
+
+What that rests on (the NDIS research):
+
+- A provider cannot see a participant's budget in the NDIA portal. The figures come from the plan the participant shares, or from their plan manager, so ODIP records them by hand and says where they came from.
+- Funding is released in periods, usually 3-monthly on plans made since May 2025. Unspent money rolls forward inside the plan and is lost at reassessment.
+- Core categories 01 to 04 form one flexible pool (Oassist bills 01 and 04). Each capacity-building or capital support is its own stated pool.
+- The NDIA refuses payment past a plan, pool or period cap (codes V17, V18, V27, V28), and may pay past one to prevent an imminent risk to safety.
+
+The older design, [service agreements and budgets](2026-09-08-service-agreements-and-budgets-design.md), was approved and never built. This work keeps its "computed, never stored" drawdown and drops its stale parts.
+
+## The three phases
+
+| Phase | What it delivers | State |
+|---|---|---|
+| 1. Budget record | the plan, pool and period data and its API; the Funding tab and its editor; the intake and profile step; the "Funding recorded" readiness item; the Settings tab (stored, not yet enforced) | this document |
+| 2. Ledger and visibility | the server-side budget service; the Funding tab's figures; the claim figures; the three alerts; the dashboard tile and the Budgets list; the plan builder's budget bar on the new model; the rejected-claim code | next |
+| 3. Moments and hard limits | the roster findings; the hard-limit mode, the Admin override and the emergency path with its review task; the pattern-generate and trip-booking warnings | after phase 2 |
+
+Each phase is its own PR with review and gates. Phase 1 ran alongside plan builder phase D, which adds its own migration.
+
+## Owner decisions (2026-10-03)
+
+1. **The limit: both, and ours is enforced.** Record the plan's budget per NDIS category. When the participant also uses other providers, record the part set aside for Oassist as well. Warnings and limits use the set-aside when there is one and the plan amount otherwise.
+2. **Hard limits (switched on in Settings) block ad-hoc shifts that overrun, and an Admin can override** with a written reason that goes in the audit log. Agreements over the limit and claims beyond the funds only warn. Recording a support that was actually delivered is never blocked.
+3. **Emergencies: a safety reason, and an Admin reviews.** With hard limits on, any Coordinator can add an overrunning ad-hoc shift by choosing "Emergency or safety" and describing it. It saves at once and is flagged for review. This path cannot be switched off.
+4. **Capture is a readiness check.** Intake asks for the plan budget, and "Funding recorded" joins the activation checklist for NDIS-funded participants. Warn mode lists it; Enforce mode makes activation wait.
+5. **In-app only.** No budget emails.
+
+Decisions 2 and 3 are phase 3. Phase 1 stores the mode and the percentage so the choice is waiting for them.
+
+## The record (backend)
+
+Four new tables in one additive migration, `AddParticipantBudgetRecord`. All are `ITenantEntity` with the tenant query filter, and all are in `AuditedEntities`, so every change has an audit row (`CreatedAt` and `UpdatedAt` are left out of the diffs).
+
+- `FundingPlans`: the participant, `PlanStart`, `PlanEnd`, an optional `ReassessmentDate`, an optional `PeriodLengthMonths` (1, 3, 6 or 12; none means the plan has no funding periods), where the figures came from (`Evidence`: a copy of the plan, the plan manager, the participant, the support coordinator, another source), when and by whom they were confirmed (free text), notes, and a `Revision` that rises on every save.
+- `FundingPools`: one Core (flexible) pool (categories 01 to 04, so no category of its own) or one stated support (any other support category), with who manages the money (agency, plan or self managed), a name and notes.
+- `FundingPeriods`: a pool's dates and money for one funding period: the plan amount, and Oassist's set-aside when there is one. Money is `decimal(18,2)`; the client works in whole cents.
+- `BudgetSettings`: one row per organisation, holding the budget mode and the "approaching" percentage, with constant defaults (Warn, 80) so a missing row means the defaults.
+
+Money never travels on the participant DTO, and every funding endpoint is closed to SupportWorker and ReadOnly.
+
+### Rules
+
+`FundingPlanValidator` is pure and reports every problem at once, each in plain words, so the editor and the server say the same thing.
+
+- **The plan:** both dates, the end not before the start, at most 800 days. A period length of 1, 3, 6 or 12 months, or none. A source chosen. Confirmed-by up to 200 characters and notes up to 2,000.
+- **Pools:** at least one and at most 40. Each is Core (flexible) or a stated support, with a manager chosen. A plan holds each category once for each way of managing it. Stated pools can be any support category except 01 to 04 (Core) and 18 (Recurring Transport, paid to the participant and never claimed by providers); `GET funding/pace-categories` serves the list of 21 and flags those two.
+- **Periods:** at least one and at most 60 per pool. With no period length a pool has one period, the whole plan. Otherwise the periods run from the plan's first day to its last with no gap and no overlap, each starting the day after the one before ends, none longer than 12 months. The server checks that the periods fit the plan; it does not insist on the editor's way of cutting them.
+- **Money:** zero or more, at most $99,999,999.99, in dollars and cents. A set-aside is never more than the plan amount, and is given for every period of a pool or for none.
+- **Overlap:** one participant's plans never overlap.
+
+### Two people saving
+
+- **Revision.** A change is sent with the revision it was made from. If someone has saved since, the answer is 409 with `code: "funding-revision-conflict"` and `data.currentRevision`, and nothing is saved. The editor keeps what the person typed and offers "Load the latest".
+- **Overlap.** The check runs in a transaction holding `FOR NO KEY UPDATE` on the participant's row (`FundingPlanLock`, the same pattern as `ShiftRowLock`), so two creates for overlapping plans queue and the second sees the first. The unique index on (tenant, participant, plan start) is the backstop, and a unique violation (23505) is mapped to the same overlap 409 (`code: "funding-plan-overlap"`, naming the other plan).
+- A save merges pools and periods by their natural keys (category and manager; period start) instead of replacing them, so rows keep their ids and the audit log shows what changed.
+
+### Routes
+
+| Route | Roles | What it does |
+|---|---|---|
+| `GET api/v1/participants/{id}/funding/plans` | SuperAdmin, Admin, Coordinator | the plans, newest first, with the plan dates the profile itself holds |
+| `POST …/funding/plans` | same | records a plan (201) |
+| `PUT …/funding/plans/{planId}` | same | replaces a plan; carries `revision` |
+| `DELETE …/funding/plans/{planId}` | SuperAdmin, Admin | deletes a plan with its pools and periods; no screen offers it yet |
+| `POST …/funding/plans/{planId}/apply-dates-to-profile` | SuperAdmin, Admin, Coordinator | copies the plan's dates onto the participant's own NDIS plan dates |
+| `GET …/funding/billing-sources-hint` | same | the active NDIS funding sources on the Billing page that have a budget, as a starting point for a pool. The Billing page is not changed. |
+| `GET api/v1/funding/pace-categories` | every signed-in role | the 21 support categories (no money in it) |
+| `GET api/v1/funding/settings` | SuperAdmin, Admin, Coordinator | the mode and percentage, or the defaults |
+| `PUT api/v1/funding/settings` | SuperAdmin, Admin | changes only the fields sent; one audit row per change |
+
+Writes use the "api" rate limit. A plan body is capped at 256 KiB and a settings body at 4 KiB. A SuperAdmin with no organisation chosen is refused with a sentence that says so. Dates travel as `DateOnly`, and `CreatedAt` and `UpdatedAt` as UTC instants.
+
+## "Funding recorded" in readiness
+
+An NDIS-funded participant has funding recorded when a plan's end is on or after today in the provider's time zone. Participants funded some other way are not asked.
+
+It is deliberately an activation-only item. `ParticipantReadiness.IssuesAsync` is the operational list that feeds the roster, the pickers and the register, and a missing budget must not take anyone off those. So:
+
+- `ActivationIssuesAsync` is that list plus "Funding not recorded". It supplies the warn-mode notes when someone changes a status or completes a profile, and the onboarding checklist (`ParticipantOnboardingDto.FundingRecorded`, null when the participant is not NDIS-funded; the worklist counts six steps instead of five).
+- `ActivationBlockAsync` and `MayActivateAsync` decide an activation in Enforce mode: the missing agreement evidence is refused first, then the missing budget, each with its own sentence. They take a `TimeProvider`, so tests fix the clock.
+- The participant detail and list DTOs keep the operational issues only.
+
+Today the agreement-evidence gate is closed for everyone (the provisional agreement template has no approved source), so an Enforce-mode tenant is refused on the evidence reason before the budget one is reached. The funding rule is tested through `ParticipantReadiness.Decide` and will begin to show once that gate can open.
+
+## The screens
+
+- **Participant hub, Funding tab** (`?tab=funding`, Admin, SuperAdmin and Coordinator): "No budget recorded" with where the figures come from and "Record plan budget"; or the current plan as facts (dates, funding periods, reassessment, source, figures confirmed, notes) and a pools table whose pools open out to their periods; "Edit" and "Record a new plan"; upcoming and past plans collapsed and read-only; and one muted line, "Spending and forecasts will appear here once budget tracking is switched on." When the profile's own plan dates differ from the current plan's, a callout asks "Use this plan's dates on the profile?" and never changes the profile unasked.
+- **The editor** (one slide-over, used by the tab, Intake and the Profile wizard): plan fields; Core (flexible) and stated pools; periods proposed from the dates and the length, each running from the day after the one before for the length in calendar months, the last ending on the plan's last day (so it can be short), with the amount split by days (the remainder cents go on the last period) and every period still editable. Boundaries are counted from the plan's first day and a month end is clamped, so a plan starting on 31 January has a first period ending on 27 February and a third starting on 31 March, with no day lost along the way; a plain-words message when edited periods stop adding up to the typed amount, because the save sends periods only; "Start from Billing funding sources" when the hint has rows.
+- **Intake and Profile wizard:** a "Plan budget" card on the NDIS funding step, only for NDIS funding. It says "Save the participant first to record the plan budget" until the participant exists, and "Plan not shared yet" is the explicit skip. It saves through the funding routes, never through the patch groups.
+- **Settings, Budgets** (Admin and SuperAdmin): "Warn only" or "Hard limit for ad-hoc shifts", and "Warn when used reaches" from 50% to 95% in steps of 5 (default 80%). The tab says budget checks arrive in a later release and the choice is saved for them. Only a value the person changed is sent, and a pick made against a value that has since moved is dropped.
+- **Settings tab strip:** `Tabs` has an `overflow="scroll"` option, so Settings' ten tabs stay on one row that scrolls sideways at every width, with the active tab (including one named by `?tab=`) scrolled into view.
+
+## Trying it offline
+
+`mock-api/funding.js` keeps plans in memory, so a save shows on the next read. Demo participants: `p-0002` has a 3-monthly plan (Core (flexible) and a stated Improved Daily Living Skills pool), a past 6-monthly plan, and profile dates that differ from the plan; `p-0004` has a plan with no funding periods; every other participant has none. Open `/participants/p-0002?tab=funding` and `/settings?tab=budgets`. Routes and roles are listed in `odip-prototype/odip/local-test/endpoints.md`.
+
+## Tests
+
+- **Backend:** the validator, the service and controller, the roles, the SQL the queries translate to (checked against an Npgsql-configured context with no connection), and the readiness rules in both modes with the roster DTOs unchanged. Eight Postgres tests (`FundingPostgresTests`, `SkippableFact`) skip locally and run in CI: rows made on the migration before this one survive it and the defaults hold, the unique indexes hold, the `decimal(18,2)` round trip, the cascade from plan to pools to periods (and the restrict that stops a participant with a plan being deleted), the service end to end on Npgsql, and the races: two creates for overlapping plans leave one, two creates for the same start day leave one and neither is a 500, and two replaces made from the same revision apply one and refuse the other as stale.
+- **Frontend:** the period proposal and the cents arithmetic, the editor's pure state and its screen (the sum message, the 409 flow, the Billing hint, the server's 400 reasons), the Funding tab's states, the card, the Settings tab, the hooks' exact request bodies and invalidation, and the permission.
+
+## What phase 2 builds on
+
+The budget service reads these four tables. A period belongs to a claim by its service date. "Available" is the set-aside (or the plan amount when none is recorded) plus Oassist's unspent amount rolled forward from earlier periods of the same plan, labelled "not confirmed". Used, Booked ahead and Forecast are computed per tenant, never stored. The muted line on the Funding tab becomes the figures, and the settings row supplies the mode and the percentage.
+
+## Open for the owner (none blocks phase 1)
+
+- Enforce mode refuses every activation today on the missing agreement evidence, so the budget rule shows only after that gate can open. Is that the order wanted?
+- Should a plan be deletable from the screen? The route exists for Admin and SuperAdmin and is audited, but nothing offers it yet.
+- The editor counts periods from the plan's first day and clamps month ends (a 31 January start: a first period ending 27 February). Is that how the NDIA releases funding for a plan that starts on the 29th, 30th or 31st? The server only requires the periods to run on without a gap.
+- From phase 2 and 3: whether the shift claim engine should move to phase B pricing, whether short-notice cancellations should bill and record a notice date, the 90-day claim limit from December 2026 as a "claim clock" warning, and a participant-facing budget statement.
