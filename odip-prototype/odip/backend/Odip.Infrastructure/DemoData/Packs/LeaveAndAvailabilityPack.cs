@@ -45,9 +45,9 @@ public sealed class LeaveAndAvailabilityPack : IDemoPack
         var newAvailability = availability.Where(a => !existingAvailability.Contains(a.Id)).ToList();
 
         // The app holds a leave request to (staff member, type, first day, last day), and a recurring rule to (staff member, day, times, effective from and to), among those not
-        // cancelled or declined: a second identical request is a 409 ("An identical request already exists."), from the coordinator's form, the staff portal and an approval's edit
-        // alike. A request a person made first holds the key, and the top-up writes none beside it (PR 1 audit); one that is itself cancelled or declined is outside the key and is
-        // written as ever. The legacy availability rows have no such rule.
+        // cancelled or declined: a second identical request is a 409 ("An identical request already exists."), from the coordinator's form, the staff portal and the coordinator's
+        // edit of a Pending or Approved request alike (so a pair of them also makes the edit of either answer 409). A request a person made first holds the key, and the top-up writes
+        // none beside it (PR 1 audit); one that is itself cancelled or declined is outside the key and is written as ever. The legacy availability rows have no such rule.
         newLeave = await WithoutHeldLeaveAsync(run, newLeave, ct);
         newRules = await WithoutHeldRulesAsync(run, newRules, ct);
 
