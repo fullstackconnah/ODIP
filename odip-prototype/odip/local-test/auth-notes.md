@@ -178,4 +178,5 @@ For all practical "give me the widest access" testing, mint a token with
   the count). General API calls are limited to 100/minute per IP (`"api"` policy). All
   irrelevant for our flow since we skip `/exchange` entirely and mint JWTs directly, but
   could bite if any test script does call `/exchange`. A refused exchange is a 401 whose
-  body's `code` says why (see `docs/runbooks/sign-in-trouble.md`).
+  body's `code` says why (see the repo-root `docs/runbooks/sign-in-trouble.md`, not
+  `odip-prototype/odip/docs/`).

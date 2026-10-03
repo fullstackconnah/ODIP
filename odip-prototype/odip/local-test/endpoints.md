@@ -12,7 +12,7 @@ Legend: **SA**=SuperAdmin, **A**=Admin, **C**=Coordinator, **SW**=SupportWorker,
 for role **RO** globally regardless of what's listed below.
 
 ## AuthController — `api/v1/auth` (no class-level `[Authorize]`)
-- POST `/exchange` — Anonymous (a flood guard of 60 requests / 5 min per IP, and a lockout after 10 FAILED exchanges in 15 min) — exchange a Firebase ID token for an Odip backend JWT (issues `odip_jwt` cookie + returns token in body). A refusal is a 401 whose body's `code` says why (`InvalidToken`, `EmailNotVerified`, `ProviderNotAllowed`, `NoOdipAccount`, `Ambiguous`, `TenantInactive`), or a 429 (`LockedOut`, with `Retry-After`); see `docs/runbooks/sign-in-trouble.md`
+- POST `/exchange` — Anonymous (a flood guard of 60 requests / 5 min per IP, and a lockout after 10 FAILED exchanges in 15 min) — exchange a Firebase ID token for an Odip backend JWT (issues `odip_jwt` cookie + returns token in body). A refusal is a 401 whose body's `code` says why (`InvalidToken`, `EmailNotVerified`, `ProviderNotAllowed`, `NoOdipAccount`, `Ambiguous`, `TenantInactive`), or a 429 (`LockedOut`, with `Retry-After`); see the repo-root `docs/runbooks/sign-in-trouble.md` (not `odip-prototype/odip/docs/`)
 - POST `/logout` — Authenticated — clears the `odip_jwt` cookie
 
 ## AuditController — `api/v1/audit` — class: `[Authorize(Roles = "Admin,SuperAdmin")]`

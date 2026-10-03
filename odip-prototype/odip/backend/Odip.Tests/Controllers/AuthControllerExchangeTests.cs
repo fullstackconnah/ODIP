@@ -363,11 +363,12 @@ public class AuthControllerExchangeTests
     // free retry, and the lockout could be dodged by aiming at that one case. A refusal never stamps LastLoginAt either, the record of when someone
     // last got in, because nobody did.
 
-    private static async Task AssertRefusalsSpendTheFailureBudget(OdipDbContext db, string tokenEmail, bool emailVerified = true, string? signInProvider = "password")
-    {
-        // One controller, so one client address and one budget for every attempt.
-        var controller = CreateController(db, tokenEmail, emailVerified, signInProvider: signInProvider);
+    private static Task AssertRefusalsSpendTheFailureBudget(OdipDbContext db, string tokenEmail, bool emailVerified = true, string? signInProvider = "password") =>
+        AssertRefusalsSpendTheFailureBudget(CreateController(db, tokenEmail, emailVerified, signInProvider: signInProvider));
 
+    // One controller, so one client address and one budget for every attempt.
+    private static async Task AssertRefusalsSpendTheFailureBudget(AuthController controller)
+    {
         for (var attempt = 0; attempt < LoginAttemptTracker.MaxFailures; attempt++)
             Assert.IsType<UnauthorizedObjectResult>((await Exchange(controller)).Result);
 
@@ -421,6 +422,27 @@ public class AuthControllerExchangeTests
         SeedUser(db, SeedTenant(db).Id, "platform.admin@platform.example.com", UserRole.SuperAdmin, isActive: false);
 
         await AssertRefusalsSpendTheFailureBudget(db, "platform.admin@platform.example.com");
+    }
+
+    // The generic InvalidToken has three ways in, and each is a way to guess at the exchange: a token Firebase will not vouch for, one with no email, and one
+    // whose provider cannot be read. All three go through Rejected() like the rest, so none is a free retry.
+    [Fact]
+    public async Task A_token_Firebase_will_not_vouch_for_spends_from_the_failure_budget()
+    {
+        using var db = CreateDb();
+
+        await AssertRefusalsSpendTheFailureBudget(CreateController(db, new RefusingVerifier(FirebaseTestExceptions.WithCode(AuthErrorCode.InvalidIdToken))));
+    }
+
+    [Theory]
+    [InlineData("""{"email_verified":true,"firebase":{"sign_in_provider":"password"}}""")]                    // no email in it
+    [InlineData("""{"email":"jane.smith@gmail.com","email_verified":true}""")]                                 // no provider it can read
+    public async Task A_token_that_is_missing_what_the_exchange_needs_spends_from_the_failure_budget(string payload)
+    {
+        using var db = CreateDb();
+        SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
+
+        await AssertRefusalsSpendTheFailureBudget(CreateController(db, FirebaseTestClaims.FromPayload(payload)));
     }
 
     [Fact]

@@ -2717,7 +2717,9 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && rel === 'auth/exchange') {
       // A REFUSAL, as the real exchange gives one (Odip.Api/Services/ExchangeRefusal.cs): a 401 whose body's `code` says why, or a 429 with Retry-After for a
       // locked-out client. The mock has no Firebase, so a script posts a magic token to see the shape: { "idToken": "refuse:EmailNotVerified" }.
-      const refusedCode = typeof body.idToken === 'string' && body.idToken.startsWith('refuse:') ? body.idToken.slice('refuse:'.length) : null
+      // `body` is whatever JSON was posted, and the literal `null` is JSON: reading idToken off it would throw and take the mock down.
+      const idToken = body?.idToken
+      const refusedCode = typeof idToken === 'string' && idToken.startsWith('refuse:') ? idToken.slice('refuse:'.length) : null
       if (refusedCode && Object.hasOwn(EXCHANGE_REFUSALS, refusedCode)) {
         const lockedOut = refusedCode === 'LockedOut'
         res.writeHead(lockedOut ? 429 : 401, {

@@ -327,7 +327,8 @@ owner decision (collected under Open Flags at the end).
     only its holder can do. Before deploy, check the Firebase console: only Email/Password
     should be enabled today.
   - A refused sign-in says why on the login page (a code on the exchange's 401). What each
-    message means and how to verify an account safely: `docs/runbooks/sign-in-trouble.md`.
+    message means and how to verify an account safely: the runbook at the repo root,
+    `docs/runbooks/sign-in-trouble.md` (not under `odip-prototype/odip/docs/`).
   - The SSO plan above retires this whole flow. With the email/password provider disabled
     there is no password to set, so the set-password emails, the two sign-in-account
     routes, the temporary-password option and the verified-at-creation rule go with it.
