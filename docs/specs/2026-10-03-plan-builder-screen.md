@@ -21,7 +21,9 @@ saves it whole.
 - `POST participants/:id/service-agreement-drafts` takes blocks or hand-typed lines, never both (`Lines` is no longer required to have one). With blocks it checks the period
   and the block count, that each block's delivery state is the agreement's, and the requirements, re-prices through `PlanPricingService`, and refuses with the engine's own
   words when a block cannot be priced at all (`InvalidInput`, `RegistrationGroupNotHeld`, `StaLegacyNotSupported`). Anything softer (a Review line, a catalogue gap) is saved
-  with the revision. The body is capped at 1 MiB and rate limited like the other API routes.
+  with the revision. The body is capped at 1 MiB and rate limited like the other API routes. A representative with a control character (a NUL, a line break, a tab) is refused with a 400 that says
+  so, after the participant is found, and nothing is saved: the database would have refused it as a 500, as it did a control character in a block id; the screen turns a tab or a line break pasted
+  into the box into a space and drops any other, so a person never meets it.
 - **Two coordinators.** The body may carry `baseVersion`, the version the working copy started from (0 for a participant with none). If a newer one has been saved since, the answer is a 409
   with `code: "draft-version-conflict"` and the newer version in `data.currentVersion`, and nothing is saved, so a save never makes one coordinator's plan the newest over another's. Two saves
   racing past that check meet the unique index on (tenant, participant, version) and get the same 409, not a 500. A body without `baseVersion` is saved as before.
