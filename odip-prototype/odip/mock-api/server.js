@@ -9,6 +9,7 @@
 
 const http = require('http')
 const planPricing = require('./planPricing')
+const fundingModule = require('./funding')
 
 const PORT = Number(process.env.MOCK_PORT) || 5062
 const BASE = '/api/v1'
@@ -2227,7 +2228,11 @@ function saveDraft(participantId, body) {
   }
 })()
 
+// Participant budgets (phase 1): the plan record, its hint from the Billing funding sources, the support category list and the budget settings. See funding.js.
+const funding = fundingModule.create({ respond, fundingSources })
+
 const routes = [
+  ...funding.get,
   ['dashboard/summary', () => dashboardSummary],
   ['plan-pricing/settings', () => planPricingSettings],
   // The newest revision in full, the older ones as summaries; one revision in full by id.
@@ -2470,6 +2475,7 @@ const routes = [
 // with its new status/decision fields, plus the one pure-preview endpoint (staff-assignments/check)
 // that must return an array of findings, not an echoed object.
 const postRoutes = [
+  ...funding.post,
   ['plan-pricing/quote', (body) => {
     if (!Array.isArray(body.blocks)) return respond(400, failEnvelope(null, ['The request needs a list of blocks.']))
     if (!body.periodFrom || !body.periodTo || body.periodFrom > body.periodTo) return respond(400, failEnvelope(null, ['The agreement period ends before it starts.']))
@@ -2612,6 +2618,7 @@ const postRoutes = [
 // echo fallback, per this task's "existing PUT /staff-availability/{id} unchanged" note.
 const putRoutes = [
   ...packageRoutesPut,
+  ...funding.put,
   ['plan-pricing/settings', (body) => {
     for (const rate of [body.travelKmRateStandard, body.travelKmRateAccessible]) {
       if (typeof rate === 'number' && (rate < 0 || rate > 5)) return respond(400, failEnvelope(null, ['The travel rate per kilometre must be between $0 and $5.']))
@@ -2876,7 +2883,7 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === 'DELETE') {
-      for (const [pattern, handler] of packageRoutesDelete) {
+      for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete]) {
         const params = matchRoute(pattern, segments)
         if (params) {
           sendResult(res, handler(...params, body))
