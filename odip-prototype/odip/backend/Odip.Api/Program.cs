@@ -171,6 +171,11 @@ builder.Services.AddSingleton<Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter>
 builder.Services.AddScoped<Odip.Api.RateLimiting.PlanQuoteConcurrencyFilter>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ServiceAgreementDraftService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ElectronicSigningEvidenceService>();
+// Plan builder phase D: "Mark approved" makes roster patterns and open shifts. The one generator is shared with the Generate button and the daily top-up; the gate is the readiness check the
+// roster writes use (the API owns it, so the infrastructure services reach it through this seam); the top-up job itself is registered below with the other hosted services.
+builder.Services.AddSingleton<Odip.Infrastructure.Rostering.IRosterPlacementGate, Odip.Api.Services.RosterPlacementGate>();
+builder.Services.AddSingleton<Odip.Infrastructure.Rostering.RosterShiftGenerator>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.ServiceAgreementApprovalService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.DemoJourneySimulationService>();
 // DOC-01 — Intake Form / Participant Profile PDF exports.
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantDocumentService>();
