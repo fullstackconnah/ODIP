@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -1157,9 +1158,22 @@ public class RosteringController : ControllerBase
         pattern.EffectiveFrom = dto.EffectiveFrom; pattern.EffectiveTo = dto.EffectiveTo; pattern.IsActive = dto.IsActive;
         pattern.Notes = dto.Notes;
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        // An agreement pattern is one weekday of one block for one worker of one revision (a unique key: the approval can never make it twice). Moving it to a day that block already has meets that key.
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: AgreementPatternKey })
+        {
+            return Conflict(ApiResponse<ShiftPatternDto>.Fail(AgreementPatternTakenMessage));
+        }
         return Ok(ApiResponse<ShiftPatternDto>.Ok(await LoadPatternDtoAsync(pattern.Id, ct)));
     }
+
+    /// <summary>The unique index on (source revision, block, weekday, worker slot) that keeps an approval from making a pattern twice (<c>OdipDbContext</c>, the partial index on agreement patterns).</summary>
+    private const string AgreementPatternKey = "IX_ShiftPatterns_SourceDraft_Block_Day_Slot";
+
+    private const string AgreementPatternTakenMessage = "This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.";
 
     /// <summary>Delete a pattern. Shifts already generated from it are left in place (provenance only, no cascade).</summary>
     [HttpDelete("patterns/{id:guid}")]
@@ -1187,8 +1201,16 @@ public class RosteringController : ControllerBase
         if (!(await ParticipantReadiness.CheckAsync(_db, pattern.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<GeneratePatternResultDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
-        var generated = await _generator.GenerateAsync(_db, pattern.ParticipantId, new[] { pattern.Id }, from, to, ct);
-        return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = generated.Created, Skipped = generated.Skipped }));
+        try
+        {
+            // A person's own window: it only moves how far the pattern has been generated when it joins on to what was covered, so the daily top-up can still fill a gap before it.
+            var generated = await _generator.GenerateAsync(_db, pattern.ParticipantId, new[] { pattern.Id }, from, to, ct, onlyWhenContiguous: true);
+            return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = generated.Created, Skipped = generated.Skipped }));
+        }
+        catch (RosterBusyException busy)
+        {
+            return Conflict(ApiResponse<GeneratePatternResultDto>.Fail(busy.Message));
+        }
     }
 
     // ══════════════════════════════════════════════════════════════

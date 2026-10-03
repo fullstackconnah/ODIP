@@ -651,6 +651,142 @@ public class ServiceAgreementApprovalServiceTests
         Assert.Single(preview.OverlappingPatterns);
     }
 
+    [Fact]
+    public async Task A_night_that_runs_into_the_next_day_meets_a_pattern_that_starts_that_day_and_one_that_only_touches_it_does_not()
+    {
+        await using var f = await SetUpAsync();
+        var clashing = HandMade(f, DayOfWeek.Friday, 20, 6, p => p.EndsNextDay = true);                           // Friday 20:00 to Saturday 06:00
+        var touching = HandMade(f, DayOfWeek.Friday, 20, 2, p => p.EndsNextDay = true);                           // Friday 20:00 to Saturday 02:00: ends as the new block starts
+        var draft = await AddRevisionAsync(f, 1, new[] { Block("early", PlanSupportType.PersonalCare, DayOfWeek.Saturday, T(2), T(4)) });      // Saturday 02:00 to 04:00
+
+        var preview = (await PreviewAsync(f, draft)).Preview!;
+
+        Assert.Equal(new[] { clashing.Id }, preview.OverlappingPatterns.Select(p => p.Id));
+        Assert.DoesNotContain(touching.Id, preview.OverlappingPatterns.Select(p => p.Id));
+    }
+
+    [Fact]
+    public async Task A_window_that_runs_past_saturday_night_meets_a_sunday_morning_pattern()
+    {
+        await using var f = await SetUpAsync();
+        var saturdayNight = HandMade(f, DayOfWeek.Saturday, 22, 2, p => p.EndsNextDay = true);                    // Saturday 22:00 to Sunday 02:00
+        var draft = await AddRevisionAsync(f, 1, new[] { Block("early", PlanSupportType.PersonalCare, DayOfWeek.Sunday, T(1), T(3)) });        // Sunday 01:00 to 03:00
+
+        var preview = (await PreviewAsync(f, draft)).Preview!;
+
+        Assert.Equal(new[] { saturdayNight.Id }, preview.OverlappingPatterns.Select(p => p.Id));
+    }
+
+    [Fact]
+    public async Task The_last_night_of_a_pattern_that_runs_on_past_midnight_meets_a_pattern_that_begins_that_next_day_and_nothing_a_week_later()
+    {
+        // Friday 20:00 to Saturday 06:00, last on Friday 30 October: its last night runs into Saturday 31 October.
+        async Task<(Fixture F, ShiftPattern Night, ServiceAgreementDraft Draft)> Setup(DateOnly start)
+        {
+            var f = await SetUpAsync();
+            var night = HandMade(f, DayOfWeek.Friday, 20, 6, p => { p.EndsNextDay = true; p.EffectiveTo = new DateOnly(2026, 10, 30); });
+            var draft = await AddRevisionAsync(f, 1, new[] { Block("early", PlanSupportType.PersonalCare, DayOfWeek.Saturday, T(2), T(4)) }, start: start, end: new DateOnly(2026, 12, 20));
+            return (f, night, draft);
+        }
+
+        var (meeting, night, begins) = await Setup(new DateOnly(2026, 10, 31));                // begins the day that last night runs into
+        var (clear, _, later) = await Setup(new DateOnly(2026, 11, 7));                        // a week later
+        await using var _1 = meeting;
+        await using var _2 = clear;
+
+        var meets = (await PreviewAsync(meeting, begins)).Preview!;
+        var misses = (await PreviewAsync(clear, later)).Preview!;
+
+        Assert.Equal(new[] { night.Id }, meets.OverlappingPatterns.Select(p => p.Id));
+        Assert.Empty(misses.OverlappingPatterns);
+    }
+
+    // ── How far shifts were made ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Approval_records_how_far_shifts_were_made_on_each_new_pattern_and_leaves_it_empty_when_none_were()
+    {
+        await using var f = await SetUpAsync();
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        await using var notActive = await SetUpAsync(active: false);
+        var onboarding = await AddRevisionAsync(notActive, 1, new[] { WeekdayBlock() });
+        await using var later = await SetUpAsync();
+        var beyond = await AddRevisionAsync(later, 1, new[] { WeekdayBlock() }, start: new DateOnly(2027, 1, 4), end: new DateOnly(2027, 3, 28));
+
+        await ApproveAsync(f, draft);
+        await ApproveAsync(notActive, onboarding);
+        await ApproveAsync(later, beyond);
+
+        Assert.All(await f.Db.ShiftPatterns.AsNoTracking().ToListAsync(), p => Assert.Equal(HorizonEnd, p.GeneratedThrough));      // today + 56 days, inside the agreement
+        Assert.All(await notActive.Db.ShiftPatterns.AsNoTracking().ToListAsync(), p => Assert.Null(p.GeneratedThrough));           // nothing was made: the top-up starts from today
+        Assert.All(await later.Db.ShiftPatterns.AsNoTracking().ToListAsync(), p => Assert.Null(p.GeneratedThrough));               // the agreement starts beyond the horizon
+    }
+
+    [Fact]
+    public async Task Moving_how_far_shifts_were_made_is_not_an_audited_change()
+    {
+        await using var f = await SetUpAsync(audited: true);
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        await ApproveAsync(f, draft);
+        var pattern = await f.Db.ShiftPatterns.FirstAsync();
+        var auditRows = await f.Db.AuditLogs.CountAsync();
+
+        pattern.GeneratedThrough = HorizonEnd.AddDays(7);
+        await f.Db.SaveChangesAsync();
+
+        Assert.Equal(auditRows, await f.Db.AuditLogs.CountAsync());
+        pattern.EffectiveTo = new DateOnly(2026, 12, 1);                                                          // a real change still is
+        await f.Db.SaveChangesAsync();
+        Assert.Equal(auditRows + 1, await f.Db.AuditLogs.CountAsync());
+    }
+
+    // ── Which old shifts are counted ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task Old_shifts_nobody_can_tidy_are_not_counted_one_under_way_one_handed_in_one_finished_or_a_day_already_past()
+    {
+        await using var f = await SetUpAsync();
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: new DateOnly(2026, 10, 1), end: new DateOnly(2026, 12, 20));
+        await ApproveAsync(f, v1);                                                                                // 40 shifts, 12 October to 4 December
+        var pattern = await f.Db.ShiftPatterns.FirstAsync(p => p.SourceDraftId == v1.Id);
+        // a shift of v1 on a day that is already past (Thursday 8 October) and four on later days in each status
+        f.Db.Shifts.Add(new Shift { Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = f.ParticipantId, ShiftPatternId = pattern.Id, ServiceDate = new DateOnly(2026, 10, 8), StartTime = T(9), EndTime = T(13), Status = ShiftStatus.Draft });
+        var later = await f.Db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 11, 2)).OrderBy(s => s.ServiceDate).ThenBy(s => s.Id).Take(3).ToListAsync();
+        later[0].Status = ShiftStatus.InProgress; later[1].Status = ShiftStatus.PendingReview; later[2].Status = ShiftStatus.Completed;
+        await f.Db.SaveChangesAsync();
+        var published = await f.Db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 11, 2) && s.Status == ShiftStatus.Draft).OrderBy(s => s.ServiceDate).ThenBy(s => s.Id).Take(2).ToListAsync();
+        published[0].Status = ShiftStatus.Published; published[1].UserId = Guid.NewGuid();                         // one published, one assigned
+        await f.Db.SaveChangesAsync();
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 10, 1), end: new DateOnly(2026, 12, 20));      // starts in the past
+
+        var counted = (await PreviewAsync(f, v2)).Preview!.OldShiftsRemaining;
+
+        // 12 October to 4 December is 40 shifts and the one on the 8th; none of those on or after 12 October is cancelled; three are not tidy-able, and the 8th is past
+        Assert.Equal((40 - 3 - 1, 1), (counted.Open, counted.Assigned));
+        Assert.Equal(new DateOnly(2026, 10, 12), counted.FirstDate);                                              // from today on, not from the day v2 starts
+    }
+
+    // ── The provider's own zone ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task The_providers_zone_is_the_approving_organisations_own_never_another_organisations_settings_row()
+    {
+        await using var f = await SetUpAsync();
+        // This organisation has no settings row (Sydney is the default); another one, in Perth, does. The context is a SuperAdmin's, so only the explicit organisation filter keeps that row out.
+        f.Db.ProviderSettings.RemoveRange(await f.Db.ProviderSettings.ToListAsync());
+        f.Db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = TenantB, State = "WA" });
+        await f.Db.SaveChangesAsync();
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: new DateOnly(2026, 10, 1), end: new DateOnly(2026, 12, 20));
+        f.Clock.Set(new DateTimeOffset(2026, 10, 9, 14, 0, 0, TimeSpan.Zero));                                    // Saturday 01:00 in Sydney, still Friday 22:00 in Perth
+
+        var preview = (await PreviewAsync(f, draft)).Preview!;
+        var outcome = await ApproveAsync(f, draft);
+
+        Assert.True(preview.CanApprove);                                                                          // Perth's zone would refuse a New South Wales agreement
+        Assert.Equal(ApprovalStatus.Approved, outcome.Status);
+        Assert.Equal(new DateOnly(2026, 10, 12), outcome.Approval!.FirstShiftDate);                               // Sydney's today is Saturday the 10th; Perth's Friday the 9th would give a shift that day
+    }
+
     // ── Concurrency ───────────────────────────────────────────────────────────────
 
     private sealed class ApprovalRaceInterceptor(Func<Task> winnerApproves) : SaveChangesInterceptor

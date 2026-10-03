@@ -150,6 +150,13 @@ public class ShiftPattern : ITenantEntity
 
     /// <summary>What the shifts of this pattern ask of a worker, as the JSON of <c>DraftBlockRequirementsDto</c>; copied onto each shift it generates. Null on a pattern that asks for nothing.</summary>
     public string? RequirementsJson { get; set; }
+
+    /// <summary>
+    /// The last day a generation has covered for this pattern (inclusive, held to the pattern's own end), set by the one generator whoever asked for it: an approval, the daily top-up or the Generate
+    /// button. The daily top-up only extends from the day after it, so a shift a coordinator deleted inside, or at the end of, what was covered is never made again; a Generate over the days is the
+    /// way to ask for them. Null while nothing has been generated. Bookkeeping, not audited.
+    /// </summary>
+    public DateOnly? GeneratedThrough { get; set; }
 }
 
 /// <summary>

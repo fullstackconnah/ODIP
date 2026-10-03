@@ -87,7 +87,7 @@ public class DemoUniqueIndexAccountingTests
             "The same lookup (DemoQueries.ActiveRuleKeysOf).",
             "DemoPr1HumanRowsTests.AnEmilyTuesdayRuleAPersonMadeFirst_HoldsTheKeyUnlessItIsCancelledOrDeclined"),
 
-        ["Shift|(pattern, date) (RosteringController.GeneratePattern skips a date that already carries a shift of the pattern, whatever its status)"] = new(
+        ["Shift|(pattern, date) (RosterShiftGenerator, which the Generate button, an approval and the daily top-up all use, skips a date that already carries a shift of the pattern, whatever its status)"] = new(
             "The roster pack asks for the dates its pattern shifts would land on (DemoQueries.PatternDatesOf) and places none where a shift of the pattern stands, and moves forward only the shifts it made.",
             "DemoRosterBesideAppShiftsTests.ADraftTheAppGeneratedForADemoPatternBeyondTheWindow_IsNotDoubledWhenTheWindowReachesIt",
             "DemoRosterBesideAppShiftsTests.APastDraftTheAppGeneratedForADemoPattern_IsNotCancelledByTheTopUp"),

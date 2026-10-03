@@ -17,6 +17,12 @@ namespace Odip.Infrastructure.Migrations
                 type: "jsonb",
                 nullable: true);
 
+            migrationBuilder.AddColumn<DateOnly>(
+                name: "GeneratedThrough",
+                table: "ShiftPatterns",
+                type: "date",
+                nullable: true);
+
             migrationBuilder.AddColumn<string>(
                 name: "RequirementsJson",
                 table: "ShiftPatterns",
@@ -135,6 +141,10 @@ namespace Odip.Infrastructure.Migrations
             migrationBuilder.DropColumn(
                 name: "RequirementsJson",
                 table: "Shifts");
+
+            migrationBuilder.DropColumn(
+                name: "GeneratedThrough",
+                table: "ShiftPatterns");
 
             migrationBuilder.DropColumn(
                 name: "RequirementsJson",

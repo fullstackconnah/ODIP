@@ -132,9 +132,10 @@ public class ServiceAgreementDraftsController : ControllerBase
 
     /// <summary>
     /// Approves the NEWEST revision for rostering (phase D), in one transaction: records who and when, makes the weekly roster patterns of its blocks, ends the patterns of the revision before it the
-    /// day before this one starts, and generates the next eight weeks of open shifts when the participant may be rostered. No shift that exists is changed. 200 with the revision (its
-    /// <c>approval</c> and the <c>oldShiftsRemaining</c> counts); 400 with every reason in <c>errors</c>; 403 for a role that may not approve; 409 when a newer revision exists. Approving an
-    /// approved revision again is a 200 with the existing approval and writes nothing.
+    /// day before this one starts, and generates the open shifts up to the horizon (<c>RosterTopUp:HorizonDays</c>, 56 days by default) when the participant may be rostered. No shift that exists is changed. 200 with
+    /// the revision (its <c>approval</c> and the <c>oldShiftsRemaining</c> counts); 400 with every reason in <c>errors</c>; 403 for a role that may not approve; 409 when a newer revision exists
+    /// (<c>draft-superseded</c>) or another change to the participant's roster was still running (<c>roster-busy</c>; nothing was changed, try again). Approving an approved revision again is a 200 with
+    /// the existing approval and writes nothing.
     /// </summary>
     [HttpPost("{id:guid}/approve")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -154,6 +155,8 @@ public class ServiceAgreementDraftsController : ControllerBase
                 return Conflict(new ApiResponse<DraftVersionConflictDto> { Success = false, Data = new DraftVersionConflictDto { CurrentVersion = outcome.NewestVersion ?? 0 }, Errors = outcome.Errors!.ToList(), Code = "draft-superseded" });
             case ApprovalStatus.Refused:
                 return BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail(outcome.Errors!.ToList()));
+            case ApprovalStatus.Busy:
+                return Conflict(new ApiResponse<ServiceAgreementDraftDto> { Success = false, Errors = outcome.Errors!.ToList(), Code = "roster-busy" });
             default:
                 return Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(outcome.Draft!) with { Approval = ApprovalOf(outcome.Approval), OldShiftsRemaining = outcome.OldShifts }));
         }

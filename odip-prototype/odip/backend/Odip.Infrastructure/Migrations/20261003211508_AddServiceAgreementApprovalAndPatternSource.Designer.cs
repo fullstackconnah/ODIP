@@ -13,7 +13,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261003165739_AddServiceAgreementApprovalAndPatternSource")]
+    [Migration("20261003211508_AddServiceAgreementApprovalAndPatternSource")]
     partial class AddServiceAgreementApprovalAndPatternSource
     {
         /// <inheritdoc />
@@ -5367,6 +5367,9 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<bool>("EndsNextDay")
                         .HasColumnType("boolean");
+
+                    b.Property<DateOnly?>("GeneratedThrough")
+                        .HasColumnType("date");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");

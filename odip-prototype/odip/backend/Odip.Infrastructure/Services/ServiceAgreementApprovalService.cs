@@ -33,6 +33,8 @@ public enum ApprovalStatus
     NotAnApprover,
     /// <summary>A newer revision exists, so this one cannot be approved.</summary>
     Superseded,
+    /// <summary>Another change to the participant's roster held its lock for too long: nothing was changed, and trying again is right.</summary>
+    Busy,
 }
 
 public sealed record ApprovalOutcome(
@@ -103,6 +105,11 @@ public sealed class ServiceAgreementApprovalService
         {
             return await ApproveCoreAsync(tenantId, found.Value.Draft, found.Value.Participant, acknowledgeOverlaps, caller, ct);
         }
+        // Another change to the participant's roster held the lock for too long: nothing was changed.
+        catch (RosterBusyException busy)
+        {
+            return new ApprovalOutcome(ApprovalStatus.Busy, Errors: new[] { busy.Message });
+        }
         // A request that got past the lock and the checks at the same moment as another lost to the unique approval per revision (or to the unique pattern key): the transaction has been rolled back,
         // nothing of this one is kept, and the answer is the winner's approval, as if this had been the second request to arrive.
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
@@ -122,7 +129,7 @@ public sealed class ServiceAgreementApprovalService
 
         // Everything below is read and written holding the participant's roster lock (PostgreSQL): a generation, or another approval, that is under way finishes first, and what this one reads is
         // what it commits. The lock also makes a second approval of the same revision wait, and find the first one's approval.
-        await using var held = await RosterGenerationLock.AcquireAsync(_db, draft.ParticipantId, ct);
+        await using var held = await RosterGenerationLock.AcquireAsync(_db, draft.ParticipantId, ct, _generator.LockWait);
         if (await _db.ServiceAgreementDraftApprovals.AsNoTracking().AnyAsync(a => a.DraftId == draft.Id, ct))
             return await ReadAsync(ApprovalStatus.AlreadyApproved, tenantId, draft, null, ct);
 
@@ -168,6 +175,8 @@ public sealed class ServiceAgreementApprovalService
         public required ServiceAgreementDraft Draft { get; init; }
         public ServiceAgreementDraftApproval? Existing { get; set; }
         public int NewestVersion { get; set; }
+        /// <summary>The provider's calendar date now.</summary>
+        public DateOnly Today { get; set; }
         public bool Superseded { get; set; }
         public List<ApprovalReasonDto> Reasons { get; } = new();
         public IReadOnlyList<ShiftPattern> NewPatterns { get; set; } = Array.Empty<ShiftPattern>();
@@ -205,6 +214,7 @@ public sealed class ServiceAgreementApprovalService
         // The provider's zone and today. Read by the organisation asked about, never by "the first settings row": a SuperAdmin's context sees every organisation's.
         var provider = ProviderTimeZoneResolver.FromState(await _db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => p.State).FirstOrDefaultAsync(ct));
         var today = ProviderLocalTime.TodayIn(_clock.GetUtcNow().UtcDateTime, provider.Zone);
+        plan.Today = today;
         plan.From = draft.AgreementStartDate > today ? draft.AgreementStartDate : today;
         plan.HorizonEnd = Earlier(draft.AgreementEndDate, today.AddDays(_options.HorizonDays));
 
@@ -213,7 +223,7 @@ public sealed class ServiceAgreementApprovalService
         if (plan.Existing is not null)
         {
             plan.Reasons.Add(new ApprovalReasonDto { Code = "AlreadyApproved", Message = string.Create(CultureInfo.InvariantCulture, $"This revision was approved for rostering by {plan.Existing.ApprovedByName} on {plan.Existing.ApprovedAt:yyyy-MM-dd}.") });
-            plan.OldShifts = await OldShiftsAsync(tenantId, draft, ct);
+            plan.OldShifts = await OldShiftsAsync(tenantId, draft, today, ct);
             return plan;
         }
 
@@ -306,7 +316,7 @@ public sealed class ServiceAgreementApprovalService
             var old = await _db.ShiftPatterns.Where(p => p.TenantId == tenantId && p.ParticipantId == draft.ParticipantId && p.SourceDraftId != null && earlierIds.Contains(p.SourceDraftId.Value)).ToListAsync(ct);
             plan.ToEnd = old.Where(p => p.EffectiveTo is null || p.EffectiveTo > plan.EndsOn).ToList();
             plan.EndsFromVersion = plan.ToEnd.Count > 0 ? plan.ToEnd.Max(p => versionOf[p.SourceDraftId!.Value]) : null;
-            plan.OldShifts = await OldShiftsAsync(tenantId, draft, ct);
+            plan.OldShifts = await OldShiftsAsync(tenantId, draft, plan.Today, ct);
         }
 
         if (plan.NewPatterns.Count > 0)
@@ -317,8 +327,11 @@ public sealed class ServiceAgreementApprovalService
         }
     }
 
-    /// <summary>The shifts of the participant's earlier approved revisions dated on or after this one starts that still stand (not cancelled, not completed): open when nobody is assigned.</summary>
-    private async Task<OldShiftsRemainingDto> OldShiftsAsync(Guid tenantId, ServiceAgreementDraft draft, CancellationToken ct)
+    /// <summary>
+    /// The shifts of the participant's earlier approved revisions dated from the day this one starts (or today, when that is later) that a coordinator can still tidy: drafts and published shifts, not one
+    /// that is under way, handed in for review, finished or cancelled. Open when nobody is assigned.
+    /// </summary>
+    private async Task<OldShiftsRemainingDto> OldShiftsAsync(Guid tenantId, ServiceAgreementDraft draft, DateOnly today, CancellationToken ct)
     {
         var earlier = await _db.ServiceAgreementDraftApprovals.AsNoTracking()
             .Where(a => a.TenantId == tenantId && a.ParticipantId == draft.ParticipantId && a.DraftVersion < draft.Version)
@@ -327,9 +340,10 @@ public sealed class ServiceAgreementApprovalService
 
         var earlierIds = earlier.Select(a => a.DraftId).ToList();
         var patternIds = await _db.ShiftPatterns.AsNoTracking().Where(p => p.TenantId == tenantId && p.ParticipantId == draft.ParticipantId && p.SourceDraftId != null && earlierIds.Contains(p.SourceDraftId.Value)).Select(p => p.Id).ToListAsync(ct);
-        var from = draft.AgreementStartDate;
+        // What a coordinator can still tidy by hand: a shift nobody has started, handed in or finished, on a day that is not past. (The new revision may start in the past.)
+        var from = draft.AgreementStartDate > today ? draft.AgreementStartDate : today;
         var shifts = patternIds.Count == 0 ? new() : await _db.Shifts.AsNoTracking()
-            .Where(s => s.ShiftPatternId != null && patternIds.Contains(s.ShiftPatternId.Value) && s.ServiceDate >= from && s.Status != ShiftStatus.Cancelled && s.Status != ShiftStatus.Completed)
+            .Where(s => s.ShiftPatternId != null && patternIds.Contains(s.ShiftPatternId.Value) && s.ServiceDate >= from && (s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.Published))
             .Select(s => new { s.UserId, s.ServiceDate }).ToListAsync(ct);
         return new OldShiftsRemainingDto
         {
@@ -408,35 +422,56 @@ public sealed class ServiceAgreementApprovalService
     {
         var fresh = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery().FirstAsync(x => x.Id == draft.Id, ct);
         var approval = await _db.ServiceAgreementDraftApprovals.AsNoTracking().FirstAsync(a => a.DraftId == draft.Id, ct);
-        return new ApprovalOutcome(status, fresh, approval, oldShifts ?? await OldShiftsAsync(tenantId, draft, ct));
+        return new ApprovalOutcome(status, fresh, approval, oldShifts ?? await OldShiftsAsync(tenantId, draft, await ProviderTodayAsync(tenantId, ct), ct));
     }
 
     // ── Small rules ───────────────────────────────────────────────────────────────
 
     private static DateOnly Earlier(DateOnly a, DateOnly b) => a < b ? a : b;
 
+    private async Task<DateOnly> ProviderTodayAsync(Guid tenantId, CancellationToken ct)
+    {
+        var provider = ProviderTimeZoneResolver.FromState(await _db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => p.State).FirstOrDefaultAsync(ct));
+        return ProviderLocalTime.TodayIn(_clock.GetUtcNow().UtcDateTime, provider.Zone);
+    }
+
     private static string OverlapMessage(int count) => count == 1
         ? "A hand-made pattern of this participant overlaps one this approval makes. It is not changed or ended. Tick the box to confirm that, then approve."
         : string.Create(CultureInfo.InvariantCulture, $"{count} hand-made patterns of this participant overlap ones this approval makes. They are not changed or ended. Tick the box to confirm that, then approve.");
 
+    private const int MinutesInWeek = 7 * 1440;
+
     /// <summary>
-    /// Two patterns of the same weekday whose dates and times overlap. A weekly window is minutes from midnight of its starting day, running past 1440 when it ends the next day; windows that only touch
-    /// (one ends when the other starts) do not overlap. Only the starting weekday is compared, as a pattern is made for it.
+    /// Two patterns whose dates and weekly times overlap. A weekly window is minutes from midnight at the start of Sunday, so a night that runs into the next day is the minutes it really covers (a
+    /// Friday 20:00 to Saturday 06:00 meets a Saturday 02:00 to 04:00), and windows are also compared a week apart so one that runs past Saturday night meets a Sunday morning. Windows that only touch
+    /// (one ends when the other starts) do not overlap. A pattern is on from its first to its last date, a day longer when its last night runs on into the next day.
     /// </summary>
     private static bool Overlap(ShiftPattern a, ShiftPattern b)
     {
-        if (a.DayOfWeek != b.DayOfWeek) return false;
-        if (a.EffectiveTo is { } aTo && aTo < b.EffectiveFrom) return false;
-        if (b.EffectiveTo is { } bTo && bTo < a.EffectiveFrom) return false;
+        if (!DatesMeet(a, b)) return false;
         var (aStart, aEnd) = Window(a);
         var (bStart, bEnd) = Window(b);
-        return aStart < bEnd && bStart < aEnd;
+        for (var week = -1; week <= 1; week++)
+        {
+            var offset = week * MinutesInWeek;
+            if (aStart < bEnd + offset && bStart + offset < aEnd) return true;
+        }
+        return false;
     }
 
+    private static bool DatesMeet(ShiftPattern a, ShiftPattern b)
+    {
+        var aLast = a.EffectiveTo is { } aTo ? aTo.AddDays(a.EndsNextDay ? 1 : 0) : (DateOnly?)null;
+        var bLast = b.EffectiveTo is { } bTo ? bTo.AddDays(b.EndsNextDay ? 1 : 0) : (DateOnly?)null;
+        return (aLast is null || b.EffectiveFrom <= aLast) && (bLast is null || a.EffectiveFrom <= bLast);
+    }
+
+    /// <summary>The minutes from the start of Sunday a pattern's weekly window begins and ends: its weekday's midnight plus its times, running on past midnight when it ends the next day.</summary>
     private static (int Start, int End) Window(ShiftPattern pattern)
     {
-        var start = pattern.StartTime.Hour * 60 + pattern.StartTime.Minute;
-        var end = pattern.EndTime.Hour * 60 + pattern.EndTime.Minute;
-        return (start, pattern.EndsNextDay ? end + 1440 : end);
+        var dayStart = (int)pattern.DayOfWeek * 1440;
+        var start = dayStart + pattern.StartTime.Hour * 60 + pattern.StartTime.Minute;
+        var end = dayStart + pattern.EndTime.Hour * 60 + pattern.EndTime.Minute + (pattern.EndsNextDay ? 1440 : 0);
+        return (start, end);
     }
 }

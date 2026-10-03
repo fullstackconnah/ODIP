@@ -231,6 +231,104 @@ public class RosterShiftGeneratorTests
         Assert.Equal(2, await db.Shifts.CountAsync());
     }
 
+    // ── How far generation has reached ────────────────────────────────────────────
+
+    private static DateOnly D(int month, int day) => new(2026, month, day);
+
+    [Fact]
+    public async Task Each_generation_records_how_far_it_reached_held_to_the_patterns_end_and_never_moves_it_back()
+    {
+        var (db, participantId) = await SeedAsync(id => Pattern(id));                  // 1 October to 31 December
+        await using var _ = db;
+        var pattern = await db.ShiftPatterns.SingleAsync();
+        var generator = new RosterShiftGenerator();
+        Assert.Null(pattern.GeneratedThrough);
+
+        await generator.GenerateAsync(db, participantId, new[] { pattern.Id }, D(10, 5), D(10, 25), CancellationToken.None);
+        Assert.Equal(D(10, 25), (await db.ShiftPatterns.AsNoTracking().SingleAsync()).GeneratedThrough);
+
+        await generator.GenerateAsync(db, participantId, new[] { pattern.Id }, D(10, 5), D(10, 12), CancellationToken.None);          // an earlier window
+        Assert.Equal(D(10, 25), (await db.ShiftPatterns.AsNoTracking().SingleAsync()).GeneratedThrough);
+
+        await generator.GenerateAsync(db, participantId, new[] { pattern.Id }, D(10, 26), new DateOnly(2027, 2, 28), CancellationToken.None);   // past the pattern's end
+        Assert.Equal(D(12, 31), (await db.ShiftPatterns.AsNoTracking().SingleAsync()).GeneratedThrough);
+    }
+
+    [Fact]
+    public async Task A_window_outside_the_pattern_and_a_pattern_switched_off_record_nothing()
+    {
+        var (db, participantId) = await SeedAsync(
+            id => Pattern(id, DayOfWeek.Monday, p => p.EffectiveTo = D(10, 11)),        // ended on the 11th
+            id => Pattern(id, DayOfWeek.Tuesday),
+            id => Pattern(id, DayOfWeek.Wednesday, p => p.IsActive = false));
+        await using var _ = db;
+        var ended = await db.ShiftPatterns.SingleAsync(p => p.DayOfWeek == DayOfWeek.Monday);
+        var generator = new RosterShiftGenerator();
+
+        await generator.GenerateAsync(db, participantId, new[] { ended.Id }, D(10, 12), D(10, 25), CancellationToken.None);      // after it ended
+        var tuesday = await db.ShiftPatterns.SingleAsync(p => p.DayOfWeek == DayOfWeek.Tuesday);
+        await generator.GenerateAsync(db, participantId, new[] { tuesday.Id }, D(9, 1), D(9, 20), CancellationToken.None);       // before it began
+        var off = await db.ShiftPatterns.SingleAsync(p => p.DayOfWeek == DayOfWeek.Wednesday);
+        await generator.GenerateAsync(db, participantId, new[] { off.Id }, D(10, 5), D(10, 25), CancellationToken.None);         // it is switched off: nothing was covered
+
+        Assert.All(await db.ShiftPatterns.AsNoTracking().ToListAsync(), p => Assert.Null(p.GeneratedThrough));
+    }
+
+    [Fact]
+    public async Task A_persons_window_that_leaves_a_gap_after_what_was_covered_does_not_move_it_but_one_that_joins_on_does_and_the_top_up_always_does()
+    {
+        var (db, participantId) = await SeedAsync(id => Pattern(id));
+        await using var _ = db;
+        var pattern = await db.ShiftPatterns.SingleAsync();
+        var generator = new RosterShiftGenerator();
+        async Task<DateOnly?> ReachedAsync() => (await db.ShiftPatterns.AsNoTracking().SingleAsync()).GeneratedThrough;
+        await generator.GenerateAsync(db, participantId, new[] { pattern.Id }, D(10, 5), D(10, 25), CancellationToken.None);
+
+        // A Generate button over a later block of days: the days between would never be reached by the top-up if it were recorded.
+        await generator.GenerateAsync(db, participantId, new[] { pattern.Id }, D(11, 9), D(11, 30), CancellationToken.None, onlyWhenContiguous: true);
+        Assert.Equal(D(10, 25), await ReachedAsync());
+
+        // One that starts the next day (or earlier) joins on.
+        await generator.GenerateAsync(db, participantId, new[] { pattern.Id }, D(10, 26), D(11, 8), CancellationToken.None, onlyWhenContiguous: true);
+        Assert.Equal(D(11, 8), await ReachedAsync());
+
+        // The top-up (an approval too) is the one that decides where the roster is kept up to: it records its window wherever it starts.
+        await generator.GenerateAsync(db, participantId, new[] { pattern.Id }, D(12, 7), D(12, 20), CancellationToken.None);
+        Assert.Equal(D(12, 20), await ReachedAsync());
+    }
+
+    [Fact]
+    public async Task A_generate_over_the_day_of_a_deleted_shift_makes_it_again_and_leaves_how_far_it_reached_where_it_was()
+    {
+        var (db, participantId) = await SeedAsync(id => Pattern(id));
+        await using var _ = db;
+        var pattern = await db.ShiftPatterns.SingleAsync();
+        var generator = new RosterShiftGenerator();
+        await generator.GenerateAsync(db, participantId, new[] { pattern.Id }, D(10, 5), D(10, 26), CancellationToken.None);         // 5, 12, 19 and 26 October
+        db.Shifts.Remove(await db.Shifts.SingleAsync(s => s.ServiceDate == D(10, 12)));                                              // the coordinator deletes one
+        await db.SaveChangesAsync();
+
+        var again = await generator.GenerateAsync(db, participantId, new[] { pattern.Id }, D(10, 5), D(10, 26), CancellationToken.None, onlyWhenContiguous: true);
+
+        Assert.Equal((1, 3), (again.Created, again.Skipped));
+        Assert.Equal(new[] { D(10, 5), D(10, 12), D(10, 19), D(10, 26) }, await db.Shifts.OrderBy(s => s.ServiceDate).Select(s => s.ServiceDate).ToListAsync());
+        Assert.Equal(D(10, 26), (await db.ShiftPatterns.AsNoTracking().SingleAsync()).GeneratedThrough);
+    }
+
+    [Fact]
+    public async Task A_pattern_made_in_the_callers_context_has_how_far_it_reached_saved_with_it()
+    {
+        var (db, participantId) = await SeedAsync();
+        await using var _ = db;
+        var fresh = Pattern(participantId, DayOfWeek.Wednesday);
+        db.ShiftPatterns.Add(fresh);
+
+        await new RosterShiftGenerator().AddAsync(db, new[] { fresh }, D(10, 5), D(10, 18), CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        Assert.Equal(D(10, 18), (await db.ShiftPatterns.AsNoTracking().SingleAsync()).GeneratedThrough);
+    }
+
     [Fact]
     public async Task The_generation_lock_is_a_no_op_off_PostgreSQL_and_opens_no_transaction_there()
     {

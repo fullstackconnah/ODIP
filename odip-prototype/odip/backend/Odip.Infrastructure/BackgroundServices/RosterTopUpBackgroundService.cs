@@ -23,8 +23,11 @@ public sealed record RosterTopUpRun(int Tenants, int Participants, int Patterns,
 /// It ticks hourly and does an organisation's work once for each of that organisation's provider days (the provider's calendar date, not the UTC date): the day it has done is remembered in memory,
 /// so a restart does it again, which is harmless because <see cref="RosterShiftGenerator"/> makes a shift only where there is none. For every organisation it finds the active agreement-made patterns
 /// (<c>SourceDraftId</c> set, active, not ended), asks <see cref="IRosterPlacementGate"/> whether each participant may be rostered (a participant who is not is skipped and counted: the next day brings
-/// them in once they are), and generates from the provider's today to today plus <c>RosterTopUp:HorizonDays</c> (56), held to each pattern's end. A hand-made or demo pattern (no source), an ended
-/// pattern and a switched-off pattern are never read. One participant's failure is logged and counted and does not stop the rest. <c>RosterTopUp:Enabled</c> (default true) switches it off.
+/// them in once they are), and EXTENDS each pattern to the provider's today plus <c>RosterTopUp:HorizonDays</c> (56), held to its end: from the day after the last day a generation reached for it
+/// (<see cref="ShiftPattern.GeneratedThrough"/>, and today at the earliest). It never fills a hole behind that day, so a shift a coordinator deleted stays deleted (a Generate over its day makes it
+/// again). A hand-made or demo pattern (no source), an ended pattern and a switched-off pattern are never read. One participant's failure is logged and counted and does not stop the rest, and the
+/// organisation's day is only marked done when nobody failed (a failure is tried again at the next tick, which is cheap: what is generated is not asked for again). <c>RosterTopUp:Enabled</c> (default
+/// true) switches it off.
 /// </para>
 /// </summary>
 public sealed class RosterTopUpBackgroundService : BackgroundService
@@ -111,29 +114,42 @@ public sealed class RosterTopUpBackgroundService : BackgroundService
 
                 var patterns = await db.ShiftPatterns.AsNoTracking()
                     .Where(p => p.SourceDraftId != null && p.IsActive && (p.EffectiveTo == null || p.EffectiveTo >= today)).ToListAsync(ct);
+                var tenantFailures = 0;
                 if (patterns.Count > 0)
                 {
                     tenants++;
                     patternsSeen += patterns.Count;
+                    var horizon = today.AddDays(options.HorizonDays);
                     foreach (var forParticipant in patterns.GroupBy(p => p.ParticipantId))
                     {
                         participants++;
                         try
                         {
                             if (!await gate.MayPlaceAsync(db, forParticipant.Key, ct)) { notReady++; continue; }
-                            var generated = await generator.GenerateAsync(db, forParticipant.Key, forParticipant.Select(p => p.Id).ToList(), today, today.AddDays(options.HorizonDays), ct);
-                            created += generated.Created;
+                            // Patterns that share a starting day are generated together; one that has already been taken to the horizon has nothing due and is left alone.
+                            foreach (var window in forParticipant.Select(p => (Pattern: p, From: ExtendFrom(p, today))).Where(x => x.From <= horizon).GroupBy(x => x.From))
+                            {
+                                var generated = await generator.GenerateAsync(db, forParticipant.Key, window.Select(x => x.Pattern.Id).ToList(), window.Key, horizon, ct);
+                                created += generated.Created;
+                            }
+                        }
+                        catch (RosterBusyException)
+                        {
+                            failures++; tenantFailures++;
+                            db.ChangeTracker.Clear();
+                            _logger.LogWarning("Roster top-up skipped participant {ParticipantId}: another change to their roster was still running; it is tried again at the next tick", forParticipant.Key);
                         }
                         catch (Exception ex) when (ex is not OperationCanceledException)
                         {
-                            failures++;
+                            failures++; tenantFailures++;
                             db.ChangeTracker.Clear();
                             _logger.LogError(ex, "Roster top-up could not generate shifts for participant {ParticipantId}; the others carry on", forParticipant.Key);
                         }
                     }
                 }
 
-                lock (_gate) { _doneOn[tenantId] = today; }
+                // Done for the provider's day only when nobody failed: a failed participant is tried again at the next tick (the others have nothing due, so that costs little).
+                if (tenantFailures == 0) { lock (_gate) { _doneOn[tenantId] = today; } }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -150,4 +166,7 @@ public sealed class RosterTopUpBackgroundService : BackgroundService
             _logger.LogDebug("Roster top-up: nothing due");
         return run;
     }
+
+    /// <summary>The first day to generate for a pattern: the day after the last one a generation reached for it, and not before today.</summary>
+    private static DateOnly ExtendFrom(ShiftPattern pattern, DateOnly today) => pattern.GeneratedThrough is { } through && through >= today ? through.AddDays(1) : today;
 }

@@ -49,7 +49,7 @@ public class PlanApprovalSchemaTests
         using var db = Db();
         var pattern = db.Model.FindEntityType(typeof(ShiftPattern))!;
 
-        Assert.All(new[] { "SourceDraftId", "SourceBlockKey", "WorkerSlot", "RequirementsJson" }, name => Assert.True(pattern.FindProperty(name)!.IsNullable, name));
+        Assert.All(new[] { "SourceDraftId", "SourceBlockKey", "WorkerSlot", "RequirementsJson", "GeneratedThrough" }, name => Assert.True(pattern.FindProperty(name)!.IsNullable, name));
         Assert.Equal(64, pattern.FindProperty("SourceBlockKey")!.GetMaxLength());
         Assert.Equal("jsonb", ColumnTypeOf(pattern.FindProperty("RequirementsJson")!));
     }
@@ -123,7 +123,7 @@ public class PlanApprovalSchemaTests
         Assert.All(migration.UpOperations, op => Assert.True(op is CreateTableOperation or CreateIndexOperation or AddColumnOperation or AddForeignKeyOperation, $"{op.GetType().Name} could change existing data"));
         Assert.Equal("ServiceAgreementDraftApprovals", Assert.Single(migration.UpOperations.OfType<CreateTableOperation>()).Name);
         var added = migration.UpOperations.OfType<AddColumnOperation>().ToList();
-        Assert.Equal(new[] { "ShiftPatterns.RequirementsJson", "ShiftPatterns.SourceBlockKey", "ShiftPatterns.SourceDraftId", "ShiftPatterns.WorkerSlot", "Shifts.RequirementsJson" },
+        Assert.Equal(new[] { "ShiftPatterns.GeneratedThrough", "ShiftPatterns.RequirementsJson", "ShiftPatterns.SourceBlockKey", "ShiftPatterns.SourceDraftId", "ShiftPatterns.WorkerSlot", "Shifts.RequirementsJson" },
             added.Select(c => $"{c.Table}.{c.Name}").OrderBy(n => n, StringComparer.Ordinal));
         Assert.All(added, c => Assert.True(c.IsNullable, $"{c.Table}.{c.Name} would refuse an existing row"));
         var unique = Assert.Single(migration.UpOperations.OfType<CreateIndexOperation>().Where(i => i.Table == "ShiftPatterns" && i.IsUnique));

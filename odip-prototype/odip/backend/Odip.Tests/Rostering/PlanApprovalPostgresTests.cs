@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -6,7 +8,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Npgsql;
+using Odip.Api.Controllers;
 using Odip.Api.Services;
+using Odip.Application.Common;
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
@@ -206,6 +211,7 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal((draft.Id, 1, "Alex Admin", 5, 0, 40), (approval.DraftId, approval.DraftVersion, approval.ApprovedByName, approval.PatternsCreated, approval.PatternsEnded, approval.ShiftsCreated));
         Assert.Equal(new DateTime(2026, 10, 10, 2, 0, 0), approval.ApprovedAt);
         Assert.Equal(5, await read.ShiftPatterns.CountAsync(p => p.SourceDraftId == draft.Id));
+        Assert.All(await read.ShiftPatterns.AsNoTracking().ToListAsync(), p => Assert.Equal(new DateOnly(2026, 12, 5), p.GeneratedThrough));      // how far shifts were made, in a real date column
         Assert.Equal(40, await read.Shifts.CountAsync());
         var again = await ApproveAsync(cs, tenantId, participantId, draft.Id, clock, Coordinator);
         Assert.Equal((ApprovalStatus.AlreadyApproved, "Alex Admin"), (again.Status, again.Approval!.ApprovedByName));
@@ -265,6 +271,140 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         await using var after = Open(cs, tenantId);
         Assert.Equal(40, await after.Shifts.CountAsync(s => after.ShiftPatterns.Any(p => p.Id == s.ShiftPatternId && p.SourceDraftId == v1.Id)));      // v1's shifts: no more
         Assert.Equal(new DateOnly(2026, 12, 11), await after.Shifts.MaxAsync(s => s.ServiceDate));
+    }
+
+    // ── Editing an agreement pattern ──────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task MovingAnAgreementPatternToADayItsBlockAlreadyHas_MeetsTheKey_AndTheControllerAnswersWithAWordedConflict()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        var draft = await StoreAsync(cs, tenantId, participantId, 1);
+        await ApproveAsync(cs, tenantId, participantId, draft.Id, FakeClock.AtUtc(2026, 10, 10, 2, 0));
+        await using var db = Open(cs, tenantId);
+        var monday = await db.ShiftPatterns.AsNoTracking().SingleAsync(p => p.SourceDraftId == draft.Id && p.DayOfWeek == DayOfWeek.Monday);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var toTuesday = new UpdateShiftPatternDto
+        {
+            ParticipantId = participantId, DayOfWeek = DayOfWeek.Tuesday, StartTime = monday.StartTime, EndTime = monday.EndTime, EndsNextDay = monday.EndsNextDay, Ratio = monday.Ratio,
+            NightType = monday.NightType, EffectiveFrom = monday.EffectiveFrom, EffectiveTo = monday.EffectiveTo, IsActive = true, Notes = monday.Notes,
+        };
+
+        var result = await controller.UpdatePattern(monday.Id, toTuesday, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ShiftPatternDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value);
+        Assert.Contains("already has a pattern for that block, day and worker", Assert.Single(body.Errors!));
+        await using var read = Open(cs, tenantId);
+        Assert.Equal(DayOfWeek.Monday, (await read.ShiftPatterns.AsNoTracking().SingleAsync(p => p.Id == monday.Id)).DayOfWeek);       // not moved
+        // a day the block does not have is still a plain edit
+        var toSaturday = toTuesday with { DayOfWeek = DayOfWeek.Saturday };
+        await using var again = Open(cs, tenantId);
+        var saved = await new RosteringController(again, new StaffCompatibilityLinkService(again), new StaffUnavailabilityQuery(again)).UpdatePattern(monday.Id, toSaturday, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(saved.Result);
+    }
+
+    // ── Another generation holds the roster ───────────────────────────────────────
+
+    [SkippableFact]
+    public async Task AGenerationWaitingOnAnotherOfTheSameParticipant_GivesUpWithBusy_AndNothingIsLeftHalfDone()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        var draft = await StoreAsync(cs, tenantId, participantId, 1);
+        Guid handMadeId;
+        await using (var seed = Open(cs, tenantId))
+        {
+            var handMade = new ShiftPattern { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), EffectiveFrom = new DateOnly(2026, 10, 1), IsActive = true };
+            seed.ShiftPatterns.Add(handMade);
+            await seed.SaveChangesAsync();
+            handMadeId = handMade.Id;
+        }
+
+        var impatient = new RosterShiftGenerator(TimeSpan.FromMilliseconds(400));
+        await using var holder = new NpgsqlConnection(cs);
+        await holder.OpenAsync();
+        await using var held = await holder.BeginTransactionAsync();
+        await using (var take = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtext('roster-generate:' || @p::text))", holder, held))
+        {
+            take.Parameters.AddWithValue("p", participantId);
+            await take.ExecuteNonQueryAsync();
+        }
+
+        // The lock itself: it gives up quickly, and does not leave its context inside an aborted transaction.
+        await using (var db = Open(cs, tenantId))
+        {
+            var waited = Stopwatch.StartNew();
+            await Assert.ThrowsAsync<RosterBusyException>(() => RosterGenerationLock.AcquireAsync(db, participantId, CancellationToken.None, TimeSpan.FromMilliseconds(400)));
+            Assert.True(waited.Elapsed < TimeSpan.FromSeconds(10), $"waited {waited.Elapsed}");
+            Assert.Null(db.Database.CurrentTransaction);
+            Assert.Equal(1, await db.ShiftPatterns.CountAsync());                                    // and the context is usable
+        }
+
+        // An approval answers Busy and changes nothing.
+        await using (var db = Open(cs, tenantId))
+        {
+            var outcome = await new ServiceAgreementApprovalService(db, new RosterPlacementGate(), impatient, clock: FakeClock.AtUtc(2026, 10, 10, 2, 0)).ApproveAsync(tenantId, participantId, draft.Id, false, Admin, CancellationToken.None);
+            Assert.Equal(ApprovalStatus.Busy, outcome.Status);
+            Assert.Contains("still running", Assert.Single(outcome.Errors!));
+        }
+
+        // The Generate button answers 409 in words.
+        await using (var db = Open(cs, tenantId))
+        {
+            var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db), generator: impatient);
+            var result = await controller.GeneratePattern(handMadeId, new DateOnly(2026, 10, 12), new DateOnly(2026, 10, 26), CancellationToken.None);
+            var body = Assert.IsType<ApiResponse<GeneratePatternResultDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value);
+            Assert.Contains("still running", Assert.Single(body.Errors!));
+        }
+
+        await using (var read = Open(cs, tenantId))
+        {
+            Assert.Empty(await read.ServiceAgreementDraftApprovals.ToListAsync());
+            Assert.Empty(await read.Shifts.ToListAsync());
+            Assert.Equal(1, await read.ShiftPatterns.CountAsync());
+        }
+
+        // Released, the same calls go through.
+        await held.RollbackAsync();
+        await using var free = Open(cs, tenantId);
+        var made = await impatient.GenerateAsync(free, participantId, new[] { handMadeId }, new DateOnly(2026, 10, 12), new DateOnly(2026, 10, 26), CancellationToken.None);
+        Assert.Equal(3, made.Created);
+    }
+
+    // ── Shifts a coordinator deleted ──────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task ShiftsACoordinatorDeleted_AreNotMadeAgainByTheTopUp_AndTheHorizonStillMovesOn()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        var draft = await StoreAsync(cs, tenantId, participantId, 1);
+        await ApproveAsync(cs, tenantId, participantId, draft.Id, FakeClock.AtUtc(2026, 10, 10, 2, 0));                 // 40 shifts, 12 October to 4 December
+        await using (var db = Open(cs, tenantId))
+        {
+            var interior = await db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 10, 26) && s.ServiceDate <= new DateOnly(2026, 10, 30)).ToListAsync();      // a whole week in the middle
+            var tail = await db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 12, 1)).ToListAsync();                                                       // and the last days
+            db.Shifts.RemoveRange(interior.Concat(tail));
+            await db.SaveChangesAsync();
+        }
+
+        var services = new ServiceCollection();
+        services.AddDbContext<OdipDbContext>(o => o.UseNpgsql(cs));
+        services.AddSingleton<IRosterPlacementGate>(new RosterPlacementGate());
+        services.AddSingleton<RosterShiftGenerator>();
+        await using var provider = services.BuildServiceProvider();
+        RosterTopUpBackgroundService Job(FakeClock clock) => new(provider.GetRequiredService<IServiceScopeFactory>(), new ConfigurationBuilder().Build(), NullLogger<RosterTopUpBackgroundService>.Instance, clock);
+        var sameDay = await Job(FakeClock.AtUtc(2026, 10, 10, 2, 0)).RunOnceAsync(CancellationToken.None);               // a deploy: a fresh job on the day approval was
+        Assert.Equal(0, sameDay.ShiftsCreated);
+
+        var monday = await Job(FakeClock.AtUtc(2026, 10, 12, 2, 0)).RunOnceAsync(CancellationToken.None);                // Monday 12 October: the horizon is 7 December
+        Assert.Equal(1, monday.ShiftsCreated);                                                                          // only Monday 7 December: the week in the middle and 1 to 4 December stay deleted
+
+        await using var read = Open(cs, tenantId);
+        Assert.Equal(40 - 5 - 4 + 1, await read.Shifts.CountAsync());
+        Assert.Empty(await read.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 10, 26) && s.ServiceDate <= new DateOnly(2026, 10, 30)).ToListAsync());
+        Assert.Empty(await read.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 12, 1) && s.ServiceDate <= new DateOnly(2026, 12, 4)).ToListAsync());
     }
 
     // ── Generation at once ────────────────────────────────────────────────────────

@@ -117,7 +117,10 @@ public static class AuditedEntities
 
     private static readonly HashSet<string> ExcludedProperties = new()
     {
-        "CreatedAt", "UpdatedAt"
+        "CreatedAt", "UpdatedAt",
+        // ShiftPattern.GeneratedThrough moves forward every time shifts are generated (the daily top-up moves it for every agreement pattern, every day): bookkeeping the generator keeps, not a
+        // change anybody made, so a save that changes nothing else writes no audit row.
+        "GeneratedThrough",
     };
 
     public static bool IsExcluded(string propertyName) =>

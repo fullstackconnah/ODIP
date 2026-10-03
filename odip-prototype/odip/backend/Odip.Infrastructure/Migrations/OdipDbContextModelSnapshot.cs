@@ -5365,6 +5365,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<bool>("EndsNextDay")
                         .HasColumnType("boolean");
 
+                    b.Property<DateOnly?>("GeneratedThrough")
+                        .HasColumnType("date");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 

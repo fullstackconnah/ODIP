@@ -193,6 +193,41 @@ public class RosterTopUpBackgroundServiceTests
     }
 
     [Fact]
+    public async Task Shifts_a_coordinator_deleted_are_never_made_again_by_a_later_run_or_a_restart_but_the_horizon_still_moves_on_each_day()
+    {
+        var clock = Clock();                                                                // Saturday 10 October: the horizon is 5 December
+        var (db, service, name) = Build(clock);
+        await using var _ = db;
+        var participant = await AddParticipantAsync(db, TenantA);
+        db.ShiftPatterns.Add(AgreementPattern(participant, DayOfWeek.Monday));
+        await db.SaveChangesAsync();
+        await service.RunOnceAsync(CancellationToken.None);                                 // Mondays 12 October to 30 November: eight shifts
+        Assert.Equal(8, await db.Shifts.CountAsync());
+
+        // The participant is away, so the coordinator deletes the open shifts of one week in the middle and of the last week (the board's Delete removes the row).
+        var deleted = new[] { new DateOnly(2026, 10, 26), new DateOnly(2026, 11, 30) };
+        db.Shifts.RemoveRange(await db.Shifts.Where(s => deleted.Contains(s.ServiceDate)).ToListAsync());
+        await db.SaveChangesAsync();
+
+        // A deploy (the job forgets the day it has done) and the next provider midnight: neither makes them again.
+        var (restartedDb, restarted, _) = Build(clock, name: name);
+        await using var __ = restartedDb;
+        var afterRestart = await restarted.RunOnceAsync(CancellationToken.None);
+        clock.Set(clock.GetUtcNow().AddDays(1));                                            // Sunday 11 October: the horizon is 6 December, and no Monday falls in the new day
+        var nextDay = await restarted.RunOnceAsync(CancellationToken.None);
+        Assert.Equal((0, 0), (afterRestart.ShiftsCreated, nextDay.ShiftsCreated));
+        Assert.Empty(await db.Shifts.Where(s => deleted.Contains(s.ServiceDate)).ToListAsync());
+
+        // The horizon does move on: Monday 12 October brings 7 December in, and only that.
+        clock.Set(clock.GetUtcNow().AddDays(1));
+        var monday = await restarted.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(1, monday.ShiftsCreated);
+        Assert.Equal(new[] { "2026-10-12", "2026-10-19", "2026-11-02", "2026-11-09", "2026-11-16", "2026-11-23", "2026-12-07" },
+            (await db.Shifts.OrderBy(s => s.ServiceDate).Select(s => s.ServiceDate).ToListAsync()).Select(d => d.ToString("yyyy-MM-dd")));
+    }
+
+    [Fact]
     public async Task The_horizon_is_held_to_the_end_of_the_pattern_and_the_configured_number_of_days()
     {
         var (db, service, _) = Build(Clock(), new Dictionary<string, string?> { ["RosterTopUp:HorizonDays"] = "14" });
@@ -255,6 +290,42 @@ public class RosterTopUpBackgroundServiceTests
 
         Assert.Equal((1, 8), (run.Failures, run.ShiftsCreated));
         Assert.Equal(new[] { good.Id }, await db.Shifts.Select(s => s.ParticipantId).Distinct().ToListAsync());
+    }
+
+    private sealed class FailsTheFirstTime(Guid participantId) : IRosterPlacementGate
+    {
+        private readonly RosterPlacementGate _real = new();
+        private bool _failed;
+        public Task<bool> MayPlaceAsync(OdipDbContext db, Guid id, CancellationToken ct)
+        {
+            if (id != participantId || _failed) return _real.MayPlaceAsync(db, id, ct);
+            _failed = true;
+            throw new InvalidOperationException("boom");
+        }
+    }
+
+    [Fact]
+    public async Task A_day_with_a_failure_is_not_marked_done_so_the_next_tick_tries_the_failed_participant_again_and_nobody_else()
+    {
+        var name = Guid.NewGuid().ToString();
+        await using var seed = NewAdminDb(name);
+        var bad = await AddParticipantAsync(seed, TenantA, name: "Bad");
+        var good = await AddParticipantAsync(seed, TenantA, name: "Good");
+        seed.ShiftPatterns.Add(AgreementPattern(bad, DayOfWeek.Monday));
+        seed.ShiftPatterns.Add(AgreementPattern(good, DayOfWeek.Monday));
+        await seed.SaveChangesAsync();
+        var (db, service, _) = Build(Clock(), gate: new FailsTheFirstTime(bad.Id), name: name);
+        await using var _ = db;
+
+        var first = await service.RunOnceAsync(CancellationToken.None);          // the good participant is done; the bad one's check fails
+        var retry = await service.RunOnceAsync(CancellationToken.None);          // the same provider day, an hour later: the day was not marked done
+        var done = await service.RunOnceAsync(CancellationToken.None);           // and now it has been
+
+        Assert.Equal((1, 8, 1), (first.Failures, first.ShiftsCreated, first.Tenants));
+        Assert.Equal((0, 8, 1), (retry.Failures, retry.ShiftsCreated, retry.Tenants));       // the failed participant's eight; the good one's patterns have nothing due
+        Assert.Equal((0, 0, 0), (done.Failures, done.ShiftsCreated, done.Tenants));
+        Assert.Equal(8, await db.Shifts.CountAsync(s => s.ParticipantId == good.Id));
+        Assert.Equal(8, await db.Shifts.CountAsync(s => s.ParticipantId == bad.Id));
     }
 
     [Fact]
