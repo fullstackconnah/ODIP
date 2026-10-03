@@ -433,4 +433,58 @@ public class FundingPlanValidatorTests
         var plan = Plan(Core(periods: days)) with { PlanEnd = D(2027, 6, 30), PeriodLengthMonths = 1 };
         AssertRefused(FundingPlanValidator.Validate(plan), "at most 60 periods");
     }
+
+    // ── A crafted body is refused in plain words, never with an exception (a 500) ──
+
+    [Fact]
+    public void ANullPool_IsRefusedInWords_AndTheOtherPoolsAreStillChecked()
+    {
+        var plan = Plan(Core()) with { Pools = new List<SaveFundingPoolDto> { null!, Core(), Core() } };
+
+        var errors = FundingPlanValidator.Validate(plan);
+
+        AssertRefused(errors, "pool 1 is empty");
+        AssertRefused(errors, "lists Core (flexible), plan-managed twice");   // pools 2 and 3 are still read
+    }
+
+    [Fact]
+    public void ANullPeriod_IsRefusedInWords_WhetherOrNotThePlanHasFundingPeriods()
+    {
+        var withNull = new List<SaveFundingPeriodDto> { null!, P(D(2026, 7, 1), D(2027, 6, 30), 1m) };
+
+        AssertRefused(FundingPlanValidator.Validate(Plan(Core(periods: withNull)) with { PeriodLengthMonths = null }), "a period in Core (flexible), plan-managed is empty");
+        AssertRefused(FundingPlanValidator.Validate(Plan(Core(periods: withNull))), "a period in Core (flexible), plan-managed is empty");
+    }
+
+    [Fact]
+    public void APeriodStartingInTheLastYearTheCalendarHolds_IsNotAnException()
+    {
+        var december = Plan(Core(periods: new() { P(D(9999, 12, 1), D(9999, 12, 31), 1m) })) with { PlanStart = D(9999, 12, 1), PlanEnd = D(9999, 12, 31), PeriodLengthMonths = 1 };
+
+        var errors = FundingPlanValidator.Validate(december);   // used to throw ArgumentOutOfRangeException from AddYears(1)
+
+        Assert.DoesNotContain(errors, e => e.Contains("longer than 12 months", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void MaxPeriodEnd_StopsAtTheEndOfTheCalendar_AndIsOtherwiseUnchanged()
+    {
+        Assert.Equal(DateOnly.MaxValue, FundingPlanValidator.MaxPeriodEnd(D(9999, 6, 15)));
+        Assert.Equal(D(2027, 6, 30), FundingPlanValidator.MaxPeriodEnd(D(2026, 7, 1)));
+        Assert.Equal(D(2028, 2, 29), FundingPlanValidator.MaxPeriodEnd(D(2027, 3, 1)));    // a leap day inside the twelve months counts
+        Assert.Equal(D(2029, 2, 28), FundingPlanValidator.MaxPeriodEnd(D(2028, 2, 29)));   // a period that starts on a leap day may run to the 28th
+    }
+
+    [Fact]
+    public void ANullCharacterInAFreeTextField_IsRefused_BecauseTheDatabaseWouldRefuseItAsAnError()
+    {
+        var nul = "a" + (char)0 + "b";
+        var withNotes = Core() with { Notes = nul };
+
+        AssertRefused(FundingPlanValidator.Validate(Plan(Core()) with { Notes = nul }), "the notes cannot contain a null character");
+        AssertRefused(FundingPlanValidator.Validate(Plan(Core()) with { ConfirmedByName = nul }), "confirmed by cannot contain a null character");
+        AssertRefused(FundingPlanValidator.Validate(Plan(Core(name: nul))), "the pool name cannot contain a null character");
+        AssertRefused(FundingPlanValidator.Validate(Plan(withNotes)), "the pool notes cannot contain a null character");
+        Assert.Empty(FundingPlanValidator.Validate(Plan(Core(name: "Core\nflexible")) with { Notes = "Line one\nLine two\ttabbed" }));   // line breaks and tabs are fine in notes
+    }
 }

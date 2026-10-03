@@ -132,6 +132,25 @@ public class ParticipantFundingControllerTests
     }
 
     [Fact]
+    public async Task Create_WithACraftedBody_IsA400InWords_NotAnException_ForANullPoolANullPeriodAndANullCharacter()
+    {
+        using var kit = Create();
+        var participant = kit.SeedParticipant();
+        var nullPool = Plan() with { Pools = new List<SaveFundingPoolDto> { null! } };
+        var nullPeriod = Plan(Core(periods: new List<SaveFundingPeriodDto> { null! }));
+        var nullCharacter = Plan() with { Notes = "a" + (char)0 + "b" };
+
+        foreach (var (crafted, phrase) in new[] { (nullPool, "Pool 1 is empty"), (nullPeriod, "A period in Core (flexible), plan-managed is empty"), (nullCharacter, "cannot contain a null character") })
+        {
+            var result = await kit.Controller.CreatePlan(participant.Id, crafted, CancellationToken.None);
+
+            var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+            Assert.Contains(Assert.IsType<ApiResponse<FundingPlanDto>>(bad.Value).Errors!, e => e.Contains(phrase, StringComparison.Ordinal));
+        }
+        Assert.Empty(kit.Db.FundingPlans);
+    }
+
+    [Fact]
     public async Task Create_OverlappingAnotherPlanOfTheParticipant_Is409NamingTheClashingPlan_AndWritesNothing()
     {
         using var kit = Create();

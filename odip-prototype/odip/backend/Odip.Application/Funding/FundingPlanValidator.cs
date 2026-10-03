@@ -60,7 +60,9 @@ public static class FundingPlanValidator
             errors.Add("Choose where the figures came from.");
 
         if (dto.ConfirmedByName?.Trim().Length > 200) errors.Add("Confirmed by can be at most 200 characters.");
+        if (HasNull(dto.ConfirmedByName)) errors.Add("Confirmed by cannot contain a null character.");
         if (dto.Notes?.Trim().Length > 2000) errors.Add("Notes can be at most 2000 characters.");
+        if (HasNull(dto.Notes)) errors.Add("The notes cannot contain a null character.");
 
         // ── The pools ───────────────────────────────────────────────────────
         var pools = dto.Pools;
@@ -76,6 +78,13 @@ public static class FundingPlanValidator
         for (var index = 0; index < pools.Count; index++)
         {
             var pool = pools[index];
+            // A body can carry a null where a pool should be (JSON allows it): say so, and go on to read the others.
+            if (pool is null)
+            {
+                errors.Add($"Pool {index + 1} is empty. Give its details, or leave it out.");
+                continue;
+            }
+
             var label = Label(pool, index);
             var kindOk = pool.Kind is { } kind && Enum.IsDefined(kind);
             var managementOk = pool.ManagementType is { } management && Enum.IsDefined(management);
@@ -88,7 +97,9 @@ public static class FundingPlanValidator
                 errors.Add($"The plan lists {label} twice. A plan holds each category once for each way of managing it.");
 
             if (pool.Name?.Trim().Length > 200) errors.Add($"{label}: the pool name can be at most 200 characters.");
+            if (HasNull(pool.Name)) errors.Add($"{label}: the pool name cannot contain a null character.");
             if (pool.Notes?.Trim().Length > 1000) errors.Add($"{label}: the pool notes can be at most 1000 characters.");
+            if (HasNull(pool.Notes)) errors.Add($"{label}: the pool notes cannot contain a null character.");
 
             CheckPeriods(pool.Periods, label, planStart, planEnd, hasFundingPeriods, errors);
         }
@@ -102,6 +113,8 @@ public static class FundingPlanValidator
     /// </summary>
     public static DateOnly MaxPeriodEnd(DateOnly start)
     {
+        // Twelve months on from a start in the last year the calendar holds is past its end, so nothing can be later than the limit: no period there is "too long".
+        if (start.Year == DateOnly.MaxValue.Year) return DateOnly.MaxValue;
         var sameDayNextYear = start.AddYears(1);
         return start is { Month: 2, Day: 29 } ? sameDayNextYear : sameDayNextYear.AddDays(-1);
     }
@@ -135,10 +148,15 @@ public static class FundingPlanValidator
             return;
         }
 
+        // A body can carry a null where a period should be: say so, and check the periods that are there.
+        var present = periods.Where(period => period is not null).ToList();
+        var emptyPeriod = present.Count < periods.Count;
+        if (emptyPeriod) errors.Add($"A period in {label} is empty. Give its dates and plan amount, or leave it out.");
+
         var missingDates = false;
         var missingAmount = false;
         var dated = new List<(DateOnly Start, DateOnly End)>();
-        foreach (var period in periods)
+        foreach (var period in present)
         {
             if (period.PeriodStart is { } s && period.PeriodEnd is { } e) dated.Add((s, e));
             else missingDates = true;
@@ -147,12 +165,12 @@ public static class FundingPlanValidator
         if (missingDates) errors.Add($"Give both dates of every period in {label}.");
         if (missingAmount) errors.Add($"Give the plan amount for every period in {label}.");
 
-        CheckMoney(periods, label, errors);
+        CheckMoney(present, label, errors);
 
         if (!hasFundingPeriods)
         {
             // No funding periods: the whole plan is one period, and the pool holds exactly that.
-            if (planStart is { } ps && planEnd is { } pe && !missingDates && (periods.Count != 1 || dated[0] != (ps, pe)))
+            if (planStart is { } ps && planEnd is { } pe && !missingDates && !emptyPeriod && (present.Count != 1 || dated[0] != (ps, pe)))
                 errors.Add($"{label}: the plan has no funding periods, so it has one period, from {Say(ps)} to {Say(pe)}.");
             return;
         }
@@ -208,6 +226,9 @@ public static class FundingPlanValidator
         if (withSetAside > 0 && withSetAside < periods.Count)
             errors.Add($"In {label}, Oassist's set-aside is given for some periods but not all. Give it for every period or for none.");
     }
+
+    /// <summary>A null character in free text: PostgreSQL refuses it in a text column, and an unchecked one would reach it as an error instead of a reason.</summary>
+    private static bool HasNull(string? text) => text is not null && text.Contains('\0');
 
     private static string Label(SaveFundingPoolDto pool, int index)
     {
