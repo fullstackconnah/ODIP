@@ -399,7 +399,8 @@ function plain(text: string): string {
 export function describeQuoteError(error: unknown): FriendlyError {
   const status = statusOf(error)
   const messages = messagesOf(error)
-  if (status === 429) return { title: 'The pricing service is busy', detail: 'Your organisation already has two plans being priced. Wait a moment and it will try again.', retryable: true }
+  // The hooks have already asked a few times by the time this shows (a 429 is retried after the pause the server names), so it does not promise another try: it offers one.
+  if (status === 429) return { title: 'The pricing service is busy', detail: 'Other plans for your organisation are being priced right now. It asked a few times and the service is still busy: try again in a moment.', retryable: true }
   if (status === 400 && messages.some(text => /ask for the totals only|one answer carries/i.test(text))) {
     return { title: 'This plan has too many lines to list', detail: 'The agreement and its blocks make more lines than one answer can carry. Shorten the agreement period or price fewer blocks; the totals are still worked out.', retryable: false }
   }

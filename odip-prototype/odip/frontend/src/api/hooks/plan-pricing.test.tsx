@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import type { PlanBlock, PlanQuote } from '../types'
 import { emptyBlock } from '@/lib/planBlocks'
-import { usePlanBlockQuote, usePlanBudget, usePlanPricingSettings, useUpdatePlanPricingSettings } from './plan-pricing'
+import { MAX_BUSY_RETRIES, busyDelay, retryWhenBusy, usePlanBlockQuote, usePlanBudget, usePlanPricingSettings, useUpdatePlanPricingSettings } from './plan-pricing'
 
 const { post, apiGet, apiPut } = vi.hoisted(() => ({ post: vi.fn(), apiGet: vi.fn(), apiPut: vi.fn() }))
 
@@ -78,13 +78,54 @@ describe('usePlanBudget', () => {
     expect(post).not.toHaveBeenCalled()
   })
 
-  it('reports a refusal as an error and does not retry it', async () => {
-    post.mockRejectedValue({ response: { status: 429, data: {} } })
-    const { result } = renderHook(() => usePlanBudget([block], '2026-10-01', '2026-12-31'), { wrapper: wrapper(new QueryClient()) })
+  // Review F5: two quotes in flight is an organisation's whole allowance, and the screen's own pattern (a budget in two steps beside a block's quote) uses it, so a 429 is ordinary; the
+  // copy said "it will try again" and nothing did.
+  it('asks again when the service is busy (429), after the pause it named, and shows the answer when one comes', async () => {
+    post.mockRejectedValueOnce({ response: { status: 429, headers: { 'retry-after': '0' }, data: {} } })
+    post.mockResolvedValueOnce(reply(quote({ periodFrom: '2026-10-01', periodTo: '2026-10-04' })))
+    const { result } = renderHook(() => usePlanBudget([block], '2026-10-01', '2026-10-04'), { wrapper: wrapper(new QueryClient()) })
 
-    await waitFor(() => expect(result.current.isError).toBe(true))
+    await waitFor(() => expect(result.current.isSuccess).toBe(true), { timeout: 4000 })
 
-    expect(post).toHaveBeenCalledTimes(1)
+    expect(post).toHaveBeenCalledTimes(2)         // the busy answer, then the quote
+    expect(result.current.isError).toBe(false)
+  })
+
+  it('gives up after a few tries and reports that it is busy', async () => {
+    post.mockRejectedValue({ response: { status: 429, headers: { 'retry-after': '0' }, data: {} } })
+    const { result } = renderHook(() => usePlanBlockQuote(block, '2026-10-01', '2026-12-31'), { wrapper: wrapper(new QueryClient()) })
+
+    await waitFor(() => expect(result.current.isError).toBe(true), { timeout: 6000 })
+
+    expect(post).toHaveBeenCalledTimes(1 + MAX_BUSY_RETRIES)
+  }, 10_000)
+
+  it('does not ask again for anything else: a refusal, a lost connection, a server error', async () => {
+    for (const failure of [{ response: { status: 400, data: { errors: ['The agreement period ends before it starts.'] } } }, { response: { status: 500, data: {} } }, new Error('Network Error')]) {
+      post.mockReset()
+      post.mockRejectedValue(failure)
+      const { result } = renderHook(() => usePlanBudget([block], '2026-10-01', '2026-12-31'), { wrapper: wrapper(new QueryClient()) })
+
+      await waitFor(() => expect(result.current.isError).toBe(true))
+
+      expect(post).toHaveBeenCalledTimes(1)
+    }
+  })
+
+  it('decides what is worth asking again, and how long to wait: only a 429, up to three more times, for the pause the server named, never less than a moment nor more than a few seconds', () => {
+    const busy = (headers?: Record<string, unknown>) => ({ response: { status: 429, headers, data: {} } })
+
+    expect([0, 1, 2, 3].map(count => retryWhenBusy(count, busy()))).toEqual([true, true, true, false])
+    expect(retryWhenBusy(0, { response: { status: 500 } })).toBe(false)
+    expect(retryWhenBusy(0, new Error('Network Error'))).toBe(false)
+    expect(retryWhenBusy(0, undefined)).toBe(false)
+    expect(busyDelay(0, busy({ 'retry-after': '1' }))).toBe(1000)
+    expect(busyDelay(1, busy({ 'retry-after': '1' }))).toBe(2000)       // a little longer each time
+    expect(busyDelay(0, busy())).toBe(1000)                              // no header: the server's usual second
+    expect(busyDelay(0, busy({ 'retry-after': 'soon' }))).toBe(1000)     // not a number of seconds: the same
+    expect(busyDelay(0, busy({ 'retry-after': '0' }))).toBe(250)         // never less than a moment
+    expect(busyDelay(0, busy({ 'retry-after': '600' }))).toBe(5000)      // nor more than a few seconds
+    expect(busyDelay(0, { response: { status: 429, headers: { get: (name: string) => (name === 'retry-after' ? '2' : undefined) }, data: {} } })).toBe(2000)   // axios' own headers object
   })
 })
 
