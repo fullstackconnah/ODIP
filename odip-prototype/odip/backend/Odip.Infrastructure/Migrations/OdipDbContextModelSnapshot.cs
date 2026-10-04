@@ -3720,6 +3720,62 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("ServiceAgreementDrafts");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementDraftApproval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ApprovedByName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid?>("ApprovedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DraftVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("FirstShiftDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("HorizonEnd")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PatternsCreated")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PatternsEnded")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ShiftsCreated")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DraftId")
+                        .IsUnique();
+
+                    b.HasIndex("ParticipantId");
+
+                    b.HasIndex("TenantId", "ParticipantId");
+
+                    b.ToTable("ServiceAgreementDraftApprovals");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementDraftBlock", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5215,6 +5271,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<int>("Ratio")
                         .HasColumnType("integer");
 
+                    b.Property<string>("RequirementsJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<int>("ReturnCount")
                         .HasColumnType("integer");
 
@@ -5478,6 +5537,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<bool>("EndsNextDay")
                         .HasColumnType("boolean");
 
+                    b.Property<DateOnly?>("GeneratedThrough")
+                        .HasColumnType("date");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -5494,11 +5556,24 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<int>("Ratio")
                         .HasColumnType("integer");
 
+                    b.Property<string>("RequirementsJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SourceBlockKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("SourceDraftId")
+                        .HasColumnType("uuid");
+
                     b.Property<TimeOnly>("StartTime")
                         .HasColumnType("time without time zone");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("WorkerSlot")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -5508,9 +5583,16 @@ namespace Odip.Infrastructure.Migrations
 
                     b.HasIndex("ParticipantId");
 
+                    b.HasIndex("SourceDraftId");
+
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "ParticipantId");
+
+                    b.HasIndex("SourceDraftId", "SourceBlockKey", "DayOfWeek", "WorkerSlot")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ShiftPatterns_SourceDraft_Block_Day_Slot")
+                        .HasFilter("\"SourceDraftId\" IS NOT NULL");
 
                     b.ToTable("ShiftPatterns");
                 });
@@ -6422,6 +6504,25 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Participant");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementDraftApproval", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.ServiceAgreementDraft", "Draft")
+                        .WithMany()
+                        .HasForeignKey("DraftId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Odip.Domain.Entities.Participant", "Participant")
+                        .WithMany()
+                        .HasForeignKey("ParticipantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Draft");
+
+                    b.Navigation("Participant");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.ServiceAgreementDraftBlock", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.ServiceAgreementDraft", "Draft")
@@ -6815,6 +6916,11 @@ namespace Odip.Infrastructure.Migrations
                         .HasForeignKey("ParticipantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Odip.Domain.Entities.ServiceAgreementDraft", null)
+                        .WithMany()
+                        .HasForeignKey("SourceDraftId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("DefaultUser");
 

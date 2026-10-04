@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { type AxiosRequestConfig } from 'axios'
 import type { ApiResponse } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
@@ -109,8 +109,8 @@ export async function apiGetWithDefault<T>(url: string, defaultValue: T, params?
   return response.data.data ?? defaultValue
 }
 
-export async function apiPost<T>(url: string, data?: unknown): Promise<T> {
-  const response = await apiClient.post<ApiResponse<T>>(url, data)
+export async function apiPost<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  const response = await apiClient.post<ApiResponse<T>>(url, data, config)
   return response.data.data as T
 }
 

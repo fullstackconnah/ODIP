@@ -626,6 +626,35 @@ public class ParticipantHubFlowTests
         Assert.Empty(await ArchivedAsync(caller));
         var checklist = Ok(await caller.Inquiries.GetOnboarding(participantId, CancellationToken.None));
         Assert.Contains(checklist.Reasons, reason => reason.Contains("agreement evidence", StringComparison.OrdinalIgnoreCase));
+        // Plan builder phase D: an approved revision makes the patterns and the shifts, so the checklist no longer says that no shifts can be created; it says where they are made.
+        Assert.Contains(checklist.Reasons, reason => reason.Contains("approved for rostering", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(checklist.Reasons, reason => reason.Contains("no shifts are created", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Lifecycle_TheChecklistNamesTheRevisionApprovedForRosteringOnceOneHasBeen_AndListsWhereTheScheduleIsMadeAsAGapUntilThen()
+    {
+        var tenantId = Guid.NewGuid();
+        using var caller = NewCaller(tenantId);
+        var enquiry = await CaptureEnquiryAsync(caller);
+        var participantId = Ok(await caller.Inquiries.Convert(enquiry.Id, new ConvertParticipantInquiryDto(), CancellationToken.None)).ParticipantId!.Value;
+
+        var before = Ok(await caller.Inquiries.GetOnboarding(participantId, CancellationToken.None));
+        // Revisions 1 and 2 were approved (the newest approved one is the one named), and another participant's approval is nobody's business here.
+        caller.Db.ServiceAgreementDraftApprovals.AddRange(
+            new ServiceAgreementDraftApproval { Id = Guid.NewGuid(), TenantId = tenantId, DraftId = Guid.NewGuid(), ParticipantId = participantId, DraftVersion = 1, ApprovedAt = new DateTime(2026, 10, 5, 3, 0, 0, DateTimeKind.Utc), ApprovedByName = "Alex" },
+            new ServiceAgreementDraftApproval { Id = Guid.NewGuid(), TenantId = tenantId, DraftId = Guid.NewGuid(), ParticipantId = participantId, DraftVersion = 2, ApprovedAt = new DateTime(2026, 10, 19, 3, 0, 0, DateTimeKind.Utc), ApprovedByName = "Alex" },
+            new ServiceAgreementDraftApproval { Id = Guid.NewGuid(), TenantId = tenantId, DraftId = Guid.NewGuid(), ParticipantId = Guid.NewGuid(), DraftVersion = 7, ApprovedAt = new DateTime(2026, 10, 20, 3, 0, 0, DateTimeKind.Utc), ApprovedByName = "Alex" });
+        await caller.Db.SaveChangesAsync();
+
+        var after = Ok(await caller.Inquiries.GetOnboarding(participantId, CancellationToken.None));
+
+        Assert.Equal((null, null), (before.ScheduleApprovedVersion, before.ScheduleApprovedAt));
+        Assert.Contains(before.Reasons, reason => reason.StartsWith("The schedule is made when an agreement revision is approved for rostering", StringComparison.Ordinal));
+        Assert.Equal((2, new DateTime(2026, 10, 19, 3, 0, 0, DateTimeKind.Utc)), (after.ScheduleApprovedVersion, after.ScheduleApprovedAt));
+        // Once a revision is approved nothing about the schedule is missing, so the "what is still missing" list does not mention it at all (the other lines stay).
+        Assert.DoesNotContain(after.Reasons, reason => reason.Contains("rostering", StringComparison.OrdinalIgnoreCase) || reason.Contains("schedule", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(before.Reasons.Count - 1, after.Reasons.Count);
     }
 
     [Fact]

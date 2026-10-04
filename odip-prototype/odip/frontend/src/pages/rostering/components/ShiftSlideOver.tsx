@@ -9,6 +9,8 @@ import { SearchableSelect } from '@/components/SearchableSelect'
 import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ReadinessNote } from '@/components/ReadinessNote'
+import { RequirementChips } from '@/components/RequirementChips'
+import { requirementLabels } from '@/lib/workerRequirements'
 import {
   useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, useCompatibility, useRosterShiftNotes, getRosterFindings,
 } from '@/api/hooks'
@@ -397,6 +399,18 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               disabled={!canWrite || statusLocked}
               items={statusItems}
             />
+          </FormField>
+        )}
+
+        {/* Plan builder phase D: a shift made from an agreement's pattern says which agreement, read only (the shifts of one revision and the next sit on the board on the same days). The shift itself says so (the server puts the pattern's source on it): no read of the pattern. */}
+        {existing?.fromAgreement && (
+          <p className="text-sm text-[var(--color-muted-foreground)]">{existing.sourceDraftVersion !== undefined ? `From agreement v${existing.sourceDraftVersion}` : 'From an agreement'}</p>
+        )}
+
+        {/* Plan builder phase D: what the agreement asked of a worker for this shift (copied from its pattern). Information: nothing checks it against the worker yet. */}
+        {existing?.requirements && requirementLabels(existing.requirements).length > 0 && (
+          <FormField label="Asks for" hint="From the agreement. Shown, not checked against the worker yet.">
+            <RequirementChips requirements={existing.requirements} />
           </FormField>
         )}
 

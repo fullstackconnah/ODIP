@@ -45,6 +45,12 @@ public record ShiftDto
     public ShiftStatus Status { get; init; }
     public Guid? ShiftPatternId { get; init; }
     public string? Notes { get; init; }
+    /// <summary>What the shift asks of a worker (gender, a driver, skills), copied from its pattern when it was generated: informational, shown as chips. Absent when it asks for nothing.</summary>
+    public DraftBlockRequirementsDto? Requirements { get; init; }
+    /// <summary>True when the pattern this shift was generated from was made by an agreement revision (plan builder, phase D); omitted otherwise. With <see cref="SourceDraftVersion"/> it is what the shift panel says ("From agreement v2"), so the panel needs no read of the pattern.</summary>
+    public bool? FromAgreement { get; init; }
+    /// <summary>The version of the agreement revision that pattern came from; omitted for a shift that did not come from one.</summary>
+    public int? SourceDraftVersion { get; init; }
     public string? OverrideReason { get; init; }
     public List<RosterFindingDto> Findings { get; init; } = new();
     /// <summary>
@@ -290,6 +296,16 @@ public record ShiftPatternDto
     public DateOnly? EffectiveTo { get; init; }
     public bool IsActive { get; init; }
     public string? Notes { get; init; }
+    /// <summary>The agreement revision whose approval made this pattern (plan builder, phase D); absent for a hand-made or demo pattern.</summary>
+    public Guid? SourceDraftId { get; init; }
+    /// <summary>The block of that revision this pattern is one weekday of.</summary>
+    public string? SourceBlockKey { get; init; }
+    /// <summary>The version of that revision, for "From agreement v2".</summary>
+    public int? SourceDraftVersion { get; init; }
+    /// <summary>Which of the workers a block asks for at once this pattern is (a 2:1 support is slots 1 and 2).</summary>
+    public int? WorkerSlot { get; init; }
+    /// <summary>What the pattern's shifts ask of a worker (gender, a driver, skills), shown as chips; informational. Absent when the pattern asks for nothing or was made by hand.</summary>
+    public DraftBlockRequirementsDto? Requirements { get; init; }
 }
 
 public record CreateShiftPatternDto

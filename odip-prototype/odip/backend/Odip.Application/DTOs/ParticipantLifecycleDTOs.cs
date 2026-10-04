@@ -71,6 +71,9 @@ public record ParticipantOnboardingDto
     public bool? FundingRecorded { get; init; }
     public bool IsReady { get; init; }
     public List<string> Reasons { get; init; } = [];
+    /// <summary>The newest revision of the participant's service agreement that has been approved for rostering (plan builder, phase D), and when: the schedule review gate says so. Null until one has.</summary>
+    public int? ScheduleApprovedVersion { get; init; }
+    public DateTime? ScheduleApprovedAt { get; init; }
 }
 
 /// <summary>Server-derived worklist row; clients cannot choose a lifecycle stage.</summary>

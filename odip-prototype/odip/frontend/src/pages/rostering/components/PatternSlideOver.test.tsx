@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PatternSlideOver } from './PatternSlideOver'
 import type { ShiftPatternDto } from '@/api/types'
@@ -362,5 +362,177 @@ describe('PatternSlideOver as a dialog', () => {
     expect(screen.getByRole('dialog', { name: 'Edit pattern' })).toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Delete' })).toHaveFocus()
+  })
+})
+
+// Plan builder phase D: a pattern an approved agreement made stays editable, and says so when it is edited (nothing is locked).
+describe('PatternSlideOver — a pattern an agreement made', () => {
+  const agreementPattern = () => makePattern({
+    sourceDraftId: 'draft-2', sourceBlockKey: 'mornings', sourceDraftVersion: 2, workerSlot: 1, notes: 'From agreement v2: Community access, community',
+    requirements: { workerGender: 'Female', driver: true, skills: ['FirstAid'] },
+  })
+
+  const open = (pattern: ShiftPatternDto | null) => render(
+    <PatternSlideOver
+      target={pattern ? { mode: 'edit', pattern } : { mode: 'create' }}
+      onClose={noop}
+      canWrite
+      participantOptions={participantOptions}
+      staffOptions={staffOptions}
+    />,
+  )
+
+  it('opens with a quiet line that says where the pattern came from, not an alert: nothing has been changed yet', () => {
+    open(agreementPattern())
+
+    expect(screen.getByRole('status')).toHaveTextContent('From agreement v2.')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(/the roster will differ/)).not.toBeInTheDocument()
+  })
+
+  it('does not warn about the edits that cause no drift: who does the shifts, and the notes', () => {
+    open(agreementPattern())
+
+    fireEvent.change(screen.getByLabelText(/Notes/), { target: { value: 'Ring the bell twice' } })
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['the start time', () => fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })],
+    ['the end time', () => fireEvent.change(screen.getByLabelText(/End time/), { target: { value: '18:00' } })],
+    ['the days it covers', () => fireEvent.change(screen.getByLabelText(/Effective to/), { target: { value: '2026-12-31' } })],
+  ])('warns, in the agreement\'s own version, once %s differs from what the agreement set, and says how to change the plan itself', (_, change) => {
+    open(agreementPattern())
+
+    change()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('You have changed what agreement v2 set, so the roster will differ from it. To change the plan itself, save a new revision.')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('takes the warning back when the change is put back', () => {
+    open(agreementPattern())
+
+    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '09:00' } })
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('From agreement v2.')
+  })
+
+  it('says "an agreement", never a version it does not know', () => {
+    open({ ...agreementPattern(), sourceDraftVersion: undefined })
+
+    expect(screen.getByRole('status')).toHaveTextContent('From an agreement.')
+    expect(screen.queryByText(/v\?/)).not.toBeInTheDocument()
+  })
+
+  it('says nothing of the kind about a hand-made pattern, or when making a new one', () => {
+    const { unmount } = open(makePattern())
+    expect(screen.queryByText(/From agreement|From an agreement|came from agreement/)).not.toBeInTheDocument()
+    unmount()
+
+    open(null)
+    expect(screen.queryByText(/From agreement|From an agreement|came from agreement/)).not.toBeInTheDocument()
+  })
+
+  it("a clash the server refuses (409, a day its block already has) shows the server's words, keeps what was edited, and keeps the warning", async () => {
+    const user = userEvent.setup()
+    const conflict = { response: { status: 409, data: { success: false, errors: ['This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.'] } } }
+    mockUpdateMutateAsync.mockRejectedValueOnce(conflict)
+    open(agreementPattern())
+
+    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'pattern-1', data: expect.objectContaining({ participantId: 'participant-1', dayOfWeek: 'Monday', startTime: '10:00', endTime: '17:00' }) })
+    expect(await screen.findByText('This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Start time/)).toHaveValue('10:00')                       // what was typed stays
+    expect(screen.getByText(/You have changed what agreement v2 set/)).toBeInTheDocument()
+  })
+
+  it('brings a refused save into view: the message sits under the last field of a form that scrolls', async () => {
+    const user = userEvent.setup()
+    const scrolled: Element[] = []
+    // jsdom has no scrollIntoView: put one in for this test and take it out again.
+    const proto = Element.prototype as { scrollIntoView?: (arg?: boolean | ScrollIntoViewOptions) => void }
+    const original = proto.scrollIntoView
+    proto.scrollIntoView = function (this: Element, arg?: boolean | ScrollIntoViewOptions) {
+      scrolled.push(this)
+      expect(arg).toEqual({ block: 'nearest' })
+    }
+    try {
+      mockUpdateMutateAsync.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: ['This agreement already has a pattern for that block, day and worker.'] } } })
+      open(agreementPattern())
+
+      expect(scrolled).toHaveLength(0)                                                       // nothing wrong, nothing scrolled
+      fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+      expect(scrolled).toHaveLength(1)                                                       // the drift warning that the change brought (its own test below)
+      scrolled.length = 0
+      await user.click(screen.getByRole('button', { name: 'Save' }))
+
+      // (The drift warning is an alert too, so the refusal is found by its words.)
+      const refusal = (await screen.findByText(/This agreement already has a pattern/)).closest('[role="alert"]')
+      expect(refusal).not.toBeNull()
+      expect(scrolled).toEqual([refusal])
+    } finally {
+      if (original) proto.scrollIntoView = original
+      else delete proto.scrollIntoView
+    }
+  })
+
+  it('brings the drift warning into view when it appears: it sits at the top of a panel that scrolls, and the field that caused it can be far below', () => {
+    const calls: { text: string; options: unknown }[] = []
+    const proto = Element.prototype as { scrollIntoView?: (arg?: boolean | ScrollIntoViewOptions) => void }
+    const original = proto.scrollIntoView
+    proto.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) { calls.push({ text: this.textContent ?? '', options }) }
+    try {
+      open(agreementPattern())
+      expect(calls).toHaveLength(0)                                                                // nothing changed yet: nothing to show
+
+      fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+      expect(calls).toHaveLength(1)
+      expect(calls[0].text).toMatch(/You have changed what agreement v2 set/)
+      expect(calls[0].options).toEqual({ block: 'nearest' })                                       // brought in only if it is out of view, not dragged to the top
+
+      fireEvent.change(screen.getByLabelText(/End time/), { target: { value: '16:00' } })           // a second change: the warning is already there, and the panel is left where it is
+      expect(calls).toHaveLength(1)
+
+      fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '09:00' } })
+      fireEvent.change(screen.getByLabelText(/End time/), { target: { value: '17:00' } })           // put back: the warning goes
+      expect(screen.queryByText(/You have changed what agreement v2 set/)).not.toBeInTheDocument()
+      fireEvent.change(screen.getByLabelText(/End time/), { target: { value: '15:00' } })           // and when it comes back, it is brought into view again
+      expect(calls).toHaveLength(2)
+    } finally {
+      if (original) proto.scrollIntoView = original
+      else delete proto.scrollIntoView
+    }
+  })
+
+  it('shows what the agreement asks of a worker as chips, which are information and not a field to change', () => {
+    open(agreementPattern())
+
+    const chips = within(screen.getByRole('list', { name: 'Asks for' }))
+    expect(chips.getAllByRole('listitem').map(item => item.textContent)).toEqual(['Female worker', 'Driver', 'First aid'])
+  })
+
+  it('still saves a change, and sends only the fields it always sent: where the pattern came from is not the form\'s to change', async () => {
+    const user = userEvent.setup()
+    mockUpdateMutateAsync.mockResolvedValue({})
+    open(agreementPattern())
+
+    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({
+      id: 'pattern-1',
+      data: {
+        participantId: 'participant-1', defaultStaffId: 'staff-1', dayOfWeek: 'Monday', startTime: '10:00', endTime: '17:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
+        effectiveFrom: '2026-01-01', effectiveTo: null, isActive: true, notes: 'From agreement v2: Community access, community',
+      },
+    })
   })
 })

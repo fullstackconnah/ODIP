@@ -31,6 +31,17 @@ export function makeShift(overrides: Partial<ShiftDto> = {}): ShiftDto {
   }
 }
 
+/**
+ * An unfilled shift as the API really sends it. The server leaves a null member out of the JSON (WhenWritingNull), so an unfilled shift arrives with no `staffId` and no `staffName` at all: both are
+ * `undefined` to the page, never `null`. `makeShift({ staffId: null })` is a shape the wire never carries, and a test built on it passed while the board hid every shift on real data.
+ */
+export function makeUnfilledShift(overrides: Partial<ShiftDto> = {}): ShiftDto {
+  const shift = makeShift(overrides)
+  delete shift.staffId
+  delete shift.staffName
+  return shift
+}
+
 export function makeFinding(overrides: Partial<RosterFindingDto> = {}): RosterFindingDto {
   return {
     code: 'DOUBLE_BOOKED',

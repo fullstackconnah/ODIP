@@ -13,7 +13,7 @@ export type UnfilledLaneProps = {
 }
 
 /**
- * Pinned as the first row of the grid — shifts with staffId === null, so a coordinator sees
+ * Pinned as the first row of the grid — shifts with no staffId (the API leaves it out), so a coordinator sees
  * what needs filling before anything else. Chips are dashed and show what the shift requires
  * (participant, time, ratio) since there's no staff name to lead with.
  */

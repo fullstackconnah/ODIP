@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -39,7 +40,7 @@ public class RosteringController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly RosterConflictService _conflictService = new();
-    private readonly ShiftPatternExpander _expander = new();
+    private readonly RosterShiftGenerator _generator;
     private readonly StaffCompatibilityLinkService _compatLink;
     private readonly IStaffUnavailabilityQuery _unavailabilityQuery;
     private readonly IConfiguration? _config;
@@ -54,9 +55,10 @@ public class RosteringController : ControllerBase
         OdipDbContext db, StaffCompatibilityLinkService compatLink, IStaffUnavailabilityQuery unavailabilityQuery,
         IConfiguration? config = null, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
         Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null,
-        ShiftPackageService? package = null, TimeProvider? clock = null)
+        ShiftPackageService? package = null, TimeProvider? clock = null, RosterShiftGenerator? generator = null)
     {
         _db = db;
+        _generator = generator ?? new RosterShiftGenerator();
         _clock = clock ?? TimeProvider.System;
         _compatLink = compatLink;
         _unavailabilityQuery = unavailabilityQuery;
@@ -220,17 +222,23 @@ public class RosteringController : ControllerBase
                 && w.Start < shiftEnd && shiftStart < w.End);
         }
 
+        // Which agreement (if any) each shift's pattern came from: two small queries for the whole week, not one per shift.
+        var shiftSources = await ShiftSourcesAsync(weekShifts.Select(s => s.ShiftPatternId), ct);
+
         ShiftDto ToShiftDto(Shift shift, List<RosterFinding> findings)
         {
             participantById.TryGetValue(shift.ParticipantId, out var participant);
             User? staff = shift.UserId.HasValue ? staffById.GetValueOrDefault(shift.UserId.Value) : null;
+            int? sourceVersion = null;
+            var fromAgreement = shift.ShiftPatternId is { } patternId && shiftSources.TryGetValue(patternId, out sourceVersion);
             return new ShiftDto
             {
                 Id = shift.Id, ParticipantId = shift.ParticipantId, ParticipantName = participant?.FullName ?? string.Empty,
                 StaffId = shift.UserId, StaffName = staff?.FullName,
                 ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
                 DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
-                ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, OverrideReason = shift.OverrideReason,
+                ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
+                FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
                 Findings = findings.Select(ToFindingDto).ToList(),
                 AssigneeOnApprovedLeave = IsAssigneeOnApprovedLeave(shift),
                 ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssuesById, shift.ParticipantId)
@@ -1098,7 +1106,8 @@ public class RosteringController : ControllerBase
         if (participantId.HasValue) query = query.Where(p => p.ParticipantId == participantId.Value);
 
         var patterns = await query.OrderBy(p => p.DayOfWeek).ThenBy(p => p.StartTime).ToListAsync(ct);
-        return Ok(ApiResponse<List<ShiftPatternDto>>.Ok(patterns.Select(ToPatternDto).ToList()));
+        var versions = await SourceVersionsAsync(patterns, ct);
+        return Ok(ApiResponse<List<ShiftPatternDto>>.Ok(patterns.Select(p => ToPatternDto(p, versions)).ToList()));
     }
 
     /// <summary>Get a single pattern.</summary>
@@ -1109,7 +1118,7 @@ public class RosteringController : ControllerBase
             .FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<ShiftPatternDto>.Fail("Pattern not found."));
 
-        return Ok(ApiResponse<ShiftPatternDto>.Ok(ToPatternDto(pattern)));
+        return Ok(ApiResponse<ShiftPatternDto>.Ok(ToPatternDto(pattern, await SourceVersionsAsync(new[] { pattern }, ct))));
     }
 
     /// <summary>Create a weekly-recurring shift pattern. Not roster-checked — generation checks its own candidates via <c>POST /shifts/check</c> if the frontend chooses to.</summary>
@@ -1155,9 +1164,22 @@ public class RosteringController : ControllerBase
         pattern.EffectiveFrom = dto.EffectiveFrom; pattern.EffectiveTo = dto.EffectiveTo; pattern.IsActive = dto.IsActive;
         pattern.Notes = dto.Notes;
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        // An agreement pattern is one weekday of one block for one worker of one revision (a unique key: the approval can never make it twice). Moving it to a day that block already has meets that key.
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: AgreementPatternKey })
+        {
+            return Conflict(ApiResponse<ShiftPatternDto>.Fail(AgreementPatternTakenMessage));
+        }
         return Ok(ApiResponse<ShiftPatternDto>.Ok(await LoadPatternDtoAsync(pattern.Id, ct)));
     }
+
+    /// <summary>The unique index on (source revision, block, weekday, worker slot) that keeps an approval from making a pattern twice (<c>OdipDbContext</c>, the partial index on agreement patterns).</summary>
+    private const string AgreementPatternKey = "IX_ShiftPatterns_SourceDraft_Block_Day_Slot";
+
+    private const string AgreementPatternTakenMessage = "This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.";
 
     /// <summary>Delete a pattern. Shifts already generated from it are left in place (provenance only, no cascade).</summary>
     [HttpDelete("patterns/{id:guid}")]
@@ -1172,10 +1194,9 @@ public class RosteringController : ControllerBase
     }
 
     /// <summary>
-    /// Materialise a pattern into concrete Draft shifts across [from, to] via
-    /// <see cref="ShiftPatternExpander.Occurrences"/>. Idempotent: any date in range that
-    /// already carries a shift with this pattern's Id is skipped rather than duplicated, so
-    /// running the same range twice in a row creates nothing the second time.
+    /// Materialise a pattern into concrete Draft shifts across [from, to] through <see cref="RosterShiftGenerator"/>, the one place that does it (the approval of an agreement revision and the
+    /// daily top-up use it too). Idempotent: any date in range that already carries a shift with this pattern's Id is skipped rather than duplicated, so running the same range twice in a
+    /// row creates nothing the second time; so is a day the pattern's agreement plan skips for a public holiday, and concurrent calls for one participant take turns.
     /// </summary>
     [HttpPost("patterns/{id:guid}/generate")]
     public async Task<ActionResult<ApiResponse<GeneratePatternResultDto>>> GeneratePattern(
@@ -1186,32 +1207,18 @@ public class RosteringController : ControllerBase
         if (!(await ParticipantReadiness.CheckAsync(_db, pattern.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<GeneratePatternResultDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
-        var occurrences = _expander.Occurrences(pattern, from, to);
-        if (occurrences.Count == 0)
-            return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = 0, Skipped = 0 }));
-
-        var existingDates = await _db.Shifts
-            .Where(s => s.ShiftPatternId == pattern.Id && occurrences.Contains(s.ServiceDate))
-            .Select(s => s.ServiceDate)
-            .ToListAsync(ct);
-        var existingSet = existingDates.ToHashSet();
-
-        int created = 0, skipped = 0;
-        foreach (var date in occurrences)
+        try
         {
-            if (existingSet.Contains(date)) { skipped++; continue; }
-
-            _db.Shifts.Add(new Shift
-            {
-                Id = Guid.NewGuid(), ParticipantId = pattern.ParticipantId, UserId = pattern.DefaultUserId,
-                ServiceDate = date, StartTime = pattern.StartTime, EndTime = pattern.EndTime, EndsNextDay = pattern.EndsNextDay,
-                Ratio = pattern.Ratio, NightType = pattern.NightType, Status = ShiftStatus.Draft, ShiftPatternId = pattern.Id
-            });
-            created++;
+            // A person's own window: it only moves how far the pattern has been generated when it joins on to what was covered (or, when nothing was yet, to the first day the top-up would make: the provider's today),
+            // so the daily top-up can still fill a gap before it.
+            var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+            var generated = await _generator.GenerateAsync(_db, pattern.ParticipantId, new[] { pattern.Id }, from, to, ct, onlyWhenContiguous: true, providerToday: today);
+            return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = generated.Created, Skipped = generated.Skipped }));
         }
-
-        await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = created, Skipped = skipped }));
+        catch (RosterBusyException busy)
+        {
+            return Conflict(ApiResponse<GeneratePatternResultDto>.Fail(busy.Message));
+        }
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1337,14 +1344,42 @@ public class RosteringController : ControllerBase
     private static Guid? LookupIncidentId(Dictionary<Guid, Guid> map, Guid key) =>
         map.TryGetValue(key, out var incidentId) ? incidentId : null;
 
-    private static ShiftPatternDto ToPatternDto(ShiftPattern p) => new()
+    private static ShiftPatternDto ToPatternDto(ShiftPattern p, IReadOnlyDictionary<Guid, int>? sourceVersions = null) => new()
     {
         Id = p.Id, ParticipantId = p.ParticipantId, ParticipantName = p.Participant?.FullName ?? string.Empty,
         DefaultStaffId = p.DefaultUserId, DefaultStaffName = p.DefaultUser?.FullName,
         DayOfWeek = p.DayOfWeek, StartTime = p.StartTime, EndTime = p.EndTime, EndsNextDay = p.EndsNextDay,
         Ratio = p.Ratio, NightType = p.NightType, EffectiveFrom = p.EffectiveFrom, EffectiveTo = p.EffectiveTo,
-        IsActive = p.IsActive, Notes = p.Notes
+        IsActive = p.IsActive, Notes = p.Notes,
+        SourceDraftId = p.SourceDraftId, SourceBlockKey = p.SourceBlockKey, WorkerSlot = p.WorkerSlot,
+        SourceDraftVersion = p.SourceDraftId is { } source && sourceVersions is not null && sourceVersions.TryGetValue(source, out var version) ? version : null,
+        Requirements = RequirementsOf(p.RequirementsJson),
     };
+
+    /// <summary>What a pattern or a shift asks of a worker, read from its stored JSON; none when it was never given any.</summary>
+    private static DraftBlockRequirementsDto? RequirementsOf(string? json) => string.IsNullOrWhiteSpace(json) ? null : DraftJson.ReadRequirements(json);
+
+    /// <summary>The versions of the agreement revisions the given patterns were made from (one query), for the "From agreement v2" badge.</summary>
+    private async Task<Dictionary<Guid, int>> SourceVersionsAsync(IEnumerable<ShiftPattern> patterns, CancellationToken ct)
+    {
+        var ids = patterns.Where(p => p.SourceDraftId is not null).Select(p => p.SourceDraftId!.Value).Distinct().ToList();
+        return ids.Count == 0 ? new() : await _db.ServiceAgreementDrafts.AsNoTracking().Where(d => ids.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.Version, ct);
+    }
+
+    /// <summary>
+    /// For shifts generated from an agreement's patterns: by pattern id, the version of the revision the pattern was made from (null if that cannot be read). A pattern that is not in it is hand-made, so its
+    /// shifts say nothing about an agreement. Two small queries for the whole set of shifts.
+    /// </summary>
+    private async Task<Dictionary<Guid, int?>> ShiftSourcesAsync(IEnumerable<Guid?> patternIds, CancellationToken ct)
+    {
+        var ids = patternIds.Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToList();
+        if (ids.Count == 0) return new();
+        var made = await _db.ShiftPatterns.AsNoTracking().Where(p => ids.Contains(p.Id) && p.SourceDraftId != null).Select(p => new { p.Id, DraftId = p.SourceDraftId!.Value }).ToListAsync(ct);
+        if (made.Count == 0) return new();
+        var draftIds = made.Select(p => p.DraftId).Distinct().ToList();
+        var versions = await _db.ServiceAgreementDrafts.AsNoTracking().Where(d => draftIds.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.Version, ct);
+        return made.ToDictionary(p => p.Id, p => versions.TryGetValue(p.DraftId, out var version) ? (int?)version : null);
+    }
 
     private static CompatibilityRowDto ToCompatibilityDto(StaffParticipantCompatibility c) => new()
     {
@@ -1423,7 +1458,7 @@ public class RosteringController : ControllerBase
     {
         var pattern = await _db.ShiftPatterns.Include(p => p.Participant).Include(p => p.DefaultUser)
             .FirstAsync(p => p.Id == id, ct);
-        return ToPatternDto(pattern);
+        return ToPatternDto(pattern, await SourceVersionsAsync(new[] { pattern }, ct));
     }
 
     private async Task<ShiftDto> ToShiftDtoAsync(Shift shift, List<RosterFinding> findings, CancellationToken ct)
@@ -1433,6 +1468,8 @@ public class RosteringController : ControllerBase
             ? await _db.Users.FirstOrDefaultAsync(s => s.Id == shift.UserId.Value, ct)
             : null;
         var readinessIssues = await ParticipantReadiness.IssuesAsync(_db, new[] { shift.ParticipantId }, ct);
+        int? sourceVersion = null;
+        var fromAgreement = shift.ShiftPatternId is { } patternId && (await ShiftSourcesAsync(new[] { shift.ShiftPatternId }, ct)).TryGetValue(patternId, out sourceVersion);
 
         return new ShiftDto
         {
@@ -1440,7 +1477,8 @@ public class RosteringController : ControllerBase
             StaffId = shift.UserId, StaffName = staff?.FullName,
             ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
             DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
-            ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, OverrideReason = shift.OverrideReason,
+            ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
+            FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
             Findings = findings.Select(ToFindingDto).ToList(),
             ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssues, shift.ParticipantId)
         };

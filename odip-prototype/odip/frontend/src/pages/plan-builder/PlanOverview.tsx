@@ -8,6 +8,7 @@ import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { TONE } from '@/lib/tone'
 import { describeBlock, type PlanStepKey } from '@/lib/planBlocks'
 import { NO_FIGURE, REASON_COPY, groupByReason, isRefusal } from '@/lib/planQuote'
+import { requirementLabels } from '@/lib/workerRequirements'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 import type { PlanTemplate } from '@/lib/planTemplates'
@@ -144,11 +145,11 @@ export function PlanOverview({ entries, readOnly = false, budget, budgetStatus, 
       key: 'block', header: 'Block', wrap: true, minWidth: '14rem',
       render: row => {
         const { block, requirements } = row.entry
-        const asks = [requirements.workerGender === 'Female' ? 'Female worker' : requirements.workerGender === 'Male' ? 'Male worker' : null, requirements.driver ? 'Driver' : null, ...requirements.skills.map(skill => (skill === 'FirstAid' ? 'First aid' : skill === 'MedicationCompetent' ? 'Medication competent' : 'Manual handling'))].filter(Boolean)
+        const asks = requirementLabels(requirements)
         return (
           <div className="flex min-w-0 flex-col gap-0.5 py-0.5">
             <span className="text-sm font-medium"><span className="tabular-nums text-[var(--color-muted-foreground)]">{row.index + 1}.</span> {describeBlock(block)}</span>
-            {asks.length > 0 && <span className="text-[13px] text-[var(--color-muted-foreground)]">Asks for {asks.join(', ').toLowerCase().replace(/^./, c => c.toUpperCase())}</span>}
+            {asks.length > 0 && <span className="text-[13px] text-[var(--color-muted-foreground)]">Asks for {asks.join(', ').toLowerCase()}</span>}
             {row.issues.map(issue => {
               const refusal = isRefusal(issue.reason)
               const copy = REASON_COPY[issue.reason]
@@ -201,7 +202,9 @@ export function PlanOverview({ entries, readOnly = false, budget, budgetStatus, 
       },
     },
   ]
-  const columns = allColumns.filter(column => (column.key === 'weekly' || column.key === 'period' ? showFigures : column.key === 'actions' ? !readOnly : true))
+  // A saved revision shows the answer it was saved with (the whole agreement, no per-occurrence lines): the ordinary week cannot be rebuilt from it, so there is no column of dashes for it.
+  const hasWeek = !(readOnly && budget?.weekly === null)
+  const columns = allColumns.filter(column => (column.key === 'weekly' ? showFigures && hasWeek : column.key === 'period' ? showFigures : column.key === 'actions' ? !readOnly : true))
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">

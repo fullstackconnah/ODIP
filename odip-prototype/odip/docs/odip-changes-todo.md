@@ -252,8 +252,45 @@ owner decision (collected under Open Flags at the end).
   incident-suggestive keywords (falls, medication, injury, behaviours) and prompt toward
   filing an incident report. Depends on NOTES-01; same potential status.
 
+### M. Plan builder / service agreement approval
+
+- [x] **PLAN-D — "Mark approved" makes roster patterns and unfilled shifts (phase D of the plan builder).**
+  Approving the newest revision of an agreement draft (Admin and Coordinator, or whatever
+  `PlanPricingSettings.ApproverRoles` says, and a SuperAdmin with a tenant) records who and when, makes
+  the weekly patterns of its blocks (a 2:1 support is two a day), ends the previous approved revision's
+  patterns the day before this one starts, and generates unfilled shifts 56 days ahead for a participant who
+  may be rostered. Refused for anything the stored pricing flagged, a hand-typed revision, an ended
+  agreement, a delivery state in another time zone than the provider's and more than 100 patterns;
+  hand-made overlaps (by their real weekly spans) need a tick. No existing shift is changed: the confirm
+  dialog and the result count the old revision's shifts that can still be tidied and link to the roster.
+  A daily job (`RosterTopUp:Enabled`, default true; `RosterTopUp:HorizonDays`, default 56) keeps the
+  horizon for agreement patterns only and never makes a shift a coordinator deleted again
+  (`ShiftPatterns.GeneratedThrough`). A roster lock that stays busy answers 409 `roster-busy`. Fix round 1
+  (a code and a design review) also reworded every screen ("unfilled", "Not approved for e-signing",
+  "Approve version N for rostering?"), made "Unfilled only" work in both board views, showed which worker
+  of a 2:1 pair a pattern is, and made the onboarding checklist's Schedule review gate Complete once a
+  revision is approved. Fix round 2 (the verification reviews): "Unfilled only" on the By participant board
+  asked for `staffId === null`, which the API never sends (it leaves a null out), so the approved card's own
+  link opened an empty week; it now asks for no staffId. The held approval dialog has a 30 second way out
+  (it says no answer came back, to check the card). The dialog and the card promise shifts "added each day"
+  only while the daily top-up is on (`topUpEnabled` on the preview and the approval). A person's own Generate
+  window no longer hides days from the daily job while nothing is recorded on the pattern, the job skips a
+  participant with nothing due, and a shift says which agreement it came from on its own DTO. Spec:
+  `docs/specs/2026-10-03-plan-builder-screen.md`, "Phase D".
+- [ ] **PLAN-D2 — match what a block asks of a worker.** The requirements travel onto patterns and shifts
+  and show as chips; nothing checks them yet. "Female worker" cannot be checked until staff have a gender
+  field. Reuse `COMPETENCY_MISSING` for the skills and the driver flag.
+- [ ] **PLAN-D3 — warn when a plan is over its budget.** Approval deliberately ignores budgets; the budget
+  feature will say it separately.
+- [ ] **PLAN-D4 — a participant who becomes active later gets their shifts the next provider day.** The
+  top-up runs once for each organisation's provider day, so activation at noon waits until tomorrow;
+  generating on activation would close the gap.
+
 ### Open Flags (owner decisions needed)
 
+- **PLAN-D defaults to confirm**: a 2:1 block makes two unfilled patterns a day; a time-zone mismatch is
+  refused (no conversion); the cap is 100 patterns; hand-made overlaps are listed, never ended; a public
+  holiday the plan Skips gets no shift; an agreement pattern stays editable (badge and warning, no lock).
 - **LIVING-04**: what fields should Supported Accommodation capture? (Source bullet was
   empty.)
 - **DIAG-02**: what is the full HIDPA option list and where does it live in the wizard,

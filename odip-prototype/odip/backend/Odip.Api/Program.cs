@@ -172,6 +172,11 @@ builder.Services.AddSingleton<Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter>
 builder.Services.AddScoped<Odip.Api.RateLimiting.PlanQuoteConcurrencyFilter>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ServiceAgreementDraftService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ElectronicSigningEvidenceService>();
+// Plan builder phase D: "Mark approved" makes roster patterns and open shifts. The one generator is shared with the Generate button and the daily top-up; the gate is the readiness check the
+// roster writes use (the API owns it, so the infrastructure services reach it through this seam); the top-up job itself is registered below with the other hosted services.
+builder.Services.AddSingleton<Odip.Infrastructure.Rostering.IRosterPlacementGate, Odip.Api.Services.RosterPlacementGate>();
+builder.Services.AddSingleton<Odip.Infrastructure.Rostering.RosterShiftGenerator>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.ServiceAgreementApprovalService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.DemoJourneySimulationService>();
 // DOC-01 — Intake Form / Participant Profile PDF exports.
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantDocumentService>();
@@ -209,6 +214,11 @@ builder.Services.AddScoped<Odip.Application.Interfaces.INotificationRaiser, Odip
 builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odip.Infrastructure.Notifications.SmtpEmailChannel>();
 builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odip.Infrastructure.Notifications.SmsChannel>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.NotificationDispatchBackgroundService>();
+
+// ── Roster top-up (plan builder phase D) ──────────────────────────
+// Keeps RosterTopUp:HorizonDays (56) days of open shifts generated for the patterns an approved agreement made, once for each organisation's provider day. RosterTopUp:Enabled (default true)
+// switches it off; hand-made and demo patterns are never touched. Reads the clock the rest of the API reads (TimeProvider.System, registered above).
+builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.RosterTopUpBackgroundService>();
 
 // ── Public early-access form (landing page) ──────────────────────
 // EarlyAccessService stores the request; EarlyAccessNotifier is the opt-in operator email (needs BOTH

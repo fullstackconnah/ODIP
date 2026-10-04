@@ -74,7 +74,8 @@ export function WeekToolbar({
           value={groupBy}
           onChange={key => onGroupByChange(key as BoardViewMode)}
         />
-        <div className="w-40">
+        {/* As wide as the name chosen (a participant's full name wrapped onto two lines inside a fixed 160px box), within limits. */}
+        <div className="w-auto min-w-40 max-w-64">
           <Dropdown
             variant="form"
             value={participantFilter}
@@ -95,20 +96,15 @@ export function WeekToolbar({
             />
           </div>
         )}
-        {groupBy === 'staff' && (
-          // A single on/off filter is a toggle button (aria-pressed), not a one-option radio
-          // group — ToggleGroup's role="radiogroup"/role="radio" semantics assume >=2 mutually
-          // exclusive options, and its arrow-key roving-tabindex handling would otherwise fire
-          // on every arrow key with only one option to rove between (index±1 mod 1 is always 0).
-          <Button
-            variant={unfilledOnly ? 'primary' : 'ghost'}
-            size="md"
-            aria-pressed={unfilledOnly}
-            onClick={() => onUnfilledOnlyChange(!unfilledOnly)}
-          >
-            Unfilled only
-          </Button>
-        )}
+        {/* Offered in both views (it narrows the staff board to its unfilled lane, and the participant board to the shifts nobody is assigned to). A single on/off filter is a toggle button (aria-pressed), not a one-option radio group — ToggleGroup's role="radiogroup"/role="radio" semantics assume >=2 mutually exclusive options, and its arrow-key roving-tabindex handling would otherwise fire on every arrow key with only one option to rove between (index±1 mod 1 is always 0). */}
+        <Button
+          variant={unfilledOnly ? 'primary' : 'ghost'}
+          size="md"
+          aria-pressed={unfilledOnly}
+          onClick={() => onUnfilledOnlyChange(!unfilledOnly)}
+        >
+          Unfilled only
+        </Button>
         <Button variant="secondary" size="md" onClick={onOpenExceptions}>
           <AlertTriangle className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           {plural(exceptionsCount, 'exception')}

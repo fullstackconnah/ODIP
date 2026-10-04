@@ -4,7 +4,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ShiftSlideOver } from './ShiftSlideOver'
 import { makeShift, makeFinding } from '../test-fixtures'
-import type { ParticipantRoutineDto, CompatibilityRowDto, ShiftNoteDto } from '@/api/types'
+import type { ParticipantRoutineDto, CompatibilityRowDto, ShiftDto, ShiftNoteDto } from '@/api/types'
 
 const {
   mockCheckMutate, mockCreateMutateAsync, mockUpdateMutateAsync, mockDeleteMutateAsync, mockGetRosterFindings,
@@ -1380,5 +1380,62 @@ describe('ShiftSlideOver as a dialog', () => {
       <ShiftSlideOver {...props} target={{ mode: 'create', participantId: 'participant-1', serviceDate: '2026-08-17', focusField: 'staff' }} onClose={noop} />,
     )
     expect(screen.getByRole('combobox', { name: 'Staff' })).toHaveFocus()
+  })
+})
+
+// Plan builder phase D: a shift generated from an agreement's pattern carries what the agreement asks of a worker, and the panel shows it (informational: nothing checks it against the worker yet).
+describe('ShiftSlideOver — what the shift asks of a worker', () => {
+  const openShift = (requirements?: ShiftDto['requirements']) => render(
+    <ShiftSlideOver
+      target={{ mode: 'edit', shift: makeShift({ requirements }) }}
+      onClose={noop}
+      canWrite
+      participantOptions={participantOptions}
+      staffOptions={staffOptions}
+    />,
+  )
+
+  it('shows a chip for each thing the shift asks of a worker, with a note that it is not checked yet', () => {
+    openShift({ workerGender: 'Female', driver: true, skills: ['MedicationCompetent'] })
+
+    const chips = within(screen.getByRole('list', { name: 'Asks for' }))
+    expect(chips.getAllByRole('listitem').map(item => item.textContent)).toEqual(['Female worker', 'Driver', 'Medication competent'])
+    expect(screen.getByText('From the agreement. Shown, not checked against the worker yet.')).toBeInTheDocument()
+  })
+
+  it('shows nothing for a shift that asks for nothing, or has no requirements (a one-off, an older shift)', () => {
+    const { unmount } = openShift({ workerGender: 'NoPreference', driver: false, skills: [] })
+    expect(screen.queryByRole('list', { name: 'Asks for' })).not.toBeInTheDocument()
+    unmount()
+
+    openShift(undefined)
+    expect(screen.queryByText('Asks for')).not.toBeInTheDocument()
+  })
+})
+
+// The shifts an approval made sit on the board on the same days as the shifts of the revision before it: the panel says which agreement a shift came from, read only (nothing here changes it). The shift itself says so
+// (the server puts its pattern's source on it), so opening the panel reads nothing more.
+describe('ShiftSlideOver — which agreement a shift came from', () => {
+  const open = (overrides: Partial<ShiftDto> = {}) => render(
+    <ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ shiftPatternId: 'pattern-7', ...overrides }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />,
+  )
+
+  it('says "From agreement v2" for a shift that says it came from version 2 of an agreement', () => {
+    open({ fromAgreement: true, sourceDraftVersion: 2 })
+
+    expect(screen.getByText('From agreement v2')).toBeInTheDocument()
+  })
+
+  it('says "From an agreement" when the version is not known, and nothing for a shift that does not say it came from one', () => {
+    const first = open({ fromAgreement: true })
+    expect(screen.getByText('From an agreement')).toBeInTheDocument()
+    first.unmount()
+
+    const second = open({})                                                                  // a hand-made pattern's shift: no fromAgreement on the wire
+    expect(screen.queryByText(/From agreement|From an agreement/)).not.toBeInTheDocument()
+    second.unmount()
+
+    open({ shiftPatternId: null })                                                           // a one-off shift with no pattern at all
+    expect(screen.queryByText(/From agreement|From an agreement/)).not.toBeInTheDocument()
   })
 })

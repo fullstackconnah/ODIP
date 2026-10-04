@@ -40,6 +40,39 @@ public class ServiceAgreementDraft : ITenantEntity
 }
 
 /// <summary>
+/// The record that a person approved one revision of an agreement draft for rostering (plan builder, phase D): who, when, and what it did. One row for each revision
+/// (unique on <see cref="DraftId"/>), written in the same transaction as the roster patterns the approval made, and never changed: there is no un-approving, a change is
+/// a new revision that is approved in its turn. It is a table of its own and not columns on <see cref="ServiceAgreementDraft"/>, which stays an immutable revision.
+/// It is not the e-signing state (that is the revision's template status, and its own evidence) and it is not a signed agreement.
+/// </summary>
+public class ServiceAgreementDraftApproval : ITenantEntity
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Guid DraftId { get; set; }
+    public ServiceAgreementDraft? Draft { get; set; }
+    public Guid ParticipantId { get; set; }
+    public Participant? Participant { get; set; }
+    /// <summary>The revision's version, kept here so the approval reads without its revision.</summary>
+    public int DraftVersion { get; set; }
+    /// <summary>The instant of the approval, from the injected clock (never the machine's).</summary>
+    public DateTime ApprovedAt { get; set; }
+    /// <summary>The user who approved it; null when the claim was not a user id.</summary>
+    public Guid? ApprovedByUserId { get; set; }
+    public string ApprovedByName { get; set; } = string.Empty;
+    /// <summary>The weekly roster patterns the approval made.</summary>
+    public int PatternsCreated { get; set; }
+    /// <summary>The patterns of earlier approved revisions it ended the day before this revision starts.</summary>
+    public int PatternsEnded { get; set; }
+    /// <summary>The open shifts it generated straight away (none for a participant who is not active yet: the daily top-up makes them once they are).</summary>
+    public int ShiftsCreated { get; set; }
+    /// <summary>The date of the first shift it generated; null when it generated none.</summary>
+    public DateOnly? FirstShiftDate { get; set; }
+    /// <summary>The last day shifts were generated to (the provider's today plus the horizon, held to the agreement's end); null when none were generated.</summary>
+    public DateOnly? HorizonEnd { get; set; }
+}
+
+/// <summary>
 /// One weekly support block of a draft revision. The block is stored exactly as the pricing engine takes it (<see cref="BlockJson"/> is the JSON of its
 /// <c>PlanBlock</c>), so re-pricing a revision later needs no translation and a change to the engine's model never needs a new column. It belongs to the revision
 /// and is never edited: a change is a new revision with its own copies. Tenant ownership is the draft's (like <see cref="ServiceAgreementDraftLine"/>, this row is

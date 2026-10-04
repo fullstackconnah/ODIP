@@ -12,7 +12,7 @@ import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { usePermissions } from '@/lib/permissions'
-import { extractErrorMessage } from '@/lib/utils'
+import { extractErrorMessage, formatWithTimeZone } from '@/lib/utils'
 
 type Detail = {
   participantId: string
@@ -28,6 +28,9 @@ type Detail = {
   fundingRecorded?: boolean | null
   isReady: boolean
   reasons: string[]
+  /** The newest revision of the agreement that has been approved for rostering, and when (plan builder, phase D). Absent until one has. */
+  scheduleApprovedVersion?: number
+  scheduleApprovedAt?: string
 }
 
 type Gate = { label: string; state: 'Needs attention' | 'Blocked' | 'Complete'; context?: React.ReactNode; fixRoute?: { to: string; label: string } }
@@ -61,6 +64,8 @@ export default function OnboardingDetailPage() {
     : undefined
   const headingTitle = participantLoading ? 'Loading…' : (participantName ?? 'Participant')
 
+  const scheduleApproved = d.scheduleApprovedVersion !== undefined
+  const approvedOn = d.scheduleApprovedAt ? formatWithTimeZone(d.scheduleApprovedAt, undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : undefined
   const recommended = !d.intakeComplete
     ? {
         label: 'Complete intake',
@@ -101,11 +106,22 @@ export default function OnboardingDetailPage() {
                 reason: 'The plan budget is recorded on the participant’s Funding tab, from the plan the participant shares or from their plan manager. If the plan has not been shared yet, this can wait.',
                 action: canManageFunding ? <Button to={`/participants/${id}?tab=funding`}>Open Funding tab</Button> : null,
               }
-            : {
-                label: 'Review schedule proposal',
-                reason: 'Schedule review is proposal-only. No schedule coverage has been approved and no shifts are created here.',
-                action: canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
-              }
+            : scheduleApproved
+              ? {
+                  // A revision has been approved for rostering: what is left is to look at what it made.
+                  label: 'Check the roster',
+                  reason: `Version ${d.scheduleApprovedVersion} was approved for rostering${approvedOn ? ` on ${approvedOn}` : ''}: its weekly patterns and unfilled shifts are made. Check them under Shift patterns and on the roster. Nothing is created from this page.`,
+                  action: canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
+                }
+              : {
+                  label: 'Approve the agreement for rostering',
+                  // What to do, not why again: that the schedule is made by approving a revision, and not from here, is said once, in the list of what is still missing below.
+                  reason: 'Open the agreement draft and approve its newest revision for rostering. That makes the weekly patterns and unfilled shifts, which you can then check under Shift patterns.',
+                  // The draft carries money, so only the roles the API admits to it are sent there.
+                  action: canAccessPage('agreement-drafts')
+                    ? <Button to={`/participants/${id}/agreement-draft`}>Open agreement draft</Button>
+                    : canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
+                }
 
   const gates: Gate[] = [
     { label: 'Intake completed', state: gateState(d.intakeComplete) },
@@ -123,7 +139,16 @@ export default function OnboardingDetailPage() {
           fixRoute: canManageFunding ? { to: `/participants/${id}?tab=funding`, label: 'Open Funding tab' } : undefined,
         } satisfies Gate]
       : []),
-    { label: 'Schedule review', state: 'Blocked', context: 'Shows the proposed schedule only — no shifts are created.', fixRoute: canAccessPage('rostering') ? { to: '/rostering/patterns', label: 'Open shift patterns' } : undefined },
+    {
+      label: 'Schedule review',
+      // Complete once a revision has been approved for rostering (it made the patterns and the shifts), and the row says which one. Until then it is Blocked and says no more than that and where to go: what the
+      // schedule needs is said once, by the next action above and the list below, not a third time here.
+      state: scheduleApproved ? 'Complete' : 'Blocked',
+      context: scheduleApproved ? `Approved for rostering: version ${d.scheduleApprovedVersion}${approvedOn ? `, on ${approvedOn}` : ''}.` : undefined,
+      // The schedule is made on the agreement draft: the shift patterns page has nothing to show before a revision is approved, so it is only the way for a role the API does not admit to the draft.
+      fixRoute: canAccessPage('agreement-drafts')
+        ? { to: `/participants/${id}/agreement-draft`, label: 'Open agreement draft' }
+        : canAccessPage('rostering') ? { to: '/rostering/patterns', label: 'Open shift patterns' } : undefined },
   ]
   const completedGateCount = gates.filter(gate => gate.state === 'Complete').length
   // Finishing onboarding is the Profile wizard's Complete Profile: it finalises the participant, and when the organisation's readiness rule allows it they
@@ -161,7 +186,12 @@ export default function OnboardingDetailPage() {
         </section>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <p className="text-sm text-[var(--color-muted-foreground)]">Completing the participant's profile finishes onboarding: they move to Active participants once your organisation's readiness rule allows it. What is still missing is listed below.</p>
+        {/* "Listed below" only while there is a list: with nothing missing the page says so, and what finishing onboarding looks like. */}
+        <p className="text-sm text-[var(--color-muted-foreground)]">
+          {d.reasons.length > 0
+            ? "Completing the participant's profile finishes onboarding: they move to Active participants once your organisation's readiness rule allows it. What is still missing is listed below."
+            : "Nothing else is missing. Completing the participant's profile finishes onboarding: they move to Active participants once your organisation's readiness rule allows it."}
+        </p>
         {canCompleteProfile && <Button to={`/participants/${id}/profile`}>Complete profile</Button>}
       </div>
     </div>

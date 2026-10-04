@@ -60,6 +60,11 @@ public class DemoUniqueIndexAccountingTests
             "DemoRecordedSlotTests.APresenterWhoRecordsTheLunchtimeDoseAsRefused_BeforeTheShiftsEnd_LeavesOneActiveRecordOfTheSlot_TheirOwn",
             "DemoRecordedSlotTests.APresenterWhoRecordsADoseTheScriptWouldWriteWhileTheShiftRuns_LeavesOneActiveRecordOfTheSlot_TheirOwn"),
 
+        ["ShiftPattern|IX_ShiftPatterns_SourceDraft_Block_Day_Slot"] = new(
+            "The index (plan builder phase D) is partial: it holds only a pattern an approved agreement revision made (SourceDraftId set). The pack's patterns are written by id with no source, " +
+            "so they are outside it, and a pattern a person's approval makes has a random id the pack never writes.",
+            "PlanApprovalSchemaTests.A_pattern_made_by_an_approval_is_unique_by_revision_block_weekday_and_worker_slot_and_a_hand_made_pattern_is_outside_the_index"),
+
         ["BookingTask|IX_BookingTask_SourceKey"] = new(
             "Every pack task's SourceKey is built from the id of the row it belongs to (flagged-note:{note}, med-witness:{dose}, incident-qsc:{incident}) and is written in the same " +
             "save as that row, so a person cannot hold the key first; leave coverage asks for the keys it wants first (DemoQueries.ExistingTaskKeys) and raises through the app's own " +
@@ -82,7 +87,7 @@ public class DemoUniqueIndexAccountingTests
             "The same lookup (DemoQueries.ActiveRuleKeysOf).",
             "DemoPr1HumanRowsTests.AnEmilyTuesdayRuleAPersonMadeFirst_HoldsTheKeyUnlessItIsCancelledOrDeclined"),
 
-        ["Shift|(pattern, date) (RosteringController.GeneratePattern skips a date that already carries a shift of the pattern, whatever its status)"] = new(
+        ["Shift|(pattern, date) (RosterShiftGenerator, which the Generate button, an approval and the daily top-up all use, skips a date that already carries a shift of the pattern, whatever its status)"] = new(
             "The roster pack asks for the dates its pattern shifts would land on (DemoQueries.PatternDatesOf) and places none where a shift of the pattern stands, and moves forward only the shifts it made.",
             "DemoRosterBesideAppShiftsTests.ADraftTheAppGeneratedForADemoPatternBeyondTheWindow_IsNotDoubledWhenTheWindowReachesIt",
             "DemoRosterBesideAppShiftsTests.APastDraftTheAppGeneratedForADemoPattern_IsNotCancelledByTheTopUp"),

@@ -42,7 +42,7 @@ describe('PlanOverview with blocks', () => {
 
     expect(screen.getByText('Mon, Wed · 09:00–13:00 · Community access 1:1 · +20 km transport')).toBeInTheDocument()
     expect(screen.getByText('Sat · 09:00–15:00 · Group activity 1:3')).toBeInTheDocument()
-    expect(screen.getByText('Asks for Female worker, driver, first aid')).toBeInTheDocument()
+    expect(screen.getByText('Asks for female worker, driver, first aid')).toBeInTheDocument()
     expect(screen.getByText('8 h · $588.64')).toBeInTheDocument()
     expect(screen.getByText('6 h · $207.06')).toBeInTheDocument()
     expect(screen.getByText('$30,610.28')).toBeInTheDocument()
@@ -381,6 +381,24 @@ describe('PlanOverview when read only', () => {
     expect(screen.queryByRole('button', { name: /Edit .* of block/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Duplicate block/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Remove block/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('PlanOverview when read only with the answer a revision was saved with', () => {
+  it('shows what each block came to over the agreement and no column for an ordinary week, which cannot be rebuilt from a stored answer', () => {
+    setUp({ readOnly: true, budget: { period: budget().period, weekly: null, week: null }, budgetStatus: 'ready' })
+
+    expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Block', 'The agreement'])
+    expect(screen.getByText('$30,610.28')).toBeInTheDocument()
+    expect(screen.getByText('$8,195.16')).toBeInTheDocument()
+    expect(screen.queryByText('8 h · $588.64')).not.toBeInTheDocument()
+    expect(screen.queryByText('…')).not.toBeInTheDocument()
+  })
+
+  it('still shows the ordinary week of a plan that can be priced live, with the week and the agreement both', () => {
+    setUp({ budget: { ...budget(), weekly: null, week: null } })      // an agreement shorter than a week has no ordinary week, and a person who can edit sees the dash
+
+    expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Block', 'An ordinary week', 'The agreement', ''])
   })
 })
 

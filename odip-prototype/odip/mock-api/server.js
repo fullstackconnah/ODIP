@@ -9,6 +9,7 @@
 
 const http = require('http')
 const planPricing = require('./planPricing')
+const planApproval = require('./planApproval')
 const fundingModule = require('./funding')
 
 const PORT = Number(process.env.MOCK_PORT) || 5062
@@ -101,6 +102,7 @@ const enquiryFeed = [
 // everyone on the worklist as NDIS-funded, and Mei has no plan budget (funding.js holds plans for p-0002 and p-0004 only).
 const FUNDING_NOT_RECORDED_REASON = "Funding is not recorded: add the plan budget on the participant's Funding tab."
 const FUNDING_ENDED_REASON = "The plan budget has ended: record the new plan on the participant's Funding tab."
+const SCHEDULE_REASON = 'The schedule is made when an agreement revision is approved for rostering, from its draft page; nothing is created from onboarding itself.'
 // Daniel has done everything but the plan budget, so his onboarding page recommends "Record plan budget" (the one step Warn mode lets wait).
 const ALL_BUT_FUNDING = new Set(['p-0104'])
 const onboardingWorklist = [
@@ -1804,7 +1806,32 @@ const sampleOverlapFinding = {
 // hole rather than a normal filled chip; board-shift-0001 is a normal filled shift for contrast.
 // The matching ASSIGNEE_ON_LEAVE entry in `exceptions` below is the server-side counterpart the
 // board/drawer now rely on instead of a client-synthesised one.
-function rosterBoard() {
+// Plan builder phase D: `weekStart` is read now (the Monday of the week it falls in; the fixture week when it is missing), and the shifts an approval generates are on the board for the week
+// they fall in. The fixture's own two shifts stay in their own week. Each participant with shifts that week has a row (the real board lists every active participant).
+const BOARD_FIXTURE_WEEK = '2026-09-07'
+function rosterBoard(searchParams) {
+  const asked = searchParams && searchParams.get('weekStart')
+  const monday = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? planApproval.addDays(asked, -((planApproval.weekday(asked) + 6) % 7)) : BOARD_FIXTURE_WEEK
+  const days = Array.from({ length: 7 }, (_, i) => planApproval.addDays(monday, i))
+  const board = rosterBoardFixture()
+  if (monday !== BOARD_FIXTURE_WEEK) { board.participantRows = []; board.exceptions = [] }
+  board.weekStart = monday
+  board.days = days
+  for (const shift of rosterShifts.filter((s) => s.serviceDate >= days[0] && s.serviceDate <= days[6])) {
+    let row = board.participantRows.find((r) => r.participantId === shift.participantId)
+    if (!row) {
+      const who = participants.find((p) => p.id === shift.participantId)
+      row = { participantId: shift.participantId, fullName: who ? who.fullName : shift.participantName, supportRatio: who ? who.supportRatio : 'OneToOne', overnightSupport: 'None', hasRestrictivePractice: false, shifts: [], tripBars: [], scheduledHours: 0, daysWithoutCover: 7 }
+      board.participantRows.push(row)
+    }
+    row.shifts.push(shift)
+    row.daysWithoutCover = 7 - new Set(row.shifts.map((s) => s.serviceDate)).size
+    row.scheduledHours = row.shifts.filter((s) => s.staffId).reduce((sum, s) => sum + s.durationHours, 0)
+  }
+  return board
+}
+
+function rosterBoardFixture() {
   return {
     groupBy: 'Participant',
     weekStart: '2026-09-07',
@@ -2065,7 +2092,7 @@ const PORTAL_SHIFT_STAFF_ID = { 'shift-0001': 's-0003', 'shift-0002': 's-0004', 
  * GET participants/:id/rostering to filter without maintaining a third hand-written shift
  * fixture. Stateless like every other derived fixture in this file — rebuilt per call. */
 function allFixtureShifts() {
-  const board = rosterBoard()
+  const board = rosterBoardFixture()
   const boardShifts = board.participantRows.flatMap((row) => row.shifts)
   const portalShifts = Object.values(portalShiftBase).map((base) => {
     const participant = participants.find((p) => p.id === base.participantId)
@@ -2152,13 +2179,24 @@ const fundingSources = [
 ]
 const serviceAgreementDrafts = {}
 
+// Plan builder phase D: the roster patterns and shifts an approval makes (planApproval.js), kept so the Patterns page and the roster board show them. Two hand-made patterns are seeded: p-0004 has a
+// Wednesday 12:00 to 15:00 one that overlaps the seeded plan's Wednesday block (so the confirm dialog lists it and asks for the box to be ticked), and p-0001 has an ordinary weekly one.
+const rosterPatterns = [
+  { id: 'pat-hand-0001', participantId: 'p-0001', participantName: 'Liam Okafor', defaultStaffId: 's-0003', defaultStaffName: "Jack O'Sullivan", dayOfWeek: 'Tuesday', startTime: '09:00:00', endTime: '15:00:00', endsNextDay: false, ratio: 'OneToTwo', nightType: 'None', effectiveFrom: '2026-09-01', effectiveTo: null, isActive: true, notes: 'Weekly community access' },
+  { id: 'pat-hand-0004', participantId: 'p-0004', participantName: 'Grace Palmer-Hughes', defaultStaffId: null, defaultStaffName: null, dayOfWeek: 'Wednesday', startTime: '12:00:00', endTime: '15:00:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None', effectiveFrom: '2026-09-01', effectiveTo: null, isActive: true, notes: 'Wednesday outing' },
+]
+const rosterShifts = []
+let rosterCounter = 0
+const approvalStore = { drafts: serviceAgreementDrafts, patterns: rosterPatterns, shifts: rosterShifts, participants, newId: (prefix) => `${prefix}-mock-${++rosterCounter}` }
+
 function draftDto(participantId, version, body, quoteResult, lines) {
   return {
     id: `draft-${participantId}-v${version}`, participantId, version, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27',
     templateDocxSha256: '9f2c1d0e', templatePdfSha256: '41ab77c3', state: body.state, planStartDate: body.planStartDate, planEndDate: body.planEndDate,
     agreementStartDate: body.agreementStartDate, agreementEndDate: body.agreementEndDate, ...(body.representative ? { representative: body.representative } : {}),
     blocks: (body.blocks || []).map((entry) => ({ block: entry.block, requirements: { workerGender: 'NoPreference', driver: false, skills: [], ...(entry.requirements || {}) } })),
-    ...(quoteResult ? { pricing: { ...quoteResult, lines: [] } } : {}), lines,
+    // The server's answer carries needsReview (PlanQuote.NeedsReview: an issue, or a line to review); the card reads it to say a plan is not ready before anybody presses Mark approved.
+    ...(quoteResult ? { pricing: { ...quoteResult, lines: [], needsReview: (quoteResult.issues || []).length > 0 || ((quoteResult.totals && quoteResult.totals.reviewLines) || 0) > 0 } } : {}), lines,
     ...draftSummaryFields(quoteResult, lines, (body.blocks || []).length),
   }
 }
@@ -2231,9 +2269,11 @@ function saveDraft(participantId, body) {
     { block: block('b3', { supportType: 'PersonalCare', days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], start: '07:00:00', end: '09:00:00', setting: 'AtHome' }), requirements: { ...none, skills: ['ManualHandling'] } },
   ]
   for (const participantId of ['p-0003', 'p-0004']) {
-    const body = { ...base, blocks: plan }
-    const result = planPricing.quote({ blocks: plan.map((entry) => entry.block), periodFrom: base.agreementStartDate, periodTo: base.agreementEndDate, includeLines: true }, planPricingSettings)
-    const lines = planPricing.groupLines(result._lines, plan.map((entry) => entry.block))
+    // p-0004's plan has decided its public holidays (Charge), so it can be approved for rostering; p-0003's has not (Review, the default), so approving it is refused with the holidays named.
+    const blocksFor = participantId === 'p-0004' ? plan.map((entry) => ({ ...entry, block: { ...entry.block, onPublicHoliday: 'Charge' } })) : plan
+    const body = { ...base, blocks: blocksFor }
+    const result = planPricing.quote({ blocks: blocksFor.map((entry) => entry.block), periodFrom: base.agreementStartDate, periodTo: base.agreementEndDate, includeLines: true }, planPricingSettings)
+    const lines = planPricing.groupLines(result._lines, blocksFor.map((entry) => entry.block))
     delete result._lines
     serviceAgreementDrafts[participantId] = [draftDto(participantId, 1, body, result, lines)]
   }
@@ -2252,6 +2292,11 @@ const routes = [
     return found || respond(404, failEnvelope(null, ['Draft not found.']))
   }],
   ['participants/:id/service-agreement-drafts', (id) => (serviceAgreementDrafts[id] || []).map((draft, index) => (index === 0 ? draft : summaryOf(draft)))],
+  // What approving would do, nothing done (phase D): the reasons, the counts, the old version's shifts that stay, the hand-made patterns that overlap.
+  ['participants/:id/service-agreement-drafts/:id/approval-preview', (participantId, draftId) => {
+    const result = planApproval.preview(approvalStore, participantId, draftId)
+    return result.status ? respond(result.status, failEnvelope(null, result.errors)) : result.preview
+  }],
   ['billing/funding-sources', (searchParams) => paged(fundingSources.filter((f) => !searchParams.get('participantId') || f.participantId === searchParams.get('participantId')))],
 
   // participants (paged list)
@@ -2263,13 +2308,20 @@ const routes = [
   ['inquiries/:id/onboarding', (id) => {
     const budget = funding.budgetStatus(id)
     const fundingRecorded = budget.recorded
-    const done = ALL_BUT_FUNDING.has(id)
+    // p-0004 has every step, its plan budget included (funding.js gives it a plan), but for the schedule: its checklist shows the last step, before and after its agreement draft is approved for rostering
+    // (phase D). Like the server, the list says where the schedule is made until a revision is approved and nothing about it after (the checklist's row names the revision), and it is never ready while the schedule waits.
+    const scheduleOnly = id === 'p-0004'
+    const approved = (serviceAgreementDrafts[id] || []).filter((d) => d.approval).sort((a, b) => b.version - a.version)[0]
+    const schedule = approved ? { scheduleApprovedVersion: approved.version, scheduleApprovedAt: approved.approval.approvedAt } : {}
+    const done = ALL_BUT_FUNDING.has(id) || scheduleOnly
     return {
-      participantId: id, intakeComplete: true, profileComplete: done, serviceTypeConfirmed: done, serviceAgreementSigned: done, fundingRecorded, isReady: done && fundingRecorded,
+      participantId: id, intakeComplete: true, profileComplete: done, serviceTypeConfirmed: done, serviceAgreementSigned: done, fundingRecorded, isReady: done && fundingRecorded && !scheduleOnly,
       reasons: [
         ...(done ? [] : ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.']),
         ...(fundingRecorded ? [] : [budget.ended ? FUNDING_ENDED_REASON : FUNDING_NOT_RECORDED_REASON]),
+        ...(scheduleOnly && !approved ? [SCHEDULE_REASON] : []),
       ],
+      ...schedule,
     }
   }],
   ['participants/:id/bookings', (id) => bookings.filter((b) => b.participantId === id)],
@@ -2450,7 +2502,10 @@ const routes = [
   ['leave/unavailability', () => recurringUnavailabilities],
 
   // Roster board (item 5/2 — assigneeOnApprovedLeave) — see rosterBoard()'s own comment.
-  ['rostering/board', () => rosterBoard()],
+  ['rostering/board', (searchParams) => rosterBoard(searchParams)],
+  // Patterns (phase D): the hand-made ones seeded above and what approvals make; ?participantId= filters like the real list.
+  ['rostering/patterns', (searchParams) => rosterPatterns.filter((p) => !searchParams.get('participantId') || p.participantId === searchParams.get('participantId'))],
+  ['rostering/patterns/:id', (id) => rosterPatterns.find((p) => p.id === id) || respond(404, failEnvelope(null, ['Pattern not found.']))],
 
   // legacy StaffAvailability list — GET /staff-availability?userId=&from=&to= (query string isn't
   // read here, same caveat as the leave/unavailability routes above).
@@ -2507,8 +2562,19 @@ const postRoutes = [
     return result
   }],
   ['participants/:id/service-agreement-drafts', (id, body) => saveDraft(id, body)],
+  // Mark approved (phase D): makes the patterns and the open shifts, ends the old revision's patterns, and answers with the revision, its approval and the old shifts that remain.
+  // The Generate button on the Patterns page: it makes nothing here (the board already holds what an approval made); it only answers in the real shape so the result dialog can be seen. Skipped holds the plan's skipped public holidays too.
+  ['rostering/patterns/:id/generate', () => ({ created: 0, skipped: 3 })],
+  ['participants/:id/service-agreement-drafts/:id/approve', (participantId, draftId, body) => {
+    const result = planApproval.approve(approvalStore, participantId, draftId, body, { name: 'Demo Coordinator' })
+    if (result.status === 409) return respond(409, failEnvelope({ currentVersion: result.currentVersion }, result.errors, 'draft-superseded'))
+    if (result.status) return respond(result.status, failEnvelope(null, result.errors))
+    return { ...result.draft, oldShiftsRemaining: result.oldShiftsRemaining }
+  }],
   ...packageRoutesPost,
   ['staff-assignments/check', () => []],
+  // The shift panel's live dry-run (a pure preview): no findings. Without it the panel, open for a moment, set its findings to whatever the fallback answered and crashed.
+  ['rostering/shifts/check', () => []],
 
   ['leave/:id/approve', (id) => ({
     leave: withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Approved', null),
@@ -2638,6 +2704,18 @@ const postRoutes = [
 const putRoutes = [
   ...packageRoutesPut,
   ...funding.put,
+  // A pattern edited or switched off on the Patterns page (phase D keeps the patterns an approval made in memory). The fields the real PUT takes; where it came from is never the form's to change.
+  ['rostering/patterns/:id', (id, body) => {
+    const pattern = rosterPatterns.find((p) => p.id === id)
+    if (!pattern) return respond(404, failEnvelope(null, ['Pattern not found.']))
+    // An agreement pattern is one weekday of one block for one worker of one revision (a unique key): moving it to a weekday its block already has is a 409 in words, as the real server answers it.
+    if (pattern.sourceDraftId && body && body.dayOfWeek && body.dayOfWeek !== pattern.dayOfWeek
+      && rosterPatterns.some((p) => p.id !== pattern.id && p.sourceDraftId === pattern.sourceDraftId && p.sourceBlockKey === pattern.sourceBlockKey && p.workerSlot === pattern.workerSlot && p.dayOfWeek === body.dayOfWeek)) {
+      return respond(409, failEnvelope(null, ['This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.']))
+    }
+    for (const key of ['dayOfWeek', 'startTime', 'endTime', 'endsNextDay', 'ratio', 'nightType', 'effectiveFrom', 'effectiveTo', 'isActive', 'notes', 'defaultStaffId']) if (body && key in body) pattern[key] = body[key]
+    return pattern
+  }],
   ['plan-pricing/settings', (body) => {
     for (const rate of [body.travelKmRateStandard, body.travelKmRateAccessible]) {
       if (typeof rate === 'number' && (rate < 0 || rate > 5)) return respond(400, failEnvelope(null, ['The travel rate per kilometre must be between $0 and $5.']))

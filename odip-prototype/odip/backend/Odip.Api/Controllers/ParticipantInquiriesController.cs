@@ -81,8 +81,8 @@ public class ParticipantInquiriesController : ControllerBase
         {
             var detail = await BuildDetail(p, rowsByParticipant.GetValueOrDefault(p.Id) ?? BlankOnboarding(p), ct, today);
             if (detail.IsReady) continue;
-            // "Funding recorded" is a step of the activation checklist for an NDIS-funded participant (FundingRecorded is null for any other, who have five steps, not six).
-            var completed = (detail.IntakeComplete ? 1 : 0) + (detail.ProfileComplete ? 1 : 0) + (detail.ServiceTypeConfirmed ? 1 : 0) + (detail.ServiceAgreementSigned ? 1 : 0) + (detail.FundingRecorded == true ? 1 : 0);
+            // "Funding recorded" is a step of the activation checklist for an NDIS-funded participant (FundingRecorded is null for any other, who have five steps, not six). The schedule review is the last step: complete once a revision has been approved for rostering, which is how the checklist page counts it, so the two say the same "n of N".
+            var completed = (detail.IntakeComplete ? 1 : 0) + (detail.ProfileComplete ? 1 : 0) + (detail.ServiceTypeConfirmed ? 1 : 0) + (detail.ServiceAgreementSigned ? 1 : 0) + (detail.FundingRecorded == true ? 1 : 0) + (detail.ScheduleApprovedVersion is not null ? 1 : 0);
             result.Add(new ParticipantOnboardingWorklistDto { ParticipantId = p.Id, FullName = p.FullName, Stage = !detail.IntakeComplete ? "Intake incomplete" : "Onboarding incomplete", NextAction = NextActionOf(detail), CompletedSteps = completed, TotalSteps = detail.FundingRecorded is null ? 5 : 6, Reasons = detail.Reasons });
         }
         return Ok(ApiResponse<List<ParticipantOnboardingWorklistDto>>.Ok(result));
@@ -90,7 +90,7 @@ public class ParticipantInquiriesController : ControllerBase
 
     /// <summary>
     /// The one next step the worklist names: the first open gate, in the order the checklist page lists them. "Funding recorded" (an NDIS-funded participant with no current plan budget)
-    /// comes after the agreement evidence, so it is named once everything before it is done; the worklist's last word, when nothing but the proposal-only schedule review is left, is unchanged.
+    /// comes after the agreement evidence, so it is named once everything before it is done. The last step is the schedule review, named as the checklist page names it: approve the agreement for rostering until a revision has been approved, then check the roster it made.
     /// </summary>
     internal static string NextActionOf(ParticipantOnboardingDto detail) =>
         !detail.IntakeComplete ? "Complete intake"
@@ -98,7 +98,8 @@ public class ParticipantInquiriesController : ControllerBase
         : !detail.ServiceTypeConfirmed ? "Confirm service needs"
         : !detail.ServiceAgreementSigned ? "Review agreement evidence"
         : detail.FundingRecorded == false ? "Record plan budget"
-        : "Review agreement evidence";
+        : detail.ScheduleApprovedVersion is null ? "Approve the agreement for rostering"
+        : "Check the roster";
 
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -244,8 +245,14 @@ public class ParticipantInquiriesController : ControllerBase
                 : "Funding is not recorded: add the plan budget on the participant's Funding tab.");
         var evidenceVerified = newestDraft != null && await _db.ElectronicSigningSnapshots.AnyAsync(s => s.ParticipantId == participant.Id && s.DraftId == newestDraft.Id && s.DraftVersion == newestDraft.Version && _db.ElectronicSigningEvidence.Any(e => e.SnapshotId == s.Id && e.Status == "Verified"), ct);
         if (!evidenceVerified || !onboarding.ServiceAgreementSigned) reasons.Add("Current immutable agreement evidence is pending; the UnapprovedDraft source is not complete or eligible.");
-        reasons.Add("Schedule review is proposal-only; no schedule coverage has been approved and no shifts are created here.");
-        return new ParticipantOnboardingDto { ParticipantId = participant.Id, IntakeComplete = intakeComplete, ProfileComplete = onboarding.ProfileComplete, ProfileCompletedAt = onboarding.ProfileCompletedAt, ProfileCompletedBy = onboarding.ProfileCompletedBy, ServiceTypeConfirmed = serviceNeedsCurrent, ServiceTypeConfirmedAt = serviceNeedsCurrent ? onboarding.ServiceTypeConfirmedAt : null, ServiceTypeConfirmedBy = serviceNeedsCurrent ? onboarding.ServiceTypeConfirmedBy : null, ServiceAgreementSigned = onboarding.ServiceAgreementSigned, FundingRecorded = fundingRecorded, IsReady = false, Reasons = reasons };
+        // The schedule is made when an agreement revision is approved for rostering (plan builder, phase D), never from onboarding. Until one is approved that is a gap, and the list says where it is made; once one is, nothing about the
+        // schedule is missing, so the list says nothing and the checklist's own row says which revision (ScheduleApprovedVersion, ScheduleApprovedAt).
+        var approved = await _db.ServiceAgreementDraftApprovals.AsNoTracking()
+            .Where(a => a.ParticipantId == participant.Id && a.TenantId == participant.TenantId)
+            .OrderByDescending(a => a.DraftVersion).Select(a => new { a.DraftVersion, a.ApprovedAt }).FirstOrDefaultAsync(ct);
+        if (approved is null)
+            reasons.Add("The schedule is made when an agreement revision is approved for rostering, from its draft page; nothing is created from onboarding itself.");
+        return new ParticipantOnboardingDto { ParticipantId = participant.Id, IntakeComplete = intakeComplete, ProfileComplete = onboarding.ProfileComplete, ProfileCompletedAt = onboarding.ProfileCompletedAt, ProfileCompletedBy = onboarding.ProfileCompletedBy, ServiceTypeConfirmed = serviceNeedsCurrent, ServiceTypeConfirmedAt = serviceNeedsCurrent ? onboarding.ServiceTypeConfirmedAt : null, ServiceTypeConfirmedBy = serviceNeedsCurrent ? onboarding.ServiceTypeConfirmedBy : null, ServiceAgreementSigned = onboarding.ServiceAgreementSigned, FundingRecorded = fundingRecorded, IsReady = false, Reasons = reasons, ScheduleApprovedVersion = approved?.DraftVersion, ScheduleApprovedAt = approved?.ApprovedAt };
     }
 
     private async Task<ServiceAgreementDraft?> CurrentValidDraftAsync(Participant participant, CancellationToken ct)

@@ -489,6 +489,31 @@ public class FundingReadinessTests
         Assert.Equal(rows.Single(r => r.ParticipantId == ndis.Id).CompletedSteps + 1, rows.Single(r => r.ParticipantId == recorded.Id).CompletedSteps);
     }
 
+    // ── The schedule review is a step too, and the worklist counts it the way the checklist page does ──
+
+    [Fact]
+    public async Task TheOnboardingWorklist_CountsAnApprovedScheduleAsADoneStep_SoItSaysWhatTheChecklistPageSays()
+    {
+        using var db = CreateDb(tenantId: TenantA, superAdmin: false);
+        SetProvider(db);
+        var waiting = SeedOnboarding(db);
+        var approved = SeedOnboarding(db);
+        db.ServiceAgreementDraftApprovals.Add(new ServiceAgreementDraftApproval
+        {
+            Id = Guid.NewGuid(), TenantId = TenantA, DraftId = Guid.NewGuid(), ParticipantId = approved.Id, DraftVersion = 2, ApprovedAt = new DateTime(2026, 10, 3, 3, 0, 0, DateTimeKind.Utc), ApprovedByName = "Alex",
+        });
+        db.SaveChanges();
+        var inquiries = Inquiries(db, NoonUtc, TenantA);
+
+        var rows = Assert.IsType<ApiResponse<List<ParticipantOnboardingWorklistDto>>>(Assert.IsType<OkObjectResult>((await inquiries.GetOnboardingWorklist(default)).Result).Value).Data!;
+
+        var waitingRow = rows.Single(r => r.ParticipantId == waiting.Id);
+        var approvedRow = rows.Single(r => r.ParticipantId == approved.Id);
+        Assert.Equal((6, 6), (waitingRow.TotalSteps, approvedRow.TotalSteps));                                // intake, profile, service needs, agreement evidence, funding, schedule review
+        Assert.Equal(waitingRow.CompletedSteps + 1, approvedRow.CompletedSteps);                              // the approved revision is the one more step done
+        Assert.Equal(2, Detail(await inquiries.GetOnboarding(approved.Id, default)).ScheduleApprovedVersion); // which the checklist page shows as its Schedule review gate being Complete
+    }
+
     // ── An ended plan is not "not recorded" ─────────────────────────────────
 
     [Fact]
@@ -528,9 +553,9 @@ public class FundingReadinessTests
 
     // ── The next action counts the funding gate ─────────────────────────────
 
-    private static ParticipantOnboardingDto Gates(bool intake = true, bool profile = true, bool service = true, bool agreement = true, bool? funding = null) => new()
+    private static ParticipantOnboardingDto Gates(bool intake = true, bool profile = true, bool service = true, bool agreement = true, bool? funding = null, int? scheduleApprovedVersion = null) => new()
     {
-        IntakeComplete = intake, ProfileComplete = profile, ServiceTypeConfirmed = service, ServiceAgreementSigned = agreement, FundingRecorded = funding,
+        IntakeComplete = intake, ProfileComplete = profile, ServiceTypeConfirmed = service, ServiceAgreementSigned = agreement, FundingRecorded = funding, ScheduleApprovedVersion = scheduleApprovedVersion,
     };
 
     [Theory]
@@ -539,10 +564,19 @@ public class FundingReadinessTests
     [InlineData(true, true, false, true, false, "Confirm service needs")]
     [InlineData(true, true, true, false, false, "Review agreement evidence")]    // the agreement evidence still comes first
     [InlineData(true, true, true, true, false, "Record plan budget")]            // an NDIS-funded participant whose only other open gate is the budget is told so
-    [InlineData(true, true, true, true, true, "Review agreement evidence")]      // nothing else open: the worklist's existing last word
-    [InlineData(true, true, true, true, null, "Review agreement evidence")]      // not NDIS-funded: no funding gate to name
+    [InlineData(true, true, true, true, true, "Approve the agreement for rostering")]      // nothing else open: the last step is the schedule review, named as the checklist page names it
+    [InlineData(true, true, true, true, null, "Approve the agreement for rostering")]      // not NDIS-funded: no funding gate to name
     public void TheWorklistsNextAction_IsTheFirstOpenGate_InTheOrderTheChecklistListsThem(bool intake, bool profile, bool service, bool agreement, bool? funding, string expected)
     {
         Assert.Equal(expected, ParticipantInquiriesController.NextActionOf(Gates(intake, profile, service, agreement, funding)));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(null)]
+    public void OnceARevisionHasBeenApprovedForRostering_TheWorklistsLastWordIsToCheckTheRoster_AndAnOpenGateBeforeItStillComesFirst(bool? funding)
+    {
+        Assert.Equal("Check the roster", ParticipantInquiriesController.NextActionOf(Gates(funding: funding, scheduleApprovedVersion: 2)));
+        Assert.Equal("Review agreement evidence", ParticipantInquiriesController.NextActionOf(Gates(agreement: false, funding: funding, scheduleApprovedVersion: 2)));
     }
 }

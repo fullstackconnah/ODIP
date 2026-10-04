@@ -37,6 +37,88 @@ export interface ServiceAgreementDraftDto {
   total: number
   /** What a reader must not miss, a sentence each, counted in shifts: shifts with a part not priced, public holiday shifts to decide, and provisional rates. Empty for a revision priced in full or typed by hand. */
   caveats: string[]
+  /**
+   * Who approved this revision for rostering, when, and what that did. Absent until somebody has. It is not `status` (the template's e-signing state, the same on every revision): approving
+   * makes the weekly roster patterns and the unfilled shifts, and is separate from signing.
+   */
+  approval?: DraftApprovalDto
+  /** Only in the answer to an approval: the previous revision's shifts on or after this one starts, which stay on the roster. */
+  oldShiftsRemaining?: OldShiftsRemainingDto
+}
+
+/** The record of an approval. There is no un-approving: a change is a new revision, approved in its turn. */
+export interface DraftApprovalDto {
+  /** An instant (UTC, with a Z). */
+  approvedAt: string
+  approvedByName: string
+  patternsCreated: number
+  patternsEnded: number
+  /** The unfilled shifts generated at once; none for a participant who was not active yet. */
+  shiftsCreated: number
+  /** The last day shifts were generated to; absent when none were. */
+  horizonEnd?: string
+  /** The first day it made a shift for; absent when it made none. */
+  firstShiftDate?: string
+  /** Whether the daily top-up is on, as the server has it now (not stored with the approval). Shifts are added each day after the horizon only while it is: the card says so only then. */
+  topUpEnabled?: boolean
+}
+
+/** The shifts of the previous approved revision on or after the new one starts: left alone by approval, counted so a coordinator can tidy them. */
+export interface OldShiftsRemainingDto {
+  open: number
+  assigned: number
+  firstDate?: string
+  /** The version they came from. */
+  fromVersion?: number
+}
+
+/** One reason an approval is refused, in plain words. `code` is a pricing issue reason (NoItem, BlocksOverlap, ...) or one of the approval's own (HolidayUndecided, ReviewFlag, HandTyped, TimeZoneMismatch, ...). */
+export interface ApprovalReasonDto {
+  code: string
+  message: string
+  /** The block it is about (`PlanBlock.id`); absent when it is about the whole revision. */
+  blockId?: string
+  count?: number
+  firstDate?: string
+}
+
+/** A hand-made pattern of the participant that overlaps one the approval would make; approval never ends or changes it. */
+export interface OverlappingPatternDto {
+  id: string
+  dayOfWeek: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  effectiveFrom: string
+  effectiveTo?: string
+  notes?: string
+}
+
+/** What approving a revision would do, with nothing done (`GET .../approval-preview`). */
+export interface DraftApprovalPreviewDto {
+  canApprove: boolean
+  alreadyApproved: boolean
+  reasons: ApprovalReasonDto[]
+  patternsToCreate: number
+  patternsToEnd: number
+  /** The version whose patterns would end, and the day they would end (the day before this revision starts). */
+  endsFromVersion?: number
+  endsOn?: string
+  /** The unfilled shifts approval would generate at once: none while the participant is not active, and then `shiftsNote` says when they will come. */
+  shiftsToCreate: number
+  shiftsNote?: string
+  oldShiftsRemaining: OldShiftsRemainingDto
+  overlappingPatterns: OverlappingPatternDto[]
+  /** The provider's today plus the horizon (56 days), held to the end of the agreement. */
+  horizonEnd?: string
+  /** Whether the daily top-up is on: the dialog says shifts are added each day after the horizon only while it is. Absent from an older server: read as on. */
+  topUpEnabled?: boolean
+}
+
+/** The body of `POST .../approve`. */
+export interface ApproveDraftDto {
+  /** Required (true) when hand-made patterns overlap the ones the approval makes. */
+  acknowledgeOverlaps: boolean
 }
 
 export interface ServiceAgreementDraftLineDto {

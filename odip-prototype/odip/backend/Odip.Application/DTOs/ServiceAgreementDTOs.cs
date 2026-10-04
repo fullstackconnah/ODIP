@@ -103,6 +103,101 @@ public record ServiceAgreementDraftDto
     public decimal Total { get; init; }
     /// <summary>What a reader must not miss, a sentence each, counted in shifts: shifts with a part not priced, public holiday shifts to decide, and provisional rates. Empty for a revision priced in full or typed by hand.</summary>
     public List<string> Caveats { get; init; } = [];
+    /// <summary>
+    /// Who approved this revision for rostering, when, and what that did (plan builder, phase D). Absent until somebody has. It is not <see cref="Status"/> (the template's state, the same for every
+    /// revision) and it is not a signature: approval makes the weekly roster patterns, nothing more.
+    /// </summary>
+    public DraftApprovalDto? Approval { get; init; }
+    /// <summary>
+    /// Only in the answer to an approval: the shifts of the revision before this one that are dated on or after this one starts and still stand, which approval leaves exactly as they are for a
+    /// coordinator to tidy by hand.
+    /// </summary>
+    public OldShiftsRemainingDto? OldShiftsRemaining { get; init; }
+}
+
+/// <summary>The body of POST .../approve.</summary>
+public record ApproveDraftDto
+{
+    /// <summary>Required (true) when hand-made patterns of the participant overlap the ones this approval makes: they are never ended or changed, and approving without saying so is refused.</summary>
+    public bool AcknowledgeOverlaps { get; init; }
+}
+
+/// <summary>The record of an approval: who, when and what it did. Never changed afterwards; there is no un-approving.</summary>
+public record DraftApprovalDto
+{
+    public DateTime ApprovedAt { get; init; }
+    public string ApprovedByName { get; init; } = string.Empty;
+    /// <summary>The weekly roster patterns it made.</summary>
+    public int PatternsCreated { get; init; }
+    /// <summary>The patterns of earlier approved revisions it ended the day before this revision starts.</summary>
+    public int PatternsEnded { get; init; }
+    /// <summary>The open shifts it generated at once (none for a participant who is not active yet).</summary>
+    public int ShiftsCreated { get; init; }
+    /// <summary>The last day shifts were generated to; absent when none were (the participant was not active yet).</summary>
+    public DateOnly? HorizonEnd { get; init; }
+    /// <summary>The first day it made a shift for; absent when it made none.</summary>
+    public DateOnly? FirstShiftDate { get; init; }
+    /// <summary>Whether the daily top-up is on (<c>RosterTopUp:Enabled</c>, read when the answer is made, not stored with the approval). While it is, shifts keep being added each day as the agreement's dates come near; when it is off the shifts made at approval, and the Generate button, are all there will be, and the screen must not promise more.</summary>
+    public bool TopUpEnabled { get; init; } = true;
+}
+
+/// <summary>Shifts of the previous approved revision on or after the new one starts: left alone by approval, counted so they can be tidied. Open means nobody is assigned.</summary>
+public record OldShiftsRemainingDto
+{
+    public int Open { get; init; }
+    public int Assigned { get; init; }
+    /// <summary>The first day of them; absent when there are none.</summary>
+    public DateOnly? FirstDate { get; init; }
+    /// <summary>The version of the revision they came from (the one whose patterns this approval ends); absent when there is none.</summary>
+    public int? FromVersion { get; init; }
+}
+
+/// <summary>One reason an approval is refused, in plain words. <see cref="Code"/> is the pricing engine's reason name (NoItem, BlocksOverlap, ...) or one of this feature's own (HolidayUndecided, ReviewFlag, HandTyped, TimeZoneMismatch, ...).</summary>
+public record ApprovalReasonDto
+{
+    public string Code { get; init; } = string.Empty;
+    public string Message { get; init; } = string.Empty;
+    /// <summary>The block it is about ('PlanBlock.Id'); absent when it is about the whole revision.</summary>
+    public string? BlockId { get; init; }
+    public int? Count { get; init; }
+    public DateOnly? FirstDate { get; init; }
+}
+
+/// <summary>A hand-made pattern of the participant that overlaps one the approval would make: listed so a coordinator can decide, and never ended or changed by approval.</summary>
+public record OverlappingPatternDto
+{
+    public Guid Id { get; init; }
+    public DayOfWeek DayOfWeek { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public bool EndsNextDay { get; init; }
+    public DateOnly EffectiveFrom { get; init; }
+    public DateOnly? EffectiveTo { get; init; }
+    public string? Notes { get; init; }
+}
+
+/// <summary>What approving a revision would do, with nothing done: the same reasons approval would refuse for, and the counts the confirm screen states.</summary>
+public record DraftApprovalPreviewDto
+{
+    public bool CanApprove { get; init; }
+    /// <summary>The revision has been approved already; nothing more can be done to it.</summary>
+    public bool AlreadyApproved { get; init; }
+    public List<ApprovalReasonDto> Reasons { get; init; } = [];
+    public int PatternsToCreate { get; init; }
+    public int PatternsToEnd { get; init; }
+    /// <summary>The version whose patterns would end.</summary>
+    public int? EndsFromVersion { get; init; }
+    /// <summary>The day they would end: the day before this revision starts.</summary>
+    public DateOnly? EndsOn { get; init; }
+    /// <summary>The open shifts approval would generate at once: none while the participant is not active, and then <see cref="ShiftsNote"/> says why.</summary>
+    public int ShiftsToCreate { get; init; }
+    public string? ShiftsNote { get; init; }
+    public OldShiftsRemainingDto OldShiftsRemaining { get; init; } = new();
+    public List<OverlappingPatternDto> OverlappingPatterns { get; init; } = [];
+    /// <summary>The provider's today plus the horizon (56 days), held to the end of the agreement.</summary>
+    public DateOnly? HorizonEnd { get; init; }
+    /// <summary>Whether the daily top-up is on (<c>RosterTopUp:Enabled</c>): the confirm screen says shifts are added each day after the horizon only while it is.</summary>
+    public bool TopUpEnabled { get; init; } = true;
 }
 
 public record ServiceAgreementDraftLineDto

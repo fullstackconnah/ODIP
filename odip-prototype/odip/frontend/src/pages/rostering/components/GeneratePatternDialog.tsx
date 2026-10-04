@@ -61,7 +61,7 @@ export function GeneratePatternDialog({ pattern, onClose }: GeneratePatternDialo
               Created <strong className="text-foreground">{result.created}</strong> shift{result.created === 1 ? '' : 's'}.
             </p>
             <p>
-              Skipped <strong className="text-foreground">{result.skipped}</strong> — already on the roster from this pattern.
+              Skipped <strong className="text-foreground">{result.skipped}</strong> — already on the roster from this pattern{pattern?.sourceDraftId ? ', or a public holiday the agreement skips' : ''}.
             </p>
             <p className="text-xs opacity-80">Running this again for the same range changes nothing further.</p>
           </>

@@ -10,6 +10,7 @@ using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
@@ -26,10 +27,12 @@ public class ServiceAgreementDraftsController : ControllerBase
     private readonly DemoJourneySimulationService _simulation;
     private readonly IConfiguration _configuration;
     private readonly PlanQuoteConcurrencyLimiter? _saveLimiter;
+    private readonly ServiceAgreementApprovalService _approval;
     public const string SaveBusyMessage = "Another plan is already being saved for your organisation. Try again in a moment.";
-    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IConfiguration? configuration = null, PlanQuoteConcurrencyLimiter? saveLimiter = null)
+    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IConfiguration? configuration = null, PlanQuoteConcurrencyLimiter? saveLimiter = null, ServiceAgreementApprovalService? approval = null)
     {
         _saveLimiter = saveLimiter;
+        _approval = approval ?? new ServiceAgreementApprovalService(db, new Odip.Api.Services.RosterPlacementGate(), configuration: configuration);
         _db = db; _tenant = tenant; _service = service; _evidence = evidence ?? new ElectronicSigningEvidenceService(db);
         _simulation = simulation ?? new DemoJourneySimulationService(db);
         _configuration = configuration ?? new ConfigurationBuilder().Build();
@@ -54,8 +57,11 @@ public class ServiceAgreementDraftsController : ControllerBase
         var blockCounts = olderIds.Count == 0 ? new Dictionary<Guid, int>()
             : await _db.ServiceAgreementDraftBlocks.AsNoTracking().Where(x => olderIds.Contains(x.DraftId)).GroupBy(x => x.DraftId).Select(g => new { Id = g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Id, x => x.Count, ct);
 
-        var listed = new List<ServiceAgreementDraftDto> { ToDto(newest) };
-        listed.AddRange(older.Select(x => ToSummary(x, blockCounts.GetValueOrDefault(x.Id))));
+        // Who approved which revision, for all of the participant's revisions at once: a row for each approved one, and there are few of those.
+        var approvals = await _db.ServiceAgreementDraftApprovals.AsNoTracking().Where(x => x.ParticipantId == participantId).ToDictionaryAsync(x => x.DraftId, ct);
+
+        var listed = new List<ServiceAgreementDraftDto> { ToDto(newest) with { Approval = ApprovalOf(approvals.GetValueOrDefault(newest.Id)) } };
+        listed.AddRange(older.Select(x => ToSummary(x, blockCounts.GetValueOrDefault(x.Id)) with { Approval = ApprovalOf(approvals.GetValueOrDefault(x.Id)) }));
         return Ok(ApiResponse<List<ServiceAgreementDraftDto>>.Ok(listed));
     }
 
@@ -66,7 +72,9 @@ public class ServiceAgreementDraftsController : ControllerBase
     {
         var draft = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery()
             .FirstOrDefaultAsync(x => x.Id == id && x.ParticipantId == participantId, ct);
-        return draft is null ? NotFound(ApiResponse<ServiceAgreementDraftDto>.Fail("Draft not found.")) : Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(draft)));
+        if (draft is null) return NotFound(ApiResponse<ServiceAgreementDraftDto>.Fail("Draft not found."));
+        var approval = await _db.ServiceAgreementDraftApprovals.AsNoTracking().FirstOrDefaultAsync(x => x.DraftId == id, ct);
+        return Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(draft) with { Approval = ApprovalOf(approval) }));
     }
 
     /// <summary>
@@ -101,6 +109,57 @@ public class ServiceAgreementDraftsController : ControllerBase
                 : BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail(result.Errors.ToList()));
         }
         return Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(result.Draft)));
+    }
+
+    /// <summary>
+    /// What approving this revision for rostering would do, with nothing done: whether it can be approved, every reason it cannot (in words, with the block each is about), the patterns it would make
+    /// and end, the open shifts it would generate and up to when, the old revision's shifts that would stay on the roster, and the hand-made patterns that overlap. For the same roles as the
+    /// approval, and only for a role the organisation lets approve (Admin and Coordinator until its settings say otherwise).
+    /// </summary>
+    [HttpGet("{id:guid}/approval-preview")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<DraftApprovalPreviewDto>>> ApprovalPreview(Guid participantId, Guid id, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<DraftApprovalPreviewDto>.Fail("A tenant context is required."));
+        var outcome = await _approval.PreviewAsync(tenantId, participantId, id, Caller(), ct);
+        return outcome.Status switch
+        {
+            ApprovalStatus.NotFound => NotFound(ApiResponse<DraftApprovalPreviewDto>.Fail("Draft not found.")),
+            ApprovalStatus.NotAnApprover => StatusCode(StatusCodes.Status403Forbidden, ApiResponse<DraftApprovalPreviewDto>.Fail(outcome.Errors!.First())),
+            _ => Ok(ApiResponse<DraftApprovalPreviewDto>.Ok(outcome.Preview!)),
+        };
+    }
+
+    /// <summary>
+    /// Approves the NEWEST revision for rostering (phase D), in one transaction: records who and when, makes the weekly roster patterns of its blocks, ends the patterns of the revision before it the
+    /// day before this one starts, and generates the open shifts up to the horizon (<c>RosterTopUp:HorizonDays</c>, 56 days by default) when the participant may be rostered. No shift that exists is changed. 200 with
+    /// the revision (its <c>approval</c> and the <c>oldShiftsRemaining</c> counts); 400 with every reason in <c>errors</c>; 403 for a role that may not approve; 409 when a newer revision exists
+    /// (<c>draft-superseded</c>) or another change to the participant's roster was still running (<c>roster-busy</c>; nothing was changed, try again). Approving an approved revision again is a 200 with
+    /// the existing approval and writes nothing.
+    /// </summary>
+    [HttpPost("{id:guid}/approve")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    [RequestSizeLimit(4_096)]
+    [EnableRateLimiting("api")]
+    public async Task<ActionResult<ApiResponse<ServiceAgreementDraftDto>>> Approve(Guid participantId, Guid id, ApproveDraftDto? dto, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail("A tenant context is required."));
+        var outcome = await _approval.ApproveAsync(tenantId, participantId, id, dto?.AcknowledgeOverlaps ?? false, Caller(), ct);
+        switch (outcome.Status)
+        {
+            case ApprovalStatus.NotFound:
+                return NotFound(ApiResponse<ServiceAgreementDraftDto>.Fail("Draft not found."));
+            case ApprovalStatus.NotAnApprover:
+                return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<ServiceAgreementDraftDto>.Fail(outcome.Errors!.First()));
+            case ApprovalStatus.Superseded:
+                return Conflict(new ApiResponse<DraftVersionConflictDto> { Success = false, Data = new DraftVersionConflictDto { CurrentVersion = outcome.NewestVersion ?? 0 }, Errors = outcome.Errors!.ToList(), Code = "draft-superseded" });
+            case ApprovalStatus.Refused:
+                return BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail(outcome.Errors!.ToList()));
+            case ApprovalStatus.Busy:
+                return Conflict(new ApiResponse<ServiceAgreementDraftDto> { Success = false, Errors = outcome.Errors!.ToList(), Code = "roster-busy" });
+            default:
+                return Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(outcome.Draft!) with { Approval = ApprovalOf(outcome.Approval), OldShiftsRemaining = outcome.OldShifts }));
+        }
     }
 
     [HttpGet("{id:guid}/pdf")]
@@ -152,6 +211,24 @@ public class ServiceAgreementDraftsController : ControllerBase
         if (error != null) return BadRequest(ApiResponse<DemoJourneySimulationDto>.Fail(error));
         return Ok(ApiResponse<DemoJourneySimulationDto>.Ok(result!));
     }
+
+    /// <summary>The caller as the approval records and checks them: the user id, the name shown, and the roles.</summary>
+    private ApprovalCaller Caller() => new(
+        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null,
+        User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name) ?? "Unknown",
+        User.FindAll(ClaimTypes.Role).Select(claim => claim.Value).ToList());
+
+    /// <summary>
+    /// The approval as the screen reads it. <c>ApprovedAt</c> is an instant: the API writes it as UTC with a Z (UtcInstantDateTimeConverter), whatever kind the column hands back. <c>TopUpEnabled</c> is the
+    /// setting as it is now (<c>RosterTopUp:Enabled</c>), not part of the stored approval: the card promises shifts "added each day" only while the daily top-up is on.
+    /// </summary>
+    private DraftApprovalDto? ApprovalOf(ServiceAgreementDraftApproval? approval) => approval is null ? null : new()
+    {
+        ApprovedAt = approval.ApprovedAt, ApprovedByName = approval.ApprovedByName,
+        PatternsCreated = approval.PatternsCreated, PatternsEnded = approval.PatternsEnded, ShiftsCreated = approval.ShiftsCreated,
+        HorizonEnd = approval.HorizonEnd, FirstShiftDate = approval.FirstShiftDate,
+        TopUpEnabled = RosterTopUpOptions.From(_configuration).Enabled,
+    };
 
     /// <summary>What a line adds up to: the engine's total for a line it generated, hours times unit price floored to the cent for one typed by hand.</summary>
     private static decimal LineTotal(ServiceAgreementDraftLine x) => x.Total ?? Math.Floor(x.Hours * x.UnitPrice * 100m) / 100m;

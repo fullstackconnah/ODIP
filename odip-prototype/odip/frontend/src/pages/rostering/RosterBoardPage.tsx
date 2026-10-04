@@ -18,7 +18,7 @@ import {
   WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer,
   type ShiftSlideOverTarget,
 } from './components'
-import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek } from './lib/roster'
+import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift } from './lib/roster'
 import { useBoardViewMode } from './lib/useBoardViewMode'
 
 type PendingAssign = { shift: ShiftDto; staffId: string | null; findings: RosterFindingDto[] }
@@ -47,9 +47,19 @@ export default function RosterBoardPage() {
     if (dateParam !== null) setWeekStart(weekStartFromDateParam(dateParam))
   }
   const [groupBy, setGroupBy] = useBoardViewMode()
-  const [participantFilter, setParticipantFilter] = useState('')
+  // `?participant=<id>` and `?unfilled=1` (plan builder phase D: the links an approval and its confirm dialog give) open the board already filtered to that participant, and to open shifts, through the same
+  // local filters the toolbar owns. Read like `date`: they open the filter, a later change of the address moves it, and a missing one never resets what the toolbar chose in between.
+  const participantParam = searchParams.get('participant')
+  const unfilledParam = searchParams.get('unfilled')
+  const [participantFilter, setParticipantFilter] = useState(participantParam ?? '')
   const [regionFilter, setRegionFilter] = useState('')
-  const [unfilledOnly, setUnfilledOnly] = useState(false)
+  const [unfilledOnly, setUnfilledOnly] = useState(unfilledParam === '1')
+  const [seenFilterParams, setSeenFilterParams] = useState({ participantParam, unfilledParam })
+  if (seenFilterParams.participantParam !== participantParam || seenFilterParams.unfilledParam !== unfilledParam) {
+    setSeenFilterParams({ participantParam, unfilledParam })
+    if (participantParam !== null) setParticipantFilter(participantParam)
+    if (unfilledParam !== null) setUnfilledOnly(unfilledParam === '1')
+  }
   const [exceptionsOpen, setExceptionsOpen] = useState(false)
   const [slideOverTarget, setSlideOverTarget] = useState<ShiftSlideOverTarget | null>(null)
   const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<ShiftDto | null>(null)
@@ -110,6 +120,8 @@ export default function RosterBoardPage() {
         // what's meant to surface gaps, not row position.
         participantRows: board.participantRows
           .filter(row => !participantFilter || row.participantId === participantFilter)
+          // "Unfilled only" on this board keeps every row (the grid is always whole) and draws only the shifts nobody is assigned to.
+          .map(row => unfilledOnly ? { ...row, shifts: row.shifts.filter(isUnfilledShift) } : row)
           .slice()
           .sort((a, b) => a.fullName.localeCompare(b.fullName)),
       }
@@ -122,7 +134,7 @@ export default function RosterBoardPage() {
         .filter(row => !regionFilter || staffRegionById.get(row.staffId) === regionFilter)
         .map(row => ({ ...row, shifts: row.shifts.filter(matchesParticipant) })),
     }
-  }, [board, participantFilter, regionFilter, staffRegionById])
+  }, [board, participantFilter, regionFilter, staffRegionById, unfilledOnly])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -161,7 +173,7 @@ export default function RosterBoardPage() {
     const overId = event.over?.id
     if (!shift || !overId) return
     if (overId === 'unassign-target') {
-      if (shift.staffId !== null) performAssign(shift, null)
+      if (!isUnfilledShift(shift)) performAssign(shift, null)                   // dropping an unfilled shift on the lane is nothing to do (it has no staffId at all, not a null one)
       return
     }
     if (typeof overId === 'string' && overId.startsWith('staff:')) {

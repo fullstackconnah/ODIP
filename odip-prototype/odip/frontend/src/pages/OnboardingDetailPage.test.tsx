@@ -86,6 +86,9 @@ describe('OnboardingDetailPage', () => {
     expect(screen.getByText('Intake completed').parentElement).toHaveTextContent('Complete')
     expect(screen.getByText('Participant Profile').parentElement).toHaveTextContent('Needs attention')
     expect(screen.getByText('Schedule review').parentElement).toHaveTextContent('Blocked')
+    // approving an agreement revision for rostering makes the patterns and shifts, so nothing says that none can be made; and what the schedule needs is not said a third time on its own row
+    expect(screen.queryByText(/The schedule is made when/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no shifts are created/)).not.toBeInTheDocument()
     expect(screen.getByText("What's still missing")).toBeInTheDocument()
     expect(screen.getByText('Profile requires date of birth.')).toBeInTheDocument()
   })
@@ -118,12 +121,74 @@ describe('OnboardingDetailPage', () => {
     expect(within(recommendation).getByRole('link', { name: 'Edit service needs' })).toHaveAttribute('href', '/participants/p-1?tab=support')
   })
 
-  it('gives the final "Review schedule proposal" gate a link into rostering instead of a dead end', () => {
+  it('sends the last step to where the schedule is made, the agreement draft, and says what approving does there', () => {
     mockUseQuery.mockReturnValue({ data: readyForSchedule, isLoading: false })
     renderDetail()
 
-    const recommendation = screen.getByRole('heading', { name: 'Review schedule proposal' }).closest('section')!
+    const recommendation = screen.getByRole('heading', { name: 'Approve the agreement for rostering' }).closest('section')!
+    expect(within(recommendation).getByRole('link', { name: 'Open agreement draft' })).toHaveAttribute('href', '/participants/p-1/agreement-draft')
+    expect(within(recommendation).getByText('Open the agreement draft and approve its newest revision for rostering. That makes the weekly patterns and unfilled shifts, which you can then check under Shift patterns.')).toBeInTheDocument()
+    expect(within(recommendation).queryByText(/proposal-only|no shifts are created here/)).not.toBeInTheDocument()
+    expect(screen.getByText('Schedule review').parentElement).toHaveTextContent('Blocked')
+    // The Blocked row sends people to the draft, where the schedule is made, not to a patterns page with nothing on it yet.
+    const gateRow = screen.getByText('Schedule review').closest('article')!
+    expect(within(gateRow).getByRole('link', { name: 'Open agreement draft' })).toHaveAttribute('href', '/participants/p-1/agreement-draft')
+    expect(within(gateRow).queryByRole('link', { name: 'Open shift patterns' })).not.toBeInTheDocument()
+    expect(within(gateRow).queryByText(/./, { selector: 'p' })).not.toBeInTheDocument()                // and says nothing more: the next action above says what approving does
+  })
+
+  it('says what the schedule needs once on a Blocked page: the line the server sends stays in the list, and the next action does not repeat it', () => {
+    mockUseQuery.mockReturnValue({ data: { ...readyForSchedule, reasons: ['The schedule is made when an agreement revision is approved for rostering, from its draft page; nothing is created from onboarding itself.'] }, isLoading: false })
+    renderDetail()
+
+    expect(screen.getAllByText(/schedule is made when/i)).toHaveLength(1)
+    expect(screen.getByText("What's still missing")).toBeInTheDocument()
+  })
+
+  it('offers a role the API admits to neither the draft nor the roster no way on from the Blocked row', () => {
+    for (const role of ['ReadOnly', 'SupportWorker']) {
+      localStorage.setItem('odip_user', JSON.stringify({ role }))
+      mockUseQuery.mockReturnValue({ data: readyForSchedule, isLoading: false })
+      const { unmount } = renderDetail()
+
+      const gateRow = screen.getByText('Schedule review').closest('article')!
+      expect(within(gateRow).queryByRole('link'), role).not.toBeInTheDocument()
+      unmount()
+    }
+  })
+
+  it('says so once a revision has been approved for rostering: the gate is complete, and the next thing is to check the roster it made', () => {
+    mockUseQuery.mockReturnValue({ data: { ...readyForSchedule, scheduleApprovedVersion: 2, scheduleApprovedAt: '2026-10-05T03:00:00Z' }, isLoading: false })
+    renderDetail()
+
+    expect(screen.getByText('Schedule review').parentElement).toHaveTextContent('Complete')
+    expect(screen.getByText('Approved for rostering: version 2, on 5 Oct 2026.')).toBeInTheDocument()
+    expect(screen.getByText('Progress: 5 of 5 gates complete')).toBeInTheDocument()
+    const recommendation = screen.getByRole('heading', { name: 'Check the roster' }).closest('section')!
+    expect(within(recommendation).getByText('Version 2 was approved for rostering on 5 Oct 2026: its weekly patterns and unfilled shifts are made. Check them under Shift patterns and on the roster. Nothing is created from this page.')).toBeInTheDocument()
     expect(within(recommendation).getByRole('link', { name: 'Open shift patterns' })).toHaveAttribute('href', '/rostering/patterns')
+    expect(screen.queryByRole('heading', { name: 'Approve the agreement for rostering' })).not.toBeInTheDocument()
+  })
+
+  it('says "listed below" only while there is a list, and says what finishing onboarding looks like when nothing is missing', () => {
+    const { unmount } = renderDetail()
+    expect(screen.getByText(/What is still missing is listed below./)).toBeInTheDocument()            // reasons exist: a list is on the page
+    expect(screen.getByText("What's still missing")).toBeInTheDocument()
+    unmount()
+
+    mockUseQuery.mockReturnValue({ data: { ...readyForSchedule, scheduleApprovedVersion: 2, scheduleApprovedAt: '2026-10-05T03:00:00Z' }, isLoading: false })
+    renderDetail()
+    expect(screen.queryByText(/listed below/)).not.toBeInTheDocument()
+    expect(screen.queryByText("What's still missing")).not.toBeInTheDocument()                       // nothing under it, so no heading either
+    expect(screen.getByText("Nothing else is missing. Completing the participant's profile finishes onboarding: they move to Active participants once your organisation's readiness rule allows it.")).toBeInTheDocument()
+  })
+
+  it('does not send a role that may not open agreement drafts to one, where it would meet a redirect or a 403', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
+    mockUseQuery.mockReturnValue({ data: readyForSchedule, isLoading: false })
+    renderDetail()
+
+    expect(screen.queryByRole('link', { name: 'Open agreement draft' })).not.toBeInTheDocument()
   })
 
   it('preserves readable status but suppresses mutation controls when lifecycle capability is absent', () => {
@@ -141,7 +206,10 @@ describe('OnboardingDetailPage', () => {
     for (const role of ['SuperAdmin', 'Admin', 'Coordinator']) {
       localStorage.setItem('odip_user', JSON.stringify({ role }))
       const { unmount } = renderDetail()
-      expect(screen.getByRole('link', { name: 'Open agreement draft' }), role).toHaveAttribute('href', '/participants/p-1/agreement-draft')
+      // The two gate rows that are not done and are decided on the draft: the evidence, and (Blocked until a revision is approved) the schedule.
+      for (const gate of ['Current agreement evidence', 'Schedule review']) {
+        expect(within(screen.getByText(gate).closest('article')!).getByRole('link', { name: 'Open agreement draft' }), `${role}: ${gate}`).toHaveAttribute('href', '/participants/p-1/agreement-draft')
+      }
       expect(screen.getByRole('link', { name: 'Review agreement evidence' }), role).toHaveAttribute('href', '/participants/p-1/agreement-draft')
       unmount()
     }
@@ -228,7 +296,7 @@ describe('OnboardingDetailPage — the funding gate', () => {
     expect(screen.getByText("Funding is not recorded: add the plan budget on the participant's Funding tab.")).toBeInTheDocument()
   })
 
-  it('puts it before the schedule review, the proposal-only gate that stays last', () => {
+  it('puts it before the schedule review, the gate that stays last', () => {
     renderDetail()
 
     const labels = screen.getAllByRole('heading', { level: 3 }).map(heading => heading.textContent)
@@ -244,6 +312,28 @@ describe('OnboardingDetailPage — the funding gate', () => {
     expect(gate).toHaveTextContent('Complete')
     expect(within(gate).queryByRole('link')).not.toBeInTheDocument()
     expect(screen.getByText('Progress: 5 of 6 gates complete')).toBeInTheDocument()
+  })
+
+  // The budget gate and the schedule gate on one page (the two features meet here): six gates for an NDIS-funded participant, the schedule counted once a revision is approved, and the budget still first.
+  it('counts the approved schedule among the six: six of six when the plan budget is recorded too, and the next action is to check the roster', () => {
+    mockUseQuery.mockReturnValue({ data: { ...readyForSchedule, fundingRecorded: true, scheduleApprovedVersion: 2, scheduleApprovedAt: '2026-10-05T03:00:00Z' }, isLoading: false })
+    renderDetail()
+
+    expect(screen.getByText('Progress: 6 of 6 gates complete')).toBeInTheDocument()
+    expect(screen.getByText('Schedule review').closest('article')).toHaveTextContent('Complete')
+    expect(screen.getByText('Funding recorded').closest('article')).toHaveTextContent('Complete')
+    expect(screen.getByRole('heading', { name: 'Check the roster' })).toBeInTheDocument()
+  })
+
+  it('still asks for the plan budget first when a revision has been approved but the budget has not been recorded: five of six, and the budget is the next action', () => {
+    mockUseQuery.mockReturnValue({ data: { ...everythingElseDone, fundingRecorded: false, scheduleApprovedVersion: 2, scheduleApprovedAt: '2026-10-05T03:00:00Z' }, isLoading: false })
+    renderDetail()
+
+    expect(screen.getByText('Progress: 5 of 6 gates complete')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Record plan budget' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Check the roster' })).not.toBeInTheDocument()
+    expect(screen.getByText('Funding recorded').closest('article')).toHaveTextContent('Needs attention')
+    expect(screen.getByText('Schedule review').closest('article')).toHaveTextContent('Complete')
   })
 
   it('keeps the five gates, and shows no funding gate, when the server says nothing about funding (a participant who is not NDIS-funded)', () => {
@@ -288,11 +378,11 @@ describe('OnboardingDetailPage — the funding gate', () => {
     expect(screen.queryByRole('heading', { name: 'Record plan budget' })).not.toBeInTheDocument()
   })
 
-  it('goes on to the schedule proposal once the plan budget is recorded, as before, and never names the budget for a participant who is not NDIS-funded', () => {
+  it('goes on to the schedule step (approving the agreement for rostering) once the plan budget is recorded, and never names the budget for a participant who is not NDIS-funded', () => {
     for (const data of [{ ...readyForSchedule, fundingRecorded: true }, { ...readyForSchedule }]) {
       mockUseQuery.mockReturnValue({ data, isLoading: false })
       const { unmount } = renderDetail()
-      expect(screen.getByRole('heading', { name: 'Review schedule proposal' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Approve the agreement for rostering' })).toBeInTheDocument()
       expect(screen.queryByRole('heading', { name: 'Record plan budget' })).not.toBeInTheDocument()
       unmount()
     }

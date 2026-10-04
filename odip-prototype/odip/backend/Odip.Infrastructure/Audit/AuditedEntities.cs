@@ -111,6 +111,10 @@ public static class AuditedEntities
         typeof(PublicHoliday),
         typeof(PublicHolidayOverride),
 
+        // Plan builder phase D: approving an agreement revision for rostering makes the weekly patterns that shifts are generated from, and ends the patterns of the revision before it.
+        // The approval row is the one record of who did that and when (the patterns and shifts it makes are audited as they are saved, with the same actor), so it is audited like them.
+        typeof(ServiceAgreementDraftApproval),
+
         // Participant budgets (phase 1): a participant's plan budget (the plan, its pools and each release period with its dollar amounts) decides what a later phase warns
         // about and may refuse, so who recorded or changed any figure, and when, must be recoverable. The settings row (the budget mode and the approaching percentage)
         // is audited the same way as PlanPricingSettings: it holds nothing private. A plan is replaced by merging, not by delete and re-insert, so an edit shows as the
@@ -123,7 +127,10 @@ public static class AuditedEntities
 
     private static readonly HashSet<string> ExcludedProperties = new()
     {
-        "CreatedAt", "UpdatedAt"
+        "CreatedAt", "UpdatedAt",
+        // ShiftPattern.GeneratedThrough moves forward every time shifts are generated (the daily top-up moves it for every agreement pattern, every day): bookkeeping the generator keeps, not a
+        // change anybody made, so a save that changes nothing else writes no audit row.
+        "GeneratedThrough",
     };
 
     public static bool IsExcluded(string propertyName) =>

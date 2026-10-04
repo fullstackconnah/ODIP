@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import type { ShiftPatternDto, CreateShiftPatternDto, SupportRatio, SleepoverType } from '@/api/types'
 import { SUPPORT_RATIOS, SLEEPOVER_TYPES } from '@/api/types'
@@ -8,7 +8,10 @@ import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useCreatePattern, useUpdatePattern, useDeletePattern } from '@/api/hooks'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
+import { RequirementChips } from '@/components/RequirementChips'
 import { SlideOver } from '@/components/SlideOver'
+import { requirementLabels } from '@/lib/workerRequirements'
 import { extractErrorMessage } from '@/lib/utils'
 import { modalGrid } from '@/lib/formGrid'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS } from '../lib/roster'
@@ -65,6 +68,21 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
   const current = JSON.stringify([participantId, defaultStaffId, dayOfWeek, startTime, endTime, endsNextDay, ratio, nightType, effectiveFrom, effectiveTo, notes])
   const [opened] = useState(current)
   const dirty = current !== opened
+  // What the agreement set is the day, the times, the ratio, the kind of night and the dates: only a change to one of those makes the roster differ from it. Who does the shifts, and the notes, are the coordinator's own.
+  const definition = JSON.stringify([dayOfWeek, startTime, endTime, endsNextDay, ratio, nightType, effectiveFrom, effectiveTo])
+  const [openedDefinition] = useState(definition)
+  const redefined = definition !== openedDefinition
+
+  // The message sits under the last field of a form that scrolls, so a refused save (the "already has a pattern for that day" one included) would otherwise look like nothing happened.
+  const errorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [error])
+  // The drift warning sits at the top of a panel that scrolls, and the field that caused it can be far below (on a phone a changed Ratio or end date): when it appears it is brought into view, and only if it is not already.
+  const driftRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (redefined) driftRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [redefined])
 
   const createPattern = useCreatePattern()
   const updatePattern = useUpdatePattern()
@@ -72,6 +90,8 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
 
   if (!open) return null
 
+  // The version when the server knows it, never a placeholder.
+  const source = existing?.sourceDraftVersion !== undefined ? `agreement v${existing.sourceDraftVersion}` : 'an agreement'
   const isBusy = createPattern.isPending || updatePattern.isPending
   const canSave = !!participantId && !!effectiveFrom && !!startTime && !!endTime
 
@@ -142,6 +162,15 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
           </>
         ) : undefined}
       >
+        {existing?.sourceDraftId && (redefined
+          ? <div ref={driftRef}><Callout tone="warning">{`You have changed what ${source} set, so the roster will differ from it. To change the plan itself, save a new revision.`}</Callout></div>
+          : <p role="status" className="text-sm text-[var(--color-muted-foreground)]">{`From ${source}.`}</p>)}
+        {existing?.requirements && requirementLabels(existing.requirements).length > 0 && (
+          <FormField label="Asks for" hint="From the agreement. Shown, not checked against the worker yet.">
+            <RequirementChips requirements={existing.requirements} />
+          </FormField>
+        )}
+
         <FormField label="Participant" required>
           <Dropdown
             variant="form"
@@ -216,7 +245,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
         </FormField>
 
         {error && (
-          <div role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
+          <div ref={errorRef} role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
             {error}
           </div>
         )}
