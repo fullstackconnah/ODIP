@@ -3,6 +3,7 @@
 
 import { describe, it, expect } from 'vitest'
 import {
+  BUDGET_FINDING_CODES,
   EMERGENCY_REASON_PREFIX,
   MIN_REASON_LENGTH,
   OVER_BUDGET_MARKER,
@@ -15,6 +16,8 @@ import {
   reasonError,
   storedReason,
   markerForAcknowledgedCodes,
+  type BudgetFindingView,
+  type BudgetOverrideChoice,
 } from './budgetOverrideTypes'
 import { RESTRICTED_FIGURE, figureIsKnown, figureText, overrunSentence } from './budgetFigures'
 import {
@@ -22,8 +25,10 @@ import {
   SHORT_REASON,
   adminCapabilities,
   amount,
+  approachingFinding,
   coordinatorCapabilities,
   emptyFigures,
+  forecastOverFinding,
   fullFigures,
   noPathCapabilities,
   notRecorded,
@@ -31,6 +36,23 @@ import {
   unknown,
   zeroFigures,
 } from './fixtures'
+
+/**
+ * The wiring recipe exactly as README.md documents it, kept in one place so the tests exercise the
+ * documented path rather than a paraphrase of it. It is a function (not an inline const) so the
+ * `choice` stays the `BudgetOverrideChoice` union: an inline `const choice = 'adminOverride' as const`
+ * narrows to that one literal, and the recipe's own `choice === 'emergency'` test then becomes a
+ * comparison between two types with no overlap, which is a compile error, not a realistic caller.
+ */
+function readmeAcknowledgedCodes(
+  warningFindings: BudgetFindingView[],
+  choice: BudgetOverrideChoice,
+): string[] {
+  return [
+    ...warningFindings.map(f => f.code),
+    ...(choice === 'emergency' ? [BUDGET_FINDING_CODES.emergency] : []),
+  ]
+}
 
 describe('availableChoices', () => {
   it('offers the emergency path to a Coordinator and not an ordinary override', () => {
@@ -168,6 +190,60 @@ describe('markerForAcknowledgedCodes', () => {
     expect(markerForAcknowledgedCodes(['BUDGET_FORECAST_OVER'])).toBe('adminOverride')
   })
 
+  it('maps the forecastOver code itself, not a hard-coded string, so the constant is the gate', () => {
+    expect(markerForAcknowledgedCodes([BUDGET_FINDING_CODES.forecastOver])).toBe('adminOverride')
+  })
+
+  // DEF-01 (independent source QA, t_357adf61). An Admin override is an ADMIN'S ACT: it carries
+  // an audited written reason, so it can only have happened on a shift that was actually over its
+  // recorded budget and the caller answered to it. BUDGET_APPROACHING and BUDGET_OVER are
+  // no-reason warnings — a shift that is merely approaching, or that is over on the server but was
+  // never pushed past, can never have been overridden. Reading ANY BUDGET_* code as an override
+  // therefore forged "Over budget: Admin override" onto a shift nobody overrode: a false entry in
+  // a compliance audit record, which is the same class F-16 was raised to prevent.
+  it.each([
+    ['the approaching warning', BUDGET_FINDING_CODES.approaching],
+    ['the over-budget warning', BUDGET_FINDING_CODES.over],
+  ])('never forges the Admin override marker from %s alone', (_label, code) => {
+    expect(markerForAcknowledgedCodes([code])).toBeNull()
+  })
+
+  it('never forges the Admin override marker from a BUDGET_ code this lane does not know', () => {
+    // A future server code, or a typo, is not evidence of an override. A prefix match is exactly
+    // the route that let an unknown code forge the marker.
+    expect(markerForAcknowledgedCodes(['BUDGET_WHATEVER_THE_SERVER_ADDS_NEXT'])).toBeNull()
+    expect(markerForAcknowledgedCodes(['BUDGET_EMERGENC'])).toBeNull()
+    expect(markerForAcknowledgedCodes(['BUDGET_'])).toBeNull()
+  })
+
+  it('ignores the no-reason warnings even when they arrive alongside non-budget codes', () => {
+    expect(markerForAcknowledgedCodes([BUDGET_FINDING_CODES.approaching, 'STAFF_LEAVE_PENDING'])).toBeNull()
+  })
+
+  it('is null for a whole set of no-reason budget warnings, and never a marker per code', () => {
+    const warningOnly = [BUDGET_FINDING_CODES.approaching, BUDGET_FINDING_CODES.over]
+    expect(markerForAcknowledgedCodes(warningOnly)).toBeNull()
+  })
+
+  it('keeps the genuine override when forecastOver is acknowledged beside a no-reason warning', () => {
+    expect(
+      markerForAcknowledgedCodes([BUDGET_FINDING_CODES.approaching, BUDGET_FINDING_CODES.forecastOver]),
+    ).toBe('adminOverride')
+  })
+
+  it('does not care about order, and does not care about a repeated code', () => {
+    // DEF-03 (independent source QA): the shared FindingsList keys by code, so two findings on
+    // different pools can both be BUDGET_FORECAST_OVER and the caller may pass the duplicate
+    // through. The marker must be a function of WHICH codes are present, not how many times, and
+    // the duplicate must not change it in either direction.
+    expect(
+      markerForAcknowledgedCodes([BUDGET_FINDING_CODES.forecastOver, BUDGET_FINDING_CODES.forecastOver]),
+    ).toBe('adminOverride')
+    expect(
+      markerForAcknowledgedCodes([BUDGET_FINDING_CODES.approaching, BUDGET_FINDING_CODES.approaching]),
+    ).toBeNull()
+  })
+
   it('returns null for no codes, and for codes with nothing budget about them', () => {
     expect(markerForAcknowledgedCodes([])).toBeNull()
     expect(markerForAcknowledgedCodes(null)).toBeNull()
@@ -179,10 +255,74 @@ describe('markerForAcknowledgedCodes', () => {
     expect(markerForAcknowledgedCodes(['BUDGET_FORECAST_OVER', 'BUDGET_EMERGENCY'])).toBe('emergency')
   })
 
+  it('keeps the emergency precedence when a no-reason warning is mixed in as well', () => {
+    // The emergency is the stronger, later fact. A no-reason warning alongside it changes
+    // nothing, and the warnings must not be able to talk the emergency out of its marker.
+    expect(
+      markerForAcknowledgedCodes([
+        BUDGET_FINDING_CODES.emergency,
+        BUDGET_FINDING_CODES.approaching,
+        BUDGET_FINDING_CODES.over,
+      ]),
+    ).toBe('emergency')
+    expect(
+      markerForAcknowledgedCodes([
+        BUDGET_FINDING_CODES.approaching,
+        BUDGET_FINDING_CODES.emergency,
+        'BUDGET_WHATEVER_THE_SERVER_ADDS_NEXT',
+      ]),
+    ).toBe('emergency')
+  })
+
+  it('reads the README wiring recipe as written: an Admin override of a forecast overrun', () => {
+    // README's documented save, followed literally: the caller's warning findings are
+    // acknowledged, the choice is an ordinary Admin override, so only the emergency code would be
+    // added. The marker must be the Admin override, because forecastOver was acknowledged.
+    const acknowledgedFindingCodes = readmeAcknowledgedCodes(
+      [approachingFinding, forecastOverFinding],
+      'adminOverride',
+    )
+    expect(acknowledgedFindingCodes).toEqual(['BUDGET_APPROACHING', 'BUDGET_FORECAST_OVER'])
+    expect(markerForAcknowledgedCodes(acknowledgedFindingCodes)).toBe('adminOverride')
+  })
+
+  it('reads the same recipe on the emergency path and gets the emergency marker', () => {
+    const acknowledgedFindingCodes = readmeAcknowledgedCodes(
+      [approachingFinding, forecastOverFinding],
+      'emergency',
+    )
+    expect(acknowledgedFindingCodes).toEqual([
+      'BUDGET_APPROACHING',
+      'BUDGET_FORECAST_OVER',
+      'BUDGET_EMERGENCY',
+    ])
+    expect(markerForAcknowledgedCodes(acknowledgedFindingCodes)).toBe('emergency')
+  })
+
+  it('reads a merely-approaching shift through the same recipe and forges nothing', () => {
+    // The exact DEF-01 reproduction: the README recipe applied to a shift that is only APPROACHING
+    // its budget. No reason was ever required, so no override can be claimed for it.
+    const acknowledgedFindingCodes = readmeAcknowledgedCodes([approachingFinding], 'adminOverride')
+    expect(acknowledgedFindingCodes).toEqual(['BUDGET_APPROACHING'])
+    expect(markerForAcknowledgedCodes(acknowledgedFindingCodes)).toBeNull()
+  })
+
   it('never reads the reason text: only the codes it is given', () => {
     // There is no reason parameter at all, which is the point: a caller cannot pass free text
     // in by accident, and cannot bypass the code by parsing one out of a string.
     expect(markerForAcknowledgedCodes.length).toBe(1)
+  })
+
+  it('forges no marker for a shift that never went over budget at all', () => {
+    // The marker is an audit claim. A shift with no forecastOver and no emergency code carries
+    // neither, whatever else is on the save.
+    const codes = [BUDGET_FINDING_CODES.approaching, 'COMPATIBILITY_EXCLUDED', 'BUDGET_UNKNOWN']
+    expect(markerForAcknowledgedCodes(codes)).toBeNull()
+    expect(markerForAcknowledgedCodes(codes)).not.toBe('adminOverride')
+  })
+
+  it('exposes exactly the two markers, so no third invented marker can be rendered', () => {
+    expect(Object.keys(OVER_BUDGET_MARKER).sort()).toEqual(['adminOverride', 'emergency'])
   })
 })
 

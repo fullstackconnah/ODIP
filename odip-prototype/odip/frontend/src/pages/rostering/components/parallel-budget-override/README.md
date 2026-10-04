@@ -75,6 +75,19 @@ await createShift.mutateAsync({
 `canSubmit` is a client-side courtesy for the button, not the enforcement: the server re-checks
 every save, and the component says so on screen.
 
+Two obligations ride on that snippet, and they belong to the integration owner, not to this lane:
+
+- **De-duplicate the codes.** `warningFindings.map(f => f.code)` produces a duplicate entry
+  whenever a participant has two findings with the same code (two over-budget pools both
+  `BUDGET_FORECAST_OVER`). The shared `FindingsList` then logs React's "Encountered two children
+  with the same key" warning. Spread a `Set` instead: `[...new Set(warningFindings.map(f => f.code))]`.
+- **The marker depends on which codes you send.** `markerForAcknowledgedCodes` grants the Admin
+  override marker for `BUDGET_FORECAST_OVER` **only**. A shift that is merely `BUDGET_APPROACHING`
+  or `BUDGET_OVER` gets **no** marker, and neither does an unrecognised `BUDGET_*` code: an Admin
+  override is an Admin's act with an audited reason behind it, so a no-reason warning can never
+  be one. Send the codes the user actually acknowledged, and a warning-only shift will not be
+  dressed up as an override.
+
 ### `BudgetFindingDetails`
 
 ```tsx
@@ -116,6 +129,16 @@ if (kind) {
   `"Emergency or safety: "` on the emergency path — but nothing stops a coordinator typing those
   words into an ordinary override reason, and a marker parsed out of the string would put a false
   emergency into a compliance audit record. This is design finding **F-16**.
+- **The Admin override marker is earned by `BUDGET_FORECAST_OVER` and nothing else.**
+  `markerForAcknowledgedCodes` tests for that one exact code. `BUDGET_APPROACHING` and
+  `BUDGET_OVER` are **no-reason warnings**, so a shift that is only approaching — or that is over on
+  the server but was never pushed past — can never have been overridden, and it gets **no** marker.
+  An unrecognised `BUDGET_*` code also gets none: a prefix match is what previously let a warning, or
+  a code this lane has never seen, forge "Over budget: Admin override" onto a shift nobody
+  overrode. A marker is an audit claim, so it is only rendered when a code supports it.
+- **`BUDGET_EMERGENCY` outranks everything.** When the emergency code is on the save, the
+  emergency marker wins regardless of which other codes accompany it — it is the stronger, later
+  fact, and an Admin override on the same save is its administrative shadow.
 - **No invented approval.** There is no `approved` state. A pending emergency says
   "Admin review pending" in the warning tone and carries the sentence "this has not been approved".
 - **A missing reviewer says so.** The row reads `Reviewed by: Not reviewed yet`. An absent row
@@ -167,10 +190,36 @@ Found but **out of this lane's write boundary** — reported to the parent, not 
   placement decision the integration owner makes when they place `<BudgetOverrideReasonFields>`;
   this component is a body-level block and is ready to drop in under the refusal.
 - **F-03, F-04, F-05** are in `FindingsList` / `RosterGateFields`, the shared-primitive owner's files.
-  This lane reuses both unchanged, and its findings are already filtered to `BUDGET_*` codes, so
-  the duplicate-key problem (F-04) does not arise from this component's call site.
+  This lane reuses both unchanged. Filtering to `BUDGET_*` codes does **not** make the duplicate-key
+  problem (F-04) unreachable from this call site: `FindingsList` keys by `finding.code`, and a
+  participant with two over-budget pools has **two findings with the same `BUDGET_FORECAST_OVER`
+  code**. React then logs "Encountered two children with the same key", and the duplicate flows
+  straight into `acknowledgedFindingCodes` as two identical entries. This lane is not editing the
+  shared primitive; **de-duplicating the codes before sending them is the integration owner's
+  obligation** at the wiring points above (see the two notes under "Wiring it to a save").
 - **F-26** (marker words in `title` *and* accessible name on the board chip) is a `ShiftChip`
   concern, in the same out-of-boundary group as F-01.
+
+## Known obligations this slice deliberately does NOT discharge
+
+Recorded so nobody reads a green suite here as more than it is. None of these is fixed in this
+folder, and each needs its owner:
+
+- **Restricted viewers get no money (F-13).** Correct by design here — this folder shows no figure
+  of its own, and whether a money-bearing finding is sent to a SupportWorker or ReadOnly at all is
+  the **server DTO's** decision. A client-side filter would be a false second security boundary.
+  The integration owner *may* additionally strip budget findings for restricted roles as defence
+  in depth in the `findings.filter(...)` above; it is not required by this slice.
+- **De-duplicate `acknowledgedFindingCodes` before sending them** (the F-04 duplicate-key route
+  above). Two findings with the same code produce a duplicate entry, which React warns about in
+  `FindingsList` and which reaches the server. The marker itself is unaffected — a repeated
+  `BUDGET_FORECAST_OVER` still reads as one genuine override — but the warning and the redundant
+  code are still the caller's to remove.
+- **Unknown codes are not markers.** `markerForAcknowledgedCodes` only knows
+  `BUDGET_FORECAST_OVER` and `BUDGET_EMERGENCY`. If phase 3 adds a third over-budget code, adding
+  it here is a deliberate contract change, with its own test — never a prefix match.
+- **K1–K10 rendered scenes, the real shift panel, and any API, enforcement, Settings or migration
+  behaviour** are the integration lane's, and are not exercised by these component tests.
 
 ## Rendering, testing and what is NOT claimed
 

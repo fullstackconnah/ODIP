@@ -183,7 +183,7 @@ export type OverBudgetMarkerKind = keyof typeof OVER_BUDGET_MARKER
 
 /**
  * Which marker a shift carries, decided by the codes the SERVER acknowledged — never by reading
- * the stored reason text.
+ * the stored reason text, and never by the shape of a code's name.
  *
  * This is a mandatory contract rule, not a style choice. `Shift.OverrideReason` is free text that
  * the server prefixes with "Emergency or safety: " on the emergency path, but nothing stops a
@@ -192,17 +192,29 @@ export type OverBudgetMarkerKind = keyof typeof OVER_BUDGET_MARKER
  * in an audit record the organisation keeps for compliance.
  *
  * So the integration owner passes the shift's `acknowledgedFindingCodes` in here, and the answer
- * comes from `BUDGET_EMERGENCY`'s presence. `BUDGET_FORECAST_OVER` (or any other budget code) with
- * no emergency code means an ordinary override. No budget code at all means no marker: the shift
- * simply did not go over budget.
+ * comes from the acknowledged CODES themselves.
  *
- * When both are present the emergency marker wins — it is the stronger, later fact, and an Admin
- * override acknowledged on the same save is the administrative shadow of the emergency.
+ * The Admin override marker is gated on `BUDGET_FORECAST_OVER` and nothing else. An override is
+ * an ADMIN'S ACT with an audited written reason behind it, so it can only have happened on a shift
+ * that was actually over its recorded budget and the caller answered to it. `BUDGET_APPROACHING`
+ * and `BUDGET_OVER` are no-reason warnings: a shift that is merely approaching, or that the server
+ * says is over but nobody pushed past, can never have been overridden. Treating "any code that
+ * starts with BUDGET_" as an override therefore put "Over budget: Admin override" on shifts nobody
+ * overrode — a false entry in the same compliance record, and the same class of defect as reading
+ * the reason string. Only the exact forecast-over code earns the marker.
+ *
+ * A code this lane does not know is likewise not evidence of anything. A prefix match let an
+ * unknown or future server code forge the marker, so the test is equality against the one
+ * constant, not a pattern.
+ *
+ * When the emergency code is present the emergency marker wins — it is the stronger, later fact,
+ * and an Admin override acknowledged on the same save is the administrative shadow of the
+ * emergency. No other budget code can outvote it.
  */
 export function markerForAcknowledgedCodes(codes: readonly string[] | null | undefined): OverBudgetMarkerKind | null {
   if (!codes || codes.length === 0) return null
   if (codes.includes(BUDGET_FINDING_CODES.emergency)) return 'emergency'
-  return codes.some(code => code.startsWith('BUDGET_')) ? 'adminOverride' : null
+  return codes.includes(BUDGET_FINDING_CODES.forecastOver) ? 'adminOverride' : null
 }
 
 /** How far an emergency review obligation has got. There is no 'approved' state here. */
