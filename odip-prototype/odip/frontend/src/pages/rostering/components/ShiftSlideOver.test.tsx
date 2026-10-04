@@ -4,11 +4,11 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ShiftSlideOver } from './ShiftSlideOver'
 import { makeShift, makeFinding } from '../test-fixtures'
-import type { ParticipantRoutineDto, CompatibilityRowDto, ShiftDto, ShiftNoteDto, ShiftPatternDto } from '@/api/types'
+import type { ParticipantRoutineDto, CompatibilityRowDto, ShiftDto, ShiftNoteDto } from '@/api/types'
 
 const {
   mockCheckMutate, mockCreateMutateAsync, mockUpdateMutateAsync, mockDeleteMutateAsync, mockGetRosterFindings,
-  mockUseParticipantRoutines, mockUseCompatibility, mockUseShiftNotes, mockUsePattern,
+  mockUseParticipantRoutines, mockUseCompatibility, mockUseShiftNotes,
 } = vi.hoisted(() => ({
   mockCheckMutate: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
@@ -18,7 +18,6 @@ const {
   mockUseParticipantRoutines: vi.fn(() => ({ data: [] as ParticipantRoutineDto[] })),
   mockUseCompatibility: vi.fn(() => ({ data: [] as CompatibilityRowDto[] })),
   mockUseShiftNotes: vi.fn(() => ({ data: [] as ShiftNoteDto[] })),
-  mockUsePattern: vi.fn(() => ({ data: undefined as ShiftPatternDto | undefined })),
 }))
 
 // Only the API layer is mocked — every other collaborator (FindingsList, SlideOver,
@@ -31,7 +30,6 @@ vi.mock('@/api/hooks', () => ({
   useParticipantRoutines: mockUseParticipantRoutines,
   useCompatibility: mockUseCompatibility,
   useRosterShiftNotes: mockUseShiftNotes,
-  usePattern: mockUsePattern,
   getRosterFindings: mockGetRosterFindings,
 }))
 
@@ -79,8 +77,6 @@ beforeEach(() => {
   mockUseParticipantRoutines.mockReturnValue({ data: [] as ParticipantRoutineDto[] })
   mockUseCompatibility.mockReturnValue({ data: [] as CompatibilityRowDto[] })
   mockUseShiftNotes.mockReturnValue({ data: [] as ShiftNoteDto[] })
-  mockUsePattern.mockReset()
-  mockUsePattern.mockReturnValue({ data: undefined })
 })
 
 describe('ShiftSlideOver override gate', () => {
@@ -1417,39 +1413,29 @@ describe('ShiftSlideOver — what the shift asks of a worker', () => {
   })
 })
 
-// The shifts an approval made sit on the board at the same times as the shifts of the revision before it: the panel says which agreement a shift came from, read only (nothing here changes it).
+// The shifts an approval made sit on the board on the same days as the shifts of the revision before it: the panel says which agreement a shift came from, read only (nothing here changes it). The shift itself says so
+// (the server puts its pattern's source on it), so opening the panel reads nothing more.
 describe('ShiftSlideOver — which agreement a shift came from', () => {
-  const agreementPattern = (version?: number): ShiftPatternDto => ({
-    id: 'pattern-7', participantId: 'participant-1', participantName: 'Mia Chen', dayOfWeek: 'Monday', startTime: '09:00:00', endTime: '13:00:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
-    effectiveFrom: '2026-10-01', isActive: true, sourceDraftId: 'draft-2', sourceBlockKey: 'b1', sourceDraftVersion: version, workerSlot: 1,
-  } as ShiftPatternDto)
-
-  const open = (shiftPatternId: string | null) => render(
-    <ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ shiftPatternId }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />,
+  const open = (overrides: Partial<ShiftDto> = {}) => render(
+    <ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ shiftPatternId: 'pattern-7', ...overrides }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />,
   )
 
-  it('says "From agreement v2" for a shift made from an agreement pattern, and reads the pattern by the shift\'s own pattern id', () => {
-    mockUsePattern.mockReturnValue({ data: agreementPattern(2) })
-    open('pattern-7')
+  it('says "From agreement v2" for a shift that says it came from version 2 of an agreement', () => {
+    open({ fromAgreement: true, sourceDraftVersion: 2 })
 
     expect(screen.getByText('From agreement v2')).toBeInTheDocument()
-    expect(mockUsePattern).toHaveBeenCalledWith('pattern-7')
   })
 
-  it('says "From an agreement" when the version is not known, and nothing for a hand-made pattern, a shift with no pattern, or while the pattern is still loading', () => {
-    mockUsePattern.mockReturnValue({ data: agreementPattern(undefined) })
-    const first = open('pattern-7')
+  it('says "From an agreement" when the version is not known, and nothing for a shift that does not say it came from one', () => {
+    const first = open({ fromAgreement: true })
     expect(screen.getByText('From an agreement')).toBeInTheDocument()
     first.unmount()
 
-    mockUsePattern.mockReturnValue({ data: { ...agreementPattern(2), sourceDraftId: undefined, sourceDraftVersion: undefined } })
-    const second = open('pattern-7')
+    const second = open({})                                                                  // a hand-made pattern's shift: no fromAgreement on the wire
     expect(screen.queryByText(/From agreement|From an agreement/)).not.toBeInTheDocument()
     second.unmount()
 
-    mockUsePattern.mockReturnValue({ data: undefined })
-    open(null)
+    open({ shiftPatternId: null })                                                           // a one-off shift with no pattern at all
     expect(screen.queryByText(/From agreement|From an agreement/)).not.toBeInTheDocument()
-    expect(mockUsePattern).toHaveBeenLastCalledWith(undefined)                          // no pattern to ask for
   })
 })

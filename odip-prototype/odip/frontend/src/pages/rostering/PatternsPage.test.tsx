@@ -223,6 +223,29 @@ describe('PatternsPage — patterns made by an agreement', () => {
     expect(screen.getByText('From agreement v2 · worker 1 of 2')).toBeInTheDocument()
     expect(screen.getByText('From agreement v2 · worker 2 of 2')).toBeInTheDocument()
     expect(screen.getAllByText('From agreement v2')).toHaveLength(1)                    // a one-to-one pattern has no second worker to name
+    // The badge is one unit and its cell has room for it: in a narrow cell it used to wrap inside its own pill ("From agreement v2 · / worker 1 of 2").
+    const badge = screen.getByText('From agreement v2 · worker 1 of 2')
+    expect(badge).toHaveClass('whitespace-nowrap')
+    expect(badge.parentElement).toHaveClass('min-w-[14rem]')
+  })
+
+  it('names the twin rows of a 2:1 support apart in every row action, by which worker each is for: the same day, the same times, and nothing else to tell them by', () => {
+    mockUsePatterns.mockReturnValue({
+      data: [
+        agreement({ id: 'slot-1', ratio: 'TwoToOne', workerSlot: 1, dayOfWeek: 'Sunday', startTime: '10:00:00', endTime: '14:00:00' }),
+        agreement({ id: 'slot-2', ratio: 'TwoToOne', workerSlot: 2, dayOfWeek: 'Sunday', startTime: '10:00:00', endTime: '14:00:00' }),
+        agreement({ id: 'single', ratio: 'OneToOne', workerSlot: 1, dayOfWeek: 'Monday', startTime: '09:00:00', endTime: '13:00:00' }),
+      ],
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    render(<PatternsPage />)
+
+    for (const action of ['Edit', 'Generate shifts for', 'Deactivate']) {
+      expect(screen.getByRole('button', { name: `${action} Mia Chen's Sunday 10am–2pm pattern (worker 1 of 2)` })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: `${action} Mia Chen's Sunday 10am–2pm pattern (worker 2 of 2)` })).toBeInTheDocument()
+      // a pattern that is not half of a pair has no worker to name
+      expect(screen.getByRole('button', { name: `${action} Mia Chen's Monday 9am–1pm pattern` })).toBeInTheDocument()
+    }
   })
 
   it('names each row action with the time as well as the day, so two patterns on one day can be chosen between', () => {

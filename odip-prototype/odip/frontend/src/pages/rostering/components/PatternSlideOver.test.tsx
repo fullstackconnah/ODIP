@@ -469,12 +469,42 @@ describe('PatternSlideOver — a pattern an agreement made', () => {
 
       expect(scrolled).toHaveLength(0)                                                       // nothing wrong, nothing scrolled
       fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+      expect(scrolled).toHaveLength(1)                                                       // the drift warning that the change brought (its own test below)
+      scrolled.length = 0
       await user.click(screen.getByRole('button', { name: 'Save' }))
 
       // (The drift warning is an alert too, so the refusal is found by its words.)
       const refusal = (await screen.findByText(/This agreement already has a pattern/)).closest('[role="alert"]')
       expect(refusal).not.toBeNull()
       expect(scrolled).toEqual([refusal])
+    } finally {
+      if (original) proto.scrollIntoView = original
+      else delete proto.scrollIntoView
+    }
+  })
+
+  it('brings the drift warning into view when it appears: it sits at the top of a panel that scrolls, and the field that caused it can be far below', () => {
+    const calls: { text: string; options: unknown }[] = []
+    const proto = Element.prototype as { scrollIntoView?: (arg?: boolean | ScrollIntoViewOptions) => void }
+    const original = proto.scrollIntoView
+    proto.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) { calls.push({ text: this.textContent ?? '', options }) }
+    try {
+      open(agreementPattern())
+      expect(calls).toHaveLength(0)                                                                // nothing changed yet: nothing to show
+
+      fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+      expect(calls).toHaveLength(1)
+      expect(calls[0].text).toMatch(/You have changed what agreement v2 set/)
+      expect(calls[0].options).toEqual({ block: 'nearest' })                                       // brought in only if it is out of view, not dragged to the top
+
+      fireEvent.change(screen.getByLabelText(/End time/), { target: { value: '16:00' } })           // a second change: the warning is already there, and the panel is left where it is
+      expect(calls).toHaveLength(1)
+
+      fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '09:00' } })
+      fireEvent.change(screen.getByLabelText(/End time/), { target: { value: '17:00' } })           // put back: the warning goes
+      expect(screen.queryByText(/You have changed what agreement v2 set/)).not.toBeInTheDocument()
+      fireEvent.change(screen.getByLabelText(/End time/), { target: { value: '15:00' } })           // and when it comes back, it is brought into view again
+      expect(calls).toHaveLength(2)
     } finally {
       if (original) proto.scrollIntoView = original
       else delete proto.scrollIntoView

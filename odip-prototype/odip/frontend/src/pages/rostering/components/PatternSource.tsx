@@ -1,6 +1,7 @@
 import type { ShiftPatternDto } from '@/api/types'
 import { StatusBadge } from '@/components/StatusBadge'
 import { RequirementChips } from '@/components/RequirementChips'
+import { workerOfPairLabel } from '../lib/roster'
 
 /**
  * The words for where an agreement pattern came from: the version when the server knows it, and, for the two patterns a 2:1 support makes (the same day, time and range, told apart only by the
@@ -9,7 +10,8 @@ import { RequirementChips } from '@/components/RequirementChips'
 function patternSourceLabel(pattern: Pick<ShiftPatternDto, 'sourceDraftId' | 'sourceDraftVersion' | 'ratio' | 'workerSlot'>): string | null {
   if (!pattern.sourceDraftId) return null
   const from = pattern.sourceDraftVersion !== undefined ? `From agreement v${pattern.sourceDraftVersion}` : 'From an agreement'
-  return pattern.ratio === 'TwoToOne' && pattern.workerSlot ? `${from} · worker ${pattern.workerSlot} of 2` : from
+  const worker = workerOfPairLabel(pattern)
+  return worker ? `${from} · ${worker}` : from
 }
 
 /**
@@ -20,8 +22,9 @@ export function PatternSource({ pattern }: { pattern: Pick<ShiftPatternDto, 'sou
   const label = patternSourceLabel(pattern)
   if (!label) return <span className="text-[var(--color-muted-foreground)]">—</span>
   return (
-    <span className="flex flex-col items-start gap-1">
-      <StatusBadge tone="info" label={label} />
+    // The cell has room for the badge on one line and for two chips side by side (min-w), and the badge is one unit (nowrap): in a narrow cell "From agreement v2 · worker 1 of 2" split inside its own pill.
+    <span className="flex min-w-[14rem] flex-col items-start gap-1">
+      <StatusBadge tone="info" label={label} className="whitespace-nowrap" />
       <RequirementChips requirements={pattern.requirements} />
     </span>
   )

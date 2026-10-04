@@ -78,6 +78,11 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
   useEffect(() => {
     if (error) errorRef.current?.scrollIntoView?.({ block: 'nearest' })
   }, [error])
+  // The drift warning sits at the top of a panel that scrolls, and the field that caused it can be far below (on a phone a changed Ratio or end date): when it appears it is brought into view, and only if it is not already.
+  const driftRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (redefined) driftRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [redefined])
 
   const createPattern = useCreatePattern()
   const updatePattern = useUpdatePattern()
@@ -158,7 +163,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
         ) : undefined}
       >
         {existing?.sourceDraftId && (redefined
-          ? <Callout tone="warning">{`You have changed what ${source} set, so the roster will differ from it. To change the plan itself, save a new revision.`}</Callout>
+          ? <div ref={driftRef}><Callout tone="warning">{`You have changed what ${source} set, so the roster will differ from it. To change the plan itself, save a new revision.`}</Callout></div>
           : <p role="status" className="text-sm text-[var(--color-muted-foreground)]">{`From ${source}.`}</p>)}
         {existing?.requirements && requirementLabels(existing.requirements).length > 0 && (
           <FormField label="Asks for" hint="From the agreement. Shown, not checked against the worker yet.">

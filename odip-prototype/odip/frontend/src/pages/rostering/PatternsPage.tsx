@@ -14,7 +14,7 @@ import { usePatterns, useUpdatePattern, useParticipants, useStaff } from '@/api/
 import type { ShiftPatternDto, CreateShiftPatternDto } from '@/api/types'
 import { PatternSlideOver, GeneratePatternDialog, type PatternSlideOverTarget } from './components'
 import { PatternSource } from './components/PatternSource'
-import { formatShiftRange, formatEffectiveRange, RATIO_LABELS, NIGHT_TYPE_LABELS, DAY_OF_WEEK_INDEX } from './lib/roster'
+import { formatShiftRange, formatEffectiveRange, workerOfPairLabel, RATIO_LABELS, NIGHT_TYPE_LABELS, DAY_OF_WEEK_INDEX } from './lib/roster'
 
 /** The write fields off a loaded pattern, for round-tripping through update without re-typing every field. */
 function toPayload(p: ShiftPatternDto): CreateShiftPatternDto {
@@ -42,8 +42,9 @@ function PatternRowActions({
   onGenerate: () => void
   onToggleActive: () => void
 }) {
-  // The time is in the name as well as the day: a participant can have two patterns on one day (a 2:1 agreement makes two with the same times), and a button heard on its own has to be told apart.
-  const which = `${pattern.participantName}'s ${pattern.dayOfWeek} ${formatShiftRange(pattern.startTime, pattern.endTime, pattern.endsNextDay)} pattern`
+  // The time is in the name as well as the day, and for the pair a 2:1 agreement makes (the same day, times and dates) which worker it is: a button heard on its own has to be told apart.
+  const worker = workerOfPairLabel(pattern)
+  const which = `${pattern.participantName}'s ${pattern.dayOfWeek} ${formatShiftRange(pattern.startTime, pattern.endTime, pattern.endsNextDay)} pattern${worker ? ` (${worker})` : ''}`
   return (
     <div className="flex items-center justify-end gap-1">
       <button
