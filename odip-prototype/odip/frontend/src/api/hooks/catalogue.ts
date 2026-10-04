@@ -6,10 +6,12 @@ import type {
   SupportActivityGroupDto,
 } from '../types'
 
-export function useProviderSettings() {
+/** The organisation's provider settings (SuperAdmin, Admin and Coordinator may read them): pass `enabled` false for any other role, which would only meet a 403. */
+export function useProviderSettings(enabled = true) {
   return useQuery({
     queryKey: ['provider-settings'],
     queryFn: () => apiGet<ProviderSettingsDto>('/provider-settings'),
+    enabled,
   })
 }
 

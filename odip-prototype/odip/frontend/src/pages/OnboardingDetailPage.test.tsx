@@ -5,8 +5,8 @@ import { createMemoryRouter, MemoryRouter, Route, Routes, RouterProvider } from 
 import OnboardingDetailPage from './OnboardingDetailPage'
 import { __testHooks } from '@/hooks/useBackNavigation'
 
-const { mockUseQuery, mockUseMutation, mockInvalidate, mockUseParticipant } = vi.hoisted(() => ({
-  mockUseQuery: vi.fn(), mockUseMutation: vi.fn(), mockInvalidate: vi.fn(), mockUseParticipant: vi.fn(),
+const { mockUseQuery, mockUseMutation, mockInvalidate, mockUseParticipant, mockUseProviderSettings } = vi.hoisted(() => ({
+  mockUseQuery: vi.fn(), mockUseMutation: vi.fn(), mockInvalidate: vi.fn(), mockUseParticipant: vi.fn(), mockUseProviderSettings: vi.fn(),
 }))
 vi.mock('@tanstack/react-query', () => ({
   useQuery: mockUseQuery,
@@ -14,7 +14,7 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: mockInvalidate }),
 }))
 vi.mock('@/api/client', () => ({ apiGet: vi.fn(), apiPost: vi.fn() }))
-vi.mock('@/api/hooks', () => ({ useParticipant: mockUseParticipant }))
+vi.mock('@/api/hooks', () => ({ useParticipant: mockUseParticipant, useProviderSettings: mockUseProviderSettings }))
 
 const incomplete = {
   participantId: 'p-1', intakeComplete: true, profileComplete: false,
@@ -30,6 +30,10 @@ const readyForSchedule = {
 
 // The previous-path tracker is module state: no test may leave its path behind for the next one.
 afterEach(() => __testHooks.reset())
+
+// The organisation's readiness mode is a request of its own: unknown (still loading, or a role that may not read it) unless a test says Warn or Enforce.
+beforeEach(() => { mockUseProviderSettings.mockReturnValue({ data: undefined }) })
+const readinessMode = (participantReadinessMode: 'Warn' | 'Enforce') => mockUseProviderSettings.mockReturnValue({ data: { participantReadinessMode } })
 
 function renderDetail() {
   return render(<MemoryRouter initialEntries={['/onboarding/p-1']}><Routes><Route path="/onboarding/:id" element={<OnboardingDetailPage />} /></Routes></MemoryRouter>)
@@ -365,6 +369,7 @@ describe('OnboardingDetailPage — the funding gate', () => {
   })
 
   it('recommends recording the plan budget once everything before it is done, and the agreement evidence while that is still open', () => {
+    readinessMode('Warn')
     const first = renderDetail()
     const recommendation = screen.getByRole('heading', { name: 'Record plan budget' }).closest('section')!
     expect(within(recommendation).getByRole('link', { name: 'Open Funding tab' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
@@ -376,6 +381,37 @@ describe('OnboardingDetailPage — the funding gate', () => {
     renderDetail()
     expect(screen.getByRole('heading', { name: 'Review agreement evidence' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Record plan budget' })).not.toBeInTheDocument()
+  })
+
+  // Q5 (budget 2a): "this can wait" is true only in Warn mode. In Enforce mode activation waits for the plan budget, so the card must never say otherwise; and while the mode is not known
+  // (loading, or a role that may not read the organisation's settings) it does not guess.
+  it('never says the plan budget can wait in Enforce mode: activation waits for it', () => {
+    readinessMode('Enforce')
+    renderDetail()
+
+    const recommendation = screen.getByRole('heading', { name: 'Record plan budget' }).closest('section')!
+    expect(recommendation).not.toHaveTextContent(/can wait/)
+    expect(within(recommendation).getByText('The plan budget is recorded on the participant’s Funding tab, from the plan the participant shares or from their plan manager. Your organisation’s readiness rule is Enforce, so activation waits for it.')).toBeInTheDocument()
+  })
+
+  it('does not claim it can wait while the mode is not known either: it says the readiness rule decides', () => {
+    renderDetail()
+
+    const recommendation = screen.getByRole('heading', { name: 'Record plan budget' }).closest('section')!
+    expect(recommendation).not.toHaveTextContent(/can wait/)
+    expect(within(recommendation).getByText('The plan budget is recorded on the participant’s Funding tab, from the plan the participant shares or from their plan manager. Your organisation’s readiness rule decides whether activation waits for it.')).toBeInTheDocument()
+  })
+
+  it('asks for the organisation\'s readiness mode only for the roles that may read it', () => {
+    renderDetail()
+    expect(mockUseProviderSettings).toHaveBeenLastCalledWith(true)   // Coordinator: the roles that manage funding may read the settings
+
+    for (const role of ['ReadOnly', 'SupportWorker']) {
+      localStorage.setItem('odip_user', JSON.stringify({ role }))
+      const { unmount } = renderDetail()
+      expect(mockUseProviderSettings, role).toHaveBeenLastCalledWith(false)
+      unmount()
+    }
   })
 
   it('goes on to the schedule step (approving the agreement for rostering) once the plan budget is recorded, and never names the budget for a participant who is not NDIS-funded', () => {
