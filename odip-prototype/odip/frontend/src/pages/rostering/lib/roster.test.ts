@@ -7,6 +7,7 @@ import {
   isToday,
   formatShiftRange,
   formatShiftTimeRange,
+  isUnfilledShift,
 } from './roster'
 
 describe('countPatternOccurrences', () => {
@@ -127,5 +128,16 @@ describe('formatShiftRange / formatShiftTimeRange', () => {
 
   it('renders on-the-hour minutes without :00 padding', () => {
     expect(formatShiftTimeRange('13:30:00', '15:00:00')).toBe('1:30pm–3pm')
+  })
+})
+
+// The API leaves a null member out of the JSON, so an unfilled shift has no staffId at all. Asking `=== null` of that is false for every shift on real data (the board hid them all).
+describe('isUnfilledShift', () => {
+  it('is true for no staffId at all (what the API sends), for null and for an empty one, and false for a person', () => {
+    expect(isUnfilledShift({})).toBe(true)
+    expect(isUnfilledShift({ staffId: undefined })).toBe(true)
+    expect(isUnfilledShift({ staffId: null })).toBe(true)
+    expect(isUnfilledShift({ staffId: '' })).toBe(true)
+    expect(isUnfilledShift({ staffId: 'staff-1' })).toBe(false)
   })
 })

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import RosterBoardPage from './RosterBoardPage'
-import { makeParticipantBoard, makeParticipantRow, makeShift, makeStaffBoard, makeStaffRow } from './test-fixtures'
+import { makeParticipantBoard, makeParticipantRow, makeShift, makeStaffBoard, makeStaffRow, makeUnfilledShift } from './test-fixtures'
 import type { RosterBoardDto } from '@/api/types'
 import { weekStartOf } from './lib/roster'
 
@@ -28,7 +28,6 @@ vi.mock('@/api/hooks', async () => {
     useParticipantRoutines: () => ({ data: [] }),
     useCompatibility: () => ({ data: [] }),
     useRosterShiftNotes: () => ({ data: [] }),
-    usePattern: () => ({ data: undefined }),
     useCheckShift: () => ({ mutate: vi.fn(), isPending: false }),
   }
 })
@@ -283,7 +282,7 @@ describe('RosterBoardPage — an assign the server refuses is no longer swallowe
   it('shows no banner when the assign succeeds', async () => {
     const user = userEvent.setup()
     mockUseRosterBoard.mockReturnValue({ data: makeBoardWithFilledShift(), isLoading: false, isError: false, refetch: vi.fn() })
-    mockAssignMutateAsync.mockResolvedValueOnce(makeShift({ staffId: null, staffName: null }))
+    mockAssignMutateAsync.mockResolvedValueOnce(makeUnfilledShift())
     renderPage()
 
     await unassignMiasShift(user)
@@ -445,8 +444,8 @@ describe('RosterBoardPage — ?participant= and ?unfilled= open the board alread
   const staffBoard = () => makeStaffBoard({
     staffRows: [makeStaffRow({ staffId: 'staff-1', fullName: 'Casey Roe' })],
     unfilled: [
-      makeShift({ id: 'open-amy', participantId: 'p-1', participantName: 'Amy Ng', staffId: null, staffName: null }),
-      makeShift({ id: 'open-ben', participantId: 'p-2', participantName: 'Ben Ito', staffId: null, staffName: null }),
+      makeUnfilledShift({ id: 'open-amy', participantId: 'p-1', participantName: 'Amy Ng' }),
+      makeUnfilledShift({ id: 'open-ben', participantId: 'p-2', participantName: 'Ben Ito' }),
     ],
   })
 
@@ -496,7 +495,7 @@ describe('RosterBoardPage — ?participant= and ?unfilled= open the board alread
         participantId: 'p-1', fullName: 'Amy Ng',
         shifts: [
           makeShift({ id: 'taken', participantId: 'p-1', participantName: 'Amy Ng', staffId: 'staff-1', staffName: 'Casey Roe', serviceDate: '2026-08-17' }),
-          makeShift({ id: 'open', participantId: 'p-1', participantName: 'Amy Ng', staffId: null, staffName: null, serviceDate: '2026-08-18' }),
+          makeUnfilledShift({ id: 'open', participantId: 'p-1', participantName: 'Amy Ng', serviceDate: '2026-08-18' }),
         ],
       })],
     })
@@ -507,6 +506,24 @@ describe('RosterBoardPage — ?participant= and ?unfilled= open the board alread
     expect(shown('Amy Ng')).toBe(true)                                                // the row is still on the board
     expect(screen.queryByText('Casey Roe')).not.toBeInTheDocument()                     // the shift somebody has is out of the way
     expect(screen.getAllByText('Unfilled').length).toBeGreaterThan(0)                   // the one nobody has is not
+  })
+
+  it('does it with the shapes the API really sends: an unfilled shift has no staffId at all (the server leaves a null out), and the approved card\'s own link lands on a board that is not empty', () => {
+    const row = makeParticipantRow({
+      participantId: 'p-1', fullName: 'Amy Ng',
+      shifts: [
+        makeShift({ id: 'taken', participantId: 'p-1', participantName: 'Amy Ng', staffId: 'staff-1', staffName: 'Casey Roe', serviceDate: '2026-08-17' }),
+        makeUnfilledShift({ id: 'open', participantId: 'p-1', participantName: 'Amy Ng', serviceDate: '2026-08-18' }),
+        makeUnfilledShift({ id: 'open-too', participantId: 'p-1', participantName: 'Amy Ng', serviceDate: '2026-08-19' }),
+      ],
+    })
+    expect('staffId' in row.shifts[1]).toBe(false)                                      // the fixture is the wire shape: no member, not a null one
+    mockUseRosterBoard.mockReturnValue({ data: makeParticipantBoard({ participantRows: [row] }), isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage('/rostering?date=2026-10-14&participant=p-1&unfilled=1')
+
+    expect(screen.getByRole('button', { name: 'Unfilled only' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getAllByText('Unfilled')).toHaveLength(2)                             // both unfilled shifts are drawn: the week is not empty
+    expect(screen.queryByText('Casey Roe')).not.toBeInTheDocument()                     // and the one somebody has is out of the way
   })
 
   it('shows the assigned shifts again when the toggle is pressed off, on the participant board', async () => {

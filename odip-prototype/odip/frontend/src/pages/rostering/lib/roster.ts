@@ -84,6 +84,22 @@ export function isToday(iso: string): boolean {
   return iso === format(new Date(), 'yyyy-MM-dd')
 }
 
+/**
+ * Nobody is assigned to the shift. The API leaves a null member out of the JSON (WhenWritingNull), so an unfilled shift arrives with NO `staffId` (undefined), not a null one: test for
+ * "unfilled" with this and never with `=== null`, which no real shift ever satisfies.
+ */
+export function isUnfilledShift(shift: { staffId?: string | null }): boolean {
+  return !shift.staffId
+}
+
+/**
+ * Which worker of the pair an agreement pattern is for ("worker 1 of 2"): a 2:1 support makes two patterns with the same day, times and dates, told apart only by that. Null for any other pattern.
+ * (Here, not in the component that draws it, so the Patterns list can put it in the row buttons' names as well.)
+ */
+export function workerOfPairLabel(pattern: { ratio: string; workerSlot?: number }): string | null {
+  return pattern.ratio === 'TwoToOne' && pattern.workerSlot ? `worker ${pattern.workerSlot} of 2` : null
+}
+
 export function formatShiftRange(startTime: string, endTime: string, endsNextDay: boolean): string {
   return `${formatShiftTime(startTime)}–${formatShiftTime(endTime)}${endsNextDay ? ' +1' : ''}`
 }

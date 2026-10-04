@@ -18,7 +18,7 @@ import {
   WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer,
   type ShiftSlideOverTarget,
 } from './components'
-import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek } from './lib/roster'
+import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift } from './lib/roster'
 import { useBoardViewMode } from './lib/useBoardViewMode'
 
 type PendingAssign = { shift: ShiftDto; staffId: string | null; findings: RosterFindingDto[] }
@@ -121,7 +121,7 @@ export default function RosterBoardPage() {
         participantRows: board.participantRows
           .filter(row => !participantFilter || row.participantId === participantFilter)
           // "Unfilled only" on this board keeps every row (the grid is always whole) and draws only the shifts nobody is assigned to.
-          .map(row => unfilledOnly ? { ...row, shifts: row.shifts.filter(shift => shift.staffId === null) } : row)
+          .map(row => unfilledOnly ? { ...row, shifts: row.shifts.filter(isUnfilledShift) } : row)
           .slice()
           .sort((a, b) => a.fullName.localeCompare(b.fullName)),
       }
@@ -173,7 +173,7 @@ export default function RosterBoardPage() {
     const overId = event.over?.id
     if (!shift || !overId) return
     if (overId === 'unassign-target') {
-      if (shift.staffId !== null) performAssign(shift, null)
+      if (!isUnfilledShift(shift)) performAssign(shift, null)                   // dropping an unfilled shift on the lane is nothing to do (it has no staffId at all, not a null one)
       return
     }
     if (typeof overId === 'string' && overId.startsWith('staff:')) {

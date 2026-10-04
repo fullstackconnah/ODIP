@@ -25,8 +25,9 @@ export interface ShiftDto {
   id: string
   participantId: string
   participantName: string
-  staffId: string | null
-  staffName: string | null
+  /** Who has the shift. ABSENT for an unfilled shift: the server leaves a null out of the JSON (WhenWritingNull), so on the wire it is never `null`. Ask `isUnfilledShift(shift)` (pages/rostering/lib/roster), not `=== null`. */
+  staffId?: string | null
+  staffName?: string | null
   serviceDate: string
   startTime: string
   endTime: string
@@ -44,6 +45,10 @@ export interface ShiftDto {
    * `findings` (those are computed at assign-time). Renders as a distinct "On leave" hole on the
    * board rather than a normal filled chip. */
   assigneeOnApprovedLeave: boolean
+  /** True when the pattern this shift was generated from was made by an agreement revision; omitted for any other shift. With `sourceDraftVersion` it is what the shift panel says ("From agreement v2"): no read of the pattern is needed. */
+  fromAgreement?: boolean
+  /** The version of that revision. */
+  sourceDraftVersion?: number
   /** What is still missing for this shift's participant (e.g. "Intake not complete"), shown verbatim as a
    * quiet warning. Omitted by the server when there is nothing missing. Never blocks a save in Warn mode. */
   readinessIssues?: string[]
@@ -282,7 +287,7 @@ export interface RosterParticipantRowDto {
   supportRatio: SupportRatio
   overnightSupport: SleepoverType
   hasRestrictivePractice: boolean
-  shifts: ShiftDto[]          // includes unfilled ones (staffId null)
+  shifts: ShiftDto[]          // includes unfilled ones (no staffId)
   tripBars: TripBarDto[]
   scheduledHours: number
   daysWithoutCover: number    // days in the week with no shift and no trip
