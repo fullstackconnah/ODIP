@@ -149,6 +149,43 @@ public class PlanApprovalRosterDtoTests
     }
 
     [Fact]
+    public async Task The_board_says_which_agreement_a_shift_came_from_so_the_shift_panel_needs_no_read_of_the_pattern_and_a_hand_made_shift_says_nothing()
+    {
+        var s = await SeedAsync();
+        await using var _ = s.Db;
+        await new RosterShiftGenerator().GenerateAsync(s.Db, s.Participant.Id, new[] { s.FromAgreement.Id, s.HandMade.Id }, Monday, Monday.AddDays(1), CancellationToken.None);
+
+        var result = await Controller(s.Db).GetBoard(Monday, "participant", CancellationToken.None);
+
+        var board = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        var shifts = Assert.Single(board.ParticipantRows!, row => row.ParticipantId == s.Participant.Id).Shifts;
+        var fromAgreement = Assert.Single(shifts, shift => shift.ServiceDate == Monday);
+        Assert.Equal((true, 2), (fromAgreement.FromAgreement, fromAgreement.SourceDraftVersion));          // the draft of the seed is version 2
+        var handMade = Assert.Single(shifts, shift => shift.ServiceDate == Monday.AddDays(1));
+        Assert.Equal((null, null), (handMade.FromAgreement, handMade.SourceDraftVersion));
+        var wire = JsonSerializer.Serialize(shifts.Single(shift => shift.ServiceDate == Monday), ApiOptions());
+        Assert.Contains("\"fromAgreement\":true,\"sourceDraftVersion\":2", wire);
+        Assert.DoesNotContain("fromAgreement", JsonSerializer.Serialize(handMade, ApiOptions()));
+    }
+
+    [Fact]
+    public async Task An_unfilled_shift_has_no_staffId_on_the_wire_not_a_null_one_which_is_what_the_board_page_must_ask_about()
+    {
+        var s = await SeedAsync();
+        await using var _ = s.Db;
+        await new RosterShiftGenerator().GenerateAsync(s.Db, s.Participant.Id, new[] { s.FromAgreement.Id }, Monday, Monday, CancellationToken.None);
+
+        var result = await Controller(s.Db).GetBoard(Monday, "participant", CancellationToken.None);
+
+        var board = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        var unfilled = Assert.Single(Assert.Single(board.ParticipantRows!, row => row.ParticipantId == s.Participant.Id).Shifts);
+        var wire = JsonSerializer.Serialize(unfilled, ApiOptions());
+        Assert.DoesNotContain("staffId", wire);                                                         // WhenWritingNull: the member is left out, so the page sees undefined
+        Assert.DoesNotContain("staffName", wire);
+        Assert.DoesNotContain("null", wire);
+    }
+
+    [Fact]
     public async Task The_Generate_button_on_an_agreement_pattern_copies_what_it_asks_and_leaves_out_the_holiday_the_plan_skips()
     {
         var s = await SeedAsync(skippedBlock: "mornings", skippedDay: Monday);

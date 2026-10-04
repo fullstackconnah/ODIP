@@ -298,6 +298,48 @@ public class RosterShiftGeneratorTests
     }
 
     [Fact]
+    public async Task With_nothing_recorded_yet_a_persons_window_is_recorded_only_if_it_starts_where_the_top_up_would_and_never_when_the_providers_day_is_not_known()
+    {
+        // The onboarding case: a participant who was not active when the revision was approved got patterns and no shifts, so nothing is recorded on them (null).
+        var (db, participantId) = await SeedAsync(id => Pattern(id));
+        await using var _ = db;
+        var pattern = await db.ShiftPatterns.SingleAsync();
+        var generator = new RosterShiftGenerator();
+        async Task<DateOnly?> ReachedAsync() => (await db.ShiftPatterns.AsNoTracking().SingleAsync()).GeneratedThrough;
+        var today = D(10, 10);
+
+        // A window that starts after the first day the top-up would make (today) would hide 10 to 24 October from it for good, so it is not recorded. Its shifts are made all the same.
+        var later = await generator.GenerateAsync(db, participantId, new[] { pattern.Id }, D(10, 25), D(11, 22), CancellationToken.None, onlyWhenContiguous: true, providerToday: today);
+        Assert.Equal(4, later.Created);
+        Assert.Null(await ReachedAsync());
+
+        // Without the provider's day nothing can be said about where the top-up starts, so nothing is recorded either.
+        await generator.GenerateAsync(db, participantId, new[] { pattern.Id }, D(10, 10), D(10, 20), CancellationToken.None, onlyWhenContiguous: true);
+        Assert.Null(await ReachedAsync());
+
+        // One that starts on that day joins on, and so does one that starts before it.
+        await generator.GenerateAsync(db, participantId, new[] { pattern.Id }, D(10, 10), D(10, 20), CancellationToken.None, onlyWhenContiguous: true, providerToday: today);
+        Assert.Equal(D(10, 20), await ReachedAsync());
+    }
+
+    [Fact]
+    public async Task With_nothing_recorded_a_pattern_that_has_not_started_yet_is_measured_from_its_own_start_not_from_today()
+    {
+        var (db, participantId) = await SeedAsync(id => Pattern(id, change: p => p.EffectiveFrom = D(11, 2)));
+        await using var _ = db;
+        var pattern = await db.ShiftPatterns.SingleAsync();
+        var generator = new RosterShiftGenerator();
+        async Task<DateOnly?> ReachedAsync() => (await db.ShiftPatterns.AsNoTracking().SingleAsync()).GeneratedThrough;
+        var today = D(10, 10);                                                                   // the top-up's first day for it is its start, 2 November: it has no days before that
+
+        await generator.GenerateAsync(db, participantId, new[] { pattern.Id }, D(11, 9), D(11, 30), CancellationToken.None, onlyWhenContiguous: true, providerToday: today);
+        Assert.Null(await ReachedAsync());                                                       // 2 to 8 November would be left to the top-up
+
+        await generator.GenerateAsync(db, participantId, new[] { pattern.Id }, D(11, 2), D(11, 30), CancellationToken.None, onlyWhenContiguous: true, providerToday: today);
+        Assert.Equal(D(11, 30), await ReachedAsync());                                           // from its own start: joins on
+    }
+
+    [Fact]
     public async Task A_generate_over_the_day_of_a_deleted_shift_makes_it_again_and_leaves_how_far_it_reached_where_it_was()
     {
         var (db, participantId) = await SeedAsync(id => Pattern(id));

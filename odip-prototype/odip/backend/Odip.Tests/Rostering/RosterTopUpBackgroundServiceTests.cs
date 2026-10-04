@@ -329,6 +329,64 @@ public class RosterTopUpBackgroundServiceTests
         Assert.Equal(8, await db.Shifts.CountAsync(s => s.ParticipantId == bad.Id));
     }
 
+    /// <summary>Remembers which participants the job asked about: the readiness check comes before the roster lock, so a participant nobody asks about is not locked either.</summary>
+    private sealed class CountingGate : IRosterPlacementGate
+    {
+        private readonly RosterPlacementGate _real = new();
+        public List<Guid> Asked { get; } = new();
+        public Task<bool> MayPlaceAsync(OdipDbContext db, Guid id, CancellationToken ct) { Asked.Add(id); return _real.MayPlaceAsync(db, id, ct); }
+    }
+
+    [Fact]
+    public async Task A_participant_with_nothing_due_is_not_asked_about_or_locked_a_pattern_taken_to_its_own_end_or_one_that_starts_after_the_horizon()
+    {
+        var name = Guid.NewGuid().ToString();
+        await using var seed = NewAdminDb(name);
+        var finished = await AddParticipantAsync(seed, TenantA, name: "Finished");
+        var later = await AddParticipantAsync(seed, TenantA, name: "Later");
+        var live = await AddParticipantAsync(seed, TenantA, name: "Live");
+        // Ends on 31 October, inside the horizon, and has been taken to that day: for the rest of its life every run used to send it through the lock for nothing.
+        seed.ShiftPatterns.Add(AgreementPattern(finished, DayOfWeek.Monday, change: p => { p.EffectiveTo = new DateOnly(2026, 10, 31); p.GeneratedThrough = new DateOnly(2026, 10, 31); }));
+        // Starts after the horizon (10 October and 56 days is 5 December): nothing is due for it yet.
+        seed.ShiftPatterns.Add(AgreementPattern(later, DayOfWeek.Monday, change: p => p.EffectiveFrom = new DateOnly(2026, 12, 14)));
+        seed.ShiftPatterns.Add(AgreementPattern(live, DayOfWeek.Monday));
+        await seed.SaveChangesAsync();
+        var gate = new CountingGate();
+        var (db, service, _) = Build(Clock(), gate: gate, name: name);
+        await using var _ = db;
+
+        var run = await service.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { live.Id }, gate.Asked);                                             // the other two were never asked about, so never locked
+        Assert.Equal((3, 3, 8, 0, 0), (run.Patterns, run.Participants, run.ShiftsCreated, run.ParticipantsNotReady, run.Failures));
+        Assert.Equal(new[] { live.Id }, await db.Shifts.Select(s => s.ParticipantId).Distinct().ToListAsync());
+    }
+
+    [Fact]
+    public async Task A_participant_activated_later_still_gets_their_first_days_from_the_job_when_somebody_generated_a_window_further_on_first()
+    {
+        // The onboarding case: the revision was approved while the participant was not active (patterns and no shifts, so nothing is recorded on them). They are activated on 10 October. Before the job's next
+        // provider day somebody presses Generate on one of their patterns for 25 October to 22 November. That must not hide 10 to 24 October from the job, which only ever carries on from what is recorded.
+        var name = Guid.NewGuid().ToString();
+        await using var seed = NewAdminDb(name);
+        var participant = await AddParticipantAsync(seed, TenantA);
+        var pattern = AgreementPattern(participant, DayOfWeek.Monday);
+        seed.ShiftPatterns.Add(pattern);
+        await seed.SaveChangesAsync();
+        var (db, service, _) = Build(Clock(), name: name);
+        await using var _ = db;
+
+        var manual = await new RosterShiftGenerator().GenerateAsync(db, participant.Id, new[] { pattern.Id }, new DateOnly(2026, 10, 25), new DateOnly(2026, 11, 22), CancellationToken.None,
+            onlyWhenContiguous: true, providerToday: new DateOnly(2026, 10, 10));
+        var run = await service.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(4, manual.Created);                                                         // 26 October, 2, 9 and 16 November
+        Assert.Equal((0, 4), (run.Failures, run.ShiftsCreated));                                 // the job makes 12 and 19 October (the days before the window) and 23 and 30 November
+        Assert.Equal(
+            new[] { new DateOnly(2026, 10, 12), new(2026, 10, 19), new(2026, 10, 26), new(2026, 11, 2), new(2026, 11, 9), new(2026, 11, 16), new(2026, 11, 23), new(2026, 11, 30) },
+            await db.Shifts.OrderBy(s => s.ServiceDate).Select(s => s.ServiceDate).ToListAsync());
+    }
+
     /// <summary>The roster lock of one participant stays busy the first time: what the lock raises when another generation of theirs outlasts the wait.</summary>
     private sealed class BusyTheFirstTime(Guid participantId) : IRosterPlacementGate
     {

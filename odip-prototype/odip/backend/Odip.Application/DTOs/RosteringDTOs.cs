@@ -47,6 +47,10 @@ public record ShiftDto
     public string? Notes { get; init; }
     /// <summary>What the shift asks of a worker (gender, a driver, skills), copied from its pattern when it was generated: informational, shown as chips. Absent when it asks for nothing.</summary>
     public DraftBlockRequirementsDto? Requirements { get; init; }
+    /// <summary>True when the pattern this shift was generated from was made by an agreement revision (plan builder, phase D); omitted otherwise. With <see cref="SourceDraftVersion"/> it is what the shift panel says ("From agreement v2"), so the panel needs no read of the pattern.</summary>
+    public bool? FromAgreement { get; init; }
+    /// <summary>The version of the agreement revision that pattern came from; omitted for a shift that did not come from one.</summary>
+    public int? SourceDraftVersion { get; init; }
     public string? OverrideReason { get; init; }
     public List<RosterFindingDto> Findings { get; init; } = new();
     /// <summary>

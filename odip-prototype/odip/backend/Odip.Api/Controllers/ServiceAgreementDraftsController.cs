@@ -218,12 +218,16 @@ public class ServiceAgreementDraftsController : ControllerBase
         User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name) ?? "Unknown",
         User.FindAll(ClaimTypes.Role).Select(claim => claim.Value).ToList());
 
-    /// <summary>The approval as the screen reads it. <c>ApprovedAt</c> is an instant: the API writes it as UTC with a Z (UtcInstantDateTimeConverter), whatever kind the column hands back.</summary>
-    private static DraftApprovalDto? ApprovalOf(ServiceAgreementDraftApproval? approval) => approval is null ? null : new()
+    /// <summary>
+    /// The approval as the screen reads it. <c>ApprovedAt</c> is an instant: the API writes it as UTC with a Z (UtcInstantDateTimeConverter), whatever kind the column hands back. <c>TopUpEnabled</c> is the
+    /// setting as it is now (<c>RosterTopUp:Enabled</c>), not part of the stored approval: the card promises shifts "added each day" only while the daily top-up is on.
+    /// </summary>
+    private DraftApprovalDto? ApprovalOf(ServiceAgreementDraftApproval? approval) => approval is null ? null : new()
     {
         ApprovedAt = approval.ApprovedAt, ApprovedByName = approval.ApprovedByName,
         PatternsCreated = approval.PatternsCreated, PatternsEnded = approval.PatternsEnded, ShiftsCreated = approval.ShiftsCreated,
         HorizonEnd = approval.HorizonEnd, FirstShiftDate = approval.FirstShiftDate,
+        TopUpEnabled = RosterTopUpOptions.From(_configuration).Enabled,
     };
 
     /// <summary>What a line adds up to: the engine's total for a line it generated, hours times unit price floored to the cent for one typed by hand.</summary>

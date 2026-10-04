@@ -137,6 +137,8 @@ public record DraftApprovalDto
     public DateOnly? HorizonEnd { get; init; }
     /// <summary>The first day it made a shift for; absent when it made none.</summary>
     public DateOnly? FirstShiftDate { get; init; }
+    /// <summary>Whether the daily top-up is on (<c>RosterTopUp:Enabled</c>, read when the answer is made, not stored with the approval). While it is, shifts keep being added each day as the agreement's dates come near; when it is off the shifts made at approval, and the Generate button, are all there will be, and the screen must not promise more.</summary>
+    public bool TopUpEnabled { get; init; } = true;
 }
 
 /// <summary>Shifts of the previous approved revision on or after the new one starts: left alone by approval, counted so they can be tidied. Open means nobody is assigned.</summary>
@@ -194,6 +196,8 @@ public record DraftApprovalPreviewDto
     public List<OverlappingPatternDto> OverlappingPatterns { get; init; } = [];
     /// <summary>The provider's today plus the horizon (56 days), held to the end of the agreement.</summary>
     public DateOnly? HorizonEnd { get; init; }
+    /// <summary>Whether the daily top-up is on (<c>RosterTopUp:Enabled</c>): the confirm screen says shifts are added each day after the horizon only while it is.</summary>
+    public bool TopUpEnabled { get; init; } = true;
 }
 
 public record ServiceAgreementDraftLineDto

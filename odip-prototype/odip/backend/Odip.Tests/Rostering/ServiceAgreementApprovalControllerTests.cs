@@ -31,7 +31,7 @@ public class ServiceAgreementApprovalControllerTests
         tenant.Setup(t => t.TenantId).Returns(withoutTenant ? null : tenantId ?? TenantA);
         tenant.Setup(t => t.IsSuperAdmin).Returns(role == "SuperAdmin");
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, Admin.UserId!.Value.ToString()), new Claim("fullName", "Alex Admin"), new Claim(ClaimTypes.Role, role) };
-        return new ServiceAgreementDraftsController(f.Db, tenant.Object, new ServiceAgreementDraftService(f.Db), approval: f.Service)
+        return new ServiceAgreementDraftsController(f.Db, tenant.Object, new ServiceAgreementDraftService(f.Db), configuration: f.Configuration, approval: f.Service)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(claims, "test")) } },
         };
@@ -129,7 +129,7 @@ public class ServiceAgreementApprovalControllerTests
         Assert.Equal((0, 0), (dto.OldShiftsRemaining!.Open, dto.OldShiftsRemaining.Assigned));
         Assert.Single(dto.Blocks);
         var json = JsonSerializer.Serialize(Assert.IsType<ApiResponse<ServiceAgreementDraftDto>>(Assert.IsType<OkObjectResult>(result.Result).Value), ApiOptions());
-        Assert.Contains("\"approval\":{\"approvedAt\":\"2026-10-10T02:00:00Z\",\"approvedByName\":\"Alex Admin\",\"patternsCreated\":5,\"patternsEnded\":0,\"shiftsCreated\":40,\"horizonEnd\":\"2026-12-05\",\"firstShiftDate\":\"2026-10-12\"}", json);
+        Assert.Contains("\"approval\":{\"approvedAt\":\"2026-10-10T02:00:00Z\",\"approvedByName\":\"Alex Admin\",\"patternsCreated\":5,\"patternsEnded\":0,\"shiftsCreated\":40,\"horizonEnd\":\"2026-12-05\",\"firstShiftDate\":\"2026-10-12\",\"topUpEnabled\":true}", json);
         Assert.Contains("\"oldShiftsRemaining\":{\"open\":0,\"assigned\":0}", json);
     }
 
@@ -209,6 +209,26 @@ public class ServiceAgreementApprovalControllerTests
         Assert.Contains("\"patternsToCreate\":5", json);
         Assert.Contains("\"horizonEnd\":\"2026-12-05\"", json);
         Assert.Empty(await f.Db.ServiceAgreementDraftApprovals.ToListAsync());
+    }
+
+    [Fact]
+    public async Task The_preview_the_approval_and_the_list_say_whether_the_daily_top_up_is_on_so_the_screen_promises_only_what_will_happen()
+    {
+        await using var f = await SetUpAsync();
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        Assert.True(Value(await Controller(f).ApprovalPreview(f.ParticipantId, draft.Id, CancellationToken.None)).TopUpEnabled);        // on unless the setting says otherwise
+
+        f.SwitchTopUpOff();                                                                                                           // RosterTopUp:Enabled=false: the approval still makes its shifts, the job does not run
+        var controller = Controller(f);
+        var preview = Value(await controller.ApprovalPreview(f.ParticipantId, draft.Id, CancellationToken.None));
+        var approved = Value(await controller.Approve(f.ParticipantId, draft.Id, new ApproveDraftDto(), CancellationToken.None));
+        var listed = Value(await controller.List(f.ParticipantId, CancellationToken.None)).Single();
+
+        Assert.False(preview.TopUpEnabled);
+        Assert.Equal(40, preview.ShiftsToCreate);
+        Assert.False(approved.Approval!.TopUpEnabled);
+        Assert.False(listed.Approval!.TopUpEnabled);
+        Assert.Contains("\"topUpEnabled\":false", JsonSerializer.Serialize(new ApiResponse<DraftApprovalPreviewDto> { Success = true, Data = preview }, ApiOptions()));        // and it is on the wire
     }
 
     // ── The list says which revisions were approved ───────────────────────────────

@@ -125,9 +125,14 @@ public sealed class RosterTopUpBackgroundService : BackgroundService
                         participants++;
                         try
                         {
+                            // What is due for each pattern: from the day after what it has reached (today at the earliest) to the horizon, within the pattern's own dates. A pattern already taken to the horizon, to its
+                            // own end, or one that starts after the horizon has nothing due, and a participant with nothing due is not asked about, locked or saved at all (for the last eight weeks of an agreement
+                            // every run used to take the lock, open a transaction and save nothing, and could meet a busy lock for no work).
+                            var due = forParticipant.Select(p => (Pattern: p, From: ExtendFrom(p, today))).Where(x => x.From <= horizon && x.From <= (x.Pattern.EffectiveTo ?? DateOnly.MaxValue) && x.Pattern.EffectiveFrom <= horizon).ToList();
+                            if (due.Count == 0) continue;
                             if (!await gate.MayPlaceAsync(db, forParticipant.Key, ct)) { notReady++; continue; }
-                            // Patterns that share a starting day are generated together; one that has already been taken to the horizon has nothing due and is left alone.
-                            foreach (var window in forParticipant.Select(p => (Pattern: p, From: ExtendFrom(p, today))).Where(x => x.From <= horizon).GroupBy(x => x.From))
+                            // Patterns that share a starting day are generated together.
+                            foreach (var window in due.GroupBy(x => x.From))
                             {
                                 var generated = await generator.GenerateAsync(db, forParticipant.Key, window.Select(x => x.Pattern.Id).ToList(), window.Key, horizon, ct);
                                 created += generated.Created;

@@ -544,6 +544,29 @@ public class ServiceAgreementApprovalServiceTests
         Assert.Empty(await f.Db.Shifts.ToListAsync());
     }
 
+    [Fact]
+    public async Task With_the_daily_top_up_switched_off_the_note_for_a_participant_who_is_not_active_promises_nothing_and_says_what_to_do_and_the_preview_says_the_top_up_is_off()
+    {
+        await using var f = await SetUpAsync(active: false, firstName: "Jordan");
+        f.SwitchTopUpOff();
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+
+        var preview = (await PreviewAsync(f, draft)).Preview!;
+
+        Assert.False(preview.TopUpEnabled);
+        Assert.Equal("No shifts are made now, because Jordan is not active yet. The daily top-up is off, so make them with Generate on their shift patterns once they are.", preview.ShiftsNote);
+        Assert.DoesNotContain("created once", preview.ShiftsNote);                              // nothing creates them once the participant is active: the job that would is off
+    }
+
+    [Fact]
+    public async Task The_preview_says_the_top_up_is_on_by_default()
+    {
+        await using var f = await SetUpAsync();
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+
+        Assert.True((await PreviewAsync(f, draft)).Preview!.TopUpEnabled);
+    }
+
     // ── The dates ─────────────────────────────────────────────────────────────────
 
     [Fact]

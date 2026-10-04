@@ -43,9 +43,10 @@ public sealed class RosterShiftGenerator
     /// <summary>
     /// Makes the shifts of <paramref name="patternIds"/> (patterns of <paramref name="participantId"/>) over [from, to] and saves them, holding the participant's generation lock. The patterns
     /// are read again once the lock is held: an approval that ended a pattern a moment ago is seen, and its shifts are not made. <paramref name="onlyWhenContiguous"/> is for a person's own window (the
-    /// Generate button): one that starts after a gap past what was already covered does not move <see cref="ShiftPattern.GeneratedThrough"/>, so the top-up can still fill the gap.
+    /// Generate button): one that starts after a gap past what was already covered does not move <see cref="ShiftPattern.GeneratedThrough"/>, so the top-up can still fill the gap. When nothing was covered yet
+    /// (<see cref="ShiftPattern.GeneratedThrough"/> is null) the gap is measured from the first day the top-up would make, the provider's <paramref name="providerToday"/> or the pattern's start when that is later; without it the window is not recorded.
     /// </summary>
-    public async Task<ShiftGeneration> GenerateAsync(OdipDbContext db, Guid participantId, IReadOnlyCollection<Guid> patternIds, DateOnly from, DateOnly to, CancellationToken ct, bool onlyWhenContiguous = false)
+    public async Task<ShiftGeneration> GenerateAsync(OdipDbContext db, Guid participantId, IReadOnlyCollection<Guid> patternIds, DateOnly from, DateOnly to, CancellationToken ct, bool onlyWhenContiguous = false, DateOnly? providerToday = null)
     {
         if (patternIds.Count == 0) return ShiftGeneration.None;
 
@@ -53,7 +54,7 @@ public sealed class RosterShiftGenerator
         var ids = patternIds.ToList();
         // Tracked: how far generation has reached is kept on the pattern and saved with the shifts.
         var patterns = await db.ShiftPatterns.Where(p => ids.Contains(p.Id) && p.ParticipantId == participantId).ToListAsync(ct);
-        var result = await AddAsync(db, patterns, from, to, ct, onlyWhenContiguous);
+        var result = await AddAsync(db, patterns, from, to, ct, onlyWhenContiguous, providerToday);
         await db.SaveChangesAsync(ct);
         await held.CommitAsync(ct);
         return result;
@@ -63,9 +64,9 @@ public sealed class RosterShiftGenerator
     /// Adds the shifts of <paramref name="patterns"/> over [from, to] to <paramref name="db"/> and saves nothing: the caller saves them with its own work, in a transaction that holds the
     /// participant's <see cref="RosterGenerationLock"/> (an approval, whose patterns are not saved yet and so have no shifts to look for).
     /// </summary>
-    public async Task<ShiftGeneration> AddAsync(OdipDbContext db, IReadOnlyCollection<ShiftPattern> patterns, DateOnly from, DateOnly to, CancellationToken ct, bool onlyWhenContiguous = false)
+    public async Task<ShiftGeneration> AddAsync(OdipDbContext db, IReadOnlyCollection<ShiftPattern> patterns, DateOnly from, DateOnly to, CancellationToken ct, bool onlyWhenContiguous = false, DateOnly? providerToday = null)
     {
-        foreach (var pattern in patterns) Cover(pattern, from, to, onlyWhenContiguous);
+        foreach (var pattern in patterns) Cover(pattern, from, to, onlyWhenContiguous, providerToday);
 
         var occurrences = patterns.Select(pattern => (Pattern: pattern, Dates: _expander.Occurrences(pattern, from, to))).Where(x => x.Dates.Count > 0).ToList();
         if (occurrences.Count == 0) return ShiftGeneration.None;
@@ -101,15 +102,27 @@ public sealed class RosterShiftGenerator
 
     /// <summary>
     /// Records how far generation has reached for the pattern: the end of the window, held to the pattern's own end, never moved back. Nothing is recorded when the pattern is switched off, when the window lay outside it, or (a
-    /// person's own window) when it starts after a gap past what was covered: the top-up starts from the day after what is recorded, so that gap would never be filled.
+    /// person's own window) when it starts after a gap past what was covered: the top-up starts from the day after what is recorded, so that gap would never be filled (<see cref="JoinsOn"/>).
     /// </summary>
-    private static void Cover(ShiftPattern pattern, DateOnly from, DateOnly to, bool onlyWhenContiguous)
+    private static void Cover(ShiftPattern pattern, DateOnly from, DateOnly to, bool onlyWhenContiguous, DateOnly? providerToday)
     {
         if (!pattern.IsActive) return;                                                           // a pattern that is switched off covers nothing (it makes no shift)
         var covered = pattern.EffectiveTo is { } end && end < to ? end : to;
         if (covered < from || covered < pattern.EffectiveFrom) return;
-        if (onlyWhenContiguous && pattern.GeneratedThrough is { } through && from > through.AddDays(1)) return;
+        if (onlyWhenContiguous && !JoinsOn(pattern, from, providerToday)) return;
         if (pattern.GeneratedThrough is null || covered > pattern.GeneratedThrough) pattern.GeneratedThrough = covered;
+    }
+
+    /// <summary>
+    /// Whether a person's own window starts where the top-up would carry on from, so that recording it leaves no gap behind it. With something recorded, that is the day after it, or earlier. With NOTHING recorded
+    /// yet (null: the normal state of a pattern whose participant was not active when its revision was approved, which got patterns and no shifts) the top-up's first day is the provider's today, or the pattern's own
+    /// start when that is later (it has no days before that): a window that starts after it would hide the days between from the top-up for good. Without the provider's today nothing can be said, so it does not join.
+    /// </summary>
+    private static bool JoinsOn(ShiftPattern pattern, DateOnly from, DateOnly? providerToday)
+    {
+        if (pattern.GeneratedThrough is { } through) return from <= through.AddDays(1);
+        if (providerToday is not { } today) return false;
+        return from <= (pattern.EffectiveFrom > today ? pattern.EffectiveFrom : today);
     }
 
     /// <summary>The (pattern, day) pairs that already carry a shift of the pattern, of any status, in one query.</summary>

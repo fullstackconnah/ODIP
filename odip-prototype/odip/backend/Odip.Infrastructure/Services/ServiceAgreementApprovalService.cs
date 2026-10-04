@@ -190,6 +190,8 @@ public sealed class ServiceAgreementApprovalService
         public DateOnly HorizonEnd { get; set; }
         public int ShiftsToCreate { get; set; }
         public string? ShiftsNote { get; set; }
+        /// <summary>Whether the daily top-up is on: what the confirm screen may promise about shifts after the horizon.</summary>
+        public bool TopUpEnabled { get; set; } = true;
 
         public DraftApprovalPreviewDto ToPreview() => new()
         {
@@ -204,6 +206,7 @@ public sealed class ServiceAgreementApprovalService
                 Id = p.Id, DayOfWeek = p.DayOfWeek, StartTime = p.StartTime, EndTime = p.EndTime, EndsNextDay = p.EndsNextDay, EffectiveFrom = p.EffectiveFrom, EffectiveTo = p.EffectiveTo, Notes = p.Notes,
             }).ToList(),
             HorizonEnd = HorizonEnd,
+            TopUpEnabled = TopUpEnabled,
         };
     }
 
@@ -217,6 +220,7 @@ public sealed class ServiceAgreementApprovalService
         plan.Today = today;
         plan.From = draft.AgreementStartDate > today ? draft.AgreementStartDate : today;
         plan.HorizonEnd = Earlier(draft.AgreementEndDate, today.AddDays(_options.HorizonDays));
+        plan.TopUpEnabled = _options.Enabled;
 
         plan.Existing = await _db.ServiceAgreementDraftApprovals.AsNoTracking().FirstOrDefaultAsync(a => a.DraftId == draft.Id, ct);
         plan.NewestVersion = await _db.ServiceAgreementDrafts.Where(x => x.TenantId == tenantId && x.ParticipantId == draft.ParticipantId).MaxAsync(x => (int?)x.Version, ct) ?? draft.Version;
@@ -292,7 +296,11 @@ public sealed class ServiceAgreementApprovalService
         plan.Ready = await _gate.MayPlaceAsync(_db, draft.ParticipantId, ct);
         if (!plan.Ready)
         {
-            plan.ShiftsNote = $"Unfilled shifts are created once {(string.IsNullOrWhiteSpace(participant.FirstName) ? "the participant" : participant.FirstName)} is active.";
+            var who = string.IsNullOrWhiteSpace(participant.FirstName) ? "the participant" : participant.FirstName;
+            // "Created once they are active" is the daily top-up's work: with it switched off nothing creates them, and the note must not promise it.
+            plan.ShiftsNote = _options.Enabled
+                ? $"Unfilled shifts are created once {who} is active."
+                : $"No shifts are made now, because {who} is not active yet. The daily top-up is off, so make them with Generate on their shift patterns once they are.";
         }
         else if (quote is not null && plan.From <= plan.HorizonEnd)
         {

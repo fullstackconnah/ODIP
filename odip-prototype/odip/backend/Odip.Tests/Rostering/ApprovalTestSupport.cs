@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Moq;
 using Odip.Api.Services;
 using Odip.Application.DTOs;
@@ -39,7 +40,12 @@ internal static class ApprovalTestSupport
         public required OdipDbContext Db { get; init; }
         public required Guid ParticipantId { get; init; }
         public FakeClock Clock { get; } = FakeClock.AtUtc(2026, 10, 10, 2, 0);
-        public ServiceAgreementApprovalService Service => new(Db, new RosterPlacementGate(), new RosterShiftGenerator(), clock: Clock);
+        /// <summary>The settings the service and the controller read (<c>RosterTopUp:*</c>); none is the defaults: the top-up on, 56 days.</summary>
+        public IConfiguration? Configuration { get; set; }
+        public ServiceAgreementApprovalService Service => new(Db, new RosterPlacementGate(), new RosterShiftGenerator(), clock: Clock, configuration: Configuration);
+
+        /// <summary>The daily top-up switched off (<c>RosterTopUp:Enabled</c> false), for the service and the controller alike.</summary>
+        public void SwitchTopUpOff() => Configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["RosterTopUp:Enabled"] = "false" }).Build();
         public ValueTask DisposeAsync() => Db.DisposeAsync();
     }
 
