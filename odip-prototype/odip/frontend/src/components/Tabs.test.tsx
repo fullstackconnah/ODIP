@@ -4,9 +4,9 @@ import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { Tabs, type TabItem } from './Tabs'
 
-function Harness({ tabs, initial }: { tabs: TabItem[]; initial: string }) {
+function Harness({ tabs, initial, overflow }: { tabs: TabItem[]; initial: string; overflow?: 'wrap' | 'scroll' }) {
   const [active, setActive] = useState(initial)
-  return <Tabs tabs={tabs} active={active} onChange={setActive} ariaLabel="Demo tabs" />
+  return <Tabs tabs={tabs} active={active} onChange={setActive} ariaLabel="Demo tabs" overflow={overflow} />
 }
 
 const demoTabs: TabItem[] = [
@@ -399,5 +399,72 @@ describe('Tabs primitive — the active tab scrolls into view inside the strip',
     select('missing')
 
     expect(scrollTo).not.toHaveBeenCalled()
+  })
+})
+
+// Budget phase 1: Settings has ten tabs, and phase C found that at 1440px its strip already wrapped with nine, leaving the last tab alone on a second row. `overflow="scroll"` keeps ONE row at every
+// width that scrolls sideways; the default is the wrapping strip every other page still has.
+describe('Tabs primitive — overflow="scroll": one row at every width', () => {
+  const manyTabs: TabItem[] = ['a', 'b', 'c', 'd', 'e', 'f'].map(id => ({ id, label: id.toUpperCase() }))
+
+  it('never wraps, from md up either, and keeps the strip scrolling sideways with a thin scrollbar', () => {
+    render(<Tabs tabs={manyTabs} active="a" onChange={() => {}} ariaLabel="Many" overflow="scroll" />)
+
+    const strip = screen.getByRole('tablist', { name: 'Many' })
+    expect(strip).toHaveClass('flex', 'flex-nowrap', 'overflow-x-auto', 'md:[scrollbar-width:thin]')
+    expect(strip.className).not.toMatch(/(^|\s)(md:)?flex-wrap/)
+    // Below md it is the phone strip it always was: the scrollbar is hidden there.
+    expect(strip).toHaveClass('max-md:[scrollbar-width:none]')
+  })
+
+  it('wraps from md up by default, as every other page does', () => {
+    render(<Tabs tabs={manyTabs} active="a" onChange={() => {}} ariaLabel="Many" />)
+
+    expect(screen.getByRole('tablist', { name: 'Many' })).toHaveClass('md:flex-wrap')
+  })
+
+  it('keeps the arrow-key navigation of the strip', async () => {
+    const user = userEvent.setup()
+    render(<Harness tabs={manyTabs} initial="a" overflow="scroll" />)
+
+    screen.getByRole('tab', { name: 'A' }).focus()
+    await user.keyboard('{ArrowRight}')
+    expect(screen.getByRole('tab', { name: 'B' })).toHaveFocus()
+    expect(screen.getByRole('tab', { name: 'B' })).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{End}')
+    expect(screen.getByRole('tab', { name: 'F' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('scrolls the tab that is active on the first render into view (a tab chosen by ?tab=), when the strip overflows', () => {
+    // The geometry jsdom lacks, in place BEFORE the first render: a 300px window on 1000px of tabs, the last tab at 900-1000.
+    const proto = HTMLElement.prototype
+    const originals = {
+      scrollWidth: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'),
+      clientWidth: Object.getOwnPropertyDescriptor(proto, 'clientWidth'),
+      rect: proto.getBoundingClientRect,
+      scrollTo: proto.scrollTo,
+    }
+    const isStrip = (el: HTMLElement) => el.getAttribute('role') === 'tablist'
+    Object.defineProperty(proto, 'scrollWidth', { configurable: true, get() { return isStrip(this as HTMLElement) ? 1000 : 0 } })
+    Object.defineProperty(proto, 'clientWidth', { configurable: true, get() { return isStrip(this as HTMLElement) ? 300 : 0 } })
+    proto.getBoundingClientRect = function (this: HTMLElement) {
+      if (isStrip(this)) return { left: 0, right: 300, width: 300, top: 0, bottom: 44, height: 44, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+      return this.textContent === 'F'
+        ? { left: 900, right: 1000, width: 100, top: 0, bottom: 44, height: 44, x: 900, y: 0, toJSON: () => ({}) } as DOMRect
+        : { left: 0, right: 100, width: 100, top: 0, bottom: 44, height: 44, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+    }
+    const scrollTo = vi.fn()
+    proto.scrollTo = scrollTo as unknown as typeof proto.scrollTo
+    try {
+      render(<Tabs tabs={manyTabs} active="f" onChange={() => {}} ariaLabel="Many" overflow="scroll" />)
+
+      // 0 + (900 - 0) - (300 - 100) / 2 = 800, clamped to scrollWidth - clientWidth = 700.
+      expect(scrollTo).toHaveBeenCalledWith({ left: 700 })
+    } finally {
+      if (originals.scrollWidth) Object.defineProperty(proto, 'scrollWidth', originals.scrollWidth); else delete (proto as unknown as Record<string, unknown>).scrollWidth
+      if (originals.clientWidth) Object.defineProperty(proto, 'clientWidth', originals.clientWidth); else delete (proto as unknown as Record<string, unknown>).clientWidth
+      proto.getBoundingClientRect = originals.rect
+      if (originals.scrollTo) proto.scrollTo = originals.scrollTo; else delete (proto as unknown as Record<string, unknown>).scrollTo
+    }
   })
 })

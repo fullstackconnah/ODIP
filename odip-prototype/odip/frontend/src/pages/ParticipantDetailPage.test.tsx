@@ -83,6 +83,8 @@ vi.mock('./participant-detail', async () => {
     // Connection map item 12 — Rostering tab has its own dedicated test file
     // (RosteringTab.test.tsx); stubbed here for the same reason as every nested-CRUD tab above.
     RosteringTab: () => <div data-testid="rostering-tab" />,
+    // Budget phase 1 — the Funding tab has its own dedicated test file (FundingTab.test.tsx); stubbed here so this page's tests stay about tab wiring.
+    FundingTab: ({ participantId, planType }: { participantId: string; planType: string }) => <div data-testid="funding-tab" data-participant={participantId} data-plan-type={planType} />,
   }
 })
 
@@ -1219,6 +1221,42 @@ describe('ParticipantDetailPage — a role-gated tab key in the URL', () => {
 
     renderAtTab('participant-1', 'claims')
     expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Claims/)])
+  })
+})
+
+// Budget phase 1: the Funding tab holds a participant's plan budget, which is money. It is for the roles the funding API admits (SuperAdmin, Admin, Coordinator) and never rides on canWrite.
+describe('ParticipantDetailPage — Funding tab', () => {
+  const selectedTab = () => screen.getAllByRole('tab').filter(tab => tab.getAttribute('aria-selected') === 'true')
+
+  it.each(['Coordinator', 'Admin', 'SuperAdmin'])('shows the Funding tab to a %s, and opens it from ?tab=funding with the participant and their plan type', role => {
+    setUserRole(role)
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAtTab('participant-1', 'funding')
+
+    expect(screen.getByRole('tab', { name: 'Funding' })).toBeInTheDocument()
+    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Funding/)])
+    const tab = screen.getByTestId('funding-tab')
+    expect(tab).toHaveAttribute('data-participant', 'participant-1')
+    expect(tab).toHaveAttribute('data-plan-type', makeParticipant().planType)
+  })
+
+  it.each(['SupportWorker', 'ReadOnly'])('has no Funding tab for a %s (ReadOnly satisfies canWrite and must still not see money), and reads ?tab=funding as Details', role => {
+    setUserRole(role)
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAtTab('participant-1', 'funding')
+
+    expect(screen.queryByRole('tab', { name: 'Funding' })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('funding-tab')).not.toBeInTheDocument()
+    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Details/)])
+  })
+
+  it('does not mount the Funding tab on another tab', () => {
+    setUserRole('Coordinator')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('tab', { name: 'Funding' })).toBeInTheDocument()
+    expect(screen.queryByTestId('funding-tab')).not.toBeInTheDocument()
   })
 })
 

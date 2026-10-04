@@ -25,6 +25,7 @@ import { OVERNIGHT_RATIO_LABELS } from '@/api/types/participants'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import { span } from '@/lib/formGrid'
 import { PlanTypeComplianceBanner, YesNoToggleField } from '../intake/intakeHelpers'
+import { PlanBudgetCard } from '../funding/PlanBudgetCard'
 import {
   ADDRESS_STATE_ITEMS, FUNDING_SOURCE_ITEMS, OVERNIGHT_RATIO_ITEMS, OVERNIGHT_SUPPORT_ITEMS, PLAN_TYPE_ITEMS,
   SUPPORT_RATIO_ITEMS, itemsIncludingCurrent,
@@ -153,6 +154,11 @@ export function NdisFundingFields({ control, register, errors, participantId }: 
               <PlanTypeComplianceBanner message={warning} />
             </div>
           )}
+
+          {/* The plan budget, as at Intake: only for NDIS funding, and saved through the funding endpoints, never this wizard's per-step patch. */}
+          <div className={span.long}>
+            <PlanBudgetCard participantId={participantId} planType={(planType as PlanType | undefined) ?? 'SelfManaged'} />
+          </div>
         </>
       ) : (
         <FormField label="Funding Organisation" required error={errors.fundingOrganisation?.message} className={span.medium}>

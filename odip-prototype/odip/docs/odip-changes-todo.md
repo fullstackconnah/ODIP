@@ -136,6 +136,26 @@ owner decision (collected under Open Flags at the end).
   Replace funding-organisation with a funding-source selection: NDIS plan information,
   or "Other" revealing a specify field — with subsequent form content changing per
   source. Gates CONTACT-02 and is a core INTAKE-07 conditional.
+- [ ] **FUND-03 — Participant plan budget record (budget phase 1 of 3).** Built on
+  `feat/budget-record`, not yet merged or checked on the deployed stack, so not ticked.
+  A Funding tab on the participant hub holding each plan's pools and funding periods
+  (Core (flexible) and stated supports, with the organisation's set-aside when there is one), a
+  "Plan budget" card on Intake and the Profile wizard, "Funding recorded" in the
+  activation checklist for NDIS-funded participants (warn or enforce, as the existing
+  readiness setting says), and a Settings → Budgets tab (warn or hard limit, and the
+  "approaching" percentage: stored, not yet used). It records what the plan says and
+  shows no spending or forecast. FUND-01's profile plan dates stay as they are; the tab
+  offers, and never forces, copying a plan's dates onto them. Spec:
+  `docs/specs/2026-10-04-participant-budgets.md`.
+- [ ] **FUND-04 — Budget phase 2: ledger and visibility.** A server-side budget service
+  (Available, Used, Booked ahead and Forecast for each pool and period), the Funding
+  tab's figures, claim figures, the approaching, forecast-over and over alerts, a
+  dashboard tile and a Budgets list, the plan builder's budget bar on the new model, and
+  the rejected-claim code. Depends on FUND-03.
+- [ ] **FUND-05 — Budget phase 3: moments and hard limits.** Roster findings, the
+  hard-limit mode for one-off shifts with the Admin override and the emergency path (an
+  Admin reviews it afterwards), and the pattern-generate and trip-booking warnings.
+  Depends on FUND-04.
 
 ### F. Living Arrangements
 
@@ -240,6 +260,18 @@ owner decision (collected under Open Flags at the end).
   beyond the epilepsy→epilepsy-management default rule?
 - **MED-03**: should "wrong medication administered" also auto-create an incident, like
   refused/withheld/missed do in INC-03?
+- **FUND-03**: Enforce mode refuses every activation on the missing agreement evidence
+  today (the provisional agreement template has no approved source), so "Funding
+  recorded" only becomes a block once that gate can open. Is that the order wanted?
+- **FUND-03**: should an Admin be able to delete a recorded plan from the screen? The
+  route exists and is audited; nothing offers it yet.
+- **FUND-03**: the editor counts funding periods from the plan's first day and clamps
+  month ends (a 31 January start ends the first period on 27 February). Does the NDIA
+  release funding that way for plans starting on the 29th to the 31st?
+- **FUND-04, FUND-05**: should the shift claim engine move to the plan builder's phase B
+  pricing, should short-notice cancellations bill (and record a notice date), is the
+  90-day claim limit from December 2026 wanted as a "claim clock" warning, and is a
+  participant-facing budget statement wanted?
 
 ## Backlog
 

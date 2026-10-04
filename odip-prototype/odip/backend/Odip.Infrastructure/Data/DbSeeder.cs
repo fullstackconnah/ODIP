@@ -2354,11 +2354,16 @@ public static class DbSeeder
     }
 
     /// <summary>
-    /// Clears all data in FK-safe order then re-seeds fresh data.
+    /// Deletes the data a reseed replaces, in FK-safe order. Its own method so a test can run the deletes without the seeding (which does not run on InMemory).
     /// </summary>
-    public static async Task ReseedAsync(OdipDbContext context, CancellationToken ct = default)
+    public static async Task ClearAllDataAsync(OdipDbContext context, CancellationToken ct = default)
     {
         // Delete in reverse FK dependency order
+        // A participant's plan budget (budget phase 1): FundingPlan → Participant is Restrict, so the plans must go before Participants.RemoveRange below or a database that holds one fails
+        // the delete. Children first (periods, pools, then plans), so the delete never leans on a cascade the context is not tracking.
+        context.FundingPeriods.RemoveRange(context.FundingPeriods);
+        context.FundingPools.RemoveRange(context.FundingPools);
+        context.FundingPlans.RemoveRange(context.FundingPlans);
         context.MedicationAdministrations.RemoveRange(context.MedicationAdministrations);
         context.ParticipantMedications.RemoveRange(context.ParticipantMedications);
         context.ParticipantNotes.RemoveRange(context.ParticipantNotes);
@@ -2389,6 +2394,14 @@ public static class DbSeeder
         context.Users.RemoveRange(context.Users);
 
         await context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Clears all data in FK-safe order then re-seeds fresh data.
+    /// </summary>
+    public static async Task ReseedAsync(OdipDbContext context, CancellationToken ct = default)
+    {
+        await ClearAllDataAsync(context, ct);
         await SeedAsync(context, ct);
         await SeedMedicationsAsync(context, ct);
         await SeedParticipantNotesAsync(context, ct);

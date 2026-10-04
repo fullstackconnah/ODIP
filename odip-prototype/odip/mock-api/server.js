@@ -9,6 +9,7 @@
 
 const http = require('http')
 const planPricing = require('./planPricing')
+const fundingModule = require('./funding')
 
 const PORT = Number(process.env.MOCK_PORT) || 5062
 const BASE = '/api/v1'
@@ -90,13 +91,22 @@ const enquiryFeed = [
   // Moved on, so the Enquiries tab does not list them: intake complete (the Onboarding tab) and finalised (Active participants).
   { id: 'inq-0003', participantId: 'p-0103', firstName: 'Mei', lastName: 'Tanaka', phone: '0455 555 030', email: null, source: 'Email', provenance: 'Support coordinator',
     createdAt: '2026-09-20T03:20:00Z', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: '2026-09-29T05:00:00Z' },
+  { id: 'inq-0005', participantId: 'p-0104', firstName: 'Daniel', lastName: 'Osei', phone: '0466 555 040', email: null, source: 'Phone', provenance: null,
+    createdAt: '2026-09-18T01:10:00Z', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: '2026-09-30T03:00:00Z' },
   { id: 'inq-0004', participantId: 'p-0001', firstName: 'Liam', lastName: 'Okafor', phone: null, email: null, source: 'Phone', provenance: null,
     createdAt: '2026-02-01T00:00:00Z', participantIsDraft: false, participantIsActive: true, participantIntakeCompletedAt: '2026-02-10T00:00:00Z' },
 ]
 
+// An NDIS-funded participant has a sixth gate, "Funding recorded" (budget phase 1): the real API counts it in totalSteps and adds this reason while no plan budget is recorded. The mock treats
+// everyone on the worklist as NDIS-funded, and Mei has no plan budget (funding.js holds plans for p-0002 and p-0004 only).
+const FUNDING_NOT_RECORDED_REASON = "Funding is not recorded: add the plan budget on the participant's Funding tab."
+const FUNDING_ENDED_REASON = "The plan budget has ended: record the new plan on the participant's Funding tab."
+// Daniel has done everything but the plan budget, so his onboarding page recommends "Record plan budget" (the one step Warn mode lets wait).
+const ALL_BUT_FUNDING = new Set(['p-0104'])
 const onboardingWorklist = [
-  { participantId: 'p-0103', fullName: 'Mei Tanaka', stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 5,
-    reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.'] },
+  { participantId: 'p-0103', fullName: 'Mei Tanaka', stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 6,
+    reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', FUNDING_NOT_RECORDED_REASON] },
+  { participantId: 'p-0104', fullName: 'Daniel Osei', stage: 'Onboarding incomplete', nextAction: 'Record plan budget', completedSteps: 4, totalSteps: 6, reasons: [FUNDING_NOT_RECORDED_REASON] },
 ]
 
 // Drafts are not on the register, so the participants list never returns these; only their detail and checklist are served (the mock's default
@@ -108,6 +118,8 @@ const draftParticipants = [
     isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: null, wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
   { id: 'p-0103', firstName: 'Mei', lastName: 'Tanaka', preferredName: null, fullName: 'Mei Tanaka', maskedNdisNumber: null, planType: 'SelfManaged', region: null,
     isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: '2026-09-29T05:00:00Z', wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
+  { id: 'p-0104', firstName: 'Daniel', lastName: 'Osei', preferredName: null, fullName: 'Daniel Osei', maskedNdisNumber: null, planType: 'PlanManaged', region: null,
+    isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: '2026-09-30T03:00:00Z', wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
 ]
 
 const participantDetailExtras = {
@@ -2227,7 +2239,11 @@ function saveDraft(participantId, body) {
   }
 })()
 
+// Participant budgets (phase 1): the plan record, its hint from the Billing funding sources, the support category list and the budget settings. See funding.js.
+const funding = fundingModule.create({ respond, fundingSources })
+
 const routes = [
+  ...funding.get,
   ['dashboard/summary', () => dashboardSummary],
   ['plan-pricing/settings', () => planPricingSettings],
   // The newest revision in full, the older ones as summaries; one revision in full by id.
@@ -2244,10 +2260,18 @@ const routes = [
     flagMatches(searchParams, 'isActive', p.isActive) && flagMatches(searchParams, 'isDraft', !!p.isDraft)))],
   ['inquiries', () => enquiryFeed],
   ['inquiries/onboarding-worklist', () => onboardingWorklist],
-  ['inquiries/:id/onboarding', (id) => ({
-    participantId: id, intakeComplete: true, profileComplete: false, serviceTypeConfirmed: false, serviceAgreementSigned: false, isReady: false,
-    reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.'],
-  })],
+  ['inquiries/:id/onboarding', (id) => {
+    const budget = funding.budgetStatus(id)
+    const fundingRecorded = budget.recorded
+    const done = ALL_BUT_FUNDING.has(id)
+    return {
+      participantId: id, intakeComplete: true, profileComplete: done, serviceTypeConfirmed: done, serviceAgreementSigned: done, fundingRecorded, isReady: done && fundingRecorded,
+      reasons: [
+        ...(done ? [] : ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.']),
+        ...(fundingRecorded ? [] : [budget.ended ? FUNDING_ENDED_REASON : FUNDING_NOT_RECORDED_REASON]),
+      ],
+    }
+  }],
   ['participants/:id/bookings', (id) => bookings.filter((b) => b.participantId === id)],
   // NDIS Claims (shift-completion design spec §2/§4, PR 3) — see the `claims` fixture's own
   // comment for why this only ever returns Shift-kind rows, mirroring the real
@@ -2470,6 +2494,7 @@ const routes = [
 // with its new status/decision fields, plus the one pure-preview endpoint (staff-assignments/check)
 // that must return an array of findings, not an echoed object.
 const postRoutes = [
+  ...funding.post,
   ['plan-pricing/quote', (body) => {
     if (!Array.isArray(body.blocks)) return respond(400, failEnvelope(null, ['The request needs a list of blocks.']))
     if (!body.periodFrom || !body.periodTo || body.periodFrom > body.periodTo) return respond(400, failEnvelope(null, ['The agreement period ends before it starts.']))
@@ -2612,6 +2637,7 @@ const postRoutes = [
 // echo fallback, per this task's "existing PUT /staff-availability/{id} unchanged" note.
 const putRoutes = [
   ...packageRoutesPut,
+  ...funding.put,
   ['plan-pricing/settings', (body) => {
     for (const rate of [body.travelKmRateStandard, body.travelKmRateAccessible]) {
       if (typeof rate === 'number' && (rate < 0 || rate > 5)) return respond(400, failEnvelope(null, ['The travel rate per kilometre must be between $0 and $5.']))
@@ -2876,7 +2902,7 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === 'DELETE') {
-      for (const [pattern, handler] of packageRoutesDelete) {
+      for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete]) {
         const params = matchRoute(pattern, segments)
         if (params) {
           sendResult(res, handler(...params, body))

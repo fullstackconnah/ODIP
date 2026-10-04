@@ -988,6 +988,10 @@ the first enabled tab rather than rendering a strip with nothing selected. Long 
 sideways (scrollbar hidden, each tab a `--tap-min` 44px on touch), and the active tab is scrolled into view inside
 the strip whenever `active` changes; from `md` up it wraps onto extra rows as before.
 
+`overflow` (optional, `'wrap'` by default): `overflow="scroll"` keeps the strip to ONE row that scrolls sideways at EVERY width, md and up included (a thin scrollbar from md, the
+native hidden one below it), instead of wrapping from md up. Use it for a strip too long to fit one row at the widest layout, where wrapping leaves the last tab alone on a second row:
+Settings, with its ten tabs. The active tab (including one named by `?tab=`) is scrolled into view either way, arrow-key navigation is unchanged, and `'wrap'` renders exactly what it did before.
+
 > When a test previously did `getByRole('button', { name: <tab> })`, it is now
 > `getByRole('tab', { name: <tab> })` — the role change is the accessibility fix, not a
 > cosmetic one.

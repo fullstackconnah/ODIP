@@ -18,7 +18,7 @@ import { BackButton } from '@/components/BackButton'
 import { useTabParam } from '@/hooks/useTabParam'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
-import { Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, FileText, CalendarRange } from 'lucide-react'
+import { Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, FileText, CalendarRange, Wallet } from 'lucide-react'
 import { useMemo, useState, useSyncExternalStore } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
@@ -27,7 +27,7 @@ import { copyText } from '@/lib/clipboard'
 import {
   MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection,
   ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab, SupportProfileTab, ClaimsTab,
-  RosteringTab,
+  RosteringTab, FundingTab,
   ParticipantIdentitySection, ParticipantAddressLivingSection, ParticipantNdisFundingSection, ParticipantKeyIdentifiersSection,
   ParticipantCulturalBackgroundSection, ParticipantMedicalSection, ParticipantBehaviourCommunicationSection,
   ParticipantCommunityAccessSection, ParticipantMealsDietSection, ParticipantAboutMeSection, ParticipantRisksHazardsSummarySection,
@@ -75,10 +75,10 @@ const ROW_LINK = 'inline-flex min-h-[var(--tap-min)] items-center font-medium ho
 const COMPACT_EMPTY_TABLE = '[&_table:has(td[colspan])_thead]:hidden [&_td[colspan]]:py-5'
 
 /** The tabs, in strip order. The active one is `?tab=` (`useTabParam`), so a reload or a shared link keeps it; an unknown value reads as Details. */
-const TAB_KEYS = ['details', 'contacts', 'bookings', 'support', 'medications', 'notes', 'routines', 'restrictive-practices', 'claims', 'rostering', 'history'] as const
+const TAB_KEYS = ['details', 'contacts', 'bookings', 'support', 'medications', 'notes', 'routines', 'restrictive-practices', 'claims', 'funding', 'rostering', 'history'] as const
 
 export default function ParticipantDetailPage() {
-  const { canWrite, canViewAlerts, canWriteParticipantDetails, canAccessPage, isAdmin, isSuperAdmin } = usePermissions()
+  const { canWrite, canViewAlerts, canWriteParticipantDetails, canManageFunding, canAccessPage, isAdmin, isSuperAdmin } = usePermissions()
   const { id } = useParams()
   const isMdUp = useIsMdUp()
   const canAccessClaims = canAccessPage('claims')
@@ -88,11 +88,11 @@ export default function ParticipantDetailPage() {
   // uses (see lib/permissions.ts's SUPPORT_WORKER_PAGES — SupportWorker is excluded).
   const canAccessRostering = canAccessPage('rostering')
   const canSeeHistory = isSuperAdmin || isAdmin
-  // Only the tabs this role can see are valid ?tab= keys (L5-05): a link to History, Claims or Rostering opened by a role without that tab
-  // reads as Details, instead of selecting nothing over an empty body.
+  // Only the tabs this role can see are valid ?tab= keys (L5-05): a link to History, Claims, Funding or Rostering opened by a role without that tab
+  // reads as Details, instead of selecting nothing over an empty body. Funding is money (a participant's plan budget), so it has its own gate and never `canWrite`.
   const tabKeys = useMemo(
-    () => TAB_KEYS.filter(key => (key === 'claims' ? canAccessClaims : key === 'rostering' ? canAccessRostering : key === 'history' ? canSeeHistory : true)),
-    [canAccessClaims, canAccessRostering, canSeeHistory],
+    () => TAB_KEYS.filter(key => (key === 'claims' ? canAccessClaims : key === 'funding' ? canManageFunding : key === 'rostering' ? canAccessRostering : key === 'history' ? canSeeHistory : true)),
+    [canAccessClaims, canManageFunding, canAccessRostering, canSeeHistory],
   )
   const [tab, setTab] = useTabParam(tabKeys, 'details')
   const { data: p, isLoading, isError, error, refetch } = useParticipant(id)
@@ -266,6 +266,7 @@ export default function ParticipantDetailPage() {
           { id: 'routines', label: 'Routines', icon: ListChecks },
           { id: 'restrictive-practices', label: 'Restrictive Practices', icon: ShieldAlert },
           ...(canAccessClaims ? [{ id: 'claims' as const, label: 'Claims', icon: FileText }] : []),
+          ...(canManageFunding ? [{ id: 'funding' as const, label: 'Funding', icon: Wallet }] : []),
           ...(canAccessRostering ? [{ id: 'rostering' as const, label: 'Rostering', icon: CalendarRange }] : []),
           ...(canSeeHistory ? [{ id: 'history' as const, label: 'History' }] : []),
         ]}
@@ -388,6 +389,10 @@ export default function ParticipantDetailPage() {
 
       {tab === 'claims' && canAccessClaims && (
         <ClaimsTab participantId={id!} canWrite={canWrite} />
+      )}
+
+      {tab === 'funding' && canManageFunding && (
+        <FundingTab participantId={id!} planType={p.planType} />
       )}
 
       {tab === 'rostering' && canAccessRostering && (

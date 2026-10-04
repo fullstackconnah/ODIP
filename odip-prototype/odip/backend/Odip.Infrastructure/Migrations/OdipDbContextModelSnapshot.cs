@@ -4708,6 +4708,178 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("VehicleAssignments");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Funding.BudgetSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ApproachingPercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(80);
+
+                    b.Property<int>("Mode")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique();
+
+                    b.ToTable("BudgetSettings");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Funding.FundingPeriod", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("FundingPoolId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("PeriodEnd")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("PeriodStart")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("PlanAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("SetAside")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FundingPoolId", "PeriodStart")
+                        .IsUnique();
+
+                    b.ToTable("FundingPeriods");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Funding.FundingPlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConfirmedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly?>("ConfirmedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Evidence")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("PeriodLengthMonths")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("PlanEnd")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("PlanStart")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("ReassessmentDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParticipantId");
+
+                    b.HasIndex("TenantId", "ParticipantId", "PlanStart")
+                        .IsUnique();
+
+                    b.ToTable("FundingPlans");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Funding.FundingPool", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("FundingPlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ManagementType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("PaceCategory")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FundingPlanId", "PaceCategory", "ManagementType")
+                        .IsUnique();
+
+                    b.ToTable("FundingPools");
+                });
+
             modelBuilder.Entity("Odip.Domain.Notifications.NotificationLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6457,6 +6629,50 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Vehicle");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Funding.BudgetSettings", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Funding.FundingPeriod", b =>
+                {
+                    b.HasOne("Odip.Domain.Funding.FundingPool", "FundingPool")
+                        .WithMany("Periods")
+                        .HasForeignKey("FundingPoolId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FundingPool");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Funding.FundingPlan", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Participant", "Participant")
+                        .WithMany()
+                        .HasForeignKey("ParticipantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Participant");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Funding.FundingPool", b =>
+                {
+                    b.HasOne("Odip.Domain.Funding.FundingPlan", "FundingPlan")
+                        .WithMany("Pools")
+                        .HasForeignKey("FundingPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FundingPlan");
+                });
+
             modelBuilder.Entity("Odip.Domain.Notifications.NotificationLog", b =>
                 {
                     b.HasOne("Odip.Domain.Notifications.NotificationOutbox", "Outbox")
@@ -6801,6 +7017,16 @@ namespace Odip.Infrastructure.Migrations
             modelBuilder.Entity("Odip.Domain.Entities.VehicleAssignment", b =>
                 {
                     b.Navigation("Tasks");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Funding.FundingPlan", b =>
+                {
+                    b.Navigation("Pools");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Funding.FundingPool", b =>
+                {
+                    b.Navigation("Periods");
                 });
 #pragma warning restore 612, 618
         }

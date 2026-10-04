@@ -47,6 +47,12 @@ export type TabsProps = {
    */
   idPrefix?: string
   className?: string
+  /**
+   * What a strip too wide for its box does from md up. `wrap` (the default) rolls the tabs onto a second row, as it always has. `scroll` keeps ONE row that scrolls sideways, as it already does
+   * below md: for a strip with so many tabs that the last one would be left alone on a second row (Settings has ten). The active tab is still scrolled into view, and the arrow keys still move
+   * between tabs, in both modes.
+   */
+  overflow?: 'wrap' | 'scroll'
 }
 
 /**
@@ -76,7 +82,7 @@ export type TabsProps = {
  *   (`md:flex-wrap`) instead: billing-style 3-tab pages stay on one line and longer strips roll
  *   over onto a second row, exactly as before.
  */
-export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, className }: TabsProps) {
+export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, className, overflow = 'wrap' }: TabsProps) {
   const generatedId = useId()
   const baseId = idPrefix ?? generatedId
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -197,7 +203,7 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, cla
         // stays as the safety net there too. The scrollbar is hidden only below md, where the strip is
         // the scrolling surface (Tailwind has no scrollbar-width utility, hence the arbitrary property
         // and the WebKit pseudo).
-        className="flex flex-nowrap gap-x-4 gap-y-1 border-b border-[var(--color-border)] overflow-x-auto scroll-smooth md:flex-wrap max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden"
+        className={`flex flex-nowrap gap-x-4 gap-y-1 border-b border-[var(--color-border)] overflow-x-auto scroll-smooth max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden ${overflow === 'scroll' ? 'md:[scrollbar-width:thin]' : 'md:flex-wrap'}`}
       >
         {tabs.map(tab => {
           const isActive = tab.id === active

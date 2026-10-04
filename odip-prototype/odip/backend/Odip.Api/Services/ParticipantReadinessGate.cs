@@ -1,5 +1,7 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Services;
@@ -83,4 +85,26 @@ public static class ParticipantReadinessGate
 
     public static Task<bool> IsActiveReadyAsync(OdipDbContext db, Guid participantId, CancellationToken ct) =>
         ActiveReadyParticipants(db).AnyAsync(p => p.Id == participantId, ct);
+
+    // ── Funding recorded: an ACTIVATION requirement, and only that ──────────────────────────────────────────────────────────────────────────
+    // An NDIS-funded participant is ready for activation when a plan budget is recorded that has not ended (the plan's last day is on or after the provider's
+    // calendar date: pass ProviderTimeZoneResolver.TodayAsync, never the UTC date). A participant whose funding is not the NDIS has no plan budget to record, so this
+    // clause never applies to them. It is deliberately NOT part of ActivationEvidenceParticipants, and so not part of ActiveReadyParticipants or IsActiveReadyAsync: those
+    // decide whether a participant may be rostered, booked and shown on the register, and a missing budget must not stop any of that (nor appear on a shift).
+
+    private static Expression<Func<Participant, bool>> FundingRecorded(OdipDbContext db, DateOnly today) =>
+        p => p.FundingSource != ParticipantFundingSource.Ndis
+            || db.FundingPlans.Any(plan => plan.ParticipantId == p.Id && plan.TenantId == p.TenantId && plan.PlanEnd >= today);
+
+    /// <summary>The participants whose plan budget is recorded, or who have none to record (funding that is not the NDIS).</summary>
+    public static IQueryable<Participant> FundingRecordedParticipants(OdipDbContext db, DateOnly today) =>
+        db.Participants.Where(FundingRecorded(db, today));
+
+    /// <summary>The NDIS-funded participants with no current plan budget: what the activation checklist lists as "Funding not recorded".</summary>
+    public static IQueryable<Participant> FundingMissingParticipants(OdipDbContext db, DateOnly today) =>
+        db.Participants.Where(p => p.FundingSource == ParticipantFundingSource.Ndis
+            && !db.FundingPlans.Any(plan => plan.ParticipantId == p.Id && plan.TenantId == p.TenantId && plan.PlanEnd >= today));
+
+    public static Task<bool> HasFundingRecordedAsync(OdipDbContext db, Guid participantId, DateOnly today, CancellationToken ct) =>
+        FundingRecordedParticipants(db, today).AnyAsync(p => p.Id == participantId, ct);
 }
