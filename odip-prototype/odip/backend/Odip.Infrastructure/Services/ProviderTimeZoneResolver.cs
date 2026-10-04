@@ -31,6 +31,16 @@ public static class ProviderTimeZoneResolver
         return ProviderLocalTime.TodayIn(clock.GetUtcNow().UtcDateTime, provider.Zone);
     }
 
+    /// <summary>
+    /// The provider's calendar date now for ONE named organisation: <see cref="TodayAsync(OdipDbContext, TimeProvider, CancellationToken)"/> reads whichever settings row the context's tenant filter
+    /// lets through, and a SuperAdmin's context has no filter, so it would answer with another organisation's state. A service that is handed a tenant id (the budget ledger) uses this.
+    /// </summary>
+    public static async Task<DateOnly> TodayAsync(OdipDbContext db, Guid tenantId, TimeProvider clock, CancellationToken ct)
+    {
+        var state = await db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => p.State).FirstOrDefaultAsync(ct);
+        return ProviderLocalTime.TodayIn(clock.GetUtcNow().UtcDateTime, FromState(state).Zone);
+    }
+
     public static ProviderTimeZone FromState(string? state)
     {
         var id = StateTimeZoneMap.Resolve(state);

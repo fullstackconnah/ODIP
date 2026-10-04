@@ -40,3 +40,46 @@ public enum BudgetLimitMode
     /// <summary>Refuses a one-off roster shift that would take the forecast past the budget, unless an Admin overrides it with a reason. Emergency or safety bookings are always allowed.</summary>
     HardLimit = 1,
 }
+
+/// <summary>
+/// How one pool of a participant's budget stands in one funding period, or over the whole plan (budget feature, phase 2a). Computed on every read and never stored, so the
+/// integer values are not persisted; they travel as names. The worst one that applies wins: Over, then Forecast over, then Approaching, then On track.
+/// </summary>
+public enum BudgetStatus
+{
+    /// <summary>The participant has no plan that has started, so there is nothing to compare with. Never "all clear": there is no figure at all.</summary>
+    None = 0,
+    OnTrack = 1,
+    /// <summary>What is used has reached the organisation's "approaching" percentage of what is available (80 by default), and the forecast does not pass it.</summary>
+    Approaching = 2,
+    /// <summary>Nothing is over yet, but what is used plus what is booked ahead is more than what is available.</summary>
+    ForecastOver = 3,
+    /// <summary>What is used (claimed and pending) is already more than what is available.</summary>
+    Over = 4,
+}
+
+/// <summary>What one row of a participant's ledger is. Wire names.</summary>
+public enum LedgerRowKind
+{
+    /// <summary>A line of a claim that counts (see <see cref="LedgerGroup"/> for whether it is claimed or still a draft).</summary>
+    ClaimLine = 0,
+    /// <summary>A completed shift nobody has claimed yet, priced the way ODIP will claim it.</summary>
+    CompletedShift = 1,
+    /// <summary>A shift whose day has passed and that was never completed or cancelled: counted as pending and flagged.</summary>
+    PastShift = 2,
+    /// <summary>A rostered shift from today on, priced the way ODIP will claim it.</summary>
+    FutureShift = 3,
+    /// <summary>A confirmed trip booking from today on, priced the way ODIP will claim it.</summary>
+    TripBooking = 4,
+}
+
+/// <summary>Where a ledger row counts: the three groups of the Funding tab's ledger. Wire names.</summary>
+public enum LedgerGroup
+{
+    /// <summary>Lines of submitted, approved or paid claims.</summary>
+    Claimed = 0,
+    /// <summary>Lines of draft or ready claims, completed shifts with no claim and shifts never resolved.</summary>
+    Pending = 1,
+    /// <summary>Future shifts and confirmed trip bookings.</summary>
+    BookedAhead = 2,
+}

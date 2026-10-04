@@ -91,17 +91,20 @@ public class Shift : ITenantEntity
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>Length of the shift in hours, accounting for <see cref="EndsNextDay"/>.</summary>
-    public decimal DurationHours
+    public decimal DurationHours => HoursBetween(StartTime, EndTime, EndsNextDay);
+
+    /// <summary>
+    /// The hours from <paramref name="start"/> to <paramref name="end"/>, through midnight when the shift ends the next day. The one definition of a shift's rostered length: a shift row and a
+    /// query that read only its times (the budget ledger prices a shift from them) agree on it.
+    /// </summary>
+    public static decimal HoursBetween(TimeOnly start, TimeOnly end, bool endsNextDay)
     {
-        get
-        {
-            var start = StartTime.ToTimeSpan();
-            var end = EndTime.ToTimeSpan();
-            var span = EndsNextDay
-                ? (TimeSpan.FromHours(24) - start) + end
-                : end - start;
-            return (decimal)span.TotalHours;
-        }
+        var startSpan = start.ToTimeSpan();
+        var endSpan = end.ToTimeSpan();
+        var span = endsNextDay
+            ? (TimeSpan.FromHours(24) - startSpan) + endSpan
+            : endSpan - startSpan;
+        return (decimal)span.TotalHours;
     }
 }
 
