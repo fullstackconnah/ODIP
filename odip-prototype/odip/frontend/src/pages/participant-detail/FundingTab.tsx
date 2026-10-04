@@ -62,6 +62,7 @@ export default function FundingTab({ participantId, planType }: { participantId:
       plan={editing?.plan}
       previousPlan={editing?.previousPlan}
       defaultManagement={planType}
+      onSaved={() => setApplied(false)}
     />
   )
 
@@ -87,6 +88,9 @@ export default function FundingTab({ participantId, planType }: { participantId:
       actionsRef.current?.querySelector<HTMLElement>('[data-edit-plan]')?.focus()
     },
   })
+  // "Now match" is true only while they do: not before the refetch shows it (the callout above says the opposite until then), not once the plan's dates were changed again, and not after
+  // the plan was saved from the editor (the saved dates are what the profile is compared with now, and a new difference is the callout's to say).
+  const showApplied = applied && !mismatch
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
@@ -97,7 +101,8 @@ export default function FundingTab({ participantId, planType }: { participantId:
         </Callout>
       )}
       {applyDates.isError && <Callout tone="danger">The profile's plan dates were not changed. Check your connection and try again.</Callout>}
-      <div aria-live="polite">{applied && <p className="text-[13px] text-[var(--color-muted-foreground)]">The profile's plan dates now match this plan.</p>}</div>
+      {/* Always here, so that what it says is announced; while it has nothing to say it is out of the flow (sr-only is absolute), so it does not add a second section gap to the column. */}
+      <p aria-live="polite" className={showApplied ? 'text-[13px] text-[var(--color-muted-foreground)]' : 'sr-only'}>{showApplied ? "The profile's plan dates now match this plan." : ''}</p>
 
       {ended && (
         <Callout tone="info">

@@ -21,7 +21,7 @@ vi.mock('@/api/hooks', () => ({
 
 // The editor has its own tests: here it is a marker that says how the tab opened it.
 vi.mock('@/pages/funding/FundingPlanEditor', () => ({
-  FundingPlanEditor: (props: { open: boolean; plan?: { id: string }; previousPlan?: { id: string }; participantId: string; defaultManagement: string }) => {
+  FundingPlanEditor: (props: { open: boolean; plan?: { id: string }; previousPlan?: { id: string }; participantId: string; defaultManagement: string; onSaved?: (plan: unknown) => void }) => {
     editor(props)
     return props.open ? <div data-testid="editor" data-plan={props.plan?.id ?? 'new'} data-previous={props.previousPlan?.id ?? 'none'} data-management={props.defaultManagement} /> : null
   },
@@ -30,8 +30,10 @@ vi.mock('@/pages/funding/FundingPlanEditor', () => ({
 const plansReply = (plans: ReturnType<typeof plan>[], profile: { start?: string; end?: string } = { start: '2026-07-01', end: '2027-06-30' }) =>
   ({ data: { plans, profilePlanDates: profile }, isLoading: false, isError: false, refetch: vi.fn() })
 
+const tab = () => <MemoryRouter><FundingTab participantId="participant-1" planType="PlanManaged" /></MemoryRouter>
+
 function renderTab() {
-  return render(<MemoryRouter><FundingTab participantId="participant-1" planType="PlanManaged" /></MemoryRouter>)
+  return render(tab())
 }
 
 beforeEach(() => {
@@ -103,6 +105,15 @@ describe('Funding tab: a recorded plan', () => {
     expect(within(stated).getByText('Set-aside').nextElementSibling).toHaveTextContent('–')   // no set-aside on this pool: an en dash, never $0
     expect(within(screen.getByRole('region', { name: 'Pools' })).getByText('A dash means no set-aside is recorded.')).toBeInTheDocument()
     expect(document.body).not.toHaveTextContent('Oassist')
+  })
+
+  it('gives the two figures of every pool the same width, so the decimals line up down the page whatever the amounts', () => {
+    useFundingPlans.mockReturnValue(plansReply([plan({ pools: [pool({ periods: quarters(9000, 1000) }), pool({ id: 'pool-15', paceCategory: 15, kind: 'Stated', name: 'Improved Daily Living Skills', managementType: 'AgencyManaged', periods: quarters(500, undefined, 's') })] })]))
+    renderTab()
+
+    const blocks = ['Core (flexible)', 'Improved Daily Living Skills'].flatMap(name => ['Plan amount', 'Set-aside'].map(label => within(poolCard(name)).getByText(label).parentElement!))
+    expect(blocks).toHaveLength(4)
+    blocks.forEach(block => expect(block).toHaveClass('w-32'))   // $36,000.00 and $2,000.00 end at the same edge; a dash stacks too
   })
 
   it('says nothing about a dash when every pool has a set-aside', () => {
@@ -194,17 +205,81 @@ describe('Funding tab: the profile says something else', () => {
     expect(apply.mock.calls[0][0]).toBe('plan-1')
   })
 
-  it('says the dates now match once they were applied, and puts focus back on Edit rather than losing it with the callout', async () => {
-    useFundingPlans.mockReturnValue(plansReply([plan()], { start: '2026-01-01', end: '2026-12-31' }))
-    renderTab()
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    expect(screen.queryByText("The profile's plan dates now match this plan.")).not.toBeInTheDocument()
+  const NOW_MATCH = "The profile's plan dates now match this plan."
 
+  /** The plan's dates applied to a profile that differed, and the plans refetched: the profile now holds the plan's own dates. */
+  async function appliedAndRefetched() {
+    useFundingPlans.mockReturnValue(plansReply([plan()], { start: '2026-01-01', end: '2026-12-31' }))
+    const view = renderTab()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     await user.click(screen.getByRole('button', { name: "Use this plan's dates" }))
     act(() => { apply.mock.calls[0][1].onSuccess() })   // the server said yes
+    useFundingPlans.mockReturnValue(plansReply([plan()]))
+    view.rerender(tab())
+    return { view, user }
+  }
 
-    expect(screen.getByText("The profile's plan dates now match this plan.")).toBeInTheDocument()
+  it('says the dates now match once they were applied and the profile shows them, and puts focus back on Edit rather than losing it with the callout', async () => {
+    await appliedAndRefetched()
+
+    expect(screen.getByText(NOW_MATCH)).toBeInTheDocument()
+    expect(screen.queryByText(/The profile says/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit' })).toHaveFocus()
+  })
+
+  it('does not say it while the profile still differs (the refetch has not come back), since the callout above would say the opposite', async () => {
+    useFundingPlans.mockReturnValue(plansReply([plan()], { start: '2026-01-01', end: '2026-12-31' }))
+    renderTab()
+    await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(screen.getByRole('button', { name: "Use this plan's dates" }))
+
+    act(() => { apply.mock.calls[0][1].onSuccess() })
+
+    expect(screen.queryByText(NOW_MATCH)).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(/The profile says the plan runs/)
+  })
+
+  it('takes it away when the plan’s dates are changed afterwards and the callout is back, so the two never contradict each other', async () => {
+    const { view } = await appliedAndRefetched()
+    expect(screen.getByText(NOW_MATCH)).toBeInTheDocument()
+
+    useFundingPlans.mockReturnValue(plansReply([plan({ planEnd: '2027-05-31' })]))   // the plan was edited: the profile no longer matches
+    view.rerender(tab())
+
+    expect(screen.queryByText(NOW_MATCH)).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(/The profile says the plan runs 1\s+Jul\s+2026 – 30\s+Jun\s+2027\./)
+  })
+
+  it('takes it away after the plan is saved from the editor, whatever the profile says, and does not come back when the dates match again', async () => {
+    const { view, user } = await appliedAndRefetched()
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+
+    act(() => { editor.mock.calls.at(-1)![0].onSaved?.(plan()) })   // the editor saved
+
+    expect(screen.queryByText(NOW_MATCH)).not.toBeInTheDocument()
+    useFundingPlans.mockReturnValue(plansReply([plan({ planEnd: '2027-05-31' })]))
+    view.rerender(tab())
+    useFundingPlans.mockReturnValue(plansReply([plan()]))   // matching again, by the editor's doing this time, not by "Use this plan's dates"
+    view.rerender(tab())
+    expect(screen.queryByText(NOW_MATCH)).not.toBeInTheDocument()
+  })
+
+  it('adds no gap of its own while it has nothing to say: its live region is out of the flow, and is the sentence itself once it applies', async () => {
+    useFundingPlans.mockReturnValue(plansReply([plan()], { start: '2026-01-01', end: '2026-12-31' }))
+    const view = renderTab()
+    const live = view.container.querySelector('p[aria-live="polite"]') as HTMLElement
+    expect(live).toHaveClass('sr-only')   // absolute: a flex child that is not drawn adds no gap to the tab's column
+    expect(live).toHaveTextContent('')
+
+    await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(screen.getByRole('button', { name: "Use this plan's dates" }))
+    act(() => { apply.mock.calls[0][1].onSuccess() })
+    useFundingPlans.mockReturnValue(plansReply([plan()]))
+    view.rerender(tab())
+
+    const after = view.container.querySelectorAll('p[aria-live="polite"]')
+    expect(after).toHaveLength(1)
+    expect(after[0]).toBe(live)   // the same region throughout, so the sentence is announced
+    expect(live).toHaveTextContent(NOW_MATCH)
+    expect(live).not.toHaveClass('sr-only')
   })
 
   it('says so when the profile has no plan dates at all', () => {

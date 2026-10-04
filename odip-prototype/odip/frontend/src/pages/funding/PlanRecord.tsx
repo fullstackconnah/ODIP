@@ -62,12 +62,13 @@ function PoolRecord({ pool }: { pool: FundingPoolDto }) {
           <h5 className="text-sm font-medium">{pool.name}</h5>
           <p className="text-[13px] text-[var(--color-muted-foreground)]"><span className="tabular-nums">{categoriesLabel(pool)}</span> · {managementLabel(pool.managementType)}</p>
         </div>
+        {/* Both figures have one width in every pool card (w-32 fits $99,999,999.99), so their decimals stack down the page instead of ending where each pool's own text does. */}
         <dl className="flex gap-8 text-left md:text-right">
-          <div>
+          <div className="w-32">
             <dt className="text-[13px] text-[var(--color-muted-foreground)]">Plan amount</dt>
             <dd className="text-sm font-medium tabular-nums">{formatCurrency(pool.planTotal)}</dd>
           </div>
-          <div>
+          <div className="w-32">
             <dt className="text-[13px] text-[var(--color-muted-foreground)]">Set-aside</dt>
             <dd className="text-sm tabular-nums">{amountOrDash(pool.setAsideTotal)}</dd>
           </div>
