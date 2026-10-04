@@ -249,7 +249,14 @@ owner decision (collected under Open Flags at the end).
   (a code and a design review) also reworded every screen ("unfilled", "Not approved for e-signing",
   "Approve version N for rostering?"), made "Unfilled only" work in both board views, showed which worker
   of a 2:1 pair a pattern is, and made the onboarding checklist's Schedule review gate Complete once a
-  revision is approved. Spec: `docs/specs/2026-10-03-plan-builder-screen.md`, "Phase D".
+  revision is approved. Fix round 2 (the verification reviews): "Unfilled only" on the By participant board
+  asked for `staffId === null`, which the API never sends (it leaves a null out), so the approved card's own
+  link opened an empty week; it now asks for no staffId. The held approval dialog has a 30 second way out
+  (it says no answer came back, to check the card). The dialog and the card promise shifts "added each day"
+  only while the daily top-up is on (`topUpEnabled` on the preview and the approval). A person's own Generate
+  window no longer hides days from the daily job while nothing is recorded on the pattern, the job skips a
+  participant with nothing due, and a shift says which agreement it came from on its own DTO. Spec:
+  `docs/specs/2026-10-03-plan-builder-screen.md`, "Phase D".
 - [ ] **PLAN-D2 — match what a block asks of a worker.** The requirements travel onto patterns and shifts
   and show as chips; nothing checks them yet. "Female worker" cannot be checked until staff have a gender
   field. Reuse `COMPETENCY_MISSING` for the skills and the driver flag.

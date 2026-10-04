@@ -2548,6 +2548,8 @@ const postRoutes = [
   }],
   ...packageRoutesPost,
   ['staff-assignments/check', () => []],
+  // The shift panel's live dry-run (a pure preview): no findings. Without it the panel, open for a moment, set its findings to whatever the fallback answered and crashed.
+  ['rostering/shifts/check', () => []],
 
   ['leave/:id/approve', (id) => ({
     leave: withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Approved', null),
