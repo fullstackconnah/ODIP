@@ -23,6 +23,9 @@ const weekday = (iso) => new Date(`${iso}T00:00:00Z`).getUTCDay()
 const earlier = (a, b) => (a < b ? a : b)
 const later = (a, b) => (a > b ? a : b)
 
+/** Whether the daily top-up is on, as the server reports it (RosterTopUp:Enabled). MOCK_TOP_UP=off switches it off, to see the screens that must not promise shifts "added each day". */
+const topUpEnabled = () => process.env.MOCK_TOP_UP !== 'off'
+
 /** The provider's calendar date now. MOCK_TODAY pins it for a screenshot or a test. */
 function providerToday() {
   if (process.env.MOCK_TODAY) return process.env.MOCK_TODAY
@@ -162,7 +165,13 @@ function plan(store, participant, draft) {
   result.overlapping = store.patterns.filter((p) => p.participantId === draft.participantId && !p.sourceDraftId && p.isActive && result.newPatterns.some((made) => overlaps(p, made)))
   result.oldShifts = oldShifts(store, draft)
   result.ready = !!participant && participant.isActive !== false && !participant.isDraft
-  if (!result.ready) result.shiftsNote = `Unfilled shifts are created once ${participant ? participant.firstName : 'the participant'} is active.`
+  if (!result.ready) {
+    const who = participant ? participant.firstName : 'the participant'
+    // As the server says it: "created once active" is the daily top-up's work, so with it off the note promises nothing.
+    result.shiftsNote = topUpEnabled()
+      ? `Unfilled shifts are created once ${who} is active.`
+      : `No shifts are made now, because ${who} is not active yet. The daily top-up is off, so make them with Generate on their shift patterns once they are.`
+  }
   else if (result.from <= result.horizonEnd) result.shiftsToCreate = countShifts(draft, result.newPatterns, result.from, result.horizonEnd)
   return result
 }
@@ -193,7 +202,7 @@ function previewOf(planned, draft) {
     ...(planned.toEnd.length > 0 ? { endsFromVersion: planned.endsFromVersion, endsOn: planned.endsOn } : {}),
     shiftsToCreate: planned.shiftsToCreate, ...(planned.shiftsNote ? { shiftsNote: planned.shiftsNote } : {}), oldShiftsRemaining: old,
     overlappingPatterns: planned.overlapping.map((p) => ({ id: p.id, dayOfWeek: p.dayOfWeek, startTime: p.startTime, endTime: p.endTime, endsNextDay: p.endsNextDay, effectiveFrom: p.effectiveFrom, ...(p.effectiveTo ? { effectiveTo: p.effectiveTo } : {}), ...(p.notes ? { notes: p.notes } : {}) })),
-    horizonEnd: planned.horizonEnd,
+    horizonEnd: planned.horizonEnd, topUpEnabled: topUpEnabled(),
   }
 }
 
@@ -233,10 +242,12 @@ function approve(store, participantId, draftId, body, caller) {
     for (const pattern of made) {
       for (const date of datesOf(pattern, planned.from, planned.horizonEnd)) {
         if (skipped.has(`${pattern.sourceBlockKey}|${date}`)) continue
+        // As the server sends it: a null member is left out of the JSON (WhenWritingNull), so an unfilled shift has NO staffId and no staffName (not nulls), and no notes or override reason either.
+        // It says which agreement it came from (the pattern's version), so the shift panel needs no pattern read.
         created.push({
-          id: store.newId('shift'), participantId, participantName: pattern.participantName, staffId: null, staffName: null, serviceDate: date, startTime: pattern.startTime, endTime: pattern.endTime,
-          endsNextDay: pattern.endsNextDay, durationHours: durationOf(pattern), ratio: pattern.ratio, nightType: pattern.nightType, status: 'Draft', shiftPatternId: pattern.id, notes: null, overrideReason: null,
-          findings: [], assigneeOnApprovedLeave: false, requirements: pattern.requirements,
+          id: store.newId('shift'), participantId, participantName: pattern.participantName, serviceDate: date, startTime: pattern.startTime, endTime: pattern.endTime,
+          endsNextDay: pattern.endsNextDay, durationHours: durationOf(pattern), ratio: pattern.ratio, nightType: pattern.nightType, status: 'Draft', shiftPatternId: pattern.id,
+          findings: [], assigneeOnApprovedLeave: false, requirements: pattern.requirements, fromAgreement: true, sourceDraftVersion: pattern.sourceDraftVersion,
         })
       }
     }
@@ -245,6 +256,7 @@ function approve(store, participantId, draftId, body, caller) {
   draft.approval = {
     approvedAt: new Date().toISOString(), approvedByName: (caller && caller.name) || 'Demo Coordinator', patternsCreated: made.length, patternsEnded: planned.toEnd.length, shiftsCreated: created.length,
     ...(created.length > 0 ? { horizonEnd: planned.horizonEnd, firstShiftDate: created.map((s) => s.serviceDate).sort()[0] } : {}),
+    topUpEnabled: topUpEnabled(),
   }
   return { draft, oldShiftsRemaining: planned.oldShifts || { open: 0, assigned: 0 } }
 }

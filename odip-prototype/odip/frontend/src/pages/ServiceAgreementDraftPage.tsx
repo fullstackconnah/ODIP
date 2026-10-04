@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { FileText, Loader2, X } from 'lucide-react'
 import { useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useParticipant, useServiceAgreementDrafts } from '@/api/hooks'
@@ -103,6 +103,9 @@ function DraftPage() {
   // The revision whose "Start a new revision" was pressed. A revision somebody approved for rostering is what the roster was made from, so its page is read only until somebody says they mean to change
   // it, and then only for THAT revision: when the next version is saved (and is itself approved one day) the page is locked again. Nothing is saved by pressing it; the working copy was already the newest.
   const [revisingFrom, setRevisingFrom] = useState<string | null>(null)
+  // Start a new revision was pressed and the plan's heading has not been brought into view yet: that has to wait for the page to unlock (a short list of facts becomes a tall form above the plan), or the heading is
+  // focused where it is about to move from.
+  const headingDue = useRef(false)
 
   const loaded = drafts.data !== undefined
   if (loaded && baseline === null) {
@@ -134,6 +137,15 @@ function DraftPage() {
   useEffect(() => {
     if (loadCount > 0) document.getElementById('plan-heading')?.focus()
   }, [loadCount])
+
+  // After Start a new revision: once the page has unlocked, the plan's heading goes to the top of the view (clear of the sticky header: it has a scroll margin) and takes focus, where the button was.
+  useEffect(() => {
+    if (!revisingFrom || !headingDue.current) return
+    headingDue.current = false
+    const heading = document.getElementById('plan-heading')
+    heading?.scrollIntoView?.({ block: 'start' })
+    heading?.focus({ preventScroll: true })
+  }, [revisingFrom])
 
   const canonicalIdentifiers = useMemo(() => ({
     ndis: participant.data?.ndisNumber ? 'Recorded on participant' : 'Not recorded on participant',
@@ -263,11 +275,12 @@ function DraftPage() {
     }, 0)
   }
 
-  // Start a new revision: the button is gone as soon as the page unlocks, and focus would fall to the top of the page. It goes to the plan's heading, where the button was (nothing is saved by pressing it).
+  // Start a new revision: the button is gone as soon as the page unlocks, and focus would fall to the top of the page. It goes to the plan's heading, where the button was, once the page has unlocked
+  // (the effect above; nothing is saved by pressing it).
   const startRevision = () => {
     if (!newest) return
+    headingDue.current = true
     setRevisingFrom(newest.id)
-    document.getElementById('plan-heading')?.focus()
   }
 
   // A revision approved before a newer one was is replaced by the NEXT approved one: its approval ended these patterns the day before that revision starts. The roster link belongs to the live one only.

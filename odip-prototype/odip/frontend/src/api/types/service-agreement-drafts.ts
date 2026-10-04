@@ -39,7 +39,7 @@ export interface ServiceAgreementDraftDto {
   caveats: string[]
   /**
    * Who approved this revision for rostering, when, and what that did. Absent until somebody has. It is not `status` (the template's e-signing state, the same on every revision): approving
-   * makes the weekly roster patterns and the open shifts, and is separate from signing.
+   * makes the weekly roster patterns and the unfilled shifts, and is separate from signing.
    */
   approval?: DraftApprovalDto
   /** Only in the answer to an approval: the previous revision's shifts on or after this one starts, which stay on the roster. */
@@ -53,12 +53,14 @@ export interface DraftApprovalDto {
   approvedByName: string
   patternsCreated: number
   patternsEnded: number
-  /** The open shifts generated at once; none for a participant who was not active yet. */
+  /** The unfilled shifts generated at once; none for a participant who was not active yet. */
   shiftsCreated: number
   /** The last day shifts were generated to; absent when none were. */
   horizonEnd?: string
   /** The first day it made a shift for; absent when it made none. */
   firstShiftDate?: string
+  /** Whether the daily top-up is on, as the server has it now (not stored with the approval). Shifts are added each day after the horizon only while it is: the card says so only then. */
+  topUpEnabled?: boolean
 }
 
 /** The shifts of the previous approved revision on or after the new one starts: left alone by approval, counted so a coordinator can tidy them. */
@@ -102,13 +104,15 @@ export interface DraftApprovalPreviewDto {
   /** The version whose patterns would end, and the day they would end (the day before this revision starts). */
   endsFromVersion?: number
   endsOn?: string
-  /** The open shifts approval would generate at once: none while the participant is not active, and then `shiftsNote` says when they will come. */
+  /** The unfilled shifts approval would generate at once: none while the participant is not active, and then `shiftsNote` says when they will come. */
   shiftsToCreate: number
   shiftsNote?: string
   oldShiftsRemaining: OldShiftsRemainingDto
   overlappingPatterns: OverlappingPatternDto[]
   /** The provider's today plus the horizon (56 days), held to the end of the agreement. */
   horizonEnd?: string
+  /** Whether the daily top-up is on: the dialog says shifts are added each day after the horizon only while it is. Absent from an older server: read as on. */
+  topUpEnabled?: boolean
 }
 
 /** The body of `POST .../approve`. */

@@ -11,7 +11,7 @@ vi.mock('../client', async () => {
   return { ...actual, apiGet, apiPost }
 })
 
-import { useApprovalPreview, useApproveServiceAgreementDraft } from './service-agreement-drafts'
+import { APPROVE_TIMEOUT_MS, useApprovalPreview, useApproveServiceAgreementDraft } from './service-agreement-drafts'
 
 const wrapper = (client: QueryClient) => function Wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -65,8 +65,10 @@ describe('useApproveServiceAgreementDraft', () => {
     await act(async () => { await result.current.mutateAsync({ participantId: 'p1', draftId: 'd1', acknowledgeOverlaps: true }) })
     await act(async () => { await result.current.mutateAsync({ participantId: 'p1', draftId: 'd2', acknowledgeOverlaps: false }) })
 
-    expect(apiPost).toHaveBeenNthCalledWith(1, '/participants/p1/service-agreement-drafts/d1/approve', { acknowledgeOverlaps: true })
-    expect(apiPost).toHaveBeenNthCalledWith(2, '/participants/p1/service-agreement-drafts/d2/approve', { acknowledgeOverlaps: false })
+    // With the approval's own time limit: the dialog holds every way out while it is on its way, and the shared client has no timeout, so a dropped connection must not hold it for ever.
+    expect(apiPost).toHaveBeenNthCalledWith(1, '/participants/p1/service-agreement-drafts/d1/approve', { acknowledgeOverlaps: true }, { timeout: 30_000 })
+    expect(apiPost).toHaveBeenNthCalledWith(2, '/participants/p1/service-agreement-drafts/d2/approve', { acknowledgeOverlaps: false }, { timeout: 30_000 })
+    expect(APPROVE_TIMEOUT_MS).toBe(30_000)
   })
 
   it('refreshes everything an approval changed: the revisions, the patterns, the board and the participant\'s rostering', async () => {

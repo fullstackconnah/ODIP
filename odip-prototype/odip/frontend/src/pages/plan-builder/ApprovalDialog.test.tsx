@@ -61,7 +61,9 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     setUp()
 
     const dialog = screen.getByRole('dialog', { name: 'Approve version 2 for rostering?' })
-    expect(within(dialog).getByText('Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027, and 40 unfilled shifts up to Sat 5 Dec 2026. After that, unfilled shifts are added each day until the agreement ends.')).toBeInTheDocument()
+    // A short line for each fact, so it scans: the patterns, the shifts, (below) what ends.
+    expect(within(dialog).getByText('Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027.')).toBeInTheDocument()
+    expect(within(dialog).getByText('Makes 40 unfilled shifts up to Sat 5 Dec 2026. After that, unfilled shifts are added each day until the agreement ends.')).toBeInTheDocument()
     expect(within(dialog).getByText(/separate from signing: nothing is signed or sent/)).toBeInTheDocument()
     expect(within(dialog).getByText("You can't undo an approval. To change the roster later, save a new revision and approve that.")).toBeInTheDocument()
     expect(previewCall).toHaveBeenCalledWith('p-1', 'd-2', true)
@@ -71,8 +73,42 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     ready(preview({ horizonEnd: '2027-03-31' }))
     setUp()
 
-    expect(screen.getByText('Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027, and 40 unfilled shifts up to Wed 31 Mar 2027.')).toBeInTheDocument()
+    expect(screen.getByText('Makes 40 unfilled shifts up to Wed 31 Mar 2027.')).toBeInTheDocument()
     expect(screen.queryByText(/After that/)).not.toBeInTheDocument()
+  })
+
+  it('says each fact on a line of its own: what it creates, the shifts it makes, and what ends', () => {
+    ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01' }))
+    setUp()
+
+    const lines = screen.getByText('Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027.').parentElement!
+    expect([...lines.children].map(line => line.textContent)).toEqual([
+      'Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027.',
+      'Makes 40 unfilled shifts up to Sat 5 Dec 2026. After that, unfilled shifts are added each day until the agreement ends.',
+      'Ends 5 patterns from version 1 the day before Mon 2 Nov 2026.',
+    ])
+  })
+
+  // "Added each day" is the daily top-up's work: RosterTopUp:Enabled=false stops the job, and an approval then makes what it makes and nothing more.
+  it('promises nothing past the horizon when the daily top-up is off, and says no shifts are made when there are none to make', () => {
+    ready(preview({ topUpEnabled: false }))
+    const { unmount } = render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} /></MemoryRouter>)
+
+    expect(screen.getByText('Makes 40 unfilled shifts up to Sat 5 Dec 2026.')).toBeInTheDocument()
+    expect(screen.queryByText(/added each day/)).not.toBeInTheDocument()
+    unmount()
+
+    ready(preview({ topUpEnabled: false, shiftsToCreate: 0, horizonEnd: undefined }))
+    render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} /></MemoryRouter>)
+    expect(screen.getByText('No unfilled shifts are made now.')).toBeInTheDocument()
+    expect(screen.queryByText(/added each day/)).not.toBeInTheDocument()
+  })
+
+  it('reads a server that does not say whether the top-up is on as on, which it was', () => {
+    ready(preview({ topUpEnabled: undefined }))
+    setUp()
+
+    expect(screen.getByText(/After that, unfilled shifts are added each day until the agreement ends\./)).toBeInTheDocument()
   })
 
   it('says how many patterns of the revision before it end, and the day before this one starts', () => {
@@ -86,7 +122,8 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     ready(preview({ patternsToCreate: 1, shiftsToCreate: 1, patternsToEnd: 1, endsFromVersion: 3, endsOn: '2026-11-01' }))
     setUp()
 
-    expect(screen.getByText(/Creates 1 weekly pattern, Mon 2 Nov 2026 to Wed 31 Mar 2027, and 1 unfilled shift up to Sat 5 Dec 2026\./)).toBeInTheDocument()
+    expect(screen.getByText('Creates 1 weekly pattern, Mon 2 Nov 2026 to Wed 31 Mar 2027.')).toBeInTheDocument()
+    expect(screen.getByText(/Makes 1 unfilled shift up to Sat 5 Dec 2026\./)).toBeInTheDocument()
     expect(screen.getByText(/Ends 1 pattern from version 3 the day before Mon 2 Nov 2026\./)).toBeInTheDocument()
   })
 
@@ -94,7 +131,7 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', oldShiftsRemaining: { open: 21, assigned: 3, firstDate: '2026-11-04', fromVersion: 1 } }))
     setUp()
 
-    expect(screen.getByText(/21 unfilled and 3 assigned shifts from version 1, from Wed 4 Nov 2026 on, stay on the roster\. The new version's unfilled shifts will sit beside them at the same times\./)).toBeInTheDocument()
+    expect(screen.getByText(/21 unfilled and 3 assigned shifts from version 1, from Wed 4 Nov 2026 on, stay on the roster\. The new version's unfilled shifts will sit beside them on the same days\./)).toBeInTheDocument()
     const link = screen.getByRole('link', { name: /See them on the roster/ })
     expect(link).toHaveAttribute('href', '/rostering?date=2026-11-02&participant=p-1')
     expect(link).toHaveAttribute('target', '_blank')
@@ -105,7 +142,7 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', oldShiftsRemaining: { open: 1, assigned: 0, firstDate: '2026-11-04', fromVersion: 1 } }))
     setUp()
 
-    expect(screen.getByText(/1 unfilled and 0 assigned shift from version 1, from Wed 4 Nov 2026 on, stays on the roster. The new version's unfilled shifts will sit beside it at the same times./)).toBeInTheDocument()
+    expect(screen.getByText(/1 unfilled and 0 assigned shift from version 1, from Wed 4 Nov 2026 on, stays on the roster. The new version's unfilled shifts will sit beside it on the same days./)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /See it on the roster/ })).toBeInTheDocument()
   })
 
@@ -121,6 +158,7 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     setUp()
 
     expect(screen.getByText('Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027.')).toBeInTheDocument()
+    expect(screen.queryByText(/^Makes /)).not.toBeInTheDocument()
     expect(screen.getByText('Unfilled shifts are created once Jordan is active.')).toBeInTheDocument()
   })
 
@@ -167,7 +205,7 @@ describe('ApprovalDialog: hand-made patterns that overlap', () => {
     setUp()
 
     expect(screen.getByText('1 hand-made pattern overlaps')).toBeInTheDocument()
-    expect(screen.getByText('It is not ended or changed. The new patterns are made beside it, so the roster will ask for both until you decide.')).toBeInTheDocument()
+    expect(screen.getByText('It is not ended or changed. The new patterns are made beside it, so the roster will show shifts for both until you decide.')).toBeInTheDocument()
     await user.click(screen.getByRole('checkbox', { name: 'This hand-made pattern stays as it is. I have checked it.' }))
     expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled()
   })
@@ -242,6 +280,58 @@ describe('ApprovalDialog: approving', () => {
 
     expect(onClose).not.toHaveBeenCalled()
     expect(approveMutate).not.toHaveBeenCalled()
+  })
+
+  // The hold above ends when the request does. The shared client has no timeout, so the approval sets its own (APPROVE_TIMEOUT_MS): a request given up on rejects with the client's timeout error, and the dialog
+  // must then be one a person can leave, and must not say "not approved": no answer is not a refusal, and the revision may well have been approved (approving twice is safe, so looking and trying again are both fine).
+  const TIMEOUT = { code: 'ECONNABORTED', message: 'timeout of 30000ms exceeded' }
+
+  it('says it took too long, and to check the card, when the request is given up on: not that it was refused', async () => {
+    approveMutate.mockImplementation((_vars, options) => options.onError(TIMEOUT))
+    const user = userEvent.setup()
+    const { onApproved } = setUp()
+
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+
+    expect(onApproved).not.toHaveBeenCalled()
+    const callout = screen.getByRole('alert')
+    expect(within(callout).getByText('No answer came back')).toBeInTheDocument()
+    expect(within(callout).getByText('It took too long. Close this and check the card: it may have been approved. If it was not, approve it again (approving twice is safe).')).toBeInTheDocument()
+    expect(screen.queryByText('Not approved')).not.toBeInTheDocument()
+    expect(screen.queryByText(/could not approve this revision/)).not.toBeInTheDocument()
+  })
+
+  it('gives every way out back once the request has been given up on, and Approve can be pressed again', async () => {
+    approveMutate.mockImplementationOnce((_vars, options) => options.onError(TIMEOUT))                     // the first press times out; the request is over, so nothing is pending any more
+    const user = userEvent.setup()
+    const { onClose } = setUp()
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Close dialog' }))
+    await user.click(screen.getByRole('dialog').parentElement!)
+    expect(onClose).toHaveBeenCalledTimes(4)
+
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    expect(approveMutate).toHaveBeenCalledTimes(2)                                                       // asking again is allowed
+  })
+
+  it('recognises a time limit by its code and message, and takes any other failure for what it says', async () => {
+    for (const [error, shown] of [
+      [{ code: 'ETIMEDOUT', message: 'timeout of 30000ms exceeded' }, 'No answer came back'],
+      [{ code: 'ECONNABORTED', message: 'Request aborted' }, 'Not approved'],                                // aborted by something else: not a time limit
+      [{ code: 'ERR_NETWORK', message: 'Network Error' }, 'Not approved'],
+    ] as const) {
+      approveMutate.mockReset()
+      approveMutate.mockImplementation((_vars, options) => options.onError(error))
+      const user = userEvent.setup()
+      const { unmount } = render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} /></MemoryRouter>)
+      await user.click(screen.getByRole('button', { name: 'Approve' }))
+      expect(within(screen.getByRole('alert')).getByText(shown), JSON.stringify(error)).toBeInTheDocument()
+      unmount()
+    }
   })
 
   it('closes with Cancel, Escape and the backdrop when nothing is on its way', async () => {

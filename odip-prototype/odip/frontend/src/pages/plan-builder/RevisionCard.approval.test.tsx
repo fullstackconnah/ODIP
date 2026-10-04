@@ -177,6 +177,20 @@ describe('RevisionCard: approved', () => {
     expect(screen.getByRole('link', { name: 'Open the shift patterns' })).toHaveAttribute('href', '/rostering/patterns')
   })
 
+  // "Added each day" is the daily top-up's work: with RosterTopUp:Enabled=false the card must not promise it (the approval says whether it is on).
+  it('does not promise shifts added each day when the daily top-up is off, and says none were made', () => {
+    setUp({ draft: draft({ approval: approval({ shiftsCreated: 0, horizonEnd: undefined, firstShiftDate: undefined, topUpEnabled: false }) }) })
+
+    expect(screen.getByText('5 weekly patterns. No unfilled shifts were made.')).toBeInTheDocument()
+    expect(screen.queryByText(/added each day/)).not.toBeInTheDocument()
+  })
+
+  it('still says the shifts it made, up to when, with the top-up off: that is a record of what was done, not a promise', () => {
+    setUp({ draft: draft({ approval: approval({ topUpEnabled: false }) }) })
+
+    expect(screen.getByText('5 weekly patterns, unfilled shifts to Sat 5 Dec 2026.')).toBeInTheDocument()
+  })
+
   it('puts the way to the roster on a line of its own, so the main follow-up is a target a thumb can hit', () => {
     setUp({ draft: draft({ approval: approval() }) })
 
@@ -253,6 +267,18 @@ describe('RevisionCard: where focus goes', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     // Where the page scrolls for that focus it stops clear of the sticky header and the phone's bottom bar (the first line was left under the header at 390px).
     expect(note).toHaveClass('scroll-mt-20', 'scroll-mb-24')
+  })
+
+  it('does not pull focus to the approval when the dialog was closed without approving and somebody else approves the revision later (a refetch)', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(renderIn(draft()))
+    await user.click(screen.getByRole('button', { name: 'Mark approved' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    rerender(renderIn(draft({ approval: approval() })))                                         // somebody else approved it: the drafts were read again
+
+    expect(screen.getByRole('group', { name: /Approved for rostering by Alex Admin/ })).not.toHaveFocus()
   })
 
   it('does not take focus when the page simply loads a revision that was approved already', () => {

@@ -39,6 +39,14 @@ const reasonStep = (code: string): PlanStepKey => REASON_COPY[code as keyof type
 const reasonIsHard = (code: string) => OWN_REASONS[code]?.hard ?? isRefusal(code as keyof typeof REASON_COPY)
 const reasonAdvice = (code: string) => REASON_COPY[code as keyof typeof REASON_COPY]?.advice ?? OWN_REASONS[code]?.advice
 
+/** The request was given up on (the approval's own time limit, see APPROVE_TIMEOUT_MS): no answer came back, which is not the same as "refused". */
+const timedOut = (error: unknown) => {
+  const { code, message } = (error ?? {}) as { code?: string; message?: string }
+  return (code === 'ECONNABORTED' || code === 'ETIMEDOUT') && /timeout/i.test(message ?? '')
+}
+
+const TIMED_OUT_MESSAGE = 'It took too long. Close this and check the card: it may have been approved. If it was not, approve it again (approving twice is safe).'
+
 /** Every sentence the server gave for a refusal (a list: saving and approving say all of them), or one of our own when it gave none. */
 function failureMessages(error: unknown): string[] {
   if (httpStatusOf(error) === 429) return ['Too many requests just now. Wait a moment and try again.']
@@ -46,6 +54,8 @@ function failureMessages(error: unknown): string[] {
   const said = data?.errors?.length ? data.errors : data?.message ? [data.message] : []
   return said.length > 0 ? [...new Set(said)] : ['The server could not approve this revision. Check your connection and try again; nothing was changed.']
 }
+
+type Failure = { timedOut: boolean; messages: string[] }
 
 const timeRange = (pattern: OverlappingPatternDto) => `${formatShiftTime(pattern.startTime)}–${formatShiftTime(pattern.endTime)}${pattern.endsNextDay ? ' +1' : ''}`
 
@@ -63,16 +73,17 @@ type ApprovalDialogProps = {
 
 /**
  * The confirm screen of "Mark approved". It is built from the server's preview (nothing is done until Approve is pressed): when the revision can be approved it says plainly what approval does, the
- * patterns it makes and the unfilled shifts it generates up to when (and that more are added each day until the agreement ends), the patterns of the revision before it that end the day before this
+ * patterns it makes and the unfilled shifts it generates up to when (and, while the daily top-up is on, that more are added each day until the agreement ends), the patterns of the revision before it that end the day before this
  * one starts, the old version's shifts that stay on the roster (with a link to them, in a new tab so the person can look and come back), the hand-made patterns that overlap (which are never changed, and
  * need a box ticked), and that an approval cannot be undone; when it cannot be approved, it lists every reason, each with the block it is about and what to do. It does not sign anything. While the
- * approval is on its way nothing closes it: the request has been sent, and Cancel would only hide a dialog the approval goes on behind.
+ * approval is on its way nothing closes it: the request has been sent, and Cancel would only hide a dialog the approval goes on behind. That hold ends when the request does: an answer, or the time limit
+ * (APPROVE_TIMEOUT_MS), after which it says no answer came back, to check the card, and that approving again is safe.
  */
 export function ApprovalDialog({ open, participantId, draft, onClose, onApproved, onGoToBlock }: ApprovalDialogProps) {
   const preview = useApprovalPreview(participantId, draft.id, open)
   const approve = useApproveServiceAgreementDraft()
   const [acknowledged, setAcknowledged] = useState(false)
-  const [failure, setFailure] = useState<string[] | null>(null)
+  const [failure, setFailure] = useState<Failure | null>(null)
   // A dialog that is opened again starts clean: the box is unticked and the last refusal is not there.
   const [seenOpen, setSeenOpen] = useState(open)
   if (seenOpen !== open) {
@@ -91,7 +102,7 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
     setFailure(null)
     approve.mutate({ participantId, draftId: draft.id, acknowledgeOverlaps: needsAcknowledgement && acknowledged }, {
       onSuccess: () => onApproved(),
-      onError: error => setFailure(failureMessages(error)),
+      onError: error => setFailure(timedOut(error) ? { timedOut: true, messages: [TIMED_OUT_MESSAGE] } : { timedOut: false, messages: failureMessages(error) }),
     })
   }
 
@@ -117,11 +128,14 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
         {data && (blocked
           ? <Reasons reasons={data.reasons} blocks={blocks} onGoToBlock={onGoToBlock ? (blockId, step) => { onGoToBlock(blockId, step); onClose() } : undefined} />
           : <WhatItDoes participantId={participantId} draft={draft} preview={data} acknowledged={acknowledged} onAcknowledge={setAcknowledged} />)}
-        {failure && (
-          <Callout tone="danger" title="Not approved">
-            <ul className="list-disc pl-5">{failure.map(message => <li key={message}>{friendlyMessage(message, blocks)}</li>)}</ul>
-          </Callout>
-        )}
+        {failure && (failure.timedOut
+          // No answer is not a refusal: it may well have been approved, so this says to look, not that it failed. The exits are back (the request is over), and approving again is safe.
+          ? <Callout tone="warning" title="No answer came back">{failure.messages[0]}</Callout>
+          : (
+            <Callout tone="danger" title="Not approved">
+              <ul className="list-disc pl-5">{failure.messages.map(message => <li key={message}>{friendlyMessage(message, blocks)}</li>)}</ul>
+            </Callout>
+          ))}
       </div>
     </Modal>
   )
@@ -133,13 +147,13 @@ function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge
   const patterns = plural(preview.patternsToCreate, 'weekly pattern')
   const range = `${start} to ${formatServiceDate(draft.agreementEndDate)}`
   // The shifts are made to the horizon the server gives (the organisation's setting, never a number said here); when the agreement ends before it, everything is made now and nothing is added later.
-  const keepsGoing = !!preview.horizonEnd && preview.horizonEnd < draft.agreementEndDate
-  const makes = preview.shiftsToCreate > 0 && preview.horizonEnd
-    ? `Creates ${patterns}, ${range}, and ${plural(preview.shiftsToCreate, 'unfilled shift')} up to ${formatServiceDate(preview.horizonEnd)}.${keepsGoing ? ' After that, unfilled shifts are added each day until the agreement ends.' : ''}`
-    : `Creates ${patterns}, ${range}.`
+  // "Added each day" is the daily top-up's work: the server says whether it is on (an older one does not say, and it was), and with it off the dialog promises nothing past the horizon.
+  const topUpOn = preview.topUpEnabled !== false
+  const keepsGoing = topUpOn && !!preview.horizonEnd && preview.horizonEnd < draft.agreementEndDate
+  const makesShifts = preview.shiftsToCreate > 0 && !!preview.horizonEnd
   const ends = preview.patternsToEnd > 0 && preview.endsFromVersion !== undefined
-    ? ` Ends ${plural(preview.patternsToEnd, 'pattern')} from version ${preview.endsFromVersion} the day before ${start}.`
-    : ''
+    ? `Ends ${plural(preview.patternsToEnd, 'pattern')} from version ${preview.endsFromVersion} the day before ${start}.`
+    : null
   const old = preview.oldShiftsRemaining
   const oldCount = old.open + old.assigned
   const oneOld = oldCount === 1
@@ -149,13 +163,18 @@ function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge
   return (
     <>
       <p className="text-[var(--color-muted-foreground)]">Puts this version&apos;s weekly patterns on the roster. It is separate from signing: nothing is signed or sent.</p>
-      <p className="font-medium">{`${makes}${ends}`}</p>
+      {/* What it does, a short line for each fact: the patterns, the shifts, what ends. */}
+      <div className="flex flex-col gap-1 font-medium">
+        <p>{`Creates ${patterns}, ${range}.`}</p>
+        {makesShifts && <p>{`Makes ${plural(preview.shiftsToCreate, 'unfilled shift')} up to ${formatServiceDate(preview.horizonEnd!)}.${keepsGoing ? ' After that, unfilled shifts are added each day until the agreement ends.' : ''}`}</p>}
+        {ends && <p>{ends}</p>}
+      </div>
       {preview.shiftsToCreate === 0 && (preview.shiftsNote
         ? <p>{preview.shiftsNote}</p>
-        : <p>{"No unfilled shifts yet. They are added each day as the agreement's dates come near."}</p>)}
+        : <p>{topUpOn ? "No unfilled shifts yet. They are added each day as the agreement's dates come near." : 'No unfilled shifts are made now.'}</p>)}
       {oldCount > 0 && old.firstDate && (
         <p>
-          {old.open} unfilled and {old.assigned} assigned {oneOld ? 'shift' : 'shifts'}{old.fromVersion !== undefined ? ` from version ${old.fromVersion}` : ''}, from {formatServiceDate(old.firstDate)} on, {oneOld ? 'stays' : 'stay'} on the roster. The new version&apos;s unfilled shifts will sit beside {oneOld ? 'it' : 'them'} at the same times.{' '}
+          {old.open} unfilled and {old.assigned} assigned {oneOld ? 'shift' : 'shifts'}{old.fromVersion !== undefined ? ` from version ${old.fromVersion}` : ''}, from {formatServiceDate(old.firstDate)} on, {oneOld ? 'stays' : 'stay'} on the roster. The new version&apos;s unfilled shifts will sit beside {oneOld ? 'it' : 'them'} on the same days.{' '}
           {/* A new tab: the person can look at the roster and come back to approve, instead of losing the dialog and its preview. */}
           <Link className="font-medium underline" to={rosterLink(old.firstDate, participantId)} target="_blank" rel="noopener noreferrer">
             {oneOld ? 'See it on the roster' : 'See them on the roster'}<span className="sr-only"> (opens in a new tab)</span>
@@ -166,8 +185,8 @@ function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge
         <section aria-labelledby="overlap-heading" className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)]">
           <h4 id="overlap-heading" className="font-semibold">{`${plural(overlaps.length, 'hand-made pattern')} ${manyOverlaps ? 'overlap' : 'overlaps'}`}</h4>
           <p className="text-[var(--color-muted-foreground)]">{manyOverlaps
-            ? 'They are not ended or changed. The new patterns are made beside them, so the roster will ask for both until you decide.'
-            : 'It is not ended or changed. The new patterns are made beside it, so the roster will ask for both until you decide.'}</p>
+            ? 'They are not ended or changed. The new patterns are made beside them, so the roster will show shifts for both until you decide.'
+            : 'It is not ended or changed. The new patterns are made beside it, so the roster will show shifts for both until you decide.'}</p>
           <ul className="flex flex-col gap-1">
             {overlaps.map(pattern => (
               <li key={pattern.id} className="flex flex-col">

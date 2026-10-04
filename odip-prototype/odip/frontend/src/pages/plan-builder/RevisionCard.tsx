@@ -129,7 +129,8 @@ function ApprovalNote({ participantId, approval, replacedBy, noteRef }: { partic
         <p>
           {approval.shiftsCreated > 0 && approval.horizonEnd
             ? `${patterns}, unfilled shifts to ${formatServiceDate(approval.horizonEnd)}.`
-            : `${patterns}. Unfilled shifts are added each day, once the participant is active and the agreement's dates come near.`}
+            // "Added each day" is the daily top-up's work: while the server has it off (an older one does not say, and it was on) the card promises nothing of the kind.
+            : `${patterns}. ${approval.topUpEnabled !== false ? "Unfilled shifts are added each day, once the participant is active and the agreement's dates come near." : 'No unfilled shifts were made.'}`}
         </p>
         {replacedBy
           ? <p className="mt-1">Replaced by version {replacedBy.version} on {formatWithTimeZone(replacedBy.approvedAt, undefined, DATE_PARTS)}: these patterns end on {formatServiceDate(addDays(replacedBy.agreementStartDate, -1))}.</p>
@@ -219,6 +220,8 @@ function FullRevision({ participantId, draft, onDownload, downloading, onCollaps
     dialogWasOpen.current = false
     note.current?.focus()
   }, [draft.approval])
+  // A dialog closed without an approval (Cancel, Escape, a way to a block) was not on the way to one: when the approval turns up later, made by somebody else and read by a refetch, it must not pull focus here.
+  const closeWithoutApproving = () => { dialogWasOpen.current = false; setApproving(false) }
   const fromBlocks = draft.blocks.length > 0
   const lines = draft.lines.map((line, index) => ({ ...line, key: `${line.itemCode}-${index}` }))
   const pricing = draft.pricing
@@ -259,7 +262,7 @@ function FullRevision({ participantId, draft, onDownload, downloading, onCollaps
     ) : approverRoles && (
       <p className="text-sm text-[var(--color-muted-foreground)]">Your organisation lets only {joinList(approverRoles)} approve plans.</p>
     ))}
-    {approvable && mayApprove && <ApprovalDialog open={approving} participantId={participantId} draft={draft} onClose={() => setApproving(false)} onApproved={() => setApproving(false)} onGoToBlock={onGoToBlock} />}
+    {approvable && mayApprove && <ApprovalDialog open={approving} participantId={participantId} draft={draft} onClose={closeWithoutApproving} onApproved={() => setApproving(false)} onGoToBlock={onGoToBlock} />}
     <ElectronicSigningEvidencePanel participantId={participantId} draft={draft} />
 
     {fromBlocks ? (

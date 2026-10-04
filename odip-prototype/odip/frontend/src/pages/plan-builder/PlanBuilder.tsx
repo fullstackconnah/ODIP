@@ -199,7 +199,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 id="plan-heading" ref={headingRef} tabIndex={-1} className="font-semibold focus:outline-none">{title}</h2>
+          <h2 id="plan-heading" ref={headingRef} tabIndex={-1} className="scroll-mt-20 font-semibold focus:outline-none">{title}</h2>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             {session ? (session.hasBlock ? describeBlock(session.entry.block) : 'Choose where the block starts. Nothing changes in the plan until you add it.')
               : readOnly ? (readOnlyNote ?? 'The plan this draft was priced from.') : 'Each block is one weekly routine, priced from the NDIS catalogue on the date of each shift.'}

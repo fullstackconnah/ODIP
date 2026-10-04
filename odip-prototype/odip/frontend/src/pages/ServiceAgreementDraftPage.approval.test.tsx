@@ -86,14 +86,28 @@ describe('ServiceAgreementDraftPage: when the newest revision is approved', () =
     expect(within(screen.getByRole('region', { name: 'Support plan' })).getByText(/^The agreement:/).textContent).toBe('The agreement: $30,610.28, 416 h of support.')
   })
 
-  it("puts focus on the plan's heading when Start a new revision is pressed: the button it was on is gone", async () => {
+  it("puts focus on the plan's heading when Start a new revision is pressed: the button it was on is gone, and the heading is brought to the top only once the page has unlocked", async () => {
     show(revision({ approval: approval() }))
     renderPage()
     const user = userEvent.setup()
+    // jsdom has no scrollIntoView: a stand-in that notes what the page looked like the moment it was called.
+    const proto = Element.prototype as { scrollIntoView?: (arg?: boolean | ScrollIntoViewOptions) => void }
+    const original = proto.scrollIntoView
+    const calls: { id: string; options: unknown; unlocked: boolean }[] = []
+    proto.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) {
+      calls.push({ id: this.id, options, unlocked: screen.queryByRole('button', { name: 'Start a new revision' }) === null && screen.getByLabelText('Agreement start') !== null })
+    }
+    try {
+      await user.click(screen.getByRole('button', { name: 'Start a new revision' }))
 
-    await user.click(screen.getByRole('button', { name: 'Start a new revision' }))
-
-    await waitFor(() => expect(document.activeElement).toBe(document.getElementById('plan-heading')))
+      await waitFor(() => expect(document.activeElement).toBe(document.getElementById('plan-heading')))
+      // Unlocking turns a short list of facts into a tall form above the plan: the heading is moved to the top of the view after that, not before it (it used to be focused first and then pushed down).
+      expect(calls).toEqual([{ id: 'plan-heading', options: { block: 'start' }, unlocked: true }])
+      expect(document.getElementById('plan-heading')).toHaveClass('scroll-mt-20')                 // so it stops clear of the sticky header
+    } finally {
+      if (original) proto.scrollIntoView = original
+      else delete proto.scrollIntoView
+    }
   })
 
   it('says on an older approved revision that a newer one replaced it, and keeps the roster link for the live one only', () => {

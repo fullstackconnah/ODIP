@@ -50,7 +50,13 @@ export function useApprovalPreview(participantId: string | undefined, id: string
 }
 
 /**
- * Approves the newest revision for rostering: the server records who and when, makes the weekly roster patterns and the open shifts, and ends the patterns of the revision before. It changes what
+ * How long the approval request is waited for. The confirm dialog holds every way out while the request is on its way, and the shared client sets no timeout, so a dropped connection would leave it
+ * up until the browser gave up. Approving twice is safe (an approved revision answers with its existing approval), so giving up and asking the person to check the card cannot do harm.
+ */
+export const APPROVE_TIMEOUT_MS = 30_000
+
+/**
+ * Approves the newest revision for rostering: the server records who and when, makes the weekly roster patterns and the unfilled shifts, and ends the patterns of the revision before. It changes what
  * the revisions list, the patterns page, the roster board and the participant's rostering tab show, so each is refreshed. A refusal (a newer revision exists, something the preview did not know) refreshes
  * only the revisions and the preview: nothing on the roster changed.
  */
@@ -58,7 +64,7 @@ export function useApproveServiceAgreementDraft() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ participantId, draftId, acknowledgeOverlaps }: { participantId: string; draftId: string } & ApproveDraftDto) =>
-      apiPost<ServiceAgreementDraftDto>(`${path(participantId)}/${draftId}/approve`, { acknowledgeOverlaps }),
+      apiPost<ServiceAgreementDraftDto>(`${path(participantId)}/${draftId}/approve`, { acknowledgeOverlaps }, { timeout: APPROVE_TIMEOUT_MS }),
     onSuccess: (_, { participantId }) => Promise.all([
       queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] }),
       queryClient.invalidateQueries({ queryKey: ['service-agreement-draft', participantId] }),
