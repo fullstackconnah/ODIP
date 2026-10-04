@@ -1080,3 +1080,81 @@ describe('editor: a set-aside that no period carries is said, and "Split again" 
     expect(periods.every(period => period.setAside === period.planAmount)).toBe(true)   // the whole 4000 is set aside
   })
 })
+
+describe('editor: a typed zero set-aside is "none" until the person confirms it means $0 (Q1)', () => {
+  const ZERO_LINE = 'A set-aside of $0 means nothing may be claimed against this pool. Leave it blank if none is recorded.'
+  const confirmBox = () => within(coreCard()).queryByRole('checkbox', { name: /set aside \$0/i })
+
+  async function typedZero(box = '0') {
+    const view = renderEditor()
+    typeYear()
+    await view.user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await view.user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '4000')
+    await view.user.type(within(coreCard()).getByLabelText('Set-aside (optional)'), box)
+    return view
+  }
+
+  it('shows the confirmation line, with a check box, beside the box while it holds a zero, in whichever way the zero is written', async () => {
+    for (const box of ['0', '0.00']) {
+      const { unmount } = await typedZero(box)
+
+      expect(within(coreCard()).getByText(ZERO_LINE)).toBeInTheDocument()
+      expect(confirmBox()).toBeInTheDocument()
+      expect(confirmBox()).not.toBeChecked()
+      unmount()
+    }
+  })
+
+  it('says nothing while the box is blank or holds another figure', async () => {
+    const { user } = await typedZero('500')
+    expect(within(coreCard()).queryByText(ZERO_LINE)).not.toBeInTheDocument()
+    expect(confirmBox()).not.toBeInTheDocument()
+
+    await user.clear(within(coreCard()).getByLabelText('Set-aside (optional)'))
+    expect(within(coreCard()).queryByText(ZERO_LINE)).not.toBeInTheDocument()
+  })
+
+  it('saves no set-aside for a zero nobody confirmed: it is the same as leaving the box blank', async () => {
+    const { user } = await typedZero()
+
+    expect(within(coreCard()).getAllByLabelText(/^Set-aside, /).map(input => (input as HTMLInputElement).value)).toEqual(['', '', '', ''])
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    const periods = create.mock.calls[0][0].pools[0].periods as { planAmount: number; setAside?: number }[]
+    expect(periods).toHaveLength(4)
+    expect(periods.every(period => period.setAside === undefined)).toBe(true)
+  })
+
+  it('saves $0 on every period once it is confirmed, and shows the zeros it put on the periods', async () => {
+    const { user } = await typedZero()
+
+    await user.click(confirmBox()!)
+
+    expect(confirmBox()).toBeChecked()
+    expect(within(coreCard()).getAllByLabelText(/^Set-aside, /).map(input => (input as HTMLInputElement).value)).toEqual(['0.00', '0.00', '0.00', '0.00'])
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+    const periods = create.mock.calls[0][0].pools[0].periods as { planAmount: number; setAside?: number }[]
+    expect(periods.map(period => period.setAside)).toEqual([0, 0, 0, 0])
+  })
+
+  it('goes back to saving nothing when the confirmation is taken back', async () => {
+    const { user } = await typedZero()
+    await user.click(confirmBox()!)
+
+    await user.click(confirmBox()!)
+
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+    const periods = create.mock.calls[0][0].pools[0].periods as { planAmount: number; setAside?: number }[]
+    expect(periods.every(period => period.setAside === undefined)).toBe(true)
+  })
+
+  it('shows a saved plan whose set-asides are $0 with the confirmation already given, and saves it as it was', async () => {
+    const stored = plan({ pools: [pool({ periods: quarters(2000, 0) })] })
+    const { user } = renderEditor({ plan: stored })
+
+    expect(confirmBox()).toBeChecked()
+    expect(within(coreCard()).getByText(ZERO_LINE)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect((update.mock.calls[0][0].body.pools[0].periods as { setAside?: number }[]).map(period => period.setAside)).toEqual([0, 0, 0, 0])
+  })
+})

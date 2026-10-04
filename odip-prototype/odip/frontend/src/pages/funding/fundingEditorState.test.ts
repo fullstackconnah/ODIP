@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { FundingPlanDto } from '@/api/types'
 import {
-  addCorePool, addStatedPool, editorStateFromPlan, emptyEditorState, hasPool, moneyOf, moneyText, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, startFromBilling,
-  toSaveBody, validate, withPeriodEdit, withPlanFields, withPoolTotals, type EditorState,
+  addCorePool, addStatedPool, editorStateFromPlan, emptyEditorState, hasPool, moneyOf, moneyText, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, setAsideOf,
+  startFromBilling, toSaveBody, validate, withPeriodEdit, withPlanFields, withPoolTotals, withSetAsideZeroConfirmed, type EditorState,
 } from './fundingEditorState'
 
 // The editor's form as plain data: what the person typed, how the periods follow the dates and the totals, what is wrong in plain words, and the body that is saved.
@@ -591,5 +591,110 @@ describe('the request body', () => {
     const body = toSaveBody(whole)
     expect(body).not.toHaveProperty('periodLengthMonths')
     expect(body.pools[0].periods).toEqual([{ periodStart: '2026-07-01', periodEnd: '2027-06-30', planAmount: 8000, setAside: 6000 }])
+  })
+})
+
+describe('a typed zero in the set-aside box: "none", or "$0 allowed"?', () => {
+  const zeroTyped = (): EditorState => {
+    const state = addCorePool(yearPlan(), 'PlanManaged', { totalText: '4000' })
+    return withPoolTotals(state, state.pools[0].key, { setAsideText: '0' })
+  }
+  const confirmedZero = (): EditorState => {
+    const state = zeroTyped()
+    return withSetAsideZeroConfirmed(state, state.pools[0].key, true)
+  }
+  const asides = (state: EditorState) => state.pools[0].periods.map(period => period.setAside)
+
+  it('is no set-aside at all until the person confirms it: no period carries one, nothing is sent and nothing is refused', () => {
+    const state = zeroTyped()
+
+    expect(state.pools[0].setAsideText).toBe('0')
+    expect(asides(state)).toEqual(['', '', '', ''])
+    expect(poolSums(state.pools[0])).toMatchObject({ typedSetAside: null, setAsideMissing: false, setAsideMismatch: false })
+    expect(validate(state).any).toBe(false)
+    expect(toSaveBody(state).pools[0].periods.every(period => !('setAside' in period))).toBe(true)
+  })
+
+  it('is read the same however the zero is written', () => {
+    for (const text of ['0', '0.00', '$0', ' 0.0 ']) {
+      const state = addCorePool(yearPlan(), 'PlanManaged', { totalText: '4000' })
+      const typed = withPoolTotals(state, state.pools[0].key, { setAsideText: text })
+      expect(setAsideOf(typed.pools[0]), text).toBeNull()
+    }
+  })
+
+  it('is a deliberate $0 once confirmed: every period carries 0.00 and every period is sent with a set-aside of 0', () => {
+    const confirmed = confirmedZero()
+
+    expect(asides(confirmed)).toEqual(['0.00', '0.00', '0.00', '0.00'])
+    expect(setAsideOf(confirmed.pools[0])).toBe(0)
+    expect(poolSums(confirmed.pools[0])).toMatchObject({ typedSetAside: 0, periodsSetAside: 0, setAsideMismatch: false, setAsideMissing: false })
+    expect(validate(confirmed).any).toBe(false)
+    expect(toSaveBody(confirmed).pools[0].periods.map(period => period.setAside)).toEqual([0, 0, 0, 0])
+  })
+
+  it('goes back to none when the confirmation is taken back: the zeros it spread are cleared', () => {
+    const confirmed = confirmedZero()
+
+    const undone = withSetAsideZeroConfirmed(confirmed, confirmed.pools[0].key, false)
+
+    expect(asides(undone)).toEqual(['', '', '', ''])
+    expect(toSaveBody(undone).pools[0].periods.every(period => !('setAside' in period))).toBe(true)
+  })
+
+  it('has to be confirmed again after the box held another figure (a confirmation is for the zero that was in front of the person)', () => {
+    let state = confirmedZero()
+    state = withPoolTotals(state, state.pools[0].key, { setAsideText: '500' })
+    expect(state.pools[0].setAsideZeroConfirmed).toBe(false)
+    expect(poolSums(state.pools[0]).typedSetAside).toBe(500)
+
+    state = withPoolTotals(state, state.pools[0].key, { setAsideText: '0' })
+
+    expect(setAsideOf(state.pools[0])).toBeNull()
+    expect(asides(state)).toEqual(['', '', '', ''])   // the 500's shares were cleared, as when the box is cleared, and the zero is not yet a figure
+  })
+
+  it('stays confirmed while the box is still a zero, however it is written on the way', () => {
+    let state = confirmedZero()
+    state = withPoolTotals(state, state.pools[0].key, { setAsideText: '0.00' })
+
+    expect(state.pools[0].setAsideZeroConfirmed).toBe(true)
+    expect(asides(state)).toEqual(['0.00', '0.00', '0.00', '0.00'])
+  })
+
+  it('applies to a pool whose periods were edited by hand: confirmed, it spreads over them without touching their amounts', () => {
+    let state = addCorePool(yearPlan(), 'PlanManaged', { totalText: '4000' })
+    state = withPeriodEdit(state, state.pools[0].key, 0, { planAmount: '3000.00' })
+    state = withPoolTotals(state, state.pools[0].key, { setAsideText: '0' })
+    expect(asides(state)).toEqual(['', '', '', ''])
+
+    state = withSetAsideZeroConfirmed(state, state.pools[0].key, true)
+
+    expect(asides(state)).toEqual(['0.00', '0.00', '0.00', '0.00'])
+    expect(state.pools[0].periods[0].planAmount).toBe('3000.00')
+  })
+
+  it('reads a saved plan whose set-asides are all $0 as a confirmed $0 (it is what was saved), and one with none or another figure as not', () => {
+    const stored = (setAside?: number): FundingPlanDto => ({
+      id: 'plan-1', participantId: 'p1', planStart: '2026-07-01', planEnd: '2026-12-31', periodLengthMonths: 6, evidence: 'PlanCopy', revision: 1, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z',
+      pools: [{
+        id: 'pool-1', position: 0, kind: 'CoreFlexible', paceCategory: 0, managementType: 'PlanManaged', name: 'Core (flexible)', planTotal: 6000, ...(setAside === undefined ? {} : { setAsideTotal: setAside }),
+        periods: [{ id: 'a', position: 0, periodStart: '2026-07-01', periodEnd: '2026-12-31', planAmount: 6000, ...(setAside === undefined ? {} : { setAside }) }],
+      }],
+    })
+
+    const zero = editorStateFromPlan(stored(0))
+    expect(zero.pools[0].setAsideZeroConfirmed).toBe(true)
+    expect(toSaveBody(zero).pools[0].periods[0].setAside).toBe(0)
+    expect(editorStateFromPlan(stored()).pools[0].setAsideZeroConfirmed).toBe(false)
+    expect(editorStateFromPlan(stored(500)).pools[0].setAsideZeroConfirmed).toBe(false)
+  })
+
+  it('does the same for a plan with no funding periods, whose single period is the box itself', () => {
+    const whole = addCorePool({ ...yearPlan(), periodLengthMonths: null }, 'PlanManaged', { totalText: '8000', setAsideText: '0' })
+
+    expect(toSaveBody(whole).pools[0].periods).toEqual([{ periodStart: '2026-07-01', periodEnd: '2027-06-30', planAmount: 8000 }])
+    const confirmed = withSetAsideZeroConfirmed(whole, whole.pools[0].key, true)
+    expect(toSaveBody(confirmed).pools[0].periods).toEqual([{ periodStart: '2026-07-01', periodEnd: '2027-06-30', planAmount: 8000, setAside: 0 }])
   })
 })
