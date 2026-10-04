@@ -51,8 +51,14 @@ public class ClaimsControllerTests
         return new OdipDbContext(options, tenant.Object);
     }
 
-    private static ClaimsController CreateController(OdipDbContext db) =>
-        new(db, new ClaimGenerationService(db), new ShiftClaimGenerationService(db), new BprCsvService(db), new InvoiceService(db));
+    private static ClaimsController CreateController(OdipDbContext db)
+    {
+        // A SuperAdmin context with no organisation chosen: the claim detail then carries no budget block (the budget tests are in the Funding folder).
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        return new(db, new ClaimGenerationService(db), new ShiftClaimGenerationService(db), new BprCsvService(db), new InvoiceService(db), new BudgetLedgerService(db, TimeProvider.System), tenant.Object);
+    }
 
     [Fact]
     public async Task GetClaim_LineItem_IncludesParticipantId_EqualToSourceBookingsParticipant()
