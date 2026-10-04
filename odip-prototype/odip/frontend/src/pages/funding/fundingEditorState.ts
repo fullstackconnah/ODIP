@@ -2,6 +2,7 @@ import type { BillingSourcesHintDto, BudgetEvidenceSource, FundingPlanDto, Fundi
 import type { PlanType } from '@/api/types/enums'
 import { addMonthsIso, MAX_PLAN_DAYS, proposePeriods, spreadSetAside, sumAmounts, toCents } from '@/lib/fundingPeriods'
 import { formatDayNumber, parseDateOnly } from '@/lib/dateOnly'
+import { formatCurrency } from '@/lib/utils'
 
 // The plan budget editor's form, as plain data: what the person typed (money stays text until it is saved, so clearing a box to type another figure does not snap to 0), how the
 // periods follow the plan's dates and the typed totals, what is wrong in plain words, and the request body. No React in here, so every rule has a test. The server checks the same
@@ -383,6 +384,9 @@ const NOT_AN_AMOUNT = 'Enter dollars and cents, like 8000.00.'
 const TOO_LARGE = 'The most a plan amount can be is $99,999,999.99.'
 /** A set-aside typed in the box that no period carries (the periods are what is saved, so it would be saved as none). Also said live, beside the periods, as soon as it is so. */
 export const SET_ASIDE_NOT_APPLIED = 'The set-aside is not on any period yet. Apply the set-aside to the periods.'
+/** The save is refused: the periods' set-asides add up to something other than the box. Said in the box's own message slot, with both figures and the two ways out. */
+export const setAsideDisagrees = (periods: number, typed: number): string =>
+  `The set-asides on the periods add up to ${formatCurrency(periods)}, not ${formatCurrency(typed)}. Apply the set-aside to the periods, or change this to ${formatCurrency(periods)}.`
 
 function amountProblem(text: string, required: boolean, requiredMessage: string): string | undefined {
   if (isBlank(text)) return required ? requiredMessage : undefined
@@ -434,7 +438,14 @@ export function validate(state: EditorState): Problems {
         if (!row.setAside && planValue !== null && asideValue !== null && toCents(asideValue) > toCents(planValue)) row.setAside = 'More than the plan amount.'
         if (row.planAmount || row.setAside) found.periods[index] = row
       })
-      if (!found.setAside && poolSums(pool).setAsideMissing) found.general.push(SET_ASIDE_NOT_APPLIED)
+      const sums = poolSums(pool)
+      if (!found.setAside && sums.setAsideMissing) found.general.push(SET_ASIDE_NOT_APPLIED)
+      // The set-aside is the pool's LIMIT, so the periods are never saved behind a figure the person typed differently: the box's own message refuses the save, and names both figures and the way
+      // out. (A plan amount that no longer adds up is only said: it is not a limit.) The box's own problem, or a period's own, is said first so that one mistake is not said twice.
+      const periodHasOwnProblem = Object.values(found.periods).some(row => row.setAside)
+      if (!found.setAside && !periodHasOwnProblem && sums.setAsideMismatch && sums.periodsSetAside !== null && sums.typedSetAside !== null) {
+        found.setAside = setAsideDisagrees(sums.periodsSetAside, sums.typedSetAside)
+      }
     }
 
     if (found.name || found.notes || found.total || found.setAside || found.general.length > 0 || Object.keys(found.periods).length > 0) problems.pools[pool.key] = found

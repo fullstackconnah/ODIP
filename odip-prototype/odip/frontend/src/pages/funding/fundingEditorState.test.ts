@@ -308,7 +308,7 @@ describe('the set-aside box agrees with the periods, in whichever order it is ty
     expect(applied.periods.map(period => period.setAside)).toEqual(['50.41', '50.41', '49.32', '49.86'])   // 200 over 92, 92, 90 and 91 days
   })
 
-  it('keeps the uneven set-asides of a saved plan when its box is corrected, and says they no longer add up to it', () => {
+  it('keeps the uneven set-asides of a saved plan when its box is corrected, and REFUSES the save in the box\'s own message (they no longer add up to it)', () => {
     const stored: FundingPlanDto = {
       id: 'plan-1', participantId: 'p1', planStart: '2026-07-01', planEnd: '2027-06-30', periodLengthMonths: 6, evidence: 'PlanCopy', revision: 1, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z',
       pools: [{
@@ -325,7 +325,8 @@ describe('the set-aside box agrees with the periods, in whichever order it is ty
 
     expect(corrected.pools[0].periods.map(period => period.setAside)).toEqual(['5000.00', '3000.00'])   // the plan's own release schedule survives
     expect(poolSums(corrected.pools[0])).toMatchObject({ periodsSetAside: 8000, typedSetAside: 8100, setAsideMismatch: true })
-    expect(validate(corrected).any).toBe(false)   // a mismatch is said, not refused: the periods are what is saved
+    expect(validate(corrected).any).toBe(true)   // the set-aside is the pool's limit: a figure the person typed differently is never saved behind a warning
+    expect(validate(corrected).pools[corrected.pools[0].key].setAside).toBe('The set-asides on the periods add up to $8,000.00, not $8,100.00. Apply the set-aside to the periods, or change this to $8,000.00.')
   })
 
   it('lets the cells that came from the box follow it as it is typed, digit by digit', () => {
@@ -792,5 +793,69 @@ describe('"Apply the set-aside to the periods" (Q4): the box is spread over the 
 
     expect(asides(applied)).toEqual(['0.00', '0.00', '0.00', '0.00'])
     expect(amounts(applied)).toEqual(['1000.00', '1500.00', '500.00', '1000.00'])
+  })
+})
+
+describe('a set-aside box that disagrees with the periods refuses the save, in the box\'s own message (Q2)', () => {
+  const DISAGREES = (periods: string, typed: string) => `The set-asides on the periods add up to ${periods}, not ${typed}. Apply the set-aside to the periods, or change this to ${periods}.`
+  /** Four periods of $1,000 whose set-asides were typed by hand ($10, $100, $100, $100), then the box corrected to `box`. */
+  const corrected = (box: string): EditorState => {
+    let state = addCorePool(yearPlan(), 'PlanManaged', { totalText: '4000' })
+    ;['1000.00', '1000.00', '1000.00', '1000.00'].forEach((planAmount, index) => { state = withPeriodEdit(state, state.pools[0].key, index, { planAmount }) })
+    state = withPoolTotals(state, state.pools[0].key, { setAsideText: '400' })   // $100 on each period
+    state = withPeriodEdit(state, state.pools[0].key, 0, { setAside: '10.00' })
+    return withPoolTotals(state, state.pools[0].key, { setAsideText: box })
+  }
+
+  it('refuses it, with the reason in the set-aside box\'s own slot, naming both figures and the way out', () => {
+    const state = corrected('200')
+    const found = validate(state)
+
+    expect(found.any).toBe(true)
+    expect(found.pools[state.pools[0].key].setAside).toBe(DISAGREES('$310.00', '$200.00'))
+    expect(found.pools[state.pools[0].key].general).toEqual([])   // not a second message under the table that Save would ignore
+  })
+
+  it('is lifted by "Apply the set-aside to the periods", and by changing the box to what the periods add up to', () => {
+    const state = corrected('200')
+
+    expect(validate(applySetAside(state, state.pools[0].key)).any).toBe(false)
+    expect(validate(withPoolTotals(state, state.pools[0].key, { setAsideText: '310' })).any).toBe(false)
+  })
+
+  it('also refuses a period set-aside edited by hand away from the box (the figure the person typed last is not silently the one that is saved)', () => {
+    let state = addCorePool(yearPlan(), 'PlanManaged', { totalText: '4000', setAsideText: '400' })
+    state = withPeriodEdit(state, state.pools[0].key, 2, { setAside: '150.00' })
+
+    expect(poolSums(state.pools[0])).toMatchObject({ typedSetAside: 400, setAsideMismatch: true })
+    expect(validate(state).pools[state.pools[0].key].setAside).toMatch(/^The set-asides on the periods add up to \$\d[\d,]*\.\d\d, not \$400\.00\./)
+  })
+
+  it('does not pile on: the box\'s own problem, or a period\'s own, is said instead', () => {
+    const over = corrected('9000')   // more than the plan amount, and over the periods' sum too
+    expect(validate(over).pools[over.pools[0].key].setAside).toBe('The set-aside cannot be more than the plan amount.')
+
+    let blankCell = corrected('200')
+    blankCell = withPeriodEdit(blankCell, blankCell.pools[0].key, 3, { setAside: '' })
+    const found = validate(blankCell).pools[blankCell.pools[0].key]
+    expect(found.periods[3].setAside).toBe('Give a set-aside for every period, or for none.')
+    expect(found.setAside).toBeUndefined()
+  })
+
+  it('says nothing for a blank box, an unconfirmed zero, or a pool whose single period is the box itself', () => {
+    for (const box of ['', '0']) {
+      const state = corrected(box)
+      expect(validate(state).any, `box "${box}"`).toBe(false)
+    }
+    const whole = addCorePool({ ...yearPlan(), periodLengthMonths: null }, 'PlanManaged', { totalText: '8000', setAsideText: '6000' })
+    expect(validate(whole).any).toBe(false)
+  })
+
+  it('still says a plan amount that no longer adds up is only said, not refused (the periods are what is saved: it is not a limit)', () => {
+    let state = addCorePool(yearPlan(), 'PlanManaged', { totalText: '8000' })
+    state = withPeriodEdit(state, state.pools[0].key, 0, { planAmount: '3000' })
+
+    expect(poolSums(state.pools[0]).planMismatch).toBe(true)
+    expect(validate(state).any).toBe(false)
   })
 })

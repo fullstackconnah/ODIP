@@ -406,8 +406,9 @@ function PoolCard(
             {sums.planMismatch && sums.periodsPlan !== null && sums.typedPlan !== null && (
               <p className="text-[var(--color-on-warning-container)]">The periods add up to {formatCurrency(sums.periodsPlan)}, not the {formatCurrency(sums.typedPlan)} you typed. The periods are what is saved.</p>
             )}
-            {sums.setAsideMismatch && sums.periodsSetAside !== null && sums.typedSetAside !== null && (
-              <p className="text-[var(--color-on-warning-container)]">The set-asides add up to {formatCurrency(sums.periodsSetAside)}, not the {formatCurrency(sums.typedSetAside)} you typed. The periods are what is saved.</p>
+            {/* A save with these figures is refused, so this is said while the person works; once a save was tried the box's own message says it, and this gives way (one message, not two). */}
+            {sums.setAsideMismatch && sums.periodsSetAside !== null && sums.typedSetAside !== null && !problems?.setAside && (
+              <p className="text-[var(--color-on-warning-container)]">The set-asides add up to {formatCurrency(sums.periodsSetAside)}, not the {formatCurrency(sums.typedSetAside)} you typed. They have to agree before this can be saved.</p>
             )}
             {/* One line that is a warning while the person is working, and the error to put right once a save was tried (the same element, so it is announced once). */}
             {sums.setAsideMissing && (

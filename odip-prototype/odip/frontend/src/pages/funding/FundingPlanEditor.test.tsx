@@ -1002,7 +1002,7 @@ describe('editor: a set-aside the person typed into a period is not overwritten 
 
     expect(first).toHaveValue('10')
     expect(periodSetAsides(coreCard()).slice(1)).toEqual(others)   // nothing was overwritten
-    expect(within(coreCard()).getByText(/^The set-asides add up to \$3\d\d\.\d\d, not the \$200\.00 you typed\. The periods are what is saved\.$/)).toBeInTheDocument()
+    expect(within(coreCard()).getByText(/^The set-asides add up to \$3\d\d\.\d\d, not the \$200\.00 you typed\. They have to agree before this can be saved\.$/)).toBeInTheDocument()
 
     await user.click(within(coreCard()).getByRole('button', { name: 'Split again from the plan amount' }))
 
@@ -1012,16 +1012,16 @@ describe('editor: a set-aside the person typed into a period is not overwritten 
     expect((create.mock.calls[0][0].pools[0].periods as { setAside: number }[]).map(period => period.setAside)).toEqual([50.41, 50.41, 49.32, 49.86])
   })
 
-  it('keeps the set-asides of a saved plan when its box is corrected, and saves them as they are', async () => {
+  it('keeps the set-asides of a saved plan when its box is corrected, but REFUSES to save them behind the corrected figure (Q2)', async () => {
     const { user } = renderEditor({ plan: plan() })   // Core: 1000.00 set aside on each of four periods
     const core = screen.getByRole('region', { name: /^Core \(flexible\), Plan Managed/ })
 
     fireEvent.change(setAsideBox(core), { target: { value: '4100' } })
 
     expect(periodSetAsides(core)).toEqual(['1000.00', '1000.00', '1000.00', '1000.00'])
-    expect(within(core).getByText('The set-asides add up to $4,000.00, not the $4,100.00 you typed. The periods are what is saved.')).toBeInTheDocument()
+    expect(within(core).getByText('The set-asides add up to $4,000.00, not the $4,100.00 you typed. They have to agree before this can be saved.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect((update.mock.calls[0][0].body.pools[0].periods as { setAside: number }[]).map(period => period.setAside)).toEqual([1000, 1000, 1000, 1000])
+    expect(update).not.toHaveBeenCalled()   // the old set-asides would have become the limit while the screen said 4100
   })
 
   it('still follows the box digit by digit while the cells are its own shares', async () => {
@@ -1078,6 +1078,75 @@ describe('editor: a set-aside that no period carries is said, and "Split again" 
     await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
     const periods = create.mock.calls[0][0].pools[0].periods as { planAmount: number; setAside?: number }[]
     expect(periods.every(period => period.setAside === period.planAmount)).toBe(true)   // the whole 4000 is set aside
+  })
+})
+
+describe('editor: a set-aside box that disagrees with the periods refuses the save, in the box\'s own message (Q2)', () => {
+  const DISAGREES = 'The set-asides on the periods add up to $4,000.00, not $4,100.00. Apply the set-aside to the periods, or change this to $4,000.00.'
+  const savedCore = () => screen.getByRole('region', { name: /^Core \(flexible\), Plan Managed/ })   // 1000.00 set aside on each of four periods
+  const box = () => within(savedCore()).getByLabelText('Set-aside (optional)')
+
+  it('puts the reason in the set-aside box\'s own message slot once a save is tried, takes the person to the box, and does not save', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    fireEvent.change(box(), { target: { value: '4100' } })
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(update).not.toHaveBeenCalled()
+    expect(within(savedCore()).getByText(DISAGREES)).toHaveAttribute('role', 'alert')
+    expect(box()).toHaveAttribute('aria-invalid', 'true')
+    expect(box()).toHaveFocus()
+    expect(screen.getByText(SOME_FIELDS)).toBeInTheDocument()
+  })
+
+  it('says it once: the live line under the table gives way to the box\'s own message when the save has been tried', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    fireEvent.change(box(), { target: { value: '4100' } })
+    expect(within(savedCore()).getByText(/set-asides add up to \$4,000\.00, not the \$4,100\.00 you typed/)).toBeInTheDocument()
+    expect(within(savedCore()).queryByText(DISAGREES)).not.toBeInTheDocument()   // nothing in the box's slot before a save is tried: nothing shouts while the person types
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(within(savedCore()).queryByText(/you typed\. They have to agree/)).not.toBeInTheDocument()
+    expect(within(savedCore()).getByText(DISAGREES)).toBeInTheDocument()
+  })
+
+  it('is lifted by "Apply the set-aside to the periods": the save then goes through with set-asides adding up to the box, and the plan amounts as they were', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    fireEvent.change(box(), { target: { value: '4100' } })
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await user.click(within(savedCore()).getByRole('button', { name: 'Apply the set-aside to the periods' }))
+
+    expect(within(savedCore()).queryByText(DISAGREES)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    const periods = update.mock.calls[0][0].body.pools[0].periods as { planAmount: number; setAside: number }[]
+    expect(periods.map(period => period.setAside)).toEqual([1025, 1025, 1025, 1025])
+    expect(periods.map(period => period.planAmount)).toEqual([2000, 2000, 2000, 2000])
+  })
+
+  it('is lifted by changing the box to what the periods add up to, which saves the set-asides as they were', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    fireEvent.change(box(), { target: { value: '4100' } })
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(update).not.toHaveBeenCalled()
+
+    fireEvent.change(box(), { target: { value: '4000' } })
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect((update.mock.calls[0][0].body.pools[0].periods as { setAside: number }[]).map(period => period.setAside)).toEqual([1000, 1000, 1000, 1000])
+  })
+
+  it('also stops a set-aside typed into a period away from the box (the box is the figure on screen, so the periods may not quietly become something else)', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    const first = within(savedCore()).getByLabelText('Set-aside, 1 Jul – 30 Sep 2026')
+    await user.clear(first)
+    await user.type(first, '900')
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(update).not.toHaveBeenCalled()
+    expect(within(savedCore()).getByText('The set-asides on the periods add up to $3,900.00, not $4,000.00. Apply the set-aside to the periods, or change this to $3,900.00.')).toBeInTheDocument()
   })
 })
 
