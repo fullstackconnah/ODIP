@@ -91,6 +91,8 @@ const enquiryFeed = [
   // Moved on, so the Enquiries tab does not list them: intake complete (the Onboarding tab) and finalised (Active participants).
   { id: 'inq-0003', participantId: 'p-0103', firstName: 'Mei', lastName: 'Tanaka', phone: '0455 555 030', email: null, source: 'Email', provenance: 'Support coordinator',
     createdAt: '2026-09-20T03:20:00Z', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: '2026-09-29T05:00:00Z' },
+  { id: 'inq-0005', participantId: 'p-0104', firstName: 'Daniel', lastName: 'Osei', phone: '0466 555 040', email: null, source: 'Phone', provenance: null,
+    createdAt: '2026-09-18T01:10:00Z', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: '2026-09-30T03:00:00Z' },
   { id: 'inq-0004', participantId: 'p-0001', firstName: 'Liam', lastName: 'Okafor', phone: null, email: null, source: 'Phone', provenance: null,
     createdAt: '2026-02-01T00:00:00Z', participantIsDraft: false, participantIsActive: true, participantIntakeCompletedAt: '2026-02-10T00:00:00Z' },
 ]
@@ -99,9 +101,12 @@ const enquiryFeed = [
 // everyone on the worklist as NDIS-funded, and Mei has no plan budget (funding.js holds plans for p-0002 and p-0004 only).
 const FUNDING_NOT_RECORDED_REASON = "Funding is not recorded: add the plan budget on the participant's Funding tab."
 const FUNDING_ENDED_REASON = "The plan budget has ended: record the new plan on the participant's Funding tab."
+// Daniel has done everything but the plan budget, so his onboarding page recommends "Record plan budget" (the one step Warn mode lets wait).
+const ALL_BUT_FUNDING = new Set(['p-0104'])
 const onboardingWorklist = [
   { participantId: 'p-0103', fullName: 'Mei Tanaka', stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 6,
     reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', FUNDING_NOT_RECORDED_REASON] },
+  { participantId: 'p-0104', fullName: 'Daniel Osei', stage: 'Onboarding incomplete', nextAction: 'Record plan budget', completedSteps: 5, totalSteps: 6, reasons: [FUNDING_NOT_RECORDED_REASON] },
 ]
 
 // Drafts are not on the register, so the participants list never returns these; only their detail and checklist are served (the mock's default
@@ -113,6 +118,8 @@ const draftParticipants = [
     isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: null, wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
   { id: 'p-0103', firstName: 'Mei', lastName: 'Tanaka', preferredName: null, fullName: 'Mei Tanaka', maskedNdisNumber: null, planType: 'SelfManaged', region: null,
     isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: '2026-09-29T05:00:00Z', wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
+  { id: 'p-0104', firstName: 'Daniel', lastName: 'Osei', preferredName: null, fullName: 'Daniel Osei', maskedNdisNumber: null, planType: 'PlanManaged', region: null,
+    isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: '2026-09-30T03:00:00Z', wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
 ]
 
 const participantDetailExtras = {
@@ -2256,9 +2263,13 @@ const routes = [
   ['inquiries/:id/onboarding', (id) => {
     const budget = funding.budgetStatus(id)
     const fundingRecorded = budget.recorded
+    const done = ALL_BUT_FUNDING.has(id)
     return {
-      participantId: id, intakeComplete: true, profileComplete: false, serviceTypeConfirmed: false, serviceAgreementSigned: false, fundingRecorded, isReady: false,
-      reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', ...(fundingRecorded ? [] : [budget.ended ? FUNDING_ENDED_REASON : FUNDING_NOT_RECORDED_REASON])],
+      participantId: id, intakeComplete: true, profileComplete: done, serviceTypeConfirmed: done, serviceAgreementSigned: done, fundingRecorded, isReady: done && fundingRecorded,
+      reasons: [
+        ...(done ? [] : ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.']),
+        ...(fundingRecorded ? [] : [budget.ended ? FUNDING_ENDED_REASON : FUNDING_NOT_RECORDED_REASON]),
+      ],
     }
   }],
   ['participants/:id/bookings', (id) => bookings.filter((b) => b.participantId === id)],

@@ -98,7 +98,7 @@ export default function OnboardingDetailPage() {
           : d.fundingRecorded === false
             ? {
                 label: 'Record plan budget',
-                reason: 'The plan budget is recorded on the participant’s Funding tab, from the plan the participant shares or from their plan manager.',
+                reason: 'The plan budget is recorded on the participant’s Funding tab, from the plan the participant shares or from their plan manager. If the plan has not been shared yet, this can wait.',
                 action: canManageFunding ? <Button to={`/participants/${id}?tab=funding`}>Open Funding tab</Button> : null,
               }
             : {

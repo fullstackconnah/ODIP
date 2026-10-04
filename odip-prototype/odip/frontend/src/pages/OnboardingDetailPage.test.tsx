@@ -278,7 +278,8 @@ describe('OnboardingDetailPage — the funding gate', () => {
     const first = renderDetail()
     const recommendation = screen.getByRole('heading', { name: 'Record plan budget' }).closest('section')!
     expect(within(recommendation).getByRole('link', { name: 'Open Funding tab' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
-    expect(within(recommendation).getByText(/The plan budget is recorded on the participant’s Funding tab/)).toBeInTheDocument()
+    // In Warn mode nothing blocks activation, so the card says there is a way out for a plan that has not been shared yet (as the intake card's "Plan not shared yet" does).
+    expect(within(recommendation).getByText('The plan budget is recorded on the participant’s Funding tab, from the plan the participant shares or from their plan manager. If the plan has not been shared yet, this can wait.')).toBeInTheDocument()
     first.unmount()
 
     mockUseQuery.mockReturnValue({ data: { ...everythingElseDone, serviceAgreementSigned: false, fundingRecorded: false }, isLoading: false })
