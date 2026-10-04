@@ -5,7 +5,7 @@
  * `region`/`isRepeatClient`/`serviceStreams`. `isDsoa` (Profile-entry, Key Identifiers) is absent.
  */
 import type { Control, FieldErrors, UseFormRegister } from 'react-hook-form'
-import { Controller } from 'react-hook-form'
+import { Controller, useWatch } from 'react-hook-form'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
 import { CheckboxField } from '@/components/CheckboxField'
@@ -16,6 +16,8 @@ import type { ParticipantFormData } from '@/lib/participantSchema'
 import { PlanTypeComplianceBanner } from '../intakeHelpers'
 import { formGrid, span } from '@/lib/formGrid'
 import { FUNDING_SOURCE_ITEMS, PLAN_TYPE_ITEMS } from '../intakeOptions'
+import { PlanBudgetCard } from '@/pages/funding/PlanBudgetCard'
+import type { PlanType } from '@/api/types/enums'
 
 /**
  * NOTE — scope simplification vs. the retired single-step wizard: that wizard guards a fundingSource
@@ -24,15 +26,18 @@ import { FUNDING_SOURCE_ITEMS, PLAN_TYPE_ITEMS } from '../intakeOptions'
  * flagged as a deliberate simplification in this branch's report, not an oversight.
  */
 export function NdisFundingStep({
-  control, register, errors, fundingSourceValue, planTypeComplianceWarningValue,
+  control, register, errors, fundingSourceValue, planTypeComplianceWarningValue, participantId,
 }: {
   control: Control<ParticipantFormData>
   register: UseFormRegister<ParticipantFormData>
   errors: FieldErrors<ParticipantFormData>
   fundingSourceValue: string | undefined
   planTypeComplianceWarningValue: string | null
+  /** The participant's id once they exist (resuming an intake); a brand-new intake has none yet, and the plan budget card says to save the participant first. */
+  participantId?: string
 }) {
   const showNdisFields = fundingSourceValue !== 'Other'
+  const planType = (useWatch({ control, name: 'planType' }) as PlanType | undefined) ?? 'SelfManaged'
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
       <Card title="Service Streams">
@@ -139,6 +144,9 @@ export function NdisFundingStep({
           <CheckboxField label="Repeat Client" id="isRepeatClient" {...register('isRepeatClient')} className={span.short} />
         </div>
       </Card>
+
+      {/* The plan budget is the NDIS plan's money: it is asked for only for NDIS funding, and saved through the funding endpoints (never this form's patch groups). */}
+      {showNdisFields && <PlanBudgetCard participantId={participantId} planType={planType} />}
     </div>
   )
 }

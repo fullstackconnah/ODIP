@@ -24,6 +24,8 @@ type Detail = {
   serviceTypeConfirmedAt?: string
   serviceTypeConfirmedBy?: string
   serviceAgreementSigned: boolean
+  /** Whether an NDIS-funded participant has a current plan budget on their Funding tab. Left out, or null, for anyone funded another way: they are not asked for one. */
+  fundingRecorded?: boolean | null
   isReady: boolean
   reasons: string[]
   /** The newest revision of the agreement that has been approved for rostering, and when (plan builder, phase D). Absent until one has. */
@@ -40,7 +42,7 @@ function gateState(complete: boolean): Gate['state'] {
 export default function OnboardingDetailPage() {
   const { id } = useParams<{ id: string }>()
   const qc = useQueryClient()
-  const { canManageParticipantLifecycle, canAccessPage } = usePermissions()
+  const { canManageParticipantLifecycle, canAccessPage, canManageFunding } = usePermissions()
   const detail = useQuery({ queryKey: ['onboarding', id], enabled: !!id, queryFn: () => apiGet<Detail>(`/inquiries/${id}/onboarding`) })
   // Participant identity for the heading — the onboarding gate payload above only carries the
   // participantId (a raw GUID), never a name, so the display name is fetched separately.
@@ -98,22 +100,28 @@ export default function OnboardingDetailPage() {
               reason: 'Open the agreement draft to check its signing evidence. Agreements are signed and approved there, not on this screen.',
               action: <Button to={`/participants/${id}/agreement-draft`}>Review agreement evidence</Button>,
             }
-          : scheduleApproved
+          : d.fundingRecorded === false
             ? {
-                // A revision has been approved for rostering: what is left is to look at what it made.
-                label: 'Check the roster',
-                reason: `Version ${d.scheduleApprovedVersion} was approved for rostering${approvedOn ? ` on ${approvedOn}` : ''}: its weekly patterns and unfilled shifts are made. Check them under Shift patterns and on the roster. Nothing is created from this page.`,
-                action: canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
+                label: 'Record plan budget',
+                reason: 'The plan budget is recorded on the participant’s Funding tab, from the plan the participant shares or from their plan manager. If the plan has not been shared yet, this can wait.',
+                action: canManageFunding ? <Button to={`/participants/${id}?tab=funding`}>Open Funding tab</Button> : null,
               }
-            : {
-                label: 'Approve the agreement for rostering',
-                // What to do, not why again: that the schedule is made by approving a revision, and not from here, is said once, in the list of what is still missing below.
-                reason: 'Open the agreement draft and approve its newest revision for rostering. That makes the weekly patterns and unfilled shifts, which you can then check under Shift patterns.',
-                // The draft carries money, so only the roles the API admits to it are sent there.
-                action: canAccessPage('agreement-drafts')
-                  ? <Button to={`/participants/${id}/agreement-draft`}>Open agreement draft</Button>
-                  : canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
-              }
+            : scheduleApproved
+              ? {
+                  // A revision has been approved for rostering: what is left is to look at what it made.
+                  label: 'Check the roster',
+                  reason: `Version ${d.scheduleApprovedVersion} was approved for rostering${approvedOn ? ` on ${approvedOn}` : ''}: its weekly patterns and unfilled shifts are made. Check them under Shift patterns and on the roster. Nothing is created from this page.`,
+                  action: canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
+                }
+              : {
+                  label: 'Approve the agreement for rostering',
+                  // What to do, not why again: that the schedule is made by approving a revision, and not from here, is said once, in the list of what is still missing below.
+                  reason: 'Open the agreement draft and approve its newest revision for rostering. That makes the weekly patterns and unfilled shifts, which you can then check under Shift patterns.',
+                  // The draft carries money, so only the roles the API admits to it are sent there.
+                  action: canAccessPage('agreement-drafts')
+                    ? <Button to={`/participants/${id}/agreement-draft`}>Open agreement draft</Button>
+                    : canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
+                }
 
   const gates: Gate[] = [
     { label: 'Intake completed', state: gateState(d.intakeComplete) },
@@ -121,6 +129,16 @@ export default function OnboardingDetailPage() {
     { label: 'Service needs and provisional lines', state: gateState(d.serviceTypeConfirmed), fixRoute: { to: `/participants/${id}?tab=support`, label: 'Edit service needs' } },
     // The draft carries money, so only the roles the API admits to it are sent there (a ReadOnly or SupportWorker who can read this page would only meet a redirect or a 403).
     { label: 'Current agreement evidence', state: gateState(d.serviceAgreementSigned), context: 'Agreements are signed and approved elsewhere.', fixRoute: canAccessPage('agreement-drafts') ? { to: `/participants/${id}/agreement-draft`, label: 'Open agreement draft' } : undefined },
+    // Only an NDIS-funded participant is asked for a plan budget: the server sends fundingRecorded for them alone, and counts it in the worklist's "of 6 gates", so this list shows the
+    // same six. The Funding tab holds money, so it is offered only to the roles that may open it.
+    ...(typeof d.fundingRecorded === 'boolean'
+      ? [{
+          label: 'Funding recorded', state: gateState(d.fundingRecorded),
+          context: "The plan budget, taken from the plan the participant shares or from their plan manager. Your organisation's readiness rule decides whether activation waits for it.",
+          // It only opens the tab (where "Record plan budget" is the button), so it says so, like its sibling "Open agreement draft".
+          fixRoute: canManageFunding ? { to: `/participants/${id}?tab=funding`, label: 'Open Funding tab' } : undefined,
+        } satisfies Gate]
+      : []),
     {
       label: 'Schedule review',
       // Complete once a revision has been approved for rostering (it made the patterns and the shifts), and the row says which one. Until then it is Blocked and says no more than that and where to go: what the

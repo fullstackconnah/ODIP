@@ -87,6 +87,9 @@ vi.mock('@/api/hooks', () => ({
   // The Plan Pricing tab (Admin and SuperAdmin).
   usePlanPricingSettings: () => ({ data: { registrationGroupsHeld: ['0107', '0104', '0125', '0136', '0115', '0108'], registrationGroupsConfirmed: false, crossingPolicy: 'Split', claimProviderTravel: true, travelKmRateStandard: 0.99, travelKmRateAccessible: 2.76, travelRatesProvisional: true, groupOutings: 'GroupActivities', staUsesHourlyAndAccommodation: true, approverRoles: ['Admin', 'Coordinator'], isDefault: true }, isLoading: false }),
   useUpdatePlanPricingSettings: () => ({ mutate: vi.fn(), isPending: false }),
+  // The Budgets tab (Admin and SuperAdmin; budget phase 1).
+  useBudgetSettings: () => ({ data: { mode: 'Warn', approachingPercent: 80, isDefault: true }, isLoading: false, isError: false, refetch: vi.fn() }),
+  useUpdateBudgetSettings: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 // TenantFormPanel (also mounted unconditionally) imports its mutations from this sibling
@@ -705,5 +708,89 @@ describe('SettingsPage — Plan Pricing tab and the tab in the URL', () => {
 
     expect(screen.getByRole('tab', { name: 'Event Templates', selected: true })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Registration groups you hold' })).not.toBeInTheDocument()
+  })
+})
+
+describe('SettingsPage — Budgets tab and the one-row tab strip', () => {
+  const asRole = (role: 'admin' | 'superAdmin' | 'coordinator') => mockUsePermissions.mockReturnValue({
+    isSuperAdmin: role === 'superAdmin', isAdmin: role === 'admin', canEditProviderSettings: role !== 'coordinator', showBankDetails: role !== 'coordinator', canManageNotifications: false,
+  })
+
+  it('gives an Admin and a SuperAdmin the Budgets tab, right after Plan Pricing, and a Coordinator none', () => {
+    asRole('admin')
+    const admin = renderSettingsPage()
+    const names = screen.getAllByRole('tab').map(tab => tab.textContent)
+    expect(names.indexOf('Budgets')).toBe(names.indexOf('Plan Pricing') + 1)
+    admin.unmount()
+
+    asRole('superAdmin')
+    const superAdmin = renderSettingsPage()
+    expect(screen.getByRole('tab', { name: 'Budgets' })).toBeInTheDocument()
+    superAdmin.unmount()
+
+    asRole('coordinator')
+    renderSettingsPage()
+    expect(screen.queryByRole('tab', { name: 'Budgets' })).not.toBeInTheDocument()
+  })
+
+  it('opens on Budgets from ?tab=budgets, and writes the tab into the URL when it is picked', async () => {
+    const user = userEvent.setup()
+    asRole('admin')
+    const { router } = renderSettingsPageAt('/settings?tab=budgets')
+
+    expect(screen.getByRole('tab', { name: 'Budgets', selected: true })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Warn only' })).toBeChecked()
+
+    await user.click(screen.getByRole('tab', { name: 'Plan Pricing' }))
+    expect(router.state.location.search).toBe('?tab=pricing')
+    await user.click(screen.getByRole('tab', { name: 'Budgets' }))
+    expect(router.state.location.search).toBe('?tab=budgets')
+  })
+
+  it('reads ?tab=budgets as the first tab for a Coordinator, who has no such tab', () => {
+    asRole('coordinator')
+    renderSettingsPageAt('/settings?tab=budgets')
+
+    expect(screen.getByRole('tab', { name: 'Event Templates', selected: true })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'Warn only' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the tab strip to one row that scrolls, not a second row with a tab alone on it', () => {
+    asRole('superAdmin')
+    renderSettingsPage()
+
+    // The one-row mode is what Settings asks of Tabs (overflow="scroll"): its strip carries the thin scrollbar from md up and never the wrap that put the tenth tab alone on a second row.
+    // flex-nowrap and overflow-x-auto are in BOTH modes, so they prove nothing; these two are what tell the modes apart (Tabs.test.tsx pins the same pair on Tabs itself).
+    const strip = screen.getByRole('tablist', { name: 'Settings sections' })
+    expect(strip).toHaveClass('flex-nowrap', 'overflow-x-auto', 'md:[scrollbar-width:thin]')
+    expect(strip).not.toHaveClass('md:flex-wrap')
+  })
+
+  it('scrolls the tab named by ?tab= into view when the strip is wider than its box', () => {
+    asRole('admin')
+    // jsdom has no layout: a 600px window on a strip of 1900px, the Budgets tab at 700 to 820.
+    const proto = HTMLElement.prototype
+    const saved = { scrollWidth: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'), clientWidth: Object.getOwnPropertyDescriptor(proto, 'clientWidth'), rect: proto.getBoundingClientRect, scrollTo: proto.scrollTo }
+    const isStrip = (el: HTMLElement) => el.getAttribute('role') === 'tablist'
+    Object.defineProperty(proto, 'scrollWidth', { configurable: true, get() { return isStrip(this as HTMLElement) ? 1900 : 0 } })
+    Object.defineProperty(proto, 'clientWidth', { configurable: true, get() { return isStrip(this as HTMLElement) ? 600 : 0 } })
+    proto.getBoundingClientRect = function (this: HTMLElement) {
+      const box = (left: number, width: number) => ({ left, right: left + width, width, top: 0, bottom: 44, height: 44, x: left, y: 0, toJSON: () => ({}) }) as DOMRect
+      if (isStrip(this)) return box(0, 600)
+      return this.getAttribute('role') === 'tab' && this.textContent === 'Budgets' ? box(700, 120) : box(0, 100)
+    }
+    const scrollTo = vi.fn()
+    proto.scrollTo = scrollTo as unknown as typeof proto.scrollTo
+    try {
+      renderSettingsPageAt('/settings?tab=budgets')
+
+      // 0 + (700 - 0) - (600 - 120) / 2 = 460, within the scroll range 0 to 1300.
+      expect(scrollTo).toHaveBeenCalledWith({ left: 460 })
+    } finally {
+      if (saved.scrollWidth) Object.defineProperty(proto, 'scrollWidth', saved.scrollWidth); else delete (proto as unknown as Record<string, unknown>).scrollWidth
+      if (saved.clientWidth) Object.defineProperty(proto, 'clientWidth', saved.clientWidth); else delete (proto as unknown as Record<string, unknown>).clientWidth
+      proto.getBoundingClientRect = saved.rect
+      if (saved.scrollTo) proto.scrollTo = saved.scrollTo; else delete (proto as unknown as Record<string, unknown>).scrollTo
+    }
   })
 })

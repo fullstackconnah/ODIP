@@ -23,6 +23,7 @@ import UserFormPanel from '@/pages/settings/UserFormPanel'
 import TenantDetailView from '@/pages/settings/TenantDetailView'
 import NotificationPreferencesTab from '@/pages/settings/NotificationPreferencesTab'
 import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
+import BudgetSettingsTab from '@/pages/settings/BudgetSettingsTab'
 import type { TenantSummaryDto, AdminUserDto } from '@/api/types'
 import { usePermissions } from '@/lib/permissions'
 import { useNotices } from '@/hooks/useNotices'
@@ -147,6 +148,8 @@ export default function SettingsPage() {
     { key: 'provider' as const, label: 'Provider Settings' },
     // The pricing engine's own answers (registration groups, crossing policy, travel rates): the provider's to set, so Admins and SuperAdmins only.
     { key: 'pricing' as const, label: 'Plan Pricing', hidden: !(isAdmin || isSuperAdmin) },
+    // What a budget check does about a one-off shift that would go over a participant's budget, and when a participant counts as approaching it (budget phase 1 stores the choice): Admins and SuperAdmins only.
+    { key: 'budgets' as const, label: 'Budgets', hidden: !(isAdmin || isSuperAdmin) },
     { key: 'catalogue' as const, label: 'Support Catalogue', superAdminOnly: true },
     // Everyone reads the calendar (it prices their plans and claims); only a SuperAdmin changes it, so the tab is read-only for the rest.
     { key: 'holidays' as const, label: 'Public Holidays' },
@@ -171,6 +174,8 @@ export default function SettingsPage() {
         active={tab}
         onChange={(key) => { setTab(key); if (key !== 'tenants') setTenantDetail(undefined) }}
         ariaLabel="Settings sections"
+        // Ten tabs do not fit one row at 1440px: one row that scrolls (the active tab scrolled into view) rather than the last tab alone on a second row.
+        overflow="scroll"
       />
 
       {tab === 'templates' && (
@@ -265,6 +270,7 @@ export default function SettingsPage() {
       {tab === 'appearance' && <AppearanceSettingsTab />}
       {tab === 'provider' && <ProviderSettingsTab />}
       {tab === 'pricing' && <PlanPricingSettingsTab />}
+      {tab === 'budgets' && <BudgetSettingsTab />}
       {tab === 'catalogue' && <SupportCatalogueTab />}
       {tab === 'holidays' && <PublicHolidaysTab canEdit={isSuperAdmin} />}
       {tab === 'notifications' && <NotificationPreferencesTab />}

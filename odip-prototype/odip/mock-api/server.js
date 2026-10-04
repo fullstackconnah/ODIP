@@ -10,6 +10,7 @@
 const http = require('http')
 const planPricing = require('./planPricing')
 const planApproval = require('./planApproval')
+const fundingModule = require('./funding')
 
 const PORT = Number(process.env.MOCK_PORT) || 5062
 const BASE = '/api/v1'
@@ -91,13 +92,23 @@ const enquiryFeed = [
   // Moved on, so the Enquiries tab does not list them: intake complete (the Onboarding tab) and finalised (Active participants).
   { id: 'inq-0003', participantId: 'p-0103', firstName: 'Mei', lastName: 'Tanaka', phone: '0455 555 030', email: null, source: 'Email', provenance: 'Support coordinator',
     createdAt: '2026-09-20T03:20:00Z', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: '2026-09-29T05:00:00Z' },
+  { id: 'inq-0005', participantId: 'p-0104', firstName: 'Daniel', lastName: 'Osei', phone: '0466 555 040', email: null, source: 'Phone', provenance: null,
+    createdAt: '2026-09-18T01:10:00Z', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: '2026-09-30T03:00:00Z' },
   { id: 'inq-0004', participantId: 'p-0001', firstName: 'Liam', lastName: 'Okafor', phone: null, email: null, source: 'Phone', provenance: null,
     createdAt: '2026-02-01T00:00:00Z', participantIsDraft: false, participantIsActive: true, participantIntakeCompletedAt: '2026-02-10T00:00:00Z' },
 ]
 
+// An NDIS-funded participant has a sixth gate, "Funding recorded" (budget phase 1): the real API counts it in totalSteps and adds this reason while no plan budget is recorded. The mock treats
+// everyone on the worklist as NDIS-funded, and Mei has no plan budget (funding.js holds plans for p-0002 and p-0004 only).
+const FUNDING_NOT_RECORDED_REASON = "Funding is not recorded: add the plan budget on the participant's Funding tab."
+const FUNDING_ENDED_REASON = "The plan budget has ended: record the new plan on the participant's Funding tab."
+const SCHEDULE_REASON = 'The schedule is made when an agreement revision is approved for rostering, from its draft page; nothing is created from onboarding itself.'
+// Daniel has done everything but the plan budget, so his onboarding page recommends "Record plan budget" (the one step Warn mode lets wait).
+const ALL_BUT_FUNDING = new Set(['p-0104'])
 const onboardingWorklist = [
-  { participantId: 'p-0103', fullName: 'Mei Tanaka', stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 5,
-    reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.'] },
+  { participantId: 'p-0103', fullName: 'Mei Tanaka', stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 6,
+    reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', FUNDING_NOT_RECORDED_REASON] },
+  { participantId: 'p-0104', fullName: 'Daniel Osei', stage: 'Onboarding incomplete', nextAction: 'Record plan budget', completedSteps: 4, totalSteps: 6, reasons: [FUNDING_NOT_RECORDED_REASON] },
 ]
 
 // Drafts are not on the register, so the participants list never returns these; only their detail and checklist are served (the mock's default
@@ -109,6 +120,8 @@ const draftParticipants = [
     isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: null, wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
   { id: 'p-0103', firstName: 'Mei', lastName: 'Tanaka', preferredName: null, fullName: 'Mei Tanaka', maskedNdisNumber: null, planType: 'SelfManaged', region: null,
     isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: '2026-09-29T05:00:00Z', wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
+  { id: 'p-0104', firstName: 'Daniel', lastName: 'Osei', preferredName: null, fullName: 'Daniel Osei', maskedNdisNumber: null, planType: 'PlanManaged', region: null,
+    isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: '2026-09-30T03:00:00Z', wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
 ]
 
 const participantDetailExtras = {
@@ -2266,7 +2279,11 @@ function saveDraft(participantId, body) {
   }
 })()
 
+// Participant budgets (phase 1): the plan record, its hint from the Billing funding sources, the support category list and the budget settings. See funding.js.
+const funding = fundingModule.create({ respond, fundingSources })
+
 const routes = [
+  ...funding.get,
   ['dashboard/summary', () => dashboardSummary],
   ['plan-pricing/settings', () => planPricingSettings],
   // The newest revision in full, the older ones as summaries; one revision in full by id.
@@ -2289,15 +2306,22 @@ const routes = [
   ['inquiries', () => enquiryFeed],
   ['inquiries/onboarding-worklist', () => onboardingWorklist],
   ['inquiries/:id/onboarding', (id) => {
-    // p-0004 is the participant whose checklist is complete but for the schedule: the page then shows the last step, before and after the agreement draft is approved for rostering.
+    const budget = funding.budgetStatus(id)
+    const fundingRecorded = budget.recorded
+    // p-0004 has every step, its plan budget included (funding.js gives it a plan), but for the schedule: its checklist shows the last step, before and after its agreement draft is approved for rostering
+    // (phase D). Like the server, the list says where the schedule is made until a revision is approved and nothing about it after (the checklist's row names the revision), and it is never ready while the schedule waits.
+    const scheduleOnly = id === 'p-0004'
     const approved = (serviceAgreementDrafts[id] || []).filter((d) => d.approval).sort((a, b) => b.version - a.version)[0]
     const schedule = approved ? { scheduleApprovedVersion: approved.version, scheduleApprovedAt: approved.approval.approvedAt } : {}
-    // Like the server: a gap until a revision is approved, and no line at all after (the checklist row names the revision).
-    const scheduleReasons = approved ? [] : ['The schedule is made when an agreement revision is approved for rostering, from its draft page; nothing is created from onboarding itself.']
-    if (id === 'p-0004') return { participantId: id, intakeComplete: true, profileComplete: true, serviceTypeConfirmed: true, serviceAgreementSigned: true, isReady: false, reasons: scheduleReasons, ...schedule }
+    const done = ALL_BUT_FUNDING.has(id) || scheduleOnly
     return {
-      participantId: id, intakeComplete: true, profileComplete: false, serviceTypeConfirmed: false, serviceAgreementSigned: false, isReady: false,
-      reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', ...scheduleReasons], ...schedule,
+      participantId: id, intakeComplete: true, profileComplete: done, serviceTypeConfirmed: done, serviceAgreementSigned: done, fundingRecorded, isReady: done && fundingRecorded && !scheduleOnly,
+      reasons: [
+        ...(done ? [] : ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.']),
+        ...(fundingRecorded ? [] : [budget.ended ? FUNDING_ENDED_REASON : FUNDING_NOT_RECORDED_REASON]),
+        ...(scheduleOnly && !approved ? [SCHEDULE_REASON] : []),
+      ],
+      ...schedule,
     }
   }],
   ['participants/:id/bookings', (id) => bookings.filter((b) => b.participantId === id)],
@@ -2525,6 +2549,7 @@ const routes = [
 // with its new status/decision fields, plus the one pure-preview endpoint (staff-assignments/check)
 // that must return an array of findings, not an echoed object.
 const postRoutes = [
+  ...funding.post,
   ['plan-pricing/quote', (body) => {
     if (!Array.isArray(body.blocks)) return respond(400, failEnvelope(null, ['The request needs a list of blocks.']))
     if (!body.periodFrom || !body.periodTo || body.periodFrom > body.periodTo) return respond(400, failEnvelope(null, ['The agreement period ends before it starts.']))
@@ -2678,6 +2703,7 @@ const postRoutes = [
 // echo fallback, per this task's "existing PUT /staff-availability/{id} unchanged" note.
 const putRoutes = [
   ...packageRoutesPut,
+  ...funding.put,
   // A pattern edited or switched off on the Patterns page (phase D keeps the patterns an approval made in memory). The fields the real PUT takes; where it came from is never the form's to change.
   ['rostering/patterns/:id', (id, body) => {
     const pattern = rosterPatterns.find((p) => p.id === id)
@@ -2954,7 +2980,7 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === 'DELETE') {
-      for (const [pattern, handler] of packageRoutesDelete) {
+      for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete]) {
         const params = matchRoute(pattern, segments)
         if (params) {
           sendResult(res, handler(...params, body))

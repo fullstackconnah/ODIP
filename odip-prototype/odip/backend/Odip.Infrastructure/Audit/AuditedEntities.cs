@@ -1,4 +1,5 @@
 using Odip.Domain.Entities;
+using Odip.Domain.Funding;
 using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
 
@@ -113,6 +114,15 @@ public static class AuditedEntities
         // Plan builder phase D: approving an agreement revision for rostering makes the weekly patterns that shifts are generated from, and ends the patterns of the revision before it.
         // The approval row is the one record of who did that and when (the patterns and shifts it makes are audited as they are saved, with the same actor), so it is audited like them.
         typeof(ServiceAgreementDraftApproval),
+
+        // Participant budgets (phase 1): a participant's plan budget (the plan, its pools and each release period with its dollar amounts) decides what a later phase warns
+        // about and may refuse, so who recorded or changed any figure, and when, must be recoverable. The settings row (the budget mode and the approaching percentage)
+        // is audited the same way as PlanPricingSettings: it holds nothing private. A plan is replaced by merging, not by delete and re-insert, so an edit shows as the
+        // fields that changed.
+        typeof(FundingPlan),
+        typeof(FundingPool),
+        typeof(FundingPeriod),
+        typeof(BudgetSettings),
     };
 
     private static readonly HashSet<string> ExcludedProperties = new()

@@ -261,5 +261,11 @@ export function usePermissions() {
      * any non-ReadOnly authenticated user manages their own (ReadOnlyMiddleware already 403s the
      * PUT ahead of the controller). */
     canManageNotifications: isSuperAdmin || isAdmin,
+
+    /**
+     * A participant's plan budget (the Funding tab, and the budget card on Intake and the Profile wizard). It is money, and money is never visible to SupportWorker or ReadOnly:
+     * mirrors ParticipantFundingController's class-wide [Authorize(Roles = "SuperAdmin,Admin,Coordinator")], reads included. Deliberately NOT canWrite, which ReadOnly satisfies.
+     */
+    canManageFunding: isSuperAdmin || isAdmin || isCoordinator,
   };
 }

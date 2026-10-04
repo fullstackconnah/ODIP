@@ -20,7 +20,7 @@ function PermissionsProbe({ pages }: { pages: PageKey[] }) {
 }
 
 function CapabilityProbe() {
-  const { canRequestLeave, canApproveLeave, canCompleteOwnShifts, canReviewCompletions, canManageNotifications, canManageParticipantLifecycle } = usePermissions()
+  const { canRequestLeave, canApproveLeave, canCompleteOwnShifts, canReviewCompletions, canManageNotifications, canManageParticipantLifecycle, canManageFunding, canWrite } = usePermissions()
   return (
     <ul>
       <li data-testid="can-request-leave">{String(canRequestLeave)}</li>
@@ -29,6 +29,8 @@ function CapabilityProbe() {
       <li data-testid="can-review-completions">{String(canReviewCompletions)}</li>
       <li data-testid="can-manage-notifications">{String(canManageNotifications)}</li>
       <li data-testid="can-manage-participant-lifecycle">{String(canManageParticipantLifecycle)}</li>
+      <li data-testid="can-manage-funding">{String(canManageFunding)}</li>
+      <li data-testid="can-write">{String(canWrite)}</li>
     </ul>
   )
 }
@@ -161,6 +163,37 @@ describe('usePermissions.canManageNotifications', () => {
       expect(screen.getByTestId('can-manage-notifications')).toHaveTextContent('false')
       unmount()
     }
+  })
+})
+
+describe('usePermissions.canManageFunding', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  // A participant's plan budget is money, and money is never visible to SupportWorker or ReadOnly: ParticipantFundingController admits SuperAdmin, Admin and Coordinator for every request,
+  // reads included. canWrite is NOT that gate (ReadOnly historically satisfied it), which is why the Funding tab has a boolean of its own.
+  it('is true for SuperAdmin, Admin and Coordinator only', () => {
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator'] as UserRole[]) {
+      setUserRole(role)
+      const { unmount } = render(<CapabilityProbe />)
+      expect(screen.getByTestId('can-manage-funding')).toHaveTextContent('true')
+      unmount()
+    }
+    for (const role of ['SupportWorker', 'ReadOnly'] as UserRole[]) {
+      setUserRole(role)
+      const { unmount } = render(<CapabilityProbe />)
+      expect(screen.getByTestId('can-manage-funding')).toHaveTextContent('false')
+      unmount()
+    }
+  })
+
+  it('is not canWrite: ReadOnly satisfies canWrite and must still never see a budget', () => {
+    setUserRole('ReadOnly')
+    render(<CapabilityProbe />)
+
+    expect(screen.getByTestId('can-write')).toHaveTextContent('true')
+    expect(screen.getByTestId('can-manage-funding')).toHaveTextContent('false')
   })
 })
 

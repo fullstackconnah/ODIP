@@ -29,6 +29,8 @@ vi.mock('@/api/hooks', () => ({
   useStaff: () => ({ data: [] }),
   useParticipantContactRoles: () => ({ data: mockContactRoles.current, isLoading: false }),
   useDeleteContactRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  // The plan budget card on the NDIS & Funding step asks for the participant's plans (budget phase 1); none are recorded here.
+  useFundingPlans: () => ({ data: { plans: [], profilePlanDates: {} }, isLoading: false, isError: false, refetch: vi.fn() }),
 }))
 
 function makeParticipant(overrides: Partial<ParticipantDetailDto> = {}): ParticipantDetailDto {
