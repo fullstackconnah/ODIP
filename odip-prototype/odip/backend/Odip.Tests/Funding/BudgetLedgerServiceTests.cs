@@ -413,6 +413,27 @@ public class BudgetLedgerServiceTests
     }
 
     [Fact]
+    public async Task InABatchEachParticipantsOwnPlanStartCutsOffTheEarlierPlansItems_NotOnlyTheEarliestPlanOfTheBatch()
+    {
+        var kit = LedgerKit.Create();
+        kit.SeedProvider("NSW");
+        kit.SeedCommunityAccessCatalogue();
+        var early = kit.SeedParticipant(last: "Early");
+        kit.SeedPlan(early, CoreQuarters());                                                                                      // from 1 Jul 2026: sets the batch's window
+        var late = kit.SeedParticipant(last: "Late");
+        kit.SeedPlan(late, new DateOnly(2026, 10, 1), new DateOnly(2027, 9, 30), Core(PlanType.PlanManaged, new PeriodSpec(new DateOnly(2026, 10, 1), new DateOnly(2027, 9, 30), 5000m)));
+        kit.SeedShift(late, new DateOnly(2026, 9, 1), ShiftStatus.Completed);                                                     // inside the batch's window, before this participant's own plan began
+        kit.SeedShift(late, new DateOnly(2026, 10, 1), ShiftStatus.Completed);
+
+        var all = await kit.Ledger.ComputeAsync(kit.TenantId, new[] { early.Id, late.Id }, Ct);
+
+        var ledger = all[late.Id].Ledger!;
+        Assert.Empty(ledger.OutsideThePlan);                                                                                      // last plan's September shift is not this ledger's, not even as an outside row
+        Assert.Equal(480m, ledger.Pools[0].Periods[0].Used);
+        Assert.Single(all[late.Id].Items);
+    }
+
+    [Fact]
     public async Task NothingCarriesAcrossPlans_TheNewPlansFirstPeriodStartsFromItsOwnLimit()
     {
         var kit = LedgerKit.Create();
