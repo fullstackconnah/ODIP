@@ -179,6 +179,27 @@ export function noPeriodsReason(state: Pick<EditorState, 'planStart' | 'planEnd'
   return 'Give the plan’s dates to see its periods.'
 }
 
+/**
+ * "Apply the set-aside to the periods": the set-aside box forced onto the periods, in proportion to the plan amounts they hold NOW, with every plan amount left exactly as it is. It is how a
+ * corrected set-aside reaches periods whose figures the person (or a saved plan) set by hand, without giving up the plan's release schedule the way `resplit` does (that re-proposes the plan
+ * amounts by days as well). The shares are the box's own again afterwards, so it follows the box as it is typed. Unchanged when there is nothing to apply (a blank, unreadable or
+ * unconfirmed-zero box) or nothing to apply it to (no periods, or an amount that is not there yet).
+ */
+export function applySetAside(state: EditorState, key: string): EditorState {
+  const pool = state.pools.find(held => held.key === key)
+  if (!pool) return state
+  const wanted = setAsideOf(pool)
+  const amounts = pool.periods.map(period => moneyOf(period.planAmount))
+  if (wanted === null || pool.periods.length === 0 || amounts.some(amount => amount === null)) return state
+  const shares = spreadSetAside(toCents(wanted), amounts.map(amount => toCents(amount as number)))
+  return {
+    ...state,
+    pools: state.pools.map(held => (held.key !== key
+      ? held
+      : { ...held, setAsideByHand: false, periods: held.periods.map((period, index) => ({ ...period, setAside: moneyText(shares[index] / 100) })) })),
+  }
+}
+
 /** The pool with its periods worked out again from the plan's dates and the totals it holds. */
 export function resplit(state: EditorState, pool: EditorPool): EditorPool {
   return { ...pool, periods: proposedPeriods(state, pool.totalText, pool.setAsideText, pool.setAsideZeroConfirmed), edited: false, fromPlan: false, touched: false, setAsideByHand: false }
@@ -361,7 +382,7 @@ export interface Problems {
 const NOT_AN_AMOUNT = 'Enter dollars and cents, like 8000.00.'
 const TOO_LARGE = 'The most a plan amount can be is $99,999,999.99.'
 /** A set-aside typed in the box that no period carries (the periods are what is saved, so it would be saved as none). Also said live, beside the periods, as soon as it is so. */
-export const SET_ASIDE_NOT_APPLIED = 'The set-aside is not on any period yet. Split again from the plan amount to apply it.'
+export const SET_ASIDE_NOT_APPLIED = 'The set-aside is not on any period yet. Apply the set-aside to the periods.'
 
 function amountProblem(text: string, required: boolean, requiredMessage: string): string | undefined {
   if (isBlank(text)) return required ? requiredMessage : undefined

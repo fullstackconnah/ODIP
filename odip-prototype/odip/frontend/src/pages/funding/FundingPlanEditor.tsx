@@ -18,7 +18,7 @@ import { categoriesLabel, managementLabel, paceNumber, writtenSpan } from '@/lib
 import { apiErrorCode, apiErrorMessages, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { cn, formatCurrency } from '@/lib/utils'
 import {
-  addCorePool, addStatedPool, editorStateFromPlan, hasPool, isZeroSetAside, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, startFromBilling, toSaveBody, updatePool, validate,
+  addCorePool, addStatedPool, applySetAside, editorStateFromPlan, hasPool, isZeroSetAside, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, startFromBilling, toSaveBody, updatePool, validate,
   withPeriodEdit, withPlanFields, withPoolTotals, withSetAsideZeroConfirmed, type EditorPool, type EditorState, type PoolProblems, type Problems,
 } from './fundingEditorState'
 
@@ -415,6 +415,10 @@ function PoolCard(
                 data-problem={notApplied ? '' : undefined} tabIndex={notApplied ? -1 : undefined}
                 className={notApplied ? 'text-[var(--color-destructive)] focus:outline-none' : 'text-[var(--color-on-warning-container)]'}
               >{SET_ASIDE_NOT_APPLIED}</p>
+            )}
+            {/* The set-aside only: the box is forced onto the periods and every plan amount stays. It is the remedy for both lines above, so it has the weight of a real control. */}
+            {(sums.setAsideMismatch || sums.setAsideMissing) && (
+              <Button variant="secondary" size="sm" className="w-fit" disabled={sums.periodsPlan === null} onClick={() => onState(applySetAside(state, pool.key))}>Apply the set-aside to the periods</Button>
             )}
             {canSplitAgain && (
               <Button variant="ghost" size="sm" className="w-fit" onClick={() => onState({ ...state, pools: state.pools.map(p => (p.key === pool.key ? resplit(state, p) : p)) })}>Split again from the plan amount</Button>

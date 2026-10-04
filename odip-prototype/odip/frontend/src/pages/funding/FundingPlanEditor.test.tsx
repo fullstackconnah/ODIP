@@ -817,7 +817,7 @@ describe('editor: a first plan starts from the dates the profile already holds',
 // ── What the second reviews found (budget fix round 2) ───────────────────────
 
 const SOME_FIELDS = 'Some fields need attention. Each has a message beside it.'
-const NOT_APPLIED = 'The set-aside is not on any period yet. Split again from the plan amount to apply it.'
+const NOT_APPLIED = 'The set-aside is not on any period yet. Apply the set-aside to the periods.'
 
 describe('editor: Save and Cancel stay at the right whatever the footer says', () => {
   const buttons = () => screen.getByRole('button', { name: 'Save plan budget' }).parentElement as HTMLElement
@@ -1078,6 +1078,82 @@ describe('editor: a set-aside that no period carries is said, and "Split again" 
     await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
     const periods = create.mock.calls[0][0].pools[0].periods as { planAmount: number; setAside?: number }[]
     expect(periods.every(period => period.setAside === period.planAmount)).toBe(true)   // the whole 4000 is set aside
+  })
+})
+
+describe('editor: "Apply the set-aside to the periods" (Q4) spreads the box and keeps the plan amounts', () => {
+  const periodAmounts = (card: HTMLElement) => within(card).getAllByLabelText(/^Plan amount, /).map(input => (input as HTMLInputElement).value)
+  const periodSetAsides = (card: HTMLElement) => within(card).getAllByLabelText(/^Set-aside, /).map(input => (input as HTMLInputElement).value)
+
+  async function boxCorrectedOverHandTyped() {
+    const view = renderEditor()
+    typeYear()
+    await view.user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await view.user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '4000')
+    await view.user.type(within(coreCard()).getByLabelText('Set-aside (optional)'), '400')
+    const first = within(coreCard()).getByLabelText('Set-aside, 1 Jul – 30 Sep 2026')
+    await view.user.clear(first)
+    await view.user.type(first, '10')
+    fireEvent.change(within(coreCard()).getByLabelText('Set-aside (optional)'), { target: { value: '200' } })
+    return view
+  }
+
+  it('is offered with the weight of a real control (a bordered secondary button, not the quiet "Split again") when the box and the periods disagree', async () => {
+    await boxCorrectedOverHandTyped()
+
+    const apply = within(coreCard()).getByRole('button', { name: 'Apply the set-aside to the periods' })
+    const splitAgain = within(coreCard()).getByRole('button', { name: 'Split again from the plan amount' })
+    expect(apply).toHaveClass('border')
+    expect(splitAgain).not.toHaveClass('border')
+    expect(apply).toBeEnabled()
+  })
+
+  it('puts the box on the periods, in proportion to the amounts they hold, and does not touch a single plan amount', async () => {
+    const { user } = await boxCorrectedOverHandTyped()
+    const before = periodAmounts(coreCard())
+
+    await user.click(within(coreCard()).getByRole('button', { name: 'Apply the set-aside to the periods' }))
+
+    expect(periodAmounts(coreCard())).toEqual(before)
+    expect(periodSetAsides(coreCard()).reduce((sum, text) => sum + Math.round(Number(text) * 100), 0)).toBe(20000)
+    expect(within(coreCard()).queryByRole('button', { name: 'Apply the set-aside to the periods' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+    const periods = create.mock.calls[0][0].pools[0].periods as { planAmount: number; setAside: number }[]
+    expect(periods.map(period => period.planAmount)).toEqual(before.map(Number))
+    expect(periods.reduce((sum, period) => sum + Math.round(period.setAside * 100), 0)).toBe(20000)
+  })
+
+  it('is what the "not on any period yet" line points to, and applying it puts the set-aside on every period', async () => {
+    const view = renderEditor()
+    typeYear()
+    await view.user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await view.user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '4000')
+    const second = within(coreCard()).getByLabelText('Plan amount, 1 Oct – 31 Dec 2026')
+    await view.user.clear(second)
+    await view.user.type(within(coreCard()).getByLabelText('Set-aside (optional)'), '4000')
+    await view.user.type(second, '1008.22')
+
+    expect(within(coreCard()).getByText('The set-aside is not on any period yet. Apply the set-aside to the periods.')).toBeInTheDocument()
+    await view.user.click(within(coreCard()).getByRole('button', { name: 'Apply the set-aside to the periods' }))
+
+    expect(within(coreCard()).queryByText(/not on any period yet/)).not.toBeInTheDocument()
+    expect(periodSetAsides(coreCard())).toEqual(periodAmounts(coreCard()))
+  })
+
+  it('is not offered while the box and the periods agree, or the box is blank', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    expect(within(coreCard()).queryByRole('button', { name: 'Apply the set-aside to the periods' })).not.toBeInTheDocument()
+
+    await user.clear(within(coreCard()).getByLabelText('Set-aside (optional)'))
+    expect(within(coreCard()).queryByRole('button', { name: 'Apply the set-aside to the periods' })).not.toBeInTheDocument()
+  })
+
+  it('cannot apply to an amount that is not there yet: the button is disabled until every period has one', async () => {
+    const { user } = await boxCorrectedOverHandTyped()
+    const second = within(coreCard()).getByLabelText('Plan amount, 1 Oct – 31 Dec 2026')
+    await user.clear(second)
+
+    expect(within(coreCard()).getByRole('button', { name: 'Apply the set-aside to the periods' })).toBeDisabled()
   })
 })
 
