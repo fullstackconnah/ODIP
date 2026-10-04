@@ -106,7 +106,7 @@ const ALL_BUT_FUNDING = new Set(['p-0104'])
 const onboardingWorklist = [
   { participantId: 'p-0103', fullName: 'Mei Tanaka', stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 6,
     reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', FUNDING_NOT_RECORDED_REASON] },
-  { participantId: 'p-0104', fullName: 'Daniel Osei', stage: 'Onboarding incomplete', nextAction: 'Record plan budget', completedSteps: 5, totalSteps: 6, reasons: [FUNDING_NOT_RECORDED_REASON] },
+  { participantId: 'p-0104', fullName: 'Daniel Osei', stage: 'Onboarding incomplete', nextAction: 'Record plan budget', completedSteps: 4, totalSteps: 6, reasons: [FUNDING_NOT_RECORDED_REASON] },
 ]
 
 // Drafts are not on the register, so the participants list never returns these; only their detail and checklist are served (the mock's default
