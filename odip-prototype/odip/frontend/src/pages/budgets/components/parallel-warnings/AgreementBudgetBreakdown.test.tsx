@@ -73,6 +73,13 @@ describe('AgreementBudgetBreakdown: the states that are not figures', () => {
     expect(screen.getByRole('link', { name: 'Record the plan budget' })).toHaveAttribute('href', '/participants/participant-1?tab=funding')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByText(/warning only/i)).not.toBeInTheDocument()
+    // SHAPE-BRIEF 5 makes this state a MANDATORY quiet one, so the tone is asserted and not merely described: a warning or
+    // error fill on this state is a regression the words above would never catch (M13). Both container tokens are rejected,
+    // and so is the danger ink, because a tint is not the only way to make a quiet state look loud.
+    const quiet = screen.getByText(/No budget recorded for this participant/).closest('div')!
+    expect(quiet.className).not.toContain('var(--color-warning-container)')
+    expect(quiet.className).not.toContain('var(--color-error-container)')
+    expect(quiet.className).not.toContain('var(--color-destructive)')
   })
 
   it('a failed check keeps the whole plan available: there is no control here that can refuse a save', () => {
@@ -188,6 +195,68 @@ describe('AgreementBudgetBreakdown: within and over', () => {
     const { container } = renderBreakdown(breakdown({ lines: [agreementLine()] }))
 
     expect(container.textContent).not.toMatch(/would be over/)
+  })
+})
+
+describe('AgreementBudgetBreakdown: the set-aside and the plan amount are independent figures', () => {
+  // Owner decision 1 says which figure is the LIMIT, not which figure exists. The server may record a set-aside and still take
+  // the limit from the whole plan amount, so the other figure must be drawn from its OWN value. Branching on which figure
+  // supplied the limit printed a recorded amount as the missing-figure dash, so a known figure read as unknown (QA-1).
+  it('shows a recorded set-aside as its own figure even when the plan amount is the limit', () => {
+    const line = agreementLine({ allowance: { planAmount: 2000, setAside: 500, limitSource: 'planAmount' } })
+    const { fields } = fieldsOf(breakdown({ lines: [line] }))
+
+    // The figure the server actually sent. Before the fix this field was the en dash.
+    expect(fields['Set aside for us']).toBe('$500.00')
+    expect(fields['Set aside for us']).not.toContain(NO_FIGURE)
+    // The limit line is unchanged: the server's decision about which figure is the limit is still obeyed. toContain, because this
+    // field also carries the sentence naming which figure is the limit, exactly as the pre-existing fallback test asserts it.
+    expect(fields['Available: whole plan amount']).toContain('$2,000.00')
+  })
+
+  it('does not claim no set-aside is recorded while showing one', () => {
+    const line = agreementLine({ allowance: { planAmount: 2000, setAside: 500, limitSource: 'planAmount' } })
+    const { item } = fieldsOf(breakdown({ lines: [line] }))
+
+    expect(item).toHaveTextContent('A set-aside is recorded, and the whole plan amount is the limit.')
+    expect(item).not.toHaveTextContent('No set-aside is recorded')
+  })
+
+  it('still says no set-aside is recorded when there genuinely is none', () => {
+    const line = agreementLine({ allowance: { planAmount: 2000, setAside: null, limitSource: 'planAmount' } })
+    const { item, fields } = fieldsOf(breakdown({ lines: [line] }))
+
+    expect(item).toHaveTextContent('No set-aside is recorded, so the whole plan amount is the limit.')
+    expect(fields['Set aside for us']).toBe(NO_FIGURE)
+  })
+
+  it('a set-aside of exactly zero beside the plan-amount limit is a recorded $0.00, not a dash', () => {
+    // null is "not recorded" and 0 is "recorded as nothing". Only the value decides which is which.
+    const line = agreementLine({ allowance: { planAmount: 2000, setAside: 0, limitSource: 'planAmount' } })
+    const { fields } = fieldsOf(breakdown({ lines: [line] }))
+
+    expect(fields['Set aside for us']).toBe('$0.00')
+    expect(fields['Available: whole plan amount']).toContain('$2,000.00')
+  })
+
+  it('the mirror case still holds: a recorded plan amount beside the set-aside limit is shown', () => {
+    const line = agreementLine({ allowance: { planAmount: 2000, setAside: 1200, limitSource: 'setAside' } })
+    const { fields } = fieldsOf(breakdown({ lines: [line] }))
+
+    expect(fields['Available: set aside for us']).toBe('$1,200.00')
+    expect(fields['Whole plan amount for this pool']).toBe('$2,000.00')
+  })
+
+  it('withholds both allowance figures together when the viewer may not see money', () => {
+    const hidden = { visible: false as const, reason: 'This role may act on the agreement but not see what it costs against the budget.' }
+    const line = agreementLine({ allowance: { planAmount: 2000, setAside: 500, limitSource: 'planAmount' } })
+    const { container } = renderBreakdown(breakdown({ lines: [line], figures: hidden }))
+
+    // The privacy contract is checked BEFORE the nullness branch, so a withheld figure can never become a dash either.
+    expect(container.textContent).toContain('Not shown')
+    expect(figuresIn(container)).toEqual([])
+    expect(container.innerHTML).not.toContain('500.00')
+    expect(container.innerHTML).not.toContain('2,000.00')
   })
 })
 

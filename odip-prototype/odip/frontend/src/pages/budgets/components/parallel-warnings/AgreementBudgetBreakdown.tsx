@@ -38,6 +38,11 @@ function Line({ line, figures }: { line: AgreementBudgetLine; figures: BudgetFig
   const periodLabel = writtenSpan(line.periodStart, line.periodEnd)
   const fromSetAside = line.allowance.limitSource === 'setAside'
   const limit = fromSetAside ? line.allowance.setAside : line.allowance.planAmount
+  // The OTHER figure: whichever of the two the server did not take as the limit. Its own VALUE decides how it is drawn, never
+  // which figure the server chose. Owner decision 1 keeps the two independent, so a set-aside can be recorded while the limit is
+  // still the whole plan amount; branching on `fromSetAside` here drew that recorded amount as the missing-figure dash, so a real
+  // figure read as unknown (QA-1). null is a figure the server could not give, 0 is a recorded zero, and only the value decides.
+  const otherFigure = fromSetAside ? line.allowance.planAmount : line.allowance.setAside
 
   return (
     <li
@@ -66,8 +71,16 @@ function Line({ line, figures }: { line: AgreementBudgetLine; figures: BudgetFig
           <dd className={FIGURE}>
             <BudgetFigure figures={figures} amount={limit} />
             {/* Which of the two figures is the limit is the server's decision (owner decision 1), and a reader cannot infer it from the two
-                lines alone. Said in one line, always, and never as an error: having no set-aside is a fact, not a failure. */}
-            {!fromSetAside && <span className="block text-xs font-normal text-[var(--color-muted-foreground)]">No set-aside is recorded, so the whole plan amount is the limit.</span>}
+                lines alone. Said in one line, always, and never as an error: a set-aside that is recorded, and a set-aside that is not, are
+                both facts rather than failures. The sentence follows the set-aside's own value, so it never claims a set-aside is missing
+                while the figure beside it shows one. */}
+            {!fromSetAside && (
+              <span className="block text-xs font-normal text-[var(--color-muted-foreground)]">
+                {line.allowance.setAside === null
+                  ? 'No set-aside is recorded, so the whole plan amount is the limit.'
+                  : 'A set-aside is recorded, and the whole plan amount is the limit.'}
+              </span>
+            )}
           </dd>
         </div>
         {/* The other figure, on its own line, always: it is never the limit, and leaving it out would let a reader assume it is. */}
@@ -76,9 +89,9 @@ function Line({ line, figures }: { line: AgreementBudgetLine; figures: BudgetFig
           <dd className="text-sm tabular-nums text-[var(--color-muted-foreground)]">
             {!figures.visible
               ? 'Not shown'
-              : fromSetAside
-                ? (line.allowance.planAmount === null ? <span aria-hidden="true">{NO_FIGURE}</span> : formatCurrency(line.allowance.planAmount))
-                : <span aria-hidden="true">{NO_FIGURE}</span>}
+              : otherFigure === null
+                ? <span aria-hidden="true">{NO_FIGURE}</span>
+                : formatCurrency(otherFigure)}
           </dd>
         </div>
       </dl>
