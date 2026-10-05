@@ -12,6 +12,7 @@ import { localIsoDate } from '@/lib/dateOnly'
 import { currentPlanOf, planStatus, planTitle, writtenDay, writtenSpan, type PlanStatus } from '@/lib/fundingPlan'
 import { PlanRecord } from '@/pages/funding/PlanRecord'
 import { FundingPlanEditor } from '@/pages/funding/FundingPlanEditor'
+import FundingLedger from './FundingLedger'
 
 type Editing = { plan?: FundingPlanDto; previousPlan?: FundingPlanDto }
 
@@ -125,7 +126,7 @@ export default function FundingTab({ participantId, planType }: { participantId:
         <PlanRecord plan={current} />
       </Card>
 
-      <p className="text-[13px] text-[var(--color-muted-foreground)]">Spending and forecasts will appear here in a later release.</p>
+      <FundingLedger participantId={participantId} />
 
       <PlanGroup title="Upcoming plans" plans={upcoming} today={today} />
       <PlanGroup title="Past plans" plans={past} today={today} />

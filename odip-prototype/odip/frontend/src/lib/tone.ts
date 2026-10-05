@@ -124,6 +124,11 @@ export const STATUS_TONE: Record<string, Tone> = {
   draft: 'neutral',
   proposed: 'neutral',
   none: 'neutral',
+  // A participant's budget (phase 2a): on track is go, approaching and forecast over are awaiting somebody's attention (nothing is spent past the limit yet), over has gone past it.
+  ontrack: 'success',
+  approaching: 'warning',
+  forecastover: 'warning',
+  over: 'danger',
   archived: 'neutral',
   cancelled: 'danger',
   unavailable: 'danger',

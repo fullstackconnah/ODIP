@@ -43,3 +43,11 @@ export function formatDateRange(start: string | null | undefined, end: string | 
   if (a.year === b.year) return `${a.day} ${MONTHS[a.month]} ${EN_DASH} ${b.day} ${MONTHS[b.month]} ${a.year}`
   return `${full(a)} ${EN_DASH} ${full(b)}`
 }
+
+/**
+ * A day with no year, for a sentence that is about this year anyway: "31 Dec". The same fixed abbreviations as `formatDateRange`. An unreadable date is '' (the caller drops the phrase).
+ */
+export function formatDayMonth(iso: string | null | undefined): string {
+  const date = parseCalendarDate(iso)
+  return date ? `${date.day} ${MONTHS[date.month]}` : ''
+}

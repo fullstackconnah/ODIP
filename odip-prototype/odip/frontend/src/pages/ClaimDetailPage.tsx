@@ -17,6 +17,7 @@ import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { FactBar } from '@/components/FactBar'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 
 const inputClass = 'w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
@@ -203,6 +204,9 @@ export default function ClaimDetailPage() {
           { label: 'Submitted', value: <span className="tabular-nums">{claim.submittedDate ? new Date(claim.submittedDate).toLocaleDateString('en-AU') : '—'}</span> },
         ]}
       />
+
+      {/* What this claim did to each participant's recorded plan, as of now. Absent when none of them has a plan that has started: no figure, not a zero. */}
+      <ClaimBudgetBlock budget={claim.budget} />
 
       {/* Notes */}
       <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] space-y-2">
