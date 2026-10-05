@@ -87,7 +87,8 @@ public class ClaimPricingEqualityTests
         kit.SeedShift(person, new DateOnly(2026, 10, 3), ShiftStatus.Completed, 7, 11);
         var before = (await kit.Ledger.ComputeAsync(kit.TenantId, new[] { person.Id }, Ct))[person.Id].Ledger!.Pools[0].Periods[1];
 
-        var preview = await new ShiftClaimGenerationService(kit.Db, kit.Ledger).PreviewAsync(person.Id, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31), Ct);
+        // The tenant is the caller's own: the preview's budget block is scoped by it, so a test standing in for a caller passes it.
+        var preview = await new ShiftClaimGenerationService(kit.Db, kit.Ledger, kit.Tenant).PreviewAsync(person.Id, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31), Ct);
 
         Assert.Equal(before.Pending, preview.TotalAmount);
         var row = Assert.Single(Assert.Single(preview.Budget!.Participants).Rows);
@@ -190,7 +191,7 @@ public class ClaimPricingEqualityTests
         kit.SeedPlan(tight, Core(PlanType.PlanManaged, Q(1, 300m), Q(2, 300m), Q(3, 300m), Q(4, 300m)));
         foreach (var person in new[] { planned, tight, unplanned }) kit.SeedBooking(trip, person);
 
-        var preview = await new ClaimGenerationService(kit.Db, kit.Ledger).PreviewClaimAsync(trip.Id, null, Ct);
+        var preview = await new ClaimGenerationService(kit.Db, kit.Ledger, kit.Tenant).PreviewClaimAsync(trip.Id, null, Ct);
 
         Assert.Equal(new[] { planned.Id, tight.Id }.OrderBy(id => id), preview.Budget!.Participants.Select(p => p.ParticipantId).OrderBy(id => id));
         var plannedRow = Assert.Single(preview.Budget.Participants.Single(p => p.ParticipantId == planned.Id).Rows);
@@ -212,7 +213,7 @@ public class ClaimPricingEqualityTests
         kit.SeedBooking(trip, kit.SeedParticipant());
 
         var without = await new ClaimGenerationService(kit.Db).PreviewClaimAsync(trip.Id, null, Ct);
-        var noPlans = await new ClaimGenerationService(kit.Db, kit.Ledger).PreviewClaimAsync(trip.Id, null, Ct);
+        var noPlans = await new ClaimGenerationService(kit.Db, kit.Ledger, kit.Tenant).PreviewClaimAsync(trip.Id, null, Ct);
 
         Assert.Null(without.Budget);
         Assert.Null(noPlans.Budget);

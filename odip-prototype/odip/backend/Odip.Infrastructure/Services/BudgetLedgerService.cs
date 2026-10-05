@@ -160,7 +160,16 @@ public sealed class BudgetLedgerService
     public async Task<ClaimBudgetDto?> EffectOfLinesAsync(Guid tenantId, IReadOnlyList<ClaimEffectLine> lines, CancellationToken ct)
     {
         if (lines.Count == 0) return null;
-        var ledgers = await ComputeAsync(tenantId, lines.Select(l => l.ParticipantId).Distinct().ToList(), ct);
+
+        // Defence in depth (budget security audit F-1). <see cref="ComputeAsync"/> already reads participants inside the tenant, so a caller naming
+        // only another organisation's participants resolves to nobody and the answer is null anyway. This closes the case that would still be
+        // wrong: a caller handing over a tenant id that is not these participants' own. A tenant id is a decision about whose money may be
+        // shown, and it may never be taken from an entity, so one foreign participant drops the whole call rather than returning a partial figure.
+        var asked = lines.Select(l => l.ParticipantId).Distinct().ToList();
+        var inTenant = (await _db.Participants.AsNoTracking().Where(p => p.TenantId == tenantId).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
+        if (asked.Any(id => !inTenant.Contains(id))) return null;
+
+        var ledgers = await ComputeAsync(tenantId, asked, ct);
 
         var participants = new List<ClaimBudgetParticipantDto>();
         foreach (var group in lines.GroupBy(l => l.ParticipantId))

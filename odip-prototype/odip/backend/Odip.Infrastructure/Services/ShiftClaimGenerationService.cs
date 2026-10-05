@@ -5,6 +5,7 @@ using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
+using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 
@@ -30,13 +31,19 @@ public class ShiftClaimGenerationService
 {
     private readonly OdipDbContext _db;
     private readonly BudgetLedgerService? _ledger;
+    private readonly ICurrentTenant? _tenant;
 
     /// <param name="ledger">When given, a preview says what the claim does to the participant's budget (a warning only: nothing here is ever blocked by it).</param>
-    public ShiftClaimGenerationService(OdipDbContext db, BudgetLedgerService? ledger = null)
+    public ShiftClaimGenerationService(OdipDbContext db, BudgetLedgerService? ledger = null, ICurrentTenant? tenant = null)
     {
         _db = db;
         _ledger = ledger;
+        _tenant = tenant;
     }
+
+    /// <summary>The caller's own tenant, and only when the participant belongs to it — see <see cref="ClaimGenerationService"/>.</summary>
+    private Guid? MoneyTenantIdFor(Guid recordTenantId) =>
+        _tenant?.TenantId is { } tenantId && tenantId == recordTenantId ? tenantId : null;
 
     public async Task<ShiftClaimPreviewResponseDto> PreviewAsync(
         Guid participantId, DateOnly from, DateOnly to, CancellationToken ct = default)
@@ -44,10 +51,13 @@ public class ShiftClaimGenerationService
         var (lineItems, participant) = await CalculateAsync(participantId, from, to, ct);
 
         // The budget effect is worked out from the same lines the claim would have: each is the shift it replaces in the participant's "pending" (a completed shift nobody has claimed is already counted).
-        var budget = _ledger == null
+        // Under the CALLER's tenant, never the participant's own: a SuperAdmin with no organisation chosen resolves other organisations'
+        // participants, and the participant's own id would hand out their whole funding position (budget security audit F-1).
+        var moneyTenantId = MoneyTenantIdFor(participant.TenantId);
+        var budget = _ledger == null || moneyTenantId is not { } forMoney
             ? null
             : await _ledger.EffectOfLinesAsync(
-                participant.TenantId,
+                forMoney,
                 lineItems.Select(l => new ClaimEffectLine(participant.Id, l.Shift.ServiceDate, PaceCategories.Of(l.CatalogueItem), participant.PlanType, l.TotalAmount, ShiftId: l.Shift.Id, BookingId: null)).ToList(),
                 ct);
 

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
+using Odip.Domain.Interfaces;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -12,13 +13,23 @@ public class ClaimGenerationService
 {
     private readonly OdipDbContext _db;
     private readonly BudgetLedgerService? _ledger;
+    private readonly ICurrentTenant? _tenant;
 
     /// <param name="ledger">When given, a preview says what the claim does to each participant's budget (a warning only: nothing here is ever blocked by it).</param>
-    public ClaimGenerationService(OdipDbContext db, BudgetLedgerService? ledger = null)
+    public ClaimGenerationService(OdipDbContext db, BudgetLedgerService? ledger = null, ICurrentTenant? tenant = null)
     {
         _db = db;
         _ledger = ledger;
+        _tenant = tenant;
     }
+
+    /// <summary>
+    /// The tenant a caller may be shown money for: the caller's own, and only when the trip actually belongs to it. A SuperAdmin who has
+    /// not chosen an organisation to view as keeps <c>IsSuperAdmin == true</c>, which is the first term of every tenant-filtered query, so a
+    /// foreign trip resolves — and the trip's own tenant id would then decide whose budgets get computed (budget security audit F-1).
+    /// </summary>
+    private Guid? MoneyTenantIdFor(Guid recordTenantId) =>
+        _tenant?.TenantId is { } tenantId && tenantId == recordTenantId ? tenantId : null;
 
     // ─── Preview (no persistence, no status checks) ────────────────────
 
@@ -28,10 +39,13 @@ public class ClaimGenerationService
         var (lineItems, context) = await CalculateClaimAsync(tripInstanceId, overrides, ct);
 
         // Each line is a part of its booking's claim: the booking stops being "booked ahead" and its lines take its place, under the participant's plan type or the booking's own.
-        var budget = _ledger == null
+        // Worked out under the CALLER's tenant, so a caller who has not chosen an organisation is shown no budget rather than another
+        // organisation's. A null block is the honest "no figure here", not a missing feature: the preview is a warning about a budget nobody may see.
+        var moneyTenantId = MoneyTenantIdFor(context.TenantId);
+        var budget = _ledger == null || moneyTenantId is not { } forMoney
             ? null
             : await _ledger.EffectOfLinesAsync(
-                context.TenantId,
+                forMoney,
                 lineItems.Select(l => new ClaimEffectLine(
                     l.Booking.ParticipantId, l.From, PaceCategories.Of(l.CatalogueItem), l.Booking.PlanTypeOverride ?? l.Booking.Participant.PlanType, l.TotalAmount, ShiftId: null, BookingId: l.Booking.Id)).ToList(),
                 ct);
