@@ -1,8 +1,15 @@
-// The participant budget endpoints of the mock API (budget phase 1): api/v1/participants/{id}/funding/* and api/v1/funding/*. Kept in its own module like planPricing.js. It holds the
+// The participant budget endpoints of the mock API: api/v1/participants/{id}/funding/* and api/v1/funding/*. Kept in its own module like planPricing.js. It holds the
 // plans in memory, so a create, a replace and "apply the dates" show in the next GET, and it answers the way the real API does: 400 with every reason in errors, 409 with a `code` and `data`
 // for a stale revision or an overlapping plan. Two demo participants hold plans: p-0002 a 3-monthly one with a Core (flexible) pool and a stated pool (whose profile plan dates
 // differ, so the Funding tab offers to use the plan's), p-0004 a plan with no funding periods, and p-0003 a plan that has ENDED (the tab and the intake card say so, and the readiness
 // reason says the budget has ended). Every other participant has none ("No budget recorded"). All names and figures are fictional.
+//
+// Budget phase 2a adds the LEDGER (GET funding/ledger and funding/ledger/rows). Its arithmetic is mock-ledger.js, which follows the same rules as the server's
+// BudgetLedgerCalculator, so the demo's numbers are worked out rather than typed: p-0002's Core (flexible) pool is FORECAST OVER in the current quarter and its Improved
+// Daily Living Skills pool is APPROACHING, p-0004's Core (flexible) is ON TRACK, and p-0002 has a row in no recorded pool and one dated before its plan, so both
+// buckets can be seen.
+
+const { ledgerFor, rowsPage } = require('./mock-ledger.js')
 
 const DAY = 86_400_000
 const day = (iso) => Date.parse(`${iso}T00:00:00Z`) / DAY
@@ -71,6 +78,15 @@ const plansByParticipant = {
     revision: 1, createdAt: '2025-08-04T00:00:00Z', updatedAt: '2025-08-04T00:00:00Z',
     pools: [pool({ position: 0, kind: 'CoreFlexible', paceCategory: 0, managementType: 'PlanManaged', name: 'Core (flexible)', periods: periodsOf([['2025-07-01', '2025-12-31'], ['2026-01-01', '2026-06-30']], 24000, 9000) })],
   }],
+  'p-0005': [{
+    id: 'fplan-0004', participantId: 'p-0005', planStart: '2026-07-01', planEnd: '2027-06-30', reassessmentDate: '2027-02-01', periodLengthMonths: 3, evidence: 'PlanManager',
+    confirmedOn: '2026-08-02', confirmedByName: 'Priya Nadarajah', notes: 'Quarterly set-aside, reassessment booked.', revision: 1,
+    createdAt: '2026-08-02T01:00:00Z', updatedAt: '2026-08-02T01:00:00Z',
+    pools: [
+      pool({ position: 0, kind: 'CoreFlexible', paceCategory: 0, managementType: 'PlanManaged', name: 'Core (flexible)', periods: periodsOf(QUARTERS, 1600, 1600) }),
+      pool({ position: 1, kind: 'Stated', paceCategory: 15, managementType: 'PlanManaged', name: 'Improved Daily Living Skills', periods: periodsOf(QUARTERS, 4000) }),
+    ],
+  }],
   'p-0004': [{
     id: 'fplan-0002', participantId: 'p-0004', planStart: '2026-07-01', planEnd: '2027-06-30', reassessmentDate: '2027-04-15', evidence: 'PlanManager', confirmedOn: '2026-08-11', confirmedByName: 'Priya Nadarajah',
     revision: 1, createdAt: '2026-08-11T02:00:00Z', updatedAt: '2026-08-11T02:00:00Z',
@@ -83,6 +99,7 @@ const profileDates = {
   'p-0002': { start: '2026-01-01', end: '2026-12-31' },
   'p-0003': { start: '2025-07-01', end: '2026-06-30' },
   'p-0004': { start: '2026-07-01', end: '2027-06-30' },
+  'p-0005': { start: '2026-07-01', end: '2027-06-30' },
 }
 
 let settings = { mode: 'Warn', approachingPercent: 80, isDefault: true }
@@ -162,6 +179,25 @@ function create({ respond, fundingSources }) {
       plans: [...plansOf(id)].sort((a, b) => (a.planStart < b.planStart ? 1 : -1)),
       profilePlanDates: profileDates[id] || {},
     })],
+    // Both ledger routes are adjacent because they are one feature: the rows page and the ledger it pages.
+
+    // One more page of one period of one pool's rows, for "show more" once the first 200 are on screen. The
+    // dispatcher matches patterns segment by segment and appends url.searchParams as the trailing argument, so
+    // this handler's only path id is the participant and poolId/periodId/skip/take all arrive in the query string —
+    // which is how the real controller takes them ([FromQuery]), and how the frontend's hook calls it.
+    ['participants/:id/funding/ledger/rows', (id, searchParams) => {
+      const page = rowsPage(
+        ledgerFor(plansOf, id, new Date().toISOString().slice(0, 10), settings.approachingPercent),
+        searchParams.get('poolId'),
+        searchParams.get('periodId'),
+        Number(searchParams.get('skip') || 0),
+        Number(searchParams.get('take') || 200),
+      )
+      return page || respond(404, fail(['That period was not found in the participant\'s current plan.']))
+    }],
+    // The budget ledger (phase 2a): the current plan's pools, periods, figures, statuses and rows, worked out by
+    // mock-ledger.js (the same rules as the server's calculator). Today is the mock's own date, as the screens use.
+    ['participants/:id/funding/ledger', (id) => ledgerFor(plansOf, id, new Date().toISOString().slice(0, 10), settings.approachingPercent)],
     ['participants/:id/funding/billing-sources-hint', (id) => {
       const rows = billingSources
         .filter((f) => f.participantId === id && f.isActive && ['AgencyManaged', 'PlanManaged', 'SelfManaged'].includes(f.routeType) && f.budget > 0)
