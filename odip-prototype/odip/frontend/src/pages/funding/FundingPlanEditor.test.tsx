@@ -817,7 +817,7 @@ describe('editor: a first plan starts from the dates the profile already holds',
 // ── What the second reviews found (budget fix round 2) ───────────────────────
 
 const SOME_FIELDS = 'Some fields need attention. Each has a message beside it.'
-const NOT_APPLIED = 'The set-aside is not on any period yet. Split again from the plan amount to apply it.'
+const NOT_APPLIED = 'The set-aside is not on any period yet. Apply the set-aside to the periods.'
 
 describe('editor: Save and Cancel stay at the right whatever the footer says', () => {
   const buttons = () => screen.getByRole('button', { name: 'Save plan budget' }).parentElement as HTMLElement
@@ -1002,7 +1002,7 @@ describe('editor: a set-aside the person typed into a period is not overwritten 
 
     expect(first).toHaveValue('10')
     expect(periodSetAsides(coreCard()).slice(1)).toEqual(others)   // nothing was overwritten
-    expect(within(coreCard()).getByText(/^The set-asides add up to \$3\d\d\.\d\d, not the \$200\.00 you typed\. The periods are what is saved\.$/)).toBeInTheDocument()
+    expect(within(coreCard()).getByText(/^The set-asides add up to \$3\d\d\.\d\d, not the \$200\.00 you typed\. They have to agree before this can be saved\.$/)).toBeInTheDocument()
 
     await user.click(within(coreCard()).getByRole('button', { name: 'Split again from the plan amount' }))
 
@@ -1012,16 +1012,16 @@ describe('editor: a set-aside the person typed into a period is not overwritten 
     expect((create.mock.calls[0][0].pools[0].periods as { setAside: number }[]).map(period => period.setAside)).toEqual([50.41, 50.41, 49.32, 49.86])
   })
 
-  it('keeps the set-asides of a saved plan when its box is corrected, and saves them as they are', async () => {
+  it('keeps the set-asides of a saved plan when its box is corrected, but REFUSES to save them behind the corrected figure (Q2)', async () => {
     const { user } = renderEditor({ plan: plan() })   // Core: 1000.00 set aside on each of four periods
     const core = screen.getByRole('region', { name: /^Core \(flexible\), Plan Managed/ })
 
     fireEvent.change(setAsideBox(core), { target: { value: '4100' } })
 
     expect(periodSetAsides(core)).toEqual(['1000.00', '1000.00', '1000.00', '1000.00'])
-    expect(within(core).getByText('The set-asides add up to $4,000.00, not the $4,100.00 you typed. The periods are what is saved.')).toBeInTheDocument()
+    expect(within(core).getByText('The set-asides add up to $4,000.00, not the $4,100.00 you typed. They have to agree before this can be saved.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect((update.mock.calls[0][0].body.pools[0].periods as { setAside: number }[]).map(period => period.setAside)).toEqual([1000, 1000, 1000, 1000])
+    expect(update).not.toHaveBeenCalled()   // the old set-asides would have become the limit while the screen said 4100
   })
 
   it('still follows the box digit by digit while the cells are its own shares', async () => {
@@ -1078,5 +1078,228 @@ describe('editor: a set-aside that no period carries is said, and "Split again" 
     await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
     const periods = create.mock.calls[0][0].pools[0].periods as { planAmount: number; setAside?: number }[]
     expect(periods.every(period => period.setAside === period.planAmount)).toBe(true)   // the whole 4000 is set aside
+  })
+})
+
+describe('editor: a set-aside box that disagrees with the periods refuses the save, in the box\'s own message (Q2)', () => {
+  const DISAGREES = 'The set-asides on the periods add up to $4,000.00, not $4,100.00. Apply the set-aside to the periods, or change this to $4,000.00.'
+  const savedCore = () => screen.getByRole('region', { name: /^Core \(flexible\), Plan Managed/ })   // 1000.00 set aside on each of four periods
+  const box = () => within(savedCore()).getByLabelText('Set-aside (optional)')
+
+  it('puts the reason in the set-aside box\'s own message slot once a save is tried, takes the person to the box, and does not save', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    fireEvent.change(box(), { target: { value: '4100' } })
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(update).not.toHaveBeenCalled()
+    expect(within(savedCore()).getByText(DISAGREES)).toHaveAttribute('role', 'alert')
+    expect(box()).toHaveAttribute('aria-invalid', 'true')
+    expect(box()).toHaveFocus()
+    expect(screen.getByText(SOME_FIELDS)).toBeInTheDocument()
+  })
+
+  it('says it once: the live line under the table gives way to the box\'s own message when the save has been tried', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    fireEvent.change(box(), { target: { value: '4100' } })
+    expect(within(savedCore()).getByText(/set-asides add up to \$4,000\.00, not the \$4,100\.00 you typed/)).toBeInTheDocument()
+    expect(within(savedCore()).queryByText(DISAGREES)).not.toBeInTheDocument()   // nothing in the box's slot before a save is tried: nothing shouts while the person types
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(within(savedCore()).queryByText(/you typed\. They have to agree/)).not.toBeInTheDocument()
+    expect(within(savedCore()).getByText(DISAGREES)).toBeInTheDocument()
+  })
+
+  it('is lifted by "Apply the set-aside to the periods": the save then goes through with set-asides adding up to the box, and the plan amounts as they were', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    fireEvent.change(box(), { target: { value: '4100' } })
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await user.click(within(savedCore()).getByRole('button', { name: 'Apply the set-aside to the periods' }))
+
+    expect(within(savedCore()).queryByText(DISAGREES)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    const periods = update.mock.calls[0][0].body.pools[0].periods as { planAmount: number; setAside: number }[]
+    expect(periods.map(period => period.setAside)).toEqual([1025, 1025, 1025, 1025])
+    expect(periods.map(period => period.planAmount)).toEqual([2000, 2000, 2000, 2000])
+  })
+
+  it('is lifted by changing the box to what the periods add up to, which saves the set-asides as they were', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    fireEvent.change(box(), { target: { value: '4100' } })
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(update).not.toHaveBeenCalled()
+
+    fireEvent.change(box(), { target: { value: '4000' } })
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect((update.mock.calls[0][0].body.pools[0].periods as { setAside: number }[]).map(period => period.setAside)).toEqual([1000, 1000, 1000, 1000])
+  })
+
+  it('also stops a set-aside typed into a period away from the box (the box is the figure on screen, so the periods may not quietly become something else)', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    const first = within(savedCore()).getByLabelText('Set-aside, 1 Jul – 30 Sep 2026')
+    await user.clear(first)
+    await user.type(first, '900')
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(update).not.toHaveBeenCalled()
+    expect(within(savedCore()).getByText('The set-asides on the periods add up to $3,900.00, not $4,000.00. Apply the set-aside to the periods, or change this to $3,900.00.')).toBeInTheDocument()
+  })
+})
+
+describe('editor: "Apply the set-aside to the periods" (Q4) spreads the box and keeps the plan amounts', () => {
+  const periodAmounts = (card: HTMLElement) => within(card).getAllByLabelText(/^Plan amount, /).map(input => (input as HTMLInputElement).value)
+  const periodSetAsides = (card: HTMLElement) => within(card).getAllByLabelText(/^Set-aside, /).map(input => (input as HTMLInputElement).value)
+
+  async function boxCorrectedOverHandTyped() {
+    const view = renderEditor()
+    typeYear()
+    await view.user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await view.user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '4000')
+    await view.user.type(within(coreCard()).getByLabelText('Set-aside (optional)'), '400')
+    const first = within(coreCard()).getByLabelText('Set-aside, 1 Jul – 30 Sep 2026')
+    await view.user.clear(first)
+    await view.user.type(first, '10')
+    fireEvent.change(within(coreCard()).getByLabelText('Set-aside (optional)'), { target: { value: '200' } })
+    return view
+  }
+
+  it('is offered with the weight of a real control (a bordered secondary button, not the quiet "Split again") when the box and the periods disagree', async () => {
+    await boxCorrectedOverHandTyped()
+
+    const apply = within(coreCard()).getByRole('button', { name: 'Apply the set-aside to the periods' })
+    const splitAgain = within(coreCard()).getByRole('button', { name: 'Split again from the plan amount' })
+    expect(apply).toHaveClass('border')
+    expect(splitAgain).not.toHaveClass('border')
+    expect(apply).toBeEnabled()
+  })
+
+  it('puts the box on the periods, in proportion to the amounts they hold, and does not touch a single plan amount', async () => {
+    const { user } = await boxCorrectedOverHandTyped()
+    const before = periodAmounts(coreCard())
+
+    await user.click(within(coreCard()).getByRole('button', { name: 'Apply the set-aside to the periods' }))
+
+    expect(periodAmounts(coreCard())).toEqual(before)
+    expect(periodSetAsides(coreCard()).reduce((sum, text) => sum + Math.round(Number(text) * 100), 0)).toBe(20000)
+    expect(within(coreCard()).queryByRole('button', { name: 'Apply the set-aside to the periods' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+    const periods = create.mock.calls[0][0].pools[0].periods as { planAmount: number; setAside: number }[]
+    expect(periods.map(period => period.planAmount)).toEqual(before.map(Number))
+    expect(periods.reduce((sum, period) => sum + Math.round(period.setAside * 100), 0)).toBe(20000)
+  })
+
+  it('is what the "not on any period yet" line points to, and applying it puts the set-aside on every period', async () => {
+    const view = renderEditor()
+    typeYear()
+    await view.user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await view.user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '4000')
+    const second = within(coreCard()).getByLabelText('Plan amount, 1 Oct – 31 Dec 2026')
+    await view.user.clear(second)
+    await view.user.type(within(coreCard()).getByLabelText('Set-aside (optional)'), '4000')
+    await view.user.type(second, '1008.22')
+
+    expect(within(coreCard()).getByText('The set-aside is not on any period yet. Apply the set-aside to the periods.')).toBeInTheDocument()
+    await view.user.click(within(coreCard()).getByRole('button', { name: 'Apply the set-aside to the periods' }))
+
+    expect(within(coreCard()).queryByText(/not on any period yet/)).not.toBeInTheDocument()
+    expect(periodSetAsides(coreCard())).toEqual(periodAmounts(coreCard()))
+  })
+
+  it('is not offered while the box and the periods agree, or the box is blank', async () => {
+    const { user } = renderEditor({ plan: plan() })
+    expect(within(coreCard()).queryByRole('button', { name: 'Apply the set-aside to the periods' })).not.toBeInTheDocument()
+
+    await user.clear(within(coreCard()).getByLabelText('Set-aside (optional)'))
+    expect(within(coreCard()).queryByRole('button', { name: 'Apply the set-aside to the periods' })).not.toBeInTheDocument()
+  })
+
+  it('cannot apply to an amount that is not there yet: the button is disabled until every period has one', async () => {
+    const { user } = await boxCorrectedOverHandTyped()
+    const second = within(coreCard()).getByLabelText('Plan amount, 1 Oct – 31 Dec 2026')
+    await user.clear(second)
+
+    expect(within(coreCard()).getByRole('button', { name: 'Apply the set-aside to the periods' })).toBeDisabled()
+  })
+})
+
+describe('editor: a typed zero set-aside is "none" until the person confirms it means $0 (Q1)', () => {
+  const ZERO_LINE = 'A set-aside of $0 means nothing may be claimed against this pool. Leave it blank if none is recorded.'
+  const confirmBox = () => within(coreCard()).queryByRole('checkbox', { name: /set aside \$0/i })
+
+  async function typedZero(box = '0') {
+    const view = renderEditor()
+    typeYear()
+    await view.user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await view.user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '4000')
+    await view.user.type(within(coreCard()).getByLabelText('Set-aside (optional)'), box)
+    return view
+  }
+
+  it('shows the confirmation line, with a check box, beside the box while it holds a zero, in whichever way the zero is written', async () => {
+    for (const box of ['0', '0.00']) {
+      const { unmount } = await typedZero(box)
+
+      expect(within(coreCard()).getByText(ZERO_LINE)).toBeInTheDocument()
+      expect(confirmBox()).toBeInTheDocument()
+      expect(confirmBox()).not.toBeChecked()
+      unmount()
+    }
+  })
+
+  it('says nothing while the box is blank or holds another figure', async () => {
+    const { user } = await typedZero('500')
+    expect(within(coreCard()).queryByText(ZERO_LINE)).not.toBeInTheDocument()
+    expect(confirmBox()).not.toBeInTheDocument()
+
+    await user.clear(within(coreCard()).getByLabelText('Set-aside (optional)'))
+    expect(within(coreCard()).queryByText(ZERO_LINE)).not.toBeInTheDocument()
+  })
+
+  it('saves no set-aside for a zero nobody confirmed: it is the same as leaving the box blank', async () => {
+    const { user } = await typedZero()
+
+    expect(within(coreCard()).getAllByLabelText(/^Set-aside, /).map(input => (input as HTMLInputElement).value)).toEqual(['', '', '', ''])
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    const periods = create.mock.calls[0][0].pools[0].periods as { planAmount: number; setAside?: number }[]
+    expect(periods).toHaveLength(4)
+    expect(periods.every(period => period.setAside === undefined)).toBe(true)
+  })
+
+  it('saves $0 on every period once it is confirmed, and shows the zeros it put on the periods', async () => {
+    const { user } = await typedZero()
+
+    await user.click(confirmBox()!)
+
+    expect(confirmBox()).toBeChecked()
+    expect(within(coreCard()).getAllByLabelText(/^Set-aside, /).map(input => (input as HTMLInputElement).value)).toEqual(['0.00', '0.00', '0.00', '0.00'])
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+    const periods = create.mock.calls[0][0].pools[0].periods as { planAmount: number; setAside?: number }[]
+    expect(periods.map(period => period.setAside)).toEqual([0, 0, 0, 0])
+  })
+
+  it('goes back to saving nothing when the confirmation is taken back', async () => {
+    const { user } = await typedZero()
+    await user.click(confirmBox()!)
+
+    await user.click(confirmBox()!)
+
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+    const periods = create.mock.calls[0][0].pools[0].periods as { planAmount: number; setAside?: number }[]
+    expect(periods.every(period => period.setAside === undefined)).toBe(true)
+  })
+
+  it('shows a saved plan whose set-asides are $0 with the confirmation already given, and saves it as it was', async () => {
+    const stored = plan({ pools: [pool({ periods: quarters(2000, 0) })] })
+    const { user } = renderEditor({ plan: stored })
+
+    expect(confirmBox()).toBeChecked()
+    expect(within(coreCard()).getByText(ZERO_LINE)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect((update.mock.calls[0][0].body.pools[0].periods as { setAside?: number }[]).map(period => period.setAside)).toEqual([0, 0, 0, 0])
   })
 })

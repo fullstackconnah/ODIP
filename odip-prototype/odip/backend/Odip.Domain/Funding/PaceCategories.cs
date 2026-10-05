@@ -1,3 +1,5 @@
+using Odip.Domain.Entities;
+
 namespace Odip.Domain.Funding;
 
 /// <summary>The four support budgets of an NDIS plan.</summary>
@@ -60,6 +62,12 @@ public static class PaceCategories
     };
 
     public static PaceCategory? Find(int number) => All.FirstOrDefault(c => c.Number == number);
+
+    /// <summary>
+    /// The PACE category a catalogue row sits in, which is where the money for it comes from: its PACE number, else the legacy support category the older rows carry (the same rule the plan
+    /// pricing engine uses). Null when the row carries neither.
+    /// </summary>
+    public static int? Of(SupportCatalogueItem row) => row.PaceSupportCategoryNumber ?? row.SupportCategoryNumber;
 
     /// <summary>The name a Stated pool of this category carries when the plan does not give one; null for a number that is not a category.</summary>
     public static string? NameOf(int number) => Find(number)?.Name;

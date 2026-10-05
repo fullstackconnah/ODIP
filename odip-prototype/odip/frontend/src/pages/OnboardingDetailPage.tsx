@@ -2,7 +2,7 @@ import type React from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost } from '@/api/client'
-import { useParticipant } from '@/api/hooks'
+import { useParticipant, useProviderSettings } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
 import { PageState } from '@/components/PageState'
@@ -11,6 +11,7 @@ import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
+import type { ParticipantReadinessMode } from '@/api/types'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage, formatWithTimeZone } from '@/lib/utils'
 
@@ -39,6 +40,13 @@ function gateState(complete: boolean): Gate['state'] {
   return complete ? 'Complete' : 'Needs attention'
 }
 
+/** Whether activation waits for the plan budget, in the words of the organisation's readiness mode. Warn lists it and lets activation go ahead, so it can wait; Enforce makes activation wait for it; an unknown mode says only that the rule decides. */
+function fundingWaitSentence(mode: ParticipantReadinessMode | undefined): string {
+  if (mode === 'Warn') return 'If the plan has not been shared yet, this can wait.'
+  if (mode === 'Enforce') return 'Your organisation’s readiness rule is Enforce, so activation waits for it.'
+  return 'Your organisation’s readiness rule decides whether activation waits for it.'
+}
+
 export default function OnboardingDetailPage() {
   const { id } = useParams<{ id: string }>()
   const qc = useQueryClient()
@@ -47,6 +55,9 @@ export default function OnboardingDetailPage() {
   // Participant identity for the heading — the onboarding gate payload above only carries the
   // participantId (a raw GUID), never a name, so the display name is fetched separately.
   const { data: participant, isLoading: participantLoading } = useParticipant(id)
+  // How strictly the organisation applies readiness: "the plan budget can wait" is true in Warn mode only, so the card says it only when it KNOWS the mode is Warn. The settings are for the roles
+  // that manage funding; for anyone else (and while they load) the mode is unknown and the card does not guess.
+  const readinessMode = useProviderSettings(canManageFunding).data?.participantReadinessMode
   // These retain the existing server endpoints and empty payloads: server-side saved-record validation remains authoritative.
   const profile = useMutation({ mutationFn: () => apiPost<Detail>(`/inquiries/${id}/onboarding/profile-validation`, {}), onSuccess: () => qc.invalidateQueries({ queryKey: ['onboarding', id] }) })
   const services = useMutation({ mutationFn: () => apiPost<Detail>(`/inquiries/${id}/onboarding/service-needs-confirmation`, {}), onSuccess: () => qc.invalidateQueries({ queryKey: ['onboarding', id] }) })
@@ -103,7 +114,7 @@ export default function OnboardingDetailPage() {
           : d.fundingRecorded === false
             ? {
                 label: 'Record plan budget',
-                reason: 'The plan budget is recorded on the participant’s Funding tab, from the plan the participant shares or from their plan manager. If the plan has not been shared yet, this can wait.',
+                reason: `The plan budget is recorded on the participant’s Funding tab, from the plan the participant shares or from their plan manager. ${fundingWaitSentence(readinessMode)}`,
                 action: canManageFunding ? <Button to={`/participants/${id}?tab=funding`}>Open Funding tab</Button> : null,
               }
             : scheduleApproved

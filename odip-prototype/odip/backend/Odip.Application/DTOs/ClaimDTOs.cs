@@ -35,6 +35,8 @@ public record TripClaimDetailDto : TripClaimListDto
     public DateTime? PaidDate { get; init; }
     public string? Notes { get; init; }
     public List<ClaimLineItemDto> LineItems { get; init; } = new();
+    /// <summary>What this claim does to the participants' budgets as of now (budget feature, phase 2a); omitted when none of them has a plan that has started. A warning, never a block.</summary>
+    public ClaimBudgetDto? Budget { get; init; }
 }
 
 public record ClaimLineItemDto
@@ -116,6 +118,8 @@ public record ClaimPreviewResponseDto
     public int ConfirmedParticipantCount { get; init; }
     public List<ClaimPreviewLineItemDto> LineItems { get; init; } = new();
     public decimal TotalAmount { get; init; }
+    /// <summary>What generating this claim would do to each participant's budget (budget feature, phase 2a); omitted when none has a plan that has started. A warning, never a block.</summary>
+    public ClaimBudgetDto? Budget { get; init; }
 }
 
 public record ClaimPreviewLineItemDto
@@ -146,6 +150,8 @@ public record ShiftClaimPreviewResponseDto
 {
     public decimal TotalAmount { get; init; }
     public List<ShiftClaimPreviewLineItemDto> LineItems { get; init; } = new();
+    /// <summary>What generating this claim would do to the participant's budget (budget feature, phase 2a); omitted when they have no plan that has started. A warning, never a block.</summary>
+    public ClaimBudgetDto? Budget { get; init; }
 }
 
 public record ShiftClaimPreviewLineItemDto

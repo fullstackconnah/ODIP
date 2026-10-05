@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { FormField } from '@/components/FormField'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
 import type { TripClaimListDto, ShiftClaimPreviewResponseDto } from '@/api/types'
+import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import type { Tone } from '@/lib/tone'
 
 // Distinct from trip-detail/ClaimsTab.tsx (same name, different directory — see the
@@ -262,6 +263,11 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
               </tr>
             }
           />
+
+          {/* What this claim would use of the participant's recorded plan: a warning, never a block. Absent when they have no plan that has started. */}
+          <div className="mt-[var(--section-gap)]">
+            <ClaimBudgetBlock budget={previewData.budget} />
+          </div>
         </>
       )}
     </Modal>

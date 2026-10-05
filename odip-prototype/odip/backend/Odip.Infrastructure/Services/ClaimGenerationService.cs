@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
+using Odip.Domain.Interfaces;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Funding;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Services;
@@ -10,8 +12,24 @@ namespace Odip.Infrastructure.Services;
 public class ClaimGenerationService
 {
     private readonly OdipDbContext _db;
+    private readonly BudgetLedgerService? _ledger;
+    private readonly ICurrentTenant? _tenant;
 
-    public ClaimGenerationService(OdipDbContext db) => _db = db;
+    /// <param name="ledger">When given, a preview says what the claim does to each participant's budget (a warning only: nothing here is ever blocked by it).</param>
+    public ClaimGenerationService(OdipDbContext db, BudgetLedgerService? ledger = null, ICurrentTenant? tenant = null)
+    {
+        _db = db;
+        _ledger = ledger;
+        _tenant = tenant;
+    }
+
+    /// <summary>
+    /// The tenant a caller may be shown money for: the caller's own, and only when the trip actually belongs to it. A SuperAdmin who has
+    /// not chosen an organisation to view as keeps <c>IsSuperAdmin == true</c>, which is the first term of every tenant-filtered query, so a
+    /// foreign trip resolves — and the trip's own tenant id would then decide whose budgets get computed (budget security audit F-1).
+    /// </summary>
+    private Guid? MoneyTenantIdFor(Guid recordTenantId) =>
+        _tenant?.TenantId is { } tenantId && tenantId == recordTenantId ? tenantId : null;
 
     // ─── Preview (no persistence, no status checks) ────────────────────
 
@@ -20,8 +38,21 @@ public class ClaimGenerationService
     {
         var (lineItems, context) = await CalculateClaimAsync(tripInstanceId, overrides, ct);
 
+        // Each line is a part of its booking's claim: the booking stops being "booked ahead" and its lines take its place, under the participant's plan type or the booking's own.
+        // Worked out under the CALLER's tenant, so a caller who has not chosen an organisation is shown no budget rather than another
+        // organisation's. A null block is the honest "no figure here", not a missing feature: the preview is a warning about a budget nobody may see.
+        var moneyTenantId = MoneyTenantIdFor(context.TenantId);
+        var budget = _ledger == null || moneyTenantId is not { } forMoney
+            ? null
+            : await _ledger.EffectOfLinesAsync(
+                forMoney,
+                lineItems.Select(l => new ClaimEffectLine(
+                    l.Booking.ParticipantId, l.From, PaceCategories.Of(l.CatalogueItem), l.Booking.PlanTypeOverride ?? l.Booking.Participant.PlanType, l.TotalAmount, ShiftId: null, BookingId: l.Booking.Id)).ToList(),
+                ct);
+
         return new ClaimPreviewResponseDto
         {
+            Budget = budget,
             DepartureTime = context.DepartureTime,
             ReturnTime = context.ReturnTime,
             ActiveHoursPerDay = context.ActiveHoursPerDay,
@@ -210,6 +241,7 @@ public class ClaimGenerationService
 
         var context = new ClaimCalcContext
         {
+            TenantId = trip.TenantId,
             DepartureTime = departureTime,
             ReturnTime = returnTime,
             ActiveHoursPerDay = activeHoursPerDay,
@@ -220,10 +252,10 @@ public class ClaimGenerationService
             TripDayCount = trip.TripDays.Count
         };
 
-        var dayGroups = GroupDaysByType(trip.TripDays.OrderBy(d => d.Date).ToList(), publicHolidays, (date, dayType) => PriceEpochOn(catalogueItems, dayType, date));
-        var tripFirstDate = trip.StartDate;
-        var tripLastDate = tripEnd;
-        var eveningThreshold = new TimeOnly(20, 0);
+        // The per-booking line computation is the shared estimator's, so this claim, its preview and the budget ledger's "booked ahead" are one rule.
+        var estimator = new TripPriceEstimator(
+            new TripPricingInput(trip.StartDate, trip.DurationDays, trip.TripDays.Select(d => new TripPricingDay(d.Date, d.IsPublicHoliday)).ToList(), departureTime, returnTime, activeHoursPerDay),
+            catalogueItems, publicHolidays, state);
 
         var lineItems = new List<LineItemCalc>();
 
@@ -232,152 +264,29 @@ public class ClaimGenerationService
             if (booking.Participant == null || string.IsNullOrWhiteSpace(booking.Participant.NdisNumber))
                 continue;
 
-            var isIntensive = booking.Participant.IsIntensiveSupport;
-
-            foreach (var group in dayGroups)
+            var price = estimator.Price(booking.Participant.IsIntensiveSupport);
+            foreach (var line in price.Lines)
             {
-                if (group.DayType != ClaimDayType.Weekday)
+                lineItems.Add(new LineItemCalc
                 {
-                    // Non-weekday: single line item
-                    var catItem = FindCatalogueItem(catalogueItems, group.DayType, isIntensive, group.From);
-                    if (catItem == null)
-                    {
-                        context.UnpricedDayTypes.Add(group.DayType);
-                        continue;
-                    }
-
-                    var hours = group.DayCount * activeHoursPerDay;
-                    var unitPrice = GetPriceForState(catItem, state);
-                    lineItems.Add(new LineItemCalc
-                    {
-                        Booking = booking,
-                        CatalogueItem = catItem,
-                        DayType = group.DayType,
-                        From = group.From,
-                        To = group.To,
-                        Hours = hours,
-                        UnitPrice = unitPrice,
-                        TotalAmount = hours * unitPrice,
-                        GSTCode = gstCode
-                    });
-                }
-                else
-                {
-                    // Weekday: potentially split into daytime + evening
-                    var totalWeekdayHours = group.DayCount * activeHoursPerDay;
-                    decimal firstDayEveningHours = 0;
-                    decimal lastDayEveningHours = 0;
-
-                    // Check if first trip day is in this group
-                    if (tripFirstDate >= group.From && tripFirstDate <= group.To)
-                    {
-                        if (departureTime >= eveningThreshold)
-                        {
-                            // All hours on the first day are evening
-                            firstDayEveningHours = activeHoursPerDay;
-                        }
-                        else
-                        {
-                            // Use raw minute arithmetic rather than TimeOnly.AddHours: TimeOnly wraps
-                            // modulo 24h, so an overnight activity window (e.g. 18:00 + 8h) would
-                            // otherwise land back at 02:00 and compare as "before" the evening
-                            // threshold instead of past it.
-                            var daytimeEndMinutes = departureTime.ToTimeSpan().TotalMinutes + (double)activeHoursPerDay * 60;
-                            var eveningThresholdMinutes = eveningThreshold.ToTimeSpan().TotalMinutes;
-                            if (daytimeEndMinutes > eveningThresholdMinutes)
-                            {
-                                // Minutes from 20:00 to end (possibly past midnight) are evening
-                                var minutesAfterThreshold = daytimeEndMinutes - eveningThresholdMinutes;
-                                firstDayEveningHours = Math.Round((decimal)minutesAfterThreshold / 60m, 2);
-                            }
-                        }
-                    }
-
-                    // Check if last trip day is in this group
-                    if (tripLastDate >= group.From && tripLastDate <= group.To && tripLastDate != tripFirstDate)
-                    {
-                        if (returnTime > eveningThreshold)
-                        {
-                            var minutesAfterThreshold = (returnTime - eveningThreshold).TotalMinutes;
-                            lastDayEveningHours = Math.Round((decimal)minutesAfterThreshold / 60m, 2);
-                        }
-                    }
-
-                    var totalEveningHours = firstDayEveningHours + lastDayEveningHours;
-                    var totalDaytimeHours = Math.Max(0, totalWeekdayHours - totalEveningHours);
-
-                    // Create weekday daytime line item
-                    if (totalDaytimeHours > 0)
-                    {
-                        var catItem = FindCatalogueItem(catalogueItems, ClaimDayType.Weekday, isIntensive, group.From);
-                        if (catItem != null)
-                        {
-                            var unitPrice = GetPriceForState(catItem, state);
-                            lineItems.Add(new LineItemCalc
-                            {
-                                Booking = booking,
-                                CatalogueItem = catItem,
-                                DayType = ClaimDayType.Weekday,
-                                From = group.From,
-                                To = group.To,
-                                Hours = totalDaytimeHours,
-                                UnitPrice = unitPrice,
-                                TotalAmount = totalDaytimeHours * unitPrice,
-                                GSTCode = gstCode
-                            });
-                        }
-                        else context.UnpricedDayTypes.Add(ClaimDayType.Weekday);
-                    }
-
-                    // Create weekday evening line item
-                    if (totalEveningHours > 0)
-                    {
-                        var catItem = FindCatalogueItem(catalogueItems, ClaimDayType.WeekdayEvening, isIntensive, group.From);
-                        if (catItem != null)
-                        {
-                            var unitPrice = GetPriceForState(catItem, state);
-                            lineItems.Add(new LineItemCalc
-                            {
-                                Booking = booking,
-                                CatalogueItem = catItem,
-                                DayType = ClaimDayType.WeekdayEvening,
-                                From = group.From,
-                                To = group.To,
-                                Hours = totalEveningHours,
-                                UnitPrice = unitPrice,
-                                TotalAmount = totalEveningHours * unitPrice,
-                                GSTCode = gstCode
-                            });
-                        }
-                        else context.UnpricedDayTypes.Add(ClaimDayType.WeekdayEvening);
-                    }
-                }
+                    Booking = booking,
+                    CatalogueItem = line.CatalogueItem,
+                    DayType = line.DayType,
+                    From = line.From,
+                    To = line.To,
+                    Hours = line.Hours,
+                    UnitPrice = line.UnitPrice,
+                    TotalAmount = line.TotalAmount,
+                    GSTCode = gstCode
+                });
             }
+            foreach (var dayType in price.UnpricedDayTypes) context.UnpricedDayTypes.Add(dayType);
         }
 
         return (lineItems, context);
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────
-
-    /// <summary>The row to price a stretch of days from: the one valid on its first day (every day of a group picks the same rows, see <see cref="PriceEpochOn"/>).</summary>
-    private static SupportCatalogueItem? FindCatalogueItem(
-        List<SupportCatalogueItem> items, ClaimDayType dayType, bool isIntensive, DateOnly serviceDate) =>
-        EffectiveCatalogueResolver.FindForDay(items, dayType, isIntensive, serviceDate);
-
-    /// <summary>
-    /// The rows a stretch of days can be priced from on <paramref name="date"/>, as one string: what <see cref="FindCatalogueItem"/> returns for the day type, for a
-    /// standard and for an intensive participant (a trip can hold both), and for a weekday also the evening row (the first and last day's hours after 20:00 are
-    /// priced from it). Two consecutive same-type days with the same epoch are priced by the same rows and stay one line; a stretch that crosses a change in
-    /// one of those rows would otherwise be one line at one price, so it is split there. A change to a row none of its lines can read (the Saturday price,
-    /// for a weekday run) does not split it.
-    /// </summary>
-    private static string PriceEpochOn(List<SupportCatalogueItem> items, ClaimDayType dayType, DateOnly date)
-    {
-        var dayTypes = dayType == ClaimDayType.Weekday ? new[] { ClaimDayType.Weekday, ClaimDayType.WeekdayEvening } : new[] { dayType };
-        return string.Join(",", dayTypes.SelectMany(t => new[] { false, true },
-            (t, intensive) => FindCatalogueItem(items, t, intensive, date)?.Id.ToString("N") ?? "-"));
-    }
 
     /// <summary>Why a trip ended up with no claim lines, for the person generating the claim: the first cause that applies, most basic first.</summary>
     private static string NoLinesReason(TripInstance trip, ClaimCalcContext context)
@@ -403,50 +312,11 @@ public class ClaimGenerationService
         return raw.Length > 50 ? raw[..50] : raw;
     }
 
-    private static List<DayGroup> GroupDaysByType(List<TripDay> days, HashSet<DateOnly> publicHolidays, Func<DateOnly, ClaimDayType, string> priceEpochOf)
-    {
-        var result = new List<DayGroup>();
-        DayGroup? current = null;
-
-        foreach (var day in days)
-        {
-            var dayType = DayTypeResolver.Resolve(day.Date, day.IsPublicHoliday || publicHolidays.Contains(day.Date));
-            var epoch = priceEpochOf(day.Date, dayType);
-
-            if (current == null || current.DayType != dayType || current.To.AddDays(1) != day.Date || current.PriceEpoch != epoch)
-            {
-                current = new DayGroup { DayType = dayType, From = day.Date, To = day.Date, DayCount = 1, PriceEpoch = epoch };
-                result.Add(current);
-            }
-            else
-            {
-                current.To = day.Date;
-                current.DayCount++;
-            }
-        }
-
-        return result;
-    }
-
-    private static decimal GetPriceForState(SupportCatalogueItem item, string state) =>
-        state.ToUpperInvariant() switch
-        {
-            "ACT" => item.PriceLimit_ACT,
-            "NSW" => item.PriceLimit_NSW,
-            "NT"  => item.PriceLimit_NT,
-            "QLD" => item.PriceLimit_QLD,
-            "SA"  => item.PriceLimit_SA,
-            "TAS" => item.PriceLimit_TAS,
-            "WA"  => item.PriceLimit_WA,
-            "REMOTE" => item.PriceLimit_Remote,
-            "VERYREMOTE" or "VERY REMOTE" => item.PriceLimit_VeryRemote,
-            _ => item.PriceLimit_VIC
-        };
-
     // ─── Internal types ────────────────────────────────────────────────
 
     private class ClaimCalcContext
     {
+        public Guid TenantId { get; set; }
         public TimeOnly DepartureTime { get; set; }
         public TimeOnly ReturnTime { get; set; }
         public decimal ActiveHoursPerDay { get; set; }
@@ -472,15 +342,5 @@ public class ClaimGenerationService
         public decimal UnitPrice { get; set; }
         public decimal TotalAmount { get; set; }
         public GSTCode GSTCode { get; set; }
-    }
-
-    private class DayGroup
-    {
-        public ClaimDayType DayType { get; set; }
-        public DateOnly From { get; set; }
-        public DateOnly To { get; set; }
-        public int DayCount { get; set; }
-        /// <summary>The rows the group's lines can be priced from, the same on every day of the group (see <see cref="ClaimGenerationService.PriceEpochOn"/>).</summary>
-        public string PriceEpoch { get; set; } = string.Empty;
     }
 }

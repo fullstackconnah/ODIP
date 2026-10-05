@@ -14,6 +14,7 @@ import { BILLABLE_EVENT_STATUSES } from '@/api/types/billing'
 import { LEAVE_STATUSES, LEAVE_STATUS_COLORS } from '@/api/types/leave'
 import { NOTIFICATION_OUTBOX_STATUSES, NOTIFICATION_STATUS_COLORS } from '@/api/types/notifications'
 import { CAREGIVER_SUBMISSION_STATUSES } from '@/api/types/caregiver'
+import { BUDGET_STATUSES } from '@/api/types/funding'
 import { BILLABLE_EVENT_STATUS_COLORS } from '@/pages/billing/constants'
 
 /**
@@ -54,6 +55,7 @@ const STATUS_ENUMS: Record<string, readonly string[]> = {
   LeaveStatus: LEAVE_STATUSES,
   NotificationOutboxStatus: NOTIFICATION_OUTBOX_STATUSES,
   CaregiverSubmissionStatus: CAREGIVER_SUBMISSION_STATUSES,
+  BudgetStatus: BUDGET_STATUSES,
 }
 
 /** C# enums called `*Status` that are never printed through a status pill, and why. */
@@ -93,6 +95,8 @@ describe('every real status has a deliberate tone (L3-02)', () => {
       // Medication: a wrong-medication dose is as red as a refused or missed one.
       onhold: 'warning', ceased: 'danger', administered: 'success', refused: 'danger', withheld: 'warning', missed: 'danger', wrongmedication: 'danger',
       sent: 'success', failed: 'danger', skipped: 'neutral',
+      // A participant's budget (phase 2a): on track is go, approaching and forecast over ask for attention without anything being over yet, over has gone past the limit.
+      ontrack: 'success', approaching: 'warning', forecastover: 'warning', over: 'danger',
     }
     for (const [key, tone] of Object.entries(expected)) expect(toneForStatus(key), key).toBe(tone)
   })

@@ -4,18 +4,24 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import FundingTab from './FundingTab'
 import { plan, pool, quarters } from '@/test/fixtures/funding'
+import { noLedger } from '@/test/fixtures/ledger'
 
-// The participant hub's Funding tab (budget phase 1): "No budget recorded" with where the figures come from, the recorded plan as facts, a pools table whose pools expand to their
-// periods, the profile-dates mismatch with its explicit apply action, past plans, and the one muted line that says spending and forecasts are not here yet.
+// The participant hub's Funding tab: "No budget recorded" with where the figures come from, the recorded plan as facts, a pools table whose pools expand to their
+// periods, the profile-dates mismatch with its explicit apply action, past plans, and the budget ledger (phase 2a) below the record. What the ledger itself says has its own
+// tests; here it is stubbed, so these stay tests of the record.
 
-const { useFundingPlans, apply, editor } = vi.hoisted(() => ({
+const { useFundingPlans, useFundingLedger, apply, editor } = vi.hoisted(() => ({
   useFundingPlans: vi.fn(),
+  useFundingLedger: vi.fn(),
   apply: vi.fn(),
   editor: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
   useFundingPlans,
+  // The tab renders the budget ledger (phase 2a) below the plan record. Every test here is about the
+  // record, so the ledger is stubbed as a single marker: what the ledger itself does has its own tests.
+  useFundingLedger: () => useFundingLedger(),
   useApplyPlanDatesToProfile: () => ({ mutate: apply, isPending: false, isError: false }),
 }))
 
@@ -40,6 +46,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-10-04T03:00:00Z'))
+  useFundingLedger.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
 })
 afterEach(() => { vi.useRealTimers() })
 
@@ -177,13 +184,39 @@ describe('Funding tab: a recorded plan', () => {
     expect(screen.getByTestId('editor')).toHaveAttribute('data-previous', 'plan-1')
   })
 
-  it('says that spending and forecasts arrive later, as one muted line, and promises nothing now', () => {
+  it('asks the server for the ledger and shows it below the record, promising nothing that is not here', () => {
     useFundingPlans.mockReturnValue(plansReply([plan()]))
+    useFundingLedger.mockReturnValue({ data: noLedger(), isLoading: false, isError: false, refetch: vi.fn() })
     renderTab()
 
-    expect(screen.getByText('Spending and forecasts will appear here in a later release.')).toBeInTheDocument()
-    expect(screen.queryByText(/switched on/)).not.toBeInTheDocument()   // there is no switch: Settings holds a mode and a percentage, and says a later release uses them
-    expect(screen.queryByText(/remaining|left of|forecast over|on track/i)).not.toBeInTheDocument()
+    // The ledger asked for this participant's figures, and says there is nothing to spend against yet.
+    expect(screen.getByText('No budget figures yet')).toBeInTheDocument()
+    // Phase 1's "later" line is gone: the figures are here now.
+    expect(screen.queryByText('Spending and forecasts will appear here in a later release.')).not.toBeInTheDocument()
+    // Still no switch (Settings holds a mode and a percentage), and still nothing promising 2b or phase 3.
+    expect(screen.queryByText(/switched on/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/NDIA rejection code|hard limit|roster finding/)).not.toBeInTheDocument()
+  })
+
+  it('shows nothing of the ledger when its own request is still waiting, rather than a zero', () => {
+    useFundingPlans.mockReturnValue(plansReply([plan()]))
+    useFundingLedger.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
+    renderTab()
+
+    expect(screen.getByText('Loading budget ledger…')).toBeInTheDocument()
+    expect(screen.queryByText('$0')).not.toBeInTheDocument()
+  })
+
+  it('says the figures could not be loaded when the ledger request failed, and offers a retry', async () => {
+    const refetch = vi.fn()
+    useFundingPlans.mockReturnValue(plansReply([plan()]))
+    useFundingLedger.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+    renderTab()
+
+    expect(screen.getByText(/Couldn't load this budget ledger/)).toBeInTheDocument()
+    await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(refetch).toHaveBeenCalled()
   })
 })
 

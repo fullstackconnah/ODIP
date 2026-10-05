@@ -7,6 +7,7 @@ import { BUDGET_EVIDENCE_LABELS, BUDGET_EVIDENCE_SOURCES } from '@/api/types'
 import { PLAN_TYPES, PLAN_TYPE_LABELS, type PlanType } from '@/api/types/enums'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { CheckboxField } from '@/components/CheckboxField'
 import { inputClass } from '@/components/FormField'
 import { SelectField } from '@/components/SelectField'
 import { SlideOver } from '@/components/SlideOver'
@@ -17,8 +18,8 @@ import { categoriesLabel, managementLabel, paceNumber, writtenSpan } from '@/lib
 import { apiErrorCode, apiErrorMessages, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { cn, formatCurrency } from '@/lib/utils'
 import {
-  addCorePool, addStatedPool, editorStateFromPlan, hasPool, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, startFromBilling, toSaveBody, updatePool, validate,
-  withPeriodEdit, withPlanFields, withPoolTotals, type EditorPool, type EditorState, type PoolProblems, type Problems,
+  addCorePool, addStatedPool, applySetAside, editorStateFromPlan, hasPool, isZeroSetAside, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, startFromBilling, toSaveBody, updatePool, validate,
+  withPeriodEdit, withPlanFields, withPoolTotals, withSetAsideZeroConfirmed, type EditorPool, type EditorState, type PoolProblems, type Problems,
 } from './fundingEditorState'
 
 export type FundingPlanEditorProps = {
@@ -42,6 +43,9 @@ const MANAGEMENT_OPTIONS = PLAN_TYPES.map(type => ({ value: type, label: PLAN_TY
 
 /** A period's amount box: the shared input, with px-2 REPLACING its px-3 (cn merges them; two padding classes together are decided by the stylesheet, and px-3 won, which clipped a figure on a phone). */
 const periodInputClass = cn(inputClass, 'px-2 tabular-nums')
+
+/** Beside the set-aside box while it holds a zero: what a $0 set-aside means, so the person confirms it knowingly or leaves the box blank. */
+const ZERO_SET_ASIDE_LINE = 'A set-aside of $0 means nothing may be claimed against this pool. Leave it blank if none is recorded.'
 
 const PROPOSAL_NOTE = 'Worked out from the plan dates and split by days. Change any amount to match the plan’s release schedule.'
 const EDITED_NOTE = 'You have edited some amounts.'
@@ -79,7 +83,8 @@ function contentOf(state: EditorState): string {
     planStart: state.planStart, planEnd: state.planEnd, reassessmentDate: state.reassessmentDate, periodLengthMonths: state.periodLengthMonths, evidence: state.evidence,
     confirmedOn: state.confirmedOn, confirmedByName: state.confirmedByName, notes: state.notes,
     pools: state.pools.map(pool => ({
-      kind: pool.kind, paceCategory: pool.paceCategory, managementType: pool.managementType, name: pool.name, notes: pool.notes, totalText: pool.totalText, setAsideText: pool.setAsideText, periods: pool.periods,
+      kind: pool.kind, paceCategory: pool.paceCategory, managementType: pool.managementType, name: pool.name, notes: pool.notes, totalText: pool.totalText, setAsideText: pool.setAsideText,
+      setAsideZeroConfirmed: pool.setAsideZeroConfirmed, periods: pool.periods,
     })),
   })
 }
@@ -375,11 +380,21 @@ function PoolCard(
           label="Plan amount for the whole plan" inputMode="decimal" placeholder="0.00" value={pool.totalText}
           onChange={event => onState(withPoolTotals(state, pool.key, { totalText: event.target.value }))} error={problems?.total}
         />
-        <TextField
-          label="Set-aside (optional)" inputMode="decimal" placeholder="0.00" value={pool.setAsideText}
-          onChange={event => onState(withPoolTotals(state, pool.key, { setAsideText: event.target.value }))} error={problems?.setAside}
-          hint="The part of this pool kept for your organisation when the participant also uses other providers. Leave blank if none is set aside."
-        />
+        <div className="flex flex-col gap-[var(--field-gap-y)]">
+          <TextField
+            label="Set-aside (optional)" inputMode="decimal" placeholder="0.00" value={pool.setAsideText}
+            onChange={event => onState(withPoolTotals(state, pool.key, { setAsideText: event.target.value }))} error={problems?.setAside}
+            hint="The part of this pool kept for your organisation when the participant also uses other providers. Leave blank if none is set aside."
+          />
+          {/* A typed zero is "none" or "$0 allowed", and a set-aside is the pool's limit: it is read as blank until the person says which. */}
+          {isZeroSetAside(pool) && (
+            <CheckboxField
+              label="Yes, set aside $0 for this pool" checked={pool.setAsideZeroConfirmed}
+              onChange={event => onState(withSetAsideZeroConfirmed(state, pool.key, event.target.checked))}
+              hint={ZERO_SET_ASIDE_LINE}
+            />
+          )}
+        </div>
       </div>
 
       {periodic ? (
@@ -391,8 +406,9 @@ function PoolCard(
             {sums.planMismatch && sums.periodsPlan !== null && sums.typedPlan !== null && (
               <p className="text-[var(--color-on-warning-container)]">The periods add up to {formatCurrency(sums.periodsPlan)}, not the {formatCurrency(sums.typedPlan)} you typed. The periods are what is saved.</p>
             )}
-            {sums.setAsideMismatch && sums.periodsSetAside !== null && sums.typedSetAside !== null && (
-              <p className="text-[var(--color-on-warning-container)]">The set-asides add up to {formatCurrency(sums.periodsSetAside)}, not the {formatCurrency(sums.typedSetAside)} you typed. The periods are what is saved.</p>
+            {/* A save with these figures is refused, so this is said while the person works; once a save was tried the box's own message says it, and this gives way (one message, not two). */}
+            {sums.setAsideMismatch && sums.periodsSetAside !== null && sums.typedSetAside !== null && !problems?.setAside && (
+              <p className="text-[var(--color-on-warning-container)]">The set-asides add up to {formatCurrency(sums.periodsSetAside)}, not the {formatCurrency(sums.typedSetAside)} you typed. They have to agree before this can be saved.</p>
             )}
             {/* One line that is a warning while the person is working, and the error to put right once a save was tried (the same element, so it is announced once). */}
             {sums.setAsideMissing && (
@@ -400,6 +416,10 @@ function PoolCard(
                 data-problem={notApplied ? '' : undefined} tabIndex={notApplied ? -1 : undefined}
                 className={notApplied ? 'text-[var(--color-destructive)] focus:outline-none' : 'text-[var(--color-on-warning-container)]'}
               >{SET_ASIDE_NOT_APPLIED}</p>
+            )}
+            {/* The set-aside only: the box is forced onto the periods and every plan amount stays. It is the remedy for both lines above, so it has the weight of a real control. */}
+            {(sums.setAsideMismatch || sums.setAsideMissing) && (
+              <Button variant="secondary" size="sm" className="w-fit" disabled={sums.periodsPlan === null} onClick={() => onState(applySetAside(state, pool.key))}>Apply the set-aside to the periods</Button>
             )}
             {canSplitAgain && (
               <Button variant="ghost" size="sm" className="w-fit" onClick={() => onState({ ...state, pools: state.pools.map(p => (p.key === pool.key ? resplit(state, p) : p)) })}>Split again from the plan amount</Button>

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 
@@ -19,10 +20,15 @@ public class ClaimsController : ControllerBase
     private readonly ShiftClaimGenerationService _shiftGenerator;
     private readonly BprCsvService _bprService;
     private readonly InvoiceService _invoiceService;
+    private readonly BudgetLedgerService _ledger;
+    private readonly ICurrentTenant _tenant;
 
     public ClaimsController(OdipDbContext db, ClaimGenerationService generator,
-        ShiftClaimGenerationService shiftGenerator, BprCsvService bprService, InvoiceService invoiceService)
+        ShiftClaimGenerationService shiftGenerator, BprCsvService bprService, InvoiceService invoiceService,
+        BudgetLedgerService ledger, ICurrentTenant tenant)
     {
+        _ledger = ledger;
+        _tenant = tenant;
         _db = db;
         _generator = generator;
         _shiftGenerator = shiftGenerator;
@@ -36,6 +42,10 @@ public class ClaimsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ClaimPreviewResponseDto>>> PreviewClaim(
         Guid tripId, [FromBody] ClaimPreviewRequestDto dto, CancellationToken ct)
     {
+        // No tenant guard here on purpose. The preview's own lines and total have always been returned to any caller the class-level
+        // [Authorize] admits, and narrowing that is a wider product change than the budget finding asks for. The budget block it now
+        // carries is scoped inside the generator, under the CALLER's tenant (budget security audit F-1), so a SuperAdmin with no
+        // organisation chosen gets a preview with no budget rather than another organisation's.
         try
         {
             var preview = await _generator.PreviewClaimAsync(tripId, dto, ct);
@@ -131,6 +141,7 @@ public class ClaimsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftClaimPreviewResponseDto>>> PreviewShiftClaim(
         Guid participantId, [FromBody] GenerateShiftClaimRequestDto dto, CancellationToken ct)
     {
+        // See PreviewClaim: the budget block is scoped in the generator, not by refusing the endpoint.
         try
         {
             var preview = await _shiftGenerator.PreviewAsync(participantId, dto.From, dto.To, ct);
@@ -182,8 +193,13 @@ public class ClaimsController : ControllerBase
 
         if (c == null) return NotFound(ApiResponse<TripClaimDetailDto>.Fail("Claim not found"));
 
+        // What this claim does to the budgets of the participants it covers, as of now (budget feature, phase 2a). A warning on the page and nothing more. It is worked out through the tenant's own
+        // participants, so a claim reached by its id alone shows no budget of another organisation; a SuperAdmin who has not chosen an organisation to view as gets none.
+        var budget = _tenant.TenantId is { } tenantId ? await _ledger.ForClaimAsync(tenantId, c.Id, ct) : null;
+
         return Ok(ApiResponse<TripClaimDetailDto>.Ok(new TripClaimDetailDto
         {
+            Budget = budget,
             Id = c.Id, Kind = c.Kind, TripInstanceId = c.TripInstanceId, TripName = c.TripInstance?.TripName ?? string.Empty,
             ParticipantId = c.ParticipantId, PeriodFrom = c.PeriodFrom, PeriodTo = c.PeriodTo,
             Status = c.Status, ClaimReference = c.ClaimReference,

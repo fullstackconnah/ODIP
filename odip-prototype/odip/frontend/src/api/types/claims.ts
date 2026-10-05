@@ -1,4 +1,5 @@
 import type { TripClaimStatus, ClaimLineItemStatus, ClaimDayType, ClaimType, GSTCode, PlanType, ClaimKind } from './enums'
+import type { BudgetStatus } from './funding'
 
 // Shift-completion design spec §1/§2, PR 3 — TripClaim gained a Kind discriminator. Trip-kind
 // claims keep tripInstanceId set and participantId/periodFrom/periodTo unset; Shift-kind claims
@@ -29,6 +30,8 @@ export interface TripClaimDetailDto extends TripClaimListDto {
   paidDate: string | null
   notes: string | null
   lineItems: ClaimLineItemDto[]
+  /** What this claim does to the participants' budgets, as of now (budget phase 2a). Absent when none of them has a plan that has started. A warning, never a block. */
+  budget?: ClaimBudgetDto
 }
 
 export interface ClaimLineItemDto {
@@ -97,6 +100,8 @@ export interface ClaimPreviewResponseDto {
   confirmedParticipantCount: number
   lineItems: ClaimPreviewLineItemDto[]
   totalAmount: number
+  /** What generating this claim would do to each participant's budget (budget phase 2a). Absent when none has a plan that has started. A warning, never a block. */
+  budget?: ClaimBudgetDto
 }
 
 export interface ClaimPreviewLineItemDto {
@@ -133,4 +138,36 @@ export interface ShiftClaimPreviewLineItemDto {
 export interface ShiftClaimPreviewResponseDto {
   totalAmount: number
   lineItems: ShiftClaimPreviewLineItemDto[]
+  /** What generating this claim would do to the participant's budget (budget phase 2a). Absent when they have no plan that has started. A warning, never a block. */
+  budget?: ClaimBudgetDto
+}
+
+// ── What a claim does to a budget (phase 2a) ──────────────────────────────────
+
+/** Where the part of a claim in a budget row landed: in a recorded pool, in none (it uses no pool's money), or outside the plan's dates. */
+export type ClaimBudgetPlacement = 'Pool' | 'NotInAPool' | 'OutsideThePlan'
+
+/** One affected pool and period of a claim. For a row in no pool or outside the plan only `thisClaim` is there. A negative `leftAfter` means the claim leaves the period over. */
+export interface ClaimBudgetRowDto {
+  placement: ClaimBudgetPlacement
+  poolName: string
+  periodStart?: string
+  periodEnd?: string
+  available?: number
+  usedBefore?: number
+  thisClaim: number
+  usedAfter?: number
+  leftAfter?: number
+  statusAfter?: BudgetStatus
+}
+
+export interface ClaimBudgetParticipantDto {
+  participantId: string
+  participantName: string
+  rows: ClaimBudgetRowDto[]
+}
+
+/** The budget effect of a claim for each participant it covers (a trip claim covers several): one row for each affected pool and period. */
+export interface ClaimBudgetDto {
+  participants: ClaimBudgetParticipantDto[]
 }
