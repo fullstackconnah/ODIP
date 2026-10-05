@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { usePreviewClaim, useGenerateClaim } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { DataTable } from '@/components/DataTable'
+import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import type { TripDetailDto, ClaimPreviewResponseDto, ClaimPreviewLineItemDto } from '@/api/types'
 import type { AxiosError } from 'axios'
 import { plural } from '@/lib/format'
@@ -244,6 +245,11 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
                   { key: 'totalAmount', header: 'Amount', type: 'currency' as const, className: 'font-medium' },
                 ]}
               />
+            </div>
+
+            {/* What this claim would use of each participant's recorded plan: a warning, never a block. Absent when none of them has a plan that has started. */}
+            <div className="mt-[var(--section-gap)]">
+              <ClaimBudgetBlock budget={previewData.budget} />
             </div>
 
           </>
