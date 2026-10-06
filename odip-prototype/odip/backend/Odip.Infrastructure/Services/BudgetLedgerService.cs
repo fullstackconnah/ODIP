@@ -310,14 +310,22 @@ public sealed class BudgetLedgerService
                     || (s.Status == ShiftStatus.Completed && !_db.ClaimLineItems.Any(l => l.ShiftId == s.Id))))
             .Select(s => new ShiftRow(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status));
 
-    /// <summary>Confirmed bookings of trips that start today or later and have not been cancelled.</summary>
+    /// <summary>Confirmed bookings of trips that start today or later and have not been cancelled, and that no claim line has already taken over.</summary>
     private async Task<List<BookingRow>> LoadBookingsAsync(Guid tenantId, List<Guid> participantIds, DateOnly today, DateOnly to, CancellationToken ct) =>
         await BookingsQuery(tenantId, participantIds, today, to).ToListAsync(ct);
 
     public IQueryable<BookingRow> BookingsQuery(Guid tenantId, IReadOnlyCollection<Guid> participantIds, DateOnly today, DateOnly to) =>
         _db.ParticipantBookings.AsNoTracking()
             .Where(b => participantIds.Contains(b.ParticipantId) && b.BookingStatus == BookingStatus.Confirmed
-                && b.TripInstance.TenantId == tenantId && b.TripInstance.StartDate >= today && b.TripInstance.StartDate <= to && b.TripInstance.Status != TripStatus.Cancelled)
+                && b.TripInstance.TenantId == tenantId && b.TripInstance.StartDate >= today && b.TripInstance.StartDate <= to && b.TripInstance.Status != TripStatus.Cancelled
+                // A claim's lines TAKE THE BOOKING'S PLACE (ClaimGenerationService says so of every line: "the booking stops being
+                // booked ahead and its lines take its place"), so a booking the ledger already counts through a claim line must not also
+                // be counted as booked ahead - the same rule the shift query above follows for a completed shift that has a claim line.
+                // "Already counted" is exactly ClaimLinesQuery's rule: the claim is neither rejected nor cancelled, and the line is not
+                // itself rejected. A claim or line the ledger drops leaves the booking's own estimate standing.
+                && !_db.ClaimLineItems.Any(l => l.ParticipantBookingId == b.Id
+                    && l.Status != ClaimLineItemStatus.Rejected
+                    && l.TripClaim.Status != TripClaimStatus.Rejected && l.TripClaim.Status != TripClaimStatus.Cancelled))
             .Select(b => new BookingRow(
                 b.Id, b.ParticipantId, b.PlanTypeOverride, b.TripInstanceId, b.TripInstance.TripName, b.TripInstance.StartDate, b.TripInstance.DurationDays, b.TripInstance.DepartureTime,
                 b.TripInstance.ReturnTime, b.TripInstance.ActiveHoursPerDay, b.TripInstance.DefaultActivityGroupId));
