@@ -13,7 +13,7 @@ import {
   useDeleteClaim,
 } from '@/api/hooks/claims'
 import { participantLedger } from '@/test/fixtures/ledger'
-import type { TripClaimDetailDto } from '@/api/types'
+import type { TripClaimDetailDto, TripClaimListDto } from '@/api/types'
 
 // ---------------------------------------------------------------------------
 // PR193 / budget phase 2a: a successful claim write must invalidate the cached
@@ -42,6 +42,9 @@ import type { TripClaimDetailDto } from '@/api/types'
 //   keys, so an ACTIVE, MOUNTED useFundingLedger observer kept serving pre-claim
 //   money figures for that participant: an open ledger showing what the claim just
 //   spent as still available.
+//
+// Every payload below is the response the server actually sends, typed as the DTO
+// its controller maps -- real enum members, no cast to force a shape through.
 // ---------------------------------------------------------------------------
 
 const LEDGER_URL = '/participants/participant-1/funding/ledger'
@@ -67,12 +70,56 @@ function axiosPayload(data: unknown): AxiosResponse {
   } as AxiosResponse
 }
 
-/** A claim detail naming exactly the participants it covers, mirroring
- * TripClaimDetailDto: `participantId` for a Shift-kind claim, one participant per
- * booking on the line items for a Trip-kind claim. */
-function tripClaim(lineItemParticipants: string[]): TripClaimDetailDto {
+/** Exactly what POST /trips/{tripId}/claims answers: ClaimsController.GenerateClaim returns
+ * ApiResponse<TripClaimListDto> and maps only Id / Kind / TripInstanceId / TripName / Status /
+ * ClaimReference / TotalAmount / CreatedAt / SubmittedDate. A Trip-kind claim therefore carries
+ * no `participantId` and no line items. */
+function generatedTripClaim(): TripClaimListDto {
   return {
-    participantId: 'trip-sponsor',
+    id: 'claim-1',
+    kind: 'Trip',
+    tripInstanceId: 'trip-1',
+    tripName: 'Sydney overnight',
+    status: 'Draft',
+    claimReference: 'TC-4301-20261001',
+    totalAmount: 400,
+    createdAt: '2026-10-01T00:00:00Z',
+  }
+}
+
+/**
+ * Exactly what POST /participants/{id}/claims/from-shifts answers: also a
+ * TripClaimListDto, but a Shift-kind one -- so `participantId` is set here and
+ * `tripInstanceId` is absent (the backend omits null fields).
+ */
+function generatedShiftClaim(): TripClaimListDto {
+  return {
+    id: 'claim-shift-1',
+    kind: 'Shift',
+    tripName: '',
+    participantId: 'participant-1',
+    periodFrom: '2026-10-01',
+    periodTo: '2026-10-01',
+    status: 'Draft',
+    claimReference: 'TC-4302-20261001',
+    totalAmount: 400,
+    createdAt: '2026-10-01T00:00:00Z',
+  }
+}
+
+/** A claim detail naming exactly the participants it covers, as GET /claims/{claimId} answers:
+ * a TripClaimDetailDto whose line items carry one participant per booking (the claim itself has
+ * no participantId of its own for this kind). */
+function tripClaimDetail(lineItemParticipants: string[]): TripClaimDetailDto {
+  return {
+    id: 'claim-1',
+    kind: 'Trip',
+    tripInstanceId: 'trip-1',
+    tripName: 'Sydney overnight',
+    status: 'Draft',
+    claimReference: 'TC-4301-20261001',
+    totalAmount: 400,
+    createdAt: '2026-10-01T00:00:00Z',
     totalApprovedAmount: 100,
     authorisedByStaffId: null,
     authorisedByStaffName: null,
@@ -85,23 +132,23 @@ function tripClaim(lineItemParticipants: string[]): TripClaimDetailDto {
       participantId,
       participantName: participantId,
       ndisNumber: 'NDIS-1',
-      planType: 'PLAN_CAPACITIES',
-      supportItemCode: 'CODE',
+      planType: 'PlanManaged',
+      supportItemCode: 'CODE_01',
       dayType: 'Weekday',
-      supportsDeliveredFrom: '2026-04-01T09:00:00Z',
-      supportsDeliveredTo: '2026-04-01T17:00:00Z',
+      supportsDeliveredFrom: '2026-10-01T09:00:00Z',
+      supportsDeliveredTo: '2026-10-01T17:00:00Z',
       hours: 8,
       unitPrice: 50,
       totalAmount: 400,
-      gstCode: 'GST_FREE',
-      claimType: 'SUPPORTED',
+      gstCode: 'NoGST',
+      claimType: 'Standard',
       cancellationReason: null,
       participantApproved: false,
-      status: 'PENDING',
+      status: 'Submitted',
       rejectionReason: null,
       paidAmount: null,
     })),
-  } as unknown as TripClaimDetailDto
+  }
 }
 
 beforeEach(() => {
@@ -115,9 +162,9 @@ beforeEach(() => {
 
     if (method === 'get' && url === LEDGER_URL) return axiosPayload(participantLedger())
     if (method === 'get' && url === LEDGER_URL_2) return axiosPayload(participantLedger())
-    if (method === 'get' && url === '/claims/claim-1') return axiosPayload(tripClaim(['participant-1']))
-    if (method === 'post' && url === SHIFT_CLAIM_URL) return axiosPayload({ claims: [], total: 0 })
-    if (method === 'post' && url === TRIP_CLAIM_URL) return axiosPayload(tripClaim(['participant-1']))
+    if (method === 'get' && url === '/claims/claim-1') return axiosPayload(tripClaimDetail(['participant-1']))
+    if (method === 'post' && url === SHIFT_CLAIM_URL) return axiosPayload(generatedShiftClaim())
+    if (method === 'post' && url === TRIP_CLAIM_URL) return axiosPayload(generatedTripClaim())
     if (method === 'put' && url === '/claims/claim-1') return axiosPayload(true)
     if (method === 'patch' && url === '/claims/claim-1/line-items/line-1') return axiosPayload(true)
     if (method === 'delete' && url === '/claims/claim-1') return axiosPayload(true)
@@ -205,11 +252,13 @@ describe('claim mutations invalidate the cached budget ledger', () => {
     )
   })
 
-  it('TRIP surface: useGenerateClaim refetches the ledgers of the participants it books', async () => {
+  it('TRIP surface: useGenerateClaim refreshes the ledgers this client holds open', async () => {
     const qc = makeClient()
-    // The generated claim names participant-1 on a line item, so only their
-    // ledger may be refetched -- participant-2's open ledger is not part of this
-    // claim and must not be pulled.
+    // The generated claim is a TripClaimListDto: it names no participant (no
+    // participantId, no line items), so the hook cannot narrow to who the claim
+    // books. What it can do -- and what it does -- is refresh the ledger keys this
+    // client already holds, so every open ledger is re-read rather than kept
+    // serving pre-claim money.
     await mountLedger(qc, 'participant-1')
     await mountLedger(qc, 'participant-2')
     expect(ledgerGets(LEDGER_URL)).toBe(1)
@@ -227,8 +276,16 @@ describe('claim mutations invalidate the cached budget ledger', () => {
     const mutation = renderHook(() => useGenerateClaim(), { wrapper: wrapperFor(qc) })
     await mutation.result.current.mutateAsync({ tripId: 'trip-1' })
 
+    // Both open ledgers are re-read -- each is a key this client genuinely holds,
+    // so this is a cache-walk, not an invented id and not a whole-namespace sweep.
     await waitFor(() => expect(ledgerGets(LEDGER_URL)).toBe(2), { timeout: 2000 })
-    expect(ledgerGets(LEDGER_URL_2)).toBe(1)
+    await waitFor(() => expect(ledgerGets(LEDGER_URL_2)).toBe(2), { timeout: 2000 })
+    expect(invalidated).toEqual(
+      expect.arrayContaining([
+        ['participant-funding', 'participant-1', 'ledger'],
+        ['participant-funding', 'participant-2', 'ledger'],
+      ]),
+    )
     // Its pre-existing invalidation is preserved, and it is narrowed to the trip.
     expect(invalidated).toEqual(expect.arrayContaining([['trip-claims', 'trip-1']]))
   })
@@ -265,7 +322,8 @@ describe('claim mutations invalidate the cached budget ledger', () => {
     await mutation.result.current.mutateAsync({ claimId: 'claim-1', itemId: 'line-1', data: { hours: 4 } })
     expect(calls.some((c) => c.method === 'patch' && c.url === '/claims/claim-1/line-items/line-1')).toBe(true)
 
-    // line-1 belongs to participant-1; participant-2's ledger is untouched.
+    // line-1 belongs to participant-1 on the claim detail this client holds;
+    // participant-2's ledger is not part of this edit and is left alone.
     await waitFor(() => expect(ledgerGets(LEDGER_URL)).toBe(2), { timeout: 2000 })
     expect(ledgerGets(LEDGER_URL_2)).toBe(1)
   })

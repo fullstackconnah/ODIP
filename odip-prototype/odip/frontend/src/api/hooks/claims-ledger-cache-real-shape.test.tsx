@@ -12,9 +12,9 @@ import type { TripClaimDetailDto, TripClaimListDto } from '@/api/types'
 // PR193 follow-up: the trip-generate response the server really sends, and the
 // cache fallback that carries its invalidation.
 //
-// claims-ledger-cache.test.tsx mocks POST /trips/{id}/claims as answering a
-// TripClaimDetailDto with line items. The server does not. ClaimsController.GenerateClaim
-// is declared Task<ActionResult<ApiResponse<TripClaimListDto>>> and maps only
+// The server answers POST /trips/{id}/claims with a TripClaimListDto, not a claim
+// detail. ClaimsController.GenerateClaim is declared
+// Task<ActionResult<ApiResponse<TripClaimListDto>>> and maps only
 // Id / Kind / TripInstanceId / TripName / Status / ClaimReference / TotalAmount /
 // CreatedAt / SubmittedDate. A Trip-kind claim omits participantId outright (the backend
 // drops null fields) and that payload carries no line items at all -- so the
@@ -29,8 +29,9 @@ import type { TripClaimDetailDto, TripClaimListDto } from '@/api/types'
 // cover it -- this is not a claim of a permanently stale screen.
 //
 // Same real hooks, same real QueryClient, only the axios transport adapter swapped,
-// as in the sibling suite. These tests pin the fallback and the response shape it exists
-// for, with the fixtures typed against the DTOs the server actually maps.
+// as in the sibling suite. The sibling suite claims-ledger-cache.test.tsx now mocks this
+// same real shape, so these tests pin the premise and the fallback on their own rather
+// than contrasting against a fiction. Fixtures are typed against the DTOs the server maps.
 // ---------------------------------------------------------------------------
 
 const LEDGER_URL_1 = '/participants/participant-1/funding/ledger'
@@ -177,11 +178,10 @@ describe("trip-generate ledger refresh, against the server's real response shape
     // answering this payload with participants, the fallback stops being the thing
     // under test and these expectations need revisiting.
     const created = tripClaimListResponse()
-    const ids = [
-      created.participantId,
-      ...((created as Partial<TripClaimDetailDto>).lineItems ?? []).map((item) => item.participantId),
-    ]
-    expect(ids.filter((id): id is string => typeof id === 'string' && id.length > 0)).toEqual([])
+    // Read it off the DTO as typed: the summary has a nullable participantId and
+    // no line-items member at all (TripClaimListDto), so nothing here names anyone.
+    expect(created.participantId).toBeUndefined()
+    expect(Object.keys(created)).not.toContain('lineItems')
   })
 
   it('useGenerateClaim still refetches a mounted ledger when the response names nobody', async () => {

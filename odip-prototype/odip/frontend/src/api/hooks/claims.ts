@@ -39,10 +39,11 @@ export function useClaim(claimId: string | undefined) {
 
 // The budget ledger is cached under ['participant-funding', participantId, 'ledger'] (funding-ledger.ts). A claim write changes what the server works out on the next read of that ledger -- claimed, pending, used, booked ahead, the forecast, the status, the row list -- so the figures have to be read again. Without this an open ledger keeps showing what a claim just spent as still available.
 
-/** The participants a claim moves money for, read off the claim itself: its own `participantId` (a Shift-kind claim carries it, since it has no trip) plus every participant on its line items (a Trip-kind claim carries one per booking). Line-item participants are nullable, so they are filtered rather than assumed. An empty result is not a guess at an id -- it means "fall back to whoever's ledger is actually open". */
-function claimParticipantIds(claim: TripClaimDetailDto | undefined): string[] {
+/** The participants a claim moves money for, read off the claim itself: its own `participantId` (a Shift-kind claim carries it, since it has no trip) plus every participant on its line items (a Trip-kind claim carries one per booking, and only the detail response spells those out). Line-item participants are nullable, so they are filtered rather than assumed. An empty result is not a guess at an id -- it means "fall back to whoever's ledger is actually open". */
+function claimParticipantIds(claim: TripClaimDetailDto | TripClaimListDto | undefined): string[] {
   if (!claim) return []
-  const ids = [claim.participantId, ...(claim.lineItems ?? []).map((item) => item.participantId)]
+  const lineItemIds = 'lineItems' in claim ? claim.lineItems.map((item) => item.participantId) : []
+  const ids = [claim.participantId, ...lineItemIds]
   return [...new Set(ids.filter((id): id is string => typeof id === 'string' && id.length > 0))]
 }
 
@@ -71,11 +72,15 @@ export function useGenerateClaim() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ tripId, data }: { tripId: string; data?: GenerateClaimRequestDto }) =>
-      apiPost<TripClaimDetailDto>(`/trips/${tripId}/claims`, data ?? {}),
+      // POST /trips/{id}/claims answers ApiResponse<TripClaimListDto> -- a summary row, not the
+      // claim detail (ClaimsController.GenerateClaim maps only Id/Kind/TripInstanceId/TripName/
+      // Status/ClaimReference/TotalAmount/CreatedAt/SubmittedDate).
+      apiPost<TripClaimListDto>(`/trips/${tripId}/claims`, data ?? {}),
     onSuccess: (created, { tripId }) => {
       qc.invalidateQueries({ queryKey: ['trip-claims', tripId] })
-      // Generating a claim spends the participants it books, and the generated detail names them
-      // (its budget block and its line items), so refresh exactly their ledgers.
+      // Generating a claim spends the participants it books, but that summary names none of them
+      // for a Trip-kind claim (no participantId, no line items), so this lands on the fallback:
+      // refresh the ledger keys this client actually holds open.
       refreshLedgers(qc, claimParticipantIds(created))
     },
   })
