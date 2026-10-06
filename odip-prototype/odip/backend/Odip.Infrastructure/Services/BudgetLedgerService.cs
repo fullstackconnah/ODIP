@@ -150,6 +150,14 @@ public sealed class BudgetLedgerService
         return result;
     }
 
+    /// <summary>
+    /// Which of the asked-for ids are participants of <paramref name="tenantId"/>: the ids the caller named and only those, so a tenant with many participants does not have all of them read to
+    /// answer a question about one. The ids are a parameter, so this stays a single query however many are asked for. It is exposed so that <c>ToQueryString</c> can show how it translates (see
+    /// <c>BudgetLedgerSqlTests</c>); the service below is its only caller.
+    /// </summary>
+    public IQueryable<Guid> MembershipQuery(Guid tenantId, IReadOnlyCollection<Guid> participantIds) =>
+        _db.Participants.AsNoTracking().Where(p => p.TenantId == tenantId && participantIds.Contains(p.Id)).Select(p => p.Id);
+
     // ── What a claim does to a budget ───────────────────────────────────────
 
     /// <summary>
@@ -166,7 +174,7 @@ public sealed class BudgetLedgerService
         // wrong: a caller handing over a tenant id that is not these participants' own. A tenant id is a decision about whose money may be
         // shown, and it may never be taken from an entity, so one foreign participant drops the whole call rather than returning a partial figure.
         var asked = lines.Select(l => l.ParticipantId).Distinct().ToList();
-        var inTenant = (await _db.Participants.AsNoTracking().Where(p => p.TenantId == tenantId).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
+        var inTenant = (await MembershipQuery(tenantId, asked).ToListAsync(ct)).ToHashSet();
         if (asked.Any(id => !inTenant.Contains(id))) return null;
 
         var ledgers = await ComputeAsync(tenantId, asked, ct);

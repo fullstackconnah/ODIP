@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.AspNetCore.RateLimiting;
 using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
@@ -206,6 +207,23 @@ public class ParticipantFundingLedgerControllerTests
         }
         var attribute = Assert.Single(typeof(ParticipantFundingLedgerController).GetCustomAttributes<AuthorizeAttribute>(false));
         Assert.Equal("SuperAdmin,Admin,Coordinator", attribute.Roles);   // the class itself carries them, so an action added without an attribute is still closed
+    }
+
+    /// <summary>
+    /// Both GETs are rate limited on the shared "api" policy, the one every other endpoint that carries a figure uses: an attribute is only a declaration, so it is
+    /// read off the compiled action and compared with the policy name itself, so a renamed or missing policy fails here rather than silently limiting nothing.
+    /// </summary>
+    [Fact]
+    public void BothLedgerActionsAreRateLimitedOnTheSharedApiPolicy_SoAManyFigureEndpointCannotBeHammered()
+    {
+        var actions = Actions().ToList();
+
+        Assert.Equal(2, actions.Count);
+        foreach (var action in actions)
+        {
+            var policy = Assert.Single(action.GetCustomAttributes<EnableRateLimitingAttribute>());
+            Assert.Equal("api", policy.PolicyName);   // the policy Program.cs registers: a typo here would leave the endpoint unlimited
+        }
     }
 
     [Fact]
