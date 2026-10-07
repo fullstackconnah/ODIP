@@ -1,5 +1,6 @@
 import type { BudgetStatus, ClaimBudgetRowDto, LedgerGroup, LedgerPeriod, LedgerPool, LedgerRow } from '@/api/types'
 import { formatDateRange, formatDayMonth } from './dateRange'
+import { plural } from './format'
 import type { FactChipTone } from '@/components/FactBar'
 
 // How the budget ledger reads in words and figures (phase 2a). The server works every figure out; nothing here adds anything up. These only decide how a figure is written, which period a
@@ -36,7 +37,8 @@ export function chipToneOf(status: BudgetStatus): Extract<FactChipTone, 'success
 /**
  * The one plain sentence of a pool, the screen's focal moment: what is left of what, to when, and where the booked shifts would take it. For example "Core: $3,120 left of $8,000 this period
  * (to 31 Dec). Booked shifts would finish $640 over." With no set-aside the figure is the plan's ("of the plan's $8,000"). What is rolled over is named when there is some, and nothing is
- * said about the future when nothing is booked ahead.
+ * said about the future when nothing is booked ahead. When booked trip days carry no catalogue rate the sentence says so, because the forecast then under-counts the claim by those
+ * days and a person budgeting from it must not be left to find that out on the claim.
  */
 export function poolSentence(pool: LedgerPool, period: LedgerPeriod): string {
   const name = pool.kind === 'CoreFlexible' ? 'Core' : pool.name
@@ -45,10 +47,22 @@ export function poolSentence(pool: LedgerPool, period: LedgerPeriod): string {
   const rolled = period.carried > 0 ? `, including ${money(period.carried)} rolled over, not confirmed` : ''
   const stand = period.remaining >= 0 ? `${money(period.remaining)} left of ${of}` : `${money(-period.remaining)} over ${of}`
   const first = `${name}: ${stand} ${when} (to ${formatDayMonth(period.periodEnd)})${rolled}.`
-  if (period.bookedAhead <= 0) return first
-  return period.forecastRemaining < 0
-    ? `${first} Booked shifts would finish ${money(-period.forecastRemaining)} over.`
-    : `${first} Booked shifts would finish with ${money(period.forecastRemaining)} to spare.`
+  const forecast = period.bookedAhead <= 0
+    ? ''
+    : period.forecastRemaining < 0
+      ? ` Booked shifts would finish ${money(-period.forecastRemaining)} over.`
+      : ` Booked shifts would finish with ${money(period.forecastRemaining)} to spare.`
+  const gap = period.unpricedTripDayCount > 0 ? ` ${unpricedTripDaySentence(period.unpricedTripDayCount)}` : ''
+  return `${first}${forecast}${gap}`
+}
+
+/**
+ * The one sentence for booked trip days the catalogue cannot price. They are counted at $0 (no rate is invented for them), so the forecast above is
+ * understated by exactly those days until a rate is imported.
+ */
+export function unpricedTripDaySentence(count: number): string {
+  const days = plural(count, 'booked trip day')
+  return `${days} no catalogue rate covers, so they are counted at $0 and the forecast above is low by that much until the catalogue has a rate for them.`
 }
 
 const GROUP_ORDER: readonly LedgerGroup[] = ['Claimed', 'Pending', 'BookedAhead']

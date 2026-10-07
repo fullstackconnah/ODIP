@@ -18,13 +18,13 @@ function statusOf(available, used, forecast, approachingPercent) {
 }
 
 /** One period's figures from its parts, so available/used/forecast cannot disagree with them. */
-function figures(limit, carried, claimed, pending, bookedAhead, approachingPercent) {
+function figures(limit, carried, claimed, pending, bookedAhead, approachingPercent, unpricedTripDayCount = 0) {
   const available = round2(limit + carried)
   const used = round2(claimed + pending)
   const forecast = round2(used + bookedAhead)
   return {
     limit: round2(limit), carried: round2(carried), available, claimed: round2(claimed), pending: round2(pending), used,
-    bookedAhead: round2(bookedAhead), forecast, remaining: round2(available - used), forecastRemaining: round2(available - forecast),
+    bookedAhead: round2(bookedAhead), forecast, unpricedTripDayCount, remaining: round2(available - used), forecastRemaining: round2(available - forecast),
     status: statusOf(available, used, forecast, approachingPercent),
   }
 }
@@ -73,7 +73,8 @@ function computeLedger(plan, today, approachingPercent, items) {
     const periods = [...pool.periods].sort((a, b) => (a.periodStart < b.periodStart ? -1 : 1)).map((period, position) => {
       const rows = order(held.get(`${pool.id}|${period.id}`) || [])
       const limit = hasSetAside ? period.setAside : period.planAmount
-      const f = figures(limit, carried, sum(byGroup(rows, 'Claimed')), sum(byGroup(rows, 'Pending')), sum(byGroup(rows, 'BookedAhead')), approachingPercent)
+      const f = figures(limit, carried, sum(byGroup(rows, 'Claimed')), sum(byGroup(rows, 'Pending')), sum(byGroup(rows, 'BookedAhead')), approachingPercent,
+        rows.reduce((total, r) => total + (r.unpricedTripDayCount || 0), 0))
       // What this period leaves unspent rolls into the next, and chains. Nothing carries between plans.
       carried = Math.max(0, round2(f.available - f.used))
       return {
@@ -91,7 +92,7 @@ function computeLedger(plan, today, approachingPercent, items) {
       id: pool.id, name: pool.name, kind: pool.kind, paceCategory: pool.paceCategory, managementType: pool.managementType, hasSetAside, periods,
       pastUnresolvedCount: sum(periods.map((p) => p.pastUnresolvedCount)),
       // The plan total is the same sums against the sum of the limits.
-      planTotal: figures(limit, 0, claimed, pending, bookedAhead, approachingPercent),
+      planTotal: figures(limit, 0, claimed, pending, bookedAhead, approachingPercent, sum(periods.map((p) => p.unpricedTripDayCount))),
     }
   })
 

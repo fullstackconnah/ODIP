@@ -188,6 +188,11 @@ export interface LedgerFigures {
   used: number
   bookedAhead: number
   forecast: number
+  /**
+   * Booked trip days no catalogue rate covers, so they contribute $0 to `bookedAhead` and `forecast`. A count, never an invented
+   * rate: 0 when every day priced. Above 0 the screen says so, so the forecast can never be read as the whole claim.
+   */
+  unpricedTripDayCount: number
   remaining: number
   forecastRemaining: number
   status: BudgetStatus
@@ -206,6 +211,8 @@ export interface LedgerRow {
   /** An in-app path to the claim, shift or trip. */
   link: string
   note?: string
+  /** Of this row's trip days, how many no catalogue rate covers (0 for a row that is not a trip booking). */
+  unpricedTripDayCount: number
 }
 
 export interface LedgerPeriod extends LedgerFigures {

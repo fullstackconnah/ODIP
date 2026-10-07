@@ -192,7 +192,10 @@ public class ClaimGenerationService
         var departureTime = overrides?.DepartureTime ?? trip.DepartureTime ?? new TimeOnly(8, 0);
         var returnTime = overrides?.ReturnTime ?? trip.ReturnTime ?? new TimeOnly(18, 0);
         var activeHoursPerDay = overrides?.ActiveHoursPerDay ?? trip.ActiveHoursPerDay;
-        var state = settings.State ?? "VIC";
+        // Trips are priced in the organisation's state. Normalised at this boundary (trimmed,
+        // upper-cased) so the price column, the holiday rows below and the budget ledger's estimate all read the
+        // same string; stored in any other case ("nsw") used to miss that state's holidays while still taking its price.
+        var state = HolidayCalendar.Normalise(settings.State) is { Length: > 0 } normalisedState ? normalisedState : "VIC";
 
         // Resolve activity group
         var activityGroupId = trip.DefaultActivityGroupId;

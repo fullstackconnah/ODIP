@@ -10,7 +10,7 @@ import { DataTable } from '@/components/DataTable'
 import { FactBar, FactChip } from '@/components/FactBar'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
-import { chipToneOf, focusPeriodOf, money, poolSentence, quietEstimateLine, rowsByGroup } from '@/lib/budgetLedger'
+import { chipToneOf, focusPeriodOf, money, poolSentence, quietEstimateLine, rowsByGroup, unpricedTripDaySentence } from '@/lib/budgetLedger'
 import { formatDateRange, formatDayMonth } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
 
@@ -110,6 +110,14 @@ function PoolLedger({ pool }: { pool: LedgerPool }) {
           {focus.pastUnresolvedCount > 0 && (
             <p className="mt-2 text-[13px] text-[var(--color-on-warning-container)]">
               {plural(focus.pastUnresolvedCount, 'past shift')} not completed or cancelled, counted as pending.
+            </p>
+          )}
+          {/* The gap is stated three times over, in three places a reader actually looks: the sentence above (poolSentence), this
+              warning line beside the figures, and the note on each affected booking row. The money figures stay exactly what
+              the catalogue can price - no rate is invented for a day the catalogue does not cover. */}
+          {focus.unpricedTripDayCount > 0 && (
+            <p className="mt-2 text-[13px] text-[var(--color-on-warning-container)]">
+              {unpricedTripDaySentence(focus.unpricedTripDayCount)}
             </p>
           )}
         </>
