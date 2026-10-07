@@ -5,7 +5,12 @@ import { SEEDED } from '../../support/env';
 import { addDays, nextWednesday, sydneyToday } from '../../support/dates';
 
 // PR193 browser acceptance, run against the real candidate API and PostgreSQL in real Chromium.
-// A funded participant's confirmed, priced, still-future trip booking stands in their budget ledger as BOOKED
+// The SAME journey runs twice, as two distinctly named cases, over one body: once for a trip that starts
+// TODAY in the app's own date semantics (sydneyToday(), the one "today" the server and the browser agree on)
+// and once for a trip that starts in the FUTURE. BookingsQuery holds a booking as booked ahead while
+// StartDate >= today, so today is a boundary the future case cannot stand in for, and the today case is never
+// moved into the future to pass.
+// A funded participant's confirmed, priced trip booking stands in their budget ledger as BOOKED
 // AHEAD; generating the claim from the real trip Claims UI TAKES THE BOOKING'S PLACE instead of stacking on top
 // of it, so the money moves booked ahead -> pending and is counted once; and the Funding tab the user never left
 // refreshes on that mutation, in the same app and the same query client, with no reload.
@@ -38,7 +43,7 @@ const API_PATH_PREFIX = '/api/v1';
 
 /** Per-run tag, so anything this spec writes under a unique business key (TripCode) never collides with
  *  an earlier run's rows left behind in the shared scratch database. */
-const runTag = `${process.pid.toString(36)}${Date.now().toString(36).slice(-5)}`;
+const runTag = `${(process.pid % 4096).toString(36).padStart(3, '0')}${Date.now().toString(36).slice(-5)}`;
 
 type LedgerPeriod = {
   limit: number;
@@ -157,16 +162,25 @@ async function createFundingPlan(session: Session, participantId: string, from: 
   return res.data?.id as string;
 }
 
-/** A trip whose StartDate is in the FUTURE. This is the eligibility gate of the whole spec: the ledger only
- *  holds a booking as booked ahead while StartDate >= today, so a past-dated trip would be a past booking and
- *  never booked-ahead money. TripDay rows are generated because both the ledger's pricing and the claim engine
- *  work a day at a time over them, and an unpriced booking is $0 with a note. */
+/** A trip whose StartDate is TODAY or in the FUTURE. This is the eligibility gate of the whole spec: the
+ *  ledger only holds a booking as booked ahead while StartDate >= today, so a past-dated trip would be a past
+ *  booking and never booked-ahead money. TripDay rows are generated because both the ledger's pricing and the
+ *  claim engine work a day at a time over them, and an unpriced booking is $0 with a note. */
 async function createTripWithConfirmedBooking(
   session: Session,
   participantId: string,
   name: string,
   startDate: string,
+  caseDiscriminator: string,
 ): Promise<{ tripId: string; bookingId: string }> {
+  // The code is built, not blindly sliced: a slice(0, 20) would silently cut the date-and-case suffix off the
+  // end, and both cases of one run share the run tag -- so the whole code has to fit the column uncut for the
+  // two business keys to stay distinct from each other and from an earlier run's leftovers.
+  const tripCode = `E2E-${runTag}-${caseDiscriminator}${startDate.slice(5, 7)}${startDate.slice(8, 10)}`;
+  expect(
+    tripCode.length,
+    'the trip code fits varchar(20) whole, so its case-and-date suffix cannot be truncated into a collision',
+  ).toBeLessThanOrEqual(20);
   const trip: ApiResult = await expectStatus(
     'POST trip',
     201,
@@ -174,8 +188,8 @@ async function createTripWithConfirmedBooking(
       tripName: name,
       // TripCode is varchar(20) with a unique filtered index (OdipDbContext: HasMaxLength(20) +
       // IsUnique().HasFilter("\"TripCode\" IS NOT NULL")). The run tag keeps a re-run from colliding with
-      // an earlier run's leftovers; the slice keeps it inside the column.
-      tripCode: `E2E-${runTag}-${startDate.replace(/-/g, '')}`.slice(0, 20),
+      // an earlier run's leftovers; the case discriminator and date keep this run's two cases apart.
+      tripCode,
       destination: 'Newtown',
       region: 'Sydney',
       startDate,
@@ -258,19 +272,24 @@ function ledgerRowsRegion(page: Page): Locator {
   return page.getByRole('region', { name: /Ledger rows for/ });
 }
 
-test.describe('PR193 budget ledger: a generated claim takes the booking\'s place, in an open tab', () => {
-  test('booked ahead becomes pending after the trip Claims UI generates the claim', async ({
-    page,
-    session,
-  }) => {
-    // The shared 45s budget fits one UI action; this journey seeds real data and walks three real SPA
-    // navigations plus two real generations. Raised here so the config other specs share is untouched.
-    test.setTimeout(240_000);
-
+/** The journey, over whatever trip start date the case hands it: a priced booking standing as booked-ahead
+ *  money, the claim generated through the trip's real Claims modal, and the money moved to pending in the open
+ *  tab. Both cases assert identically because the contract under test is identical; the start date is a
+ *  parameter rather than a branch, so neither case can quietly grow a weaker copy of the rules. */
+async function bookingBecomesPending(
+  page: Page,
+  session: Session,
+  tripStart: string,
+  caseDiscriminator: string,
+): Promise<void> {
+    // The timeout is set per case so the config other specs share stays untouched.
     const today = sydneyToday();
-    const tripStart = nextWednesday(today);
+    expect(
+      tripStart >= today,
+      'the case start date is today or later, which is the booked-ahead gate itself',
+    ).toBe(true);
 
-    // ── Seed: a funded participant with a confirmed, priced, still-future booking. ──
+    // ── Seed: a funded participant with a confirmed, priced, still-open booking. ──
     const participantId = await createParticipant(session, `Pr193${Date.now().toString(36).slice(-5)}`);
     await createFundingPlan(session, participantId, today);
     const tripName = `PR193 ledger ${tripStart}`;
@@ -280,6 +299,7 @@ test.describe('PR193 budget ledger: a generated claim takes the booking\'s place
       participantId,
       tripName,
       tripStart,
+      caseDiscriminator,
     );
     // GENERATION requires a Completed trip (ClaimGenerationService.GenerateDraftClaimAsync). The InProgress
     // gate demands confirmed STAFF, which this trip has none of; Completed carries no gate, so the trip moves
@@ -301,7 +321,10 @@ test.describe('PR193 budget ledger: a generated claim takes the booking\'s place
     // ── Open the ledger ONCE and leave it open for the rest of the test: this tab is the witness. ──
     await page.goto(`/participants/${participantId}?tab=funding`);
     const rows = ledgerRowsRegion(page);
-    await expect(rows, 'the ledger rows region is rendered').toBeVisible();
+    // Generous, because this is the one assertion that waits on a COLD ledger endpoint: this stack
+    // answers /funding/ledger in 3-4s warm (measured) and its first call after a build is slower still.
+    // Only the wait is widened; every ledger-value assertion below keeps the shared expect budget.
+    await expect(rows, 'the ledger rows region is rendered').toBeVisible({ timeout: 60_000 });
     await expect(
       rows.getByText('Booked ahead', { exact: true }),
       'the booking is grouped under Booked ahead on screen',
@@ -356,6 +379,9 @@ test.describe('PR193 budget ledger: a generated claim takes the booking\'s place
     expect(previewTotal, 'the preview states a money total').toBeTruthy();
 
     // ── Generate the claim through the real modal. No API shortcut, no stubbed response. ──
+    // The request log is counted from HERE, so what is asserted at the end is a ledger request made after the
+    // successful write -- never one of the requests that populated the cache in the first place.
+    const ledgerRequestsBeforeMutation = ledgerRefetches.length;
     await page.getByRole('button', { name: 'Confirm & Generate' }).click();
     await expect(
       page.getByRole('dialog', { name: 'Claim Preview' }),
@@ -381,6 +407,10 @@ test.describe('PR193 budget ledger: a generated claim takes the booking\'s place
       .getByRole('link', { name: 'View' })
       .getAttribute('href');
     expect(draftClaimHref, 'the claim row links to the claim').toMatch(/^\/claims\/[0-9a-f-]{36}$/);
+
+    // The COUNT is deliberately not sampled here: the tab is off Funding at this point, and the ledger
+    // request the invalidation causes goes out when the Funding tab mounts again further down. Sampling
+    // now would read zero and prove nothing. It is read once, at the assertion, below.
 
     // ── R3 rejection control, same real UI, nothing mocked: this trip now has an active claim, so a second
     //    generation is refused by the claim engine in its own words and the ledger must be untouched by the
@@ -515,16 +545,41 @@ test.describe('PR193 budget ledger: a generated claim takes the booking\'s place
       'no ledger row still points at the trip booking it replaced',
     ).toHaveCount(0);
 
-    // ── The lifetime claim, stated as fact rather than as an absence of goto: the document the cache was
-    //    populated in is still this document, and this query client really did refetch the ledger after the
-    //    claim write (the claims.ts refreshLedgers invalidation), over the wire, with no reload in between. ──
+    // ── The lifetime evidence, each part stated no more strongly than what it actually proves. The window
+    //    sentinel proves the DOCUMENT survived: nothing tore the app down and rebuilt it. It says nothing about
+    //    object identity of the query client, which lives module-scoped at frontend/src/App.tsx:68 and is not
+    //    reachable from the page. The request count proves a real /funding/ledger request went out over the wire
+    //    after the successful claim write; it does not, on its own, identify WHICH invalidation call caused it,
+    //    because returning to the Funding tab mounts the ledger again. ──
     expect(
       await page.evaluate(() => (window as unknown as Record<string, string>).__pr193Document),
       'the whole journey ran in ONE document: nothing reloaded the page between cache population and here',
     ).toBe('alive');
     expect(
       ledgerRefetches.length,
-      'the open query client refetched the ledger after the claim write, with no document replacement',
-    ).toBeGreaterThan(0);
+      'a real ledger request went out AFTER the successful claim write, over the wire, in that same document',
+    ).toBeGreaterThan(ledgerRequestsBeforeMutation);
+}
+
+test.describe('PR193 budget ledger: a generated claim takes the booking\'s place, in an open tab', () => {
+  test('a trip starting TODAY: booked ahead becomes pending after the trip Claims UI generates the claim', async ({
+    page,
+    session,
+  }) => {
+    // The shared 45s budget fits one UI action; this journey seeds real data and walks three real SPA
+    // navigations plus two real generations. Raised here so the config other specs share is untouched.
+    test.setTimeout(240_000);
+
+    // Sydney's today, in the app's own date semantics: the boundary of BookingsQuery's StartDate >= today.
+    await bookingBecomesPending(page, session, sydneyToday(), 'T');
+  });
+
+  test('a trip starting in the FUTURE: booked ahead becomes pending after the trip Claims UI generates the claim', async ({
+    page,
+    session,
+  }) => {
+    test.setTimeout(240_000);
+
+    await bookingBecomesPending(page, session, nextWednesday(sydneyToday()), 'F');
   });
 });
