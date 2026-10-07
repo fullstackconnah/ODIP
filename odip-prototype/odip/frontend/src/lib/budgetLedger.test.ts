@@ -71,6 +71,22 @@ describe('the sentence of a pool', () => {
     expect(poolSentence(stated, q2({ available: 500, used: 100, remaining: 400, bookedAhead: 0, forecast: 100, forecastRemaining: 400 }))).toBe('Improved Daily Living Skills: $400 left of the plan\'s $500 this period (to 31 Dec).')
     expect(poolSentence(core(), q2({ isCurrent: false, bookedAhead: 0, forecast: 4880, forecastRemaining: 3120 }))).toBe('Core: $3,120 left of the $8,000 set aside in the last period (to 31 Dec).')
   })
+
+  it('says when booked trip days carry no catalogue rate, because the forecast above is then low by exactly those days', () => {
+    // One trip day the catalogue cannot price: it contributes $0, so nothing is invented, but the reader is told the figure is short.
+    expect(poolSentence(core(), q2({ bookedAhead: 1152, forecast: 6032, forecastRemaining: 1968, unpricedTripDayCount: 1 })))
+      .toBe('Core: $3,120 left of the $8,000 set aside this period (to 31 Dec). Booked shifts would finish with $1,968 to spare. 1 booked trip day no catalogue rate covers, so they are counted at $0 and the forecast above is low by that much until the catalogue has a rate for them.')
+  })
+
+  it('pluralises the unpriced trip days and says nothing about them when there are none', () => {
+    expect(poolSentence(core(), q2({ unpricedTripDayCount: 2 }))).toContain('2 booked trip days no catalogue rate covers')
+    expect(poolSentence(core(), q2({ unpricedTripDayCount: 0 }))).not.toContain('no catalogue rate')
+  })
+
+  it('says the gap even when nothing is booked ahead in money, because the days themselves are booked', () => {
+    expect(poolSentence(core(), q2({ bookedAhead: 0, forecast: 4880, forecastRemaining: 3120, unpricedTripDayCount: 3 })))
+      .toBe('Core: $3,120 left of the $8,000 set aside this period (to 31 Dec). 3 booked trip days no catalogue rate covers, so they are counted at $0 and the forecast above is low by that much until the catalogue has a rate for them.')
+  })
 })
 
 describe('the period the strip is about', () => {

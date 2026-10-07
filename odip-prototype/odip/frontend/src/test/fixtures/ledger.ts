@@ -6,13 +6,13 @@ import type { ClaimBudgetDto, ClaimBudgetRowDto, LedgerBucket, LedgerFigures, Le
 
 export function figures(overrides: Partial<LedgerFigures> = {}): LedgerFigures {
   return {
-    limit: 2000, carried: 500, available: 2500, claimed: 1200, pending: 480, used: 1680, bookedAhead: 960, forecast: 2640, remaining: 820, forecastRemaining: -140, status: 'ForecastOver', ...overrides,
+    limit: 2000, carried: 500, available: 2500, claimed: 1200, pending: 480, used: 1680, bookedAhead: 960, forecast: 2640, unpricedTripDayCount: 0, remaining: 820, forecastRemaining: -140, status: 'ForecastOver', ...overrides,
   }
 }
 
 export function ledgerRow(overrides: Partial<LedgerRow> = {}): LedgerRow {
   return {
-    id: 'row-1', kind: 'ClaimLine', group: 'Claimed', date: '2026-10-01', description: 'TC-4301-20261001 · 04_Weekday_STD · 8 h', amount: 480, status: 'Submitted', link: '/claims/claim-1', ...overrides,
+    id: 'row-1', kind: 'ClaimLine', group: 'Claimed', date: '2026-10-01', description: 'TC-4301-20261001 · 04_Weekday_STD · 8 h', amount: 480, status: 'Submitted', link: '/claims/claim-1', unpricedTripDayCount: 0, ...overrides,
   }
 }
 

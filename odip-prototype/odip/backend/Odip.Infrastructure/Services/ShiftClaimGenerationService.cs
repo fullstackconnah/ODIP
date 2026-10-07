@@ -155,9 +155,17 @@ public class ShiftClaimGenerationService
 
         // Participant.AddressState with a fallback to ProviderSettings.State — the only
         // geographic signal that exists on the tenant today (Region is free-text prose).
+        // ShiftPriceEstimator.StateFor normalises the case, so "Nsw" prices in NSW's column
+        // and finds NSW's holidays here exactly as the budget ledger's estimate does
+        // (one rule for both, so the claim and the estimate cannot drift apart).
         var providerState = string.IsNullOrWhiteSpace(participant.AddressState) ? (await _db.ProviderSettings.FirstOrDefaultAsync(ct))?.State : null;
         var state = ShiftPriceEstimator.StateFor(participant.AddressState, providerState);
 
+        // HolidayCalendar.For normalises the state's case too, so the holiday rows match however
+        // they are written ("NSW", "nsw", or with spaces around them). The query keeps the same
+        // clause as the engines have always used; the state it compares against is already the
+        // normalised one, and a row written in another case is normalised in memory by
+        // HolidayCalendar further down.
         var publicHolidays = (await _db.PublicHolidays
             .Where(h => h.Date >= from && h.Date <= to && (h.State == null || h.State == state))
             .Select(h => h.Date)

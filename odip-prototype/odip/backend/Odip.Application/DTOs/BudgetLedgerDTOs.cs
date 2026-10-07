@@ -8,7 +8,7 @@ namespace Odip.Application.DTOs;
 // DateOnly (a calendar day, in the provider's own time); there is no instant anywhere in them.
 
 /// <summary>
-/// The figures of one pool in one funding period, or over a whole plan. Nothing here is for a screen to add up: <see cref="Remaining"/> and <see cref="ForecastRemaining"/> are the two
+/// <summary>The figures of one pool in one period, or over a whole plan. Nothing here is for a screen to add up: <see cref="Remaining"/> and <see cref="ForecastRemaining"/> are the two
 /// subtractions a sentence needs, and a negative one means over.
 /// </summary>
 public record LedgerFiguresDto
@@ -29,6 +29,11 @@ public record LedgerFiguresDto
     public decimal BookedAhead { get; init; }
     /// <summary>Used plus booked ahead.</summary>
     public decimal Forecast { get; init; }
+    /// <summary>
+    /// How many booked trip days no catalogue rate covers, so those days contribute $0 to <see cref="BookedAhead"/> and <see cref="Forecast"/>. A count, never an invented rate: the
+    /// gap is shown and measurable, and the money figures stay exactly what the catalogue can price.
+    /// </summary>
+    public int UnpricedTripDayCount { get; init; }
     /// <summary>Available minus used; negative when over.</summary>
     public decimal Remaining { get; init; }
     /// <summary>Available minus forecast; negative when the booked shifts would take the period over.</summary>
@@ -53,6 +58,8 @@ public record LedgerRowDto
     public string Link { get; init; } = string.Empty;
     /// <summary>Something worth saying about the figure, for instance that no catalogue rate covers the date so it is counted as $0; omitted when there is nothing to say.</summary>
     public string? Note { get; init; }
+    /// <summary>How many of this row's trip days no catalogue rate covers (always 0 for a row that is not a trip booking), the same count the period's and the pool's figures carry.</summary>
+    public int UnpricedTripDayCount { get; init; }
 }
 
 public record LedgerPeriodDto : LedgerFiguresDto

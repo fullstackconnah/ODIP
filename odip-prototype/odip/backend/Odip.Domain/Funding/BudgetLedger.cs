@@ -32,6 +32,11 @@ public sealed record LedgerItem
     public string Link { get; init; } = string.Empty;
     /// <summary>Something worth saying about the figure (an item no catalogue rate covers is counted as $0), or null.</summary>
     public string? Note { get; init; }
+    /// <summary>
+    /// How many of this item's days the catalogue has no rate for: a trip booking's unpriced trip days, carried beside the amount so the gap is a counted figure rather than only
+    /// prose. Zero for anything that is not a partly-priced trip, so nothing else has to think about it.
+    /// </summary>
+    public int UnpricedTripDayCount { get; init; }
 }
 
 /// <summary>Where an item landed.</summary>
@@ -49,7 +54,7 @@ public readonly record struct LedgerPlace(LedgerPlacement Placement, FundingPool
 
 /// <summary>One funding period of one pool with its figures. <see cref="Available"/>, <see cref="Used"/> and <see cref="Forecast"/> are derived, so they cannot disagree with their parts.</summary>
 public sealed record PeriodLedger(
-    FundingPeriod Period, bool IsCurrent, decimal Limit, decimal Carried, decimal Claimed, decimal Pending, decimal BookedAhead, int PastUnresolvedCount, BudgetStatus Status,
+    FundingPeriod Period, bool IsCurrent, decimal Limit, decimal Carried, decimal Claimed, decimal Pending, decimal BookedAhead, int PastUnresolvedCount, int UnpricedTripDayCount, BudgetStatus Status,
     IReadOnlyList<LedgerItem> Items)
 {
     /// <summary>The limit plus what earlier periods of the plan left unspent (rolled over, not confirmed: somebody else may have used it).</summary>
@@ -59,7 +64,7 @@ public sealed record PeriodLedger(
 }
 
 /// <summary>The same sums over a whole pool: every period's limit, claimed, pending and booked ahead, against the sum of the limits. Nothing carries: it is movement inside the pool.</summary>
-public sealed record PoolTotals(decimal Limit, decimal Claimed, decimal Pending, decimal BookedAhead, int PastUnresolvedCount, BudgetStatus Status)
+public sealed record PoolTotals(decimal Limit, decimal Claimed, decimal Pending, decimal BookedAhead, int PastUnresolvedCount, int UnpricedTripDayCount, BudgetStatus Status)
 {
     public decimal Available => Limit;
     public decimal Used => Claimed + Pending;
@@ -168,6 +173,7 @@ public static class BudgetLedgerCalculator
             var used = claimed + pending;
             periods.Add(new PeriodLedger(
                 period, period.PeriodStart <= today && today <= period.PeriodEnd, limit, carried, claimed, pending, booked, held.Count(i => i.Kind == LedgerRowKind.PastShift),
+                held.Sum(i => i.UnpricedTripDayCount),
                 StatusOf(available, used, used + booked, approachingPercent), held));
             carried = Math.Max(0m, available - used);   // what this period leaves unspent rolls into the next, and chains
         }
@@ -177,7 +183,7 @@ public static class BudgetLedgerCalculator
         var totalPending = periods.Sum(p => p.Pending);
         var totalBooked = periods.Sum(p => p.BookedAhead);
         var total = new PoolTotals(
-            totalLimit, totalClaimed, totalPending, totalBooked, periods.Sum(p => p.PastUnresolvedCount),
+            totalLimit, totalClaimed, totalPending, totalBooked, periods.Sum(p => p.PastUnresolvedCount), periods.Sum(p => p.UnpricedTripDayCount),
             StatusOf(totalLimit, totalClaimed + totalPending, totalClaimed + totalPending + totalBooked, approachingPercent));
         return new PoolLedger(pool, hasSetAside, periods, total);
     }

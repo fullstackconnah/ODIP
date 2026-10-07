@@ -26,21 +26,31 @@ public static class CatalogueStatePrice
 }
 
 /// <summary>
-/// The public holidays as the claim engines read them: a row with no state is national, a row with a state counts only for that state (an exact, case-sensitive match, as the engines' own
-/// query always made it). Loaded once and asked for per state, so pricing many participants needs no query per participant.
+/// The public holidays as the claim engines read them: a row with no state is national, a row with a state counts only for that state (matched without regard to case, so "NSW",
+/// "nsw" and "Nsw" are one state - see <see cref="Normalise"/>), while the lookup itself is still the engines' own exact match on the normalised form. Loaded once and asked for per
+/// state, so pricing many participants needs no query per participant.
 /// </summary>
 public sealed class HolidayCalendar
 {
     private readonly List<(DateOnly Date, string? State)> _rows;
     private readonly Dictionary<string, IReadOnlySet<DateOnly>> _byState = new(StringComparer.Ordinal);
 
-    public HolidayCalendar(IEnumerable<(DateOnly Date, string? State)> rows) => _rows = rows.ToList();
+    public HolidayCalendar(IEnumerable<(DateOnly Date, string? State)> rows) =>
+        _rows = rows.Select(r => (r.Date, r.State is null ? null : Normalise(r.State))).ToList();
+
+    /// <summary>
+    /// A state string as the rest of the pricing reads it: trimmed and upper-cased. The catalogue's price columns and the holiday calendar are both keyed by the upper-case
+    /// abbreviation, but a state typed or imported any other way ("Nsw", " nsw ") used to fall through to the VIC price and to miss that state's public holidays. Normalising once,
+    /// here at the boundary, is what keeps the ledger, the shift claim and the trip claim reading the same state.
+    /// </summary>
+    public static string Normalise(string? state) => state?.Trim().ToUpperInvariant() ?? string.Empty;
 
     /// <summary>The days that are public holidays where <paramref name="state"/> is: the national ones and that state's own.</summary>
     public IReadOnlySet<DateOnly> For(string state)
     {
-        if (!_byState.TryGetValue(state, out var days))
-            _byState[state] = days = _rows.Where(h => h.State == null || h.State == state).Select(h => h.Date).ToHashSet();
+        var wanted = Normalise(state);
+        if (!_byState.TryGetValue(wanted, out var days))
+            _byState[wanted] = days = _rows.Where(h => h.State == null || h.State == wanted).Select(h => h.Date).ToHashSet();
         return days;
     }
 }
@@ -56,9 +66,15 @@ public sealed record ShiftPrice(SupportCatalogueItem CatalogueItem, ClaimDayType
 /// </summary>
 public static class ShiftPriceEstimator
 {
-    /// <summary>The state a participant's shifts are priced in: their own address state, else the organisation's (the only geographic signal there is), else VIC.</summary>
+    /// <summary>
+    /// The state a participant's shifts are priced in: their own address state, else the organisation's (the only geographic signal there is), else VIC. The state is normalised
+    /// (<see cref="HolidayCalendar.Normalise"/>) so that the price column and the public-holiday calendar are always read with the same string: "Nsw" used to take the VIC price and miss
+    /// that state's holidays, because only the price column upper-cased.
+    /// </summary>
     public static string StateFor(string? participantState, string? providerState) =>
-        string.IsNullOrWhiteSpace(participantState) ? providerState ?? "VIC" : participantState;
+        string.IsNullOrWhiteSpace(participantState)
+            ? string.IsNullOrWhiteSpace(providerState) ? "VIC" : HolidayCalendar.Normalise(providerState)
+            : HolidayCalendar.Normalise(participantState);
 
     /// <summary>The price of one shift, or null when no row of the group is valid on its date for its day type (the claim engine leaves such a shift out, and the ledger counts it as $0).</summary>
     public static ShiftPrice? Price(
@@ -86,10 +102,34 @@ public sealed record TripPricingInput(
 /// <summary>One line of a trip claim as the engine builds it for one booking: the row it is priced from, the day type, the stretch of days, the hours and the price.</summary>
 public sealed record PricedTripLine(SupportCatalogueItem CatalogueItem, ClaimDayType DayType, DateOnly From, DateOnly To, decimal Hours, decimal UnitPrice, decimal TotalAmount);
 
-/// <summary>The lines one booking's claim would have, and the day types the catalogue had no row for (what stops a claim that ends up with no lines).</summary>
-public sealed record TripBookingPrice(IReadOnlyList<PricedTripLine> Lines, IReadOnlySet<ClaimDayType> UnpricedDayTypes)
+/// <summary>
+/// One stretch of a trip's days the catalogue has no row for: its day type, the days it covers, and the hours that stretch would have been claimed for (its active hours a day). This is
+/// the "bucket, shown, never dropped" of a trip day the claim cannot bill - nothing here is priced, and no rate is invented for it. <see cref="From"/>/<see cref="To"/> are the
+/// service dates, and <see cref="Hours"/> is what the claim would have asked for if a row had existed.
+/// </summary>
+public sealed record UnpricedTripDays(ClaimDayType DayType, DateOnly From, DateOnly To, int DayCount, decimal Hours)
 {
+    /// <summary>The days themselves, so a screen or a budget can name the gap by date rather than only by type.</summary>
+    public IEnumerable<DateOnly> Dates
+    {
+        get { for (var d = From; d <= To; d = d.AddDays(1)) yield return d; }
+    }
+}
+
+/// <summary>
+/// The lines one booking's claim would have, the day types the catalogue had no row for (what stops a claim that ends up with no lines), and those stretches of days with the hours
+/// each would have claimed. A day type alone cannot say how big the gap is, and a budget forecasting from this needs to know that: the unpriced stretches are how much of the trip is
+/// invisible to the money.
+/// </summary>
+public sealed record TripBookingPrice(IReadOnlyList<PricedTripLine> Lines, IReadOnlySet<ClaimDayType> UnpricedDayTypes, IReadOnlyList<UnpricedTripDays> UnpricedDays)
+{
+    public TripBookingPrice(IReadOnlyList<PricedTripLine> lines, IReadOnlySet<ClaimDayType> unpricedDayTypes)
+        : this(lines, unpricedDayTypes, Array.Empty<UnpricedTripDays>()) { }
+
     public decimal Total => Lines.Sum(l => l.TotalAmount);
+
+    /// <summary>The active hours the trip's unpriced days would have claimed. Never a price: it is the measure of what the ledger cannot see.</summary>
+    public decimal UnpricedHours => UnpricedDays.Sum(d => d.Hours);
 }
 
 /// <summary>
@@ -122,9 +162,18 @@ public sealed class TripPriceEstimator
     {
         var lines = new List<PricedTripLine>();
         var unpriced = new SortedSet<ClaimDayType>();
+        var unpricedDays = new List<UnpricedTripDays>();
         var activeHoursPerDay = _trip.ActiveHoursPerDay;
         var tripFirstDate = _trip.StartDate;
         var tripLastDate = _trip.EndDate;
+
+        // A stretch of days the catalogue cannot bill: recorded with its dates and the hours it would have claimed, so the caller can say WHICH days are missing and how big
+        // they are rather than only that a day type was (see TripBookingPrice.UnpricedDays).
+        void MarkUnpriced(ClaimDayType dayType, DateOnly from, DateOnly to, int dayCount, decimal hours)
+        {
+            unpriced.Add(dayType);
+            unpricedDays.Add(new UnpricedTripDays(dayType, from, to, dayCount, hours));
+        }
 
         foreach (var group in _groups)
         {
@@ -134,7 +183,7 @@ public sealed class TripPriceEstimator
                 var catItem = FindCatalogueItem(_items, group.DayType, isIntensive, group.From);
                 if (catItem == null)
                 {
-                    unpriced.Add(group.DayType);
+                    MarkUnpriced(group.DayType, group.From, group.To, group.DayCount, group.DayCount * activeHoursPerDay);
                     continue;
                 }
 
@@ -196,7 +245,7 @@ public sealed class TripPriceEstimator
                         var unitPrice = CatalogueStatePrice.For(catItem, _state);
                         lines.Add(new PricedTripLine(catItem, ClaimDayType.Weekday, group.From, group.To, totalDaytimeHours, unitPrice, totalDaytimeHours * unitPrice));
                     }
-                    else unpriced.Add(ClaimDayType.Weekday);
+                    else MarkUnpriced(ClaimDayType.Weekday, group.From, group.To, group.DayCount, totalDaytimeHours);
                 }
 
                 // Create weekday evening line item
@@ -208,12 +257,12 @@ public sealed class TripPriceEstimator
                         var unitPrice = CatalogueStatePrice.For(catItem, _state);
                         lines.Add(new PricedTripLine(catItem, ClaimDayType.WeekdayEvening, group.From, group.To, totalEveningHours, unitPrice, totalEveningHours * unitPrice));
                     }
-                    else unpriced.Add(ClaimDayType.WeekdayEvening);
+                    else MarkUnpriced(ClaimDayType.WeekdayEvening, group.From, group.To, group.DayCount, totalEveningHours);
                 }
             }
         }
 
-        return new TripBookingPrice(lines, unpriced);
+        return new TripBookingPrice(lines, unpriced, unpricedDays);
     }
 
     /// <summary>The row to price a stretch of days from: the one valid on its first day (every day of a group picks the same rows, see <see cref="PriceEpochOn"/>).</summary>

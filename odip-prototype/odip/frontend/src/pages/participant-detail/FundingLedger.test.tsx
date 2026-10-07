@@ -128,6 +128,44 @@ describe('the ledger table', () => {
   })
 })
 
+describe('booked trip days the catalogue cannot price', () => {
+  const gappedTrip = ledgerRow({
+    id: 't1', kind: 'TripBooking', group: 'BookedAhead', date: '2026-10-23', amount: 1152, status: 'Confirmed', link: '/trips/trip-1',
+    description: 'Coastal weekend · 3 days', unpricedTripDayCount: 1,
+    note: 'No catalogue rate covers Sunday 25 Oct 2026 (8 h), so that part of the trip is counted as $0.',
+  })
+  const gapped = ledgerPeriod({ rows: [gappedTrip], rowCount: 1, bookedAhead: 1152, forecast: 1152, unpricedTripDayCount: 1 })
+
+  it('says in the pool sentence that the forecast is low by exactly those days', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods: [gapped] })] }))
+
+    expect(screen.getByRole('heading', { name: /^Core/ })).toBeInTheDocument()
+    expect(screen.getByText(/^Core: \$820 left.*1 booked trip day no catalogue rate covers, so they are counted at \$0/)).toBeInTheDocument()
+  })
+
+  it('shows the gap beside the figures, in the warning tone', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods: [gapped] })] }))
+
+    // Said in the pool sentence AND as its own warning line: the one place a reader may look must never miss it.
+    expect(screen.getAllByText(/1 booked trip day no catalogue rate covers/).length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText(/^1 booked trip day no catalogue rate covers/)).toHaveClass('text-[var(--color-on-warning-container)]')
+  })
+
+  it('names the gap on the booking row itself, with its dates and hours', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods: [gapped] })] }))
+
+    expect(screen.getByText('No catalogue rate covers Sunday 25 Oct 2026 (8 h), so that part of the trip is counted as $0.')).toBeInTheDocument()
+    // The money is exactly what the catalogue priced, with no rate invented for the missing day.
+    expect(screen.getByText('$1,152')).toBeInTheDocument()
+  })
+
+  it('says nothing at all when every booked day has a rate', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods: [ledgerPeriod()] })] }))
+
+    expect(screen.queryByText(/no catalogue rate covers/)).not.toBeInTheDocument()
+  })
+})
+
 describe('the plan total', () => {
   it('shows the same sums over the whole plan against the sum of the limits', () => {
     renderLedger(participantLedger())

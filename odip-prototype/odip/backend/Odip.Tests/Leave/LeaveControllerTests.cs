@@ -12,6 +12,7 @@ using Odip.Domain.Interfaces;
 using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 using Xunit;
 
 namespace Odip.Tests.Leave;
@@ -30,11 +31,11 @@ public class LeaveControllerTests
         return new OdipDbContext(options, tenant.Object);
     }
 
-    private static LeaveController MakeController(OdipDbContext db, Guid? callerId = null)
+    private static LeaveController MakeController(OdipDbContext db, Guid? callerId = null, TimeProvider? clock = null)
     {
         var identity = new System.Security.Claims.ClaimsIdentity(
             [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, (callerId ?? Guid.NewGuid()).ToString())], "Test");
-        return new LeaveController(db)
+        return new LeaveController(db, clock: clock)
         {
             ControllerContext = new ControllerContext
             {
@@ -96,6 +97,44 @@ public class LeaveControllerTests
         db.RecurringUnavailabilities.Add(rule);
         db.SaveChanges();
         return rule;
+    }
+
+    /// <summary>
+    /// A clock pinned to a chosen UTC instant, so a test can place the SUT's "now" inside a chosen
+    /// provider-local window instead of wherever CI happens to run. The overlap tests below rotate
+    /// this through the failing window to prove their fixtures are clock-independent.
+    /// </summary>
+    private sealed class FixedClock(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+    }
+
+    /// <summary>
+    /// The clock-relative fixture the two overlap tests use, and the reason the OLD
+    /// <c>DateOnly.FromDateTime(DateTime.UtcNow)</c> fixture went time-rot.
+    /// <para>
+    /// <see cref="LeaveController.FindRecurringOverlapsAsync"/> clamps its look-ahead window to the
+    /// PROVIDER's today via <see cref="ProviderTimeZoneResolver.TodayAsync"/>, which with no
+    /// ProviderSettings row is the Sydney fallback zone (<see cref="ProviderLocalTime.FallbackZoneId"/>,
+    /// UTC+10/UTC+11). The old fixture built the rule's EffectiveFrom and the shift's date from the
+    /// UTC date, so whenever Sydney-today rolled past midnight while UTC still sat on the previous
+    /// day, the fixture's next-Wednesday landed BEFORE <c>horizonStart</c>, the shift query filtered
+    /// it out, and the tests failed with an empty Overlaps collection. Measured on 2026-10-07: at
+    /// 06:01Z Sydney was still Wednesday and the suite passed; at 17:35Z Sydney was already Thursday
+    /// and it failed. Any UTC run after ~13:00Z on a Wednesday reproduced the failure on any branch,
+    /// including main — a clock window, not a code regression.
+    /// </para>
+    /// <para>
+    /// This returns the fixture keyed to the SAME clock the SUT reads: it takes the controller's own
+    /// TimeProvider, asks the resolver for today's date, and places the shift on the next Wednesday
+    /// on or after that date. Nothing here reads the wall clock.
+    /// </para>
+    /// </summary>
+    private static (DateOnly Today, DateOnly Wednesday) OverlapFixtureDates(TimeProvider clock)
+    {
+        var providerToday = ProviderLocalTime.TodayIn(clock.GetUtcNow().UtcDateTime, ProviderTimeZoneResolver.FromState(null).Zone);
+        var wednesday = providerToday.AddDays(((int)DayOfWeek.Wednesday - (int)providerToday.DayOfWeek + 7) % 7);
+        return (providerToday, wednesday);
     }
 
     /// <summary>
@@ -655,17 +694,44 @@ public class LeaveControllerTests
         Assert.Equal(LeaveStatus.Approved, body.Data!.Status);
     }
 
-    [Fact]
-    public async Task ApproveUnavailability_ReturnsOverlappingPublishedShift()
+    /// <summary>
+    /// The instants below span the window the OLD UTC-based fixture broke on, all
+    /// verified against Sydney's actual offsets for those dates (the probe behind this fix):
+    /// <list type="bullet">
+    /// <item><description>2026-10-07 17:35Z — the exact PR195 CI failure instant: Sydney +11, local Thursday 04:35, so provider-today (Thu 8 Oct) was a day AHEAD of the UTC-date fixture's Wednesday. This is the reproducer.</description></item>
+    /// <item><description>2026-10-07 06:01Z — main's own passing CI run that same day: Sydney still Wednesday, both dates agreed.</description></item>
+    /// <item><description>2026-10-07 13:00Z and 13:01Z — either side of the exact minute Sydney's date rolls over while UTC still says Wednesday.</description></item>
+    /// <item><description>2026-04-04 16:30Z — the opposite daylight-saving half-year (AEST +10), and 2026-01-07 23:45Z — a second AEDT evening that also failed the old fixture.</description></item>
+    /// <item><description>2026-04-05 20:30Z — just after Sydney's DST ends, and 2026-06-10 02:15Z — midweek inside AEST.</description></item>
+    /// </list>
+    /// Passing all of these means the fixture no longer depends on the host's UTC time of day.
+    /// </summary>
+    public static TheoryData<DateTimeOffset> ClocksAcrossTheOldFailingWindow => new()
+    {
+        new DateTimeOffset(2026, 10, 7, 17, 35, 0, TimeSpan.Zero), // the PR195 CI failure instant itself
+        new DateTimeOffset(2026, 10, 7, 6, 1, 0, TimeSpan.Zero),   // main's passing CI run the same day
+        new DateTimeOffset(2026, 10, 7, 13, 0, 0, TimeSpan.Zero),  // the minute Sydney's date rolls over
+        new DateTimeOffset(2026, 10, 7, 13, 1, 0, TimeSpan.Zero),  // one minute later
+        new DateTimeOffset(2026, 10, 8, 9, 0, 0, TimeSpan.Zero),   // Thursday morning UTC, Sydney evening
+        new DateTimeOffset(2026, 4, 5, 20, 30, 0, TimeSpan.Zero),  // just after Sydney's DST ends (AEST +10)
+        new DateTimeOffset(2026, 4, 4, 16, 30, 0, TimeSpan.Zero),  // just before it ends (AEDT +11)
+        new DateTimeOffset(2026, 1, 7, 23, 45, 0, TimeSpan.Zero),  // a second AEDT evening that failed the old fixture
+        new DateTimeOffset(2026, 6, 10, 2, 15, 0, TimeSpan.Zero),  // midweek inside AEST
+    };
+
+    [Theory]
+    [MemberData(nameof(ClocksAcrossTheOldFailingWindow))]
+    public async Task ApproveUnavailability_ReturnsOverlappingPublishedShift(DateTimeOffset now)
     {
         using var db = CreateDb();
         var user = SeedUser(db);
-        // Clock-relative fixture (Important #3): LeaveController.FindRecurringOverlapsAsync clamps
-        // horizonStart to DateTime.UtcNow, not to this file's frozen `Today` constant, so the rule's
-        // EffectiveFrom and the shift's date must be pinned to the real UTC "today" the SUT actually
-        // reads — otherwise this test goes red once real "today" passes the frozen Wednesday.
-        var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
-        var wednesday = realToday.AddDays(((int)DayOfWeek.Wednesday - (int)realToday.DayOfWeek + 7) % 7);
+        // Clock-relative fixture, keyed to the clock the SUT reads (see OverlapFixtureDates): the
+        // controller clamps horizonStart to the PROVIDER's today, so the rule's EffectiveFrom and the
+        // shift's date are both derived from that same provider-local date rather than from the UTC
+        // date. The old fixture read the UTC date, which is a different day for 10-11 hours of every
+        // Sydney day and made this test go red on any CI run after ~13:00Z on a Wednesday.
+        var clock = new FixedClock(now);
+        var (realToday, wednesday) = OverlapFixtureDates(clock);
         var rule = new RecurringUnavailability
         {
             Id = Guid.NewGuid(), UserId = user.Id, DayOfWeek = DayOfWeek.Wednesday,
@@ -684,7 +750,7 @@ public class LeaveControllerTests
         });
         await db.SaveChangesAsync();
 
-        var result = await MakeController(db).ApproveUnavailability(rule.Id, CancellationToken.None);
+        var result = await MakeController(db, clock: clock).ApproveUnavailability(rule.Id, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<RecurringUnavailabilityApprovalResultDto>>(ok.Value);
@@ -980,13 +1046,17 @@ public class LeaveControllerTests
         Assert.True(updated!.UpdatedAt > beforeUpdatedAt);
     }
 
-    [Fact]
-    public async Task UpdateUnavailability_Approved_ReturnsOverlaps_WhenOverlappingShiftExists()
+    [Theory]
+    [MemberData(nameof(ClocksAcrossTheOldFailingWindow))]
+    public async Task UpdateUnavailability_Approved_ReturnsOverlaps_WhenOverlappingShiftExists(DateTimeOffset now)
     {
         using var db = CreateDb();
         var user = SeedUser(db);
-        var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
-        var wednesday = realToday.AddDays(((int)DayOfWeek.Wednesday - (int)realToday.DayOfWeek + 7) % 7);
+        // Same clock-keyed fixture as ApproveUnavailability_ReturnsOverlappingPublishedShift: this
+        // path reaches the same FindRecurringOverlapsAsync through UpdateUnavailability, so it shared
+        // the UTC-date fixture's failure window.
+        var clock = new FixedClock(now);
+        var (realToday, wednesday) = OverlapFixtureDates(clock);
         var rule = new RecurringUnavailability
         {
             Id = Guid.NewGuid(), UserId = user.Id, DayOfWeek = DayOfWeek.Wednesday,
@@ -1005,7 +1075,7 @@ public class LeaveControllerTests
         });
         await db.SaveChangesAsync();
 
-        var result = await MakeController(db).UpdateUnavailability(
+        var result = await MakeController(db, clock: clock).UpdateUnavailability(
             rule.Id,
             new UpdateRecurringUnavailabilityDto { DayOfWeek = DayOfWeek.Wednesday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = realToday },
             CancellationToken.None);

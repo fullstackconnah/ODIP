@@ -239,6 +239,161 @@ public class BudgetLedgerServiceTests
         Assert.Equal(0m, q2.Used);
     }
 
+    // ── A trip day no rate covers: said, counted, never priced (the QA run 2560 D2 blocker) ──
+
+    [Fact]
+    public async Task ATripDayNoCatalogueRateCoversIsCountedInThePeriodAndThePoolAndSaysSo_TheGapIsNeverDropped()
+    {
+        var (kit, person, _) = Arrange(CoreQuarters(PlanType.PlanManaged, 8000m));
+        var trip = kit.SeedTrip(new DateOnly(2026, 10, 23), 3);   // Fri 23, Sat 24, Sun 25 Oct 2026
+        kit.SeedBooking(trip, person);
+        var removed = kit.Db.SupportCatalogueItems.Where(i => i.DayType == ClaimDayType.Sunday).ToList();
+        kit.Db.SupportCatalogueItems.RemoveRange(removed);
+        kit.Db.SaveChanges();                                    // Friday and Saturday price, Sunday cannot
+
+        var ledger = await LedgerOf(kit, person);
+        var q2 = Q2Of(ledger);
+
+        // The money is exactly what the catalogue can price, and never a rate invented for the Sunday: $480 Friday + $672 Saturday.
+        var row = Assert.Single(q2.Items);
+        Assert.Equal(LedgerRowKind.TripBooking, row.Kind);
+        Assert.Equal(1152m, row.Amount);
+        Assert.Equal(1152m, q2.BookedAhead);
+        Assert.Equal(1152m, q2.Forecast);
+        Assert.Equal(1152m, ledger.Pools[0].Total.BookedAhead);
+
+        // The Sunday is not dropped silently: the row names it and its hours, and the period and the pool each carry the count of days the gap covers.
+        Assert.Equal(1, row.UnpricedTripDayCount);
+        Assert.Equal(1, q2.UnpricedTripDayCount);
+        Assert.Equal(1, ledger.Pools[0].Total.UnpricedTripDayCount);
+        Assert.Equal(
+            "No catalogue rate covers Sunday 25 Oct 2026 (8 h), so that part of the trip is counted as $0.",
+            row.Note);
+    }
+
+    [Fact]
+    public async Task ATripTheCataloguePricesCompletelyHasNoGapNoteAndNoUnpricedDays()
+    {
+        var (kit, person, _) = Arrange(CoreQuarters(PlanType.PlanManaged, 8000m));
+        var trip = kit.SeedTrip(new DateOnly(2026, 10, 20), 3);   // three weekdays, every one priced
+        kit.SeedBooking(trip, person);
+
+        var ledger = await LedgerOf(kit, person);
+        var q2 = Q2Of(ledger);
+
+        var row = Assert.Single(q2.Items);
+        Assert.Equal(1440m, row.Amount);
+        Assert.Null(row.Note);                                    // nothing to say: every day priced
+        Assert.Equal(0, row.UnpricedTripDayCount);
+        Assert.Equal(0, q2.UnpricedTripDayCount);
+        Assert.Equal(0, ledger.Pools[0].Total.UnpricedTripDayCount);
+    }
+
+    [Fact]
+    public async Task TwoUnpricedTripStretchesAreBothNamedInOneNote()
+    {
+        var (kit, person, _) = Arrange(CoreQuarters(PlanType.PlanManaged, 8000m));
+        var trip = kit.SeedTrip(new DateOnly(2026, 10, 23), 4);   // Fri, Sat, Sun, Mon: the two weekdays price, the weekend cannot
+        kit.SeedBooking(trip, person);
+        var removed = kit.Db.SupportCatalogueItems
+            .Where(i => i.DayType == ClaimDayType.Saturday || i.DayType == ClaimDayType.Sunday).ToList();
+        kit.Db.SupportCatalogueItems.RemoveRange(removed);
+        kit.Db.SaveChanges();
+
+        var q2 = Q2Of(await LedgerOf(kit, person));
+        var row = Assert.Single(q2.Items);
+
+        // Friday and Monday price ($480 each); the two missing days are both named in one note rather than one note each.
+        Assert.Equal(960m, row.Amount);
+        Assert.Equal(2, row.UnpricedTripDayCount);
+        Assert.Equal(2, q2.UnpricedTripDayCount);
+        Assert.NotNull(row.Note);
+        Assert.Contains("Saturday 24 Oct 2026", row.Note);
+        Assert.Contains("Sunday 25 Oct 2026", row.Note);
+        Assert.DoesNotContain("Friday", row.Note);           // a priced day is never named as missing
+    }
+
+    [Fact]
+    public async Task ATripNoDayOfWhichCanBePricedKeepsTheWholeTripReasonAndStillCountsItsDays()
+    {
+        var (kit, person, _) = Arrange(CoreQuarters(PlanType.PlanManaged, 8000m));
+        var trip = kit.SeedTrip(new DateOnly(2026, 10, 23), 3);
+        kit.SeedBooking(trip, person);
+        var all = kit.Db.SupportCatalogueItems.ToList();        // every row of the group, of every day type
+        kit.Db.SupportCatalogueItems.RemoveRange(all);
+        kit.SeedCommunityAccessCatalogue(new DateOnly(2026, 7, 1), new DateOnly(2026, 10, 22));   // all end-dated before the trip
+        kit.Db.SaveChanges();
+
+        var q2 = Q2Of(await LedgerOf(kit, person));
+        var row = Assert.Single(q2.Items);
+
+        // Nothing at all prices, so the pre-existing whole-trip reason is the honest one to give, and the count is every day of the
+        // trip: the period and the pool say the same thing the row says, which is what makes the three places agree.
+        Assert.Equal(0m, row.Amount);
+        Assert.Equal("No catalogue rate covers the trip's days, so it is counted as $0.", row.Note);
+        Assert.Equal(3, row.UnpricedTripDayCount);
+        Assert.Equal(3, q2.UnpricedTripDayCount);
+    }
+
+    [Fact]
+    public async Task ABookingWithNoNdisNumberStillCountsAsZero_AndTheTripGapNoteDoesNotReplaceThatReason()
+    {
+        var (kit, person, _) = Arrange(CoreQuarters(PlanType.PlanManaged, 8000m));
+        var trip = kit.SeedTrip(new DateOnly(2026, 10, 23), 3);
+        kit.SeedBooking(trip, person);
+        kit.Db.Participants.Single(p => p.Id == person.Id).NdisNumber = null;
+        kit.Db.SaveChanges();
+
+        var q2 = Q2Of(await LedgerOf(kit, person));
+        var row = Assert.Single(q2.Items);
+
+        // With no NDIS number the claim will carry nothing for this booking at all: that is the reason given, and no day count is claimed.
+        Assert.Equal(0m, row.Amount);
+        Assert.Equal("This participant has no NDIS number, so the trip claim will not include this booking: it is counted as $0.", row.Note);
+        Assert.Equal(0, row.UnpricedTripDayCount);
+    }
+
+    // ── The address state's case (the QA run 2560 D3 blocker) ──
+
+    [Theory]
+    [InlineData("NSW")]
+    [InlineData("nsw")]
+    [InlineData("Nsw")]
+    public async Task AnAddressStateInAnyCasePricesAndFindsHolidaysAsItsOwnState(string addressState)
+    {
+        var kit = LedgerKit.Create();
+        kit.SeedProvider("NSW");
+        kit.SeedCommunityAccessCatalogue();
+        var person = kit.SeedParticipant(addressState: addressState);
+        kit.SeedPlan(person, CoreQuarters());
+        kit.Db.PublicHolidays.Add(new PublicHoliday { Id = Guid.NewGuid(), Date = new DateOnly(2026, 10, 1), State = "NSW", Name = "Labour Day" });
+        kit.Db.SaveChanges();
+        kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Published);   // 09:00-17:00 = 8 h on an NSW holiday
+
+        var q2 = Q2Of(await LedgerOf(kit, person));
+
+        // The NSW public-holiday rate at 8 h ($132/h), not the VIC weekday column ($60/h): the state's case is normalised
+        // once, at the boundary, so "Nsw" is the same state as "NSW".
+        Assert.Equal(1056m, q2.Pending);
+    }
+
+    [Fact]
+    public async Task AnAddressStateInAnyCaseStillFindsItsOwnStatesHolidayRowWhateverCaseThatRowIsWrittenIn()
+    {
+        var kit = LedgerKit.Create();
+        kit.SeedProvider("NSW");
+        kit.SeedCommunityAccessCatalogue();
+        var person = kit.SeedParticipant(addressState: "Nsw");
+        kit.SeedPlan(person, CoreQuarters());
+        kit.Db.PublicHolidays.Add(new PublicHoliday { Id = Guid.NewGuid(), Date = new DateOnly(2026, 10, 1), State = "nsw", Name = "Labour Day" });
+        kit.Db.SaveChanges();
+        kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Published);
+
+        var q2 = Q2Of(await LedgerOf(kit, person));
+
+        Assert.Equal(1056m, q2.Pending);
+    }
+
     [Fact]
     public async Task AShiftIsPricedForTheParticipantsOwnState_ElseTheOrganisations_AndAtTheIntensivePrice()
     {

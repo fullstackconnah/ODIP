@@ -536,7 +536,7 @@ public sealed class BudgetLedgerService
     {
         var daysByTrip = tripDays.GroupBy(d => d.TripId).ToDictionary(g => g.Key, g => g.Select(d => new TripPricingDay(d.Date, d.IsPublicHoliday)).ToList());
         var estimators = new Dictionary<Guid, TripPriceEstimator>();
-        var state = pricing.ProviderState ?? "VIC";   // the trip claim engine prices in the organisation's state, as ClaimGenerationService does
+        var state = HolidayCalendar.Normalise(pricing.ProviderState) is { Length: > 0 } normalisedState ? normalisedState : "VIC";   // the trip claim engine prices in the organisation's state, as ClaimGenerationService does
 
         foreach (var booking in bookings)
         {
@@ -551,7 +551,8 @@ public sealed class BudgetLedgerService
 
             // Only a booking whose participant has an NDIS number gets claim lines, so only such a booking has a price.
             var hasNumber = !string.IsNullOrWhiteSpace(person.NdisNumber);
-            var lines = hasNumber ? estimator.Price(person.IsIntensive).Lines : Array.Empty<PricedTripLine>();
+            var price = hasNumber ? estimator.Price(person.IsIntensive) : new TripBookingPrice(Array.Empty<PricedTripLine>(), new HashSet<ClaimDayType>());
+            var lines = price.Lines;
             var parts = lines.GroupBy(l => PaceCategories.Of(l.CatalogueItem)).Select(g => (Category: g.Key, Amount: g.Sum(l => l.TotalAmount))).ToList();
             if (parts.Count == 0) parts.Add((pricing.DefaultShiftCategory, 0m));   // nothing to price: the booking is still shown, as $0, with the reason
 
@@ -563,11 +564,50 @@ public sealed class BudgetLedgerService
                     Kind = LedgerRowKind.TripBooking, Group = LedgerGroup.BookedAhead, Date = booking.StartDate, Amount = part.Amount, PaceCategory = part.Category,
                     PlanType = booking.PlanTypeOverride ?? person.PlanType, Id = booking.Id, BookingId = booking.Id, Description = description,
                     Status = BookingStatus.Confirmed.ToString(), Link = $"/trips/{booking.TripId}",
-                    Note = !hasNumber ? NoNdisNumberNote : lines.Count == 0 ? UnpricedTripNote : null,
+                    Note = !hasNumber
+                        ? NoNdisNumberNote
+                        : lines.Count == 0
+                            ? UnpricedTripNote
+                            : TripGapNote(price.UnpricedDays),
+                    UnpricedTripDayCount = hasNumber ? price.UnpricedDays.Sum(d => d.DayCount) : 0,
                 });
             }
         }
     }
+
+    /// <summary>
+    /// The note for a trip booking the catalogue only partly prices: which days no rate covers and how many hours of the trip they are, so the gap is said out loud on the row instead of
+    /// the trip quietly being worth less than it will be claimed for. Null when every day priced (nothing to say). The hours, not a rate: SPEC-P2A forbids inventing a price, so the
+    /// amount stays the priced lines' own and the days are counted beside it (<see cref="LedgerItem.UnpricedTripDayCount"/>).
+    /// </summary>
+    private static string? TripGapNote(IReadOnlyList<UnpricedTripDays> unpricedDays) => unpricedDays.Count switch
+    {
+        0 => null,
+        1 => string.Create(CultureInfo.InvariantCulture,
+            $"No catalogue rate covers {DescribeDayType(unpricedDays[0].DayType)} {FormatDaySpan(unpricedDays[0].From, unpricedDays[0].To)} ({Hours(unpricedDays[0])}), so that part of the trip is counted as $0."),
+        _ => string.Create(CultureInfo.InvariantCulture,
+            $"No catalogue rate covers {string.Join(", ", unpricedDays.Select(d => $"{DescribeDayType(d.DayType)} {FormatDaySpan(d.From, d.To)}"))} ({string.Join(", ", unpricedDays.Select(Hours))} in total), so that part of the trip is counted as $0."),
+    };
+
+    /// <summary>The hours of one unpriced stretch as a person reads them ("8 h").</summary>
+    private static string Hours(UnpricedTripDays days) => string.Create(CultureInfo.InvariantCulture, $"{days.Hours:0.##} h");
+
+    /// <summary>One day as a person reads it ("25 Oct 2026"), or the span of several ("25 to 26 Oct 2026").</summary>
+    private static string FormatDaySpan(DateOnly from, DateOnly to) =>
+        from == to
+            ? string.Create(CultureInfo.InvariantCulture, $"{from:dd MMM yyyy}")
+            : string.Create(CultureInfo.InvariantCulture, $"{from:dd} to {to:dd MMM yyyy}");
+
+    /// <summary>A claim day type as the catalogue and the claim speak of it, with spaces ("weekday evening") rather than as the enum's name.</summary>
+    private static string DescribeDayType(ClaimDayType dayType) => dayType switch
+    {
+        ClaimDayType.Weekday => "weekday",
+        ClaimDayType.WeekdayEvening => "weekday evening",
+        ClaimDayType.Saturday => "Saturday",
+        ClaimDayType.Sunday => "Sunday",
+        ClaimDayType.PublicHoliday => "public holiday",
+        _ => dayType.ToString(),
+    };
 
     // ── The wire shape ──────────────────────────────────────────────────────
 
@@ -592,8 +632,8 @@ public sealed class BudgetLedgerService
         PlanTotal = new LedgerFiguresDto
         {
             Limit = pool.Total.Limit, Carried = 0m, Available = pool.Total.Available, Claimed = pool.Total.Claimed, Pending = pool.Total.Pending, Used = pool.Total.Used,
-            BookedAhead = pool.Total.BookedAhead, Forecast = pool.Total.Forecast, Remaining = pool.Total.Available - pool.Total.Used,
-            ForecastRemaining = pool.Total.Available - pool.Total.Forecast, Status = pool.Total.Status,
+            BookedAhead = pool.Total.BookedAhead, Forecast = pool.Total.Forecast, UnpricedTripDayCount = pool.Total.UnpricedTripDayCount,
+            Remaining = pool.Total.Available - pool.Total.Used, ForecastRemaining = pool.Total.Available - pool.Total.Forecast, Status = pool.Total.Status,
         },
     };
 
@@ -601,7 +641,8 @@ public sealed class BudgetLedgerService
     {
         Id = period.Period.Id, Position = period.Period.Position, PeriodStart = period.Period.PeriodStart, PeriodEnd = period.Period.PeriodEnd, IsCurrent = period.IsCurrent,
         Limit = period.Limit, Carried = period.Carried, Available = period.Available, Claimed = period.Claimed, Pending = period.Pending, Used = period.Used, BookedAhead = period.BookedAhead,
-        Forecast = period.Forecast, Remaining = period.Available - period.Used, ForecastRemaining = period.Available - period.Forecast, Status = period.Status,
+        Forecast = period.Forecast, UnpricedTripDayCount = period.UnpricedTripDayCount,
+        Remaining = period.Available - period.Used, ForecastRemaining = period.Available - period.Forecast, Status = period.Status,
         PastUnresolvedCount = period.PastUnresolvedCount, RowCount = period.Items.Count, Rows = period.Items.Take(RowsPerPeriod).Select(ToRow).ToList(),
     };
 
@@ -610,5 +651,6 @@ public sealed class BudgetLedgerService
     private static LedgerRowDto ToRow(LedgerItem item) => new()
     {
         Id = item.Id, Kind = item.Kind, Group = item.Group, Date = item.Date, Description = item.Description, Amount = item.Amount, Status = item.Status, Link = item.Link, Note = item.Note,
+        UnpricedTripDayCount = item.UnpricedTripDayCount,
     };
 }
