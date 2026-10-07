@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Interfaces;
@@ -32,6 +33,7 @@ public class ParticipantFundingLedgerController : ControllerBase
     /// carried in, what is available, claimed, pending, booked ahead, the forecast and the status, the plan's total line for the pool, the first rows of each period, and the rows that are in no
     /// pool or outside the plan. With no plan that has started it answers 200 with no plan and no pools.
     /// </summary>
+    [EnableRateLimiting("api")]
     [HttpGet("ledger")]
     public async Task<ActionResult<ApiResponse<ParticipantLedgerDto>>> Ledger(Guid participantId, CancellationToken ct)
     {
@@ -44,6 +46,7 @@ public class ParticipantFundingLedgerController : ControllerBase
     }
 
     /// <summary>One more page of the rows of one period of one pool, for "show more" once the first <see cref="BudgetLedgerService.RowsPerPeriod"/> are on screen.</summary>
+    [EnableRateLimiting("api")]
     [HttpGet("ledger/rows")]
     public async Task<ActionResult<ApiResponse<LedgerRowsPageDto>>> Rows(
         Guid participantId, [FromQuery] Guid poolId, [FromQuery] Guid periodId, CancellationToken ct, [FromQuery] int skip = 0, [FromQuery] int take = BudgetLedgerService.RowsPerPeriod)

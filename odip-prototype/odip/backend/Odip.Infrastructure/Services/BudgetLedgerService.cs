@@ -64,17 +64,31 @@ public sealed class BudgetLedgerService
         return all.TryGetValue(participantId, out var ledger) ? LedgerDto(ledger) : null;
     }
 
-    /// <summary>One more page of one period's rows. Null when the participant, pool or period is not found.</summary>
+    /// <summary>
+    /// One more page of one period's rows, and null when the participant, pool or period is not found.
+    ///
+    /// Read bounded to the one period asked for: an item counts in the period of its own date, so the claims, shifts and bookings are read for the period's dates alone and never for
+    /// the whole plan (see <see cref="ItemsInPeriodAsync"/>). What prices them is deliberately NOT bounded the same way, and the rest of the ledger reads the plan whole.
+    /// </summary>
     public async Task<LedgerRowsPageDto?> GetRowsAsync(Guid tenantId, Guid participantId, Guid poolId, Guid periodId, int skip, int take, CancellationToken ct)
     {
-        var all = await ComputeAsync(tenantId, new[] { participantId }, ct);
-        if (!all.TryGetValue(participantId, out var ledger) || ledger.Ledger is null) return null;
-        var period = ledger.Ledger.Pools.Where(p => p.Pool.Id == poolId).SelectMany(p => p.Periods).FirstOrDefault(p => p.Period.Id == periodId);
-        if (period is null) return null;
-
         skip = Math.Max(0, skip);
         take = Math.Clamp(take, 1, MaxRowsPerPage);
-        return new LedgerRowsPageDto { Total = period.Items.Count, Skip = skip, Rows = period.Items.Skip(skip).Take(take).Select(ToRow).ToList() };
+
+        // The participant first, inside the tenant, and only then the plan and the period: a page of rows is never reached through a pool or period id the caller supplied.
+        var people = await PeopleAsync(tenantId, new[] { participantId }, ct);
+        if (people.Count == 0) return null;
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+        var plan = BudgetLedgerCalculator.CurrentPlanOf(await PlansAsync(tenantId, new[] { participantId }, ct), today);
+        if (plan is null) return null;
+        var found = plan.Pools.Where(p => p.Id == poolId)
+            .SelectMany(p => p.Periods.Select(period => (Pool: p, Period: period)))
+            .FirstOrDefault(p => p.Period.Id == periodId);
+        if (found.Pool is null) return null;
+
+        var state = await ProviderStateAsync(tenantId, ct);
+        var items = await ItemsInPeriodAsync(tenantId, people[0], plan, found.Pool, found.Period, today, state, ct);
+        return new LedgerRowsPageDto { Total = items.Count, Skip = skip, Rows = items.Skip(skip).Take(take).Select(ToRow).ToList() };
     }
 
     // ── Many participants at once ───────────────────────────────────────────
@@ -90,24 +104,17 @@ public sealed class BudgetLedgerService
         if (ids.Count == 0) return result;
 
         // The participants first, inside the tenant: everything below is reached through the ids found here and never through an id the caller supplied.
-        var people = await _db.Participants.AsNoTracking()
-            .Where(p => p.TenantId == tenantId && ids.Contains(p.Id))
-            .Select(p => new PersonRow(p.Id, p.FirstName, p.LastName, p.PreferredName, p.PlanType, p.IsIntensiveSupport, p.AddressState, p.NdisNumber))
-            .ToListAsync(ct);
+        var people = await PeopleAsync(tenantId, ids, ct);
         if (people.Count == 0) return result;
         var found = people.Select(p => p.Id).ToList();
 
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
-        var providerState = await _db.ProviderSettings.AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => s.State).FirstOrDefaultAsync(ct);
+        var providerState = await ProviderStateAsync(tenantId, ct);
         var timeBasis = ProviderTimeZoneResolver.FromState(providerState).Id;
         var approaching = await _db.BudgetSettings.AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => (int?)s.ApproachingPercent).FirstOrDefaultAsync(ct)
             ?? BudgetSettings.DefaultApproachingPercent;
 
-        var plans = await _db.FundingPlans.AsNoTracking()
-            .Include(p => p.Pools).ThenInclude(p => p.Periods)
-            .AsSplitQuery()
-            .Where(p => p.TenantId == tenantId && found.Contains(p.ParticipantId))
-            .ToListAsync(ct);
+        var plans = await PlansAsync(tenantId, found, ct);
         var currentPlans = plans.GroupBy(p => p.ParticipantId).ToDictionary(g => g.Key, g => BudgetLedgerCalculator.CurrentPlanOf(g, today));
 
         var withPlan = new List<PersonRow>();
@@ -150,6 +157,97 @@ public sealed class BudgetLedgerService
         return result;
     }
 
+    /// <summary>
+    /// Which of the asked-for ids are participants of <paramref name="tenantId"/>: the ids the caller named and only those, so a tenant with many participants does not have all of them read to
+    /// answer a question about one. The ids are a parameter, so this stays a single query however many are asked for. It is exposed so that <c>ToQueryString</c> can show how it translates (see
+    /// <c>BudgetLedgerSqlTests</c>); the service below is its only caller.
+    /// </summary>
+    public IQueryable<Guid> MembershipQuery(Guid tenantId, IReadOnlyCollection<Guid> participantIds) =>
+        _db.Participants.AsNoTracking().Where(p => p.TenantId == tenantId && participantIds.Contains(p.Id)).Select(p => p.Id);
+
+    // ── One participant's ledger ────────────────────────────────────────────
+
+    /// <summary>The asked-for participants of <paramref name="tenantId"/>, and nothing else: every read below is reached through the ids found here.</summary>
+    private Task<List<PersonRow>> PeopleAsync(Guid tenantId, IReadOnlyCollection<Guid> participantIds, CancellationToken ct) =>
+        _db.Participants.AsNoTracking()
+            .Where(p => p.TenantId == tenantId && participantIds.Contains(p.Id))
+            .Select(p => new PersonRow(p.Id, p.FirstName, p.LastName, p.PreferredName, p.PlanType, p.IsIntensiveSupport, p.AddressState, p.NdisNumber))
+            .ToListAsync(ct);
+
+    private Task<List<FundingPlan>> PlansAsync(Guid tenantId, IReadOnlyCollection<Guid> participantIds, CancellationToken ct) =>
+        _db.FundingPlans.AsNoTracking()
+            .Include(p => p.Pools).ThenInclude(p => p.Periods)
+            .AsSplitQuery()
+            .Where(p => p.TenantId == tenantId && participantIds.Contains(p.ParticipantId))
+            .ToListAsync(ct);
+
+    /// <summary>The state the organisation delivers in: the trips are priced in it and a shift without an address of its own falls back to it.</summary>
+    private Task<string?> ProviderStateAsync(Guid tenantId, CancellationToken ct) =>
+        _db.ProviderSettings.AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => s.State).FirstOrDefaultAsync(ct);
+
+    /// <summary>
+    /// One period's rows, read for that period's dates and no wider.
+    ///
+    /// Placement is by an item's own date (<see cref="BudgetLedgerCalculator.Place"/>: a shift on its service date, a claim line on its SupportsDeliveredFrom, a booking on its trip's
+    /// start), so only items dated inside the period can ever be in it - which is what lets the reads here be bounded to the period where the whole ledger's reads are bounded to
+    /// the plan. Two things are NOT bounded that way and must not be:
+    ///
+    /// <list type="bullet">
+    /// <item><b>The allocation window.</b> It is the period intersected with the plan, so a period that ran outside its plan still reads only what could be counted, and a row never
+    ///   leaves the plan.</item>
+    /// <item><b>The pricing resources.</b> A trip booking counts in the period its trip STARTS in, but it is priced over its WHOLE days - so a trip starting on the last day of the
+    ///   period is priced with catalogue rows, holidays and trip days that fall outside the period's dates. Bounding those to the allocation window would price such a booking at
+    ///   $0 and silently disagree with the claim the same trip produces. The window's own end is part of that range: a shift is priced by its own date, so a holiday after the last
+    ///   booking still prices the shift that falls on it.</item>
+    /// </list>
+    ///
+    /// The rows themselves are placed by <see cref="BudgetLedgerCalculator.Compute"/> on the plan exactly as the full ledger places them, so a period's ordered rows and total
+    /// are the canonical ones, not a second way of deciding what belongs to a period.
+    /// </summary>
+    private async Task<List<LedgerItem>> ItemsInPeriodAsync(
+        Guid tenantId, PersonRow person, FundingPlan plan, FundingPool pool, FundingPeriod period, DateOnly today, string? providerState, CancellationToken ct)
+    {
+        // Where this item could be counted: the period's own dates, cut to the plan's.
+        var from = period.PeriodStart > plan.PlanStart ? period.PeriodStart : plan.PlanStart;
+        var to = period.PeriodEnd < plan.PlanEnd ? period.PeriodEnd : plan.PlanEnd;
+        if (from > to) return new List<LedgerItem>();
+
+        var ids = new List<Guid> { person.Id };
+        var lineRows = await LoadClaimLinesAsync(ids, from, to, ct);
+        var shiftRows = await LoadShiftsAsync(tenantId, ids, from, to, ct);
+
+        // A booking is placed on its trip's start date, so only a trip starting inside the window can land in this period at all: from the window's own start, and never before today
+        // either, because a trip that has already left is the earlier period's row rather than a booking ahead. Both ends of that range come from the window and the day, never
+        // from the plan, so a page for one period reads that period's bookings and not the plan's.
+        var bookingFrom = from > today ? from : today;
+        var bookingRows = await LoadBookingsAsync(tenantId, ids, bookingFrom, to, ct);
+
+        // What prices a booking of a trip starting inside the window: the whole trip's days, however far past the window the trip runs. The calendar always reaches the end of the
+        // window as well, because every included shift is dated inside it - a booking is not what makes the calendar long enough to price a shift.
+        var pricingTo = to;
+        if (bookingRows.Count > 0)
+        {
+            var lastTripDay = bookingRows.Max(b => b.StartDate.AddDays(b.DurationDays - 1));
+            if (lastTripDay > pricingTo) pricingTo = lastTripDay;
+        }
+        var tripDays = await LoadTripDaysAsync(bookingRows, ct);
+        var catalogue = await LoadCatalogueAsync(lineRows, bookingRows, ct);
+        var holidays = await LoadHolidaysAsync(shiftRows.Count + bookingRows.Count == 0 ? null : (from, pricingTo), ct);
+
+        var pricing = new Pricing(catalogue, holidays, providerState);
+        var items = new List<LedgerItem>();
+        foreach (var line in lineRows) items.Add(ClaimLineItemOf(line, person, pricing));
+        foreach (var shift in shiftRows) items.Add(ShiftItemOf(shift, person, today, pricing));
+        AddBookingItems(bookingRows, tripDays, new Dictionary<Guid, PersonRow> { [person.Id] = person }, pricing,
+            new Dictionary<Guid, List<LedgerItem>> { [person.Id] = items });
+
+        // The calculator is the one the full ledger uses, so it decides what belongs to the period and in what order. The approaching percentage only colours a period's status,
+        // never its rows, so a page of rows does not read the setting.
+        var ledger = BudgetLedgerCalculator.Compute(plan, today, BudgetSettings.DefaultApproachingPercent, items.Where(i => i.Date >= plan.PlanStart));
+        var held = ledger.Pools.Where(p => p.Pool.Id == pool.Id).SelectMany(p => p.Periods).FirstOrDefault(p => p.Period.Id == period.Id);
+        return held is null ? new List<LedgerItem>() : held.Items.ToList();
+    }
+
     // ── What a claim does to a budget ───────────────────────────────────────
 
     /// <summary>
@@ -166,7 +264,7 @@ public sealed class BudgetLedgerService
         // wrong: a caller handing over a tenant id that is not these participants' own. A tenant id is a decision about whose money may be
         // shown, and it may never be taken from an entity, so one foreign participant drops the whole call rather than returning a partial figure.
         var asked = lines.Select(l => l.ParticipantId).Distinct().ToList();
-        var inTenant = (await _db.Participants.AsNoTracking().Where(p => p.TenantId == tenantId).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
+        var inTenant = (await MembershipQuery(tenantId, asked).ToListAsync(ct)).ToHashSet();
         if (asked.Any(id => !inTenant.Contains(id))) return null;
 
         var ledgers = await ComputeAsync(tenantId, asked, ct);
@@ -310,14 +408,22 @@ public sealed class BudgetLedgerService
                     || (s.Status == ShiftStatus.Completed && !_db.ClaimLineItems.Any(l => l.ShiftId == s.Id))))
             .Select(s => new ShiftRow(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status));
 
-    /// <summary>Confirmed bookings of trips that start today or later and have not been cancelled.</summary>
+    /// <summary>Confirmed bookings of trips that start today or later and have not been cancelled, and that no claim line has already taken over.</summary>
     private async Task<List<BookingRow>> LoadBookingsAsync(Guid tenantId, List<Guid> participantIds, DateOnly today, DateOnly to, CancellationToken ct) =>
         await BookingsQuery(tenantId, participantIds, today, to).ToListAsync(ct);
 
     public IQueryable<BookingRow> BookingsQuery(Guid tenantId, IReadOnlyCollection<Guid> participantIds, DateOnly today, DateOnly to) =>
         _db.ParticipantBookings.AsNoTracking()
             .Where(b => participantIds.Contains(b.ParticipantId) && b.BookingStatus == BookingStatus.Confirmed
-                && b.TripInstance.TenantId == tenantId && b.TripInstance.StartDate >= today && b.TripInstance.StartDate <= to && b.TripInstance.Status != TripStatus.Cancelled)
+                && b.TripInstance.TenantId == tenantId && b.TripInstance.StartDate >= today && b.TripInstance.StartDate <= to && b.TripInstance.Status != TripStatus.Cancelled
+                // A claim's lines TAKE THE BOOKING'S PLACE (ClaimGenerationService says so of every line: "the booking stops being
+                // booked ahead and its lines take its place"), so a booking the ledger already counts through a claim line must not also
+                // be counted as booked ahead - the same rule the shift query above follows for a completed shift that has a claim line.
+                // "Already counted" is exactly ClaimLinesQuery's rule: the claim is neither rejected nor cancelled, and the line is not
+                // itself rejected. A claim or line the ledger drops leaves the booking's own estimate standing.
+                && !_db.ClaimLineItems.Any(l => l.ParticipantBookingId == b.Id
+                    && l.Status != ClaimLineItemStatus.Rejected
+                    && l.TripClaim.Status != TripClaimStatus.Rejected && l.TripClaim.Status != TripClaimStatus.Cancelled))
             .Select(b => new BookingRow(
                 b.Id, b.ParticipantId, b.PlanTypeOverride, b.TripInstanceId, b.TripInstance.TripName, b.TripInstance.StartDate, b.TripInstance.DurationDays, b.TripInstance.DepartureTime,
                 b.TripInstance.ReturnTime, b.TripInstance.ActiveHoursPerDay, b.TripInstance.DefaultActivityGroupId));

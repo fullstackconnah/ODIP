@@ -701,6 +701,32 @@ public class BudgetLedgerServiceTests
         Assert.Null(await kit.Ledger.ForClaimAsync(kit.TenantId, unplanned.Id, Ct));
     }
 
+    /// <summary>
+    /// The membership guard now reads only the ids the lines name. Its two edges are pinned here so the narrowing cannot change an answer: an empty request is still no figure,
+    /// and a participant named by several lines is still one participant of the block (the ids are de-duplicated before they are looked up, so the narrowing cannot split it).
+    /// </summary>
+    [Fact]
+    public async Task APreviewWithNoLinesIsNoFigure_AndTheSameParticipantNamedTwiceIsStillOneParticipant()
+    {
+        var (kit, person, _) = Arrange(CoreQuarters(each: 2000m));
+        var shift = kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Completed);
+
+        Assert.Null(await kit.Ledger.EffectOfLinesAsync(kit.TenantId, [], Ct));
+
+        var twice = (await kit.Ledger.EffectOfLinesAsync(
+            kit.TenantId,
+            new[]
+            {
+                new ClaimEffectLine(person.Id, shift.ServiceDate, 4, PlanType.PlanManaged, 480m, null, null),
+                new ClaimEffectLine(person.Id, shift.ServiceDate, 9, PlanType.PlanManaged, 75m, null, null),
+            },
+            Ct))!;
+
+        var participant = Assert.Single(twice.Participants);
+        Assert.Equal(person.Id, participant.ParticipantId);
+        Assert.Equal(2, participant.Rows.Count);   // both lines, under one participant
+    }
+
     [Fact]
     public async Task APreviewTakesTheShiftsItReplacesOutOfPending_SoNothingIsCountedTwice()
     {

@@ -29,6 +29,24 @@ public class BudgetLedgerSqlTests
         return new BudgetLedgerService(db, TimeProvider.System);
     }
 
+    /// <summary>
+    /// The membership check the claim preview does: it must read only the ids the caller asked about, not every participant of the tenant. EF InMemory would stay green either way
+    /// (the extra ids change nothing about the answer, they are just read), so this reads the SQL the NPGSQL provider builds.
+    /// </summary>
+    [Fact]
+    public void TheMembershipQuery_AsksForOnlyTheIdsNamed_AndStaysInTheTenant()
+    {
+        var service = Service(out var db);
+        using var _ = db;
+
+        var sql = service.MembershipQuery(Guid.NewGuid(), Ids).ToQueryString();
+
+        Assert.Contains("\"Participants\"", sql);
+        Assert.Contains("\"TenantId\" =", sql);        // the tenant is still the one that was named...
+        Assert.Contains("\"Id\" = ANY (", sql);        // ...and the ids are a parameter, narrowed to the ones asked for
+        Assert.Matches(@"= ANY \(", sql);
+    }
+
     [Fact]
     public void TheClaimLinesQuery_ReachesLinesThroughShiftsAndBookingsOnly_AndLeavesOutRejectedAndCancelledClaims()
     {
