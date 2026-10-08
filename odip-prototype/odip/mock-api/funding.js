@@ -278,7 +278,8 @@ function create({ respond, fundingSources }) {
     return { recorded, ended: !recorded && plans.length > 0 }
   }
 
-  return { get, post, put, delete: del, budgetStatus }
+  // plansOf and settings are the roster budget check's (rosterBudget.js): the same plans and the same "approaching" percentage the Funding tab shows.
+  return { get, post, put, delete: del, budgetStatus, plansOf, settings: () => settings }
 }
 
 module.exports = { create, PACE_CATEGORIES }
