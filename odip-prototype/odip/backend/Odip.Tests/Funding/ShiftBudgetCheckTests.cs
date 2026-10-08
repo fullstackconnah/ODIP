@@ -410,6 +410,25 @@ public class ShiftBudgetCheckTests : IDisposable
         Assert.StartsWith("no catalogue rate covers", outcome.NotCheckedReason);   // the exact words are the estimator's own, and may change with it
     }
 
+    // Through the REAL estimator, as the budget fix (round 1b) leaves it: the shift claim engine prices one-to-one and two-to-one community access only, so a group shift, a sleepover and a passive night have no
+    // price, are not checked and are never blocked, even where the same shift as one-to-one would be refused. When the engine prices them this test is where to decide what a hard limit does about them.
+    [Theory]
+    [InlineData(SupportRatio.OneToThree, SleepoverType.None)]
+    [InlineData(SupportRatio.OneToOne, SleepoverType.Sleepover)]
+    [InlineData(SupportRatio.OneToOne, SleepoverType.PassiveNight)]
+    public async Task AShiftTheClaimEngineDoesNotPriceYet_IsNotChecked_EvenWhereAOneToOneShiftWouldBeRefused(SupportRatio ratio, SleepoverType nightType)
+    {
+        var (participant, _) = Seed(october: 100m);
+        Mode(BudgetLimitMode.HardLimit);
+
+        var oneToOne = await Service().CheckAsync(Request(participant, Mon12Oct), default);
+        var unpriced = await Service().CheckAsync(Request(participant, Mon12Oct) with { Ratio = ratio, NightType = nightType }, default);
+
+        Assert.Equal(RosterFindingSeverity.Blocking, Find(oneToOne, BudgetFindingCodes.ForecastOver)!.Severity);
+        Assert.Empty(unpriced.Findings);
+        Assert.StartsWith("Budget not checked: ", unpriced.Note);
+    }
+
     // ── Whose money ─────────────────────────────────────────────────────────
 
     [Fact]
