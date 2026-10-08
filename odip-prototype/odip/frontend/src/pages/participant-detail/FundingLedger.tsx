@@ -26,7 +26,7 @@ const GROUP_HEADINGS: Record<string, string> = {
 
 const GROUP_NOTES: Record<string, string> = {
   Claimed: 'Claim lines sent to the NDIA, and paid ones at what was paid.',
-  Pending: 'Claims not sent yet, completed shifts nobody has claimed, and shifts whose day passed unresolved.',
+  Pending: 'Claims not sent yet, completed shifts nobody has claimed, shifts whose day passed unresolved, and trips that have started with no claim yet.',
   BookedAhead: 'Rostered shifts and confirmed trip bookings still to come in this period.',
 }
 
@@ -110,6 +110,12 @@ function PoolLedger({ pool }: { pool: LedgerPool }) {
           {focus.pastUnresolvedCount > 0 && (
             <p className="mt-2 text-[13px] text-[var(--color-on-warning-container)]">
               {plural(focus.pastUnresolvedCount, 'past shift')} not completed or cancelled, counted as pending.
+            </p>
+          )}
+          {/* A trip's claim cannot be made until the trip is completed, so a trip that has started counts as pending from its first day: its row says so too. */}
+          {focus.startedUnclaimedTripCount > 0 && (
+            <p className="mt-2 text-[13px] text-[var(--color-on-warning-container)]">
+              {plural(focus.startedUnclaimedTripCount, 'started trip')} not claimed yet, counted as pending.
             </p>
           )}
           {/* The gap is stated three times over, in three places a reader actually looks: the sentence above (poolSentence), this

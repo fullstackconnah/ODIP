@@ -37,6 +37,13 @@ public sealed record LedgerItem
     /// prose. Zero for anything that is not a partly-priced trip, so nothing else has to think about it.
     /// </summary>
     public int UnpricedTripDayCount { get; init; }
+
+    /// <summary>
+    /// A confirmed trip booking whose trip has started and which no claim line has taken over yet. The trip claim cannot be made until the trip is completed, so until then nothing
+    /// else would count the booking: it is pending, priced like a booked-ahead trip, and flagged. It stays a <see cref="LedgerRowKind.TripBooking"/> so that a claim preview takes it out
+    /// as it takes a booked-ahead one (see <c>BudgetLedgerService.EffectOfLinesAsync</c>), whatever its group.
+    /// </summary>
+    public bool IsStartedUnclaimedTrip => Kind == LedgerRowKind.TripBooking && Group == LedgerGroup.Pending;
 }
 
 /// <summary>Where an item landed.</summary>
@@ -54,8 +61,8 @@ public readonly record struct LedgerPlace(LedgerPlacement Placement, FundingPool
 
 /// <summary>One funding period of one pool with its figures. <see cref="Available"/>, <see cref="Used"/> and <see cref="Forecast"/> are derived, so they cannot disagree with their parts.</summary>
 public sealed record PeriodLedger(
-    FundingPeriod Period, bool IsCurrent, decimal Limit, decimal Carried, decimal Claimed, decimal Pending, decimal BookedAhead, int PastUnresolvedCount, int UnpricedTripDayCount, BudgetStatus Status,
-    IReadOnlyList<LedgerItem> Items)
+    FundingPeriod Period, bool IsCurrent, decimal Limit, decimal Carried, decimal Claimed, decimal Pending, decimal BookedAhead, int PastUnresolvedCount, int StartedUnclaimedTripCount,
+    int UnpricedTripDayCount, BudgetStatus Status, IReadOnlyList<LedgerItem> Items)
 {
     /// <summary>The limit plus what earlier periods of the plan left unspent (rolled over, not confirmed: somebody else may have used it).</summary>
     public decimal Available => Limit + Carried;
@@ -64,7 +71,8 @@ public sealed record PeriodLedger(
 }
 
 /// <summary>The same sums over a whole pool: every period's limit, claimed, pending and booked ahead, against the sum of the limits. Nothing carries: it is movement inside the pool.</summary>
-public sealed record PoolTotals(decimal Limit, decimal Claimed, decimal Pending, decimal BookedAhead, int PastUnresolvedCount, int UnpricedTripDayCount, BudgetStatus Status)
+public sealed record PoolTotals(
+    decimal Limit, decimal Claimed, decimal Pending, decimal BookedAhead, int PastUnresolvedCount, int StartedUnclaimedTripCount, int UnpricedTripDayCount, BudgetStatus Status)
 {
     public decimal Available => Limit;
     public decimal Used => Claimed + Pending;
@@ -173,6 +181,8 @@ public static class BudgetLedgerCalculator
             var used = claimed + pending;
             periods.Add(new PeriodLedger(
                 period, period.PeriodStart <= today && today <= period.PeriodEnd, limit, carried, claimed, pending, booked, held.Count(i => i.Kind == LedgerRowKind.PastShift),
+                // A booking priced in more than one category has an item for each: it is one trip however many parts it is split into.
+                held.Where(i => i.IsStartedUnclaimedTrip).Select(i => i.BookingId).Distinct().Count(),
                 held.Sum(i => i.UnpricedTripDayCount),
                 StatusOf(available, used, used + booked, approachingPercent), held));
             carried = Math.Max(0m, available - used);   // what this period leaves unspent rolls into the next, and chains
@@ -183,7 +193,7 @@ public static class BudgetLedgerCalculator
         var totalPending = periods.Sum(p => p.Pending);
         var totalBooked = periods.Sum(p => p.BookedAhead);
         var total = new PoolTotals(
-            totalLimit, totalClaimed, totalPending, totalBooked, periods.Sum(p => p.PastUnresolvedCount), periods.Sum(p => p.UnpricedTripDayCount),
+            totalLimit, totalClaimed, totalPending, totalBooked, periods.Sum(p => p.PastUnresolvedCount), periods.Sum(p => p.StartedUnclaimedTripCount), periods.Sum(p => p.UnpricedTripDayCount),
             StatusOf(totalLimit, totalClaimed + totalPending, totalClaimed + totalPending + totalBooked, approachingPercent));
         return new PoolLedger(pool, hasSetAside, periods, total);
     }

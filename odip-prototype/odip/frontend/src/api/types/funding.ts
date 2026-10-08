@@ -224,6 +224,8 @@ export interface LedgerPeriod extends LedgerFigures {
   isCurrent: boolean
   /** Shifts in the period never completed or cancelled although their day has passed (counted as pending). */
   pastUnresolvedCount: number
+  /** Confirmed trip bookings in the period whose trip has started and has no claim yet (counted as pending: the trip claim waits for the trip to be completed). */
+  startedUnclaimedTripCount: number
   /** How many rows the period has in all; `rows` holds the first page. */
   rowCount: number
   rows: LedgerRow[]
@@ -242,6 +244,7 @@ export interface LedgerPool {
   /** The same sums over the whole plan, against the sum of the limits. */
   planTotal: LedgerFigures
   pastUnresolvedCount: number
+  startedUnclaimedTripCount: number
 }
 
 /** Rows that are in no pool, or outside the plan: shown, never dropped. */

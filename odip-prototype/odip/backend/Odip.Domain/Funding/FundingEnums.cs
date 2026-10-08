@@ -69,7 +69,10 @@ public enum LedgerRowKind
     PastShift = 2,
     /// <summary>A rostered shift from today on, priced the way ODIP will claim it.</summary>
     FutureShift = 3,
-    /// <summary>A confirmed trip booking from today on, priced the way ODIP will claim it.</summary>
+    /// <summary>
+    /// A confirmed trip booking nobody has claimed yet, priced the way ODIP will claim it: booked ahead while its trip starts today or later, and pending (flagged) once the trip has
+    /// started, because the trip claim cannot be made until the trip is completed and the booking would otherwise be counted nowhere.
+    /// </summary>
     TripBooking = 4,
 }
 
@@ -78,8 +81,8 @@ public enum LedgerGroup
 {
     /// <summary>Lines of submitted, approved or paid claims.</summary>
     Claimed = 0,
-    /// <summary>Lines of draft or ready claims, completed shifts with no claim and shifts never resolved.</summary>
+    /// <summary>Lines of draft or ready claims, completed shifts with no claim, shifts never resolved, and trips that have started with no claim yet.</summary>
     Pending = 1,
-    /// <summary>Future shifts and confirmed trip bookings.</summary>
+    /// <summary>Future shifts and confirmed bookings of trips that have not started.</summary>
     BookedAhead = 2,
 }

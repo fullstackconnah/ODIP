@@ -72,6 +72,11 @@ public record LedgerPeriodDto : LedgerFiguresDto
     public bool IsCurrent { get; init; }
     /// <summary>How many shifts in this period were never completed or cancelled although their day has passed (they are counted as pending).</summary>
     public int PastUnresolvedCount { get; init; }
+    /// <summary>
+    /// How many confirmed trip bookings in this period belong to a trip that has started and has no claim yet. They are counted as pending (the trip claim waits for the trip to be
+    /// completed, so until then nothing else would count them) and flagged the way <see cref="PastUnresolvedCount"/> flags shifts.
+    /// </summary>
+    public int StartedUnclaimedTripCount { get; init; }
     /// <summary>How many rows the period has in all; <see cref="Rows"/> holds the first page of them.</summary>
     public int RowCount { get; init; }
     public List<LedgerRowDto> Rows { get; init; } = new();
@@ -91,6 +96,8 @@ public record LedgerPoolDto
     /// <summary>The same sums over the whole plan, against the sum of the limits.</summary>
     public LedgerFiguresDto PlanTotal { get; init; } = new();
     public int PastUnresolvedCount { get; init; }
+    /// <summary>The same flag as the periods', over the whole plan: started trips that have no claim yet.</summary>
+    public int StartedUnclaimedTripCount { get; init; }
 }
 
 /// <summary>Rows that are in no pool or period of the plan: shown, never dropped.</summary>

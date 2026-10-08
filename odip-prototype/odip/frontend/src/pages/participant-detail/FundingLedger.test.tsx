@@ -120,6 +120,33 @@ describe('the ledger table', () => {
     expect(screen.getByText(/2 past shifts not completed or cancelled, counted as pending\./)).toBeInTheDocument()
   })
 
+  it('flags trips that have started and have no claim yet, and says they are counted as pending', () => {
+    const startedTrip = ledgerRow({
+      id: 'st1', kind: 'TripBooking', group: 'Pending', date: '2026-10-02', amount: 1440, status: 'Confirmed', link: '/trips/trip-9', description: 'Coastal weekend · 3 days',
+      note: 'The trip has started and has no claim yet, so it is counted as pending.',
+    })
+    const period = ledgerPeriod({ rows: [startedTrip], rowCount: 1, startedUnclaimedTripCount: 2 })
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods: [period] })] }))
+
+    // Beside the figures, in the warning tone, as past shifts are (the money is in Used and the forecast, but the trip is not claimed or finished).
+    expect(screen.getByText(/^2 started trips not claimed yet, counted as pending\./)).toHaveClass('text-[var(--color-on-warning-container)]')
+    // And on the row itself, which still links to the trip.
+    expect(screen.getByText('The trip has started and has no claim yet, so it is counted as pending.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Coastal weekend · 3 days' })).toHaveAttribute('href', '/trips/trip-9')
+  })
+
+  it('says nothing about started trips when there are none', () => {
+    renderLedger(participantLedger())
+
+    expect(screen.queryByText(/started trip/)).not.toBeInTheDocument()
+  })
+
+  it('names trips in the note under the Pending group, beside claims and shifts', () => {
+    renderLedger(participantLedger())
+
+    expect(screen.getByText(/Claims not sent yet.*trips that have started with no claim yet/)).toBeInTheDocument()
+  })
+
   it('names a row the server could not price, so a $0 is never a mystery', () => {
     const unpriced = ledgerRow({ id: 'u1', amount: 0, note: 'No catalogue rate covers this date, so it is counted as $0.' })
     renderLedger(participantLedger({ pools: [ledgerPool({ periods: [ledgerPeriod({ rows: [unpriced], rowCount: 1 })] })] }))

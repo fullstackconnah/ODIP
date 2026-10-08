@@ -8,6 +8,10 @@
 
 const round2 = (n) => Math.round(n * 100) / 100
 const sum = (rows) => round2(rows.reduce((total, r) => total + r.amount, 0))
+/** A plain total of counts (the rows of `sum` carry an amount; a count does not). */
+const count = (numbers) => numbers.reduce((total, n) => total + n, 0)
+/** Trips that have started and have no claim yet: the server counts such a booking once, however many categories its price is split across. */
+const startedTrips = (rows) => new Set(rows.filter((r) => r.kind === 'TripBooking' && r.group === 'Pending').map((r) => r.id)).size
 
 /** The worst status that applies, in the server's own words and arithmetic (decimals, no rounding deciding it). */
 function statusOf(available, used, forecast, approachingPercent) {
@@ -81,6 +85,7 @@ function computeLedger(plan, today, approachingPercent, items) {
         id: period.id, position, periodStart: period.periodStart, periodEnd: period.periodEnd,
         isCurrent: period.periodStart <= today && today <= period.periodEnd,
         pastUnresolvedCount: rows.filter((r) => r.kind === 'PastShift').length,
+        startedUnclaimedTripCount: startedTrips(rows),
         rowCount: rows.length, rows: rows.slice(0, 200), ...f,
       }
     })
@@ -90,9 +95,10 @@ function computeLedger(plan, today, approachingPercent, items) {
     const bookedAhead = sum(periods.map((p) => p.bookedAhead))
     return {
       id: pool.id, name: pool.name, kind: pool.kind, paceCategory: pool.paceCategory, managementType: pool.managementType, hasSetAside, periods,
-      pastUnresolvedCount: sum(periods.map((p) => p.pastUnresolvedCount)),
+      pastUnresolvedCount: count(periods.map((p) => p.pastUnresolvedCount)),
+      startedUnclaimedTripCount: count(periods.map((p) => p.startedUnclaimedTripCount)),
       // The plan total is the same sums against the sum of the limits.
-      planTotal: figures(limit, 0, claimed, pending, bookedAhead, approachingPercent, sum(periods.map((p) => p.unpricedTripDayCount))),
+      planTotal: figures(limit, 0, claimed, pending, bookedAhead, approachingPercent, count(periods.map((p) => p.unpricedTripDayCount))),
     }
   })
 
@@ -119,6 +125,7 @@ const row = (id, kind, group, date, description, amount, status, link, paceCateg
 const AGENCY = 'AgencyManaged'
 const PLANNED = 'PlanManaged'
 const UNRESOLVED = 'Past shift not completed or cancelled'
+const STARTED_TRIP = 'The trip has started and has no claim yet, so it is counted as pending.'
 
 const demoItems = {
   // p-0002's plan: Core (flexible) is FORECAST OVER in the current quarter, Improved Daily Living Skills is APPROACHING.
@@ -169,6 +176,8 @@ const demoItems = {
     row('p1', 'ClaimLine', 'Claimed', '2026-08-12', 'TC-4303-20260812 · 04_Weekday_STD · 5 h', 345, 'Submitted', '/claims/claim-201', 4, PLANNED),
     row('p2', 'ClaimLine', 'Claimed', '2026-09-08', 'TC-4303-20260908 · 04_Weekday_STD · 4 h', 276, 'Submitted', '/claims/claim-202', 4, PLANNED),
     row('p3', 'FutureShift', 'BookedAhead', '2026-11-24', 'Shift 09:00–13:00 · 4 h', 276, 'Published', '/rostering?date=2026-11-24', 4, PLANNED),
+    // A trip that has started and has no claim yet: pending, flagged, and a trip booking still (the server's rule: a booking is booked ahead only while its trip has not started).
+    row('p4', 'TripBooking', 'Pending', '2026-10-02', 'Harbour weekend · 2 days', 480, 'Confirmed', '/trips/trip-76', 4, PLANNED, STARTED_TRIP),
   ],
 }
 
