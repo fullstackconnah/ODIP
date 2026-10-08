@@ -464,6 +464,21 @@ public class RosteringBudgetGateTests : IDisposable
     }
 
     [Fact]
+    public async Task AnEmergencyDescriptionOverTheLimit_IsRefusedWithAMessage_NotAFailedSave_AndOneAtTheLimitIsAccepted()
+    {
+        // The phase 3 review (C10): the server adds a 21-character prefix and Shift.OverrideReason holds 2,000, so a description of 1,980 characters or more passed the minimum and then failed the save with a database error.
+        var controller = Rig("Coordinator");
+
+        var tooLong = await controller.CreateShift(Create(Wed14Oct, reason: new string('x', 1901), emergency: true), default);
+        var atTheLimit = Ok(await controller.CreateShift(Create(Wed14Oct, reason: new string('y', 1900), emergency: true), default));
+
+        Assert.Equal("Describe the emergency or safety need in at most 1,900 characters.", Said(tooLong));
+        Assert.Equal(3, ShiftCount());   // only the shift at the limit was saved
+        Assert.True(atTheLimit.OverrideReason!.Length <= 2000);
+        Assert.Single(_kit.Db.BookingTasks);
+    }
+
+    [Fact]
     public async Task AnEmergency_IsAvailableInWarnModeToo_ItCannotBeSwitchedOff()
     {
         var controller = Rig("Coordinator", BudgetLimitMode.Warn);

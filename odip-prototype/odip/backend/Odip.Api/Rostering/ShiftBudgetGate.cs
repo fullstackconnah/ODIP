@@ -19,6 +19,7 @@ namespace Odip.Api.Rostering;
 public static class ShiftBudgetGate
 {
     public const string DescribeEmergencyMessage = "Describe the emergency or safety need in at least 10 characters.";
+    public const string EmergencyDescriptionTooLongMessage = "Describe the emergency or safety need in at most 1,900 characters.";
 
     public sealed record Decision(List<RosterFinding> GateFindings, bool EmergencyAccepted, string? Error)
     {
@@ -31,8 +32,9 @@ public static class ShiftBudgetGate
     {
         if (!emergencyRequested || !findings.Any(f => f.Code == BudgetFindingCodes.ForecastOver)) return Decision.NoEmergency(findings);
 
-        if ((overrideReason?.Trim().Length ?? 0) < BudgetFindingCodes.MinEmergencyDescriptionLength)
-            return new Decision(findings, false, DescribeEmergencyMessage);
+        var length = overrideReason?.Trim().Length ?? 0;
+        if (length < BudgetFindingCodes.MinEmergencyDescriptionLength) return new Decision(findings, false, DescribeEmergencyMessage);
+        if (length > BudgetFindingCodes.MaxEmergencyDescriptionLength) return new Decision(findings, false, EmergencyDescriptionTooLongMessage);
 
         // The emergency path answers the budget finding and nothing else.
         return new Decision(findings.Where(f => f.Code != BudgetFindingCodes.ForecastOver).ToList(), true, null);

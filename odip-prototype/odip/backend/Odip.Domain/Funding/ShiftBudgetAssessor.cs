@@ -25,6 +25,12 @@ public static class BudgetFindingCodes
     /// <summary>The shortest description, in trimmed characters, an emergency or safety booking is accepted with.</summary>
     public const int MinEmergencyDescriptionLength = 10;
 
+    /// <summary>
+    /// The longest description, in trimmed characters, an emergency or safety booking is accepted with. The server adds <see cref="EmergencyReasonPrefix"/> (21 characters) and <c>Shift.OverrideReason</c> holds
+    /// 2,000, so this leaves room: past it the save used to fail with a database error instead of a message (the phase 3 review, C10).
+    /// </summary>
+    public const int MaxEmergencyDescriptionLength = 1900;
+
     public static bool IsBudgetCode(string? code) => code is not null && code.StartsWith("BUDGET_", StringComparison.Ordinal);
 }
 
