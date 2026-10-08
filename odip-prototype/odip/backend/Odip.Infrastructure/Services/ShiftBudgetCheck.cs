@@ -62,17 +62,17 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
 
         var from = shifts.Min(s => s.ServiceDate);
         var to = shifts.Max(s => s.ServiceDate);
-        var holidayRows = await _db.PublicHolidays.AsNoTracking().Where(h => h.Date >= from && h.Date <= to).Select(h => new { h.Date, h.State }).ToListAsync(ct);
-        var holidays = new HolidayCalendar(holidayRows.Select(h => (h.Date, h.State)));
+        // The one holiday loader the quote, both claim engines and the ledger read through, so a day the override table makes a holiday is priced here as the ledger prices it.
+        var holidays = PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(_db, from, to, includePartDay: false, ct));
         var state = ShiftPriceEstimator.StateFor(person.AddressState, providerState);
 
         return shifts.Select(shift =>
         {
             var hours = Shift.HoursBetween(shift.StartTime, shift.EndTime, shift.EndsNextDay);
-            var price = ShiftPriceEstimator.Price(communityAccess, shift.ServiceDate, hours, person.IsIntensiveSupport, state, holidays.For(state));
-            return price is null
-                ? (ShiftCostEstimate)new ShiftCostEstimate.NotPriced(string.Create(CultureInfo.InvariantCulture, $"no catalogue rate covers {shift.ServiceDate:d MMM yyyy}"))
-                : new ShiftCostEstimate.Priced(price.TotalAmount, PaceCategories.Of(price.CatalogueItem));
+            var outcome = ShiftPriceEstimator.Price(communityAccess, shift.ServiceDate, hours, shift.Ratio, shift.NightType, person.IsIntensiveSupport, state, holidays.For(state));
+            return outcome.Price is { } price
+                ? (ShiftCostEstimate)new ShiftCostEstimate.Priced(price.TotalAmount, PaceCategories.Of(price.CatalogueItem))
+                : new ShiftCostEstimate.NotPriced(outcome.NotPricedBecause ?? "the estimator has no price for it");
         }).ToList();
     }
 }

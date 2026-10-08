@@ -42,9 +42,9 @@ public sealed class BudgetLedgerService
     public const int RowsPerPeriod = 200;
     public const int MaxRowsPerPage = 500;
 
-    private const string UnpricedShiftNote = "No catalogue rate covers this date, so it is counted as $0.";
     private const string NoNdisNumberNote = "This participant has no NDIS number, so the trip claim will not include this booking: it is counted as $0.";
     private const string UnpricedTripNote = "No catalogue rate covers the trip's days, so it is counted as $0.";
+    private const string StartedTripNote = "The trip has started and has no claim yet, so it is counted as pending.";
 
     private readonly OdipDbContext _db;
     private readonly TimeProvider _clock;
@@ -133,7 +133,8 @@ public sealed class BudgetLedgerService
 
         var lineRows = await LoadClaimLinesAsync(planIds, from, to, ct);
         var shiftRows = await LoadShiftsAsync(tenantId, planIds, from, to, ct);
-        var bookingRows = await LoadBookingsAsync(tenantId, planIds, today, to, ct);
+        // Bookings are read from the same start as everything else: a trip that has already started and has no claim yet is pending (see AddBookingItems), so it must be loaded as well.
+        var bookingRows = await LoadBookingsAsync(tenantId, planIds, from, to, ct);
         var tripDays = await LoadTripDaysAsync(bookingRows, ct);
         var catalogue = await LoadCatalogueAsync(lineRows, bookingRows, ct);
         var holidays = await LoadHolidaysAsync(shiftRows.Count + bookingRows.Count == 0 ? null : (from, to), ct);
@@ -144,7 +145,7 @@ public sealed class BudgetLedgerService
 
         foreach (var line in lineRows) itemsByPerson[line.ParticipantId].Add(ClaimLineItemOf(line, peopleById[line.ParticipantId], pricing));
         foreach (var shift in shiftRows) itemsByPerson[shift.ParticipantId].Add(ShiftItemOf(shift, peopleById[shift.ParticipantId], today, pricing));
-        AddBookingItems(bookingRows, tripDays, peopleById, pricing, itemsByPerson);
+        AddBookingItems(bookingRows, tripDays, peopleById, today, pricing, itemsByPerson);
 
         foreach (var person in withPlan)
         {
@@ -216,11 +217,10 @@ public sealed class BudgetLedgerService
         var lineRows = await LoadClaimLinesAsync(ids, from, to, ct);
         var shiftRows = await LoadShiftsAsync(tenantId, ids, from, to, ct);
 
-        // A booking is placed on its trip's start date, so only a trip starting inside the window can land in this period at all: from the window's own start, and never before today
-        // either, because a trip that has already left is the earlier period's row rather than a booking ahead. Both ends of that range come from the window and the day, never
-        // from the plan, so a page for one period reads that period's bookings and not the plan's.
-        var bookingFrom = from > today ? from : today;
-        var bookingRows = await LoadBookingsAsync(tenantId, ids, bookingFrom, to, ct);
+        // A booking is placed on its trip's start date, so only a trip starting inside the window can land in this period at all. The window's own start is the lower bound, with no clamp
+        // to today: a trip that has already started and has no claim yet is a pending row of its period (see AddBookingItems), and the rows endpoint must agree with the ledger about it.
+        // Both ends of that range come from the window, never from the plan, so a page for one period reads that period's bookings and not the plan's.
+        var bookingRows = await LoadBookingsAsync(tenantId, ids, from, to, ct);
 
         // What prices a booking of a trip starting inside the window: the whole trip's days, however far past the window the trip runs. The calendar always reaches the end of the
         // window as well, because every included shift is dated inside it - a booking is not what makes the calendar long enough to price a shift.
@@ -238,7 +238,7 @@ public sealed class BudgetLedgerService
         var items = new List<LedgerItem>();
         foreach (var line in lineRows) items.Add(ClaimLineItemOf(line, person, pricing));
         foreach (var shift in shiftRows) items.Add(ShiftItemOf(shift, person, today, pricing));
-        AddBookingItems(bookingRows, tripDays, new Dictionary<Guid, PersonRow> { [person.Id] = person }, pricing,
+        AddBookingItems(bookingRows, tripDays, new Dictionary<Guid, PersonRow> { [person.Id] = person }, today, pricing,
             new Dictionary<Guid, List<LedgerItem>> { [person.Id] = items });
 
         // The calculator is the one the full ledger uses, so it decides what belongs to the period and in what order. The approaching percentage only colours a period's status,
@@ -370,7 +370,7 @@ public sealed class BudgetLedgerService
         Guid Id, Guid ClaimId, string ClaimReference, TripClaimStatus ClaimStatus, ClaimLineItemStatus Status, string ItemCode, DateOnly From, decimal Hours, decimal TotalAmount, decimal? PaidAmount,
         Guid? ShiftId, Guid? BookingId, Guid ParticipantId, PlanType? BookingPlanType);
 
-    public sealed record ShiftRow(Guid Id, Guid ParticipantId, DateOnly ServiceDate, TimeOnly Start, TimeOnly End, bool EndsNextDay, ShiftStatus Status);
+    public sealed record ShiftRow(Guid Id, Guid ParticipantId, DateOnly ServiceDate, TimeOnly Start, TimeOnly End, bool EndsNextDay, ShiftStatus Status, SupportRatio Ratio, SleepoverType NightType);
 
     public sealed record BookingRow(
         Guid Id, Guid ParticipantId, PlanType? PlanTypeOverride, Guid TripId, string TripName, DateOnly StartDate, int DurationDays, TimeOnly? DepartureTime, TimeOnly? ReturnTime,
@@ -406,16 +406,20 @@ public sealed class BudgetLedgerService
             .Where(s => s.TenantId == tenantId && participantIds.Contains(s.ParticipantId) && s.ServiceDate >= from && s.ServiceDate <= to
                 && (s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.Published || s.Status == ShiftStatus.InProgress || s.Status == ShiftStatus.PendingReview
                     || (s.Status == ShiftStatus.Completed && !_db.ClaimLineItems.Any(l => l.ShiftId == s.Id))))
-            .Select(s => new ShiftRow(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status));
+            .Select(s => new ShiftRow(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.Ratio, s.NightType));
 
-    /// <summary>Confirmed bookings of trips that start today or later and have not been cancelled, and that no claim line has already taken over.</summary>
-    private async Task<List<BookingRow>> LoadBookingsAsync(Guid tenantId, List<Guid> participantIds, DateOnly today, DateOnly to, CancellationToken ct) =>
-        await BookingsQuery(tenantId, participantIds, today, to).ToListAsync(ct);
+    /// <summary>
+    /// Confirmed bookings of trips that start between <paramref name="from"/> and <paramref name="to"/> and have not been cancelled, and that no claim line has already taken over. The lower
+    /// bound is the window's start and NOT today: a trip that has already started and has no claim yet is still a cost (the trip claim waits for the trip to be completed), so it is read like
+    /// the rest and counted as pending by <see cref="AddBookingItems"/>.
+    /// </summary>
+    private async Task<List<BookingRow>> LoadBookingsAsync(Guid tenantId, List<Guid> participantIds, DateOnly from, DateOnly to, CancellationToken ct) =>
+        await BookingsQuery(tenantId, participantIds, from, to).ToListAsync(ct);
 
-    public IQueryable<BookingRow> BookingsQuery(Guid tenantId, IReadOnlyCollection<Guid> participantIds, DateOnly today, DateOnly to) =>
+    public IQueryable<BookingRow> BookingsQuery(Guid tenantId, IReadOnlyCollection<Guid> participantIds, DateOnly from, DateOnly to) =>
         _db.ParticipantBookings.AsNoTracking()
             .Where(b => participantIds.Contains(b.ParticipantId) && b.BookingStatus == BookingStatus.Confirmed
-                && b.TripInstance.TenantId == tenantId && b.TripInstance.StartDate >= today && b.TripInstance.StartDate <= to && b.TripInstance.Status != TripStatus.Cancelled
+                && b.TripInstance.TenantId == tenantId && b.TripInstance.StartDate >= from && b.TripInstance.StartDate <= to && b.TripInstance.Status != TripStatus.Cancelled
                 // A claim's lines TAKE THE BOOKING'S PLACE (ClaimGenerationService says so of every line: "the booking stops being
                 // booked ahead and its lines take its place"), so a booking the ledger already counts through a claim line must not also
                 // be counted as booked ahead - the same rule the shift query above follows for a completed shift that has a claim line.
@@ -452,8 +456,8 @@ public sealed class BudgetLedgerService
     private async Task<HolidayCalendar> LoadHolidaysAsync((DateOnly From, DateOnly To)? window, CancellationToken ct)
     {
         if (window is not { } w) return new HolidayCalendar(Array.Empty<(DateOnly, string?)>());
-        var rows = await _db.PublicHolidays.AsNoTracking().Where(h => h.Date >= w.From && h.Date <= w.To).Select(h => new { h.Date, h.State }).ToListAsync(ct);
-        return new HolidayCalendar(rows.Select(h => (h.Date, h.State)));
+        // The shared loader, as the claim engines read it: the synced feed and the whole-day override rows, so an estimate prices a day as the claim made from it will.
+        return PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(_db, w.From, w.To, includePartDay: false, ct));
     }
 
     // ── Turning records into ledger items ───────────────────────────────────
@@ -513,7 +517,8 @@ public sealed class BudgetLedgerService
     {
         var state = ShiftPriceEstimator.StateFor(person.AddressState, pricing.ProviderState);
         var hours = Shift.HoursBetween(shift.Start, shift.End, shift.EndsNextDay);
-        var price = ShiftPriceEstimator.Price(pricing.CommunityAccess, shift.ServiceDate, hours, person.IsIntensive, state, pricing.Holidays.For(state));
+        var outcome = ShiftPriceEstimator.Price(pricing.CommunityAccess, shift.ServiceDate, hours, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state));
+        var price = outcome.Price;
 
         var completed = shift.Status == ShiftStatus.Completed;
         var past = !completed && shift.ServiceDate < today;
@@ -526,13 +531,28 @@ public sealed class BudgetLedgerService
             Id = shift.Id, ShiftId = shift.Id,
             Description = string.Create(CultureInfo.InvariantCulture, $"Shift {shift.Start:HH:mm}–{shift.End:HH:mm} · {hours:0.##} h"),
             Status = shift.Status.ToString(), Link = string.Create(CultureInfo.InvariantCulture, $"/rostering?date={shift.ServiceDate:yyyy-MM-dd}"),
-            Note = price is null ? UnpricedShiftNote : null,
+            // A shift with no price is counted as $0 and says why (a sleepover or a group shift the shift claim does not price yet, or no catalogue rate); one that is priced but not
+            // worked out fully (an overnight shift: evening and night rates are not applied yet) carries the estimator's caveat.
+            Note = outcome.NotPricedBecause is { } because ? NotCountedNote(because) : outcome.Caveat,
+            // The marker the period counts: a shift the estimator refused is $0 in every figure, so the figures say how many they leave out and why.
+            NotPricedKinds = outcome.NotPricedKinds,
         };
     }
 
-    /// <summary>One item for each booking and category: the booking's whole trip priced for the participant the way the trip claim will be, counted in the period the trip starts in.</summary>
+    /// <summary>The ledger's note for a shift or booking that has no price: the reason, then what the ledger does about it ("No catalogue rate covers this date, so it is counted as $0.").</summary>
+    private static string NotCountedNote(string because) => char.ToUpperInvariant(because[0]) + because[1..] + ", so it is counted as $0.";
+
+    /// <summary>
+    /// One item for each booking and category: the booking's whole trip priced for the participant the way the trip claim will be, counted in the period the trip starts in.
+    ///
+    /// A trip that starts today or later is booked ahead. One that has already started and has no claim line yet is PENDING and flagged (<see cref="LedgerItem.IsStartedUnclaimedTrip"/>):
+    /// the trip claim cannot be made until the trip is completed, so without this the booking would be counted nowhere from the day after it starts until a coordinator
+    /// generates the claim, and the forecast would drop by the whole trip. It is a pending estimate: a trip that is still running counts in full (it is dated at its start, by the
+    /// service-date rule), so a status can show Approaching or Over a few days early, and a trip never completed or cancelled stays pending until somebody resolves it, which is why it is flagged.
+    /// It keeps <see cref="LedgerRowKind.TripBooking"/>, so a claim preview still takes it out when the claim that replaces it is previewed.
+    /// </summary>
     private static void AddBookingItems(
-        List<BookingRow> bookings, List<TripDayRow> tripDays, Dictionary<Guid, PersonRow> people, Pricing pricing, Dictionary<Guid, List<LedgerItem>> itemsByPerson)
+        List<BookingRow> bookings, List<TripDayRow> tripDays, Dictionary<Guid, PersonRow> people, DateOnly today, Pricing pricing, Dictionary<Guid, List<LedgerItem>> itemsByPerson)
     {
         var daysByTrip = tripDays.GroupBy(d => d.TripId).ToDictionary(g => g.Key, g => g.Select(d => new TripPricingDay(d.Date, d.IsPublicHoliday)).ToList());
         var estimators = new Dictionary<Guid, TripPriceEstimator>();
@@ -557,20 +577,29 @@ public sealed class BudgetLedgerService
             if (parts.Count == 0) parts.Add((pricing.DefaultShiftCategory, 0m));   // nothing to price: the booking is still shown, as $0, with the reason
 
             var description = string.Create(CultureInfo.InvariantCulture, $"{booking.TripName} · {booking.DurationDays} {(booking.DurationDays == 1 ? "day" : "days")}");
+            var started = booking.StartDate < today;
+            var priceNote = !hasNumber
+                ? NoNdisNumberNote
+                : lines.Count == 0
+                    ? UnpricedTripNote
+                    : TripGapNote(price.UnpricedDays);
+            var note = started ? (priceNote is null ? StartedTripNote : $"{StartedTripNote} {priceNote}") : priceNote;
+
+            // The unpriced days are counted as DAYS: every date of the booking once, however many stretches and pieces (weekday, weekday evening) are unpriced on it, and once for the
+            // booking however many categories its price is split across. The count rides on the first part: no rate covers those days, so there is no category to say they belong to.
+            var unpricedDays = hasNumber ? price.UnpricedDays.SelectMany(d => d.Dates).Distinct().Count() : 0;
+            var firstPart = true;
             foreach (var part in parts)
             {
                 itemsByPerson[booking.ParticipantId].Add(new LedgerItem
                 {
-                    Kind = LedgerRowKind.TripBooking, Group = LedgerGroup.BookedAhead, Date = booking.StartDate, Amount = part.Amount, PaceCategory = part.Category,
+                    Kind = LedgerRowKind.TripBooking, Group = started ? LedgerGroup.Pending : LedgerGroup.BookedAhead, Date = booking.StartDate, Amount = part.Amount, PaceCategory = part.Category,
                     PlanType = booking.PlanTypeOverride ?? person.PlanType, Id = booking.Id, BookingId = booking.Id, Description = description,
                     Status = BookingStatus.Confirmed.ToString(), Link = $"/trips/{booking.TripId}",
-                    Note = !hasNumber
-                        ? NoNdisNumberNote
-                        : lines.Count == 0
-                            ? UnpricedTripNote
-                            : TripGapNote(price.UnpricedDays),
-                    UnpricedTripDayCount = hasNumber ? price.UnpricedDays.Sum(d => d.DayCount) : 0,
+                    Note = note,
+                    UnpricedTripDayCount = firstPart ? unpricedDays : 0,
                 });
+                firstPart = false;
             }
         }
     }
@@ -592,11 +621,18 @@ public sealed class BudgetLedgerService
     /// <summary>The hours of one unpriced stretch as a person reads them ("8 h").</summary>
     private static string Hours(UnpricedTripDays days) => string.Create(CultureInfo.InvariantCulture, $"{days.Hours:0.##} h");
 
-    /// <summary>One day as a person reads it ("25 Oct 2026"), or the span of several ("25 to 26 Oct 2026").</summary>
-    private static string FormatDaySpan(DateOnly from, DateOnly to) =>
-        from == to
-            ? string.Create(CultureInfo.InvariantCulture, $"{from:dd MMM yyyy}")
-            : string.Create(CultureInfo.InvariantCulture, $"{from:dd} to {to:dd MMM yyyy}");
+    /// <summary>
+    /// One day as a person reads it ("25 Oct 2026"), or the span of several: "25 to 26 Oct 2026" inside one month, "30 Nov to 2 Dec 2026" across a month end, and "28 Dec 2026 to 1 Jan 2027"
+    /// across a year end. A span names the months and years of both its ends whenever they differ: "30 to 02 Dec 2026" reads as 30 December, and the note exists so that someone can find the
+    /// missing rate by date. (The frontend's formatDateRange writes spans the same way, with a dash.)
+    /// </summary>
+    private static string FormatDaySpan(DateOnly from, DateOnly to)
+    {
+        if (from == to) return string.Create(CultureInfo.InvariantCulture, $"{from:d MMM yyyy}");
+        if (from.Year != to.Year) return string.Create(CultureInfo.InvariantCulture, $"{from:d MMM yyyy} to {to:d MMM yyyy}");
+        if (from.Month != to.Month) return string.Create(CultureInfo.InvariantCulture, $"{from:d MMM} to {to:d MMM yyyy}");
+        return string.Create(CultureInfo.InvariantCulture, $"{from.Day} to {to:d MMM yyyy}");   // (a lone "d" format is the short date, not the day of the month)
+    }
 
     /// <summary>A claim day type as the catalogue and the claim speak of it, with spaces ("weekday evening") rather than as the enum's name.</summary>
     private static string DescribeDayType(ClaimDayType dayType) => dayType switch
@@ -628,7 +664,8 @@ public sealed class BudgetLedgerService
     private static LedgerPoolDto PoolDto(PoolLedger pool) => new()
     {
         Id = pool.Pool.Id, Name = pool.Pool.Name, Kind = pool.Pool.Kind, PaceCategory = pool.Pool.PaceCategory, ManagementType = pool.Pool.ManagementType, HasSetAside = pool.HasSetAside,
-        Periods = pool.Periods.Select(PeriodDto).ToList(), PastUnresolvedCount = pool.Total.PastUnresolvedCount,
+        Periods = pool.Periods.Select(PeriodDto).ToList(), PastUnresolvedCount = pool.Total.PastUnresolvedCount, StartedUnclaimedTripCount = pool.Total.StartedUnclaimedTripCount,
+        UnpricedShiftCount = pool.Total.UnpricedShiftCount,
         PlanTotal = new LedgerFiguresDto
         {
             Limit = pool.Total.Limit, Carried = 0m, Available = pool.Total.Available, Claimed = pool.Total.Claimed, Pending = pool.Total.Pending, Used = pool.Total.Used,
@@ -643,7 +680,9 @@ public sealed class BudgetLedgerService
         Limit = period.Limit, Carried = period.Carried, Available = period.Available, Claimed = period.Claimed, Pending = period.Pending, Used = period.Used, BookedAhead = period.BookedAhead,
         Forecast = period.Forecast, UnpricedTripDayCount = period.UnpricedTripDayCount,
         Remaining = period.Available - period.Used, ForecastRemaining = period.Available - period.Forecast, Status = period.Status,
-        PastUnresolvedCount = period.PastUnresolvedCount, RowCount = period.Items.Count, Rows = period.Items.Take(RowsPerPeriod).Select(ToRow).ToList(),
+        PastUnresolvedCount = period.PastUnresolvedCount, StartedUnclaimedTripCount = period.StartedUnclaimedTripCount, UnpricedShiftCount = period.UnpricedShiftCount,
+        UnpricedShiftReasons = period.Items.SelectMany(i => i.NotPricedKinds).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList(), RowCount = period.Items.Count,
+        Rows = period.Items.Take(RowsPerPeriod).Select(ToRow).ToList(),
     };
 
     private static LedgerBucketDto BucketDto(IReadOnlyList<LedgerItem> items) => new() { Count = items.Count, Amount = items.Sum(i => i.Amount), Rows = items.Take(RowsPerPeriod).Select(ToRow).ToList() };

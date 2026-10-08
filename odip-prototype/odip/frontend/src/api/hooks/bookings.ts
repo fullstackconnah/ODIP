@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiPutRaw, apiPatchRaw, apiDeleteRaw } from '../client'
+import { refreshBudgetFigures } from './funding-ledger'
 import { fetchPagedList } from './pagedList'
 import type {
   BookingListDto,
@@ -34,7 +35,8 @@ export function useCreateBooking() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: CreateBookingDto) => apiPostRaw<BookingDetailDto>('/bookings', data),
-    onSuccess: () => {
+    onSuccess: (_, data) => {
+      refreshBudgetFigures(qc, [data.participantId])   // a confirmed booking is booked ahead in its participant's budget
       qc.invalidateQueries({ queryKey: ['bookings'] })
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trips'] })
@@ -49,6 +51,7 @@ export function useUpdateBooking() {
     mutationFn: ({ id, data }: { id: string; data: UpdateBookingDto }) =>
       apiPutRaw<BookingDetailDto>(`/bookings/${id}`, data),
     onSuccess: () => {
+      refreshBudgetFigures(qc)   // its status (confirmed or not) decides whether it is in the budget at all
       qc.invalidateQueries({ queryKey: ['bookings'] })
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trips'] })
@@ -64,6 +67,7 @@ export function usePatchBooking() {
     mutationFn: ({ id, data }: { id: string; data: PatchBookingDto }) =>
       apiPatchRaw<BookingDetailDto>(`/bookings/${id}`, data),
     onSuccess: () => {
+      refreshBudgetFigures(qc)   // a patch can confirm or cancel the booking
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trip'] })
       qc.invalidateQueries({ queryKey: ['bookings'] })
@@ -77,6 +81,7 @@ export function useDeleteBooking() {
   return useMutation({
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/bookings/${id}`),
     onSuccess: () => {
+      refreshBudgetFigures(qc)   // a removed booking costs nothing
       qc.invalidateQueries({ queryKey: ['bookings'] })
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trips'] })
@@ -91,6 +96,7 @@ export function useCancelBooking() {
     mutationFn: ({ id, data }: { id: string; data: UpdateBookingDto }) =>
       apiPutRaw<BookingListDto>(`/bookings/${id}`, { ...data, bookingStatus: 'Cancelled' }),
     onSuccess: () => {
+      refreshBudgetFigures(qc)   // a cancelled booking costs nothing
       qc.invalidateQueries({ queryKey: ['bookings'] })
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trip'] })

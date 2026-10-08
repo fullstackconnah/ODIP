@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import FundingTab from './FundingTab'
 import { plan, pool, quarters } from '@/test/fixtures/funding'
-import { noLedger } from '@/test/fixtures/ledger'
+import { noLedger, participantLedger } from '@/test/fixtures/ledger'
 
 // The participant hub's Funding tab: "No budget recorded" with where the figures come from, the recorded plan as facts, a pools table whose pools expand to their
 // periods, the profile-dates mismatch with its explicit apply action, past plans, and the budget ledger (phase 2a) below the record. What the ledger itself says has its own
@@ -405,6 +405,52 @@ describe('Funding tab: a plan that has ended', () => {
 
     expect(screen.queryByText(/This plan ended/)).not.toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Record a new plan' })).toHaveLength(1)
+  })
+})
+
+describe('Funding tab: the provider\'s date, and the gap between two plans', () => {
+  const ledgerReply = (data: ReturnType<typeof participantLedger> | undefined) => ({ data, isLoading: false, isError: false, refetch: vi.fn() })
+
+  it('says no plan is running between an ended plan and the next one, rather than showing the ended plan\'s figures under the upcoming plan\'s card', () => {
+    const ended = plan({ id: 'plan-0', planStart: '2025-10-01', planEnd: '2026-09-30' })
+    const next = plan({ id: 'plan-2', planStart: '2026-10-15', planEnd: '2027-10-14' })
+    useFundingPlans.mockReturnValue(plansReply([next, ended], { start: '2026-10-15', end: '2027-10-14' }))
+    useFundingLedger.mockReturnValue(ledgerReply(participantLedger({ planId: 'plan-0', planStart: '2025-10-01', planEnd: '2026-09-30', planIsCurrent: false })))
+    renderTab()
+
+    expect(screen.getByText('Upcoming')).toBeInTheDocument()                                    // the card above is the upcoming plan's
+    expect(screen.getByText(/No plan is running between 30\s+Sep\s+2026 and 15\s+Oct\s+2026\./)).toBeInTheDocument()
+    expect(screen.queryByText('Available')).not.toBeInTheDocument()                             // and none of the ended plan's figures sit under it
+    expect(screen.queryByText(/in the last period/)).not.toBeInTheDocument()
+  })
+
+  it('takes today from the ledger, the provider\'s date, rather than the browser\'s', () => {
+    // The browser says 4 Oct 2026 (the fixed clock); the provider's date is 6 Oct, the day this plan starts: it is running, not upcoming.
+    const starting = plan({ planStart: '2026-10-06', planEnd: '2027-10-05' })
+    useFundingPlans.mockReturnValue(plansReply([starting], { start: '2026-10-06', end: '2027-10-05' }))
+    useFundingLedger.mockReturnValue(ledgerReply(participantLedger({ asOf: '2026-10-06', planStart: '2026-10-06', planEnd: '2027-10-05' })))
+    renderTab()
+
+    expect(screen.getByText('Current')).toBeInTheDocument()
+    expect(screen.queryByText('Upcoming')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the browser\'s date until the ledger has answered', () => {
+    const starting = plan({ planStart: '2026-10-06', planEnd: '2027-10-05' })
+    useFundingPlans.mockReturnValue(plansReply([starting], { start: '2026-10-06', end: '2027-10-05' }))
+    useFundingLedger.mockReturnValue(ledgerReply(undefined))
+    renderTab()
+
+    expect(screen.getByText('Upcoming')).toBeInTheDocument()
+  })
+
+  it('says the plan has ended on the provider\'s date, when the browser\'s day has not turned yet', () => {
+    const ending = plan({ id: 'plan-0', planStart: '2025-10-05', planEnd: '2026-10-04' })
+    useFundingPlans.mockReturnValue(plansReply([ending], { start: '2025-10-05', end: '2026-10-04' }))
+    useFundingLedger.mockReturnValue(ledgerReply(participantLedger({ asOf: '2026-10-06', planStart: '2025-10-05', planEnd: '2026-10-04', planIsCurrent: false })))
+    renderTab()
+
+    expect(screen.getByText(/^This plan ended on 4\s+Oct\s+2026\./)).toBeInTheDocument()
   })
 })
 

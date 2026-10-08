@@ -31,7 +31,8 @@ public record LedgerFiguresDto
     public decimal Forecast { get; init; }
     /// <summary>
     /// How many booked trip days no catalogue rate covers, so those days contribute $0 to <see cref="BookedAhead"/> and <see cref="Forecast"/>. A count, never an invented rate: the
-    /// gap is shown and measurable, and the money figures stay exactly what the catalogue can price.
+    /// gap is shown and measurable, and the money figures stay exactly what the catalogue can price. It counts days: each date of a booking once, however many pieces of it (weekday,
+    /// weekday evening) are unpriced and however many categories the booking's price is split across.
     /// </summary>
     public int UnpricedTripDayCount { get; init; }
     /// <summary>Available minus used; negative when over.</summary>
@@ -72,6 +73,18 @@ public record LedgerPeriodDto : LedgerFiguresDto
     public bool IsCurrent { get; init; }
     /// <summary>How many shifts in this period were never completed or cancelled although their day has passed (they are counted as pending).</summary>
     public int PastUnresolvedCount { get; init; }
+    /// <summary>
+    /// How many confirmed trip bookings in this period belong to a trip that has started and has no claim yet. They are counted as pending (the trip claim waits for the trip to be
+    /// completed, so until then nothing else would count them) and flagged the way <see cref="PastUnresolvedCount"/> flags shifts.
+    /// </summary>
+    public int StartedUnclaimedTripCount { get; init; }
+    /// <summary>
+    /// How many shifts in this period the shift claim cannot price yet (a sleepover, a passive night, a group or shared shift, or a shift no catalogue rate covers). They are in every figure as
+    /// $0, so the figures leave them out: this says how many, and <see cref="UnpricedShiftReasons"/> why. Zero when every shift priced.
+    /// </summary>
+    public int UnpricedShiftCount { get; init; }
+    /// <summary>The distinct reasons behind <see cref="UnpricedShiftCount"/>, each in a few words ("a sleepover", "a 1:3 group shift", "no catalogue rate for the date"), in a fixed order; empty when nothing is unpriced.</summary>
+    public List<string> UnpricedShiftReasons { get; init; } = new();
     /// <summary>How many rows the period has in all; <see cref="Rows"/> holds the first page of them.</summary>
     public int RowCount { get; init; }
     public List<LedgerRowDto> Rows { get; init; } = new();
@@ -91,6 +104,10 @@ public record LedgerPoolDto
     /// <summary>The same sums over the whole plan, against the sum of the limits.</summary>
     public LedgerFiguresDto PlanTotal { get; init; } = new();
     public int PastUnresolvedCount { get; init; }
+    /// <summary>The same flag as the periods', over the whole plan: started trips that have no claim yet.</summary>
+    public int StartedUnclaimedTripCount { get; init; }
+    /// <summary>The same count as the periods', over the whole plan: shifts the shift claim cannot price yet, which every figure leaves out.</summary>
+    public int UnpricedShiftCount { get; init; }
 }
 
 /// <summary>Rows that are in no pool or period of the plan: shown, never dropped.</summary>

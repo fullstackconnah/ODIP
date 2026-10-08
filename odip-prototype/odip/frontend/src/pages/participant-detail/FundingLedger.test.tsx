@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { LedgerBody } from './FundingLedger'
 import { ClaimBudgetBlock as Block } from '@/components/ClaimBudgetBlock'
-import { budgetRow, claimBudget, ledgerPeriod, ledgerPool, ledgerRow, noLedger, participantLedger, q2Rows } from '@/test/fixtures/ledger'
+import { budgetRow, claimBudget, ledgerBucket, ledgerPeriod, ledgerPool, ledgerRow, noLedger, participantLedger, q2Rows } from '@/test/fixtures/ledger'
 
 // The Funding tab's budget ledger (budget phase 2a): the current period's glance strip, the one sentence per pool, the period strip with its current period marked and its carry named
 // as rolled over, the ledger table in its three groups with a row linking to its claim, the plan total, and the no-plan case. Every figure comes from the server: the screen adds
@@ -23,6 +23,45 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-10-04T03:00:00Z'))
 })
 afterEach(() => { vi.useRealTimers() })
+
+describe('which plan the figures are for', () => {
+  it('names the plan by its dates above the figures', () => {
+    renderLedger(participantLedger())
+
+    expect(screen.getByText(/^Figures for the plan 1\s+Jul\s+2026\s+–\s+30\s+Jun\s+2027\.$/)).toBeInTheDocument()
+  })
+
+  it('says so when that plan has ended, and the figures stay that plan\'s', () => {
+    renderLedger(participantLedger({ planIsCurrent: false, planStart: '2025-07-01', planEnd: '2026-06-30' }))
+
+    expect(screen.getByText(/^Figures for the plan 1\s+Jul\s+2025\s+–\s+30\s+Jun\s+2026, which has ended\./)).toBeInTheDocument()
+    expect(screen.getByText('Available')).toBeInTheDocument()
+  })
+
+  it('says no plan is running between an ended plan and the next, and shows none of the ended plan\'s figures', () => {
+    const ended = participantLedger({ planIsCurrent: false, planStart: '2025-10-01', planEnd: '2026-09-30' })
+    render(<MemoryRouter><LedgerBody data={ended} nextPlanStart="2026-10-15" /></MemoryRouter>)
+
+    expect(screen.getByText(/No plan is running between 30\s+Sep\s+2026 and 15\s+Oct\s+2026\./)).toBeInTheDocument()
+    expect(screen.queryByText('Available')).not.toBeInTheDocument()
+    expect(screen.queryByText('Plan total')).not.toBeInTheDocument()
+    expect(screen.queryByText(/in the last period/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the figures while the plan is running, however many later plans are recorded', () => {
+    render(<MemoryRouter><LedgerBody data={participantLedger()} nextPlanStart="2027-07-01" /></MemoryRouter>)
+
+    expect(screen.getByText('Available')).toBeInTheDocument()
+    expect(screen.queryByText(/No plan is running/)).not.toBeInTheDocument()
+  })
+
+  it('keeps an ended plan\'s figures when no later plan is recorded to start', () => {
+    render(<MemoryRouter><LedgerBody data={participantLedger({ planIsCurrent: false, planEnd: '2026-09-30' })} /></MemoryRouter>)
+
+    expect(screen.getByText('Available')).toBeInTheDocument()
+    expect(screen.queryByText(/No plan is running/)).not.toBeInTheDocument()
+  })
+})
 
 describe('the glance strip and the sentence', () => {
   it('leads each pool with the current period\'s available, used and forecast, and the status chip in its own tone', () => {
@@ -120,6 +159,53 @@ describe('the ledger table', () => {
     expect(screen.getByText(/2 past shifts not completed or cancelled, counted as pending\./)).toBeInTheDocument()
   })
 
+  it('flags trips that have started and have no claim yet, and says they are counted as pending', () => {
+    const startedTrip = ledgerRow({
+      id: 'st1', kind: 'TripBooking', group: 'Pending', date: '2026-10-02', amount: 1440, status: 'Confirmed', link: '/trips/trip-9', description: 'Coastal weekend · 3 days',
+      note: 'The trip has started and has no claim yet, so it is counted as pending.',
+    })
+    const period = ledgerPeriod({ rows: [startedTrip], rowCount: 1, startedUnclaimedTripCount: 2 })
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods: [period] })] }))
+
+    // Beside the figures, in the warning tone, as past shifts are (the money is in Used and the forecast, but the trip is not claimed or finished).
+    expect(screen.getByText(/^2 started trips not claimed yet, counted as pending\./)).toHaveClass('text-[var(--color-on-warning-container)]')
+    // And on the row itself, which still links to the trip.
+    expect(screen.getByText('The trip has started and has no claim yet, so it is counted as pending.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Coastal weekend · 3 days' })).toHaveAttribute('href', '/trips/trip-9')
+  })
+
+  it('counts the shifts the claim cannot price yet, names why, and says the figures leave them out', () => {
+    const period = ledgerPeriod({ rows: [], rowCount: 0, unpricedShiftCount: 3, unpricedShiftReasons: ['a 1:3 group shift', 'a sleepover'] })
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods: [period] })] }))
+
+    // Beside the figures, in the warning tone: they are $0 in every figure above, so the forecast is low by whatever they will cost.
+    expect(screen.getByText('3 shifts are not priced yet (a 1:3 group shift and a sleepover), so the figures above leave them out.')).toHaveClass('text-[var(--color-on-warning-container)]')
+  })
+
+  it('says nothing about unpriced shifts when every shift is priced', () => {
+    renderLedger(participantLedger())
+
+    expect(screen.queryByText(/not priced yet/)).not.toBeInTheDocument()
+  })
+
+  it('names, under the ledger, the shifts it does not count yet', () => {
+    renderLedger(participantLedger())
+
+    expect(screen.getByText(/shift claims price community access only for now, so sleepover, passive-night and group shifts are not counted yet\./)).toBeInTheDocument()
+  })
+
+  it('says nothing about started trips when there are none', () => {
+    renderLedger(participantLedger())
+
+    expect(screen.queryByText(/started trip/)).not.toBeInTheDocument()
+  })
+
+  it('names trips in the note under the Pending group, beside claims and shifts', () => {
+    renderLedger(participantLedger())
+
+    expect(screen.getByText(/Claims not sent yet.*trips that have started with no claim yet/)).toBeInTheDocument()
+  })
+
   it('names a row the server could not price, so a $0 is never a mystery', () => {
     const unpriced = ledgerRow({ id: 'u1', amount: 0, note: 'No catalogue rate covers this date, so it is counted as $0.' })
     renderLedger(participantLedger({ pools: [ledgerPool({ periods: [ledgerPeriod({ rows: [unpriced], rowCount: 1 })] })] }))
@@ -163,6 +249,70 @@ describe('booked trip days the catalogue cannot price', () => {
     renderLedger(participantLedger({ pools: [ledgerPool({ periods: [ledgerPeriod()] })] }))
 
     expect(screen.queryByText(/no catalogue rate covers/)).not.toBeInTheDocument()
+  })
+})
+
+describe('money that fits no pool, or falls outside the plan dates', () => {
+  // The plan records only a stated pool, so $7,654.32 of community access fits none: the server sends it in the bucket and says how much (it is the server's own sum).
+  const noPool = ledgerBucket([
+    ledgerRow({ id: 'n1', date: '2026-10-11', amount: 4500, description: 'TC-4301-20261011 · 04_Weekday_STD · 60 h', link: '/claims/claim-9' }),
+    ledgerRow({ id: 'n2', kind: 'CompletedShift', group: 'Pending', date: '2026-10-12', amount: 3154.32, status: 'Completed', description: 'Shift 09:00–17:00 · 8 h', link: '/rostering?date=2026-10-12' }),
+  ])
+  const outside = ledgerBucket([
+    ledgerRow({ id: 'o1', kind: 'FutureShift', group: 'BookedAhead', date: '2027-07-05', amount: 960, status: 'Published', description: 'Shift 09:00–17:00 · 16 h', link: '/rostering?date=2027-07-05' }),
+  ])
+
+  it('shows nothing for a bucket with nothing in it', () => {
+    renderLedger(participantLedger())
+
+    expect(screen.queryByText('Not in a recorded pool')).not.toBeInTheDocument()
+    expect(screen.queryByText('Outside the plan dates')).not.toBeInTheDocument()
+  })
+
+  it('shows "Not in a recorded pool" with its amount and its rows, each linking to its claim or shift', () => {
+    renderLedger(participantLedger({ notInARecordedPool: noPool }))
+
+    const section = screen.getByRole('heading', { name: 'Not in a recorded pool' }).closest('section')!
+    expect(within(section).getByText('$7,654.32')).toBeInTheDocument()           // the server's total for the bucket
+    expect(within(section).getByText(/2 items/)).toBeInTheDocument()
+    expect(within(section).getByRole('link', { name: 'TC-4301-20261011 · 04_Weekday_STD · 60 h' })).toHaveAttribute('href', '/claims/claim-9')
+    expect(within(section).getByRole('link', { name: 'Shift 09:00–17:00 · 8 h' })).toHaveAttribute('href', '/rostering?date=2026-10-12')
+    // The rows keep the ledger's own groups, so a reader can tell a claim from an estimate.
+    expect(within(section).getByRole('heading', { name: 'Claimed' })).toBeInTheDocument()
+    expect(within(section).getByRole('heading', { name: 'Pending' })).toBeInTheDocument()
+    expect(within(section).queryByRole('heading', { name: 'Booked ahead' })).not.toBeInTheDocument()
+  })
+
+  it('shows "Outside the plan dates" with its amount and rows', () => {
+    renderLedger(participantLedger({ outsideThePlanDates: outside }))
+
+    const section = screen.getByRole('heading', { name: 'Outside the plan dates' }).closest('section')!
+    expect(within(section).getByText('$960')).toBeInTheDocument()
+    expect(within(section).getByText(/1 item\b/)).toBeInTheDocument()
+    expect(within(section).getByRole('link', { name: 'Shift 09:00–17:00 · 16 h' })).toHaveAttribute('href', '/rostering?date=2027-07-05')
+    expect(screen.queryByText('Not in a recorded pool')).not.toBeInTheDocument()
+  })
+
+  it('says plainly that neither bucket is part of any pool\'s figures', () => {
+    renderLedger(participantLedger({ notInARecordedPool: noPool, outsideThePlanDates: outside }))
+
+    const notes = screen.getAllByText(/not part of any pool's figures/)
+    expect(notes).toHaveLength(2)                 // once in each bucket, in its own words
+    expect(screen.getByText(/dated after the plan ends/i)).toBeInTheDocument()
+  })
+
+  it('says how many items it is not showing when the server capped the rows', () => {
+    renderLedger(participantLedger({ notInARecordedPool: ledgerBucket(noPool.rows, { count: 5, amount: 9000 }) }))
+
+    expect(screen.getByText(/3 more items are not shown here/)).toBeInTheDocument()
+    expect(screen.getByText('$9,000')).toBeInTheDocument()
+  })
+
+  it('still shows them when the plan has no pool to put them in', () => {
+    renderLedger(participantLedger({ pools: [], notInARecordedPool: noPool }))
+
+    expect(screen.getByText(/This plan has no pools recorded/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Not in a recorded pool' })).toBeInTheDocument()
   })
 })
 

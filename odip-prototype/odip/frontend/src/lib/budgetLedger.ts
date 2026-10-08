@@ -1,6 +1,6 @@
 import type { BudgetStatus, ClaimBudgetRowDto, LedgerGroup, LedgerPeriod, LedgerPool, LedgerRow } from '@/api/types'
 import { formatDateRange, formatDayMonth } from './dateRange'
-import { plural } from './format'
+import { joinList, plural } from './format'
 import type { FactChipTone } from '@/components/FactBar'
 
 // How the budget ledger reads in words and figures (phase 2a). The server works every figure out; nothing here adds anything up. These only decide how a figure is written, which period a
@@ -72,8 +72,21 @@ export function rowsByGroup(rows: readonly LedgerRow[]): { group: LedgerGroup; r
   return GROUP_ORDER.map(group => ({ group, rows: rows.filter(row => row.group === group) }))
 }
 
-/** The quiet line under the ledger: what the estimates are made from, and the one thing they leave out. */
-export const quietEstimateLine = 'Estimates use the rates ODIP will claim with; shift claims price community access only for now.'
+/**
+ * The quiet line under the ledger: what the estimates are made from, and what they leave out. Shift claims price one-to-one community access hours only, so a sleepover, a passive night or a
+ * group shift has no price yet and is counted as $0: the line says so, and the Funding tab counts the shifts it leaves out (see `unpricedShiftSentence`).
+ */
+export const quietEstimateLine =
+  'Estimates use the rates ODIP will claim with; shift claims price community access only for now, so sleepover, passive-night and group shifts are not counted yet.'
+
+/**
+ * The warning beside a pool's figures when shifts have no price: they are $0 in every figure, so Used, the forecast and the status leave them out, and the screen says how many and why
+ * ("2 shifts are not priced yet (a 1:3 group shift and a sleepover), so the figures above leave them out."). The reasons are the server's, each in a few words.
+ */
+export function unpricedShiftSentence(count: number, reasons: readonly string[]): string {
+  const why = reasons.length > 0 ? ` (${joinList(reasons)})` : ''
+  return `${plural(count, 'shift')} ${count === 1 ? 'is' : 'are'} not priced yet${why}, so the figures above leave ${count === 1 ? 'it' : 'them'} out.`
+}
 
 /**
  * The sentence of one budget row of a claim, and whether it is over (the screens give an over line the warning tone). A claim is never blocked by it: it only says what the claim uses and what

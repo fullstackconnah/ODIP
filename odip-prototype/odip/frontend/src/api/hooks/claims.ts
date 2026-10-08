@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPutRaw, apiPatchRaw, apiDeleteRaw } from '../client'
-import { ledgerKey } from './funding-ledger'
+import { refreshLedgers } from './funding-ledger'
 import type {
   TripClaimListDto,
   TripClaimDetailDto,
@@ -12,6 +12,7 @@ import type {
   ClaimKind,
   GenerateShiftClaimRequestDto,
   ShiftClaimPreviewResponseDto,
+  ShiftClaimGeneratedDto,
 } from '../types'
 
 /** PP-61: `options.enabled` lets a caller (e.g. a tab that only needs this once visited) defer
@@ -47,21 +48,7 @@ function claimParticipantIds(claim: TripClaimDetailDto | TripClaimListDto | unde
   return [...new Set(ids.filter((id): id is string => typeof id === 'string' && id.length > 0))]
 }
 
-/** The participants whose ledger key this client currently holds, used only as the fallback when a mutation names none -- so the refresh reaches the open ledgers and nothing else. */
-function cachedLedgerParticipants(queryClient: QueryClient): string[] {
-  return queryClient
-    .getQueryCache()
-    .findAll({ queryKey: ['participant-funding'] })
-    .filter((query) => query.queryKey[0] === 'participant-funding' && query.queryKey[2] === 'ledger')
-    .map((query) => query.queryKey[1])
-    .filter((id): id is string => typeof id === 'string')
-}
-
-/** Refresh one participant's ledger -- and its "show more" row pages, which hang off the same key -- after a claim write that moves their money. Narrowed to the participants the claim names rather than the whole funding namespace: a claim write moves no plan record and no billing hint, and both sit under that same prefix, so invalidating the prefix would refetch figures the write never touched. */
-function refreshLedgers(queryClient: QueryClient, participantIds: string[]) {
-  const ids = participantIds.length > 0 ? [...new Set(participantIds)] : cachedLedgerParticipants(queryClient)
-  for (const participantId of ids) void queryClient.invalidateQueries({ queryKey: ledgerKey(participantId) })
-}
+// The ledger refresh itself (narrowed to the participants a write names, else the ledgers this client holds) is funding-ledger.ts's `refreshLedgers`, shared with the shift, booking, trip and settings writes.
 
 /** The claim detail this client already holds. Read before the claim key is invalidated, since that is the claim as the last read it -- the participants it covers live there and nowhere else in the response (the update and delete writes answer `true`/`void`). */
 function cachedClaim(queryClient: QueryClient, claimId: string): TripClaimDetailDto | undefined {
@@ -170,7 +157,7 @@ export function useGenerateShiftClaim() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ participantId, data }: { participantId: string; data: GenerateShiftClaimRequestDto }) =>
-      apiPost<TripClaimListDto>(`/participants/${participantId}/claims/from-shifts`, data),
+      apiPost<ShiftClaimGeneratedDto>(`/participants/${participantId}/claims/from-shifts`, data),
     onSuccess: (_, { participantId }) => {
       qc.invalidateQueries({ queryKey: ['participant-claims', participantId] })
       qc.invalidateQueries({ queryKey: ['claims'] })

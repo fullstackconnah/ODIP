@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
+import { refreshBudgetFigures } from './funding-ledger'
 import type { ApproveDraftDto, CreateServiceAgreementDraftDto, DemoJourneySimulationDto, DraftApprovalPreviewDto, ElectronicSigningEvidenceDto, ElectronicSigningSnapshotDto, ServiceAgreementDraftDto, SubmitElectronicSigningEvidenceDto } from '../types'
 
 const path = (participantId: string) => `/participants/${participantId}/service-agreement-drafts`
@@ -71,6 +72,8 @@ export function useApproveServiceAgreementDraft() {
       queryClient.invalidateQueries({ queryKey: ['roster-board'] }),
       queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
       queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
+      // The unfilled shifts it makes are booked ahead in this participant's budget.
+      refreshBudgetFigures(queryClient, [participantId]),
     ]),
     onError: (_, { participantId, draftId }) => Promise.all([
       queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] }),

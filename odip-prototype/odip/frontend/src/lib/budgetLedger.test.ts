@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chipToneOf, claimBudgetLine, focusPeriodOf, money, poolSentence, quietEstimateLine, rowsByGroup } from './budgetLedger'
+import { chipToneOf, claimBudgetLine, focusPeriodOf, money, poolSentence, quietEstimateLine, rowsByGroup, unpricedShiftSentence } from './budgetLedger'
 import { formatDayMonth } from './dateRange'
 import { ledgerPeriod, ledgerPool, ledgerRow } from '@/test/fixtures/ledger'
 
@@ -123,8 +123,30 @@ describe('the rows in their three groups', () => {
 })
 
 describe('the quiet estimate line', () => {
-  it('says what the estimates use and that shift claims price community access only', () => {
-    expect(quietEstimateLine).toBe('Estimates use the rates ODIP will claim with; shift claims price community access only for now.')
+  it('says what the estimates use, that shift claims price community access only, and which shifts are therefore not counted', () => {
+    expect(quietEstimateLine).toBe(
+      'Estimates use the rates ODIP will claim with; shift claims price community access only for now, so sleepover, passive-night and group shifts are not counted yet.',
+    )
+  })
+})
+
+describe('the sentence for shifts the claim cannot price yet', () => {
+  it('counts them, names why, and says the figures leave them out', () => {
+    expect(unpricedShiftSentence(2, ['a 1:3 group shift', 'a sleepover'])).toBe('2 shifts are not priced yet (a 1:3 group shift and a sleepover), so the figures above leave them out.')
+  })
+
+  it('keeps the singular for one shift', () => {
+    expect(unpricedShiftSentence(1, ['a sleepover'])).toBe('1 shift is not priced yet (a sleepover), so the figures above leave it out.')
+  })
+
+  it('lists three reasons the Australian way, with no serial comma', () => {
+    expect(unpricedShiftSentence(5, ['a sleepover', 'a passive night', 'no catalogue rate for the date'])).toBe(
+      '5 shifts are not priced yet (a sleepover, a passive night and no catalogue rate for the date), so the figures above leave them out.',
+    )
+  })
+
+  it('still says it when no reason came with the count', () => {
+    expect(unpricedShiftSentence(3, [])).toBe('3 shifts are not priced yet, so the figures above leave them out.')
   })
 })
 

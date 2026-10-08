@@ -2,14 +2,16 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { FileText } from 'lucide-react'
 import { useParticipantClaims, usePreviewShiftClaim, useGenerateShiftClaim } from '@/api/hooks'
+import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { DataTable } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { FormField } from '@/components/FormField'
+import { plural } from '@/lib/format'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
-import type { TripClaimListDto, ShiftClaimPreviewResponseDto } from '@/api/types'
+import type { TripClaimListDto, ShiftClaimFlaggedDto, ShiftClaimGeneratedDto, ShiftClaimLeftOutDto, ShiftClaimPreviewLineItemDto, ShiftClaimPreviewResponseDto } from '@/api/types'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import type { Tone } from '@/lib/tone'
 
@@ -138,10 +140,12 @@ export default function ClaimsTab({ participantId, canWrite }: { participantId: 
 function GenerateShiftClaimModal({ participantId, onClose }: { participantId: string; onClose: () => void }) {
   const navigate = useNavigate()
   const defaultRange = useMemo(() => lastFullFortnight(), [])
-  const [step, setStep] = useState<'input' | 'preview'>('input')
+  const [step, setStep] = useState<'input' | 'preview' | 'done'>('input')
   const [from, setFrom] = useState(defaultRange.from)
   const [to, setTo] = useState(defaultRange.to)
   const [previewData, setPreviewData] = useState<ShiftClaimPreviewResponseDto | null>(null)
+  // The claim that was made, kept only when it left shifts out: the person is told which and why before being taken to it.
+  const [generated, setGenerated] = useState<ShiftClaimGeneratedDto | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const previewShiftClaim = usePreviewShiftClaim()
@@ -168,7 +172,16 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
     generateShiftClaim.mutate(
       { participantId, data: { from, to } },
       {
-        onSuccess: (claim) => navigate(`/claims/${claim.id}`),
+        onSuccess: (claim) => {
+          // A shift the claim could not price was left out and is still waiting, and a shift priced with a caveat (an overnight shift: evening and night rates are not applied yet) keeps that
+          // caveat nowhere on the claim line: say both before leaving the screen, so neither is lost between the preview and the claim.
+          if ((claim.leftOut?.length ?? 0) > 0 || (claim.flagged?.length ?? 0) > 0) {
+            setGenerated(claim)
+            setStep('done')
+            return
+          }
+          navigate(`/claims/${claim.id}`)
+        },
         onError: (err: unknown) => {
           setError(extractErrorMessage(err, 'Failed to generate this claim. Please try again.'))
         },
@@ -180,10 +193,19 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
     <Modal
       open
       onClose={onClose}
-      title={step === 'input' ? 'Generate claim from shifts' : 'Claim preview'}
+      title={step === 'input' ? 'Generate claim from shifts' : step === 'preview' ? 'Claim preview' : 'Claim generated'}
       size="lg"
       footer={
-        step === 'input' ? (
+        step === 'done' && generated ? (
+          <div className="flex w-full justify-end gap-3">
+            <button type="button" onClick={onClose} className={secondaryButtonClass}>
+              Close
+            </button>
+            <button type="button" onClick={() => navigate(`/claims/${generated.id}`)} className={primaryButtonClass}>
+              View claim
+            </button>
+          </div>
+        ) : step === 'input' ? (
           <>
             <button type="button" onClick={onClose} className={secondaryButtonClass}>
               Cancel
@@ -242,7 +264,17 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
             keyField="_idx"
             columns={[
               { key: 'serviceDate', header: 'Date', type: 'date' },
-              { key: 'dayTypeLabel', header: 'Day type' },
+              {
+                key: 'dayTypeLabel',
+                header: 'Day type',
+                // A line that is priced but not worked out fully says so beside its day type (an overnight shift: evening and night rates are not applied yet).
+                render: (l: ShiftClaimPreviewLineItemDto & { _idx: number }) => (
+                  <span>
+                    {l.dayTypeLabel}
+                    {l.note && <span className="block text-xs text-[var(--color-on-warning-container)]">{l.note}</span>}
+                  </span>
+                ),
+              },
               { key: 'supportItemCode', header: 'Item', className: 'font-mono text-xs' },
               { key: 'hours', header: 'Hours', align: 'right' },
               { key: 'unitPrice', header: 'Unit price', type: 'currency', align: 'right' },
@@ -264,12 +296,66 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
             }
           />
 
+          {/* A completed shift this claim cannot price is left out and stays waiting: never dropped silently. */}
+          {previewData.leftOut && previewData.leftOut.length > 0 && (
+            <div className="mt-[var(--section-gap)]">
+              <LeftOutShifts shifts={previewData.leftOut} heading={`${plural(previewData.leftOut.length, 'shift')} will be left out of this claim`} />
+            </div>
+          )}
+
           {/* What this claim would use of the participant's recorded plan: a warning, never a block. Absent when they have no plan that has started. */}
           <div className="mt-[var(--section-gap)]">
             <ClaimBudgetBlock budget={previewData.budget} />
           </div>
         </>
       )}
+
+      {step === 'done' && generated && (
+        <div className="flex flex-col gap-[var(--section-gap)]">
+          <p className="text-sm">
+            {generated.claimReference ? `Claim ${generated.claimReference} was made` : 'The claim was made'}
+            {generated.totalAmount != null ? ` for ${formatCurrency(generated.totalAmount)}` : ''}, from the shifts that could be priced.
+          </p>
+          {generated.leftOut && generated.leftOut.length > 0 && (
+            <LeftOutShifts shifts={generated.leftOut} heading={`${plural(generated.leftOut.length, 'shift')} ${generated.leftOut.length === 1 ? 'was' : 'were'} left out of the claim`} />
+          )}
+          {generated.flagged && generated.flagged.length > 0 && <FlaggedShifts shifts={generated.flagged} />}
+        </div>
+      )}
     </Modal>
+  )
+}
+
+/** The shifts that are in a claim but were priced with a caveat: each with its date, what it is and what is not worked out. The claim line cannot keep the caveat, so this is where it is read. */
+function FlaggedShifts({ shifts }: { shifts: ShiftClaimFlaggedDto[] }) {
+  return (
+    <Callout tone="info">
+      <p className="font-medium">{`${plural(shifts.length, 'shift')} in this claim ${shifts.length === 1 ? 'has' : 'have'} a pricing note`}</p>
+      <ul className="mt-2 flex flex-col gap-1 text-sm">
+        {shifts.map(shift => (
+          <li key={shift.shiftId}>
+            <span className="tabular-nums">{formatDateAu(shift.serviceDate)}</span> · {shift.description} · {shift.caveat}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[13px]">Their lines are priced as hours at the day rate. Check them against the hours worked before the claim is submitted.</p>
+    </Callout>
+  )
+}
+
+/** The completed shifts a shift claim leaves out: each with its date, what it is and why. They are not part of the claim, and they stay completed and unclaimed. */
+function LeftOutShifts({ shifts, heading }: { shifts: ShiftClaimLeftOutDto[]; heading: string }) {
+  return (
+    <Callout tone="warning">
+      <p className="font-medium">{heading}</p>
+      <ul className="mt-2 flex flex-col gap-1 text-sm">
+        {shifts.map(shift => (
+          <li key={shift.shiftId}>
+            <span className="tabular-nums">{formatDateAu(shift.serviceDate)}</span> · {shift.description} · {shift.reason}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[13px]">They stay completed and unclaimed. Nothing here is billed for them.</p>
+    </Callout>
   )
 }
