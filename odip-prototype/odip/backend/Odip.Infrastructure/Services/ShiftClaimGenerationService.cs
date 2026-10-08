@@ -169,16 +169,10 @@ public class ShiftClaimGenerationService
         var providerState = string.IsNullOrWhiteSpace(participant.AddressState) ? (await _db.ProviderSettings.FirstOrDefaultAsync(ct))?.State : null;
         var state = ShiftPriceEstimator.StateFor(participant.AddressState, providerState);
 
-        // HolidayCalendar.For normalises the state's case too, so the holiday rows match however
-        // they are written ("NSW", "nsw", or with spaces around them). The query keeps the same
-        // clause as the engines have always used; the state it compares against is already the
-        // normalised one, and a row written in another case is normalised in memory by
-        // HolidayCalendar further down.
-        var publicHolidays = (await _db.PublicHolidays
-            .Where(h => h.Date >= from && h.Date <= to && (h.State == null || h.State == state))
-            .Select(h => h.Date)
-            .ToListAsync(ct))
-            .ToHashSet();
+        // The shared holiday loader: the synced feed AND the maintained whole-day override rows (the feed misses days such as Boxing Day 2026), every state read and the state matched in any
+        // case in memory, so the holiday rows match however they are written ("NSW", "nsw", or with spaces around them). The quote, the trip claim, the budget ledger and the roster read
+        // through it too, so a day is a holiday in all of them or in none.
+        var publicHolidays = PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(_db, from, to, includePartDay: false, ct)).For(state);
 
         // Only the community access group is priced from here. It is the only group that existed when this engine picked "the first active item for the
         // day type", and the catalogue now also holds personal care, sleepover, STA, travel and every other family: an item of those must never be

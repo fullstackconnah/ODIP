@@ -11,7 +11,7 @@ namespace Odip.Infrastructure.Services;
 /// </summary>
 public sealed class PlanPricingService
 {
-    public const string FeedSource = "Nager.Date feed";
+    public const string FeedSource = PublicHolidayLoader.FeedSource;
 
     private readonly OdipDbContext _db;
 
@@ -30,7 +30,7 @@ public sealed class PlanPricingService
         // A period the engine will refuse loads nothing: it answers with the reason.
         var priceable = to >= from && to.DayNumber - from.DayNumber + 1 <= PlanPricingEngine.MaxPeriodDays;
         var catalogue = priceable ? await LoadCatalogueAsync(from, to, ct) : new List<SupportCatalogueItem>();
-        var holidays = priceable ? await LoadHolidaysAsync(blocks, from, to, ct) : new List<HolidayEntry>();
+        var holidays = priceable ? await LoadHolidaysAsync(from, to, ct) : new List<HolidayEntry>();
         List<HolidayCoverage>? coverage = priceable ? await LoadCoverageAsync(from, to, ct) : null;
         DateOnly? overridesThrough = priceable ? await LoadOverridesThroughAsync(ct) : null;
 
@@ -75,23 +75,10 @@ public sealed class PlanPricingService
         await _db.PublicHolidayOverrides.AsNoTracking().MaxAsync(o => (DateOnly?)o.Date, ct) ?? DateOnly.MinValue;
 
     /// <summary>
-    /// The public holidays of the blocks' delivery states for the period and the day after it (an occurrence on the last day can end the next day): the
-    /// synced rows first, then the override rows (NDIS-CODES 5.3), both as one list. National rows (no state) are for every state.
+    /// The public holidays for the period and the day after it (an occurrence on the last day can end the next day): the synced rows first, then the override rows (NDIS-CODES 5.3), whole-day
+    /// AND part-day, both as one list, read by the loader the claims, the budget and the roster use. Every state is read: the engine's calendar picks a block's delivery state in memory, in
+    /// any case, where a database filter on the state is exact and a row written "nsw" would never be found (the 2026-10-08 review, L3-05). National rows (no state) are for every state.
     /// </summary>
-    private async Task<List<HolidayEntry>> LoadHolidaysAsync(IReadOnlyList<PlanBlock> blocks, DateOnly from, DateOnly to, CancellationToken ct)
-    {
-        var last = to.AddDays(1);
-        var states = blocks.Select(b => b?.Location?.State?.Trim().ToUpperInvariant()).Where(s => !string.IsNullOrEmpty(s)).Distinct().Cast<string>().ToList();
-
-        var feed = await _db.PublicHolidays.AsNoTracking()
-            .Where(h => h.Date >= from && h.Date <= last && (h.State == null || states.Contains(h.State)))
-            .ToListAsync(ct);
-        var overrides = await _db.PublicHolidayOverrides.AsNoTracking()
-            .Where(h => h.Date >= from && h.Date <= last && (h.State == null || states.Contains(h.State)))
-            .ToListAsync(ct);
-
-        return feed.Select(h => new HolidayEntry(h.Date, h.State, h.Name, null, null, FeedSource))
-            .Concat(overrides.Select(o => new HolidayEntry(o.Date, o.State, o.Name, o.StartTime, o.EndTime, o.Source)))
-            .ToList();
-    }
+    private Task<List<HolidayEntry>> LoadHolidaysAsync(DateOnly from, DateOnly to, CancellationToken ct) =>
+        PublicHolidayLoader.LoadAsync(_db, from, to.AddDays(1), includePartDay: true, ct);
 }

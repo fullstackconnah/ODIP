@@ -214,13 +214,10 @@ public class ClaimGenerationService
         if (!confirmedBookings.Any())
             throw new InvalidOperationException("No confirmed bookings found on this trip.");
 
-        // Load public holidays using provider state
+        // Load public holidays using provider state: the synced feed AND the maintained whole-day override rows (the feed misses days such as Boxing Day 2026), with the state matched in any
+        // case. The same loader prices the quote, the shift claim, the budget ledger and the roster, so a day is a holiday in all of them or in none.
         var tripEnd = trip.StartDate.AddDays(trip.DurationDays - 1);
-        var publicHolidays = (await _db.PublicHolidays
-            .Where(h => h.Date >= trip.StartDate && h.Date <= tripEnd && (h.State == null || h.State == state))
-            .Select(h => h.Date)
-            .ToListAsync(ct))
-            .ToHashSet();
+        var publicHolidays = PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(_db, trip.StartDate, tripEnd, includePartDay: false, ct)).For(state);
 
         // Load catalogue items: every row of the group, history included. Each stretch of days is priced by the rows valid on ITS dates
         // (EffectiveCatalogueResolver.IsValidOn), so an import that end-dates a row (a December price set) cannot reprice a trip that ended before it.

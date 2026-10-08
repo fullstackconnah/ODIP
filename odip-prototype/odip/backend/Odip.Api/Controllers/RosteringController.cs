@@ -1561,19 +1561,17 @@ public class RosteringController : ControllerBase
     }
 
     /// <summary>
-    /// PUBLIC_HOLIDAY source of truth (connection-map item 8): same state-scoping as
-    /// <c>ClaimGenerationService.CalculateClaimInternalAsync</c> — a holiday row with a null
-    /// <see cref="Odip.Domain.Entities.PublicHoliday.State"/> applies everywhere, one scoped to a
-    /// state only applies there, and the provider's own state (falling back to "VIC") decides
-    /// which scoped rows count. One query per call.
+    /// PUBLIC_HOLIDAY source of truth (connection-map item 8): the same holidays as the claim engines
+    /// and the budget ledger, read by the same <see cref="PublicHolidayLoader"/> — the synced rows AND
+    /// the whole-day override rows (the feed misses days such as Boxing Day 2026) — with the same
+    /// state-scoping: a holiday with no state applies everywhere, one scoped to a state only applies
+    /// there, and the provider's own state (falling back to "VIC") decides which scoped rows count,
+    /// matched in any case. Two queries per call (the synced rows and the override rows).
     /// </summary>
     private async Task<List<PublicHolidayRef>> LoadPublicHolidaysAsync(DateOnly start, DateOnly end, CancellationToken ct)
     {
-        var state = (await _db.ProviderSettings.Select(s => s.State).FirstOrDefaultAsync(ct)) ?? "VIC";
-        return await _db.PublicHolidays
-            .Where(h => h.Date >= start && h.Date <= end && (h.State == null || h.State == state))
-            .Select(h => new PublicHolidayRef(h.Date, h.Name))
-            .ToListAsync(ct);
+        var state = await _db.ProviderSettings.Select(s => s.State).FirstOrDefaultAsync(ct);
+        return PublicHolidayLoader.RosterRefsFor(await PublicHolidayLoader.LoadAsync(_db, start, end, includePartDay: false, ct), state);
     }
 
     /// <summary>

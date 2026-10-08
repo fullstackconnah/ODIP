@@ -456,8 +456,8 @@ public sealed class BudgetLedgerService
     private async Task<HolidayCalendar> LoadHolidaysAsync((DateOnly From, DateOnly To)? window, CancellationToken ct)
     {
         if (window is not { } w) return new HolidayCalendar(Array.Empty<(DateOnly, string?)>());
-        var rows = await _db.PublicHolidays.AsNoTracking().Where(h => h.Date >= w.From && h.Date <= w.To).Select(h => new { h.Date, h.State }).ToListAsync(ct);
-        return new HolidayCalendar(rows.Select(h => (h.Date, h.State)));
+        // The shared loader, as the claim engines read it: the synced feed and the whole-day override rows, so an estimate prices a day as the claim made from it will.
+        return PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(_db, w.From, w.To, includePartDay: false, ct));
     }
 
     // ── Turning records into ledger items ───────────────────────────────────
