@@ -171,6 +171,7 @@ public class ClaimsController : ControllerBase
                 Status = claim.Status, ClaimReference = claim.ClaimReference,
                 TotalAmount = claim.TotalAmount, CreatedAt = claim.CreatedAt, SubmittedDate = claim.SubmittedDate,
                 LeftOut = generated.LeftOut.ToList(),
+                Flagged = generated.Flagged.ToList(),
             }));
         }
         catch (InvalidOperationException ex)

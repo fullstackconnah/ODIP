@@ -147,10 +147,25 @@ export interface ShiftClaimLeftOutDto {
   reason: string
 }
 
-/** The claim made from shifts, and the shifts in the range it left out. */
+/**
+ * A shift that is in the claim but was priced with a caveat (an overnight shift: evening and night rates are not applied yet). The preview says it on the line; a claim line has no column to
+ * keep it in, so the generate response echoes it for the screen that generated the claim.
+ */
+export interface ShiftClaimFlaggedDto {
+  shiftId: string
+  serviceDate: string
+  /** The shift as the ledger describes it ("Shift 22:00–06:00 · 8 h"). */
+  description: string
+  /** What is not worked out ("Evening and night rates are not applied yet."). */
+  caveat: string
+}
+
+/** The claim made from shifts, the shifts in the range it left out, and the shifts in it that carry a pricing caveat. */
 export interface ShiftClaimGeneratedDto extends TripClaimListDto {
   /** The server always sends it (empty when nothing was left out). */
   leftOut?: ShiftClaimLeftOutDto[]
+  /** The server always sends it (empty when no shift carries a caveat). */
+  flagged?: ShiftClaimFlaggedDto[]
 }
 
 export interface ShiftClaimPreviewResponseDto {

@@ -11,7 +11,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { FormField } from '@/components/FormField'
 import { plural } from '@/lib/format'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
-import type { TripClaimListDto, ShiftClaimGeneratedDto, ShiftClaimLeftOutDto, ShiftClaimPreviewLineItemDto, ShiftClaimPreviewResponseDto } from '@/api/types'
+import type { TripClaimListDto, ShiftClaimFlaggedDto, ShiftClaimGeneratedDto, ShiftClaimLeftOutDto, ShiftClaimPreviewLineItemDto, ShiftClaimPreviewResponseDto } from '@/api/types'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import type { Tone } from '@/lib/tone'
 
@@ -173,8 +173,9 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
       { participantId, data: { from, to } },
       {
         onSuccess: (claim) => {
-          // A shift the claim could not price was left out and is still waiting: say so before leaving the screen, so it is never lost between the preview and the claim.
-          if (claim.leftOut && claim.leftOut.length > 0) {
+          // A shift the claim could not price was left out and is still waiting, and a shift priced with a caveat (an overnight shift: evening and night rates are not applied yet) keeps that
+          // caveat nowhere on the claim line: say both before leaving the screen, so neither is lost between the preview and the claim.
+          if ((claim.leftOut?.length ?? 0) > 0 || (claim.flagged?.length ?? 0) > 0) {
             setGenerated(claim)
             setStep('done')
             return
@@ -318,9 +319,27 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
           {generated.leftOut && generated.leftOut.length > 0 && (
             <LeftOutShifts shifts={generated.leftOut} heading={`${plural(generated.leftOut.length, 'shift')} ${generated.leftOut.length === 1 ? 'was' : 'were'} left out of the claim`} />
           )}
+          {generated.flagged && generated.flagged.length > 0 && <FlaggedShifts shifts={generated.flagged} />}
         </div>
       )}
     </Modal>
+  )
+}
+
+/** The shifts that are in a claim but were priced with a caveat: each with its date, what it is and what is not worked out. The claim line cannot keep the caveat, so this is where it is read. */
+function FlaggedShifts({ shifts }: { shifts: ShiftClaimFlaggedDto[] }) {
+  return (
+    <Callout tone="info">
+      <p className="font-medium">{`${plural(shifts.length, 'shift')} in this claim ${shifts.length === 1 ? 'has' : 'have'} a pricing note`}</p>
+      <ul className="mt-2 flex flex-col gap-1 text-sm">
+        {shifts.map(shift => (
+          <li key={shift.shiftId}>
+            <span className="tabular-nums">{formatDateAu(shift.serviceDate)}</span> · {shift.description} · {shift.caveat}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[13px]">Their lines are priced as hours at the day rate. Check them against the hours worked before the claim is submitted.</p>
+    </Callout>
   )
 }
 

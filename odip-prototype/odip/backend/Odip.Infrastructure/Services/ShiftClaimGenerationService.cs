@@ -132,7 +132,13 @@ public class ShiftClaimGenerationService
         claim.TotalAmount = claimLineItems.Sum(l => l.TotalAmount);
 
         await _db.SaveChangesAsync(ct);
-        return new ShiftClaimGenerated(claim, leftOut);
+        // A caveat (an overnight shift: evening and night rates are not applied yet) is shown on the preview line, but a claim line has no column to keep it in, so once the claim exists
+        // nothing on it would say so. The response echoes the flagged shifts for the screen that generated it; a lasting flag on the line is a column and a migration, left to the L3-03 follow-up.
+        var flagged = lineItems
+            .Where(l => l.Caveat is not null)
+            .Select(l => new ShiftClaimFlaggedDto { ShiftId = l.Shift.Id, ServiceDate = l.Shift.ServiceDate, Description = Describe(l.Shift), Caveat = l.Caveat! })
+            .ToList();
+        return new ShiftClaimGenerated(claim, leftOut, flagged);
     }
 
     // ─── Shared calculation ──────────────────────────────────────────────
@@ -268,5 +274,5 @@ public class ShiftClaimGenerationService
     }
 }
 
-/// <summary>The claim made from shifts, and the completed shifts in the range it left out and why.</summary>
-public sealed record ShiftClaimGenerated(TripClaim Claim, IReadOnlyList<ShiftClaimLeftOutDto> LeftOut);
+/// <summary>The claim made from shifts, the completed shifts in the range it left out and why, and the shifts in it that were priced with a caveat.</summary>
+public sealed record ShiftClaimGenerated(TripClaim Claim, IReadOnlyList<ShiftClaimLeftOutDto> LeftOut, IReadOnlyList<ShiftClaimFlaggedDto> Flagged);

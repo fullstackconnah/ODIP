@@ -184,10 +184,26 @@ public record ShiftClaimLeftOutDto
     public string Reason { get; init; } = string.Empty;
 }
 
-/// <summary>The claim made from shifts (<see cref="TripClaimListDto"/>), and the completed shifts in the range it left out and why.</summary>
+/// <summary>
+/// A shift the claim priced but could not work out fully: an overnight shift is priced as hours at one day rate, and evening and night rates are not applied yet. The preview says so on the line;
+/// a claim line has no column for it, so the generate response echoes it, and the caveat is not kept on the line once the claim exists.
+/// </summary>
+public record ShiftClaimFlaggedDto
+{
+    public Guid ShiftId { get; init; }
+    public DateOnly ServiceDate { get; init; }
+    /// <summary>The shift as the ledger describes it ("Shift 22:00–06:00 · 8 h").</summary>
+    public string Description { get; init; } = string.Empty;
+    /// <summary>What is not worked out ("Evening and night rates are not applied yet.").</summary>
+    public string Caveat { get; init; } = string.Empty;
+}
+
+/// <summary>The claim made from shifts (<see cref="TripClaimListDto"/>), the completed shifts in the range it left out and why, and the shifts it priced with a caveat.</summary>
 public record ShiftClaimGeneratedDto : TripClaimListDto
 {
     public List<ShiftClaimLeftOutDto> LeftOut { get; init; } = new();
+    /// <summary>The shifts that are in the claim but priced with a caveat (an overnight shift: evening and night rates are not applied yet); empty when there are none.</summary>
+    public List<ShiftClaimFlaggedDto> Flagged { get; init; } = new();
 }
 
 // ══════════════════════════════════════════════════════════════

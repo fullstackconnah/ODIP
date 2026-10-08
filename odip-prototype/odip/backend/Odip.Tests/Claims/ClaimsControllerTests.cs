@@ -482,6 +482,30 @@ public class ClaimsControllerTests
     }
 
     [Fact]
+    public async Task GenerateShiftClaim_EchoesTheShiftsItPricedWithACaveat()
+    {
+        using var db = CreateDb();
+        var participant = SeedParticipantWithCompletedShift(db, Guid.NewGuid(), out var shift);
+        var overnight = new Shift
+        {
+            Id = Guid.NewGuid(), TenantId = shift.TenantId, ParticipantId = participant.Id, ServiceDate = new DateOnly(2026, 9, 8), StartTime = new TimeOnly(18, 0), EndTime = new TimeOnly(2, 0),
+            EndsNextDay = true, Ratio = SupportRatio.OneToOne, NightType = SleepoverType.ActiveNight, Status = ShiftStatus.Completed,
+        };
+        db.Shifts.Add(overnight);
+        db.SaveChanges();
+        var controller = CreateController(db);
+
+        var result = await controller.GenerateShiftClaim(participant.Id,
+            new GenerateShiftClaimRequestDto { From = shift.ServiceDate, To = overnight.ServiceDate }, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ShiftClaimGeneratedDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(640m, body.Data!.TotalAmount);                                   // both shifts are in the claim, 8 h each at $40
+        var flagged = Assert.Single(body.Data.Flagged);
+        Assert.Equal((overnight.Id, "Evening and night rates are not applied yet."), (flagged.ShiftId, flagged.Caveat));
+        Assert.Empty(body.Data.LeftOut);
+    }
+
+    [Fact]
     public async Task GenerateShiftClaim_NoCompletedUnclaimedShiftsInRange_ReturnsBadRequest()
     {
         using var db = CreateDb();

@@ -101,6 +101,38 @@ public class ShiftClaimLeftOutTests
         }
     }
 
+    // ── The caveat does not live on the claim line, so the generate response echoes it (round 1b, review F2) ──
+
+    [Fact]
+    public async Task TheGeneratedClaimEchoesTheShiftsItPricedWithACaveat_BecauseTheLineHasNowhereToKeepIt()
+    {
+        var (kit, person) = Arrange();
+        var (plain, _, _, twoToOne, activeNight) = FiveShifts(kit, person);
+
+        var generated = await Engine(kit).GenerateAsync(person.Id, From, To, Ct);
+
+        var flagged = Assert.Single(generated.Flagged);                                       // the active night, and only it: the plain and two-to-one lines carry no caveat
+        Assert.Equal(activeNight.Id, flagged.ShiftId);
+        Assert.Equal(new DateOnly(2026, 10, 6), flagged.ServiceDate);
+        Assert.Equal("Shift 18:00–02:00 · 8 h", flagged.Description);
+        Assert.Equal("Evening and night rates are not applied yet.", flagged.Caveat);
+        Assert.DoesNotContain(generated.Flagged, f => f.ShiftId == plain.Id || f.ShiftId == twoToOne.Id);
+        Assert.True(kit.Db.ClaimLineItems.Any(l => l.ShiftId == activeNight.Id));            // it IS in the claim, priced; the flag is about the price
+    }
+
+    [Fact]
+    public async Task AShiftLeftOutIsNotAlsoFlagged_AndAClaimWithNoCaveatsFlagsNothing()
+    {
+        var (kit, person) = Arrange();
+        Completed(kit, person, new DateOnly(2026, 10, 1));
+        Completed(kit, person, new DateOnly(2026, 10, 2), night: SleepoverType.Sleepover, start: 22, end: 6, overnight: true);
+
+        var generated = await Engine(kit).GenerateAsync(person.Id, From, To, Ct);
+
+        Assert.Empty(generated.Flagged);
+        Assert.Single(generated.LeftOut);
+    }
+
     [Fact]
     public async Task GenerateDraftClaimAsyncMakesTheSameClaim()
     {
