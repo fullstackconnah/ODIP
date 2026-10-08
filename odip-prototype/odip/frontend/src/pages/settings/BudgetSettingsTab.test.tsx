@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import BudgetSettingsTab from './BudgetSettingsTab'
 import type { BudgetSettingsDto } from '@/api/types'
 
-// Settings, Budgets (Admin and SuperAdmin; budget phase 1). The mode and the "approaching" percentage are STORED for the checks a later release brings, and the tab says so. It copies the stale-form
+// Settings, Budgets (Admin and SuperAdmin). The mode and the "approaching" percentage are what the roster's budget check reads, and the tab says precisely what each mode does (budget phase 3). It copies the stale-form
 // protection of Provider Settings: only what the person deliberately changed is sent, and a choice made against a value that has since moved is dropped, never pushed over a newer one.
 
 const { useBudgetSettings, mutate } = vi.hoisted(() => ({ useBudgetSettings: vi.fn(), mutate: vi.fn() }))
@@ -34,31 +34,37 @@ describe('Budgets tab: what is shown', () => {
     expect(screen.getByRole('radio', { name: 'Warn only' })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' })).not.toBeChecked()
     expect(screen.getByRole('button', { name: /Warn when used reaches/ })).toHaveTextContent('80%')
-    expect(screen.getByText(/Refuses a one-off roster shift that would take a participant's forecast past their budget for the funding period, unless an Admin overrides it with a reason\. Emergency or safety bookings are always allowed and reviewed by an Admin afterwards\./)).toBeInTheDocument()
+    expect(screen.getByText(/Refuses a one-off roster shift that would take a participant's forecast past their budget for the funding period, unless an Admin saves it with a written reason, which is recorded in the audit log\./)).toBeInTheDocument()
   })
 
-  it('says once, at the top, that the checks arrive in a later release and that BOTH choices are saved for them', () => {
+  it('no longer says the checks arrive later: they are live, and the page says what they do', () => {
     renderTab()
 
-    const line = screen.getByText('Budget checks arrive in a later release. Both choices on this page are saved for them.')
-    expect(line).toBeInTheDocument()
-    expect(screen.queryByText(/this choice is saved for them/)).not.toBeInTheDocument()   // not under the first section only, which made the percentage read as live
-    const firstHeading = screen.getByRole('heading', { name: /When a one-off shift would go over/ })
-    expect(line.compareDocumentPosition(firstHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()   // it comes before both sections
+    expect(screen.queryByText(/arrive in a later release/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/saved for them/)).not.toBeInTheDocument()
   })
 
-  it('puts that line under the defaults callout when there is one, and still shows it when there is not', () => {
-    useBudgetSettings.mockReturnValue(reply(saved({ isDefault: true })))
-    const { unmount } = renderTab()
-    const callout = screen.getByText(/Nothing has been saved yet/)
-    const line = screen.getByText('Budget checks arrive in a later release. Both choices on this page are saved for them.')
-    expect(callout.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    unmount()
-
-    useBudgetSettings.mockReturnValue(reply(saved({ isDefault: false })))
+  it('says what both modes leave alone, once, under the choice: patterns, trips, agreements and claims only warn, and cancels, cheaper edits and started or delivered shifts are never refused', () => {
     renderTab()
-    expect(screen.queryByText(/Nothing has been saved yet/)).not.toBeInTheDocument()
-    expect(screen.getByText('Budget checks arrive in a later release. Both choices on this page are saved for them.')).toBeInTheDocument()
+
+    const line = screen.getByText(/In both modes, a shift made from a pattern, a trip booking, an agreement and a claim only ever warn\. Cancelling a shift, an edit that lowers its cost, and a shift that has started or been delivered are never refused\./)
+    const heading = screen.getByRole('heading', { name: /When a one-off shift would go over/ })
+    const percentHeading = screen.getByRole('heading', { name: /When a participant is approaching/ })
+    expect(heading.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(line.compareDocumentPosition(percentHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()   // inside the first section, before the percentage
+  })
+
+  it('states that the emergency or safety path is always on, as a line to read and not a control, in either mode', async () => {
+    const user = userEvent.setup()
+    renderTab()
+    expect(screen.getByText('Emergency or safety bookings are always allowed and reviewed by an Admin.')).toBeInTheDocument()
+    expect(screen.getByText(/A Coordinator describes the need, the shift is saved at once, and an Admin reviews it afterwards from Tasks\. This cannot be switched off\./)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' }))
+
+    expect(screen.getByText('Emergency or safety bookings are always allowed and reviewed by an Admin.')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /emergency/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
   })
 
   it('says nothing has been saved yet while these are the defaults', () => {

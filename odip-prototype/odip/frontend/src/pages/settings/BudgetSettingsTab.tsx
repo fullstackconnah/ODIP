@@ -18,8 +18,15 @@ const MODE_OPTIONS: { key: BudgetLimitMode; label: string }[] = [
 
 const MODE_WORDS: Record<BudgetLimitMode, string> = {
   Warn: "Shows a warning when a one-off roster shift would take a participant's forecast (what is used so far plus shifts already booked) past their budget for the funding period. The shift is still saved.",
-  HardLimit: "Refuses a one-off roster shift that would take a participant's forecast past their budget for the funding period, unless an Admin overrides it with a reason. Emergency or safety bookings are always allowed and reviewed by an Admin afterwards.",
+  HardLimit: "Refuses a one-off roster shift that would take a participant's forecast past their budget for the funding period, unless an Admin saves it with a written reason, which is recorded in the audit log.",
 }
+
+/** What neither mode ever does, said once. */
+const BOTH_MODES_WORDS = 'In both modes, a shift made from a pattern, a trip booking, an agreement and a claim only ever warn. Cancelling a shift, an edit that lowers its cost, and a shift that has started or been delivered are never refused.'
+
+/** The emergency or safety path is the owner's decision and cannot be switched off: a line to read, never a control. */
+const EMERGENCY_LINE = 'Emergency or safety bookings are always allowed and reviewed by an Admin.'
+const EMERGENCY_WORDS = 'A Coordinator describes the need, the shift is saved at once, and an Admin reviews it afterwards from Tasks. This cannot be switched off.'
 
 const PERCENT_ITEMS = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95].map(percent => ({ value: String(percent), label: `${percent}%` }))
 
@@ -27,8 +34,9 @@ const PERCENT_ITEMS = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95].map(percent => ({
 type Pick<T> = { value: T; base: T }
 
 /**
- * Settings, Budgets (Admin and SuperAdmin; budget phase 1): what a budget check does about a one-off roster shift that would take a participant past their budget, and the percentage of the budget
- * used at which a participant counts as approaching it. Phase 1 only STORES the choice for the checks a later release brings, and says so.
+ * Settings, Budgets (Admin and SuperAdmin): what the roster's budget check does about a one-off roster shift that would take a participant past their budget, and the percentage of the budget
+ * used at which a participant counts as approaching it. The page says precisely what each mode does, what neither mode ever does, and, as a line to read and not a control, that the emergency or safety
+ * path is always on (the owner decided it cannot be switched off). A change of mode is audited by the server.
  *
  * It copies Provider Settings' stale-form protection. The mode and the percentage are kept out of any form state: only a value the person deliberately picked that differs from the server's is ever
  * sent, so a stale tab can never push an old choice back over a newer one (the settings change only for a field that is sent). A pick is good only while the server still holds the value it was
@@ -71,7 +79,6 @@ export default function BudgetSettingsTab() {
     <div className="flex max-w-2xl flex-col gap-[var(--section-gap)]">
       {unsavedChangesDialog}
       {settings.isDefault && <Callout tone="info" className="max-w-prose">Nothing has been saved yet: these are the defaults (Warn only, and approaching at 80%).</Callout>}
-      <p className="text-[13px] text-[var(--color-muted-foreground)]">Budget checks arrive in a later release. Both choices on this page are saved for them.</p>
 
       <section className="flex flex-col gap-[var(--field-gap-y)]" aria-labelledby="budget-mode-heading">
         <h2 id="budget-mode-heading" className="font-semibold">When a one-off shift would go over a participant&rsquo;s budget</h2>
@@ -89,6 +96,11 @@ export default function BudgetSettingsTab() {
             </li>
           ))}
         </ul>
+        <p className="text-[13px] text-[var(--color-muted-foreground)]">{BOTH_MODES_WORDS}</p>
+        <div className="flex flex-col gap-0.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-container)] p-3">
+          <p className="text-sm font-medium">{EMERGENCY_LINE}</p>
+          <p className="text-[13px] text-[var(--color-muted-foreground)]">{EMERGENCY_WORDS}</p>
+        </div>
       </section>
 
       <section className="flex flex-col gap-[var(--field-gap-y)] border-t border-[var(--color-border)] pt-[var(--section-gap)]" aria-labelledby="budget-percent-heading">
