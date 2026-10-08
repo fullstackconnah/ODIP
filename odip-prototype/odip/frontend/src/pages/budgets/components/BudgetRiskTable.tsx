@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -41,30 +42,52 @@ function RowAction({ action, participantLabel }: { action: BudgetAttentionAction
   )
 }
 
+/**
+ * The word for a status in its own tone. A row that is over or forecast over is tinted in that same tone from md up, so its pill sits on the card fill there (a pill of the row's own colour would
+ * vanish into the tint). Below md the rows are cards on the card fill, untinted, and the pill keeps its own tone.
+ */
+function RiskPill({ status }: { status: BudgetRiskRow['status'] }) {
+  const { label, tone } = BUDGET_RISK_STATUS[status]
+  const tinted = status === 'Over' || status === 'ForecastOver'
+  return <StatusBadge tone={tone} label={label} className={tinted ? 'md:bg-[var(--color-card)]' : undefined} />
+}
+
+/**
+ * Who the row is about. When the row has an action (here, the participant's Funding tab) the NAME is the link, named for what it does ("Open funding for Dylan Marchetti": the visible name is inside
+ * its accessible name), so the row needs no column of buttons: that column, pinned to the edge by the DataTable's column rule, covered Forecast, the figure a person comes here for, at 1440px.
+ * The truncation is on the link itself, not on a wrapper whose overflow would clip its focus ring.
+ */
+function ParticipantCell({ row }: { row: BudgetRiskRow }) {
+  const { action } = row
+  if (!action) return <CellText title={row.participantLabel} className="md:max-w-[16rem]">{row.participantLabel}</CellText>
+  const named = `${action.label} for ${row.participantLabel}`
+  const look = 'block font-medium text-[var(--color-primary)] hover:underline md:max-w-[16rem] md:truncate'
+  if ('to' in action) return <Link to={action.to} aria-label={named} title={named} className={look}>{row.participantLabel}</Link>
+  return <button type="button" onClick={action.onSelect} aria-label={named} title={named} className={`${look} text-left`}>{row.participantLabel}</button>
+}
+
+// The columns' narrowest widths are chosen so the table fits the page's content box at 1366px and 1440px (1092 and 1166px, with the sidebar open), so Forecast is on screen at rest, measured in a
+// browser. A table wider than its box (1280px) still scrolls sideways with the first column pinned (DataTable's column rule), which is why these are not the DataTable's usual 8rem.
 function columnsFor(): Column<BudgetRiskRow>[] {
   return [
     {
       key: 'participantLabel',
       header: 'Participant',
-      minWidth: '11rem',
-      maxWidth: '18rem',
-      // The pinned start column is the one that says who the row is. It wraps rather than truncates: a name cut at its last syllable is ambiguous, and DataTable's plain-string cap puts the
-      // full text in `title`, which a phone never shows.
-      wrap: true,
-      render: row => <CellText title={row.participantLabel}>{row.participantLabel}</CellText>,
+      minWidth: '10rem',
+      // The pinned start column is the one that says who the row is.
+      render: row => <ParticipantCell row={row} />,
     },
     {
       key: 'poolLabel',
       header: 'Pool',
-      minWidth: '9rem',
-      maxWidth: '14rem',
-      wrap: true,
-      render: row => <CellText title={row.poolLabel}>{row.poolLabel}</CellText>,
+      minWidth: '8rem',
+      // A stated pool is named for its category ("Increased Social and Community Participation"): cut at a cap that grows with the room, with the full name in `title`.
+      render: row => <CellText title={row.poolLabel} className="md:max-w-[12rem] 2xl:max-w-[18rem]">{row.poolLabel}</CellText>,
     },
     {
       key: 'period',
       header: 'Period',
-      minWidth: '11rem',
+      minWidth: '10rem',
       wrap: true,
       // A period is a range of two calendar days, written with the app's own range formatter: it never drops a year and never becomes "Sep" in one ICU build and "Sept" in another.
       render: row => <CellText title={`${row.periodStart} to ${row.periodEnd}`}>{writtenSpan(row.periodStart, row.periodEnd)}</CellText>,
@@ -72,7 +95,7 @@ function columnsFor(): Column<BudgetRiskRow>[] {
     {
       key: 'status',
       header: 'Status',
-      minWidth: '8rem',
+      minWidth: '7rem',
       sortable: true,
       // F-15: without an explicit `sortFn`, `DataTable.defaultComparator` falls through to `String(a).localeCompare(b)` and sorts the risk words ALPHABETICALLY - Approaching, ForecastOver,
       // OnTrack, Over - the exact reverse of the order the spec requires. The rank is declared once, in BUDGET_RISK_ORDER, and this column is the only thing that reads it. Ties fall back to
@@ -81,13 +104,13 @@ function columnsFor(): Column<BudgetRiskRow>[] {
         const rank = BUDGET_RISK_ORDER[a.status] - BUDGET_RISK_ORDER[b.status]
         return rank !== 0 ? rank : a.participantLabel.localeCompare(b.participantLabel, 'en-AU')
       },
-      render: row => <StatusBadge tone={BUDGET_RISK_STATUS[row.status].tone} label={BUDGET_RISK_STATUS[row.status].label} />,
+      render: row => <RiskPill status={row.status} />,
     },
     {
       key: 'available',
       header: 'Available',
       align: 'right',
-      minWidth: '7.5rem',
+      minWidth: '6.5rem',
       render: row => (
         <span className="max-md:text-left">
           <BudgetFigure
@@ -104,7 +127,7 @@ function columnsFor(): Column<BudgetRiskRow>[] {
       key: 'used',
       header: 'Used',
       align: 'right',
-      minWidth: '7.5rem',
+      minWidth: '6.5rem',
       render: row => (
         <span className="max-md:text-left">
           <BudgetFigure figures={row.figures} amount={row.used} reason={row.unavailableReason ?? unavailableFigure()} />
@@ -115,7 +138,7 @@ function columnsFor(): Column<BudgetRiskRow>[] {
       key: 'bookedAhead',
       header: 'Booked ahead',
       align: 'right',
-      minWidth: '8rem',
+      minWidth: '6.5rem',
       render: row =>
         row.bookedAhead === undefined ? (
           <span className="text-[var(--color-muted-foreground)]" aria-hidden="true">{NO_FIGURE}</span>
@@ -129,17 +152,12 @@ function columnsFor(): Column<BudgetRiskRow>[] {
       key: 'forecast',
       header: 'Forecast',
       align: 'right',
-      minWidth: '8rem',
+      minWidth: '6.5rem',
       render: row => (
         <span className="max-md:text-left">
           <BudgetFigure figures={row.figures} amount={row.forecast} reason={row.unavailableReason ?? unavailableFigure()} />
         </span>
       ),
-    },
-    {
-      key: 'actions',
-      header: '',
-      render: row => (row.action ? <RowAction action={row.action} participantLabel={row.participantLabel} /> : null),
     },
   ]
 }

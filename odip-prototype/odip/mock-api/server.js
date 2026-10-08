@@ -2286,7 +2286,9 @@ function saveDraft(participantId, body) {
     { block: block('b2', { supportType: 'GroupActivity', days: ['Saturday'], start: '09:00:00', end: '15:00:00', participantsPresent: 3 }), requirements: none },
     { block: block('b3', { supportType: 'PersonalCare', days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], start: '07:00:00', end: '09:00:00', setting: 'AtHome' }), requirements: { ...none, skills: ['ManualHandling'] } },
   ]
-  for (const participantId of ['p-0003', 'p-0004']) {
+  // p-0005 has a draft too (budget phase 2b), so the agreement budget bar can be seen OVER: her Core (flexible) pool is already over for the quarter (mock-ledger.js), so any agreement is. p-0003's
+  // plan has ended and p-0004's is far from its limit, so the bar shows "No budget recorded" for the first and "Within" for the second.
+  for (const participantId of ['p-0003', 'p-0004', 'p-0005']) {
     // p-0004's plan has decided its public holidays (Charge), so it can be approved for rostering; p-0003's has not (Review, the default), so approving it is refused with the holidays named.
     const blocksFor = participantId === 'p-0004' ? plan.map((entry) => ({ ...entry, block: { ...entry.block, onPublicHoliday: 'Charge' } })) : plan
     const body = { ...base, blocks: blocksFor }

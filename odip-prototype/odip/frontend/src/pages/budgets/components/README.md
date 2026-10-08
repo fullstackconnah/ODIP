@@ -43,5 +43,10 @@ These started as a parallel agent system's presentation surfaces (cherry-picked 
   {agreement cost, available minus used, over by} per pool and period and nothing else, so the breakdown draws exactly those, and gained the part of the agreement that fits no pool or falls outside
   the plan, a retry, and the "no budget recorded" link to the Funding tab.
 - **The no-budget tail is a real disclosure.** It was a button that called back and opened nothing. It now holds the participants (with why, and a way to record a budget) and says whether it is open.
-- **Row actions are named "{action} for {participant}"** (they were named by a pattern that only worked for labels containing "open", "view" or "go"), and the coarse "estimate" and "committed" members,
-  which the server never sends, are removed.
+- **The row's action is the participant's name.** It is a link named "{action} for {participant}" (the visible name is inside the accessible name), where it was a column of buttons named by a pattern that
+  only worked for labels containing "open", "view" or "go". The DataTable's column rule pins an actions column to the edge, and at 1440px that column covered Forecast, the figure the list is for. The
+  columns' narrowest widths were also trimmed so the table fits at 1366px and 1440px (measured in a browser). The coarse "estimate" and "committed" members, which the server never sends, are removed.
+- **A row that is over or forecast over is tinted from md up, so its status pill sits on the card fill there** (a pill in the row's own colour vanished into it); below md the rows are untinted cards and
+  the pill keeps its own tone.
+- **A pool with more than three funding periods draws the first three and puts the rest behind a native disclosure** that says how many there are and how many are over (`MAX_LINES_SHOWN`). The bar is
+  docked, and a plan funded monthly would otherwise fill the screen with a year of lines.

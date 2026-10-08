@@ -3,8 +3,9 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { TONE } from '@/lib/tone'
 import { writtenSpan } from '@/lib/fundingPlan'
+import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
-import type { AgreementBudgetBreakdownView, AgreementBudgetLine, BudgetAttentionAction, BudgetFigureVisibility } from './viewModel'
+import type { AgreementBudgetBreakdownView, AgreementBudgetLine, AgreementBudgetPool, BudgetAttentionAction, BudgetFigureVisibility } from './viewModel'
 import { BudgetFigure } from './BudgetFigure'
 import { AGREEMENT_NO_BUDGET, AGREEMENT_WARNING_ONLY, OVER_BY_WORD, WITHIN_WORD } from './wording'
 
@@ -46,6 +47,31 @@ function Line({ line, poolLabel, figures }: { line: AgreementBudgetLine; poolLab
         )}
       </p>
     </li>
+  )
+}
+
+/** How many periods of one pool are drawn before the rest go behind a disclosure: the bar is docked, and a plan with monthly funding periods would otherwise fill the screen. */
+export const MAX_LINES_SHOWN = 3
+
+/** One pool the agreement touches: its first periods, and any more behind a native disclosure that says how many there are and how many of them are over (a count of the server's own verdicts). */
+function Pool({ pool, figures }: { pool: AgreementBudgetPool; figures: BudgetFigureVisibility }) {
+  const shown = pool.lines.slice(0, MAX_LINES_SHOWN)
+  const rest = pool.lines.slice(MAX_LINES_SHOWN)
+  const restOver = rest.filter(line => !line.withinLimit).length
+  const lineOf = (line: AgreementBudgetLine) => <Line key={`${line.periodStart}-${line.periodEnd}`} line={line} poolLabel={pool.poolLabel} figures={figures} />
+  return (
+    <div className="flex flex-col gap-0.5">
+      <p className={`${LABEL} font-medium`}>{pool.poolLabel}</p>
+      <ul className="flex flex-col gap-1">{shown.map(lineOf)}</ul>
+      {rest.length > 0 && (
+        <details className="mt-1">
+          <summary className="flex min-h-[var(--control-h)] cursor-pointer select-none items-center text-[13px] text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
+            {plural(rest.length, 'more period')}, {restOver > 0 ? `${restOver} over` : 'all within'}
+          </summary>
+          <ul className="mt-1 flex flex-col gap-1">{rest.map(lineOf)}</ul>
+        </details>
+      )}
+    </div>
   )
 }
 
@@ -91,14 +117,7 @@ export function AgreementBudgetBreakdown({ view }: { view: AgreementBudgetBreakd
       {view.pools.length === 0 && !hasBucket && (
         <p className={NOTE}>Nothing in the agreement is priced against a pool yet, so there is nothing to compare.</p>
       )}
-      {view.pools.map(pool => (
-        <div key={pool.poolLabel} className="flex flex-col gap-0.5">
-          <p className={`${LABEL} font-medium`}>{pool.poolLabel}</p>
-          <ul className="flex flex-col gap-1">
-            {pool.lines.map(line => <Line key={`${line.periodStart}-${line.periodEnd}`} line={line} poolLabel={pool.poolLabel} figures={figures} />)}
-          </ul>
-        </div>
-      ))}
+      {view.pools.map(pool => <Pool key={pool.poolLabel} pool={pool} figures={figures} />)}
       {(view.notInARecordedPool ?? 0) > 0 && (
         <p className={NOTE}>
           <BudgetFigure figures={figures} amount={view.notInARecordedPool} /> of the agreement is in no pool the plan records, so it is not compared.

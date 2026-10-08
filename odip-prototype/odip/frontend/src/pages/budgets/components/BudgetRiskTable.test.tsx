@@ -141,6 +141,22 @@ describe('BudgetRiskTable: a real row', () => {
     expect(rowFor('Amara Okonkwo-Bell').className).not.toContain('warning-container')
   })
 
+  it('puts the pill of a tinted row on the card fill from md up, so it does not vanish into its own tint, and keeps the pill of an untinted row in its tone', () => {
+    renderTable(readyTable([
+      riskRow({ id: 'a', participantLabel: 'Over Person', status: 'Over' }),
+      riskRow({ id: 'b', participantLabel: 'Forecast Person', status: 'ForecastOver' }),
+      riskRow({ id: 'c', participantLabel: 'Approaching Person', status: 'Approaching' }),
+    ]))
+
+    // Below md a row is an untinted card, so the pill keeps its own tone there; from md the row is tinted in that tone and the pill is lifted onto the card fill.
+    expect(screen.getByText('Over').className).toContain('bg-[var(--color-error-container)]')
+    expect(screen.getByText('Over').className).toContain('md:bg-[var(--color-card)]')
+    expect(screen.getByText('Forecast over').className).toContain('bg-[var(--color-warning-container)]')
+    expect(screen.getByText('Forecast over').className).toContain('md:bg-[var(--color-card)]')
+    expect(screen.getByText('Approaching').className).toContain('bg-[var(--color-warning-container)]')
+    expect(screen.getByText('Approaching').className).not.toContain('md:bg-[var(--color-card)]')
+  })
+
   it('leaves the row order exactly as the server sent it, and never re-ranks it by risk itself', () => {
     // Deliberately worst-last. If the component sorted, this would come out in a different order.
     const rows = [riskRow({ id: 'a', participantLabel: 'Zoe Wellard', status: 'OnTrack' }), riskRow({ id: 'b', participantLabel: 'Adam Bright', status: 'Over' })]
@@ -293,10 +309,21 @@ describe('BudgetRiskTable: the next action', () => {
     ]))
 
     const buttons = screen.getAllByRole('button', { name: /^Review / })
-    expect(buttons.map(b => b.textContent)).toEqual(['Review', 'Review'])   // both read "Review": the name carries the person
+    expect(buttons.map(b => b.textContent)).toEqual(['First Person', 'Second Person'])   // the visible name is the participant's, inside the accessible name "Review for {name}"
 
     await userEvent.click(screen.getByRole('button', { name: 'Review for First Person' }))
     expect(onSelect).toHaveBeenCalledTimes(1)
+  })
+
+  it('makes the participant\'s own name the link, with no column of buttons to take room from the figures', () => {
+    renderTable(readyTable([riskRow({ action: { label: 'Open funding', to: '/participants/participant-1?tab=funding' } })]))
+
+    const link = screen.getByRole('link', { name: 'Open funding for Amara Okonkwo-Bell' })
+    expect(link).toHaveTextContent('Amara Okonkwo-Bell')                      // the visible text is inside the accessible name (WCAG 2.5.3)
+    expect(link).toHaveAttribute('title', 'Open funding for Amara Okonkwo-Bell')
+    expect(link.closest('td')).toBe(within(rowFor('Amara Okonkwo-Bell')).getAllByRole('cell')[0])   // in the first, pinned cell
+    expect(within(rowFor('Amara Okonkwo-Bell')).getAllByRole('cell')).toHaveLength(8)             // participant, pool, period, status and the four figures
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('leaves a row with no action on without one, rather than a dead control', () => {

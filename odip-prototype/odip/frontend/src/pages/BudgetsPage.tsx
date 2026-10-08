@@ -87,6 +87,8 @@ export default function BudgetsPage() {
           options={STATUS_FILTERS.map(key => ({ key, label: data ? `${STATUS_LABEL[key]} (${counts[key]})` : STATUS_LABEL[key] }))}
           value={status}
           onChange={setStatus}
+          // Five words with counts do not fit one row at 390px: they wrap onto a second row whole, rather than squeezing into boxes that cut them (each label stays on one line).
+          className="flex-wrap [&>button]:whitespace-nowrap"
         />
         <SearchInput value={search} onChange={setSearch} placeholder="Search participants..." label="Search participants" />
       </PageHeader>

@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { TONE } from '@/lib/tone'
-import { AgreementBudgetBreakdown } from './AgreementBudgetBreakdown'
+import { AgreementBudgetBreakdown, MAX_LINES_SHOWN } from './AgreementBudgetBreakdown'
 import { agreementLine, agreementPool, breakdown } from './fixtures'
 import type { AgreementBudgetBreakdownView } from './viewModel'
 import { AGREEMENT_NO_BUDGET, AGREEMENT_WARNING_ONLY, NO_FIGURE } from './wording'
@@ -147,6 +147,61 @@ describe('AgreementBudgetBreakdown: several pools and periods', () => {
     renderView(breakdown())
 
     expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('Core, Agreement')
+  })
+})
+
+// The bar is docked at the foot of the screen, so a pool funded monthly (a year of agreement is twelve periods) must not fill it: the first periods are drawn, the rest sit behind a disclosure
+// that says how many there are and how many of them are over, and every one of them is still there to open.
+describe('AgreementBudgetBreakdown: a pool with many periods', () => {
+  const month = (n: number, extra: Partial<Parameters<typeof agreementLine>[0]> = {}) =>
+    agreementLine({ periodStart: `2026-${String(n).padStart(2, '0')}-01`, periodEnd: `2026-${String(n).padStart(2, '0')}-28`, cost: 100, remaining: 5000, ...extra })
+
+  it('draws no more than three periods of a pool, and no disclosure at all for a pool with three or fewer', () => {
+    renderView(breakdown({ pools: [agreementPool({ lines: [month(1), month(2), month(3)] })] }))
+
+    expect(MAX_LINES_SHOWN).toBe(3)
+    expect(screen.getAllByRole('listitem')).toHaveLength(3)
+    expect(document.querySelector('details')).toBeNull()
+  })
+
+  it('puts the rest behind a disclosure that counts them: all within', () => {
+    renderView(breakdown({ pools: [agreementPool({ lines: [1, 2, 3, 4, 5].map(n => month(n)) })] }))
+
+    const details = document.querySelector('details') as HTMLDetailsElement
+    expect(details).not.toHaveAttribute('open')
+    expect(within(details).getByText('2 more periods, all within')).toBeInTheDocument()
+    expect(within(details).getAllByRole('listitem')).toHaveLength(2)    // still in the page, behind the disclosure
+    expect(within(screen.getByRole('region')).getAllByRole('listitem')).toHaveLength(5)
+  })
+
+  it('says how many of the hidden periods are over, so an over period is never out of sight unannounced', () => {
+    renderView(breakdown({ pools: [agreementPool({ lines: [1, 2, 3].map(n => month(n)).concat([month(4, { withinLimit: false, overBy: 70, remaining: 30 }), month(5, { withinLimit: false, overBy: 20, remaining: 80 }), month(6)]) })] }))
+
+    const details = document.querySelector('details') as HTMLDetailsElement
+    expect(within(details).getByText('3 more periods, 2 over')).toBeInTheDocument()
+    // The summary above the pools counts every over period, hidden or not.
+    expect(screen.getByRole('region')).toHaveTextContent('2 periods would be over what is left.')
+  })
+
+  it('opens with the keyboard like any native disclosure: the summary is the control, named by what it holds', async () => {
+    const user = userEvent.setup()
+    renderView(breakdown({ pools: [agreementPool({ lines: [1, 2, 3, 4].map(n => month(n)) })] }))
+
+    const summary = screen.getByText('1 more period, all within')
+    expect(summary.tagName).toBe('SUMMARY')
+    await user.click(summary)
+    expect(document.querySelector('details')).toHaveAttribute('open')
+  })
+
+  it('counts each pool\'s periods apart: one with few and one with many', () => {
+    renderView(breakdown({
+      pools: [
+        agreementPool({ poolLabel: 'Core', lines: [1, 2, 3, 4].map(n => month(n)) }),
+        agreementPool({ poolLabel: 'Improved Daily Living Skills', lines: [month(1), month(2)] }),
+      ],
+    }))
+
+    expect(document.querySelectorAll('details')).toHaveLength(1)
   })
 })
 
