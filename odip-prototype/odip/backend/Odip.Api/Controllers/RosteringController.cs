@@ -499,6 +499,8 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<RosterFindingDto>>>> CheckShift(
         [FromBody] CheckShiftDto dto, CancellationToken ct)
     {
+        if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<List<RosterFindingDto>>.Fail(ShiftEndsBeforeItStartsMessage));
+
         var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
         if (refError != null) return BadRequest(ApiResponse<List<RosterFindingDto>>.Fail(refError));
 
@@ -523,6 +525,8 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftDto>>> CreateShift(
         [FromBody] CreateShiftDto dto, CancellationToken ct)
     {
+        if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftDto>.Fail(ShiftEndsBeforeItStartsMessage));
+
         var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
         if (refError != null) return BadRequest(ApiResponse<ShiftDto>.Fail(refError));
 
@@ -561,6 +565,12 @@ public class RosteringController : ControllerBase
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+
+        // A shift has to end after it starts. The rule is for times somebody is setting now: an edit that leaves the shift's times alone, or cancels it, never trips it, because rows saved before this rule
+        // may already be wrong and the panel must still be able to annotate, assign and cancel them (a started shift's times are locked and could not be mended at all).
+        var timesChanged = dto.StartTime != shift.StartTime || dto.EndTime != shift.EndTime || dto.EndsNextDay != shift.EndsNextDay;
+        if (timesChanged && dto.Status != ShiftStatus.Cancelled && Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m)
+            return BadRequest(ApiResponse<ShiftDto>.Fail(ShiftEndsBeforeItStartsMessage));
 
         // An existing legacy shift can still be status-managed after readiness is lost. Moving
         // it to another participant or assigning/reassigning staff is a new placement and must
@@ -1685,6 +1695,9 @@ public class RosteringController : ControllerBase
     }
 
     private bool CallerIsAdmin => User?.IsInRole("Admin") == true || User?.IsInRole("SuperAdmin") == true;
+
+    /// <summary>What a shift whose end is not after its start is refused with: an overnight shift is one that "ends the next day" (the phase 3 review, C1: without it the shift had a negative length and a negative price).</summary>
+    private const string ShiftEndsBeforeItStartsMessage = "The shift must end after it starts. Tick 'Ends the next day' for an overnight shift.";
 
     /// <summary>
     /// The budget check of the candidate shift (budget phase 3), quiet when the request has no organisation to show money for. <paramref name="existingId"/> is the saved shift an edit replaces, <paramref name="status"/>

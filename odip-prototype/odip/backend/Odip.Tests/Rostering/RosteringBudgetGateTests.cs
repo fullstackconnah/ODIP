@@ -148,6 +148,77 @@ public class RosteringBudgetGateTests : IDisposable
         Assert.Empty(_kit.Db.BookingTasks);
     }
 
+    // ── A shift with no length (the phase 3 review, C1) ─────────────────────
+
+    private const string EndsBeforeItStarts = "The shift must end after it starts. Tick 'Ends the next day' for an overnight shift.";
+
+    [Fact]
+    public async Task TheDryRun_RefusesAShiftThatEndsBeforeItStarts_AndSaysToTickEndsTheNextDay()
+    {
+        var controller = Rig();
+
+        var result = await controller.CheckShift(Check(Wed14Oct) with { StartTime = new TimeOnly(22, 0), EndTime = new TimeOnly(6, 0), EndsNextDay = false }, default);
+
+        Assert.Equal(EndsBeforeItStarts, Said(result));
+    }
+
+    [Theory]
+    [InlineData(22, 6)]   // an overnight shift, the box not ticked: a length of minus sixteen hours
+    [InlineData(9, 9)]    // nothing at all
+    public async Task Create_RefusesAShiftWithNoLength_AndSavesNothing_SoNothingNegativeEntersTheLedger(int startHour, int endHour)
+    {
+        var controller = Rig();
+        var before = ShiftCount();
+
+        var result = await controller.CreateShift(Create(Wed14Oct) with { StartTime = new TimeOnly(startHour, 0), EndTime = new TimeOnly(endHour, 0) }, default);
+
+        Assert.Equal(EndsBeforeItStarts, Said(result));
+        Assert.Equal(before, ShiftCount());
+    }
+
+    [Fact]
+    public async Task Update_RefusesAnEditThatMakesAShiftEndBeforeItStarts_AndLeavesTheShiftAsItWas()
+    {
+        var controller = Rig();
+        var shift = _kit.Db.Shifts.First(s => s.ServiceDate == Mon12Oct);   // 09:00 to 17:00
+
+        var result = await controller.UpdateShift(shift.Id, Update(shift, endHour: 8), default);
+
+        Assert.Equal(EndsBeforeItStarts, Said(result));
+        Assert.Equal(new TimeOnly(17, 0), _kit.Db.Shifts.Single(s => s.Id == shift.Id).EndTime);
+    }
+
+    [Fact]
+    public async Task AnOvernightShiftWithTheBoxTicked_IsAShiftLikeAnyOther()
+    {
+        var controller = Rig(booked: false);
+        var overnight = Create(Wed14Oct) with { StartTime = new TimeOnly(22, 0), EndTime = new TimeOnly(6, 0), EndsNextDay = true };
+
+        var dryRun = Ok(await controller.CheckShift(Check(Wed14Oct) with { StartTime = new TimeOnly(22, 0), EndTime = new TimeOnly(6, 0), EndsNextDay = true }, default));
+        var created = Ok(await controller.CreateShift(overnight, default));
+
+        Assert.Empty(dryRun);
+        Assert.Equal(8m, created.DurationHours);
+    }
+
+    [Fact]
+    public async Task Update_NeverRefusesARowSavedBeforeTheRule_WhileItsTimesAreLeftAlone_OrItIsCancelled_ButNotAFreshBadTime()
+    {
+        // Rows with no length may already exist (a new shift's end time used to default to its start). The panel must still be able to annotate and cancel them; only times somebody sets now are refused.
+        var controller = Rig(booked: false);
+        var legacy = _kit.SeedShift(_participant, Wed14Oct);
+        legacy.EndTime = legacy.StartTime;
+        _kit.Db.SaveChanges();
+
+        var annotated = Ok(await controller.UpdateShift(legacy.Id, Update(legacy, notes: "Family asked for a call first"), default));
+        var anotherBadTime = await controller.UpdateShift(legacy.Id, Update(legacy, endHour: 8), default);
+        var cancelled = Ok(await controller.UpdateShift(legacy.Id, Update(legacy, status: ShiftStatus.Cancelled), default));
+
+        Assert.Equal("Family asked for a call first", annotated.Notes);
+        Assert.Equal(EndsBeforeItStarts, Said(anotherBadTime));
+        Assert.Equal(ShiftStatus.Cancelled, cancelled.Status);
+    }
+
     // ── The dry run ─────────────────────────────────────────────────────────
 
     [Fact]

@@ -123,4 +123,27 @@ public class ShiftPriceEstimatorGuardTests
 
         Assert.Equal("it is a 1:3 group shift, which shift claims do not price yet", outcome.NotPricedBecause);
     }
+
+    // The phase 3 review (C1, 2026-10-09): a shift that ends before it starts (an overnight shift saved without "Ends the next day") has a length of zero or less. Priced as hours x rate it was a NEGATIVE
+    // item, which the ledger summed with the real ones, wiping the forecast. A shift with no length has no price, whatever its kind.
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-16)]
+    public void AShiftWithNoLengthHasNoPrice_NotAZeroOrNegativeOne(int hours)
+    {
+        var outcome = ShiftPriceEstimator.Price(Catalogue(), Wednesday, hours, SupportRatio.OneToOne, SleepoverType.None, isIntensive: false, "NSW", new HashSet<DateOnly>());
+
+        Assert.False(outcome.IsPriced);
+        Assert.Null(outcome.Price);
+        Assert.Contains("no length", outcome.NotPricedBecause);
+        Assert.Equal(new[] { "no length" }, outcome.NotPricedKinds);
+    }
+
+    [Fact]
+    public void AShiftWithNoLengthSaysSoBeforeItsKind()
+    {
+        var outcome = ShiftPriceEstimator.Price(Catalogue(), Wednesday, -4m, SupportRatio.OneToThree, SleepoverType.Sleepover, isIntensive: false, "NSW", new HashSet<DateOnly>());
+
+        Assert.Equal(new[] { "no length" }, outcome.NotPricedKinds);   // the data is wrong first; its kind is not what to say
+    }
 }
