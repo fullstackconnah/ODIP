@@ -257,7 +257,13 @@ public sealed class TripPriceEstimator
                         var unitPrice = CatalogueStatePrice.For(catItem, _state);
                         lines.Add(new PricedTripLine(catItem, ClaimDayType.WeekdayEvening, group.From, group.To, totalEveningHours, unitPrice, totalEveningHours * unitPrice));
                     }
-                    else MarkUnpriced(ClaimDayType.WeekdayEvening, group.From, group.To, group.DayCount, totalEveningHours);
+                    else
+                    {
+                        // The evening hours are on the trip's first day (after the departure) and on its last (before the return), and on no day between: those are the days no rate covers,
+                        // not the whole stretch of weekdays the evening line spans when it is priced. Each is its own entry, so a date is named once and the days are counted as days.
+                        if (firstDayEveningHours > 0) MarkUnpriced(ClaimDayType.WeekdayEvening, tripFirstDate, tripFirstDate, 1, firstDayEveningHours);
+                        if (lastDayEveningHours > 0) MarkUnpriced(ClaimDayType.WeekdayEvening, tripLastDate, tripLastDate, 1, lastDayEveningHours);
+                    }
                 }
             }
         }

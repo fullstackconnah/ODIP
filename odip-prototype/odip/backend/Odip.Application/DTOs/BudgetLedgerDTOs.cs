@@ -31,7 +31,8 @@ public record LedgerFiguresDto
     public decimal Forecast { get; init; }
     /// <summary>
     /// How many booked trip days no catalogue rate covers, so those days contribute $0 to <see cref="BookedAhead"/> and <see cref="Forecast"/>. A count, never an invented rate: the
-    /// gap is shown and measurable, and the money figures stay exactly what the catalogue can price.
+    /// gap is shown and measurable, and the money figures stay exactly what the catalogue can price. It counts days: each date of a booking once, however many pieces of it (weekday,
+    /// weekday evening) are unpriced and however many categories the booking's price is split across.
     /// </summary>
     public int UnpricedTripDayCount { get; init; }
     /// <summary>Available minus used; negative when over.</summary>

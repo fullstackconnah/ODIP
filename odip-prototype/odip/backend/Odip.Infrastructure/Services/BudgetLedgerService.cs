@@ -577,6 +577,11 @@ public sealed class BudgetLedgerService
                     ? UnpricedTripNote
                     : TripGapNote(price.UnpricedDays);
             var note = started ? (priceNote is null ? StartedTripNote : $"{StartedTripNote} {priceNote}") : priceNote;
+
+            // The unpriced days are counted as DAYS: every date of the booking once, however many stretches and pieces (weekday, weekday evening) are unpriced on it, and once for the
+            // booking however many categories its price is split across. The count rides on the first part: no rate covers those days, so there is no category to say they belong to.
+            var unpricedDays = hasNumber ? price.UnpricedDays.SelectMany(d => d.Dates).Distinct().Count() : 0;
+            var firstPart = true;
             foreach (var part in parts)
             {
                 itemsByPerson[booking.ParticipantId].Add(new LedgerItem
@@ -585,8 +590,9 @@ public sealed class BudgetLedgerService
                     PlanType = booking.PlanTypeOverride ?? person.PlanType, Id = booking.Id, BookingId = booking.Id, Description = description,
                     Status = BookingStatus.Confirmed.ToString(), Link = $"/trips/{booking.TripId}",
                     Note = note,
-                    UnpricedTripDayCount = hasNumber ? price.UnpricedDays.Sum(d => d.DayCount) : 0,
+                    UnpricedTripDayCount = firstPart ? unpricedDays : 0,
                 });
+                firstPart = false;
             }
         }
     }
