@@ -18,6 +18,10 @@ import { extractErrorMessage } from '@/lib/utils'
 import { formatNoteTimestamp } from '@/lib/format'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { RosterGateFields } from './RosterGateFields'
+import {
+  BUDGET_FINDING_CODES, BudgetEmergencyReviewMarker, BudgetFindingDetails, BudgetOverrideReasonFields, canSubmit, emergencyOffered, figuresOf, markerForAcknowledgedCodes,
+  type BudgetOverrideChoice, type EmergencyReviewDetails,
+} from './parallel-budget-override'
 import { Button } from '@/components/Button'
 import { SlideOver } from '@/components/SlideOver'
 import { modalGrid } from '@/lib/formGrid'
@@ -94,8 +98,16 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // Create always defaults to Draft — the backend hardcodes it there regardless of this value.
   const [status, setStatus] = useState<ShiftStatus>(existing?.status ?? 'Draft')
   const [notes, setNotes] = useState(existing?.notes ?? '')
-  const [overrideReason, setOverrideReason] = useState(existing?.overrideReason ?? '')
+  // The marker a shift already carries from a save past its budget (read from the codes the server stored, never from the reason's words). Its reason is shown by the marker, read only: it is not copied into
+  // the ordinary reason field below, where a later save would send the server's own sentence back as if somebody had just written it.
+  const budgetMarker = markerForAcknowledgedCodes(existing?.acknowledgedFindingCodes)
+  const [overrideReason, setOverrideReason] = useState(budgetMarker ? '' : existing?.overrideReason ?? '')
   const [findings, setFindings] = useState<RosterFindingDto[]>(existing?.findings ?? [])
+  // Budget phase 3: "Emergency or safety", the one way through a one-off shift a hard limit refused for a Coordinator, and the one line a shift the budget could not check gets.
+  const [budgetChoice, setBudgetChoice] = useState<BudgetOverrideChoice>('none')
+  const [emergencyDescription, setEmergencyDescription] = useState('')
+  const [emergencySubmitted, setEmergencySubmitted] = useState(false)
+  const [budgetNote, setBudgetNote] = useState<string | null>(null)
   const [reasonRequired, setReasonRequired] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // The live dry-run below runs the same readiness gate as the save, so in Enforce mode (or for an inactive participant, in either
@@ -103,12 +115,12 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // to the exact candidate it was computed for: it hides itself the moment any field of the candidate changes, and a late reply for an
   // older candidate can never show. It never gates Save; a preview that fails without a server message (a network blip) says nothing.
   const [previewRefusal, setPreviewRefusal] = useState<{ key: string; message: string } | null>(null)
-  const candidateKey = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType])
+  const candidateKey = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, status])
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   // Unsaved edits: the form as it is now against the form as it first rendered. The page keys this component on the target,
   // so "first render" is the moment the panel opened.
-  const current = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, status, notes, overrideReason])
+  const current = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, status, notes, overrideReason, emergencyDescription])
   const [opened] = useState(current)
   const dirty = current !== opened
 
@@ -165,14 +177,18 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
     if (!canWrite || !participantId || !serviceDate || !startTime || !endTime) return
     const handle = setTimeout(() => {
       checkShift.mutate(
-        { id: existing?.id, participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType },
+        // The status the shift would be saved with, for an existing shift: a cancel costs nothing and gets no budget finding.
+        { id: existing?.id, participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, status: isEdit ? status : undefined },
         {
-          onSuccess: f => {
+          onSuccess: ({ findings: f, budgetNote: note }) => {
             setFindings(f)
+            setBudgetNote(note ?? null)
             setPreviewRefusal(null)
             // A fresh dry-run can clear the finding that forced the reason (e.g. the coordinator
             // changed staff/date) — don't leave the error copy pinned once it no longer applies.
             if (!getRosterGate(f).needsReason) setReasonRequired(false)
+            // The emergency path answers a refusal: once the server no longer refuses the shift there is nothing to answer.
+            if (!emergencyOffered(f)) setBudgetChoice('none')
           },
           onError: err => {
             const message = extractErrorMessage(err, '')
@@ -183,7 +199,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
     }, 400)
     return () => clearTimeout(handle)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canWrite, participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType])
+  }, [canWrite, participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, status])
 
   if (!open) return null
 
@@ -207,6 +223,15 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // sets requiresReason on a Blocking finding, so deriving reasonRequiredFindings from all
   // findings (via getRosterGate) rather than warningFindings alone is equivalent here.
   const { blockingFindings, reasonRequiredFindings } = getRosterGate(findings)
+  // Budget phase 3. The server REFUSED the shift on the budget (a blocking BUDGET_FORECAST_OVER, which is a Coordinator under a hard limit); "Emergency or safety" answers that refusal and nothing else,
+  // and only once its description is a real one. Every other blocking finding still stops the save.
+  const refusedOnBudget = emergencyOffered(findings)
+  const emergencyActive = refusedOnBudget && budgetChoice === 'emergency'
+  const emergencyReady = emergencyActive && canSubmit(budgetChoice, emergencyDescription)
+  const stillBlocking = emergencyActive ? blockingFindings.filter(f => f.code !== BUDGET_FINDING_CODES.forecastOver) : blockingFindings
+  const saveWithheld = stillBlocking.length > 0 || (refusedOnBudget && !emergencyReady)
+  const forecastOver = findings.find(f => f.code === BUDGET_FINDING_CODES.forecastOver && f.budget)
+  const figures = forecastOver ? figuresOf(forecastOver) : null
   const isBusy = createShift.isPending || updateShift.isPending
   // Informational only: never read by the save gate above or by the Save button, so it can never block a save.
   const readinessIssues = participantReadiness?.[participantId] ?? existing?.readinessIssues
@@ -215,8 +240,13 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
 
   async function handleSave() {
     setError(null)
-    if (blockingFindings.length > 0) return
-    if (reasonRequiredFindings.length > 0 && !overrideReason.trim()) {
+    if (stillBlocking.length > 0) return
+    if (refusedOnBudget && !emergencyReady) {
+      setEmergencySubmitted(true)
+      return
+    }
+    // The emergency description IS the reason of an emergency save: it answers any reason-required warning beside the budget one too.
+    if (!emergencyActive && reasonRequiredFindings.length > 0 && !overrideReason.trim()) {
       setReasonRequired(true)
       return
     }
@@ -233,8 +263,10 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       nightType,
       status,
       notes: notes.trim() || null,
-      overrideReason: overrideReason.trim() || null,
-      acknowledgedFindingCodes: warningFindings.map(f => f.code),
+      overrideReason: emergencyActive ? emergencyDescription.trim() : overrideReason.trim() || null,
+      // A code once: two pools both past their funding are two findings with the same code.
+      acknowledgedFindingCodes: [...new Set(warningFindings.map(f => f.code))],
+      ...(emergencyActive ? { emergency: true } : {}),
     }
 
     try {
@@ -285,13 +317,27 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               <Button variant="ghost" onClick={onClose}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={isBusy || blockingFindings.length > 0}>
-                {isBusy ? 'Saving…' : warningFindings.length > 0 ? 'Save with override' : 'Save'}
+              <Button onClick={handleSave} disabled={isBusy || saveWithheld}>
+                {isBusy ? 'Saving…' : emergencyActive ? 'Save as emergency' : warningFindings.length > 0 ? 'Save with override' : 'Save'}
               </Button>
             </div>
           </>
         ) : undefined}
       >
+        {budgetMarker && (
+          <BudgetEmergencyReviewMarker
+            details={{
+              kind: budgetMarker,
+              // Only an emergency has a review to wait for; one whose review the server could not find reads as pending.
+              state: budgetMarker === 'emergency' ? (existing?.budgetReview?.state === 'Reviewed' ? 'reviewed' : 'pending') : undefined,
+              reason: existing?.overrideReason,
+              recordedAt: existing?.budgetReview?.recordedAt,
+              reviewedOn: existing?.budgetReview?.reviewedOn,
+              reviewTaskTitle: existing?.budgetReview?.reviewTaskTitle,
+            } satisfies EmergencyReviewDetails}
+          />
+        )}
+
         <div data-shift-field="participant" ref={participantFieldRef}>
           <FormField label="Participant" required>
             <Dropdown
@@ -484,10 +530,32 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
           overrideReason={overrideReason}
           onOverrideReasonChange={setOverrideReason}
           reasonRequired={reasonRequired}
-          forceVisible={!!existing?.overrideReason}
+          forceVisible={!!existing?.overrideReason && !budgetMarker}
           showOnAnyWarning
           disabled={!canWrite}
+          blockingAnswered={emergencyActive && stillBlocking.length === 0}
         />
+
+        {figures && (
+          <details className="text-sm">
+            <summary className="cursor-pointer text-[13px] font-medium text-[var(--color-muted-foreground)]">Budget figures</summary>
+            <BudgetFindingDetails figures={figures} sentence={false} className="mt-2" />
+          </details>
+        )}
+
+        <BudgetOverrideReasonFields
+          findings={findings}
+          choice={budgetChoice}
+          reason={emergencyDescription}
+          submitted={emergencySubmitted}
+          pending={isBusy}
+          disabled={!canWrite}
+          onChoiceChange={setBudgetChoice}
+          onReasonChange={setEmergencyDescription}
+        />
+
+        {/* Not a finding and never a block: a shift the estimator cannot price has nothing to check, and a quiet line says so rather than letting no warning read as an all clear. */}
+        {budgetNote && <p className="text-[13px] text-[var(--color-muted-foreground)]">{budgetNote}</p>}
 
         {shownError && (
           <div role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">

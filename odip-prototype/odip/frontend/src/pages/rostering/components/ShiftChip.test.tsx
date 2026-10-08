@@ -377,3 +377,58 @@ describe('ShiftChip sub-text is announced, never clipped', () => {
     ]) expect(wrapper).toHaveClass(cls)
   })
 })
+
+describe('ShiftChip over-budget marker (budget phase 3)', () => {
+  const emergency = () => makeShift({
+    overrideReason: 'Emergency or safety: Participant unsafe at home tonight',
+    acknowledgedFindingCodes: ['BUDGET_EMERGENCY'],
+    budgetReview: { state: 'Pending' },
+  })
+
+  it('marks an emergency shift with the words "Over budget: emergency", and says the review is pending', () => {
+    renderChip(<ShiftChip shift={emergency()} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const marker = screen.getByRole('img', { name: /Over budget: emergency/ })
+    expect(marker).toHaveAttribute('title', expect.stringContaining('Over budget: emergency'))
+    expect(marker).toHaveAttribute('title', expect.stringContaining('Admin review pending'))
+    expect(marker).toHaveAttribute('data-budget-marker', 'emergency')
+  })
+
+  it('marks an Admin override with its own words, and no review to wait for', () => {
+    const shift = makeShift({ overrideReason: 'Client carer is in hospital', acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'] })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const marker = screen.getByRole('img', { name: /Over budget: Admin override/ })
+    expect(marker).toHaveAttribute('data-budget-marker', 'adminOverride')
+    expect(marker.getAttribute('title')).not.toMatch(/review/i)
+  })
+
+  it('says it in the open control\'s accessible name too, in place of the generic override line, so one mark is not announced twice', () => {
+    const shift = emergency()
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const name = getOpenButton(shift).getAttribute('aria-label')!
+    expect(name).toContain('Over budget: emergency, Admin review pending')
+    expect(name).not.toContain('Assigned with an override')
+    expect(screen.queryByRole('img', { name: /Assigned with an override/ })).not.toBeInTheDocument()
+  })
+
+  it('draws no budget marker for a plain override, a warning-only shift, or codes the server did not acknowledge', () => {
+    renderChip(<ShiftChip shift={makeShift({ overrideReason: 'Only cover available' })} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    expect(screen.queryByRole('img', { name: /Over budget/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /Assigned with an override/ })).toBeInTheDocument()   // the generic mark is unchanged
+  })
+
+  it('does not take a marker from the reason\'s words', () => {
+    renderChip(<ShiftChip shift={makeShift({ overrideReason: 'Emergency or safety: typed by hand', acknowledgedFindingCodes: ['BUDGET_APPROACHING'] })} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(screen.queryByRole('img', { name: /Over budget/ })).not.toBeInTheDocument()
+  })
+
+  it('reads a reviewed emergency as reviewed', () => {
+    const shift = makeShift({ ...emergency(), budgetReview: { state: 'Reviewed', reviewedOn: '2026-10-05' } })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(screen.getByRole('img', { name: /Over budget: emergency/ })).toHaveAttribute('title', expect.stringContaining('Reviewed'))
+  })
+})

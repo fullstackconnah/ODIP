@@ -1,6 +1,7 @@
 import { ShieldAlert, ShieldCheck } from 'lucide-react'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateTimeAu } from '@/lib/format'
+import { formatDateAu } from '@/lib/utils'
 import {
   OVER_BUDGET_MARKER,
   emergencyReviewBadge,
@@ -63,10 +64,13 @@ function MissingRow({ label, note }: { label: string; note: string }) {
  */
 export function BudgetEmergencyReviewMarker({ details, className }: BudgetEmergencyReviewMarkerProps) {
   const restricted = !!details.restricted
-  const badge = emergencyReviewBadge(details.state)
   const isEmergency = details.kind === 'emergency'
+  // Only an emergency has a review to wait for: an Admin override is an Admin's own act with a written reason, so it carries no badge and no "not approved" sentence. An emergency whose
+  // review the server could not find reads as pending: a review nobody can show has not happened.
+  const state = isEmergency ? details.state ?? 'pending' : undefined
+  const badge = state ? emergencyReviewBadge(state) : null
   const marker = OVER_BUDGET_MARKER[details.kind]
-  const reviewed = details.state === 'reviewed'
+  const reviewed = state === 'reviewed'
 
   // A restricted viewer sees that the shift went over budget and whether the review has happened.
   // Not the reason, not who reviewed it, not when the money ran out.
@@ -75,11 +79,13 @@ export function BudgetEmergencyReviewMarker({ details, className }: BudgetEmerge
     : [
         <DetailRow key="recorded" label="Recorded" value={details.recordedAt ? formatDateTimeAu(details.recordedAt) : null} />,
         <DetailRow key="reason" label="Reason given" value={details.reason} />,
+        !state
+          ? null
+          : reviewed
+            ? <DetailRow key="reviewer" label="Reviewed by" value={details.reviewedBy} />
+            : <MissingRow key="reviewer" label="Reviewed by" note="Not reviewed yet" />,
         reviewed
-          ? <DetailRow key="reviewer" label="Reviewed by" value={details.reviewedBy} />
-          : <MissingRow key="reviewer" label="Reviewed by" note="Not reviewed yet" />,
-        reviewed
-          ? <DetailRow key="reviewedAt" label="Review completed" value={details.reviewedAt ? formatDateTimeAu(details.reviewedAt) : null} />
+          ? <DetailRow key="reviewedAt" label="Review completed" value={details.reviewedAt ? formatDateTimeAu(details.reviewedAt) : details.reviewedOn ? formatDateAu(details.reviewedOn) : null} />
           : null,
         <DetailRow key="task" label="Review task" value={details.reviewTaskTitle} />,
       ].filter(Boolean)
@@ -104,14 +110,14 @@ export function BudgetEmergencyReviewMarker({ details, className }: BudgetEmerge
           )}
           {marker}
         </span>
-        <StatusBadge tone={badge.tone} label={badge.label} />
+        {badge && <StatusBadge tone={badge.tone} label={badge.label} />}
       </div>
 
       {rows && rows.length > 0 && <dl className="grid grid-cols-[9rem_1fr] gap-x-3">{rows}</dl>}
 
       {/* The one sentence that is always true of a pending emergency, whichever fields are absent.
           Without it, a marker with no reviewer reads as "nobody needed to review this". */}
-      {!reviewed && (
+      {state && !reviewed && (
         <p className="text-xs text-[var(--color-muted-foreground)]">
           Saved straight away. An Admin still has to review it — this has not been approved.
         </p>

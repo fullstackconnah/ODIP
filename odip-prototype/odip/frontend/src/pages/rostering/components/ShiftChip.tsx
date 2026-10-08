@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom'
 import { useDraggable } from '@dnd-kit/core'
-import { AlertOctagon, AlertTriangle, CalendarOff, GripVertical, MoreVertical, ShieldCheck } from 'lucide-react'
+import { AlertOctagon, AlertTriangle, CalendarOff, GripVertical, MoreVertical, ShieldAlert, ShieldCheck } from 'lucide-react'
 import type { RosterFindingDto, ShiftDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { formatShiftTimeRange, RATIO_LABELS } from '../lib/roster'
 import { plural } from '@/lib/format'
+import { OVER_BUDGET_MARKER, markerForAcknowledgedCodes } from './parallel-budget-override'
 
 /**
  * Accessible name for the severity marker — states the severity(s) present and their counts, so
@@ -75,6 +76,12 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
   const onApprovedLeave = isFilled && shift.assigneeOnApprovedLeave
   const onLeaveTitle = `${shift.staffName} has approved leave covering this shift — this slot needs a new assignee.`
 
+  // Budget phase 3: a shift saved past its budget on purpose carries a marker, read from the codes the SERVER stored (never from the reason's words). It stands in for the generic override mark: one shield, not two.
+  const budgetMarker = markerForAcknowledgedCodes(shift.acknowledgedFindingCodes)
+  const budgetReviewWords = budgetMarker === 'emergency' ? (shift.budgetReview?.state === 'Reviewed' ? 'Reviewed' : 'Admin review pending') : null
+  const budgetMarkerName = budgetMarker ? [OVER_BUDGET_MARKER[budgetMarker], budgetReviewWords].filter(Boolean).join(', ') : null
+  const budgetMarkerTitle = budgetMarkerName ? `${budgetMarkerName}${shift.overrideReason ? ` — ${shift.overrideReason}` : ''}` : null
+
   const menuItems = [
     { value: 'edit', label: 'Edit' },
     { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : 'Reassign to…' },
@@ -111,7 +118,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
     `${timeRange}${shift.endsNextDay ? ' (ends the next day)' : ''}`,
     labelText,
     showRatio ? `${RATIO_LABELS[shift.ratio] ?? shift.ratio} ratio` : null,
-    shift.overrideReason ? `Assigned with an override: ${shift.overrideReason}` : null,
+    budgetMarkerName ?? (shift.overrideReason ? `Assigned with an override: ${shift.overrideReason}` : null),
     onApprovedLeave ? 'On leave' : null,
   ].filter(Boolean).join(', ')
 
@@ -249,7 +256,19 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
               operationally) an under-covered ratio surfaces as a RATIO_SHORTFALL finding, which the severity
               marker already makes visible.
             */}
-            {shift.overrideReason && (
+            {budgetMarker && budgetMarkerTitle ? (
+              // The marker's words show once the chip is wide enough (container query on the chip); below that it is the shield alone, with the words in the title and the accessible name, never a clipped word.
+              <span
+                className={`ml-1 inline-flex shrink-0 items-center gap-1 text-xs font-semibold ${budgetMarker === 'emergency' ? 'text-[var(--color-on-warning-container)]' : 'text-muted-foreground'}`}
+                role="img"
+                aria-label={budgetMarkerName ?? undefined}
+                title={budgetMarkerTitle}
+                data-budget-marker={budgetMarker}
+              >
+                {budgetMarker === 'emergency' ? <ShieldAlert className="h-3 w-3" aria-hidden="true" /> : <ShieldCheck className="h-3 w-3" aria-hidden="true" />}
+                <span className="hidden @[18rem]:inline" aria-hidden="true">{OVER_BUDGET_MARKER[budgetMarker]}</span>
+              </span>
+            ) : shift.overrideReason && (
               <span
                 className="ml-1 shrink-0 text-muted-foreground"
                 role="img"

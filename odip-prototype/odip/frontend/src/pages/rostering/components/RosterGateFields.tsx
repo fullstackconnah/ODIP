@@ -32,6 +32,12 @@ export interface RosterGateFieldsProps {
   /** Disables the override-reason textarea — mirrors the write-permission check every other field
    * in these forms gets from its caller. Defaults to false (enabled). */
   disabled?: boolean
+  /**
+   * Every Blocking finding on the list has been answered by another control on the form (the shift panel's "Emergency or safety" choice, once its description is real), so the standing sentence
+   * "can't be saved while a blocking finding is open" is not said: it would contradict a Save button that now works. The findings themselves still print, and still count in the live announcement.
+   * Defaults to false: today's behaviour at every other call site.
+   */
+  blockingAnswered?: boolean
 }
 
 /**
@@ -50,7 +56,7 @@ export interface RosterGateFieldsProps {
  * finding that originally required it is gone — or, when the caller opts in via
  * showOnAnyWarning, whenever any Warning finding is present at all (still optional in that case).
  */
-export function RosterGateFields({ findings, overrideReason, onOverrideReasonChange, reasonRequired, forceVisible, showOnAnyWarning, disabled }: RosterGateFieldsProps) {
+export function RosterGateFields({ findings, overrideReason, onOverrideReasonChange, reasonRequired, forceVisible, showOnAnyWarning, disabled, blockingAnswered }: RosterGateFieldsProps) {
   const { reasonRequiredFindings, blockingFindings } = getRosterGate(findings)
   const hasWarningFinding = findings.some(f => f.severity === 'Warning')
   const showReasonField = reasonRequiredFindings.length > 0 || !!forceVisible || (!!showOnAnyWarning && hasWarningFinding)
@@ -111,7 +117,7 @@ export function RosterGateFields({ findings, overrideReason, onOverrideReasonCha
         </FormField>
       )}
 
-      {blockingFindings.length > 0 && (
+      {blockingFindings.length > 0 && !blockingAnswered && (
         <p role="alert" className="text-sm font-medium text-destructive">
           This assignment can't be saved while a blocking finding is open.
         </p>

@@ -137,6 +137,31 @@ describe('a shift saved through an Admin override', () => {
     render(<BudgetEmergencyReviewMarker details={adminOverrideShift} />)
     expect(valueOf('Reason given')).not.toMatch(/^Emergency or safety: /)
   })
+
+  it('has no review to wait for: an Admin override is an Admin’s own act, so there is no badge, no not-approved sentence and no reviewer row', () => {
+    render(<BudgetEmergencyReviewMarker details={adminOverrideShift} />)
+
+    expect(screen.queryByText(/Admin review pending|^Reviewed$/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/has not been approved/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Reviewed by', { selector: 'dt' })).not.toBeInTheDocument()
+  })
+})
+
+describe('an emergency whose review task could not be found', () => {
+  it('reads as pending: a review nobody can show has not happened', () => {
+    render(<BudgetEmergencyReviewMarker details={{ kind: 'emergency', reason: 'Emergency or safety: Unsafe tonight' }} />)
+
+    expect(reviewBadge()).toHaveTextContent('Admin review pending')
+    expect(screen.getByText(/has not been approved/)).toBeInTheDocument()
+  })
+})
+
+describe('a review day the server sends as a date', () => {
+  it('shows the day in the app’s en-AU format, without shifting it across a time zone', () => {
+    render(<BudgetEmergencyReviewMarker details={{ ...reviewedEmergency, reviewedAt: null, reviewedOn: '2026-10-05' }} />)
+
+    expect(valueOf('Review completed')).toBe('05/10/2026')
+  })
 })
 
 describe('a privacy-restricted view', () => {

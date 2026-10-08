@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost, apiPut, apiDelete } from '../client'
+import { apiGet, apiPost, apiPostRaw, apiPut, apiDelete } from '../client'
 import { awaitsData } from '@/lib/queryPhase'
 import type {
   RosterBoardDto,
@@ -8,6 +8,7 @@ import type {
   UpdateShiftDto,
   AssignShiftDto,
   CheckShiftDto,
+  ShiftCheckResult,
   RosterFindingDto,
   ShiftPatternDto,
   CreateShiftPatternDto,
@@ -45,7 +46,11 @@ export function useRosterBoard(weekStart: string | undefined, groupBy: 'particip
  */
 export function useCheckShift() {
   return useMutation({
-    mutationFn: (data: CheckShiftDto) => apiPost<RosterFindingDto[]>('/rostering/shifts/check', data),
+    // The envelope's message carries the one informational line a shift the budget could not check gets ("Budget not checked: ..."): not a finding, so it does not travel in the list.
+    mutationFn: async (data: CheckShiftDto): Promise<ShiftCheckResult> => {
+      const response = await apiPostRaw<RosterFindingDto[]>('/rostering/shifts/check', data)
+      return { findings: response.data ?? [], budgetNote: response.message ?? undefined }
+    },
   })
 }
 

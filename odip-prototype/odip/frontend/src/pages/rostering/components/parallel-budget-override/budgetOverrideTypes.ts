@@ -8,6 +8,7 @@
 // integration owner wires it in, without this lane having to touch that file.
 
 import type { RosterFindingDto } from '@/api/types'
+import { formatDateRange } from '@/lib/dateRange'
 
 /**
  * The budget finding this lane renders. Deliberately the app's own
@@ -74,30 +75,10 @@ export type BudgetPeriodFigures = {
 }
 
 /**
- * Who is acting, expressed as the CALLER's answer. This lane never reads a session, a role from
- * a hook, or a permission table: the integration owner knows the caller's role and says so. A
- * presentational component that guessed would be a second source of truth about permissions.
+ * The ways through a shift the server refused on the budget. There is ONE: "Emergency or safety", for any Coordinator, always. An Admin's way through is not here: the server answers an Admin
+ * with the same finding as a warning that asks for a reason (`requiresReason`), and the shift panel's existing reason field takes it (SPEC-P3). `none` is the state before a choice.
  */
-export type BudgetOverrideCapabilities = {
-  /**
-   * Admin or SuperAdmin: may record an ordinary override with a written reason. The reason is
-   * audited (owner decision, shape round 1).
-   */
-  canOverrideAsAdmin: boolean
-  /**
-   * Any Coordinator, and always: may record an "Emergency or safety" reason. This is NOT a
-   * switchable capability — the owner decided it "cannot be switched off" (shape round 3), so
-   * this prop states what the caller authorises for display, and there is deliberately no prop,
-   * setting or toggle anywhere in this lane that could turn the path off.
-   */
-  canRecordEmergency: boolean
-}
-
-/**
- * Which of the two ways through an over-budget shift the user has chosen. Both require a written
- * reason. `none` is the state before a choice.
- */
-export type BudgetOverrideChoice = 'none' | 'adminOverride' | 'emergency'
+export type BudgetOverrideChoice = 'none' | 'emergency'
 
 /** The shortest reason this lane accepts, in trimmed characters (DECISIONS: "a required description (min 10 characters)"). */
 export const MIN_REASON_LENGTH = 10
@@ -125,52 +106,21 @@ export function meetsEmergencyMinimum(reason: string): boolean {
 }
 
 /**
- * The two ways through, and whether this caller may take each one. Returns ONLY the choices the
- * caller authorises — an unauthorised path is not rendered disabled, it is not rendered at all,
- * so a hidden radio can never be submitted and never implies the path is off.
- */
-export function availableChoices(caps: BudgetOverrideCapabilities): BudgetOverrideChoice[] {
-  const choices: BudgetOverrideChoice[] = []
-  if (caps.canOverrideAsAdmin) choices.push('adminOverride')
-  if (caps.canRecordEmergency) choices.push('emergency')
-  return choices
-}
-
-/**
- * The problem with the reason as it stands, in the words the field should show, or null when
- * there is none. Pure so the tests can pin every state without a DOM.
+ * The problem with the reason as it stands, in the words the field should show, or null when there is none. Pure so the tests can pin every state without a DOM.
  */
 export function reasonError(choice: BudgetOverrideChoice, reason: string, submitted: boolean): string | null {
   if (!submitted || choice === 'none') return null
   if (!isMeaningfulReason(reason)) return 'Write why this shift should go ahead. A reason is recorded in the audit log.'
-  if (choice === 'emergency' && !meetsEmergencyMinimum(reason)) {
-    return `Describe the emergency or safety reason in at least ${MIN_REASON_LENGTH} characters.`
-  }
+  if (!meetsEmergencyMinimum(reason)) return `Describe the emergency or safety reason in at least ${MIN_REASON_LENGTH} characters.`
   return null
 }
 
 /**
- * Whether a save may go ahead. Two rules only, both the owner's: a choice must be made when
- * there is a choice to make, and a reason must be written. This never inspects the budget — the
- * server decides what is over budget, and a client-side money check would be a second,
- * disagreeable one.
+ * Whether the emergency save may go ahead: the path is chosen and the description is a real one of at least the minimum. This never inspects the budget: the server decides what is over
+ * budget and re-checks the description, and a client-side money check would be a second, disagreeable one.
  */
 export function canSubmit(choice: BudgetOverrideChoice, reason: string): boolean {
-  if (choice === 'none') return false
-  return isMeaningfulReason(reason) && (choice !== 'emergency' || meetsEmergencyMinimum(reason))
-}
-
-/**
- * The label the emergency path is saved under, exactly as the server prefixes it. Exported so an
- * integration or a test can assert the stored string without duplicating the wording.
- */
-export const EMERGENCY_REASON_PREFIX = 'Emergency or safety: '
-
-/** The reason text as it is stored: the emergency prefix for the emergency path, raw for an override. */
-export function storedReason(choice: BudgetOverrideChoice, reason: string): string | null {
-  const trimmed = normalisedReason(reason)
-  if (trimmed === null) return null
-  return choice === 'emergency' ? `${EMERGENCY_REASON_PREFIX}${trimmed}` : trimmed
+  return choice === 'emergency' && meetsEmergencyMinimum(reason)
 }
 
 /** The marker a shift saved through either path carries on the board and in the slide-over. */
@@ -228,15 +178,18 @@ export type EmergencyReviewState = 'pending' | 'reviewed'
  */
 export type EmergencyReviewDetails = {
   kind: OverBudgetMarkerKind
-  state: EmergencyReviewState
+  /** Where the Admin's review stands. Absent for an Admin override: that is an Admin's own act with a written reason, so it has no review to wait for. */
+  state?: EmergencyReviewState
   /** The reason as it was stored (server's record, including the emergency prefix). */
-  reason: string
+  reason?: string | null
   /** When the shift was saved through the path, when the server recorded it. */
   recordedAt?: string | null
   /** The reviewer's name, once a reviewer has been assigned or has acted. Null while pending. */
   reviewedBy?: string | null
   /** When the review happened. Null while pending — never "now", never an estimate. */
   reviewedAt?: string | null
+  /** The calendar day the review task was completed (the server sends a date, not an instant). */
+  reviewedOn?: string | null
   /** A line to the review task, when the caller has one. Rendered as text, not as a link here. */
   reviewTaskTitle?: string | null
   /**
@@ -257,4 +210,38 @@ export function emergencyReviewBadge(state: EmergencyReviewState): { label: stri
   return state === 'reviewed'
     ? { label: 'Reviewed', tone: 'success' }
     : { label: 'Admin review pending', tone: 'warning' }
+}
+
+// ── From the server's answer to what the components print ───────────────────────────────
+
+/** A budget finding, by its CODE (never its message text): `BUDGET_APPROACHING`, `BUDGET_OVER`, `BUDGET_FORECAST_OVER`. */
+export function isBudgetFinding(finding: Pick<RosterFindingDto, 'code'>): boolean {
+  return finding.code.startsWith('BUDGET_')
+}
+
+/**
+ * Whether the shift panel offers "Emergency or safety": when, and only when, the SERVER refused the shift on the budget (BUDGET_FORECAST_OVER came back Blocking, which is a Coordinator
+ * under a hard limit). An Admin gets the same finding as a warning that needs a reason, and the panel's existing reason field answers it.
+ */
+export function emergencyOffered(findings: readonly RosterFindingDto[]): boolean {
+  return findings.some(f => f.code === BUDGET_FINDING_CODES.forecastOver && f.severity === 'Blocking')
+}
+
+/**
+ * A finding's figures as the readout wants them, or null when the finding carries none. Every number is the server's: nothing is summed or compared here. The "over by" cell is the
+ * server's over-by as it is ($0.00 when the forecast is not over).
+ */
+export function figuresOf(finding: Pick<RosterFindingDto, 'budget'>): BudgetPeriodFigures | null {
+  const b = finding.budget
+  if (!b) return null
+  const value = (amount: number): BudgetFigure => ({ kind: 'value', amount })
+  return {
+    pool: b.poolName,
+    period: formatDateRange(b.periodStart, b.periodEnd),
+    available: value(b.available),
+    remaining: value(b.remaining),
+    shiftCost: value(b.shiftCost),
+    projectedTotal: value(b.forecast),
+    projectedOverrun: value(b.overBy),
+  }
 }

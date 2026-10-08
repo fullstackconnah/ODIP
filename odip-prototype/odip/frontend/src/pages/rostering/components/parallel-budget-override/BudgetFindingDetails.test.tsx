@@ -71,6 +71,14 @@ describe('the complete case', () => {
     render(<BudgetFindingDetails figures={fullFigures} />)
     expect(screen.getByText('Takes Core (flexible) to $8,640.00 of $8,000.00 for Oct–Dec 2026.')).toBeInTheDocument()
   })
+
+  it('leaves the sentence out when the caller already prints the server’s own, and keeps every figure', () => {
+    render(<BudgetFindingDetails figures={fullFigures} sentence={false} />)
+
+    expect(screen.queryByText(/^Takes Core/)).not.toBeInTheDocument()
+    expect(valueOf('With this shift')).toBe('$8,640.00')
+    expect(valueOf('Over by')).toBe('$640.00')
+  })
 })
 
 describe('a missing figure is never a zero', () => {

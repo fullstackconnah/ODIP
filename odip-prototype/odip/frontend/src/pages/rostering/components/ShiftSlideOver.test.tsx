@@ -1162,7 +1162,7 @@ describe('ShiftSlideOver — the live dry-run\'s refusal', () => {
     { value: 'participant-1', label: 'Mia Chen' },
     { value: 'participant-2', label: 'Noah Reid' },
   ]
-  type PreviewCallbacks = { onSuccess?: (findings: unknown[]) => void; onError?: (err: unknown) => void }
+  type PreviewCallbacks = { onSuccess?: (result: { findings: unknown[]; budgetNote?: string }) => void; onError?: (err: unknown) => void }
 
   afterEach(() => {
     mockCheckMutate.mockReset()
@@ -1198,7 +1198,7 @@ describe('ShiftSlideOver — the live dry-run\'s refusal', () => {
     const user = userEvent.setup()
     mockCheckMutate.mockImplementation((candidate: { participantId: string }, opts?: PreviewCallbacks) => {
       if (candidate.participantId === 'participant-1') opts?.onError?.(badRequest(NOT_READY_MESSAGE))
-      else opts?.onSuccess?.([])
+      else opts?.onSuccess?.({ findings: [] })
     })
     renderCreate()
     expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()

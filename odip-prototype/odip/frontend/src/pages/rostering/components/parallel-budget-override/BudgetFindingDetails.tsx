@@ -10,6 +10,11 @@ export type BudgetFindingDetailsProps = {
    * that computes a budget figure is how two screens end up disagreeing about the same period.
    */
   figures: BudgetPeriodFigures
+  /**
+   * Whether to print the overrun sentence above the figures. On by default. Where the same sentence is already on screen (the shift panel's findings list prints the server's own words), turning it
+   * off keeps one sentence for one fact instead of two that could drift apart.
+   */
+  sentence?: boolean
   className?: string
 }
 
@@ -76,7 +81,7 @@ function MoneyRow({ label, figure, restricted }: { label: string; figure: Budget
  *  - **a restricted viewer gets no money at all**, and the same word in every cell, so nothing can
  *    be inferred from which figure happens to be blank.
  */
-export function BudgetFindingDetails({ figures, className }: BudgetFindingDetailsProps) {
+export function BudgetFindingDetails({ figures, sentence = true, className }: BudgetFindingDetailsProps) {
   const restricted = !!figures.restricted
   const hasOverrun = figureIsKnown(figures.projectedOverrun, restricted)
 
@@ -85,10 +90,12 @@ export function BudgetFindingDetails({ figures, className }: BudgetFindingDetail
       aria-label="Budget figures for this shift"
       className={`flex flex-col gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-container-low)] p-3 ${className ?? ''}`}
     >
-      <p className="flex items-start gap-2 text-sm text-[var(--color-foreground)]">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-warning)]" aria-hidden="true" />
-        <span>{overrunSentence(figures)}</span>
-      </p>
+      {sentence && (
+        <p className="flex items-start gap-2 text-sm text-[var(--color-foreground)]">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-on-warning-container)]" aria-hidden="true" />
+          <span>{overrunSentence(figures)}</span>
+        </p>
+      )}
 
       <dl className="grid grid-cols-[10rem_1fr] gap-x-4">
         <TextRow label="Pool" value={figures.pool} />

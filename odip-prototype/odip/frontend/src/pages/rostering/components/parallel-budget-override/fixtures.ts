@@ -7,7 +7,6 @@
 import type {
   BudgetFigure,
   BudgetFindingView,
-  BudgetOverrideCapabilities,
   BudgetPeriodFigures,
   EmergencyReviewDetails,
 } from './budgetOverrideTypes'
@@ -35,6 +34,14 @@ export const forecastOverWarningForAdmin: BudgetFindingView = {
   ...forecastOverFinding,
   severity: 'Warning',
   requiresReason: true,
+}
+
+/** The same finding with the figures the server works it out from (what the readout prints). */
+export const forecastOverWithFigures: BudgetFindingView = {
+  ...forecastOverFinding,
+  budget: {
+    poolName: 'Core (flexible)', periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 8000, used: 4200, remaining: 3800, forecast: 8640, shiftCost: 292.32, overBy: 640,
+  },
 }
 
 /** An "approaching" warning: no reason required, and no emergency path involved. */
@@ -81,24 +88,6 @@ export const zeroFigures: BudgetPeriodFigures = {
 /** A SupportWorker / ReadOnly viewer: money never reaches the DOM. */
 export const restrictedFigures: BudgetPeriodFigures = { ...fullFigures, restricted: true }
 
-/** A Coordinator: may take the emergency path; an ordinary override is an Admin's. */
-export const coordinatorCapabilities: BudgetOverrideCapabilities = {
-  canOverrideAsAdmin: false,
-  canRecordEmergency: true,
-}
-
-/** An Admin: both paths, as the owner decided ("an Admin can push through with a written reason"). */
-export const adminCapabilities: BudgetOverrideCapabilities = {
-  canOverrideAsAdmin: true,
-  canRecordEmergency: true,
-}
-
-/** A caller that authorises neither path: nothing to choose, so no choice is rendered. */
-export const noPathCapabilities: BudgetOverrideCapabilities = {
-  canOverrideAsAdmin: false,
-  canRecordEmergency: false,
-}
-
 /** A saved emergency shift, not yet looked at by an Admin. */
 export const pendingEmergency: EmergencyReviewDetails = {
   kind: 'emergency',
@@ -118,14 +107,11 @@ export const reviewedEmergency: EmergencyReviewDetails = {
   reviewedAt: '2026-10-05T01:04:00Z',
 }
 
-/** An Admin override, already reviewed. */
+/** An Admin override: the Admin's own act with a written reason, so it has no review to wait for. */
 export const adminOverrideShift: EmergencyReviewDetails = {
   kind: 'adminOverride',
-  state: 'reviewed',
   reason: 'Participant’s plan manager confirmed the set-aside was increased on 3 Oct.',
   recordedAt: '2026-10-04T04:40:00Z',
-  reviewedBy: 'Priya Raman',
-  reviewedAt: '2026-10-04T06:15:00Z',
 }
 
 /** An emergency shift as a restricted viewer sees it: a marker and a state, nothing else. */

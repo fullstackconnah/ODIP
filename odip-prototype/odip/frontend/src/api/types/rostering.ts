@@ -18,6 +18,57 @@ export interface RosterFindingDto {
    * (e.g. STAFF_ON_LEAVE); false when it's a soft warning acknowledged with no reason (e.g.
    * STAFF_LEAVE_PENDING). Always false on a Blocking finding — Blocking can never be overridden. */
   requiresReason: boolean
+  /** The figures a budget finding (`BUDGET_*`) was worked out from, so a screen prints them and does no sum of its own. Omitted on every other finding. */
+  budget?: BudgetFindingFiguresDto
+}
+
+/** The figures behind a budget finding: one pool in one funding period with the shift counted in. Dollars; the dates are calendar dates. */
+export interface BudgetFindingFiguresDto {
+  poolName: string
+  periodStart: string
+  periodEnd: string
+  available: number
+  used: number
+  /** What the period has left after what is used; negative once it is over. */
+  remaining: number
+  /** Used plus booked ahead, with this shift counted. */
+  forecast: number
+  /** The estimate of the shift itself, priced the way ODIP will claim it. */
+  shiftCost: number
+  /** How far the forecast is past what is available; zero when it is not. */
+  overBy: number
+}
+
+/**
+ * One pool in one funding period that an action takes past its funding: the shifts a pattern has just made, the shifts approving an agreement would make, or a trip booking just confirmed. A warning
+ * only, in every mode: the action has happened, or will, whatever it says. The server works every figure out.
+ */
+export interface BudgetWarningDto {
+  poolName: string
+  periodStart: string
+  periodEnd: string
+  available: number
+  used: number
+  forecast: number
+  /** What the action itself adds to this pool in this period. */
+  added: number
+  overBy: number
+  /** How many shifts (or bookings) the action puts in this pool and period. */
+  count: number
+  /** The warning in a sentence: "These 8 shifts take Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct–31 Dec 2026." */
+  message: string
+}
+
+/** Where the Admin's review of an emergency or safety booking past the budget stands. There is no "approved": it saves at once and is reviewed afterwards. */
+export type BudgetReviewState = 'Pending' | 'Reviewed'
+
+export interface BudgetReviewDto {
+  state: BudgetReviewState
+  /** When the server recorded the emergency booking: the moment its review task was raised. */
+  recordedAt?: string
+  reviewTaskTitle?: string
+  /** The provider's calendar date the review task was completed on; absent while it is pending. */
+  reviewedOn?: string
 }
 
 // ── Shift ─────────────────────────────────────────────────
@@ -39,6 +90,10 @@ export interface ShiftDto {
   shiftPatternId: string | null
   notes: string | null
   overrideReason: string | null
+  /** The finding codes the server stored when it saved this shift. The over-budget marker is read from these (`markerForAcknowledgedCodes`): `BUDGET_EMERGENCY` for an emergency or safety booking, `BUDGET_FORECAST_OVER` for one an Admin pushed past the budget with a written reason. Omitted when none. */
+  acknowledgedFindingCodes?: string[]
+  /** The Admin review of an emergency or safety booking past the budget; omitted for every other shift. */
+  budgetReview?: BudgetReviewDto
   findings: RosterFindingDto[]
   /** True when this shift's assigned staff member has approved leave covering it — set after the
    * fact (leave approved after the assignment was made), so it's not necessarily reflected in
@@ -347,6 +402,11 @@ export interface CreateShiftDto {
   notes?: string | null
   overrideReason: string | null
   acknowledgedFindingCodes: string[]
+  /**
+   * "Emergency or safety" (budget phase 3): save past the budget now and have an Admin review it afterwards. The description goes in `overrideReason` (at least 10 characters once trimmed). Only
+   * means something when the check found the shift past the budget; the server refuses a description that is too short.
+   */
+  emergency?: boolean
 }
 
 export type UpdateShiftDto = CreateShiftDto
@@ -368,6 +428,15 @@ export interface CheckShiftDto {
   endsNextDay: boolean
   ratio: SupportRatio
   nightType: SleepoverType
+  /** The status the shift would be saved with: a shift about to be cancelled costs nothing and gets no budget finding. Omitted means the shift's own status, or a new Draft. */
+  status?: ShiftStatus
+}
+
+/** What the dry run answers: the findings, and, when the budget was not checked because the shift cannot be priced, the one informational line that says so (never a finding, never a block). */
+export interface ShiftCheckResult {
+  findings: RosterFindingDto[]
+  /** "Budget not checked: sleepover shifts are not priced yet." Absent when the budget was checked, or there was nothing to check it against. */
+  budgetNote?: string
 }
 
 // ── Shift Pattern ─────────────────────────────────────────
@@ -419,6 +488,8 @@ export type UpdateShiftPatternDto = CreateShiftPatternDto
 export interface GeneratePatternResultDto {
   created: number
   skipped: number
+  /** Where the shifts just made take a pool past its funding for a period (budget phase 3), one entry for each pool and period. A warning only: the shifts are made. Omitted when there is nothing to say. */
+  budgetWarnings?: BudgetWarningDto[]
 }
 
 // ── Staff / Participant compatibility ────────────────────

@@ -1,51 +1,35 @@
+import { useEffect, useId, useRef } from 'react'
 import { Loader2, ShieldAlert } from 'lucide-react'
+import { Button } from '@/components/Button'
 import { FormField } from '@/components/FormField'
-import { FindingsList } from '@/pages/rostering/components/FindingsList'
 import {
   MIN_REASON_LENGTH,
-  availableChoices,
-  isMeaningfulReason,
+  emergencyOffered,
   reasonError,
   type BudgetFindingView,
-  type BudgetOverrideCapabilities,
   type BudgetOverrideChoice,
 } from './budgetOverrideTypes'
 
 export type BudgetOverrideReasonFieldsProps = {
   /**
-   * The budget findings the SERVER returned for the shift being saved, exactly as
-   * `POST rostering/shifts/check` produced them. This component shows them and never derives one:
-   * a message invented here would be a client-side budget rule wearing the server's clothes.
-   * Pass the budget findings only (filter upstream by the `BUDGET_*` codes) so this does not
-   * re-list a staff-leave finding that `RosterGateFields` already shows.
-   *
-   * With no finding there is nothing to answer and this renders nothing at all — the reason field
-   * is not a free-text note on an ordinary shift.
+   * The findings the SERVER returned for the shift being saved, exactly as `POST rostering/shifts/check` produced them. This component derives nothing from them but one fact: whether the
+   * server REFUSED the shift on the budget (a blocking BUDGET_FORECAST_OVER). It prints no finding and no money of its own: the findings list above it shows the server's sentence, and the
+   * figures readout is a separate component. With no refusal there is nothing to get through and this renders nothing at all: the description is not a note on an ordinary shift.
    */
-  findings: BudgetFindingView[]
-  /** What this caller may do, decided by the integration owner from the real session. */
-  capabilities: BudgetOverrideCapabilities
-  /** The chosen path: `none`, `adminOverride` or `emergency`. */
+  findings: readonly BudgetFindingView[]
+  /** The chosen path: `none` (the refusal stands) or `emergency`. */
   choice: BudgetOverrideChoice
-  /** Why the shift should go ahead. Kept exactly as typed so a failed save loses nothing. */
+  /** What made it an emergency or safety need. Kept exactly as typed, so a failed save loses nothing. */
   reason: string
   /**
-   * True once the user has tried to go ahead. Validation is only shown after an attempt (or the
-   * server has refused), never while someone is still typing their first word.
+   * True once the user has tried to go ahead (or the server has refused the description). Validation is only shown after an attempt, never while someone is still typing their first word.
    */
   submitted: boolean
   /** A save is in flight: the fields are held so a second submit cannot double-write. */
   pending?: boolean
-  /**
-   * The caller may read but not write (no write permission on the roster). The fields go
-   * `disabled`, never `hidden` — a read-only form that vanished would leave no sign the shift was
-   * ever over budget.
-   */
+  /** The caller may read but not write. The controls go `disabled`, never hidden: a read-only form that vanished would leave no sign the shift was refused. */
   disabled?: boolean
-  /**
-   * The last save's failure, in the server's words. Shown above the fields and never in place of
-   * them: the typed reason and the chosen path stay on screen so the retry is one press.
-   */
+  /** The last save's failure, in the server's words. Shown above the controls and never in place of them: the typed description and the chosen path stay on screen so the retry is one press. */
   error?: string | null
   onChoiceChange: (choice: BudgetOverrideChoice) => void
   onReasonChange: (reason: string) => void
@@ -53,32 +37,15 @@ export type BudgetOverrideReasonFieldsProps = {
 }
 
 /**
- * The two ways through an over-budget ad-hoc shift, and the written reason each of them needs.
+ * "Emergency or safety": the one way through a one-off shift a hard limit has refused, for any Coordinator, in every mode and for good. (An Admin's way through is the existing reason field: the server
+ * answers an Admin with the same finding as a warning that needs a reason.) Nothing is blocked until a person says it is an emergency: a secondary action opens the description, focus moves to it, and the
+ * panel's primary Save stays disabled until the description is a real one of at least {@link MIN_REASON_LENGTH} characters. The shift then saves at once and an Admin reviews it afterwards.
  *
- * **This component shows no money of its own.** The server's finding text goes through verbatim —
- * that is the server's sentence, and whether a restricted viewer is sent one at all is the
- * server's decision, not this component's. The authoritative figures belong to
- * `<BudgetFindingDetails>`, which the caller places separately and which honours `restricted`.
- * A component that both answered a finding and re-printed the figures would be a second place for
- * a number to leak from, and a second place for the same sentence to drift.
- *
- * It decides nothing. Specifically it does not decide whether the shift is over budget, whether a
- * reason is long enough for the server, or whether this user may take a path at all — the caller
- * authorises the capabilities, the server enforces them, and the only judgement here is the
- * visible, testable one: a reason that is nothing but whitespace is not a reason.
- *
- * What this deliberately does NOT render, because a client is not the security boundary:
- *  - a "disable emergency bookings" control. The owner decided the emergency path "cannot be
- *    switched off", so there is no prop for it and no way to turn it off from here;
- *  - a claim that hiding a choice makes the server refuse it. The copy says the server decides.
- *
- * The emergency path is styled as its own thing, not a second entry in the same list: a person
- * choosing to record a safety reason is making a different kind of act from an Admin accepting an
- * overrun, and the audit record will read differently later.
+ * It decides nothing: it does not decide whether the shift is over budget (the server's refusal opens it), whether the description is long enough for the server (the server re-checks every save), or
+ * who may take the path. There is no prop, setting or control that could switch the path off, because the owner decided it cannot be switched off.
  */
 export function BudgetOverrideReasonFields({
   findings,
-  capabilities,
   choice,
   reason,
   submitted,
@@ -89,139 +56,93 @@ export function BudgetOverrideReasonFields({
   onReasonChange,
   className,
 }: BudgetOverrideReasonFieldsProps) {
-  const choices = availableChoices(capabilities)
+  const descriptionId = useId()
+  const reasonRef = useRef<HTMLTextAreaElement>(null)
+  const wasEmergency = useRef(choice === 'emergency')
   const isEmergency = choice === 'emergency'
-  const showReason = choice !== 'none'
-  const message = reasonError(choice, reason, submitted)
   const readOnly = disabled || pending
+  const message = reasonError(choice, reason, submitted)
 
-  // Nothing to answer: no budget finding, so no path and no reason. A voluntary note on an ordinary
-  // shift is RosterGateFields' job, not this one's.
-  if (findings.length === 0) return null
+  // Choosing the path moves focus to the description, so a keyboard or screen-reader user lands on the one thing left to do. Only on the change: a re-render (or an initial render already in the path) never steals it.
+  useEffect(() => {
+    if (isEmergency && !wasEmergency.current) reasonRef.current?.focus()
+    wasEmergency.current = isEmergency
+  }, [isEmergency])
+
+  if (!emergencyOffered(findings)) return null
 
   return (
-    <div className={`flex flex-col gap-3 ${className ?? ''}`}>
-      <FindingsList findings={findings} />
-
+    <section
+      aria-label="Emergency or safety"
+      data-emergency-panel=""
+      className={`flex flex-col gap-3 rounded-[var(--radius-sm)] border p-3 ${
+        isEmergency ? 'border-[var(--color-warning)] bg-[var(--color-warning-container)]' : 'border-[var(--color-border)] bg-[var(--color-surface-container)]'
+      } ${className ?? ''}`}
+    >
       {error && (
         <div role="alert" className="rounded-[var(--radius-sm)] bg-[var(--color-error-container)] px-3 py-2 text-sm text-[var(--color-destructive)]">
           {error}
         </div>
       )}
 
-      {choices.length > 0 && (
-        <fieldset disabled={readOnly} className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
-          <legend className="mb-0.5 text-[13px] font-medium text-[var(--color-muted-foreground)]">
-            This shift goes past the recorded budget. How?
-          </legend>
-
-          {capabilities.canOverrideAsAdmin && (
-            <label htmlFor="budget-override-choice-admin" className="flex min-h-[var(--control-h)] cursor-pointer items-start gap-3 py-1">
-              <input
-                type="radio"
-                id="budget-override-choice-admin"
-                name="budget-override-choice"
-                className="mt-0.5 h-4 w-4 shrink-0"
-                checked={choice === 'adminOverride'}
-                onChange={() => onChoiceChange('adminOverride')}
-              />
-              <span className="text-sm">
-                <span className="font-medium text-[var(--color-foreground)]">Override as an Admin</span>
-                <span className="block text-[13px] text-[var(--color-muted-foreground)]">
-                  You are accepting the overrun. Your reason is recorded in the audit log.
-                </span>
-              </span>
-            </label>
-          )}
-
-          {/* The emergency path is its own panel with its own fill, so it never reads as a variant
-              of the Admin override above. It is not switchable and nothing here offers to make
-              it so. */}
-          {capabilities.canRecordEmergency && (
-            <div
-              data-emergency-panel=""
-              className={`rounded-[var(--radius-sm)] border p-3 ${
-                isEmergency
-                  ? 'border-[var(--color-warning)] bg-[var(--color-warning-container)]'
-                  : 'border-[var(--color-border)] bg-[var(--color-surface-container)]'
-              }`}
-            >
-              <label htmlFor="budget-override-choice-emergency" className="flex min-h-[var(--control-h)] cursor-pointer items-start gap-3">
-                <input
-                  type="radio"
-                  id="budget-override-choice-emergency"
-                  name="budget-override-choice"
-                  className="mt-0.5 h-4 w-4 shrink-0"
-                  checked={isEmergency}
-                  onChange={() => onChoiceChange('emergency')}
-                />
-                <span className="text-sm">
-                  <span className="flex items-center gap-1.5 font-medium text-[var(--color-on-warning-container)]">
-                    <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    Emergency or safety
-                  </span>
-                  <span className="block text-[13px] text-[var(--color-on-warning-container)]">
-                    The shift saves at once and an Admin reviews it afterwards. This option is always
-                    available and cannot be switched off.
-                  </span>
-                </span>
-              </label>
-            </div>
-          )}
-
-          {showReason && (
-            <FormField
-              // Two different labels, not one with a swapped word: the emergency field is read by
-              // an Admin reviewing the shift afterwards, and it has to say so where they will see
-              // it. "Reason for the override" on a safety reason would file it in the same place
-              // an ordinary overrun note lives.
-              label={isEmergency ? 'What made this an emergency or safety need' : 'Reason for the override'}
-              required
-              // The error is the field's own: FormField puts it under the control with
-              // role="alert" and folds its id into aria-describedby, so a keyboard user focused on
-              // the textarea hears it without hunting.
-              error={message ?? undefined}
-              hint={
-                isEmergency
-                  ? `At least ${MIN_REASON_LENGTH} characters. This is stored with the shift, and an Admin reviews it afterwards.`
-                  : 'What makes this overrun acceptable? Recorded in the audit log against your name.'
-              }
-            >
-              <textarea
-                rows={3}
-                value={reason}
-                disabled={readOnly}
-                onChange={e => onReasonChange(e.target.value)}
-                placeholder={isEmergency ? 'e.g. Participant was unsafe at the time of the shift and needed support now' : 'Why this shift should proceed past the funding'}
-              />
-            </FormField>
-          )}
-
-          {/* A reason that is only whitespace is the one thing this component refuses on its own.
-              The words are here, next to the field, because a silent no-op reads as a broken form. */}
-          {submitted && showReason && !isMeaningfulReason(reason) && (
-            <p className="text-xs text-[var(--color-muted-foreground)]">
-              A reason of spaces or empty lines is not a reason.
-            </p>
-          )}
-        </fieldset>
+      {isEmergency ? (
+        <>
+          <p className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-on-warning-container)]">
+            <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Emergency or safety
+          </p>
+          <p className="text-[13px] text-[var(--color-on-warning-container)]">
+            The shift saves at once and an Admin reviews it afterwards. This option is always available and cannot be switched off.
+          </p>
+          <FormField
+            label="What made this an emergency or safety need"
+            required
+            // The error is the field's own: FormField puts it under the control with role="alert" and folds its id into aria-describedby, so a keyboard user focused on the textarea hears it.
+            error={message ?? undefined}
+            hint={`At least ${MIN_REASON_LENGTH} characters. This is stored with the shift, and an Admin reviews it afterwards.`}
+          >
+            <textarea
+              ref={reasonRef}
+              id={descriptionId}
+              rows={3}
+              value={reason}
+              disabled={readOnly}
+              onChange={e => onReasonChange(e.target.value)}
+              placeholder="e.g. Participant was unsafe at the time of the shift and needed support now"
+            />
+          </FormField>
+          <div>
+            <Button variant="ghost" size="sm" disabled={readOnly} onClick={() => onChoiceChange('none')}>
+              This is not an emergency
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-[13px] text-[var(--color-foreground)]">
+            A hard limit refuses a one-off shift that takes a participant past their budget. An Admin can save it with a written reason. If it is an emergency or a safety need, book it now and an Admin reviews it afterwards.
+          </p>
+          <div>
+            <Button variant="secondary" disabled={readOnly} onClick={() => onChoiceChange('emergency')}>
+              <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+              Emergency or safety
+            </Button>
+          </div>
+        </>
       )}
 
-      {/* Deliberately NOT role="status". ShiftSlideOver already keeps a polite region for its own
-          notice and its tests assert there is exactly one (or zero) live status in that panel; a
-          second one here would double-announce every save. The visual cue is enough while the
-          fields are held disabled. */}
+      {/* Deliberately NOT role="status". ShiftSlideOver already keeps a polite region for its own notice and its tests assert there is exactly one (or zero) live status in that panel; a second one here
+          would double-announce every save. The visual cue is enough while the controls are held disabled. */}
       {pending && (
         <p className="flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)]">
           <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden="true" />
-          Saving — the reason above is kept so you can try again if it does not save.
+          Saving — the description above is kept so you can try again if it does not save.
         </p>
       )}
 
       <p className="text-xs text-[var(--color-muted-foreground)]">
-        The server checks the budget on every save. What this form shows is what the server last
-        told us, not a decision made in the browser.
+        The server checks the budget on every save. What this panel shows is what the server last told us, not a decision made in the browser.
       </p>
-    </div>
+    </section>
   )
 }

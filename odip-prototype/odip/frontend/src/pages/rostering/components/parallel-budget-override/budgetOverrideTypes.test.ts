@@ -1,70 +1,82 @@
-// The pure rules, pinned without a DOM: which paths a caller authorises, what counts as a reason,
-// and the two sentences that must never imply the server is on this side of the fence.
+// The pure rules, pinned without a DOM: when the emergency path is offered, what counts as a reason, how the server's finding becomes the figures a readout prints, and the markers a shift carries.
 
 import { describe, it, expect } from 'vitest'
 import {
   BUDGET_FINDING_CODES,
-  EMERGENCY_REASON_PREFIX,
   MIN_REASON_LENGTH,
   OVER_BUDGET_MARKER,
-  availableChoices,
   canSubmit,
+  emergencyOffered,
   emergencyReviewBadge,
+  figuresOf,
+  isBudgetFinding,
   isMeaningfulReason,
   meetsEmergencyMinimum,
   normalisedReason,
   reasonError,
-  storedReason,
   markerForAcknowledgedCodes,
-  type BudgetFindingView,
-  type BudgetOverrideChoice,
 } from './budgetOverrideTypes'
 import { RESTRICTED_FIGURE, figureIsKnown, figureText, overrunSentence } from './budgetFigures'
 import {
   GOOD_EMERGENCY_REASON,
   SHORT_REASON,
-  adminCapabilities,
   amount,
   approachingFinding,
-  coordinatorCapabilities,
   emptyFigures,
   forecastOverFinding,
+  forecastOverWarningForAdmin,
+  forecastOverWithFigures,
   fullFigures,
-  noPathCapabilities,
   notRecorded,
   restrictedFigures,
   unknown,
   zeroFigures,
 } from './fixtures'
 
-/**
- * The wiring recipe exactly as README.md documents it, kept in one place so the tests exercise the
- * documented path rather than a paraphrase of it. It is a function (not an inline const) so the
- * `choice` stays the `BudgetOverrideChoice` union: an inline `const choice = 'adminOverride' as const`
- * narrows to that one literal, and the recipe's own `choice === 'emergency'` test then becomes a
- * comparison between two types with no overlap, which is a compile error, not a realistic caller.
- */
-function readmeAcknowledgedCodes(
-  warningFindings: BudgetFindingView[],
-  choice: BudgetOverrideChoice,
-): string[] {
-  return [
-    ...warningFindings.map(f => f.code),
-    ...(choice === 'emergency' ? [BUDGET_FINDING_CODES.emergency] : []),
-  ]
-}
+describe('isBudgetFinding', () => {
+  it('reads the code, never the words', () => {
+    expect(isBudgetFinding({ code: 'BUDGET_FORECAST_OVER' })).toBe(true)
+    expect(isBudgetFinding({ code: 'BUDGET_APPROACHING' })).toBe(true)
+    expect(isBudgetFinding({ code: 'STAFF_ON_LEAVE' })).toBe(false)
+    expect(isBudgetFinding({ code: 'OVER_BUDGET_WORDS_BUT_NOT_A_BUDGET_CODE' })).toBe(false)
+  })
+})
 
-describe('availableChoices', () => {
-  it('offers the emergency path to a Coordinator and not an ordinary override', () => {
-    expect(availableChoices(coordinatorCapabilities)).toEqual(['emergency'])
+describe('emergencyOffered', () => {
+  it('is offered when the server REFUSED the shift on the budget: a blocking forecast over', () => {
+    expect(emergencyOffered([forecastOverFinding])).toBe(true)
+    expect(emergencyOffered([approachingFinding, forecastOverFinding])).toBe(true)
   })
 
-  it('offers both paths to an Admin', () => {
-    expect(availableChoices(adminCapabilities)).toEqual(['adminOverride', 'emergency'])
+  it('is not offered to an Admin, whose finding is a warning that asks for a reason: the existing reason field answers it', () => {
+    expect(emergencyOffered([forecastOverWarningForAdmin])).toBe(false)
   })
 
-  it('offers nothing when the caller authorises nothing — an unauthorised path is absent, not disabled', () => {
-    expect(availableChoices(noPathCapabilities)).toEqual([])
+  it('is not offered for warnings that block nothing, or for no finding at all', () => {
+    expect(emergencyOffered([approachingFinding])).toBe(false)
+    expect(emergencyOffered([])).toBe(false)
+  })
+
+  it('is not offered for some other finding that happens to block', () => {
+    expect(emergencyOffered([{ code: 'WSC_EXPIRED', severity: 'Blocking', message: 'Screening has expired', requiresReason: false }])).toBe(false)
+  })
+})
+
+describe('figuresOf', () => {
+  it('turns the server figures into the readout, with nothing added up', () => {
+    expect(figuresOf(forecastOverWithFigures)).toEqual({
+      pool: 'Core (flexible)',
+      period: '1 Oct – 31 Dec 2026',
+      available: amount(8000),
+      remaining: amount(3800),
+      shiftCost: amount(292.32),
+      projectedTotal: amount(8640),
+      projectedOverrun: amount(640),
+    })
+  })
+
+  it('is null for a finding that carries no figures', () => {
+    expect(figuresOf(forecastOverFinding)).toBeNull()
   })
 })
 
@@ -123,17 +135,15 @@ describe('reasonError', () => {
   })
 
   it('rejects a whitespace-only reason after an attempt', () => {
-    expect(reasonError('adminOverride', '   ', true)).toMatch(/Write why this shift should go ahead/)
+    expect(reasonError('emergency', '   ', true)).toMatch(/Write why this shift should go ahead/)
   })
 
-  it('asks for the emergency minimum only on the emergency path', () => {
+  it('asks for the emergency minimum', () => {
     expect(reasonError('emergency', SHORT_REASON, true)).toMatch(/at least 10 characters/)
-    expect(reasonError('adminOverride', SHORT_REASON, true)).toBeNull()
   })
 
-  it('accepts a good reason on both paths', () => {
+  it('accepts a good description', () => {
     expect(reasonError('emergency', GOOD_EMERGENCY_REASON, true)).toBeNull()
-    expect(reasonError('adminOverride', 'Confirmed by the plan manager', true)).toBeNull()
   })
 })
 
@@ -142,32 +152,14 @@ describe('canSubmit', () => {
     expect(canSubmit('none', GOOD_EMERGENCY_REASON)).toBe(false)
   })
 
-  it('refuses a whitespace-only reason on either path', () => {
-    expect(canSubmit('adminOverride', '  \n ')).toBe(false)
-    expect(canSubmit('emergency', '\t\t')).toBe(false)
+  it('refuses a whitespace-only description', () => {
+    expect(canSubmit('emergency', ' \t\t ')).toBe(false)
+    expect(canSubmit('emergency', '  \n ')).toBe(false)
   })
 
-  it('refuses a short emergency reason but allows a short Admin reason', () => {
+  it('refuses a short description and allows one of the minimum length', () => {
     expect(canSubmit('emergency', SHORT_REASON)).toBe(false)
-    expect(canSubmit('adminOverride', SHORT_REASON)).toBe(true)
-  })
-
-  it('allows an Admin reason of any real length', () => {
-    expect(canSubmit('adminOverride', 'Confirmed by the plan manager')).toBe(true)
-  })
-})
-
-describe('storedReason', () => {
-  it('prefixes the emergency reason exactly as the server stores it', () => {
-    expect(storedReason('emergency', '  Unsafe today  ')).toBe(`${EMERGENCY_REASON_PREFIX}Unsafe today`)
-  })
-
-  it('stores an ordinary override verbatim, with no prefix', () => {
-    expect(storedReason('adminOverride', '  Confirmed  ')).toBe('Confirmed')
-  })
-
-  it('stores null when there is nothing to store', () => {
-    expect(storedReason('adminOverride', '   ')).toBeNull()
+    expect(canSubmit('emergency', 'x'.repeat(MIN_REASON_LENGTH))).toBe(true)
   })
 })
 
@@ -272,39 +264,6 @@ describe('markerForAcknowledgedCodes', () => {
         'BUDGET_WHATEVER_THE_SERVER_ADDS_NEXT',
       ]),
     ).toBe('emergency')
-  })
-
-  it('reads the README wiring recipe as written: an Admin override of a forecast overrun', () => {
-    // README's documented save, followed literally: the caller's warning findings are
-    // acknowledged, the choice is an ordinary Admin override, so only the emergency code would be
-    // added. The marker must be the Admin override, because forecastOver was acknowledged.
-    const acknowledgedFindingCodes = readmeAcknowledgedCodes(
-      [approachingFinding, forecastOverFinding],
-      'adminOverride',
-    )
-    expect(acknowledgedFindingCodes).toEqual(['BUDGET_APPROACHING', 'BUDGET_FORECAST_OVER'])
-    expect(markerForAcknowledgedCodes(acknowledgedFindingCodes)).toBe('adminOverride')
-  })
-
-  it('reads the same recipe on the emergency path and gets the emergency marker', () => {
-    const acknowledgedFindingCodes = readmeAcknowledgedCodes(
-      [approachingFinding, forecastOverFinding],
-      'emergency',
-    )
-    expect(acknowledgedFindingCodes).toEqual([
-      'BUDGET_APPROACHING',
-      'BUDGET_FORECAST_OVER',
-      'BUDGET_EMERGENCY',
-    ])
-    expect(markerForAcknowledgedCodes(acknowledgedFindingCodes)).toBe('emergency')
-  })
-
-  it('reads a merely-approaching shift through the same recipe and forges nothing', () => {
-    // The exact DEF-01 reproduction: the README recipe applied to a shift that is only APPROACHING
-    // its budget. No reason was ever required, so no override can be claimed for it.
-    const acknowledgedFindingCodes = readmeAcknowledgedCodes([approachingFinding], 'adminOverride')
-    expect(acknowledgedFindingCodes).toEqual(['BUDGET_APPROACHING'])
-    expect(markerForAcknowledgedCodes(acknowledgedFindingCodes)).toBeNull()
   })
 
   it('never reads the reason text: only the codes it is given', () => {
