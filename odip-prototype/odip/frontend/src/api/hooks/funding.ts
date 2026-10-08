@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPut } from '../client'
+import { refreshBudgetFigures, refreshBudgetWarnings } from './funding-ledger'
 import type {
   ApplyPlanDatesResult, BillingSourcesHintDto, BudgetSettingsDto, FundingPlanDto, FundingPlansDto, PaceCategoryDto, SaveFundingPlanDto, UpdateBudgetSettingsDto,
 } from '../types'
-import { refreshBudgetWarnings } from './funding-warnings'
 
 // A participant's NDIS plan budget (budget feature, phase 1). The plan record is saved through these endpoints and never through the participant's patch groups. Every plan write
 // refreshes ['participant-funding', participantId], which is also the prefix of the Billing hint, so a saved plan updates the tab, the intake card and the hint at once.
@@ -101,7 +101,9 @@ export function useUpdateBudgetSettings() {
     mutationFn: (data: UpdateBudgetSettingsDto) => apiPut<BudgetSettingsDto>('/funding/settings', data),
     onSuccess: (saved) => {
       queryClient.setQueryData(SETTINGS_KEY, saved)
-      refreshBudgetWarnings(queryClient)   // the "approaching" percentage decides which participants are approaching
+      // The "approaching" percentage decides every participant's status, so every ledger held (and the claim pages' budget blocks) is read again, and with them the alerts, the Budgets list and any
+      // agreement check, which are worked out from the same figures (refreshBudgetFigures marks all of them).
+      refreshBudgetFigures(queryClient)
     },
   })
 }

@@ -160,6 +160,11 @@ public record ShiftClaimPreviewResponseDto
 {
     public decimal TotalAmount { get; init; }
     public List<ShiftClaimPreviewLineItemDto> LineItems { get; init; } = new();
+    /// <summary>
+    /// The completed, unclaimed shifts in the range that this claim leaves out, and why (a sleepover or a group shift, which shift claims do not price yet; a shift no catalogue rate covers). They
+    /// stay completed and unclaimed. Never dropped silently: an empty list means nothing was left out.
+    /// </summary>
+    public List<ShiftClaimLeftOutDto> LeftOut { get; init; } = new();
     /// <summary>What generating this claim would do to the participant's budget (budget feature, phase 2a); omitted when they have no plan that has started. A warning, never a block.</summary>
     public ClaimBudgetDto? Budget { get; init; }
 }
@@ -174,6 +179,41 @@ public record ShiftClaimPreviewLineItemDto
     public decimal Hours { get; init; }
     public decimal UnitPrice { get; init; }
     public decimal TotalAmount { get; init; }
+    /// <summary>Something worth saying about a line that is priced but not worked out fully (an overnight shift: evening and night rates are not applied yet); omitted when there is nothing to say.</summary>
+    public string? Note { get; init; }
+}
+
+/// <summary>A completed, unclaimed shift a shift claim leaves out, and the reason: the claim does not silently drop it, and it stays completed and unclaimed.</summary>
+public record ShiftClaimLeftOutDto
+{
+    public Guid ShiftId { get; init; }
+    public DateOnly ServiceDate { get; init; }
+    /// <summary>The shift as the ledger describes it ("Shift 22:00–06:00 · 8 h").</summary>
+    public string Description { get; init; } = string.Empty;
+    /// <summary>Why, as a sentence ("It is a sleepover, which shift claims do not price yet.").</summary>
+    public string Reason { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// A shift the claim priced but could not work out fully: an overnight shift is priced as hours at one day rate, and evening and night rates are not applied yet. The preview says so on the line;
+/// a claim line has no column for it, so the generate response echoes it, and the caveat is not kept on the line once the claim exists.
+/// </summary>
+public record ShiftClaimFlaggedDto
+{
+    public Guid ShiftId { get; init; }
+    public DateOnly ServiceDate { get; init; }
+    /// <summary>The shift as the ledger describes it ("Shift 22:00–06:00 · 8 h").</summary>
+    public string Description { get; init; } = string.Empty;
+    /// <summary>What is not worked out ("Evening and night rates are not applied yet.").</summary>
+    public string Caveat { get; init; } = string.Empty;
+}
+
+/// <summary>The claim made from shifts (<see cref="TripClaimListDto"/>), the completed shifts in the range it left out and why, and the shifts it priced with a caveat.</summary>
+public record ShiftClaimGeneratedDto : TripClaimListDto
+{
+    public List<ShiftClaimLeftOutDto> LeftOut { get; init; } = new();
+    /// <summary>The shifts that are in the claim but priced with a caveat (an overnight shift: evening and night rates are not applied yet); empty when there are none.</summary>
+    public List<ShiftClaimFlaggedDto> Flagged { get; init; } = new();
 }
 
 // ══════════════════════════════════════════════════════════════

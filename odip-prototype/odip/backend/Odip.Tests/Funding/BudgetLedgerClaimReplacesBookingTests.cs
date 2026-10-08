@@ -175,20 +175,21 @@ public class BudgetLedgerClaimReplacesBookingTests
     // ── Boundaries: yesterday, today, tomorrow ─────────────────────────────
 
     [Fact]
-    public async Task ABookingWhoseTripStartedYesterdayWasNeverBookedAhead_AndIsUnaffected()
+    public async Task ABookingWhoseTripStartedYesterdayIsNeverBookedAhead_ItIsPendingUntilItsClaimLineTakesItsPlace()
     {
         var (kit, person, _, booking) = ArrangeTripStarting(Today.AddDays(-1));
         using (kit)
         {
+            // Started and not claimed: pending at the trip estimator's figure (a Saturday, 8 h x $84), where it used to be counted nowhere (L5-01).
             var before = await PeriodOf(kit, person);
             Assert.Equal(0m, before.BookedAhead);
-            Assert.Equal(0m, before.Pending);
+            Assert.Equal(672m, before.Pending);
 
             ClaimOver(kit, booking, TripClaimStatus.Draft, ClaimLineItemStatus.Draft, amount: 480m);
             var after = await PeriodOf(kit, person);
 
             Assert.Equal(0m, after.BookedAhead);
-            Assert.Equal(480m, after.Pending);
+            Assert.Equal(480m, after.Pending);   // the line replaces the estimate: not 672 + 480
         }
     }
 

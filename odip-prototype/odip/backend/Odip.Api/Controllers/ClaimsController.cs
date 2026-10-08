@@ -160,23 +160,27 @@ public class ClaimsController : ControllerBase
     // POST /api/v1/participants/{participantId}/claims/from-shifts
     [HttpPost("participants/{participantId:guid}/claims/from-shifts")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
-    public async Task<ActionResult<ApiResponse<TripClaimListDto>>> GenerateShiftClaim(
+    public async Task<ActionResult<ApiResponse<ShiftClaimGeneratedDto>>> GenerateShiftClaim(
         Guid participantId, [FromBody] GenerateShiftClaimRequestDto dto, CancellationToken ct)
     {
         try
         {
-            var claim = await _shiftGenerator.GenerateDraftClaimAsync(participantId, dto.From, dto.To, ct);
-            return Ok(ApiResponse<TripClaimListDto>.Ok(new TripClaimListDto
+            // The claim summary, plus the completed shifts in the range it left out and why (a sleepover or group shift, a shift no catalogue rate covers): never dropped silently.
+            var generated = await _shiftGenerator.GenerateAsync(participantId, dto.From, dto.To, ct);
+            var claim = generated.Claim;
+            return Ok(ApiResponse<ShiftClaimGeneratedDto>.Ok(new ShiftClaimGeneratedDto
             {
                 Id = claim.Id, Kind = claim.Kind, TripInstanceId = claim.TripInstanceId, TripName = string.Empty,
                 ParticipantId = claim.ParticipantId, PeriodFrom = claim.PeriodFrom, PeriodTo = claim.PeriodTo,
                 Status = claim.Status, ClaimReference = claim.ClaimReference,
-                TotalAmount = claim.TotalAmount, CreatedAt = claim.CreatedAt, SubmittedDate = claim.SubmittedDate
+                TotalAmount = claim.TotalAmount, CreatedAt = claim.CreatedAt, SubmittedDate = claim.SubmittedDate,
+                LeftOut = generated.LeftOut.ToList(),
+                Flagged = generated.Flagged.ToList(),
             }));
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(ApiResponse<TripClaimListDto>.Fail(ex.Message));
+            return BadRequest(ApiResponse<ShiftClaimGeneratedDto>.Fail(ex.Message));
         }
     }
 

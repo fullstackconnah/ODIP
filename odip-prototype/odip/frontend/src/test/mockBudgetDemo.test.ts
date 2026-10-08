@@ -94,8 +94,8 @@ describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (
     const ledger = handler(mock.get, 'participants/:id/funding/ledger')('p-0004') as { pools: Array<{ name: string; ndiaRejection?: Record<string, string>; planTotal: Record<string, number> }> }
 
     expect(ledger.pools[0].ndiaRejection).toEqual({ date: '2026-10-08', code: 'V27', claimId: 'claim-0003', claimReference: 'TC-43000412-20261008' })
-    // The pool's plan total is worked out from its periods (it was NaN, and so null on the wire, when it summed plain numbers as if they were rows).
-    expect(ledger.pools[0].planTotal).toMatchObject({ limit: 40000, claimed: 621, pending: 0, bookedAhead: 276, forecast: 897 })
+    // The pool's plan total is worked out from its periods (it was NaN, and so null on the wire, when it summed plain numbers as if they were rows). Her started trip with no claim yet is pending.
+    expect(ledger.pools[0].planTotal).toMatchObject({ limit: 40000, claimed: 621, pending: 480, bookedAhead: 276, forecast: 1377 })
     const other = handler(mock.get, 'participants/:id/funding/ledger')('p-0005') as { pools: Array<{ ndiaRejection?: unknown }> }
     expect(other.pools.every(pool => pool.ndiaRejection === undefined)).toBe(true)
   })

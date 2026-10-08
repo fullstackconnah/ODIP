@@ -6,11 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/api/client'
 import type { PlanBlock } from '@/api/types'
 import { agreementCheck, budgetList } from '@/test/fixtures/budgets'
-import { useAgreementCheck, useBudgetList, refreshBudgetWarnings, BUDGET_LIST_KEY } from './funding-warnings'
+import { useAgreementCheck, useBudgetList, BUDGET_LIST_KEY } from './funding-warnings'
+import { refreshBudgetFigures, refreshBudgetWarnings } from './funding-ledger'
 import {
   useDeleteClaim, useGenerateClaim, useGenerateShiftClaim, useUpdateClaim, useUpdateClaimLineItem,
 } from './claims'
 import { useCreateFundingPlan, useUpdateBudgetSettings, useUpdateFundingPlan } from './funding'
+import { useCancelBooking, useCreateBooking, useDeleteBooking, usePatchBooking, useUpdateBooking } from './bookings'
+import { usePatchTrip, useUpdateTrip } from './trips'
+import { useApproveServiceAgreementDraft } from './service-agreement-drafts'
 import {
   useApproveCompletion, useApproveCompletionsBatch, useAssignShift, useCreateShift, useDeleteShift, useGeneratePattern, useReturnCompletion, useUpdateShift,
 } from './rostering'
@@ -138,6 +142,19 @@ describe('refreshBudgetWarnings', () => {
   })
 })
 
+describe('refreshBudgetFigures', () => {
+  // The ledger's own helper (funding-ledger.ts) refreshes the warnings too: they are worked out from the same figures, so a write that refreshes the one has refreshed the other.
+  it('marks the warnings stale with the ledgers and the claim pages', () => {
+    const client = newClient()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+
+    refreshBudgetFigures(client, ['p-1'])
+
+    const keys = invalidate.mock.calls.map(call => (call[0] as { queryKey: unknown[] }).queryKey)
+    expect(keys).toEqual(expect.arrayContaining([['participant-funding', 'p-1', 'ledger'], ['claim'], ['participant-alerts-aggregate'], ['participant-alerts'], ['budget-list'], ['agreement-check']]))
+  })
+})
+
 // ── Everything that moves a participant's money refreshes them ───────────────
 
 describe('the writes that move a participant’s money', () => {
@@ -164,9 +181,16 @@ describe('the writes that move a participant’s money', () => {
     ['changing a shift', client => run(client, useUpdateShift, { id: 's-1', data: {} as never })],
     ['removing a shift', client => run(client, useDeleteShift, 's-1')],
     ['approving a shift completion', client => run(client, useApproveCompletion, 's-1')],
-    ['returning a shift completion', client => run(client, useReturnCompletion, { shiftId: 's-1', data: { reason: 'Add the times' } as never })],
     ['approving shift completions in a batch', client => run(client, useApproveCompletionsBatch, ['s-1', 's-2'])],
     ['generating shifts from a pattern', client => run(client, useGeneratePattern, { id: 'pat-1', from: '2026-10-01', to: '2026-10-31' })],
+    ['making a trip booking', client => run(client, useCreateBooking, { tripInstanceId: 't-1', participantId: 'p-1' } as never)],
+    ['changing a trip booking', client => run(client, useUpdateBooking, { id: 'b-1', data: {} } as never)],
+    ['patching a trip booking', client => run(client, usePatchBooking, { id: 'b-1', data: { bookingStatus: 'Confirmed' } } as never)],
+    ['cancelling a trip booking', client => run(client, useCancelBooking, { id: 'b-1', data: {} } as never)],
+    ['removing a trip booking', client => run(client, useDeleteBooking, 'b-1')],
+    ['changing a trip (its status or dates)', client => run(client, useUpdateTrip, { id: 't-1', data: { status: 'Completed' } } as never)],
+    ['patching a trip (its status)', client => run(client, usePatchTrip, { id: 't-1', data: { status: 'InProgress' } } as never)],
+    ['approving an agreement revision for rostering', client => run(client, useApproveServiceAgreementDraft, { participantId: 'p-1', draftId: 'd-1', acknowledgeOverlaps: false } as never)],
   ]
 
   async function run<TVars>(client: QueryClient, useHook: () => { mutateAsync: (vars: TVars) => Promise<unknown> }, vars: TVars) {
@@ -183,11 +207,15 @@ describe('the writes that move a participant’s money', () => {
     expectRefreshed(invalidate)
   })
 
-  it('does not, for a write that moves no money: assigning a worker to a shift', async () => {
+  // Assigning a worker, and returning a completion for the times to be added (it takes the shift from review back to Published, and the ledger counts both the same way), move no money.
+  it.each([
+    ['assigning a worker to a shift', (client: QueryClient) => run(client, useAssignShift, { id: 's-1', data: { staffId: 'st-1' } as never })],
+    ['returning a shift completion', (client: QueryClient) => run(client, useReturnCompletion, { shiftId: 's-1', data: { reason: 'Add the times' } as never })],
+  ])('does not, for a write that moves no money: %s', async (_name, write) => {
     const client = newClient()
     const invalidate = vi.spyOn(client, 'invalidateQueries')
 
-    await run(client, useAssignShift, { id: 's-1', data: { staffId: 'st-1' } as never })
+    await write(client)
 
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['budget-list'] })
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['participant-alerts-aggregate'] })

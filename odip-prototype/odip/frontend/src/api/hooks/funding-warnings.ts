@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery, type QueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { apiClient, apiGet } from '../client'
 import type { AgreementCheck, AgreementCheckRequest, ApiResponse, BudgetListDto, PlanBlock } from '../types'
 import { periodProblem } from '@/lib/planQuote'
@@ -9,7 +9,8 @@ import { busyDelay, retryWhenBusy } from './plan-pricing'
 // that must not see it.
 
 export const BUDGET_LIST_KEY = ['budget-list'] as const
-const AGREEMENT_CHECK_KEY = 'agreement-check' as const
+/** The root of every agreement check's key, so a write that moves money can mark them all stale (funding-ledger.ts's refreshBudgetWarnings). */
+export const AGREEMENT_CHECK_KEY = 'agreement-check' as const
 export const agreementCheckKey = (participantId: string | undefined) => [AGREEMENT_CHECK_KEY, participantId] as const
 
 /** Every active participant's pools for the funding period running now, sorted by risk, with the NDIS-funded participants who have no budget in force kept apart at the end. */
@@ -46,16 +47,4 @@ export function useAgreementCheck(participantId: string | undefined, blocks: rea
     retryDelay: busyDelay,
     queryFn: ({ signal }) => postAgreementCheck(participantId as string, { blocks: [...blocks], periodFrom: from, periodTo: to }, signal),
   })
-}
-
-/**
- * Whatever shows a budget warning is stale once something that moves a participant's money is written: a claim (claimed or pending goes up, a rejection with an NDIA code starts or ends a signal), a
- * shift (booked ahead, or pending once its completion is approved), a plan record (the limits themselves), the organisation's "approaching" percentage (every status). So the alerts the dashboard's
- * tile and the participant banners read, the Budgets list and any agreement check on screen are all read again. The ledger's own refresh is separate (funding-ledger.ts).
- */
-export function refreshBudgetWarnings(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: ['participant-alerts-aggregate'] })
-  void queryClient.invalidateQueries({ queryKey: ['participant-alerts'] })
-  void queryClient.invalidateQueries({ queryKey: BUDGET_LIST_KEY })
-  void queryClient.invalidateQueries({ queryKey: [AGREEMENT_CHECK_KEY] })
 }

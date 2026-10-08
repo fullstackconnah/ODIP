@@ -164,9 +164,10 @@ public class CatalogueServiceDateTests
     }
 
     [Fact]
-    public async Task A_shift_that_has_a_row_but_not_for_its_day_type_still_reads_as_nothing_to_claim()
+    public async Task A_shift_that_has_a_row_but_not_for_its_day_type_is_left_out_and_the_refusal_says_so()
     {
-        // The old wording stays for the case it was true for: rows are valid on the date, none is for the shift's day type (a Saturday with no Saturday item).
+        // Rows are valid on the date, none is for the shift's day type (a Saturday with no Saturday item): the shift is there and waiting, so "No completed, unclaimed shifts found"
+        // would be untrue. It is left out, and the refusal says that and why (2026-10-08 review, L3-02: a left-out shift is never dropped silently).
         await using var db = CreateDb();
         var group = await SeedCommunityAccessGroupAsync(db);
         db.SupportCatalogueItems.Add(LegacyRow(group.Id, "04_ONLY_WEEKDAY", ClaimDayType.Weekday, 60m, new DateOnly(2026, 7, 1)));
@@ -178,7 +179,7 @@ public class CatalogueServiceDateTests
         var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             new ShiftClaimGenerationService(db).PreviewAsync(participant.Id, new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 30)));
 
-        Assert.Equal("No completed, unclaimed shifts found in this date range.", refusal.Message);
+        Assert.Equal("Nothing in this date range could be claimed: 1 completed, unclaimed shift was left out. No catalogue rate covers this date.", refusal.Message);
     }
 
     // ── Trip claims ───────────────────────────────────────────────────────────────

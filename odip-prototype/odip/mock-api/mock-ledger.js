@@ -8,8 +8,15 @@
 
 const round2 = (n) => Math.round(n * 100) / 100
 const sum = (rows) => round2(rows.reduce((total, r) => total + r.amount, 0))
-/** The sum of plain numbers (a figure of each period): `sum` is over rows with an `amount`, and given numbers it answered NaN, which the JSON carried as null. */
+/** The sum of plain money figures (one of each period): `sum` is over rows with an `amount`, and given numbers it answered NaN, which the JSON carried as null. */
 const add = (values) => round2(values.reduce((total, value) => total + value, 0))
+/** A plain total of counts (the rows of `sum` carry an amount; a count does not). */
+const count = (numbers) => numbers.reduce((total, n) => total + n, 0)
+/** Trips that have started and have no claim yet: the server counts such a booking once, however many categories its price is split across. */
+const startedTrips = (rows) => new Set(rows.filter((r) => r.kind === 'TripBooking' && r.group === 'Pending').map((r) => r.id)).size
+/** Shifts the shift claim cannot price: $0 in every figure, so the period counts them and says why (each reason once, in a fixed order). */
+const unpricedShifts = (rows) => rows.filter((r) => (r.notPricedKinds || []).length > 0)
+const unpricedReasons = (rows) => [...new Set(unpricedShifts(rows).flatMap((r) => r.notPricedKinds))].sort()
 
 /** The worst status that applies, in the server's own words and arithmetic (decimals, no rounding deciding it). */
 function statusOf(available, used, forecast, approachingPercent) {
@@ -60,7 +67,9 @@ function computeLedger(plan, today, approachingPercent, items, rejections = []) 
   const notInAPool = []
   const outsideThePlan = []
   for (const item of items) {
-    if (item.date < plan.planStart || item.date > plan.planEnd) { outsideThePlan.push(item); continue }
+    // What happened before the plan began is the earlier plan's: the server cuts it off and shows it nowhere in this ledger.
+    if (item.date < plan.planStart) continue
+    if (item.date > plan.planEnd) { outsideThePlan.push(item); continue }
     const pool = poolFor(plan, item.paceCategory, item.managementType)
     if (!pool) { notInAPool.push(item); continue }
     const period = pool.periods
@@ -86,6 +95,9 @@ function computeLedger(plan, today, approachingPercent, items, rejections = []) 
         id: period.id, position, periodStart: period.periodStart, periodEnd: period.periodEnd,
         isCurrent: period.periodStart <= today && today <= period.periodEnd,
         pastUnresolvedCount: rows.filter((r) => r.kind === 'PastShift').length,
+        startedUnclaimedTripCount: startedTrips(rows),
+        unpricedShiftCount: unpricedShifts(rows).length,
+        unpricedShiftReasons: unpricedReasons(rows),
         rowCount: rows.length, rows: rows.slice(0, 200), ...f,
       }
     })
@@ -103,9 +115,11 @@ function computeLedger(plan, today, approachingPercent, items, rejections = []) 
       .sort((a, b) => (a.date < b.date ? 1 : -1))[0]
     return {
       id: pool.id, name: pool.name, kind: pool.kind, paceCategory: pool.paceCategory, managementType: pool.managementType, hasSetAside, periods,
-      pastUnresolvedCount: add(periods.map((p) => p.pastUnresolvedCount)),
+      pastUnresolvedCount: count(periods.map((p) => p.pastUnresolvedCount)),
+      startedUnclaimedTripCount: count(periods.map((p) => p.startedUnclaimedTripCount)),
+      unpricedShiftCount: count(periods.map((p) => p.unpricedShiftCount)),
       // The plan total is the same sums against the sum of the limits.
-      planTotal: figures(limit, 0, claimed, pending, bookedAhead, approachingPercent, add(periods.map((p) => p.unpricedTripDayCount))),
+      planTotal: figures(limit, 0, claimed, pending, bookedAhead, approachingPercent, count(periods.map((p) => p.unpricedTripDayCount))),
       ...(rejection ? { ndiaRejection: { date: rejection.date, code: rejection.code, claimId: rejection.claimId, claimReference: rejection.claimReference } } : {}),
     }
   })
@@ -124,8 +138,8 @@ function bucket(items) {
 }
 
 /** A ledger row. The category and the way the money is managed are what the server works out from the record; the mock states them here. */
-const row = (id, kind, group, date, description, amount, status, link, paceCategory, managementType, note) => ({
-  id, kind, group, date, description, amount, status, link, paceCategory, managementType, ...(note ? { note } : {}),
+const row = (id, kind, group, date, description, amount, status, link, paceCategory, managementType, note, notPricedKinds) => ({
+  id, kind, group, date, description, amount, status, link, paceCategory, managementType, ...(note ? { note } : {}), ...(notPricedKinds ? { notPricedKinds } : {}),
 })
 
 // Community access (category 04, as the shift claim engine prices it only) in Core (flexible), the participant's plan type; Improved Daily Living Skills (15) in its stated pool; and
@@ -133,6 +147,8 @@ const row = (id, kind, group, date, description, amount, status, link, paceCateg
 const AGENCY = 'AgencyManaged'
 const PLANNED = 'PlanManaged'
 const UNRESOLVED = 'Past shift not completed or cancelled'
+const STARTED_TRIP = 'The trip has started and has no claim yet, so it is counted as pending.'
+const SLEEPOVER = 'It is a sleepover, which shift claims do not price yet, so it is counted as $0.'
 
 const demoItems = {
   // p-0002's plan: Core (flexible) is FORECAST OVER in the current quarter, Improved Daily Living Skills is APPROACHING.
@@ -153,6 +169,8 @@ const demoItems = {
     row('f1', 'FutureShift', 'BookedAhead', '2026-11-03', 'Shift 09:00–17:00 · 8 h', 552, 'Published', '/rostering?date=2026-11-03', 4, AGENCY),
     row('f2', 'FutureShift', 'BookedAhead', '2026-11-17', 'Shift 13:00–21:00 · 8 h', 552, 'Draft', '/rostering?date=2026-11-17', 4, AGENCY),
     row('f3', 'FutureShift', 'BookedAhead', '2026-12-01', 'Shift 09:00–17:00 · 8 h', 552, 'InProgress', '/rostering?date=2026-12-01', 4, AGENCY),
+    // A sleepover the shift claim cannot price: $0 in every figure, counted and named on the period (the server's rule), with the reason on its own row.
+    row('f4', 'FutureShift', 'BookedAhead', '2026-11-10', 'Shift 22:00–06:00 · 8 h', 0, 'Published', '/rostering?date=2026-11-10', 4, AGENCY, SLEEPOVER, ['a sleepover']),
     row('b1', 'TripBooking', 'BookedAhead', '2026-11-24', 'Oceanview retreat · 3 days', 1240, 'Confirmed', '/trips/trip-77', 4, AGENCY),
     // The stated pool in the current quarter: used is at the approaching line, with nothing booked after it.
     row('d3', 'ClaimLine', 'Claimed', '2026-10-05', 'TC-4302-20261005 · 15_Weekday_STD · 5 h', 345, 'Submitted', '/claims/claim-113', 15, AGENCY),
@@ -160,9 +178,9 @@ const demoItems = {
     row('d5', 'ClaimLine', 'Claimed', '2026-10-20', 'TC-4302-20261020 · 15_Weekday_STD · 6 h', 414, 'Approved', '/claims/claim-115', 15, AGENCY),
     row('d6', 'CompletedShift', 'Pending', '2026-10-22', 'Shift 10:00–15:00 · 5 h', 345, 'Completed', '/rostering?date=2026-10-22', 15, AGENCY),
     row('d7', 'ClaimLine', 'Pending', '2026-10-27', 'TC-4302-20261027 · 15_Weekday_STD · 5 h', 345, 'Ready', '/claims/claim-116', 15, AGENCY),
-    // In no recorded pool, and before the plan: shown, never dropped.
+    // In no recorded pool, and dated after the plan ends: shown, never dropped (the Funding tab lists both, with the amount and the rows).
     row('x1', 'ClaimLine', 'Claimed', '2026-10-11', 'TC-4302-20261011 · 09_Weekday_STD · 3 h', 207, 'Submitted', '/claims/claim-117', 9, AGENCY),
-    row('x2', 'ClaimLine', 'Claimed', '2026-06-20', 'TC-4301-20260620 · 04_Weekday_STD · 4 h', 276, 'Paid', '/claims/claim-090', 4, AGENCY),
+    row('x2', 'FutureShift', 'BookedAhead', '2027-07-05', 'Shift 09:00–17:00 · 8 h', 552, 'Published', '/rostering?date=2027-07-05', 4, AGENCY),
   ],
   // p-0005's plan: Core (flexible) is OVER — claims and pending shifts have already passed what was
   // set aside for the quarter, and nothing is booked after them. The one genuinely-over pool in the demo.
@@ -183,6 +201,8 @@ const demoItems = {
     row('p1', 'ClaimLine', 'Claimed', '2026-08-12', 'TC-4303-20260812 · 04_Weekday_STD · 5 h', 345, 'Submitted', '/claims/claim-201', 4, PLANNED),
     row('p2', 'ClaimLine', 'Claimed', '2026-09-08', 'TC-4303-20260908 · 04_Weekday_STD · 4 h', 276, 'Submitted', '/claims/claim-202', 4, PLANNED),
     row('p3', 'FutureShift', 'BookedAhead', '2026-11-24', 'Shift 09:00–13:00 · 4 h', 276, 'Published', '/rostering?date=2026-11-24', 4, PLANNED),
+    // A trip that has started and has no claim yet: pending, flagged, and a trip booking still (the server's rule: a booking is booked ahead only while its trip has not started).
+    row('p4', 'TripBooking', 'Pending', '2026-10-02', 'Harbour weekend · 2 days', 480, 'Confirmed', '/trips/trip-76', 4, PLANNED, STARTED_TRIP),
   ],
 }
 
