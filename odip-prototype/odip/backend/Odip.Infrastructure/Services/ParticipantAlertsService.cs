@@ -279,10 +279,13 @@ public class ParticipantAlertsService
 
         // ── Rules 8 to 11: the participant's budget (phase 2b) ──
         // One call for the whole set: the ledger is worked out for every participant at once, in a fixed number of queries, never one by one.
+        IReadOnlySet<Guid> budgetInForce = new HashSet<Guid>();
         if (_budget is not null)
         {
-            foreach (var (pid, budgetAlerts) in await _budget.ForAsync(participantIds, ct))
+            var budget = await _budget.ForSetAsync(participantIds, ct);
+            foreach (var (pid, budgetAlerts) in budget.Alerts)
                 alertsByParticipant[pid].AddRange(budgetAlerts);
+            budgetInForce = budget.InForce;
         }
 
         // ── Assemble, rank Critical-first within each participant ──
@@ -299,6 +302,7 @@ public class ParticipantAlertsService
                 ParticipantId = p.Id,
                 ParticipantName = string.IsNullOrEmpty(p.PreferredName) ? $"{p.FirstName} {p.LastName}" : $"{p.PreferredName} {p.LastName}",
                 IsActive = p.IsActive,
+                BudgetInForce = budgetInForce.Contains(p.Id),
                 Alerts = alerts,
                 CriticalCount = alerts.Count(a => a.Severity == AlertSeverity.Critical),
                 WarningCount = alerts.Count(a => a.Severity == AlertSeverity.Warning),

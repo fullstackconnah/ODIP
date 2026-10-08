@@ -172,9 +172,11 @@ export default function DashboardPage() {
     })
   }
   // Budgets at risk: counted from the same alerts, so while they are loading or failed the Critical Participant Alerts tile above is already the en dash that says so, and this one is simply not
-  // there (a tile is only ever a count that arrived). The tile opens the Budgets list, so only a role that can open it is offered it. At zero it is a name in the All clear row, never a tile.
+  // there (a tile is only ever a count that arrived). The tile opens the Budgets list, so only a role that can open it is offered it. At zero it is a name in the All clear row, never a tile; and it is
+  // named there only where a budget is in force and the NDIA has not said the funds ran out, so the band never says "all clear" about budgets nobody has recorded (budgetsAtRiskItem is null then).
   if (canViewAlerts && canAccessPage('budgets') && !alertsLoading && !alertsError) {
-    attentionItems.push(budgetsAtRiskItem(budgetRisk))
+    const budgetItem = budgetsAtRiskItem(budgetRisk)
+    if (budgetItem) attentionItems.push(budgetItem)
   }
   // ReadOnly reaches the Schedule but its writes are refused (permissions.ts keeps canWrite for it and the server answers 403), so it is offered the page and not a verb it
   // cannot use. Both links go to the same page, so they may share a name.

@@ -232,6 +232,40 @@ public class ParticipantBudgetAlertsTests
         Assert.Equal("budget-over", Assert.Single(await s.BudgetAlertsAsync(archived.Id)).Type);
     }
 
+    // ── Whether a budget is in force at all ─────────────────────────────────
+
+    // The dashboard must not say "all clear" about budgets nobody has recorded: no alert cannot tell "nothing is at risk" from "no budget is recorded", so the aggregate says who has a plan running.
+    [Fact]
+    public async Task TheAggregateSaysWhoseBudgetIsInForce_APlanRunningNowAndNobodyElse_WhetherOrNotAnythingIsAtRisk()
+    {
+        using var s = Setup.Create();
+        var running = s.Kit.SeedParticipant(first: "Ron", last: "Running");
+        s.Kit.SeedParticipant(first: "Nora", last: "None");
+        var ended = s.Kit.SeedParticipant(first: "Edna", last: "Ended");
+        var upcoming = s.Kit.SeedParticipant(first: "Una", last: "Upcoming");
+        OctoberPlan(s.Kit, running, 8000m);   // on track: no alert, and still a budget in force
+        s.Kit.SeedPlan(ended, D(2025, 7, 1), D(2026, 6, 30), Core(PlanType.PlanManaged, new PeriodSpec(D(2025, 7, 1), D(2026, 6, 30), 5000m)));
+        s.Kit.SeedPlan(upcoming, D(2027, 1, 1), D(2027, 12, 31), Core(PlanType.PlanManaged, new PeriodSpec(D(2027, 1, 1), D(2027, 12, 31), 5000m)));
+
+        var all = await s.Service.GetAlertsAsync(participantId: null, activeOnly: true);
+
+        Assert.Equal(
+            new[] { ("Edna Ended", false), ("Nora None", false), ("Ron Running", true), ("Una Upcoming", false) },
+            all.OrderBy(p => p.ParticipantName, StringComparer.Ordinal).Select(p => (p.ParticipantName, p.BudgetInForce)));
+        Assert.All(all, p => Assert.Empty(p.Alerts));
+    }
+
+    [Fact]
+    public async Task TheSingleRouteSaysItToo_AndAServiceBuiltWithoutABudgetSourceSaysNobodyHasOne()
+    {
+        using var s = Setup.Create();
+        var participant = s.Kit.SeedParticipant();
+        OctoberPlan(s.Kit, participant, 8000m);
+
+        Assert.True((await s.Service.GetAlertsAsync(participant.Id)).Single().BudgetInForce);
+        Assert.False((await new ParticipantAlertsService(s.Kit.Db, s.Kit.Clock).GetAlertsAsync(participant.Id)).Single().BudgetInForce);   // built the way the older tests build it
+    }
+
     // ── Whose money ─────────────────────────────────────────────────────────
 
     [Fact]

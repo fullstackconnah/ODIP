@@ -86,10 +86,12 @@ describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (
   })
 
   it('serves the aggregate for the active participants only, Critical first within each, with the counts that follow', () => {
-    const all = handler(mock.get, 'participants/alerts')() as Array<{ participantId: string; criticalCount: number; warningCount: number; alerts: unknown[] }>
+    const all = handler(mock.get, 'participants/alerts')() as Array<{ participantId: string; criticalCount: number; warningCount: number; budgetInForce: boolean; alerts: unknown[] }>
 
     expect(all.map(entry => entry.participantId)).toEqual(['p-0001', 'p-0002', 'p-0003', 'p-0004', 'p-0005'])   // p-0006 is not active
     expect(all.map(entry => [entry.criticalCount, entry.warningCount])).toEqual([[0, 0], [0, 2], [0, 0], [1, 0], [1, 0]])
+    // Who has a budget in force (a plan running now): Liam has none recorded and Marcus's plan has ended, so the dashboard can tell "no budget is at risk" from "no budget is recorded".
+    expect(all.map(entry => entry.budgetInForce)).toEqual([false, true, false, true, true])
   })
 
   it('says the NDIA\'s word on the Funding tab\'s pool, with the claim, and nowhere else', () => {

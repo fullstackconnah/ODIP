@@ -25,13 +25,21 @@ public sealed class BudgetAlertSource
     }
 
     /// <summary>The budget alerts of each participant that has any, by participant id. Ids that are not participants of the caller's organisation are simply absent.</summary>
-    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<ParticipantAlertDto>>> ForAsync(IReadOnlyCollection<Guid> participantIds, CancellationToken ct)
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<ParticipantAlertDto>>> ForAsync(IReadOnlyCollection<Guid> participantIds, CancellationToken ct) =>
+        (await ForSetAsync(participantIds, ct)).Alerts;
+
+    /// <summary>
+    /// The budget alerts of the set AND which of its participants have a budget in force (a plan running now), from the same single call to the ledger. The second is what lets a screen tell "nothing is
+    /// at risk" from "no budget is recorded": a participant on track has no alert either way.
+    /// </summary>
+    public async Task<BudgetAlertsOfSet> ForSetAsync(IReadOnlyCollection<Guid> participantIds, CancellationToken ct)
     {
         var result = new Dictionary<Guid, IReadOnlyList<ParticipantAlertDto>>();
-        if (participantIds.Count == 0 || _tenant.TenantId is not { } tenantId) return result;
+        var inForce = new HashSet<Guid>();
+        if (participantIds.Count == 0 || _tenant.TenantId is not { } tenantId) return new BudgetAlertsOfSet(result, inForce);
 
         var ledgers = await _ledger.ComputeAsync(tenantId, participantIds, ct);
-        if (ledgers.Count == 0) return result;
+        if (ledgers.Count == 0) return new BudgetAlertsOfSet(result, inForce);
 
         // The NDIA's word only matters for a plan that is running, and every ledger carries the same provider's today.
         var running = ledgers.Values.Where(l => l.Ledger is { PlanIsCurrent: true }).ToDictionary(l => l.ParticipantId, l => l.Ledger!.Plan);
@@ -41,10 +49,14 @@ public sealed class BudgetAlertSource
         var none = new Dictionary<Guid, PoolNdiaRejection>();
         foreach (var (participantId, ledger) in ledgers)
         {
+            if (ledger.Ledger is { PlanIsCurrent: true }) inForce.Add(participantId);
             var alerts = BudgetAlertRules.For(ledger, ndia.TryGetValue(participantId, out var pools) ? pools : none);
             if (alerts.Count > 0) result[participantId] = alerts;
         }
 
-        return result;
+        return new BudgetAlertsOfSet(result, inForce);
     }
 }
+
+/// <summary>The budget alerts of a set of participants by participant id, and the ones among them with a budget in force (a plan running now).</summary>
+public sealed record BudgetAlertsOfSet(IReadOnlyDictionary<Guid, IReadOnlyList<ParticipantAlertDto>> Alerts, IReadOnlySet<Guid> InForce);

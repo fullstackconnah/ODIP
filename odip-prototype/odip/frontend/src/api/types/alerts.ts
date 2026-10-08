@@ -30,6 +30,11 @@ export interface ParticipantAlertsDto {
    * participant too (this field will be `false` there), so it must not be filtered out.
    */
   isActive: boolean
+  /**
+   * The participant has a funding plan running now, so a budget can warn about them (budget phase 2b). Not an alert: it is what tells "no budget is at risk" (a plan is running and nothing is over)
+   * from "no budget is recorded", about which a screen says nothing, least of all "all clear". Omitted by an older answer, and then read as no.
+   */
+  budgetInForce?: boolean
   alerts: ParticipantAlertDto[]
   criticalCount: number
   warningCount: number

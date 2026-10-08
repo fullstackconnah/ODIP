@@ -876,8 +876,9 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
 
     expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => label !== 'Missing Vehicles' && label !== 'Budgets at risk'))
     expect(screen.queryByRole('group', { name: /Missing Vehicles/ })).not.toBeInTheDocument()
-    // No participant is over or forecast to go over, so Budgets at risk is a name in the row beside the other zero, not a tile of zero.
-    expect(clearRow()).toHaveTextContent('All clear on budgets at risk and trips missing vehicles')
+    // No budget is in force for anybody here, so the band does not name Budgets at risk at all: it cannot say it checked what nobody recorded. The other zero is a name in the row.
+    expect(clearRow()).toHaveTextContent('All clear on trips missing vehicles')
+    expect(clearRow()).not.toHaveTextContent(/budgets/)
   })
 
   it('leaves out the alerts item, Pending Leave, Shift Completions and Qualification Issues for a role without canViewAlerts / canApproveLeave / canReviewCompletions / the Qualifications page', () => {
@@ -1098,7 +1099,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     expect(tileLabels()).toEqual(['Overdue'])
     const row = clearRow()!
     expect(row).toHaveTextContent(
-      'All clear on qualification issues, critical participant alerts, budgets at risk, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue QSC reports, pending leave and shift completions',
+      'All clear on qualification issues, critical participant alerts, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue QSC reports, pending leave and shift completions',
     )
     expect(row).toHaveClass('bg-[var(--color-primary-fixed)]', 'text-[var(--color-on-primary-fixed)]')
     expect(screen.getAllByText('All clear')).toHaveLength(1)
@@ -1132,7 +1133,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     expect(clearRow()).toBeNull()
     // It names everything it checked, so the claim can be audited.
     expect(screen.getByText(
-      'Checked and at zero: qualification issues, critical participant alerts, budgets at risk, overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue QSC reports, pending leave and shift completions.',
+      'Checked and at zero: qualification issues, critical participant alerts, overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue QSC reports, pending leave and shift completions.',
     )).toBeInTheDocument()
   })
 
@@ -1399,7 +1400,7 @@ describe('DashboardPage — Shift Completions: the band counts what the nav badg
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
     expect(tileLabels()).toEqual(['Shift Completions'])
     expect(clearRow()).toHaveTextContent(
-      'All clear on qualification issues, critical participant alerts, budgets at risk, overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue QSC reports and pending leave',
+      'All clear on qualification issues, critical participant alerts, overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue QSC reports and pending leave',
     )
     expect(clearRow()).not.toHaveTextContent('shift completions')
   })
@@ -1505,7 +1506,7 @@ describe('DashboardPage — the All clear row and field name the items by nouns'
     asRole('Coordinator')
     renderPage()
 
-    expect(screen.getByText(/^Checked and at zero: qualification issues, critical participant alerts, budgets at risk, overdue tasks, trips missing accommodation/)).toBeInTheDocument()
+    expect(screen.getByText(/^Checked and at zero: qualification issues, critical participant alerts, overdue tasks, trips missing accommodation/)).toBeInTheDocument()
     expect(screen.getByText(/overdue QSC reports, pending leave and shift completions\.$/)).toBeInTheDocument()
   })
 
@@ -1771,13 +1772,43 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
     expect(budgetTile()).toHaveTextContent('1 over, 0 forecast to go over')
   })
 
-  it('is not a tile at zero, and is a name in the one All clear row instead; approaching and the NDIA’s word do not make it one', () => {
+  // At zero the band names an item in its All clear row, "checked, and nothing": true only of a budget somebody has recorded. A participant on track has no alert, so the alerts say who has a budget in
+  // force (budgetInForce), and the item is named only where somebody does.
+  it('is not a tile at zero, and is a name in the one All clear row instead, where a budget is in force; approaching does not make it a tile', () => {
     asRole('Coordinator')
-    withAlerts(budgetParticipant('p1', 'Appa Roach', 'budget-approaching'), budgetParticipant('p2', 'Noor Refused', 'budget-ndia-exhausted'))
+    withAlerts(budgetParticipant('p1', 'Appa Roach', 'budget-approaching', { budgetInForce: true }), budgetParticipant('p2', 'Ontrack Olive', 'budget-approaching', { budgetInForce: true, alerts: [], warningCount: 0 }))
     renderPage()
 
+    // Everything else is at zero too, so the whole band is the all-clear field, and it names the budgets among what it checked.
+    expect(screen.queryByRole('group', { name: /Budgets at risk/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/^Checked and at zero:/)).toHaveTextContent('budgets over or forecast to go over')
+  })
+
+  it('is not named at all where no budget is in force for anybody: the band cannot say it checked what nobody recorded', () => {
+    asRole('Coordinator')
+    withAlerts(budgetParticipant('p1', 'No Plan', 'plan-expiring-soon', { budgetInForce: false }), budgetParticipant('p2', 'Older Answer', 'plan-expiring-soon'))
+    renderPage()
+
+    expect(screen.queryByRole('group', { name: /Budgets at risk/ })).not.toBeInTheDocument()
+    expect(band()).not.toHaveTextContent(/budgets/i)
+  })
+
+  it('is not named at zero while the NDIA says the funds ran out for somebody: an all clear about budgets would contradict the Critical tile beside it', () => {
+    asRole('Coordinator')
+    withAlerts(budgetParticipant('p1', 'Noor Refused', 'budget-ndia-exhausted', { budgetInForce: true }))
+    renderPage()
+
+    expect(tileLabels()).toContain('Critical Participant Alerts')
     expect(tileLabels()).not.toContain('Budgets at risk')
-    expect(clearRow()).toHaveTextContent('budgets at risk')
+    expect(band()).not.toHaveTextContent(/budgets over or forecast to go over/)
+  })
+
+  it('is still a tile when somebody is over, whether or not the NDIA has also refused a claim', () => {
+    asRole('Coordinator')
+    withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over', { budgetInForce: true }), budgetParticipant('p2', 'Noor Refused', 'budget-ndia-exhausted', { budgetInForce: true }))
+    renderPage()
+
+    expect(budgetTile()).toHaveAccessibleName('Budgets at risk 1')
   })
 
   it('is not a tile while the alerts are loading, and the band is not an all clear: the Critical alerts tile is the en dash that says so', () => {
@@ -1809,8 +1840,8 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
     withAlerts(budgetParticipant('p1', 'Archie Gone', 'budget-over', { isActive: false }))
     renderPage()
 
-    // Nobody counts, so the whole band is the all-clear field, and it names Budgets at risk among what it checked.
-    expect(screen.getByText(/^Checked and at zero:.*budgets at risk/)).toBeInTheDocument()
+    // Nobody counts, not even as having a budget in force, so the whole band is the all-clear field and it does not name budgets among what it checked.
+    expect(screen.getByText(/^Checked and at zero:/)).not.toHaveTextContent(/budgets/)
     expect(screen.queryByRole('group', { name: /Budgets at risk/ })).not.toBeInTheDocument()
   })
 
