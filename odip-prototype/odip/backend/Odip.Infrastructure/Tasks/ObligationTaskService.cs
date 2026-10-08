@@ -37,6 +37,7 @@ public sealed class ObligationTaskService : IObligationTaskService
         _db.BookingTasks.Add(new BookingTask
         {
             Id = Guid.NewGuid(),
+            TenantId = spec.TenantId ?? default,
             SourceKey = spec.SourceKey,
             TaskType = spec.Type,
             Title = spec.Title,
