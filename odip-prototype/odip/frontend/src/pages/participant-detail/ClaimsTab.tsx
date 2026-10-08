@@ -314,7 +314,9 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
         <div className="flex flex-col gap-[var(--section-gap)]">
           <p className="text-sm">
             {generated.claimReference ? `Claim ${generated.claimReference} was made` : 'The claim was made'}
-            {generated.totalAmount != null ? ` for ${formatCurrency(generated.totalAmount)}` : ''}, from the shifts that could be priced.
+            {generated.totalAmount != null ? ` for ${formatCurrency(generated.totalAmount)}` : ''}
+            {/* "From the shifts that could be priced" is only true when some could not: a claim whose only note is a caveat has every shift of the range in it. */}
+            {(generated.leftOut?.length ?? 0) > 0 ? ', from the shifts that could be priced' : ''}.
           </p>
           {generated.leftOut && generated.leftOut.length > 0 && (
             <LeftOutShifts shifts={generated.leftOut} heading={`${plural(generated.leftOut.length, 'shift')} ${generated.leftOut.length === 1 ? 'was' : 'were'} left out of the claim`} />

@@ -184,7 +184,8 @@ function PoolLedger({ pool }: { pool: LedgerPool }) {
       )}
 
       {pool.periods.length > 0 && <PeriodStrip pool={pool} selectedId={selected?.id} onSelect={setSelectedPeriodId} />}
-      {selected && <PeriodLedger period={selected} />}
+      {/* The warnings beside the glance strip are about the period the strip is about; an opened period that is another one says its own where its rows are. */}
+      {selected && <PeriodLedger period={selected} warnedAbove={selected.id === focus?.id} />}
 
       <PlanTotal pool={pool} />
     </Card>
@@ -257,8 +258,11 @@ function PeriodStrip({ pool, selectedId, onSelect }: { pool: LedgerPool; selecte
   )
 }
 
-/** The rows of one period in their three groups, each row linking to the claim, shift or trip it stands for. */
-function PeriodLedger({ period }: { period: LedgerPeriod }) {
+/**
+ * The rows of one period in their three groups, each row linking to the claim, shift or trip it stands for. `warnedAbove` is true for the period the glance strip is about, whose shifts
+ * that cannot be priced are already counted beside the strip; any other period says its own here, because its figures leave those shifts out just the same.
+ */
+function PeriodLedger({ period, warnedAbove }: { period: LedgerPeriod; warnedAbove: boolean }) {
   const groups = rowsByGroup(period.rows)
   const hidden = Math.max(0, period.rowCount - period.rows.length)
 
@@ -267,6 +271,9 @@ function PeriodLedger({ period }: { period: LedgerPeriod }) {
       <h4 className="text-sm font-medium text-[var(--color-muted-foreground)]">
         {formatDateRange(period.periodStart, period.periodEnd)} · {plural(period.rowCount, 'item')}
       </h4>
+      {!warnedAbove && period.unpricedShiftCount > 0 && (
+        <p className="text-[13px] text-[var(--color-on-warning-container)]">{unpricedShiftSentence(period.unpricedShiftCount, period.unpricedShiftReasons)}</p>
+      )}
       {groups.map(({ group, rows }) => (
         <Group key={group} heading={GROUP_HEADINGS[group]} note={GROUP_NOTES[group]} rows={rows} />
       ))}
@@ -356,6 +363,10 @@ function PlanTotal({ pool }: { pool: LedgerPool }) {
         {money(total.limit)} across the whole plan · {money(total.used)} used · {money(total.bookedAhead)} booked ahead · {money(total.remaining)} left
       </p>
       <div className="mt-1"><BudgetStatusBadge status={total.status} /></div>
+      {/* The plan total is the one whole-plan figure: shifts that have no price are $0 in it whichever period they fall in, so it says how many (the periods name the reasons). */}
+      {pool.unpricedShiftCount > 0 && (
+        <p className="mt-2 text-[13px] text-[var(--color-on-warning-container)]">{unpricedShiftSentence(pool.unpricedShiftCount, [])}</p>
+      )}
     </div>
   )
 }

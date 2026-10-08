@@ -226,6 +226,7 @@ describe('ClaimsTab — shifts a claim leaves out (L3-02)', () => {
     await user.click(screen.getByRole('button', { name: /confirm & generate/i }))
 
     expect(screen.queryByText('Claim detail page')).not.toBeInTheDocument()   // not navigated away: the person is told first
+    expect(screen.getByText('Claim TC-4301-20260214 was made for $320.00, from the shifts that could be priced.')).toBeInTheDocument()
     expect(screen.getByText('1 shift was left out of the claim')).toBeInTheDocument()
     expect(screen.getByText(/It is a sleepover, which shift claims do not price yet\./)).toBeInTheDocument()
 
@@ -282,6 +283,9 @@ describe('ClaimsTab — shifts priced with a caveat (review F2)', () => {
     const user = await generateWith({ leftOut: [], flagged: [flagged] })
 
     expect(screen.queryByText('Claim detail page')).not.toBeInTheDocument()
+    // Nothing was left out, so the sentence must not say the claim was made "from the shifts that could be priced": every shift in the range is in it.
+    expect(screen.getByText('Claim TC-4301-20260214 was made for $640.00.')).toBeInTheDocument()
+    expect(screen.queryByText(/from the shifts that could be priced/)).not.toBeInTheDocument()
     expect(screen.getByText('1 shift in this claim has a pricing note')).toBeInTheDocument()
     expect(screen.getByText(/Shift 18:00–02:00 · 8 h/)).toBeInTheDocument()
     expect(screen.getByText(/Evening and night rates are not applied yet\./)).toBeInTheDocument()
@@ -295,6 +299,7 @@ describe('ClaimsTab — shifts priced with a caveat (review F2)', () => {
   it('shows the shifts left out and the shifts with a caveat together', async () => {
     await generateWith({ leftOut: [sleepover], flagged: [flagged, { ...flagged, shiftId: 'sh-5', serviceDate: '2026-02-06' }] })
 
+    expect(screen.getByText('Claim TC-4301-20260214 was made for $640.00, from the shifts that could be priced.')).toBeInTheDocument()   // here some WERE left out, so the clause is true
     expect(screen.getByText('1 shift was left out of the claim')).toBeInTheDocument()
     expect(screen.getByText('2 shifts in this claim have a pricing note')).toBeInTheDocument()
     expect(screen.getAllByText(/Evening and night rates are not applied yet\./)).toHaveLength(2)
