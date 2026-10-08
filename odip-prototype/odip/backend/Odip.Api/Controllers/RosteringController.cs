@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -55,19 +56,23 @@ public class RosteringController : ControllerBase
     // Budget phase 3: the budget check of a one-off shift, which needs to know whose money it may show (the caller's organisation). Without a tenant on the request there is no budget check.
     private readonly ICurrentTenant? _tenant;
     private readonly ShiftBudgetCheck? _budget;
+    private readonly ShiftBudgetEffect? _budgetEffect;
+    private readonly ILogger<RosteringController>? _logger;
 
     public RosteringController(
         OdipDbContext db, StaffCompatibilityLinkService compatLink, IStaffUnavailabilityQuery unavailabilityQuery,
         IConfiguration? config = null, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
         Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null,
         ShiftPackageService? package = null, TimeProvider? clock = null, RosterShiftGenerator? generator = null,
-        ICurrentTenant? tenant = null, ShiftBudgetCheck? budget = null)
+        ICurrentTenant? tenant = null, ShiftBudgetCheck? budget = null, ShiftBudgetEffect? budgetEffect = null, ILogger<RosteringController>? logger = null)
     {
+        _logger = logger;
         _db = db;
         _generator = generator ?? new RosterShiftGenerator();
         _clock = clock ?? TimeProvider.System;
         _tenant = tenant;
         _budget = budget ?? (tenant is null ? null : new ShiftBudgetCheck(db, new BudgetLedgerService(db, _clock)));
+        _budgetEffect = budgetEffect ?? (tenant is null ? null : new ShiftBudgetEffect(db, new BudgetLedgerService(db, _clock)));
         _compatLink = compatLink;
         _unavailabilityQuery = unavailabilityQuery;
         _config = config;
@@ -1246,7 +1251,8 @@ public class RosteringController : ControllerBase
             // so the daily top-up can still fill a gap before it.
             var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
             var generated = await _generator.GenerateAsync(_db, pattern.ParticipantId, new[] { pattern.Id }, from, to, ct, onlyWhenContiguous: true, providerToday: today);
-            return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = generated.Created, Skipped = generated.Skipped }));
+            var warnings = await BudgetWarningsAsync(pattern.ParticipantId, generated.MadeShifts, ct);
+            return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = generated.Created, Skipped = generated.Skipped, BudgetWarnings = warnings }));
         }
         catch (RosterBusyException busy)
         {
@@ -1659,6 +1665,25 @@ public class RosteringController : ControllerBase
         var (reason, codes) = ShiftBudgetGate.ToStore(findings, budgetGate, overrideReason, acknowledgedCodes, previousReason, previousCodes);
         shift.OverrideReason = reason;
         shift.AcknowledgedFindingCodes = codes;
+    }
+
+    /// <summary>
+    /// Where the shifts just made take a pool past its funding for a period (budget phase 3), as warnings; null when there are none to say. A warning only, in every mode: the shifts exist, and a budget that could
+    /// not be worked out must never turn a successful Generate into a failure, so a failure here is logged and the result goes out without warnings.
+    /// </summary>
+    private async Task<List<BudgetWarningDto>?> BudgetWarningsAsync(Guid participantId, IReadOnlyList<Shift> made, CancellationToken ct)
+    {
+        if (_budgetEffect is null || _tenant?.TenantId is not { } tenantId || made.Count == 0) return null;
+        try
+        {
+            var warnings = await _budgetEffect.ForShiftsAsync(tenantId, participantId, made.Select(PlannedShift.Of).ToList(), ct);
+            return warnings.Count > 0 ? warnings : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger?.LogWarning(ex, "The budget warnings for the shifts just generated for participant {ParticipantId} could not be worked out; the result is returned without them", participantId);
+            return null;
+        }
     }
 
     private bool CallerIsAdmin => User?.IsInRole("Admin") == true || User?.IsInRole("SuperAdmin") == true;

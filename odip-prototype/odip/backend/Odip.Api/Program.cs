@@ -171,6 +171,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetLedgerService>();
 // Budget phase 3: the roster's budget check, with the one seam to the shift estimator (the ledger's own pricing).
 builder.Services.AddScoped<Odip.Infrastructure.Services.IShiftCostSource, Odip.Infrastructure.Services.LedgerShiftCostSource>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftBudgetCheck>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftBudgetEffect>();
 // The plan quote is the one heavy request: about two in flight per organisation (a resource filter, because the rate limiter runs before authentication).
 builder.Services.AddSingleton<Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter>();
 builder.Services.AddScoped<Odip.Api.RateLimiting.PlanQuoteConcurrencyFilter>();

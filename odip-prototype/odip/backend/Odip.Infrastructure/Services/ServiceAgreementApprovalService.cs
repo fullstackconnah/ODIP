@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Pricing;
@@ -68,15 +69,22 @@ public sealed class ServiceAgreementApprovalService
     private readonly TimeProvider _clock;
     private readonly RosterTopUpOptions _options;
     private readonly ShiftPatternExpander _expander = new();
+    // Budget phase 3: what the shifts approval would make do to the participant's budget, shown in the preview as a warning (never a reason to refuse).
+    private readonly ShiftBudgetEffect _budget;
+    private readonly ILogger<ServiceAgreementApprovalService>? _logger;
 
-    public ServiceAgreementApprovalService(OdipDbContext db, IRosterPlacementGate gate, RosterShiftGenerator? generator = null, PlanPricingService? pricing = null, TimeProvider? clock = null, IConfiguration? configuration = null)
+    public ServiceAgreementApprovalService(
+        OdipDbContext db, IRosterPlacementGate gate, RosterShiftGenerator? generator = null, PlanPricingService? pricing = null, TimeProvider? clock = null, IConfiguration? configuration = null,
+        ShiftBudgetEffect? budget = null, ILogger<ServiceAgreementApprovalService>? logger = null)
     {
+        _logger = logger;
         _db = db;
         _gate = gate;
         _generator = generator ?? new RosterShiftGenerator();
         _pricing = pricing ?? new PlanPricingService(db);
         _clock = clock ?? TimeProvider.System;
         _options = RosterTopUpOptions.From(configuration);
+        _budget = budget ?? new ShiftBudgetEffect(db, new BudgetLedgerService(db, _clock));
     }
 
     // ── Preview ───────────────────────────────────────────────────────────────────
@@ -89,7 +97,7 @@ public sealed class ServiceAgreementApprovalService
         if (!await MayApproveAsync(tenantId, caller, ct)) return NotAnApprover();
 
         var (draft, participant) = found.Value;
-        var plan = await PlanAsync(tenantId, draft, participant, ct);
+        var plan = await PlanAsync(tenantId, draft, participant, ct, includeBudget: true);
         return new ApprovalOutcome(ApprovalStatus.Previewed, draft, plan.Existing, Preview: plan.ToPreview(), NewestVersion: plan.NewestVersion);
     }
 
@@ -192,6 +200,8 @@ public sealed class ServiceAgreementApprovalService
         public string? ShiftsNote { get; set; }
         /// <summary>Whether the daily top-up is on: what the confirm screen may promise about shifts after the horizon.</summary>
         public bool TopUpEnabled { get; set; } = true;
+        /// <summary>Where the shifts this approval would make take a pool past its funding (preview only; null when there are none to say).</summary>
+        public List<BudgetWarningDto>? BudgetWarnings { get; set; }
 
         public DraftApprovalPreviewDto ToPreview() => new()
         {
@@ -207,10 +217,11 @@ public sealed class ServiceAgreementApprovalService
             }).ToList(),
             HorizonEnd = HorizonEnd,
             TopUpEnabled = TopUpEnabled,
+            BudgetWarnings = BudgetWarnings is { Count: > 0 } ? BudgetWarnings : null,
         };
     }
 
-    private async Task<Plan> PlanAsync(Guid tenantId, ServiceAgreementDraft draft, Participant participant, CancellationToken ct)
+    private async Task<Plan> PlanAsync(Guid tenantId, ServiceAgreementDraft draft, Participant participant, CancellationToken ct, bool includeBudget = false)
     {
         var plan = new Plan { Draft = draft, EndsOn = draft.AgreementStartDate.AddDays(-1) };
 
@@ -305,7 +316,25 @@ public sealed class ServiceAgreementApprovalService
         else if (quote is not null && plan.From <= plan.HorizonEnd)
         {
             var skipped = quote.HolidayOccurrences.Where(h => h.Skipped).Select(h => (h.BlockId, h.Date)).ToHashSet();
-            plan.ShiftsToCreate = plan.NewPatterns.Sum(pattern => _expander.Occurrences(pattern, plan.From, plan.HorizonEnd).Count(date => !skipped.Contains((pattern.SourceBlockKey!, date))));
+            var occurrences = plan.NewPatterns
+                .SelectMany(pattern => _expander.Occurrences(pattern, plan.From, plan.HorizonEnd).Where(date => !skipped.Contains((pattern.SourceBlockKey!, date))).Select(date => (Pattern: pattern, Date: date))).ToList();
+            plan.ShiftsToCreate = occurrences.Count;
+
+            // Budget phase 3: what those shifts do to the participant's budget, as a warning on the preview. Only the preview asks (an approval does not need it), and a failure to work it out
+            // must never stop the preview, so it says nothing rather than fail.
+            if (includeBudget && occurrences.Count > 0)
+            {
+                try
+                {
+                    var planned = occurrences.Select(o => new PlannedShift(null, o.Date, o.Pattern.StartTime, o.Pattern.EndTime, o.Pattern.EndsNextDay, o.Pattern.Ratio, o.Pattern.NightType)).ToList();
+                    plan.BudgetWarnings = await _budget.ForShiftsAsync(tenantId, draft.ParticipantId, planned, ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger?.LogWarning(ex, "The budget warnings for the approval preview of draft {DraftId} could not be worked out; the preview is shown without them", draft.Id);
+                    plan.BudgetWarnings = null;
+                }
+            }
         }
 
         return plan;

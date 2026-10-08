@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 using Npgsql;
 using Odip.Api.Services;
 using Odip.Infrastructure.Data;
@@ -20,10 +22,36 @@ public class BookingsController : ControllerBase
     // The request's clock: a test fixes it. Every calendar rule uses the PROVIDER's date from it (ProviderTimeZoneResolver.TodayAsync), never the UTC date.
     private readonly OdipDbContext _db;
     private readonly TimeProvider _clock;
-    public BookingsController(OdipDbContext db, TimeProvider? clock = null)
+    // Budget phase 3: confirming a booking says what it does to the participant's budget. Without a tenant on the request there is no money to show, so no warning.
+    private readonly ICurrentTenant? _tenant;
+    private readonly ShiftBudgetEffect? _budget;
+    private readonly ILogger<BookingsController>? _logger;
+    public BookingsController(OdipDbContext db, TimeProvider? clock = null, ICurrentTenant? tenant = null, ShiftBudgetEffect? budget = null, ILogger<BookingsController>? logger = null)
     {
         _db = db;
         _clock = clock ?? TimeProvider.System;
+        _tenant = tenant;
+        _budget = budget ?? (tenant is null ? null : new ShiftBudgetEffect(db, new BudgetLedgerService(db, _clock)));
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Where a booking that has just been confirmed takes a pool past the participant's funding (budget phase 3), as warnings; null when it is not confirmed or there is nothing to say. A warning only, in
+    /// every mode, and one that could not be worked out is logged and left out rather than failing a booking that is already saved.
+    /// </summary>
+    private async Task<List<BudgetWarningDto>?> BudgetWarningsAsync(ParticipantBooking booking, CancellationToken ct)
+    {
+        if (_budget is null || _tenant?.TenantId is not { } tenantId || booking.BookingStatus != BookingStatus.Confirmed) return null;
+        try
+        {
+            var warnings = await _budget.ForBookingAsync(tenantId, booking.ParticipantId, booking.Id, ct);
+            return warnings.Count > 0 ? warnings : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger?.LogWarning(ex, "The budget warning for booking {BookingId} could not be worked out; the booking is saved and the response goes out without it", booking.Id);
+            return null;
+        }
     }
 
     [HttpGet]
@@ -177,6 +205,7 @@ public class BookingsController : ControllerBase
         {
             return Conflict(ApiResponse<BookingDetailDto>.Fail("This participant is already booked on this trip."));
         }
+        var createdWarnings = await BudgetWarningsAsync(booking, ct);
         return CreatedAtAction(nameof(GetById), new { id = booking.Id },
             ApiResponse<BookingDetailDto>.Ok(new BookingDetailDto
             {
@@ -196,7 +225,7 @@ public class BookingsController : ControllerBase
                 InsuranceCoverageStart = booking.InsuranceCoverageStart, InsuranceCoverageEnd = booking.InsuranceCoverageEnd,
                 IsInsuranceValid = booking.InsuranceStatus == InsuranceStatus.Confirmed,
                 CreatedAt = booking.CreatedAt, UpdatedAt = booking.UpdatedAt,
-                ReadinessIssues = readiness.IssuesOrNull
+                ReadinessIssues = readiness.IssuesOrNull, BudgetWarnings = createdWarnings
             }));
     }
 
@@ -208,6 +237,7 @@ public class BookingsController : ControllerBase
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (b == null) return NotFound(ApiResponse<BookingDetailDto>.Fail("Booking not found"));
 
+        var wasConfirmed = b.BookingStatus == BookingStatus.Confirmed;
         b.BookingStatus = dto.BookingStatus; b.SupportRatioOverride = dto.SupportRatioOverride;
         b.NightSupportRequired = dto.NightSupportRequired; b.WheelchairRequired = dto.WheelchairRequired;
         b.HighSupportRequired = dto.HighSupportRequired; b.HasRestrictivePracticeFlag = dto.HasRestrictivePracticeFlag;
@@ -238,6 +268,8 @@ public class BookingsController : ControllerBase
 
         await RecalculateStaffRequired(b.TripInstanceId, ct);
         await _db.SaveChangesAsync(ct);
+        // Only the write that CONFIRMS a booking says what it does to the budget: one edited while it stays confirmed has said it already.
+        var updatedWarnings = wasConfirmed ? null : await BudgetWarningsAsync(b, ct);
         return Ok(ApiResponse<BookingDetailDto>.Ok(new BookingDetailDto
         {
             Id = b.Id, TripInstanceId = b.TripInstanceId, TripName = b.TripInstance.TripName,
@@ -254,17 +286,18 @@ public class BookingsController : ControllerBase
             InsuranceProvider = b.InsuranceProvider, InsurancePolicyNumber = b.InsurancePolicyNumber,
             InsuranceCoverageStart = b.InsuranceCoverageStart, InsuranceCoverageEnd = b.InsuranceCoverageEnd,
             IsInsuranceValid = b.InsuranceStatus == InsuranceStatus.Confirmed,
-            CreatedAt = b.CreatedAt, UpdatedAt = b.UpdatedAt
+            CreatedAt = b.CreatedAt, UpdatedAt = b.UpdatedAt, BudgetWarnings = updatedWarnings
         }));
     }
 
     [HttpPatch("{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
-    public async Task<ActionResult<ApiResponse<bool>>> Patch(Guid id, [FromBody] PatchBookingDto dto, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<BookingDetailDto>>> Patch(Guid id, [FromBody] PatchBookingDto dto, CancellationToken ct)
     {
-        var b = await _db.ParticipantBookings.FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (b == null) return NotFound(ApiResponse<bool>.Fail("Booking not found"));
+        var b = await _db.ParticipantBookings.Include(x => x.Participant).Include(x => x.TripInstance).FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (b == null) return NotFound(ApiResponse<BookingDetailDto>.Fail("Booking not found"));
 
+        var wasConfirmed = b.BookingStatus == BookingStatus.Confirmed;
         if (dto.BookingStatus.HasValue) b.BookingStatus = dto.BookingStatus.Value;
         if (dto.InsuranceStatus.HasValue) b.InsuranceStatus = dto.InsuranceStatus.Value;
         if (dto.PaymentStatus.HasValue) b.PaymentStatus = dto.PaymentStatus.Value;
@@ -272,7 +305,23 @@ public class BookingsController : ControllerBase
         b.UpdatedAt = DateTime.UtcNow;
         await RecalculateStaffRequired(b.TripInstanceId, ct);
         await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<bool>.Ok(true));
+
+        // The booking as it now stands (the response used to be a bare true, which the page typed as a booking anyway), so the write that confirms it can carry its budget warning.
+        var warnings = wasConfirmed ? null : await BudgetWarningsAsync(b, ct);
+        return Ok(ApiResponse<BookingDetailDto>.Ok(new BookingDetailDto
+        {
+            Id = b.Id, TripInstanceId = b.TripInstanceId, TripName = b.TripInstance.TripName,
+            ParticipantId = b.ParticipantId, ParticipantName = b.Participant.FirstName + " " + b.Participant.LastName,
+            BookingStatus = b.BookingStatus, BookingDate = b.BookingDate,
+            WheelchairRequired = b.WheelchairRequired, HighSupportRequired = b.HighSupportRequired,
+            NightSupportRequired = b.NightSupportRequired, HasRestrictivePracticeFlag = b.HasRestrictivePracticeFlag,
+            SupportRatioOverride = b.SupportRatioOverride, ActionRequired = b.ActionRequired,
+            InsuranceStatus = b.InsuranceStatus, PaymentStatus = b.PaymentStatus,
+            PlanTypeOverride = b.PlanTypeOverride, FundingNotes = b.FundingNotes,
+            BookingNotes = b.BookingNotes, CancellationReason = b.CancellationReason,
+            IsInsuranceValid = b.InsuranceStatus == InsuranceStatus.Confirmed,
+            CreatedAt = b.CreatedAt, UpdatedAt = b.UpdatedAt, BudgetWarnings = warnings
+        }));
     }
 
     [HttpDelete("{id:guid}")]

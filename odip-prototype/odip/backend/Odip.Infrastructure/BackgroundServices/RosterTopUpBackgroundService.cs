@@ -120,6 +120,7 @@ public sealed class RosterTopUpBackgroundService : BackgroundService
                     tenants++;
                     patternsSeen += patterns.Count;
                     var horizon = today.AddDays(options.HorizonDays);
+                    var madeToday = new Dictionary<Guid, List<Shift>>();
                     foreach (var forParticipant in patterns.GroupBy(p => p.ParticipantId))
                     {
                         participants++;
@@ -136,6 +137,11 @@ public sealed class RosterTopUpBackgroundService : BackgroundService
                             {
                                 var generated = await generator.GenerateAsync(db, forParticipant.Key, window.Select(x => x.Pattern.Id).ToList(), window.Key, horizon, ct);
                                 created += generated.Created;
+                                if (generated.Created > 0)
+                                {
+                                    if (!madeToday.TryGetValue(forParticipant.Key, out var made)) madeToday[forParticipant.Key] = made = new List<Shift>();
+                                    made.AddRange(generated.MadeShifts);
+                                }
                             }
                         }
                         catch (RosterBusyException)
@@ -151,6 +157,9 @@ public sealed class RosterTopUpBackgroundService : BackgroundService
                             _logger.LogError(ex, "Roster top-up could not generate shifts for participant {ParticipantId}; the others carry on", forParticipant.Key);
                         }
                     }
+
+                    // Budget phase 3: one line for the organisation saying what today's shifts do to budgets. No screen shows it, and it never fails a run.
+                    await LogBudgetSummaryAsync(db, tenantId, madeToday, ct);
                 }
 
                 // Done for the provider's day only when nobody failed: a failed participant is tried again at the next tick (the others have nothing due, so that costs little).
@@ -170,6 +179,35 @@ public sealed class RosterTopUpBackgroundService : BackgroundService
         else
             _logger.LogDebug("Roster top-up: nothing due");
         return run;
+    }
+
+    /// <summary>
+    /// One summary line for an organisation (budget phase 3): how many of the participants whose shifts were made in this run have a pool taken past its funding for a period, and how many pool periods that is.
+    /// Nothing else sees it: the top-up has no screen, and the people who rostered the pattern were warned when its agreement was approved. Logged only when there is something to say; a failure to work it out is logged
+    /// as a warning and is not a failure of the run.
+    /// </summary>
+    private async Task LogBudgetSummaryAsync(OdipDbContext db, Guid tenantId, Dictionary<Guid, List<Shift>> madeToday, CancellationToken ct)
+    {
+        if (madeToday.Count == 0) return;
+        try
+        {
+            var effect = new ShiftBudgetEffect(db, new BudgetLedgerService(db, _clock));
+            int participantsPast = 0, periodsPast = 0;
+            foreach (var (participantId, made) in madeToday)
+            {
+                var warnings = await effect.ForShiftsAsync(tenantId, participantId, made.Select(PlannedShift.Of).ToList(), ct);
+                if (warnings.Count == 0) continue;
+                participantsPast++;
+                periodsPast += warnings.Count;
+            }
+
+            if (periodsPast > 0)
+                _logger.LogInformation("Roster top-up budget for organisation {TenantId}: shifts made in this run take a pool past its funding in {Periods} period(s), for {Participants} of {Made} participants", tenantId, periodsPast, participantsPast, madeToday.Count);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Roster top-up could not work out the budget effect of the shifts it made for organisation {TenantId}; the shifts are made and the run carries on", tenantId);
+        }
     }
 
     /// <summary>The first day to generate for a pattern: the day after the last one a generation reached for it, and not before today.</summary>
