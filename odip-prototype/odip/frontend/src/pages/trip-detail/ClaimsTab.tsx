@@ -5,8 +5,9 @@ import { Dropdown } from '@/components/Dropdown'
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import GenerateClaimModal from '@/components/GenerateClaimModal'
+import { RejectClaimDialog } from '@/components/RejectClaimDialog'
 import type { TripClaimStatus } from '@/api/types/enums'
-import type { TripClaimListDto } from '@/api/types/claims'
+import type { TripClaimListDto, UpdateClaimDto } from '@/api/types/claims'
 import type { TripDetailDto } from '@/api/types/trips'
 
 const CLAIM_STATUS_ITEMS = [
@@ -33,31 +34,54 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
   const [selectedClaimIds, setSelectedClaimIds] = useState<Set<string>>(new Set())
   const [bulkLoading, setBulkLoading] = useState(false)
   const [deletingClaim, setDeletingClaim] = useState<TripClaimListDto | null>(null)
+  // The claims being marked Rejected, while the NDIA's code is asked for: whichever way a claim gets there (its status pill, or the bulk control), a rejection asks, as the claim page's does.
+  const [rejecting, setRejecting] = useState<string[] | null>(null)
+  const [rejectError, setRejectError] = useState<string | null>(null)
+  const [rejectLoading, setRejectLoading] = useState(false)
+
+  /** The server's own reason for a refusal, in plain words. */
+  function reasonOf(err: unknown, fallback: string): string {
+    const axiosErr = err as { response?: { data?: { errors?: string[]; message?: string } } }
+    return axiosErr?.response?.data?.errors?.[0] ?? axiosErr?.response?.data?.message ?? fallback
+  }
+
+  /**
+   * Writes the same change to each claim; settles when every one has been written, and refuses with the first refusal. Each claim is its own `mutateAsync` promise: `mutate` with callbacks reports
+   * only the LAST call made on a mutation, so with two or more claims the others never settled and the bulk change waited for ever.
+   */
+  function writeClaims(ids: string[], data: UpdateClaimDto) {
+    return Promise.all(ids.map(id => updateClaim.mutateAsync({ claimId: id, data })))
+  }
 
   async function bulkUpdateClaimStatus(ids: string[], status: string) {
     setBulkLoading(true)
     try {
-      await Promise.all(
-        ids.map(
-          id =>
-            new Promise<void>((resolve, reject) => {
-              updateClaim.mutate(
-                { claimId: id, data: { status: status as TripClaimStatus } },
-                { onSuccess: () => resolve(), onError: err => reject(err) }
-              )
-            })
-        )
-      )
+      await writeClaims(ids, { status: status as TripClaimStatus })
       setSelectedClaimIds(new Set())
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { errors?: string[]; message?: string } } }
-      setError(
-        axiosErr?.response?.data?.errors?.[0] ??
-        axiosErr?.response?.data?.message ??
-        'Failed to update claims.'
-      )
+      setError(reasonOf(err, 'Failed to update claims.'))
     } finally {
       setBulkLoading(false)
+    }
+  }
+
+  function askForNdiaCode(ids: string[]) {
+    setRejectError(null)
+    setRejecting(ids)
+  }
+
+  async function rejectClaims(ids: string[], code: string | null) {
+    setRejectLoading(true)
+    setRejectError(null)
+    try {
+      // The code goes with the Rejected status in the one request, and only when somebody gave one.
+      await writeClaims(ids, code ? { status: 'Rejected', rejectionCode: code } : { status: 'Rejected' })
+      setRejecting(null)
+      setSelectedClaimIds(new Set())
+    } catch (err: unknown) {
+      setRejectError(reasonOf(err, 'Failed to reject the claim.'))
+    } finally {
+      setRejectLoading(false)
     }
   }
 
@@ -120,13 +144,13 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
               sortable: true,
               ...(canWrite ? { bulkEditable: {
                 items: CLAIM_STATUS_ITEMS,
-                onBulkChange: (ids: string[], value: string) => bulkUpdateClaimStatus(ids, value),
+                onBulkChange: (ids: string[], value: string) => (value === 'Rejected' ? askForNdiaCode(ids) : bulkUpdateClaimStatus(ids, value)),
               } } : {}),
               render: (c: TripClaimListDto) => (
                 <Dropdown
                   variant="pill"
                   value={c.status}
-                  onChange={val => updateClaim.mutate({ claimId: c.id, data: { status: val as TripClaimStatus } })}
+                  onChange={val => (val === 'Rejected' ? askForNdiaCode([c.id]) : updateClaim.mutate({ claimId: c.id, data: { status: val as TripClaimStatus } }))}
                   colorClass={CLAIM_STATUS_COLORS[c.status] ?? 'bg-gray-100 text-gray-600'}
                   items={CLAIM_STATUS_ITEMS}
                   disabled={!canWrite}
@@ -161,6 +185,16 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
           trip={trip}
           onClose={() => setShowGenerateModal(false)}
           onSuccess={() => setShowGenerateModal(false)}
+        />
+      )}
+
+      {rejecting && (
+        <RejectClaimDialog
+          count={rejecting.length}
+          error={rejectError}
+          loading={rejectLoading}
+          onCancel={() => { if (!rejectLoading) setRejecting(null) }}
+          onConfirm={code => { void rejectClaims(rejecting, code) }}
         />
       )}
 

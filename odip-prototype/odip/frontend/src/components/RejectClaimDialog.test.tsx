@@ -27,6 +27,13 @@ describe('RejectClaimDialog', () => {
     expect(within(dialog).queryByLabelText('The code the NDIA gave')).not.toBeInTheDocument()
   })
 
+  it('says how many claims when it is asked for several at once, and one code goes with all of them', () => {
+    const { dialog } = setup({ count: 3 })
+
+    expect(dialog).toHaveTextContent('Mark these 3 claims as rejected? This cannot be undone.')
+    expect(dialog).not.toHaveTextContent('Mark this claim as rejected?')
+  })
+
   it('rejects with no code at all by default: null, never an empty string', async () => {
     const user = userEvent.setup()
     const { onConfirm, dialog } = setup()

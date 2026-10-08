@@ -23,6 +23,8 @@ type RejectClaimDialogProps = {
   /** The server's refusal of the last try, said in the dialog. */
   error?: string | null
   loading?: boolean
+  /** How many claims are being marked Rejected at once (the trip's Claims tab can do several): one code is sent with all of them. Default one. */
+  count?: number
   onCancel: () => void
   /** The NDIA's code, or null when none was given. The caller sends it with the Rejected status. */
   onConfirm: (code: string | null) => void
@@ -32,7 +34,7 @@ type RejectClaimDialogProps = {
  * "Mark as rejected?", asking, optionally, for the NDIA's code. A code that says the funds ran out (V17, V18, V27, V28) is the only direct sign a provider gets that a participant's pool is empty
  * (the NDIA's portal does not show a budget), so it warns on the participant's budget; any other code is kept as it was typed. Nothing here is required: a rejection with no code is still a rejection.
  */
-export function RejectClaimDialog({ error, loading, onCancel, onConfirm }: RejectClaimDialogProps) {
+export function RejectClaimDialog({ error, loading, count = 1, onCancel, onConfirm }: RejectClaimDialogProps) {
   const [choice, setChoice] = useState(NOT_GIVEN)
   const [typed, setTyped] = useState('')
   const [missing, setMissing] = useState(false)
@@ -58,7 +60,7 @@ export function RejectClaimDialog({ error, loading, onCancel, onConfirm }: Rejec
       loading={loading}
       message={
         <>
-          <p>Mark this claim as rejected? This cannot be undone.</p>
+          <p>{count > 1 ? `Mark these ${count} claims as rejected? This cannot be undone.` : 'Mark this claim as rejected? This cannot be undone.'}</p>
           <SelectField
             label="NDIA rejection code (optional)"
             value={choice}
