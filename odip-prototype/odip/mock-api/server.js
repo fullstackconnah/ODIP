@@ -2020,7 +2020,15 @@ function shiftClaimPreview() {
         supportItemCode: '01_002_0117_1_1', hours: 8, unitPrice: 40, totalAmount: 320,
       },
     ],
+    // A completed shift the claim cannot price (a sleepover or a group shift) is left out and listed with the reason, as the real endpoint does (L3-02).
+    leftOut: shiftClaimLeftOut(),
   }
+}
+
+function shiftClaimLeftOut() {
+  return [
+    { shiftId: 'sh-mock-2', serviceDate: '2026-08-11', description: 'Shift 22:00–06:00 · 8 h', reason: 'It is a sleepover, which shift claims do not price yet.' },
+  ]
 }
 
 // Notifications (docs/specs/2026-09-08-notifications-design.md §6) — preference grid for
@@ -2684,7 +2692,7 @@ const postRoutes = [
     id: 'claim-mock-0001', kind: 'Shift', participantId: id,
     periodFrom: body?.from ?? '2026-08-01', periodTo: body?.to ?? '2026-08-14',
     tripName: '', status: 'Draft', claimReference: `TC-MOCK-${id}`,
-    totalAmount: 320, createdAt: new Date().toISOString(),
+    totalAmount: 320, createdAt: new Date().toISOString(), leftOut: shiftClaimLeftOut(),
   })],
 
   // Notifications (design spec §2/§6) — stateless like every other POST here: retry doesn't

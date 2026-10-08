@@ -449,11 +449,36 @@ public class ClaimsControllerTests
         var result = await controller.GenerateShiftClaim(participant.Id,
             new GenerateShiftClaimRequestDto { From = shift.ServiceDate, To = shift.ServiceDate }, CancellationToken.None);
 
-        var body = Assert.IsType<ApiResponse<TripClaimListDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var body = Assert.IsType<ApiResponse<ShiftClaimGeneratedDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.Equal(ClaimKind.Shift, body.Data!.Kind);
         Assert.Equal(participant.Id, body.Data.ParticipantId);
         Assert.Equal(320m, body.Data.TotalAmount);
         Assert.Single(await db.TripClaims.ToListAsync());
+    }
+
+    [Fact]
+    public async Task GenerateShiftClaim_ListsTheShiftsItLeftOutAndWhy_AndTheClaimCarriesOnlyWhatItPriced()
+    {
+        using var db = CreateDb();
+        var participant = SeedParticipantWithCompletedShift(db, Guid.NewGuid(), out var shift);
+        var sleepover = new Shift
+        {
+            Id = Guid.NewGuid(), TenantId = shift.TenantId, ParticipantId = participant.Id, ServiceDate = new DateOnly(2026, 9, 8), StartTime = new TimeOnly(22, 0), EndTime = new TimeOnly(6, 0),
+            EndsNextDay = true, Ratio = SupportRatio.OneToOne, NightType = SleepoverType.Sleepover, Status = ShiftStatus.Completed,
+        };
+        db.Shifts.Add(sleepover);
+        db.SaveChanges();
+        var controller = CreateController(db);
+
+        var result = await controller.GenerateShiftClaim(participant.Id,
+            new GenerateShiftClaimRequestDto { From = shift.ServiceDate, To = sleepover.ServiceDate }, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ShiftClaimGeneratedDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(320m, body.Data!.TotalAmount);                                   // the plain shift only: the sleepover is not billed as eight hours of community access
+        var left = Assert.Single(body.Data.LeftOut);
+        Assert.Equal(sleepover.Id, left.ShiftId);
+        Assert.Equal("It is a sleepover, which shift claims do not price yet.", left.Reason);
+        Assert.Equal(1, await db.ClaimLineItems.CountAsync());
     }
 
     [Fact]

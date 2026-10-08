@@ -42,7 +42,6 @@ public sealed class BudgetLedgerService
     public const int RowsPerPeriod = 200;
     public const int MaxRowsPerPage = 500;
 
-    private const string UnpricedShiftNote = "No catalogue rate covers this date, so it is counted as $0.";
     private const string NoNdisNumberNote = "This participant has no NDIS number, so the trip claim will not include this booking: it is counted as $0.";
     private const string UnpricedTripNote = "No catalogue rate covers the trip's days, so it is counted as $0.";
     private const string StartedTripNote = "The trip has started and has no claim yet, so it is counted as pending.";
@@ -371,7 +370,7 @@ public sealed class BudgetLedgerService
         Guid Id, Guid ClaimId, string ClaimReference, TripClaimStatus ClaimStatus, ClaimLineItemStatus Status, string ItemCode, DateOnly From, decimal Hours, decimal TotalAmount, decimal? PaidAmount,
         Guid? ShiftId, Guid? BookingId, Guid ParticipantId, PlanType? BookingPlanType);
 
-    public sealed record ShiftRow(Guid Id, Guid ParticipantId, DateOnly ServiceDate, TimeOnly Start, TimeOnly End, bool EndsNextDay, ShiftStatus Status);
+    public sealed record ShiftRow(Guid Id, Guid ParticipantId, DateOnly ServiceDate, TimeOnly Start, TimeOnly End, bool EndsNextDay, ShiftStatus Status, SupportRatio Ratio, SleepoverType NightType);
 
     public sealed record BookingRow(
         Guid Id, Guid ParticipantId, PlanType? PlanTypeOverride, Guid TripId, string TripName, DateOnly StartDate, int DurationDays, TimeOnly? DepartureTime, TimeOnly? ReturnTime,
@@ -407,7 +406,7 @@ public sealed class BudgetLedgerService
             .Where(s => s.TenantId == tenantId && participantIds.Contains(s.ParticipantId) && s.ServiceDate >= from && s.ServiceDate <= to
                 && (s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.Published || s.Status == ShiftStatus.InProgress || s.Status == ShiftStatus.PendingReview
                     || (s.Status == ShiftStatus.Completed && !_db.ClaimLineItems.Any(l => l.ShiftId == s.Id))))
-            .Select(s => new ShiftRow(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status));
+            .Select(s => new ShiftRow(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.Ratio, s.NightType));
 
     /// <summary>
     /// Confirmed bookings of trips that start between <paramref name="from"/> and <paramref name="to"/> and have not been cancelled, and that no claim line has already taken over. The lower
@@ -518,7 +517,8 @@ public sealed class BudgetLedgerService
     {
         var state = ShiftPriceEstimator.StateFor(person.AddressState, pricing.ProviderState);
         var hours = Shift.HoursBetween(shift.Start, shift.End, shift.EndsNextDay);
-        var price = ShiftPriceEstimator.Price(pricing.CommunityAccess, shift.ServiceDate, hours, person.IsIntensive, state, pricing.Holidays.For(state));
+        var outcome = ShiftPriceEstimator.Price(pricing.CommunityAccess, shift.ServiceDate, hours, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state));
+        var price = outcome.Price;
 
         var completed = shift.Status == ShiftStatus.Completed;
         var past = !completed && shift.ServiceDate < today;
@@ -531,9 +531,14 @@ public sealed class BudgetLedgerService
             Id = shift.Id, ShiftId = shift.Id,
             Description = string.Create(CultureInfo.InvariantCulture, $"Shift {shift.Start:HH:mm}–{shift.End:HH:mm} · {hours:0.##} h"),
             Status = shift.Status.ToString(), Link = string.Create(CultureInfo.InvariantCulture, $"/rostering?date={shift.ServiceDate:yyyy-MM-dd}"),
-            Note = price is null ? UnpricedShiftNote : null,
+            // A shift with no price is counted as $0 and says why (a sleepover or a group shift the shift claim does not price yet, or no catalogue rate); one that is priced but not
+            // worked out fully (an overnight shift: evening and night rates are not applied yet) carries the estimator's caveat.
+            Note = outcome.NotPricedBecause is { } because ? NotCountedNote(because) : outcome.Caveat,
         };
     }
+
+    /// <summary>The ledger's note for a shift or booking that has no price: the reason, then what the ledger does about it ("No catalogue rate covers this date, so it is counted as $0.").</summary>
+    private static string NotCountedNote(string because) => char.ToUpperInvariant(because[0]) + because[1..] + ", so it is counted as $0.";
 
     /// <summary>
     /// One item for each booking and category: the booking's whole trip priced for the participant the way the trip claim will be, counted in the period the trip starts in.

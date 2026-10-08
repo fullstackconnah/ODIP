@@ -12,6 +12,7 @@ import type {
   ClaimKind,
   GenerateShiftClaimRequestDto,
   ShiftClaimPreviewResponseDto,
+  ShiftClaimGeneratedDto,
 } from '../types'
 
 /** PP-61: `options.enabled` lets a caller (e.g. a tab that only needs this once visited) defer
@@ -156,7 +157,7 @@ export function useGenerateShiftClaim() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ participantId, data }: { participantId: string; data: GenerateShiftClaimRequestDto }) =>
-      apiPost<TripClaimListDto>(`/participants/${participantId}/claims/from-shifts`, data),
+      apiPost<ShiftClaimGeneratedDto>(`/participants/${participantId}/claims/from-shifts`, data),
     onSuccess: (_, { participantId }) => {
       qc.invalidateQueries({ queryKey: ['participant-claims', participantId] })
       qc.invalidateQueries({ queryKey: ['claims'] })

@@ -48,7 +48,7 @@ public class ShiftClaimGenerationService
     public async Task<ShiftClaimPreviewResponseDto> PreviewAsync(
         Guid participantId, DateOnly from, DateOnly to, CancellationToken ct = default)
     {
-        var (lineItems, participant) = await CalculateAsync(participantId, from, to, ct);
+        var (lineItems, leftOut, participant) = await CalculateAsync(participantId, from, to, ct);
 
         // The budget effect is worked out from the same lines the claim would have: each is the shift it replaces in the participant's "pending" (a completed shift nobody has claimed is already counted).
         // Under the CALLER's tenant, never the participant's own: a SuperAdmin with no organisation chosen resolves other organisations'
@@ -74,15 +74,23 @@ public class ShiftClaimGenerationService
                 SupportItemCode = l.CatalogueItem.ItemNumber,
                 Hours = l.Hours,
                 UnitPrice = l.UnitPrice,
-                TotalAmount = l.TotalAmount
-            }).ToList()
+                TotalAmount = l.TotalAmount,
+                Note = l.Caveat
+            }).ToList(),
+            // Never dropped silently: a completed shift this claim cannot price stays completed and unclaimed, and the preview says which and why.
+            LeftOut = leftOut.ToList()
         };
     }
 
     public async Task<TripClaim> GenerateDraftClaimAsync(
+        Guid participantId, DateOnly from, DateOnly to, CancellationToken ct = default) =>
+        (await GenerateAsync(participantId, from, to, ct)).Claim;
+
+    /// <summary>The draft claim for the shifts in the range that can be priced, and the shifts it left out and why (they stay completed and unclaimed).</summary>
+    public async Task<ShiftClaimGenerated> GenerateAsync(
         Guid participantId, DateOnly from, DateOnly to, CancellationToken ct = default)
     {
-        var (lineItems, participant) = await CalculateAsync(participantId, from, to, ct);
+        var (lineItems, leftOut, participant) = await CalculateAsync(participantId, from, to, ct);
 
         var settings = await _db.ProviderSettings.FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("Provider settings are not configured.");
@@ -124,12 +132,12 @@ public class ShiftClaimGenerationService
         claim.TotalAmount = claimLineItems.Sum(l => l.TotalAmount);
 
         await _db.SaveChangesAsync(ct);
-        return claim;
+        return new ShiftClaimGenerated(claim, leftOut);
     }
 
     // ─── Shared calculation ──────────────────────────────────────────────
 
-    private async Task<(List<ShiftLineCalc> LineItems, Participant Participant)> CalculateAsync(
+    private async Task<(List<ShiftLineCalc> LineItems, List<ShiftClaimLeftOutDto> LeftOut, Participant Participant)> CalculateAsync(
         Guid participantId, DateOnly from, DateOnly to, CancellationToken ct)
     {
         // Participants is ITenantEntity-filtered — a participantId that doesn't resolve under
@@ -183,11 +191,21 @@ public class ShiftClaimGenerationService
             .ToListAsync(ct);
 
         var lineItems = new List<ShiftLineCalc>();
+        var leftOut = new List<ShiftClaimLeftOutDto>();
         foreach (var shift in shifts)
         {
             // The one pricing rule, shared with the budget ledger so an estimate is exactly what this claim will say.
-            var price = ShiftPriceEstimator.Price(catalogueItems, shift.ServiceDate, shift.DurationHours, participant.IsIntensiveSupport, state, publicHolidays);
-            if (price == null) continue;
+            var outcome = ShiftPriceEstimator.Price(
+                catalogueItems, shift.ServiceDate, shift.DurationHours, shift.Ratio, shift.NightType, participant.IsIntensiveSupport, state, publicHolidays);
+            if (outcome.Price is not { } price)
+            {
+                // A shift that cannot be priced is not claimed, and it is not dropped silently either: it is listed with the reason, and it stays completed and unclaimed.
+                leftOut.Add(new ShiftClaimLeftOutDto
+                {
+                    ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = outcome.NotPricedSentence!,
+                });
+                continue;
+            }
 
             lineItems.Add(new ShiftLineCalc
             {
@@ -196,21 +214,39 @@ public class ShiftClaimGenerationService
                 DayType = price.DayType,
                 Hours = price.Hours,
                 UnitPrice = price.UnitPrice,
-                TotalAmount = price.TotalAmount
+                TotalAmount = price.TotalAmount,
+                Caveat = outcome.Caveat
             });
         }
 
         if (lineItems.Count == 0)
         {
             // Nothing priced because no row of the group is valid on any of these dates (the catalogue starts after them): say so, the same way the trip engine does.
-            // Shifts that have a row for their date but not for their day type still read as nothing to claim, as they always did.
-            if (!shifts.Any(s => catalogueItems.Any(i => EffectiveCatalogueResolver.IsValidOn(i, s.ServiceDate))))
+            if (leftOut.All(l => l.Reason == NoCatalogueRateSentence) && !shifts.Any(s => catalogueItems.Any(i => EffectiveCatalogueResolver.IsValidOn(i, s.ServiceDate))))
                 throw new InvalidOperationException(FormattableString.Invariant(
                     $"No catalogue row covers these shifts' dates ({shifts[0].ServiceDate:dd/MM/yyyy} to {shifts[^1].ServiceDate:dd/MM/yyyy}). Import the catalogue for that period first."));
-            throw new InvalidOperationException("No completed, unclaimed shifts found in this date range.");
+            // There ARE completed, unclaimed shifts here: none of them could be priced, so the refusal says they were left out, and why.
+            throw new InvalidOperationException(NothingClaimable(leftOut));
         }
 
-        return (lineItems, participant);
+        return (lineItems, leftOut, participant);
+    }
+
+    private static readonly string NoCatalogueRateSentence = new ShiftPriceOutcome(null, ShiftPriceEstimator.NoCatalogueRateBecause, null).NotPricedSentence!;
+
+    /// <summary>The shift as the budget ledger describes it ("Shift 22:00–06:00 · 8 h"), so the same shift reads the same on every screen.</summary>
+    private static string Describe(Shift shift) =>
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Shift {shift.StartTime:HH:mm}–{shift.EndTime:HH:mm} · {shift.DurationHours:0.##} h");
+
+    /// <summary>
+    /// The refusal when shifts were found but none could be claimed: how many were left out and why, grouped by reason. "No completed, unclaimed shifts found" would be untrue here
+    /// (they are there, and are still waiting), so it says they were left out instead.
+    /// </summary>
+    private static string NothingClaimable(IReadOnlyList<ShiftClaimLeftOutDto> leftOut)
+    {
+        var count = leftOut.Count;
+        var why = string.Join(" ", leftOut.GroupBy(l => l.Reason).Select(g => count > 1 ? $"{g.Key.TrimEnd('.')} ({g.Count()} {(g.Count() == 1 ? "shift" : "shifts")})." : g.Key));
+        return $"Nothing in this date range could be claimed: {count} completed, unclaimed {(count == 1 ? "shift was" : "shifts were")} left out. {why}";
     }
 
     // ─── Helpers ─
@@ -233,5 +269,10 @@ public class ShiftClaimGenerationService
         public decimal Hours { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal TotalAmount { get; set; }
+        /// <summary>Something worth saying about the line (the estimator's caveat), or null.</summary>
+        public string? Caveat { get; set; }
     }
 }
+
+/// <summary>The claim made from shifts, and the completed shifts in the range it left out and why.</summary>
+public sealed record ShiftClaimGenerated(TripClaim Claim, IReadOnlyList<ShiftClaimLeftOutDto> LeftOut);

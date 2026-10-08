@@ -133,11 +133,31 @@ export interface ShiftClaimPreviewLineItemDto {
   hours: number
   unitPrice: number
   totalAmount: number
+  /** Something worth saying about a line that is priced but not worked out fully (an overnight shift: evening and night rates are not applied yet). Absent when there is nothing to say. */
+  note?: string
+}
+
+/** A completed, unclaimed shift a shift claim leaves out, and why. It stays completed and unclaimed. */
+export interface ShiftClaimLeftOutDto {
+  shiftId: string
+  serviceDate: string
+  /** The shift as the ledger describes it ("Shift 22:00–06:00 · 8 h"). */
+  description: string
+  /** A sentence ("It is a sleepover, which shift claims do not price yet."). */
+  reason: string
+}
+
+/** The claim made from shifts, and the shifts in the range it left out. */
+export interface ShiftClaimGeneratedDto extends TripClaimListDto {
+  /** The server always sends it (empty when nothing was left out). */
+  leftOut?: ShiftClaimLeftOutDto[]
 }
 
 export interface ShiftClaimPreviewResponseDto {
   totalAmount: number
   lineItems: ShiftClaimPreviewLineItemDto[]
+  /** The shifts this claim leaves out and why: never dropped silently. The server always sends it (empty when nothing is left out). */
+  leftOut?: ShiftClaimLeftOutDto[]
   /** What generating this claim would do to the participant's budget (budget phase 2a). Absent when they have no plan that has started. A warning, never a block. */
   budget?: ClaimBudgetDto
 }
