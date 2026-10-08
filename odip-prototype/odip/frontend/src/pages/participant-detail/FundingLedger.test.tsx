@@ -175,6 +175,42 @@ describe('the plan total', () => {
   })
 })
 
+// Budget phase 2b: the NDIA's own word that a pool has run out. A provider cannot see a participant's budget in the NDIA's portal, so a claim refused with V17, V18, V27 or V28 is the only direct sign.
+describe('the NDIA rejecting a claim for want of funds', () => {
+  const rejection = { date: '2026-10-08', code: 'V27', claimId: 'claim-9', claimReference: 'CLM-0009' }
+
+  it('says it on the pool the claim belongs to, with the day and the code, and links to the claim', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ ndiaRejection: rejection })] }))
+
+    const note = screen.getByText(/NDIA rejected a claim on/)
+    expect(note).toHaveTextContent('NDIA rejected a claim on 8 Oct 2026: not enough funds (V27). Claim CLM-0009')
+    expect(within(note).getByRole('link', { name: 'Claim CLM-0009' })).toHaveAttribute('href', '/claims/claim-9')
+  })
+
+  it('is in words and in the danger tone with a mark that is not colour, and carries no money', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ ndiaRejection: rejection })] }))
+
+    const note = screen.getByText(/NDIA rejected a claim on/).closest('p')!
+    expect(note).toHaveClass('bg-[var(--color-error-container)]')
+    expect(note.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    expect(note.textContent).not.toMatch(/\$/)
+  })
+
+  it('says it once per pool that has it, and not on a pool that has not', () => {
+    renderLedger(participantLedger({
+      pools: [ledgerPool({ id: 'pool-a', name: 'Core', ndiaRejection: rejection }), ledgerPool({ id: 'pool-b', name: 'Improved Daily Living Skills' })],
+    }))
+
+    expect(screen.getAllByText(/NDIA rejected a claim on/)).toHaveLength(1)
+  })
+
+  it('says nothing of the NDIA when the server sent no rejection for the pool', () => {
+    renderLedger(participantLedger())
+
+    expect(document.body).not.toHaveTextContent('NDIA rejected')
+  })
+})
+
 describe('no plan, no figure', () => {
   it('says there is nothing to spend against yet and shows no figure at all, never a zero balance', () => {
     renderLedger(noLedger())

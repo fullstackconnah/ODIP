@@ -9,6 +9,7 @@ import { apiClient } from '@/api/client'
 import { NoShowModal } from '@/components/NoShowModal'
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { RejectClaimDialog } from '@/components/RejectClaimDialog'
 import { formatCurrency, formatDateAu } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
 import { PageHeader } from '@/components/PageHeader'
@@ -84,10 +85,11 @@ export default function ClaimDetailPage() {
     })
   }
 
-  function handleStatusChange(status: TripClaimStatus) {
+  function handleStatusChange(status: TripClaimStatus, rejectionCode?: string | null) {
     if (!id) return
     setStatusError(null)
-    updateClaim.mutate({ claimId: id, data: { status } }, {
+    // The NDIA's code goes with a rejection only, and only when somebody gave one: any other status change carries no code, so the server's "only with a rejected claim" rule cannot trip.
+    updateClaim.mutate({ claimId: id, data: rejectionCode ? { status, rejectionCode } : { status } }, {
       onSuccess: () => setStatusConfirmTarget(null),
       onError: (err) => {
         const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
@@ -102,8 +104,6 @@ export default function ClaimDetailPage() {
         return { title: 'Mark as submitted?', message: 'Mark this claim as submitted to the NDIA?', confirmLabel: 'Mark as Submitted', variant: 'default' as const }
       case 'Paid':
         return { title: 'Mark as paid?', message: 'Mark this claim as paid? This cannot be undone.', confirmLabel: 'Mark as Paid', variant: 'default' as const }
-      case 'Rejected':
-        return { title: 'Mark as rejected?', message: 'Mark this claim as rejected? This cannot be undone.', confirmLabel: 'Mark as Rejected', variant: 'danger' as const }
       default:
         return null
     }
@@ -202,6 +202,18 @@ export default function ClaimDetailPage() {
             : { label: 'Trip', value: claim.tripName || '—' },
           { label: 'Created', value: <span className="tabular-nums">{claim.createdAt ? new Date(claim.createdAt).toLocaleDateString('en-AU') : '—'}</span> },
           { label: 'Submitted', value: <span className="tabular-nums">{claim.submittedDate ? new Date(claim.submittedDate).toLocaleDateString('en-AU') : '—'}</span> },
+          // What the NDIA said, once it has refused the claim: when, and the code it gave (V17, V18, V27 and V28 say the funds ran out). Nothing is said of a claim that is not rejected.
+          ...(claim.status === 'Rejected'
+            ? [{
+              label: 'Rejected',
+              value: (
+                <span className="tabular-nums">
+                  {claim.rejectedDate ? new Date(claim.rejectedDate).toLocaleDateString('en-AU') : '—'}
+                  {' · '}{claim.rejectionCode ? `NDIA code ${claim.rejectionCode}` : 'no NDIA code recorded'}
+                </span>
+              ),
+            }]
+            : []),
         ]}
       />
 
@@ -374,7 +386,16 @@ export default function ClaimDetailPage() {
           onSuccess={() => setNoShowTarget(null)}
         />
       )}
-      {statusConfirmTarget && (() => {
+      {/* A rejection asks, optionally, for the NDIA's code (V17, V18, V27, V28 or another): the codes that say the funds ran out warn on the participant's budget. */}
+      {statusConfirmTarget === 'Rejected' && (
+        <RejectClaimDialog
+          error={statusError}
+          loading={updateClaim.isPending}
+          onCancel={() => { if (!updateClaim.isPending) setStatusConfirmTarget(null) }}
+          onConfirm={code => handleStatusChange('Rejected', code)}
+        />
+      )}
+      {statusConfirmTarget && statusConfirmTarget !== 'Rejected' && (() => {
         const copy = statusConfirmCopy(statusConfirmTarget)!
         return (
           <ConfirmDialog

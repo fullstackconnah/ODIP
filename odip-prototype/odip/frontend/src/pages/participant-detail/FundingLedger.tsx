@@ -13,6 +13,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { chipToneOf, focusPeriodOf, money, poolSentence, quietEstimateLine, rowsByGroup, unpricedTripDaySentence } from '@/lib/budgetLedger'
 import { formatDateRange, formatDayMonth } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
+import { NdiaRejectionNote } from './NdiaRejectionNote'
 
 // The budget ledger on the Funding tab (budget feature, phase 2a): for each pool of the current plan, the current period's figures, the one sentence that says what is left and
 // where the booked shifts would take it, the strip of periods, the rows of the selected period in their three groups, and the plan's total. Every figure is the server's: this screen
@@ -107,6 +108,7 @@ function PoolLedger({ pool }: { pool: LedgerPool }) {
         <>
           <GlanceStrip period={focus} />
           <p className="mt-3 text-sm text-[var(--color-foreground)]">{poolSentence(pool, focus)}</p>
+          {pool.ndiaRejection && <NdiaRejectionNote rejection={pool.ndiaRejection} />}
           {focus.pastUnresolvedCount > 0 && (
             <p className="mt-2 text-[13px] text-[var(--color-on-warning-container)]">
               {plural(focus.pastUnresolvedCount, 'past shift')} not completed or cancelled, counted as pending.
