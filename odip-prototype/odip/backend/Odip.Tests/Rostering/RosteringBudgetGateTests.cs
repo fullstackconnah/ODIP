@@ -122,6 +122,32 @@ public class RosteringBudgetGateTests : IDisposable
         return staff;
     }
 
+    // ── The stack canary's write sequence ───────────────────────────────────
+
+    [Fact]
+    public async Task TheStackCanarysShiftSequence_CreateAssignPublish_IsUntouched_ForAParticipantWithNoBudget()
+    {
+        // e2e/tests/_canary/stack.spec.ts books and rosters a shift in Warn mode for a fresh participant, and expects no findings at all from the assign. A participant with no plan has no budget
+        // finding, in either mode, so none of the three writes may see one.
+        _kit.SeedProvider("NSW");
+        _kit.SeedCommunityAccessCatalogue();
+        _participant = _kit.SeedParticipant();
+        var staff = SeedStaff();
+        var controller = Controller("Coordinator");
+
+        var created = Ok(await controller.CreateShift(Create(Wed14Oct), default));
+        var assigned = Ok(await controller.AssignShift(created.Id, new AssignShiftDto { StaffId = staff.Id }, default));
+        var shift = _kit.Db.Shifts.Single(s => s.Id == created.Id);
+        var published = Ok(await controller.UpdateShift(created.Id, Update(shift, status: ShiftStatus.Published), default));
+
+        Assert.Empty(created.Findings.Where(f => f.Code.StartsWith("BUDGET_")));
+        Assert.Empty(assigned.Findings);
+        Assert.Empty(published.Findings.Where(f => f.Code.StartsWith("BUDGET_")));
+        Assert.Equal(ShiftStatus.Published, published.Status);
+        Assert.Null(published.AcknowledgedFindingCodes);
+        Assert.Empty(_kit.Db.BookingTasks);
+    }
+
     // ── The dry run ─────────────────────────────────────────────────────────
 
     [Fact]

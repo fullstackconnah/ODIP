@@ -122,6 +122,20 @@ describe('TasksPage — obligation-engine tasks (item 9)', () => {
     expect(screen.getByText('Flagged note follow-up')).toBeInTheDocument()
   })
 
+  it('shows an Admin the emergency booking review task by its human label, with the way to the shift on the roster board', () => {
+    mockUseTasks.mockReturnValue({
+      data: [
+        { id: 't6', title: 'Review emergency shift past budget: Mia Chen on 17 Aug 2026', taskType: 'BudgetEmergencyReview', ownerName: null, dueDate: '2026-08-18', priority: 'Medium', status: 'NotStarted', linkTo: '/rostering?date=2026-08-17&participant=p-1' },
+      ],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.getByText('Budget emergency review')).toBeInTheDocument()
+    expect(screen.getByText('Review emergency shift past budget: Mia Chen on 17 Aug 2026')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/rostering?date=2026-08-17&participant=p-1')
+  })
+
   it('still shows the raw type text for an existing task type not in the new label map', () => {
     renderPage()
     expect(screen.getByText('AccommodationRequest')).toBeInTheDocument()
