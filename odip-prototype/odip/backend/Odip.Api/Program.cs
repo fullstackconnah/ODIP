@@ -168,6 +168,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.CatalogueImportService>(
 builder.Services.AddScoped<Odip.Infrastructure.Services.PlanPricingService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.FundingPlanService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetLedgerService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetListService>();
 // The plan quote is the one heavy request: about two in flight per organisation (a resource filter, because the rate limiter runs before authentication).
 builder.Services.AddSingleton<Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter>();
 builder.Services.AddScoped<Odip.Api.RateLimiting.PlanQuoteConcurrencyFilter>();
