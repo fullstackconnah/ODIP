@@ -24,6 +24,45 @@ beforeEach(() => {
 })
 afterEach(() => { vi.useRealTimers() })
 
+describe('which plan the figures are for', () => {
+  it('names the plan by its dates above the figures', () => {
+    renderLedger(participantLedger())
+
+    expect(screen.getByText(/^Figures for the plan 1\s+Jul\s+2026\s+–\s+30\s+Jun\s+2027\.$/)).toBeInTheDocument()
+  })
+
+  it('says so when that plan has ended, and the figures stay that plan\'s', () => {
+    renderLedger(participantLedger({ planIsCurrent: false, planStart: '2025-07-01', planEnd: '2026-06-30' }))
+
+    expect(screen.getByText(/^Figures for the plan 1\s+Jul\s+2025\s+–\s+30\s+Jun\s+2026, which has ended\./)).toBeInTheDocument()
+    expect(screen.getByText('Available')).toBeInTheDocument()
+  })
+
+  it('says no plan is running between an ended plan and the next, and shows none of the ended plan\'s figures', () => {
+    const ended = participantLedger({ planIsCurrent: false, planStart: '2025-10-01', planEnd: '2026-09-30' })
+    render(<MemoryRouter><LedgerBody data={ended} nextPlanStart="2026-10-15" /></MemoryRouter>)
+
+    expect(screen.getByText(/No plan is running between 30\s+Sep\s+2026 and 15\s+Oct\s+2026\./)).toBeInTheDocument()
+    expect(screen.queryByText('Available')).not.toBeInTheDocument()
+    expect(screen.queryByText('Plan total')).not.toBeInTheDocument()
+    expect(screen.queryByText(/in the last period/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the figures while the plan is running, however many later plans are recorded', () => {
+    render(<MemoryRouter><LedgerBody data={participantLedger()} nextPlanStart="2027-07-01" /></MemoryRouter>)
+
+    expect(screen.getByText('Available')).toBeInTheDocument()
+    expect(screen.queryByText(/No plan is running/)).not.toBeInTheDocument()
+  })
+
+  it('keeps an ended plan\'s figures when no later plan is recorded to start', () => {
+    render(<MemoryRouter><LedgerBody data={participantLedger({ planIsCurrent: false, planEnd: '2026-09-30' })} /></MemoryRouter>)
+
+    expect(screen.getByText('Available')).toBeInTheDocument()
+    expect(screen.queryByText(/No plan is running/)).not.toBeInTheDocument()
+  })
+})
+
 describe('the glance strip and the sentence', () => {
   it('leads each pool with the current period\'s available, used and forecast, and the status chip in its own tone', () => {
     renderLedger(participantLedger())

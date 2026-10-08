@@ -12,6 +12,7 @@ import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { chipToneOf, focusPeriodOf, money, poolSentence, quietEstimateLine, rowsByGroup, unpricedTripDaySentence } from '@/lib/budgetLedger'
 import { formatDateRange, formatDayMonth } from '@/lib/dateRange'
+import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { plural } from '@/lib/format'
 
 // The budget ledger on the Funding tab (budget feature, phase 2a): for each pool of the current plan, the current period's figures, the one sentence that says what is left and
@@ -39,7 +40,7 @@ function BudgetStatusBadge({ status, size }: { status: keyof typeof BUDGET_STATU
  * The participant's budget ledger. With no plan that has started it says so in one sentence and shows no figure at all: an absent plan is not a zero balance, and nothing here ever
  * implies a confirmed NDIA balance (these are ODIP's own figures against the recorded plan).
  */
-export default function FundingLedger({ participantId, enabled = true }: { participantId: string; enabled?: boolean }) {
+export default function FundingLedger({ participantId, enabled = true, nextPlanStart }: { participantId: string; enabled?: boolean; nextPlanStart?: string }) {
   const query = useFundingLedger(participantId, enabled)
 
   if (query.isLoading) return <PageState kind="loading" noun="budget ledger" />
@@ -57,13 +58,32 @@ export default function FundingLedger({ participantId, enabled = true }: { parti
           <div className="mt-2"><Button variant="secondary" size="sm" onClick={() => { void query.refetch() }}>Try again</Button></div>
         </Callout>
       )}
-      <LedgerBody data={data} />
+      <LedgerBody data={data} nextPlanStart={nextPlanStart} />
     </div>
   )
 }
 
-/** The whole ledger for a loaded answer, so the sections can be rendered from a fixture with no query behind it. */
-export function LedgerBody({ data }: { data: ParticipantLedgerDto }) {
+/**
+ * The whole ledger for a loaded answer, so the sections can be rendered from a fixture with no query behind it.
+ *
+ * `nextPlanStart` is the start of the plan the tab leads with when that plan has not started: the ledger is always of the plan that holds today or, with none, the latest that has
+ * STARTED, so between a plan that has ended and the next one the ledger would be the ended plan's under the upcoming plan's card. There it says no plan is running instead of showing the ended plan's
+ * figures; everywhere else it names the plan the figures are for.
+ */
+export function LedgerBody({ data, nextPlanStart }: { data: ParticipantLedgerDto; nextPlanStart?: string }) {
+  if (data.planId && !data.planIsCurrent && nextPlanStart) {
+    return (
+      <Card>
+        <div className="flex max-w-prose flex-col items-start gap-2">
+          <h3 className="text-sm font-semibold">No budget figures today</h3>
+          <p className="text-sm text-[var(--color-muted-foreground)]">
+            No plan is running between {writtenDay(data.planEnd)} and {writtenDay(nextPlanStart)}. There is nothing to spend against yet, and the plan that ended on {writtenDay(data.planEnd)} is under Past plans.
+          </p>
+        </div>
+      </Card>
+    )
+  }
+
   const noPlan = !data.planId || data.pools.length === 0
   // Money that fits no recorded pool, or is dated outside the plan, is shown and never dropped (the brief's rule): the server sends both buckets, and each shows only when it holds something.
   const buckets = (
@@ -101,6 +121,12 @@ export function LedgerBody({ data }: { data: ParticipantLedgerDto }) {
 
   return (
     <>
+      {/* The ledger is of one plan: say which, by its dates, so that it can never be read as the plan the card above it shows. */}
+      {data.planStart && data.planEnd && (
+        <p className="text-[13px] text-[var(--color-muted-foreground)]">
+          Figures for the plan {writtenSpan(data.planStart, data.planEnd)}{data.planIsCurrent ? '' : ', which has ended'}.
+        </p>
+      )}
       {data.pools.map(pool => <PoolLedger key={pool.id} pool={pool} />)}
       {buckets}
       <p className="text-[13px] text-[var(--color-muted-foreground)]">
