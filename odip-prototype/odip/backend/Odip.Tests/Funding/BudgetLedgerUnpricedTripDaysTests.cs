@@ -109,6 +109,53 @@ public class BudgetLedgerUnpricedTripDaysTests
         Assert.Equal(2, q2.UnpricedTripDayCount);
     }
 
+    // ── The dates a note names (the 2026-10-08 review, L5-03) ───────────────
+
+    private static async Task<string?> NoteOfAWeekdayGapIn(DateOnly start, int days)
+    {
+        // Only the weekend has a rate, so every weekday of the trip is unpriced and the note has to say which dates.
+        using var kit = ArrangeWith(k =>
+        {
+            k.Db.SupportCatalogueItems.Add(Row(k, "04_Saturday_STD", ClaimDayType.Saturday, 4));
+            k.Db.SupportCatalogueItems.Add(Row(k, "04_Sunday_STD", ClaimDayType.Sunday, 4));
+            k.Db.SaveChanges();
+        });
+        var person = kit.SeedParticipant();
+        kit.SeedPlan(person, CoreQuarters());
+        kit.SeedBooking(kit.SeedTrip(start, days), person);
+        var all = await kit.Ledger.ComputeAsync(kit.TenantId, new[] { person.Id }, Ct);
+        return Assert.Single(all[person.Id].Items).Note;
+    }
+
+    [Fact]
+    public async Task ASpanAcrossAMonthEndNamesBothMonths_NotJustTheFirstDaysNumber()
+    {
+        // Sat 28 Nov to Wed 2 Dec 2026: the weekdays that cannot be priced are 30 Nov, 1 Dec and 2 Dec. It used to read "30 to 02 Dec 2026", which is 30 December to 2 December.
+        var note = await NoteOfAWeekdayGapIn(new DateOnly(2026, 11, 28), 5);
+
+        Assert.Equal("No catalogue rate covers weekday 30 Nov to 2 Dec 2026 (24 h), so that part of the trip is counted as $0.", note);
+    }
+
+    [Fact]
+    public async Task ASpanAcrossAYearEndNamesBothYears()
+    {
+        // Sat 26 Dec 2026 to Sat 2 Jan 2027: the weekdays are Mon 28 Dec to Fri 1 Jan.
+        var note = await NoteOfAWeekdayGapIn(new DateOnly(2026, 12, 26), 8);
+
+        Assert.Contains("weekday 28 Dec 2026 to 1 Jan 2027 (40 h)", note);
+    }
+
+    [Fact]
+    public async Task ASpanInsideOneMonthStillNamesTheMonthOnce_AndASingleDayItsDate()
+    {
+        // Fri 6 to Tue 10 Nov 2026: Friday on its own, then Monday and Tuesday after the weekend.
+        var note = await NoteOfAWeekdayGapIn(new DateOnly(2026, 11, 6), 5);
+
+        Assert.Contains("weekday 6 Nov 2026", note);
+        Assert.Contains("weekday 9 to 10 Nov 2026", note);
+        Assert.DoesNotContain("06 Nov", note);   // a day number is written as a person writes it
+    }
+
     [Fact]
     public void TheEstimatorNamesTheEveningHoursOwnDays_NotTheWholeStretch()
     {

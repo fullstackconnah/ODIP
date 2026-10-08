@@ -614,11 +614,18 @@ public sealed class BudgetLedgerService
     /// <summary>The hours of one unpriced stretch as a person reads them ("8 h").</summary>
     private static string Hours(UnpricedTripDays days) => string.Create(CultureInfo.InvariantCulture, $"{days.Hours:0.##} h");
 
-    /// <summary>One day as a person reads it ("25 Oct 2026"), or the span of several ("25 to 26 Oct 2026").</summary>
-    private static string FormatDaySpan(DateOnly from, DateOnly to) =>
-        from == to
-            ? string.Create(CultureInfo.InvariantCulture, $"{from:dd MMM yyyy}")
-            : string.Create(CultureInfo.InvariantCulture, $"{from:dd} to {to:dd MMM yyyy}");
+    /// <summary>
+    /// One day as a person reads it ("25 Oct 2026"), or the span of several: "25 to 26 Oct 2026" inside one month, "30 Nov to 2 Dec 2026" across a month end, and "28 Dec 2026 to 1 Jan 2027"
+    /// across a year end. A span names the months and years of both its ends whenever they differ: "30 to 02 Dec 2026" reads as 30 December, and the note exists so that someone can find the
+    /// missing rate by date. (The frontend's formatDateRange writes spans the same way, with a dash.)
+    /// </summary>
+    private static string FormatDaySpan(DateOnly from, DateOnly to)
+    {
+        if (from == to) return string.Create(CultureInfo.InvariantCulture, $"{from:d MMM yyyy}");
+        if (from.Year != to.Year) return string.Create(CultureInfo.InvariantCulture, $"{from:d MMM yyyy} to {to:d MMM yyyy}");
+        if (from.Month != to.Month) return string.Create(CultureInfo.InvariantCulture, $"{from:d MMM} to {to:d MMM yyyy}");
+        return string.Create(CultureInfo.InvariantCulture, $"{from.Day} to {to:d MMM yyyy}");   // (a lone "d" format is the short date, not the day of the month)
+    }
 
     /// <summary>A claim day type as the catalogue and the claim speak of it, with spaces ("weekday evening") rather than as the enum's name.</summary>
     private static string DescribeDayType(ClaimDayType dayType) => dayType switch
