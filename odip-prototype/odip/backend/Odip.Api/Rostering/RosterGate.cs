@@ -15,7 +15,14 @@ public static class RosterGate
 {
     public static RosterFindingDto ToFindingDto(RosterFinding f) => new()
     {
-        Code = f.Code, Severity = f.Severity, Message = f.Message, RequiresReason = f.RequiresReason
+        Code = f.Code, Severity = f.Severity, Message = f.Message, RequiresReason = f.RequiresReason,
+        Budget = f.Budget is { } b
+            ? new BudgetFindingFiguresDto
+            {
+                PoolName = b.PoolName, PeriodStart = b.PeriodStart, PeriodEnd = b.PeriodEnd, Available = b.Available, Used = b.Used, Remaining = b.Remaining,
+                Forecast = b.Forecast, ShiftCost = b.ShiftCost, OverBy = b.OverBy,
+            }
+            : null,
     };
 
     /// <summary>
