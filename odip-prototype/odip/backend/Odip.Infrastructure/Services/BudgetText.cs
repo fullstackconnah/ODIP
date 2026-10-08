@@ -22,6 +22,14 @@ public static class BudgetText
     public static string Day(DateOnly day) => day.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
 
     /// <summary>
+    /// What an alert says when the figures it rests on leave shifts out: the shift claim cannot price a sleepover, a passive night or a group shift yet, so each is $0 in every figure and the period counts
+    /// them (<see cref="PeriodLedger.UnpricedShiftCount"/>). "1 shift in this period is not priced yet, so this leaves it out"; "3 shifts in this period are not priced yet, so this leaves them out".
+    /// </summary>
+    public static string UnpricedShifts(int count) => count == 1
+        ? "1 shift in this period is not priced yet, so this leaves it out"
+        : string.Create(CultureInfo.InvariantCulture, $"{count} shifts in this period are not priced yet, so this leaves them out");
+
+    /// <summary>
     /// What a pool is called in a sentence. A stated pool is the category as the plan prints it. The Core (flexible) pool a plan holds under the default name is just "Core", and when a plan
     /// holds two of them (the NDIA splits Core by how the money is managed) each says how, so the two can be told apart.
     /// </summary>

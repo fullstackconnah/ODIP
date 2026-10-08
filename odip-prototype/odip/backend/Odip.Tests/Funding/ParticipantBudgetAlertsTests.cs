@@ -103,6 +103,24 @@ public class ParticipantBudgetAlertsTests
         Assert.Equal("Booked shifts would take Core $440 over by 31 Dec 2026", alert.Message);
     }
 
+    // The fix round's ledger counts the shifts the shift claim cannot price (a group shift, a sleepover) in the period, and every figure leaves them out; the alert says so, from a real ledger.
+    [Fact]
+    public async Task AStatusAlert_SaysTheFiguresLeaveOutTheShiftsThatAreNotPricedYet_FromARealLedger()
+    {
+        using var s = Setup.Create();
+        var participant = s.Kit.SeedParticipant();
+        OctoberPlan(s.Kit, participant, 1000m);
+        foreach (var day in new[] { 5, 6, 7 }) s.Kit.SeedShift(participant, D(2026, 10, day));    // $1,440 booked: forecast over by $440
+        var group = s.Kit.SeedShift(participant, D(2026, 10, 8));
+        group.Ratio = SupportRatio.OneToThree;                                                     // a group shift: $0 in every figure
+        s.Kit.Db.SaveChanges();
+
+        var alert = Assert.Single(await s.BudgetAlertsAsync(participant.Id));
+
+        Assert.Equal("budget-forecast-over", alert.Type);
+        Assert.Equal("Booked shifts would take Core $440 over by 31 Dec 2026. 1 shift in this period is not priced yet, so this leaves it out", alert.Message);
+    }
+
     [Fact]
     public async Task Approaching_ByClaimedMoney_RaisesTheWarning()
     {

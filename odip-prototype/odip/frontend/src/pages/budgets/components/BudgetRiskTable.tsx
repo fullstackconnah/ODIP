@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { CellText, DataTable, type Column } from '@/components/DataTable'
@@ -9,7 +9,7 @@ import { TONE } from '@/lib/tone'
 import { writtenSpan } from '@/lib/fundingPlan'
 import { BUDGET_RISK_ORDER, BUDGET_RISK_STATUS, type BudgetAttentionAction, type BudgetRiskRow, type BudgetRiskTableState, type NoBudgetEntry } from './viewModel'
 import { BudgetFigure } from './BudgetFigure'
-import { NO_FIGURE, configuredZero, noBudgetHiddenLabel, noBudgetNote, unavailableFigure } from './wording'
+import { NO_FIGURE, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, noBudgetNote, unavailableFigure, unpricedForecastLabel } from './wording'
 
 // The Budgets list's body: one row per participant and pool for the current funding period, in the DataTable idiom, with the server's own status and figures and nothing of its own invented.
 //
@@ -64,6 +64,19 @@ function ParticipantCell({ row }: { row: BudgetRiskRow }) {
   const look = 'block font-medium text-[var(--color-primary)] hover:underline md:max-w-[16rem] md:truncate'
   if ('to' in action) return <Link to={action.to} aria-label={named} title={named} className={look}>{row.participantLabel}</Link>
   return <button type="button" onClick={action.onSelect} aria-label={named} title={named} className={`${look} text-left`}>{row.participantLabel}</button>
+}
+
+/**
+ * The mark beside a forecast that leaves shifts out (the shift claim cannot price a sleepover, a passive night or a group shift yet, so each is $0 in every figure). An icon named in words for a screen
+ * reader and a pointer; the line under the table says what it is for everybody else. It is the server's own count for the period, never worked out here.
+ */
+function UnpricedMark({ count }: { count: number }) {
+  const words = unpricedForecastLabel(count)
+  return (
+    <span role="img" aria-label={words} title={words} className={`ml-1 inline-flex align-middle ${TONE.warning.ink}`}>
+      <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+    </span>
+  )
 }
 
 // The columns' narrowest widths are chosen so the table fits the page's content box at 1366px and 1440px (1092 and 1166px, with the sidebar open), so Forecast is on screen at rest, measured in a
@@ -156,6 +169,7 @@ function columnsFor(): Column<BudgetRiskRow>[] {
       render: row => (
         <span className="max-md:text-left">
           <BudgetFigure figures={row.figures} amount={row.forecast} reason={row.unavailableReason ?? unavailableFigure()} />
+          {row.figures.visible && (row.unpricedShifts ?? 0) > 0 && <UnpricedMark count={row.unpricedShifts as number} />}
         </span>
       ),
     },
@@ -242,6 +256,12 @@ export function BudgetRiskTable({ state, caption }: { state: BudgetRiskTableStat
         emptyMessage="No participant budgets are being tracked yet."
         rowClassName={row => (row.status === 'Over' ? TONE.danger.soft : row.status === 'ForecastOver' ? TONE.warning.soft : '')}
       />
+      {state.rows.some(row => row.figures.visible && (row.unpricedShifts ?? 0) > 0) && (
+        <p className="flex items-start gap-1 text-[13px] text-[var(--color-muted-foreground)]">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>{UNPRICED_LEGEND}</span>
+        </p>
+      )}
       <NoBudgetTail entries={state.noBudget ?? []} />
     </div>
   )

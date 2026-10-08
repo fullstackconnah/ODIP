@@ -325,6 +325,8 @@ export interface BudgetListRow {
   /** Used plus booked ahead. */
   forecast: number
   status: BudgetStatus
+  /** How many shifts of this period the shift claim cannot price yet (a sleepover, a passive night, a group shift): each is $0 in every figure above, so they leave those shifts out. 0 when every shift priced. */
+  unpricedShiftCount: number
 }
 
 /** Why an NDIS-funded participant has no row: nothing was recorded that has started, or the plan they have has ended. */

@@ -9,7 +9,7 @@ import type {
 export function budgetRow(overrides: Partial<BudgetListRow> = {}): BudgetListRow {
   return {
     participantId: 'p-0002', participantName: 'Sienna Williams', poolId: 'pool-core', poolName: 'Core', kind: 'CoreFlexible', managementType: 'AgencyManaged',
-    periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 9000, used: 3180, bookedAhead: 960, forecast: 4140, status: 'OnTrack', ...overrides,
+    periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 9000, used: 3180, bookedAhead: 960, forecast: 4140, status: 'OnTrack', unpricedShiftCount: 0, ...overrides,
   }
 }
 

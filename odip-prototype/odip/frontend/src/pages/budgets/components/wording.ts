@@ -27,6 +27,16 @@ export const NO_BUDGET_REASON = 'No budget recorded'
 /** The line under the no-budget count: a participant with no budget is never warned about, because there is no limit to be near. */
 export const noBudgetNote = 'A participant with no budget recorded is never warned about: there is no limit to be near.'
 
+// ── A forecast that leaves shifts out ───────────────────────────────────────────────────────────────────────────────────
+
+/** What the mark beside a forecast says: shifts the shift claim cannot price yet are $0 in every figure, so the forecast leaves them out. */
+export function unpricedForecastLabel(count: number): string {
+  return `Leaves out ${plural(count, 'shift')} that ${count === 1 ? 'is' : 'are'} not priced yet`
+}
+
+/** Under the table, once, when any row has the mark: what it is, and where the shifts are named. */
+export const UNPRICED_LEGEND = 'A triangle beside a forecast means it leaves out shifts that are not priced yet (a sleepover, a passive night or a group shift). The participant’s Funding tab names them.'
+
 // ── The agreement budget bar ────────────────────────────────────────────────────────────────────────────────────────────
 
 /** What the bar says when the participant has no budget recorded (it links to the Funding tab where one is recorded). */

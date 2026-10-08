@@ -98,6 +98,8 @@ export type BudgetRiskRow = {
   bookedAhead?: BudgetAmount
   /** Used plus booked ahead, as the server computed it. `null` when it could not compute one. */
   forecast: BudgetAmount
+  /** How many shifts of this period the forecast leaves out because no price can be worked out for them yet (a sleepover, a passive night, a group shift). Omitted when there are none: the figures are then complete. */
+  unpricedShifts?: number
   /** Why a figure or the forecast is missing, in the server's words. Shown beside the dash; never a generic "error". */
   unavailableReason?: string
   /** Where this row's next action goes. Omitted entirely when the viewer may not act on the row. */

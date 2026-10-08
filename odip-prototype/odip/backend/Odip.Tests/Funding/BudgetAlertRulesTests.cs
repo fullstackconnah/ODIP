@@ -258,6 +258,67 @@ public class BudgetAlertRulesTests
         Assert.Equal(new[] { "budget-over", "budget-approaching" }, AlertsOf(ledger).Select(a => a.Type));
     }
 
+    // ── Shifts the shift claim cannot price (the fix round's UnpricedShiftCount) ──────────────────────
+    // A sleepover, a passive night or a group shift is $0 in every figure, so the figures an alert rests on leave it out. An alert says so rather than reading as the whole picture.
+
+    private static LedgerItem Unpriced(DateOnly? date = null, string reason = "a sleepover") => new()
+    {
+        Kind = LedgerRowKind.FutureShift, Group = LedgerGroup.BookedAhead, Date = date ?? new DateOnly(2026, 10, 12), Amount = 0m, PaceCategory = 4, PlanType = PlanType.PlanManaged,
+        NotPricedKinds = new[] { reason },
+    };
+
+    [Fact]
+    public void AForecastOverAlert_SaysTheFiguresLeaveAShiftOut_InTheSingular()
+    {
+        var alert = Assert.Single(AlertsOf(LedgerOf(CorePlan(), Cost(LedgerGroup.Claimed, 5000m), Cost(LedgerGroup.BookedAhead, 3640m), Unpriced())));
+
+        Assert.Equal("budget-forecast-over", alert.Type);
+        Assert.Equal("Booked shifts would take Core $640 over by 31 Dec 2026. 1 shift in this period is not priced yet, so this leaves it out", alert.Message);
+    }
+
+    [Theory]
+    [InlineData(6560, 0, "budget-approaching", "Core is at 82% of this period's $8,000 (to 31 Dec 2026)")]
+    [InlineData(5000, 3640, "budget-forecast-over", "Booked shifts would take Core $640 over by 31 Dec 2026")]
+    [InlineData(8200, 0, "budget-over", "Core is $200 over this period's $8,000")]
+    public void EveryStatusAlert_SaysTheFiguresLeaveShiftsOut_InThePlural(int claimed, int booked, string type, string plain)
+    {
+        var items = new List<LedgerItem> { Cost(LedgerGroup.Claimed, claimed), Unpriced(), Unpriced(new DateOnly(2026, 11, 3), "a 1:3 group shift") };
+        if (booked > 0) items.Add(Cost(LedgerGroup.BookedAhead, booked));
+
+        var alert = Assert.Single(AlertsOf(LedgerOf(CorePlan(), items.ToArray())));
+
+        Assert.Equal(type, alert.Type);
+        Assert.Equal($"{plain}. 2 shifts in this period are not priced yet, so this leaves them out", alert.Message);
+    }
+
+    [Fact]
+    public void APoolThatIsOnTrack_StillSaysNothing_HoweverManyShiftsAreUnpriced()
+    {
+        // The alerts speak of a status; the Funding tab and the Budgets list are where a gap in an otherwise comfortable pool shows.
+        Assert.Empty(AlertsOf(LedgerOf(CorePlan(), Cost(LedgerGroup.Claimed, 1000m), Unpriced(), Unpriced())));
+    }
+
+    [Fact]
+    public void AnUnpricedShiftInAnotherPeriod_IsNotSaidOfTheOneRunningNow()
+    {
+        var alert = Assert.Single(AlertsOf(LedgerOf(CorePlan(), Cost(LedgerGroup.Claimed, 8200m), Unpriced(new DateOnly(2027, 1, 12)))));
+
+        Assert.Equal("Core is $200 over this period's $8,000", alert.Message);
+    }
+
+    [Fact]
+    public void TheNdiasAlert_IsNotAnnotated_ItIsTheNdiasWordAndNotAFigure()
+    {
+        var plan = CorePlan();
+        var pool = plan.Pools.Single();
+        var ledger = LedgerOf(plan, Unpriced());
+
+        var alert = Assert.Single(AlertsOf(ledger, new PoolNdiaRejection(pool.Id, Guid.NewGuid(), "TC-1", new DateOnly(2026, 10, 3), "V27")));
+
+        Assert.Equal("budget-ndia-exhausted", alert.Type);
+        Assert.DoesNotContain("priced", alert.Message);
+    }
+
     [Fact]
     public void TheMessagesAreInvariant_WhateverCultureTheServerRunsIn()
     {

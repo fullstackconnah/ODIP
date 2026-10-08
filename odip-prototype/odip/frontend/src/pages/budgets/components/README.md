@@ -48,5 +48,8 @@ These started as a parallel agent system's presentation surfaces (cherry-picked 
   columns' narrowest widths were also trimmed so the table fits at 1366px and 1440px (measured in a browser). The coarse "estimate" and "committed" members, which the server never sends, are removed.
 - **A row that is over or forecast over is tinted from md up, so its status pill sits on the card fill there** (a pill in the row's own colour vanished into it); below md the rows are untinted cards and
   the pill keeps its own tone.
+- **A forecast that leaves shifts out says so** (after the fix round merged). A shift the shift claim cannot price yet (a sleepover, a passive night, a group shift) is $0 in every figure, so the server
+  counts them per period (`unpricedShiftCount`); a row with some carries a triangle beside its forecast, named in words ("Leaves out 3 shifts that are not priced yet"), and one line under the table says what
+  the mark is. The participant alerts say the same in their own sentence. The count is the server's, never worked out here.
 - **A pool with more than three funding periods draws the first three and puts the rest behind a native disclosure** that says how many there are and how many are over (`MAX_LINES_SHOWN`). The bar is
   docked, and a plan funded monthly would otherwise fill the screen with a year of lines.

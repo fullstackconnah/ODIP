@@ -61,17 +61,24 @@ public static class BudgetAlertRules
         switch (period.Status)
         {
             case BudgetStatus.Over:
-                return Alert(OverType, AlertSeverity.Critical, $"{label} is {BudgetText.Money(period.Used - period.Available)} over this period's {BudgetText.Money(period.Available)}");
+                return Alert(OverType, AlertSeverity.Critical, WithTheGap($"{label} is {BudgetText.Money(period.Used - period.Available)} over this period's {BudgetText.Money(period.Available)}", period));
             case BudgetStatus.ForecastOver:
-                return Alert(ForecastOverType, AlertSeverity.Warning, $"Booked shifts would take {label} {BudgetText.Money(period.Forecast - period.Available)} over by {end}");
+                return Alert(ForecastOverType, AlertSeverity.Warning, WithTheGap($"Booked shifts would take {label} {BudgetText.Money(period.Forecast - period.Available)} over by {end}", period));
             case BudgetStatus.Approaching:
                 // Rounded DOWN, so a period that is at 79.6% is never reported as the 80% that makes it "approaching" (only a period at or past the percentage gets here at all, and then it is at least that).
                 var percent = (int)Math.Floor(period.Used * 100m / period.Available);
-                return Alert(ApproachingType, AlertSeverity.Warning, $"{label} is at {percent}% of this period's {BudgetText.Money(period.Available)} (to {end})");
+                return Alert(ApproachingType, AlertSeverity.Warning, WithTheGap($"{label} is at {percent}% of this period's {BudgetText.Money(period.Available)} (to {end})", period));
             default:
                 return null;
         }
     }
+
+    /// <summary>
+    /// Shifts the shift claim cannot price are $0 in every figure, so the figures leave them out: an alert about a status says so, rather than reading as the whole picture. Only the period the alert is
+    /// about counts, and only a status alert says it (a pool that is on track says nothing, and the NDIA's word is not a figure).
+    /// </summary>
+    private static string WithTheGap(string message, PeriodLedger period) =>
+        period.UnpricedShiftCount > 0 ? $"{message}. {BudgetText.UnpricedShifts(period.UnpricedShiftCount)}" : message;
 
     private static ParticipantAlertDto NdiaAlert(string label, PoolNdiaRejection rejection) =>
         Alert(NdiaExhaustedType, AlertSeverity.Critical, $"{label}: NDIA rejected a claim on {BudgetText.Day(rejection.Date)}: not enough funds ({rejection.Code})");

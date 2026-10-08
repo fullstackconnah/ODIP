@@ -57,7 +57,7 @@ public sealed class BudgetListService
                     {
                         ParticipantId = participantId, ParticipantName = ledger.Name, PoolId = pool.Pool.Id, PoolName = BudgetText.PoolLabel(pool.Pool, severalCorePools), Kind = pool.Pool.Kind,
                         ManagementType = pool.Pool.ManagementType, PeriodStart = period.Period.PeriodStart, PeriodEnd = period.Period.PeriodEnd, Available = period.Available, Used = period.Used,
-                        BookedAhead = period.BookedAhead, Forecast = period.Forecast, Status = period.Status,
+                        BookedAhead = period.BookedAhead, Forecast = period.Forecast, Status = period.Status, UnpricedShiftCount = period.UnpricedShiftCount,
                     }, pool.Pool.Position));
                     added++;
                 }

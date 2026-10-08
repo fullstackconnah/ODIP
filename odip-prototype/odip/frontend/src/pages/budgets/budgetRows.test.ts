@@ -20,6 +20,12 @@ describe('budgetRiskRow', () => {
     expect([row.available, row.used, row.bookedAhead, row.forecast]).toEqual([0, 0, 0, 0])
   })
 
+  it('carries how many shifts the forecast leaves out because no price can be worked out for them yet, and nothing at all when there are none', () => {
+    expect(budgetRiskRow(budgetRow({ unpricedShiftCount: 3 }), visible)).toHaveProperty('unpricedShifts', 3)
+    expect(budgetRiskRow(budgetRow({ unpricedShiftCount: 0 }), visible)).not.toHaveProperty('unpricedShifts')
+    expect(budgetRiskRow(budgetRow(), visible)).not.toHaveProperty('unpricedShifts')
+  })
+
   it('names who, which pool and which period, and links the row to the participant’s Funding tab', () => {
     const row = budgetRiskRow(budgetRow({ participantId: 'p-0002', participantName: 'Sienna Williams', poolName: 'Improved Daily Living Skills' }), visible)
 

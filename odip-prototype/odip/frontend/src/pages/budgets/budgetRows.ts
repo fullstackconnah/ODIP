@@ -32,6 +32,8 @@ export function budgetRiskRow(row: BudgetListRow, figures: BudgetFigureVisibilit
     used: row.used,
     bookedAhead: row.bookedAhead,
     forecast: row.forecast,
+    // Only when there are some: a row with none has complete figures and says nothing.
+    ...(row.unpricedShiftCount > 0 ? { unpricedShifts: row.unpricedShiftCount } : {}),
     action: { label: 'Open funding', to: fundingTabPath(row.participantId) },
   }
 }

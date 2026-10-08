@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { BudgetRiskTable } from './BudgetRiskTable'
 import { hiddenRow, noBudgetEntry, noBudgetRow, readyTable, riskRow } from './fixtures'
 import type { BudgetRiskRow } from './viewModel'
-import { NO_FIGURE, configuredZero, noBudgetHiddenLabel, unavailableFigure } from './wording'
+import { NO_FIGURE, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, unavailableFigure } from './wording'
 
 // The Budgets list body. What these tests hold:
 //   - the six states that must never be confused: loading, failed, empty, a row with no budget recorded, a pool configured at zero, and a
@@ -331,6 +331,38 @@ describe('BudgetRiskTable: the next action', () => {
 
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+})
+
+// A shift the shift claim cannot price (a sleepover, a passive night, a group shift) is $0 in every figure, so a forecast leaves it out. The row says so beside the forecast, and a line under the table
+// says what the mark is, so the list does not read as the whole picture.
+describe('BudgetRiskTable: a forecast that leaves shifts out', () => {
+  it('marks the forecast with how many shifts it leaves out, named in words for a screen reader and for a pointer', () => {
+    renderTable(readyTable([riskRow({ unpricedShifts: 1 }), riskRow({ id: 'b', participantLabel: 'Bilal Nasser', unpricedShifts: 3 })]))
+
+    const one = within(cellOf('Amara Okonkwo-Bell', 'Forecast')).getByRole('img', { name: 'Leaves out 1 shift that is not priced yet' })
+    expect(one).toHaveAttribute('title', 'Leaves out 1 shift that is not priced yet')
+    expect(within(cellOf('Bilal Nasser', 'Forecast')).getByRole('img', { name: 'Leaves out 3 shifts that are not priced yet' })).toBeInTheDocument()
+  })
+
+  it('says what the mark is once, under the table, when any row has it', () => {
+    renderTable(readyTable([riskRow({ unpricedShifts: 2 }), riskRow({ id: 'b', participantLabel: 'Bilal Nasser', unpricedShifts: 1 })]))
+
+    expect(screen.getAllByText(UNPRICED_LEGEND)).toHaveLength(1)
+  })
+
+  it('says nothing, and has no mark, when every shift priced', () => {
+    renderTable(readyTable([riskRow(), riskRow({ id: 'b', participantLabel: 'Bilal Nasser' })]))
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(screen.queryByText(UNPRICED_LEGEND)).not.toBeInTheDocument()
+  })
+
+  it('says nothing to a viewer who is not shown the figures: there is no forecast to leave anything out of', () => {
+    renderTable(readyTable([hiddenRow({ unpricedShifts: 2 })]))
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(screen.queryByText(UNPRICED_LEGEND)).not.toBeInTheDocument()
   })
 })
 

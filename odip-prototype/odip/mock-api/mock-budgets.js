@@ -29,6 +29,13 @@ function poolLabel(pool, pools) {
   return pool.kind === 'CoreFlexible' && several ? `${name} (${MANAGEMENT[pool.managementType] || pool.managementType})` : name
 }
 
+/** What a status alert adds when the period's figures leave shifts out (the shift claim cannot price a sleepover, a passive night or a group shift yet): BudgetText.UnpricedShifts on the server. */
+const withTheGap = (message, period) => {
+  const n = period.unpricedShiftCount || 0
+  if (n === 0) return message
+  return n === 1 ? `${message}. 1 shift in this period is not priced yet, so this leaves it out` : `${message}. ${n} shifts in this period are not priced yet, so this leaves them out`
+}
+
 const nameOf = (person) => `${person.preferredName || person.firstName} ${person.lastName}`
 
 // ── The participant alerts ───────────────────────────────────────────────────
@@ -44,9 +51,9 @@ function budgetAlertsOf(ledger) {
     if (!period) continue
     const label = poolLabel(pool, ledger.pools)
     const end = say(period.periodEnd)
-    if (period.status === 'Over') alerts.push(alert('budget-over', 'Critical', `${label} is ${money(period.used - period.available)} over this period's ${money(period.available)}`))
-    else if (period.status === 'ForecastOver') alerts.push(alert('budget-forecast-over', 'Warning', `Booked shifts would take ${label} ${money(period.forecast - period.available)} over by ${end}`))
-    else if (period.status === 'Approaching') alerts.push(alert('budget-approaching', 'Warning', `${label} is at ${Math.floor((period.used * 100) / period.available)}% of this period's ${money(period.available)} (to ${end})`))
+    if (period.status === 'Over') alerts.push(alert('budget-over', 'Critical', withTheGap(`${label} is ${money(period.used - period.available)} over this period's ${money(period.available)}`, period)))
+    else if (period.status === 'ForecastOver') alerts.push(alert('budget-forecast-over', 'Warning', withTheGap(`Booked shifts would take ${label} ${money(period.forecast - period.available)} over by ${end}`, period)))
+    else if (period.status === 'Approaching') alerts.push(alert('budget-approaching', 'Warning', withTheGap(`${label} is at ${Math.floor((period.used * 100) / period.available)}% of this period's ${money(period.available)} (to ${end})`, period)))
     if (pool.ndiaRejection) alerts.push(alert('budget-ndia-exhausted', 'Critical', `${label}: NDIA rejected a claim on ${say(pool.ndiaRejection.date)}: not enough funds (${pool.ndiaRejection.code})`))
   }
   return alerts
@@ -76,7 +83,7 @@ function budgetList(people, ledgerOf, today, approachingPercent) {
       if (!period) return
       rows.push({
         participantId: person.id, participantName: nameOf(person), poolId: pool.id, poolName: poolLabel(pool, ledger.pools), kind: pool.kind, managementType: pool.managementType,
-        periodStart: period.periodStart, periodEnd: period.periodEnd, available: period.available, used: period.used, bookedAhead: period.bookedAhead, forecast: period.forecast, status: period.status, position,
+        periodStart: period.periodStart, periodEnd: period.periodEnd, available: period.available, used: period.used, bookedAhead: period.bookedAhead, forecast: period.forecast, status: period.status, unpricedShiftCount: period.unpricedShiftCount || 0, position,
       })
     })
   }

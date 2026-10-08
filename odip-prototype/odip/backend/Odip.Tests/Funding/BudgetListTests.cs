@@ -81,6 +81,41 @@ public class BudgetListTests
         Assert.Equal((D(2026, 10, 4), 80), (list.AsOf, list.ApproachingPercent));
     }
 
+    // A shift the shift claim cannot price (a 1:3 group shift, a sleepover, a passive night) is $0 in every figure, so a forecast leaves it out. The row says how many, so the list does not
+    // read as the whole picture (the Funding tab says the same in words: the ledger's UnpricedShiftCount).
+    [Fact]
+    public async Task ARowSaysHowManyShiftsOfItsPeriodAreNotPricedYet_AndNothingForAnotherPeriodOrAnotherPool()
+    {
+        using var kit = Arrange();
+        kit.SeedItem("15_001", 15);
+        var person = kit.SeedParticipant();
+        OctoberPlan(kit, person, 8000m, Stated(15, PlanType.AgencyManaged, Q(2, 1000m), Q(3, 1000m), Q(4, 1000m)));
+        foreach (var date in new[] { D(2026, 10, 6), D(2026, 10, 7) })
+        {
+            var group = kit.SeedShift(person, date);
+            group.Ratio = SupportRatio.OneToThree;                                   // a group shift: not priced yet
+        }
+        var elsewhere = kit.SeedShift(person, D(2027, 1, 12));                       // another period, also a group shift
+        elsewhere.Ratio = SupportRatio.OneToThree;
+        kit.Db.SaveChanges();
+
+        var rows = Body(await ListAsync(kit)).Rows.ToDictionary(r => r.PoolName);
+
+        Assert.Equal(2, rows["Core"].UnpricedShiftCount);
+        Assert.Equal(0, rows["Improved Daily Living Skills"].UnpricedShiftCount);
+    }
+
+    [Fact]
+    public async Task ARowWithEveryShiftPriced_HasNoUnpricedShifts()
+    {
+        using var kit = Arrange();
+        var person = kit.SeedParticipant();
+        OctoberPlan(kit, person, 8000m);
+        kit.SeedShift(person, D(2026, 10, 5));
+
+        Assert.Equal(0, Assert.Single(Body(await ListAsync(kit)).Rows).UnpricedShiftCount);
+    }
+
     [Fact]
     public async Task EachPoolOfAPlan_IsARowOfItsOwn_InPoolOrder()
     {
