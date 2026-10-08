@@ -21,6 +21,15 @@ import { addDays, nextWednesday, sydneyToday } from '../../support/dates';
 //                                          that booking. So one claim line for the booking retires it completely.
 //   BudgetLedgerService.ClaimLineItemOf    a Draft or Ready claim's lines are PENDING; Submitted and later are
 //                                          CLAIMED. So the money after generation is pending, not claimed.
+//   TripPriceEstimator (claim lines)       a trip's claim has ONE LINE PER DAY-TYPE GROUP (a run of weekdays, a
+//                                          Saturday, a Sunday, a public holiday), and the ledger shows ONE ROW PER
+//                                          CLAIM LINE. The 2-day trip here is therefore one pending row when both
+//                                          days share a day type and TWO when they do not: a start on a Friday,
+//                                          Saturday or Sunday runs across two. Which one the suite meets depends on
+//                                          the day it runs, so no assertion below may assume either: the money is
+//                                          summed over the pending rows, and the claim is every row that links to it.
+//                                          (Before the claim the booking is one row per support category, and this
+//                                          trip's lines all sit in one, so day types never split THAT row.)
 //   BudgetLedgerService.AddBookingItems    the booked-ahead amount is TripPriceEstimator's, over the trip's
 //                                          TripDay rows; a participant with no NDIS number is shown at $0 with a
 //                                          reason, so the seed carries a number.
@@ -272,6 +281,18 @@ function ledgerRowsRegion(page: Page): Locator {
   return page.getByRole('region', { name: /Ledger rows for/ });
 }
 
+/** The money in the Amount cells of one ledger group's rows, in whole cents, one entry per rendered row. A cell is
+ *  recognised by what it holds, a figure in the table's currency format ("$588.64", "-$20.00"), so the Date, What
+ *  and Status cells never count. This is the column as a person would add it up on screen, not the server's sum. */
+async function amountCentsOf(group: Locator): Promise<number[]> {
+  const figures = await group.getByRole('cell', { name: /^-?\$[\d,]+(\.\d+)?$/ }).allTextContents();
+  return figures.map(f => (f.startsWith('-') ? -1 : 1) * Math.round(Number(f.replace(/[^\d.]/g, '')) * 100));
+}
+
+function sumOf(values: number[]): number {
+  return values.reduce((total, value) => total + value, 0);
+}
+
 /** The journey, over whatever trip start date the case hands it: a priced booking standing as booked-ahead
  *  money, the claim generated through the trip's real Claims modal, and the money moved to pending in the open
  *  tab. Both cases assert identically because the contract under test is identical; the start date is a
@@ -509,37 +530,47 @@ async function bookingBecomesPending(
       bookedAheadGroup.getByText('Nothing here this period.'),
       'no booked-ahead row survives the claim in the open tab',
     ).toBeVisible();
+    // The claim stands in the ledger as ONE pending row or as TWO, depending on the day the suite runs (a trip's
+    // claim has a line per day-type group and the ledger a row per line; see the header). So nothing below looks
+    // for a single row or a single figure: the money on screen is the SUM over the Pending group's rows.
+    const pendingGroup = rows.getByRole('heading', { name: 'Pending', exact: true }).locator('..');
+    const pendingOnScreen = async (): Promise<number> => sumOf(await amountCentsOf(pendingGroup)) / 100;
     await expect(
-      rows.getByRole('heading', { name: 'Pending', exact: true }).locator('..').getByRole('link').first(),
+      pendingGroup.getByRole('link').first(),
       'the pending group holds the claim rows that replaced the booking',
     ).toBeVisible();
-    await expect(
-      rows.getByText(money(after.pending), { exact: true }),
-      'the pending figure on screen is the server\'s own pending total',
-    ).toBeVisible();
+    await expect.poll(
+      pendingOnScreen,
+      { message: 'the pending rows on screen add up to the server\'s own pending total' },
+    ).toBeCloseTo(after.pending, 2);
     // The very same money now sits under Pending -- that is the replacement, not a leftover -- so the
-    // amount must be gone from the BOOKED-AHEAD group specifically, and present under Pending.
+    // amount must be gone from the BOOKED-AHEAD group specifically, and the pending rows must add up to what
+    // the booking was worth: the claim's lines carry the booking's money, once.
     await expect(
       rows.getByRole('heading', { name: 'Booked ahead', exact: true }).locator('..').getByText(bookedAheadMoney, { exact: true }),
       'the booked-ahead amount is gone from the booked-ahead group it used to sit in',
     ).toHaveCount(0);
-    await expect(
-      rows.getByRole('heading', { name: 'Pending', exact: true }).locator('..').getByText(bookedAheadMoney, { exact: true }).first(),
-      'that same amount is now a pending claim line',
-    ).toBeVisible();
+    await expect.poll(
+      pendingOnScreen,
+      { message: 'that same amount, the booking\'s price, is what the pending claim lines now add up to' },
+    ).toBeCloseTo(before.bookedAhead, 2);
 
-    // ── The claim reference is what the ledger row now links to: the money is attributed to the
+    // ── The claim reference is what the ledger rows now link to: the money is attributed to the
     //    claim, not to the booking. The row description is built by the server as
     //    "{claimReference} · {itemCode} · {hours} h" (BudgetLedgerService.ClaimLineItemOf), so the
     //    reference is read off the claim list the same page already rendered and matched literally.
+    //    Every pending row is a line of that one claim, so each carries the reference and links to the
+    //    claim: the rows that do are exactly the pending rows, however many lines the claim has today. ──
+    const pendingRowCount = (await amountCentsOf(pendingGroup)).length;
+    expect(pendingRowCount, 'the claim stands in the pending group as at least one row').toBeGreaterThan(0);
     await expect(
-      rows.getByText(new RegExp(`^${draftReference} ·`)),
-      'the ledger row now carries the claim reference, not the booking description',
-    ).toBeVisible();
+      pendingGroup.getByRole('link'),
+      'every ledger row of the claim now carries the claim reference, not the booking description',
+    ).toHaveText(Array.from({ length: pendingRowCount }, () => new RegExp(`^${draftReference} ·`)));
     await expect(
       rows.locator(`a[href="${draftClaimHref}"]`),
-      'the pending row links to the very claim that replaced the booking',
-    ).toHaveCount(1);
+      'every pending row links to the very claim that replaced the booking',
+    ).toHaveCount(pendingRowCount);
     await expect(
       rows.locator(`a[href="/trips/${tripId}"]`),
       'no ledger row still points at the trip booking it replaced',
