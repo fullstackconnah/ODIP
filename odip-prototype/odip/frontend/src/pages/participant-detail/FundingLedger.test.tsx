@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { LedgerBody } from './FundingLedger'
 import { ClaimBudgetBlock as Block } from '@/components/ClaimBudgetBlock'
-import { budgetRow, claimBudget, ledgerBucket, ledgerPeriod, ledgerPool, ledgerRow, noLedger, participantLedger, q2Rows } from '@/test/fixtures/ledger'
+import { budgetRow, claimBudget, ledgerBucket, ledgerPeriod, ledgerPool, ledgerRow, noLedger, participantLedger, q2Rows, quarterLedgers } from '@/test/fixtures/ledger'
 
 // The Funding tab's budget ledger (budget phase 2a): the current period's glance strip, the one sentence per pool, the period strip with its current period marked and its carry named
 // as rolled over, the ledger table in its three groups with a row linking to its claim, the plan total, and the no-plan case. Every figure comes from the server: the screen adds
@@ -322,6 +322,53 @@ describe('the plan total', () => {
 
     const total = screen.getByText('Plan total').closest('div')!
     expect(within(total).getByText(/\$8,000 across the whole plan · \$3,180 used · \$960 booked ahead · \$4,820 left/)).toBeInTheDocument()
+  })
+
+  it('says how many shifts of the plan are not priced yet, since the plan total leaves them out whichever period they are in', () => {
+    // None in the current quarter (so the line beside the glance strip is quiet), some in a later one: the plan total is the one whole-plan figure, and it must not read as complete.
+    renderLedger(participantLedger({ pools: [ledgerPool({ unpricedShiftCount: 3 })] }))
+
+    const total = screen.getByText('Plan total').closest('div')!
+    expect(within(total).getByText('3 shifts are not priced yet, so the figures above leave them out.')).toHaveClass('text-[var(--color-on-warning-container)]')
+  })
+
+  it('says nothing about unpriced shifts in the plan total when every shift is priced', () => {
+    renderLedger(participantLedger())
+
+    const total = screen.getByText('Plan total').closest('div')!
+    expect(within(total).queryByText(/not priced yet/)).not.toBeInTheDocument()
+  })
+})
+
+describe('unpriced shifts in the period that is opened', () => {
+  // The line beside the glance strip is about the period the strip is about. A period opened from the strip that is not that one says its own, with its own reasons, where its rows are.
+  const withUnpriced = (index: number, count: number, reasons: string[]) => {
+    const periods = quarterLedgers()
+    periods[index] = { ...periods[index], unpricedShiftCount: count, unpricedShiftReasons: reasons }
+    return periods
+  }
+
+  it('says how many shifts of an opened period that is not the current one are not priced yet, and why', async () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods: withUnpriced(2, 2, ['a sleepover']) })] }))
+    expect(screen.queryByText(/not priced yet/)).not.toBeInTheDocument()   // the current quarter has none, and nothing else is opened yet
+
+    await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(screen.getByRole('button', { name: /1 Jan – 31 Mar 2027/ }))
+
+    const rows = screen.getByRole('region', { name: /Ledger rows for 1 Jan – 31 Mar 2027/ })
+    expect(within(rows).getByText('2 shifts are not priced yet (a sleepover), so the figures above leave them out.')).toHaveClass('text-[var(--color-on-warning-container)]')
+  })
+
+  it('does not repeat the current period\'s warning in its own rows', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods: withUnpriced(1, 2, ['a sleepover']) })] }))
+
+    expect(screen.getAllByText('2 shifts are not priced yet (a sleepover), so the figures above leave them out.')).toHaveLength(1)   // beside the glance strip only
+  })
+
+  it('does not repeat it either when the plan has ended and the strip is about the last period', () => {
+    const ended = withUnpriced(3, 2, ['a sleepover']).map(period => ({ ...period, isCurrent: false }))
+    renderLedger(participantLedger({ planIsCurrent: false, pools: [ledgerPool({ periods: ended })] }))
+
+    expect(screen.getAllByText('2 shifts are not priced yet (a sleepover), so the figures above leave them out.')).toHaveLength(1)
   })
 })
 
