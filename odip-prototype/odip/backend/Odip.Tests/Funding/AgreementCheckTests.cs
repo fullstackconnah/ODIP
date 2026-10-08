@@ -128,14 +128,14 @@ public class AgreementCheckTests
         Assert.True(core.Over);
         Assert.Equal(new[] { D(2026, 10, 1), D(2026, 11, 1) }, core.Periods.Select(p => p.PeriodStart));
         Assert.Equal((TwoBlocks, 600m, 100m, 500m, TwoBlocks - 500m), Figures(core.Periods[0]));       // October: $588.64 against $500 left: over by $88.64
-        Assert.Equal((TwoBlocks, 1500m, 0m, 1500m, 0m), Figures(core.Periods[1]));                     // November: October's unspent $500 rolled in; plenty left
+        Assert.Equal((TwoBlocks, 1000m, 0m, 1000m, 0m), Figures(core.Periods[1]));                     // November: October's $500 was spent by this agreement (it costs $588.64), so nothing rolls in; its own $1,000 is plenty
         Assert.True(core.Periods[0].IsCurrent);
         Assert.False(core.Periods[1].IsCurrent);
 
         var stated = check.Pools[1];
         Assert.True(stated.Over);
         Assert.Equal((TwoBlocks, 300m, 0m, 300m, TwoBlocks - 300m), Figures(stated.Periods[0]));
-        Assert.Equal((TwoBlocks, 400m, 0m, 400m, TwoBlocks - 400m), Figures(stated.Periods[1]));      // $100 plus the $300 October left
+        Assert.Equal((TwoBlocks, 100m, 0m, 100m, TwoBlocks - 100m), Figures(stated.Periods[1]));      // its own $100: the $300 October had is spent by the agreement, and more
         Assert.Equal((0m, 0m), (check.NotInARecordedPool, check.OutsideThePlan));
     }
 
@@ -155,6 +155,35 @@ public class AgreementCheckTests
         Assert.Equal(4 * Block, core.AgreementCost);
         Assert.Equal(new[] { Block * 2, Block * 2 }, core.Periods.Select(p => p.AgreementCost));
         Assert.All(core.Periods, p => Assert.Equal(0m, p.OverBy));
+    }
+
+    // ── The carry: money the agreement spends in one period is not there for the next ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task ALaterPeriodDoesNotInheritMoneyTheSameAgreementSpendsInAnEarlierOne()
+    {
+        using var a = await ArrangeAsync();
+        // October has exactly what the agreement costs there ($588.64, two Mondays) and November only $100 of its own. October's money would roll into November if nothing spent it, but the
+        // agreement spends all of it, so November has $100 against its $588.64 (it read as $688.64 when October's money was counted twice).
+        a.Kit.SeedPlan(a.Person, D(2026, 10, 1), D(2026, 12, 31), Core(PlanType.PlanManaged, Month(10, TwoBlocks), Month(11, 100m), Month(12, 1000m)));
+
+        var core = Assert.Single(Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays()), CancellationToken.None)).Pools);
+
+        Assert.Equal((TwoBlocks, TwoBlocks, 0m, TwoBlocks, 0m), Figures(core.Periods[0]));
+        Assert.Equal((TwoBlocks, 100m, 0m, 100m, TwoBlocks - 100m), Figures(core.Periods[1]));
+        Assert.True(core.Over);
+    }
+
+    [Fact]
+    public async Task WhatTheAgreementLeavesUnspentInAnEarlierPeriodStillRollsForward()
+    {
+        using var a = await ArrangeAsync();
+        a.Kit.SeedPlan(a.Person, D(2026, 10, 1), D(2026, 12, 31), Core(PlanType.PlanManaged, Month(10, 1000m), Month(11, 100m), Month(12, 1000m)));
+
+        var core = Assert.Single(Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays()), CancellationToken.None)).Pools);
+
+        var rolled = 1000m - TwoBlocks;   // October's $1,000 less the $588.64 the agreement spends there
+        Assert.Equal((TwoBlocks, 100m + rolled, 0m, 100m + rolled, TwoBlocks - (100m + rolled)), Figures(core.Periods[1]));
     }
 
     [Fact]

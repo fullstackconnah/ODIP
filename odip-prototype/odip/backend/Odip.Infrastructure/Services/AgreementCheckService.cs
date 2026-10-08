@@ -20,8 +20,9 @@ public sealed record AgreementCheckResult(AgreementCheckDto? Check, IReadOnlyLis
 /// The agreement budget bar's check (budget phase 2b). The agreement is priced IN PROCESS by the plan pricing engine through <see cref="PlanPricingService"/> (the same engine, catalogue, holidays and
 /// the organisation's own settings as the plan builder's quote; no HTTP call to itself), and every priced line is placed on a pool and a funding period of the participant's current plan with the
 /// ledger's own rule, <see cref="BudgetLedgerCalculator.Place"/>: the period is the line's service date, the pool is found by the PACE category of the item the engine priced it with and by how the
-/// participant's money is managed. For each pool and period the agreement touches the answer is {agreement cost, available, used, remaining = available - used, over by}: the available and used
-/// are the ledger's, so the money is never worked out a second way here.
+/// participant's money is managed. For each pool and period the agreement touches the answer is {agreement cost, available, used, remaining = available - used, over by}: each period's limit and
+/// used are the ledger's, and what carries from one period to the next is the ledger's own rule with the agreement taken off as it goes (<see cref="AgreementCarry"/>), so a later period never
+/// counts money the same agreement spends in an earlier one. With no agreement in the earlier periods the available is the ledger's own figure.
 ///
 /// A question, not a gate: nothing is written, and nothing in the answer blocks a save or an approval. With no plan running now there is nothing to compare with, and the answer is just that (the
 /// agreement is not even priced). What no recorded pool covers and what falls outside the plan's dates are shown as sums of their own, never dropped. Tenancy: the participant, and the draft when
@@ -106,19 +107,23 @@ public sealed class AgreementCheckService
         var pools = new List<AgreementCheckPoolDto>();
         foreach (var pool in plan.Pools)
         {
-            var periods = pool.Periods.Where(p => byPeriod.ContainsKey(p.Period.Id)).OrderBy(p => p.Period.PeriodStart)
-                .Select(p =>
+            if (!pool.Periods.Any(p => byPeriod.ContainsKey(p.Period.Id))) continue;
+
+            // Walk ALL the pool's periods in date order, the ones the agreement does not touch too: their unspent money carries on, and what the agreement spends in an earlier period is not there
+            // for a later one (AgreementCarry). Only the periods the agreement touches are answered.
+            var ordered = pool.Periods.OrderBy(p => p.Period.PeriodStart).ToList();
+            var walk = AgreementCarry.Walk(ordered[0].Carried, ordered.Select(p => new AgreementCarry.PeriodInput(p.Limit, p.Used, byPeriod.GetValueOrDefault(p.Period.Id))).ToList());
+            var periods = new List<AgreementCheckPeriodDto>();
+            for (var i = 0; i < ordered.Count; i++)
+            {
+                var p = ordered[i];
+                if (!byPeriod.TryGetValue(p.Period.Id, out var cost)) continue;
+                periods.Add(new AgreementCheckPeriodDto
                 {
-                    var cost = byPeriod[p.Period.Id];
-                    var remaining = p.Available - p.Used;
-                    return new AgreementCheckPeriodDto
-                    {
-                        PeriodId = p.Period.Id, PeriodStart = p.Period.PeriodStart, PeriodEnd = p.Period.PeriodEnd, IsCurrent = p.IsCurrent, AgreementCost = cost,
-                        Available = p.Available, Used = p.Used, Remaining = remaining, OverBy = Math.Max(0m, cost - remaining),
-                    };
-                })
-                .ToList();
-            if (periods.Count == 0) continue;
+                    PeriodId = p.Period.Id, PeriodStart = p.Period.PeriodStart, PeriodEnd = p.Period.PeriodEnd, IsCurrent = p.IsCurrent, AgreementCost = cost,
+                    Available = walk[i].Available, Used = p.Used, Remaining = walk[i].Remaining, OverBy = walk[i].OverBy,
+                });
+            }
 
             pools.Add(new AgreementCheckPoolDto
             {

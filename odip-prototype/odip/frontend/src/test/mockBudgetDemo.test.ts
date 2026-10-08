@@ -116,6 +116,10 @@ describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (
     // Available minus used is what is left (the ledger's own figures, 3,473.32 less 1,932), and the cost over it is how far over.
     expect(firstQuarter).toMatchObject({ agreementCost: 588.64, available: 3473.32, used: 1932, remaining: 1541.32, overBy: 0, isCurrent: true })
     expect(secondQuarter).toMatchObject({ agreementCost: 588.64, isCurrent: false, overBy: 0 })
+    // What the agreement spends in the first quarter is not there for the second: the ledger's own available for it, less the $588.64 the agreement uses up in the first (AgreementCarry on the server).
+    const ledger = handler(mock.get, 'participants/:id/funding/ledger')('p-0002') as { pools: Array<{ periods: Array<{ periodStart: string; periodEnd: string; available: number }> }> }
+    const ledgerSecond = ledger.pools[0].periods.find(period => period.periodStart <= '2027-01-12' && '2027-01-12' <= period.periodEnd) as { available: number }
+    expect(secondQuarter.available).toBe(Math.round((ledgerSecond.available - 588.64) * 100) / 100)
     expect(check.pools[1].periods[0]).toMatchObject({ agreementCost: 100, remaining: 108.22, overBy: 0 })
     expect(check.agreementCost).toBe(1277.28)   // a line that is not priced adds nothing
     expect(check.notInARecordedPool).toBe(0)

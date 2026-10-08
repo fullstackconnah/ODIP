@@ -32,7 +32,10 @@ public record AgreementCheckPeriodDto
     public bool IsCurrent { get; init; }
     /// <summary>What the agreement costs in this period: the priced lines delivered on its days that belong to this pool.</summary>
     public decimal AgreementCost { get; init; }
-    /// <summary>The period's limit plus what earlier periods left unspent (the ledger's figure).</summary>
+    /// <summary>
+    /// The period's limit plus what earlier periods would leave unspent once this agreement had spent its share of them, so a later period never counts money the same agreement uses earlier.
+    /// With no agreement cost in the earlier periods it is the ledger's own figure.
+    /// </summary>
     public decimal Available { get; init; }
     /// <summary>Claimed plus pending (the ledger's figure). What is booked ahead is not taken off: it is not used yet.</summary>
     public decimal Used { get; init; }
