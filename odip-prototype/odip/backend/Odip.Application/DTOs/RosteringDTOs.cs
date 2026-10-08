@@ -64,6 +64,8 @@ public record BudgetReviewDto
     public string? ReviewTaskTitle { get; init; }
     /// <summary>The provider's calendar date the task was completed on; omitted while it is pending.</summary>
     public DateOnly? ReviewedOn { get; init; }
+    /// <summary>The Admin who completed the review (the task's owner, stamped when an Admin completes it); omitted while it is pending or when nobody is recorded.</summary>
+    public string? ReviewedBy { get; init; }
 }
 
 public record ShiftDto

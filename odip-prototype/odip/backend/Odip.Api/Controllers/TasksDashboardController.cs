@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
+using Odip.Api.Rostering;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -42,6 +43,8 @@ public class TasksController : ControllerBase
         [FromQuery] bool? dueThisWeek, [FromQuery] Guid? ownerId, CancellationToken ct)
     {
         var query = _db.BookingTasks.Include(t => t.TripInstance).Include(t => t.Owner).AsQueryable();
+        // The Admin's review of an emergency past budget names a participant whose budget is spent: only the roles that see budget standing elsewhere see it (the phase 3 review, C7).
+        if (!BudgetReviewAudience.MaySee(User)) query = query.Where(t => t.TaskType != TaskType.BudgetEmergencyReview);
         if (tripId.HasValue) query = query.Where(t => t.TripInstanceId == tripId.Value);
         if (status == TaskItemStatus.Overdue)
         {
@@ -85,7 +88,7 @@ public class TasksController : ControllerBase
     {
         var t = await _db.BookingTasks.Include(x => x.TripInstance).Include(x => x.Owner)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (t == null) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
+        if (t == null || (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MaySee(User))) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
 
         return Ok(ApiResponse<TaskDto>.Ok(new TaskDto
         {
@@ -105,6 +108,9 @@ public class TasksController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<TaskDto>>> Create([FromBody] CreateTaskDto dto, CancellationToken ct)
     {
+        // Only the server raises the review of an emergency (with the shift): nobody but an Admin can make one by hand.
+        if (dto.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
+
         if (!await IsValidOwnerRefAsync(dto.OwnerId, ct))
             return BadRequest(ApiResponse<TaskDto>.Fail("Task owner not found."));
 
@@ -141,10 +147,20 @@ public class TasksController : ControllerBase
         var t = await _db.BookingTasks.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
 
-        if (!await IsValidOwnerRefAsync(dto.OwnerId, ct))
+        // The review of an emergency booking past budget is an Admin's: complete, cancel, delete or retype it only as an Admin or SuperAdmin, and neither retype it away nor retype another task into it (C2).
+        var isReview = t.TaskType == TaskType.BudgetEmergencyReview || dto.TaskType == TaskType.BudgetEmergencyReview;
+        if (isReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
+
+        // Whoever completes the review owns it, unless the request names an owner: that is how the shift panel can say who reviewed the emergency.
+        var ownerId = dto.OwnerId;
+        if (t.TaskType == TaskType.BudgetEmergencyReview && ownerId == null && dto.Status == TaskItemStatus.Completed && t.Status != TaskItemStatus.Completed
+            && Guid.TryParse(User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var reviewer))
+            ownerId = reviewer;
+
+        if (!await IsValidOwnerRefAsync(ownerId, ct))
             return BadRequest(ApiResponse<TaskDto>.Fail("Task owner not found."));
 
-        t.TaskType = dto.TaskType; t.Title = dto.Title; t.OwnerId = dto.OwnerId;
+        t.TaskType = dto.TaskType; t.Title = dto.Title; t.OwnerId = ownerId;
         t.Priority = dto.Priority; t.DueDate = dto.DueDate; t.Status = dto.Status;
         t.CompletedDate = dto.CompletedDate; t.Notes = dto.Notes; t.UpdatedAt = DateTime.UtcNow;
 
@@ -171,6 +187,7 @@ public class TasksController : ControllerBase
     {
         var t = await _db.BookingTasks.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<bool>.Fail("Task not found"));
+        if (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
         t.Status = TaskItemStatus.Cancelled; t.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
@@ -438,8 +455,11 @@ public class DashboardController : ControllerBase
                 LeadCoordinatorName = t.LeadCoordinator != null ? t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName : null
             }).ToListAsync(ct);
 
+        // The Admin's review of an emergency past budget is left out for a role that may not see budget standing, in the list and in the counts (the phase 3 review, C7).
+        var mayReview = BudgetReviewAudience.MaySee(User);
         var overdueTasks = await _db.BookingTasks.Include(t => t.TripInstance).Include(t => t.Owner)
             .Where(TaskOverdue.IsOverdueExpr(today))
+            .Where(t => mayReview || t.TaskType != TaskType.BudgetEmergencyReview)
             .Select(t => new TaskDto
             {
                 Id = t.Id, TripInstanceId = t.TripInstanceId, TripName = t.TripInstance != null ? t.TripInstance.TripName : null,
@@ -477,7 +497,7 @@ public class DashboardController : ControllerBase
         {
             UpcomingTripCount = upcomingTrips.Count,
             ActiveParticipantCount = await _db.Participants.CountAsync(p => p.IsActive, ct),
-            OutstandingTaskCount = await _db.BookingTasks.CountAsync(t => t.Status != TaskItemStatus.Completed && t.Status != TaskItemStatus.Cancelled, ct),
+            OutstandingTaskCount = await _db.BookingTasks.CountAsync(t => (mayReview || t.TaskType != TaskType.BudgetEmergencyReview) && t.Status != TaskItemStatus.Completed && t.Status != TaskItemStatus.Cancelled, ct),
             OverdueTaskCount = overdueTasks.Count,
             ConflictCount = conflictCount,
             TripsMissingAccommodation = upcomingTripIds.Count - tripsWithAccommodation.Count,

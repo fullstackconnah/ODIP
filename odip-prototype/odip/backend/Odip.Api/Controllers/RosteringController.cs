@@ -1548,15 +1548,16 @@ public class RosteringController : ControllerBase
 
         var tasks = await _db.BookingTasks.AsNoTracking()
             .Where(t => t.TaskType == TaskType.BudgetEmergencyReview && t.ShiftId != null && ids.Contains(t.ShiftId.Value))
-            .Select(t => new { ShiftId = t.ShiftId!.Value, t.Title, t.Status, t.CreatedAt, t.CompletedDate })
+            .Select(t => new { ShiftId = t.ShiftId!.Value, t.Title, t.Status, t.SourceKey, t.CreatedAt, t.CompletedDate, OwnerName = t.Owner != null ? t.Owner.FirstName + " " + t.Owner.LastName : null })
             .ToListAsync(ct);
         return tasks.GroupBy(t => t.ShiftId).ToDictionary(g => g.Key, g =>
         {
-            var task = g.OrderByDescending(t => t.CreatedAt).First();
+            var task = g.OrderByDescending(t => t.SourceKey!.Length).ThenByDescending(t => t.SourceKey).First();   // the newest review of the shift: :2 and :3 follow the first
             var reviewed = task.Status == TaskItemStatus.Completed;
             return new BudgetReviewDto
             {
                 State = reviewed ? BudgetReviewState.Reviewed : BudgetReviewState.Pending, RecordedAt = task.CreatedAt, ReviewTaskTitle = task.Title, ReviewedOn = reviewed ? task.CompletedDate : null,
+                ReviewedBy = reviewed ? task.OwnerName : null,
             };
         });
     }
@@ -1712,16 +1713,27 @@ public class RosteringController : ControllerBase
     }
 
     /// <summary>
-    /// Raises the Admin's review of a shift just accepted as an emergency or safety booking past the budget: one task for the shift (idempotent on its source key, so a retry or a second save of the same
-    /// shift never doubles it), due the provider's tomorrow, owned by the shift's organisation, and committed with the shift in the caller's own save.
+    /// Raises the Admin's review of a shift just accepted as an emergency or safety booking past the budget: one open task for the shift at a time (idempotent on its source key, so a retry or a second save of
+    /// the same shift never doubles it), due the provider's tomorrow, owned by the shift's organisation, and committed with the shift in the caller's own save. The first review is
+    /// <c>budget-emergency:{shiftId}</c>. A review an Admin has closed is never reopened, so a further emergency on the same shift (a bigger overrun nobody has looked at) gets its own,
+    /// <c>budget-emergency:{shiftId}:2</c>, then <c>:3</c>, so the shift's marker never reads "Reviewed" over an overrun that was never reviewed (the phase 3 review, C4).
     /// </summary>
     private async Task RaiseEmergencyReviewAsync(Shift shift, CancellationToken ct)
     {
         var participant = await _db.Participants.AsNoTracking().FirstAsync(p => p.Id == shift.ParticipantId, ct);
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, participant.TenantId, _clock, ct);
         var date = shift.ServiceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var earlier = await _db.BookingTasks.AsNoTracking()
+            .Where(t => t.ShiftId == shift.Id && t.TaskType == TaskType.BudgetEmergencyReview)
+            .OrderBy(t => t.SourceKey!.Length).ThenBy(t => t.SourceKey)   // the keys run :2, :3 after the first, so the last is the newest
+            .Select(t => new { t.SourceKey, t.Status })
+            .ToListAsync(ct);
+        var newest = earlier.LastOrDefault();
+        var sourceKey = newest == null ? $"budget-emergency:{shift.Id}"
+            : newest.Status is TaskItemStatus.Completed or TaskItemStatus.Cancelled ? $"budget-emergency:{shift.Id}:{earlier.Count + 1}"
+            : newest.SourceKey!;
         await _obligationTasks.EnsureAsync(new Odip.Application.Interfaces.ObligationTaskSpec(
-            SourceKey: $"budget-emergency:{shift.Id}",
+            SourceKey: sourceKey,
             Type: TaskType.BudgetEmergencyReview,
             Title: string.Create(CultureInfo.InvariantCulture, $"Review emergency shift past budget: {participant.FullName} on {shift.ServiceDate:d MMM yyyy}"),
             DueDate: today.AddDays(1),

@@ -574,21 +574,58 @@ public class RosteringBudgetGateTests : IDisposable
     }
 
     [Fact]
-    public async Task AnEmergencyAgainOnTheSameShift_RaisesNoSecondTask_AndNeverReopensAClosedOne()
+    public async Task AnEmergencyAgainOnTheSameShift_WhileItsReviewIsOpen_RaisesNoSecondTask_AndARetryNeverDoublesIt()
     {
         var controller = Rig("Coordinator");
         var saved = Ok(await controller.CreateShift(Create(Wed14Oct, reason: "Participant unsafe at home tonight", emergency: true), default));
         var shift = _kit.Db.Shifts.Single(s => s.Id == saved.Id);
 
-        Ok(await controller.UpdateShift(shift.Id, Update(shift, endHour: 19, reason: "Still unsafe, needs the extra two hours", emergency: true), default));
-        var task = Assert.Single(_kit.Db.BookingTasks);
-        task.Status = TaskItemStatus.Completed;
-        _kit.Db.SaveChanges();
-        var again = Ok(await controller.UpdateShift(shift.Id, Update(shift, endHour: 20, reason: "Still unsafe, needs a further hour", emergency: true), default));
+        var again = Ok(await controller.UpdateShift(shift.Id, Update(shift, endHour: 19, reason: "Still unsafe, needs the extra two hours", emergency: true), default));
+        var retry = Ok(await controller.UpdateShift(shift.Id, Update(shift, endHour: 19, reason: "Still unsafe, needs the extra two hours", emergency: true), default));
 
         Assert.Single(_kit.Db.BookingTasks);
-        Assert.Equal(TaskItemStatus.Completed, _kit.Db.BookingTasks.Single().Status);
-        Assert.Equal(BudgetReviewState.Reviewed, again.BudgetReview!.State);
+        Assert.Equal(BudgetReviewState.Pending, again.BudgetReview!.State);
+        Assert.Equal(BudgetReviewState.Pending, retry.BudgetReview!.State);
+    }
+
+    [Fact]
+    public async Task AFurtherEmergency_OnceAnAdminHasClosedTheReview_RaisesAFreshReview_SoTheMarkerNeverReadsReviewedOverAnOverrunNobodyLookedAt()
+    {
+        // The phase 3 review (C4): a closed task is never reopened, so a bigger emergency on a reviewed shift used to save with no review and still read "Reviewed".
+        var controller = Rig("Coordinator");
+        var saved = Ok(await controller.CreateShift(Create(Wed14Oct, reason: "Participant unsafe at home tonight", emergency: true), default));
+        var shift = _kit.Db.Shifts.Single(s => s.Id == saved.Id);
+        var first = Assert.Single(_kit.Db.BookingTasks);
+        first.Status = TaskItemStatus.Completed;   // an Admin reviewed the first emergency
+        _kit.Db.SaveChanges();
+
+        var again = Ok(await controller.UpdateShift(shift.Id, Update(shift, endHour: 19, reason: "Still unsafe, needs the extra two hours", emergency: true), default));
+        var retry = Ok(await controller.UpdateShift(shift.Id, Update(shift, endHour: 19, reason: "Still unsafe, needs the extra two hours", emergency: true), default));
+
+        var tasks = _kit.Db.BookingTasks.OrderBy(t => t.SourceKey!.Length).ToList();
+        Assert.Equal(new[] { $"budget-emergency:{saved.Id}", $"budget-emergency:{saved.Id}:2" }, tasks.Select(t => t.SourceKey));
+        Assert.Equal(new[] { TaskItemStatus.Completed, TaskItemStatus.NotStarted }, tasks.Select(t => t.Status));
+        Assert.Equal(BudgetReviewState.Pending, again.BudgetReview!.State);
+        Assert.Equal(BudgetReviewState.Pending, retry.BudgetReview!.State);   // and the retry of that second emergency does not make a third task
+    }
+
+    [Fact]
+    public async Task AReviewedEmergency_NamesTheAdminWhoCompletedIt_AndAPendingOneNamesNobody()
+    {
+        var controller = Rig("Coordinator");
+        var admin = SeedStaff();   // any active user stands in for the Admin who owns the completed task
+        var saved = Ok(await controller.CreateShift(Create(Wed14Oct, reason: "Participant unsafe at home tonight", emergency: true), default));
+        var pending = Ok(await controller.GetBoard(new DateOnly(2026, 10, 12), "participant", default)).ParticipantRows!.SelectMany(r => r.Shifts).Single(s => s.Id == saved.Id).BudgetReview!;
+        var task = Assert.Single(_kit.Db.BookingTasks);
+        task.Status = TaskItemStatus.Completed;
+        task.OwnerId = admin.Id;
+        task.CompletedDate = new DateOnly(2026, 10, 5);
+        _kit.Db.SaveChanges();
+
+        var reviewed = Ok(await controller.GetBoard(new DateOnly(2026, 10, 12), "participant", default)).ParticipantRows!.SelectMany(r => r.Shifts).Single(s => s.Id == saved.Id).BudgetReview!;
+
+        Assert.Equal((BudgetReviewState.Pending, null), (pending.State, pending.ReviewedBy));
+        Assert.Equal((BudgetReviewState.Reviewed, "Ben Turner", new DateOnly(2026, 10, 5)), (reviewed.State, reviewed.ReviewedBy, reviewed.ReviewedOn));
     }
 
     [Fact]
