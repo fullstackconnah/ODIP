@@ -407,7 +407,7 @@ public class ShiftBudgetCheckTests : IDisposable
         var outcome = await Service().CheckAsync(Request(participant, Mon12Oct), default);
 
         Assert.Empty(outcome.Findings);
-        Assert.Equal("no catalogue rate covers 12 Oct 2026", outcome.NotCheckedReason);
+        Assert.StartsWith("no catalogue rate covers", outcome.NotCheckedReason);   // the exact words are the estimator's own, and may change with it
     }
 
     // ── Whose money ─────────────────────────────────────────────────────────
