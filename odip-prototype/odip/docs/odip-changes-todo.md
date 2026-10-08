@@ -143,7 +143,7 @@ owner decision (collected under Open Flags at the end).
   "Plan budget" card on Intake and the Profile wizard, "Funding recorded" in the
   activation checklist for NDIS-funded participants (warn or enforce, as the existing
   readiness setting says), and a Settings → Budgets tab (warn or hard limit, and the
-  "approaching" percentage: stored, not yet used). It records what the plan says and
+  "approaching" percentage: stored in phase 1, read by the roster's checks since phase 3). It records what the plan says and
   shows no spending or forecast. FUND-01's profile plan dates stay as they are; the tab
   offers, and never forces, copying a plan's dates onto them. Spec:
   `docs/specs/2026-10-04-participant-budgets.md`.
@@ -152,10 +152,16 @@ owner decision (collected under Open Flags at the end).
   tab's figures, claim figures, the approaching, forecast-over and over alerts, a
   dashboard tile and a Budgets list, the plan builder's budget bar on the new model, and
   the rejected-claim code. Depends on FUND-03.
-- [ ] **FUND-05 — Budget phase 3: moments and hard limits.** Roster findings, the
-  hard-limit mode for one-off shifts with the Admin override and the emergency path (an
-  Admin reviews it afterwards), and the pattern-generate and trip-booking warnings.
-  Depends on FUND-04.
+- [ ] **FUND-05 — Budget phase 3: moments and hard limits.** Built on
+  `feat/budget-limits`, not yet merged or checked on the deployed stack, so not ticked.
+  Roster findings (approaching, over, forecast over) in the shift panel's check, create and
+  update; the hard-limit mode for one-off shifts, which refuses a Coordinator and asks an
+  Admin for a written reason; the always-on "Emergency or safety" path (a Coordinator
+  describes it, the shift saves at once, an Admin reviews it from Tasks); "Over budget"
+  markers on the board and in the panel; and budget warnings (never blocks) on Generate,
+  the approval preview, the daily top-up's log and a confirmed trip booking. A shift the
+  estimator cannot price gets no finding, only "Budget not checked: {reason}". Spec:
+  `docs/specs/2026-10-04-participant-budgets.md` (Phase 3). Depends on FUND-04.
 
 ### F. Living Arrangements
 
@@ -280,8 +286,9 @@ owner decision (collected under Open Flags at the end).
 - [ ] **PLAN-D2 — match what a block asks of a worker.** The requirements travel onto patterns and shifts
   and show as chips; nothing checks them yet. "Female worker" cannot be checked until staff have a gender
   field. Reuse `COMPETENCY_MISSING` for the skills and the driver flag.
-- [ ] **PLAN-D3 — warn when a plan is over its budget.** Approval deliberately ignores budgets; the budget
-  feature will say it separately.
+- [ ] **PLAN-D3 — warn when a plan is over its budget.** Approval deliberately ignores budgets and the plan
+  builder's checks stay as they are; the approval preview now carries the budget feature's own warnings
+  (`budgetWarnings`, FUND-05 on `feat/budget-limits`, not yet merged): shown, never blocking.
 - [ ] **PLAN-D4 — a participant who becomes active later gets their shifts the next provider day.** The
   top-up runs once for each organisation's provider day, so activation at noon waits until tomorrow;
   generating on activation would close the gap.
