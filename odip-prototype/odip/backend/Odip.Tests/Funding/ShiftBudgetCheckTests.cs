@@ -44,8 +44,8 @@ public class ShiftBudgetCheckTests : IDisposable
     private ShiftBudgetCheck Service(IShiftCostSource? costs = null) => new(_kit.Db, _kit.Ledger, costs);
 
     private static ShiftBudgetRequest Request(
-        Participant participant, DateOnly date, int startHour = 9, int endHour = 17, Guid? shiftId = null, ShiftStatus? status = null, Guid? pattern = null, bool admin = false, Guid? tenantId = null) =>
-        new(tenantId ?? participant.TenantId, participant.Id, shiftId, date, new TimeOnly(startHour, 0), new TimeOnly(endHour, 0), false, SupportRatio.OneToOne, SleepoverType.None, status, pattern, admin);
+        Participant participant, DateOnly date, int startHour = 9, int endHour = 17, Guid? shiftId = null, ShiftStatus? status = null, bool admin = false, Guid? tenantId = null) =>
+        new(tenantId ?? participant.TenantId, participant.Id, shiftId, date, new TimeOnly(startHour, 0), new TimeOnly(endHour, 0), false, SupportRatio.OneToOne, SleepoverType.None, status, admin);
 
     private static RosterFinding? Find(ShiftBudgetOutcome outcome, string code) => outcome.Findings.SingleOrDefault(f => f.Code == code);
 
@@ -312,35 +312,19 @@ public class ShiftBudgetCheckTests : IDisposable
     }
 
     [Fact]
-    public async Task AShiftFromARealPatternOfTheParticipant_OnlyWarns_UnderAHardLimit()
+    public async Task ANewShift_IsAOneOff_WhateverPatternAnyoneNamed_BecauseOnlyALinkTheServerSetCounts()
     {
+        // The phase 3 review (C3). A new shift has no saved link, so the check never sees a pattern for it; the controller drops one a request names.
         var (participant, _) = Seed(october: 300m);
-        var pattern = SeedPattern(participant);
         Mode(BudgetLimitMode.HardLimit);
 
-        var outcome = await Service().CheckAsync(Request(participant, Mon12Oct, pattern: pattern.Id), default);
+        var outcome = await Service().CheckAsync(Request(participant, Mon12Oct), default);
 
-        var finding = Find(outcome, BudgetFindingCodes.ForecastOver)!;
-        Assert.Equal((RosterFindingSeverity.Warning, false), (finding.Severity, finding.RequiresReason));
+        Assert.Equal(RosterFindingSeverity.Blocking, Find(outcome, BudgetFindingCodes.ForecastOver)!.Severity);
     }
 
     [Fact]
-    public async Task NamingAPatternThatIsNotTheParticipants_DoesNotMakeAShiftRoutine()
-    {
-        var (participant, _) = Seed(october: 300m);
-        var other = _kit.SeedParticipant();
-        var strangers = SeedPattern(other);
-        Mode(BudgetLimitMode.HardLimit);
-
-        var bogus = await Service().CheckAsync(Request(participant, Mon12Oct, pattern: Guid.NewGuid()), default);
-        var notTheirs = await Service().CheckAsync(Request(participant, Mon12Oct, pattern: strangers.Id), default);
-
-        Assert.Equal(RosterFindingSeverity.Blocking, Find(bogus, BudgetFindingCodes.ForecastOver)!.Severity);
-        Assert.Equal(RosterFindingSeverity.Blocking, Find(notTheirs, BudgetFindingCodes.ForecastOver)!.Severity);
-    }
-
-    [Fact]
-    public async Task AnEditJudgesTheShiftByItsSavedPatternLink_NotByWhatTheRequestSays()
+    public async Task AnEditJudgesTheShiftByItsSavedPatternLink()
     {
         var (participant, _) = Seed(october: 300m);
         var pattern = SeedPattern(participant);
@@ -350,12 +334,27 @@ public class ShiftBudgetCheckTests : IDisposable
         _kit.Db.SaveChanges();
         Mode(BudgetLimitMode.HardLimit);
 
-        // A one-off cannot become routine by naming a pattern, and a pattern shift edited with no link in the request (the roster panel never sends one) is still routine.
-        var dodge = await Service().CheckAsync(Request(participant, Tue13Oct, endHour: 19, shiftId: oneOff.Id, pattern: pattern.Id), default);
-        var panel = await Service().CheckAsync(Request(participant, Mon12Oct, endHour: 19, shiftId: fromPattern.Id, pattern: null), default);
+        var routine = await Service().CheckAsync(Request(participant, Mon12Oct, endHour: 19, shiftId: fromPattern.Id), default);
+        var single = await Service().CheckAsync(Request(participant, Tue13Oct, endHour: 19, shiftId: oneOff.Id), default);
 
-        Assert.Equal(RosterFindingSeverity.Blocking, Find(dodge, BudgetFindingCodes.ForecastOver)!.Severity);
-        Assert.Equal(RosterFindingSeverity.Warning, Find(panel, BudgetFindingCodes.ForecastOver)!.Severity);
+        Assert.Equal((RosterFindingSeverity.Warning, false), (Find(routine, BudgetFindingCodes.ForecastOver)!.Severity, Find(routine, BudgetFindingCodes.ForecastOver)!.RequiresReason));
+        Assert.Equal(RosterFindingSeverity.Blocking, Find(single, BudgetFindingCodes.ForecastOver)!.Severity);
+    }
+
+    [Fact]
+    public async Task ALinkToAnotherParticipantsPattern_DoesNotMakeAShiftRoutine_SoAShiftMovedToSomeoneElseMeetsTheLimit()
+    {
+        var (participant, _) = Seed(october: 300m);
+        var other = _kit.SeedParticipant();
+        var strangers = SeedPattern(other);
+        var moved = _kit.SeedShift(participant, Mon12Oct);
+        moved.ShiftPatternId = strangers.Id;   // it was another participant's pattern shift before it was moved here
+        _kit.Db.SaveChanges();
+        Mode(BudgetLimitMode.HardLimit);
+
+        var outcome = await Service().CheckAsync(Request(participant, Mon12Oct, endHour: 19, shiftId: moved.Id), default);
+
+        Assert.Equal(RosterFindingSeverity.Blocking, Find(outcome, BudgetFindingCodes.ForecastOver)!.Severity);
     }
 
     // ── A shift the estimator cannot price ──────────────────────────────────

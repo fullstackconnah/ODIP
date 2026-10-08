@@ -515,7 +515,7 @@ public class RosteringController : ControllerBase
 
         // Budget phase 3: after the domain check and OUTSIDE its early return for an unfilled shift (a budget is about the participant, not the worker). The envelope's message carries the one
         // informational line a shift the estimator cannot price gets; it is not a finding and never blocks.
-        var budget = await CheckBudgetAsync(candidate, dto.Id, dto.Status, null, ct);
+        var budget = await CheckBudgetAsync(candidate, dto.Id, dto.Status, ct);
         findings.AddRange(budget.Findings);
         return Ok(ApiResponse<List<RosterFindingDto>>.Ok(findings.Select(ToFindingDto).ToList(), budget.Note));
     }
@@ -534,12 +534,13 @@ public class RosteringController : ControllerBase
         {
             Id = Guid.NewGuid(), ParticipantId = dto.ParticipantId, UserId = dto.StaffId,
             ServiceDate = dto.ServiceDate, StartTime = dto.StartTime, EndTime = dto.EndTime, EndsNextDay = dto.EndsNextDay,
-            Ratio = dto.Ratio, NightType = dto.NightType, ShiftPatternId = dto.ShiftPatternId, Notes = dto.Notes,
+            // No ShiftPatternId: a pattern link is the server's (the generator sets it). One a request names is dropped, or a hand-made shift could call itself routine and walk round the hard limit (C3).
+            Ratio = dto.Ratio, NightType = dto.NightType, Notes = dto.Notes,
             Status = ShiftStatus.Draft
         };
 
         var findings = await CheckAsync(shift, null, ct);
-        findings.AddRange((await CheckBudgetAsync(shift, null, ShiftStatus.Draft, dto.ShiftPatternId, ct)).Findings);
+        findings.AddRange((await CheckBudgetAsync(shift, null, ShiftStatus.Draft, ct)).Findings);
 
         var budgetGate = ShiftBudgetGate.Resolve(findings, dto.Emergency, dto.OverrideReason);
         if (budgetGate.Error != null) return BadRequest(ApiResponse<ShiftDto>.Fail(budgetGate.Error));
@@ -613,7 +614,7 @@ public class RosteringController : ControllerBase
         };
 
         var findings = await CheckAsync(candidate, shift.Id, ct);
-        findings.AddRange((await CheckBudgetAsync(candidate, shift.Id, dto.Status, dto.ShiftPatternId, ct)).Findings);
+        findings.AddRange((await CheckBudgetAsync(candidate, shift.Id, dto.Status, ct)).Findings);
 
         var budgetGate = ShiftBudgetGate.Resolve(findings, dto.Emergency, dto.OverrideReason);
         if (budgetGate.Error != null) return BadRequest(ApiResponse<ShiftDto>.Fail(budgetGate.Error));
@@ -627,8 +628,8 @@ public class RosteringController : ControllerBase
         shift.ParticipantId = dto.ParticipantId; shift.UserId = dto.StaffId;
         shift.ServiceDate = dto.ServiceDate; shift.StartTime = dto.StartTime; shift.EndTime = dto.EndTime;
         shift.EndsNextDay = dto.EndsNextDay; shift.Ratio = dto.Ratio; shift.NightType = dto.NightType;
-        // The roster panel never sends a pattern link, so a request without one keeps the saved link: before, every edit silently cut a pattern shift loose from its pattern.
-        shift.ShiftPatternId = dto.ShiftPatternId ?? shift.ShiftPatternId; shift.Notes = dto.Notes; shift.Status = dto.Status;
+        // The saved pattern link stays as the server set it: an edit never cuts a pattern shift loose from its pattern, and a link a request names is never stored (C3).
+        shift.Notes = dto.Notes; shift.Status = dto.Status;
         shift.UpdatedAt = DateTime.UtcNow;
         ApplyOverride(shift, findings, budgetGate, dto.OverrideReason, dto.AcknowledgedFindingCodes, previousReason, previousCodes);
         if (budgetGate.EmergencyAccepted) await RaiseEmergencyReviewAsync(shift, ct);
@@ -1702,14 +1703,14 @@ public class RosteringController : ControllerBase
 
     /// <summary>
     /// The budget check of the candidate shift (budget phase 3), quiet when the request has no organisation to show money for. <paramref name="existingId"/> is the saved shift an edit replaces, <paramref name="status"/>
-    /// the status it would be saved with, <paramref name="requestedPatternId"/> the pattern link the request names (it counts only for a new shift, and only when it is the participant's own).
+    /// the status it would be saved with. Whether the shift is routine is read from the saved shift's own pattern link, never from the request (C3).
     /// </summary>
-    private async Task<ShiftBudgetOutcome> CheckBudgetAsync(Shift candidate, Guid? existingId, ShiftStatus? status, Guid? requestedPatternId, CancellationToken ct)
+    private async Task<ShiftBudgetOutcome> CheckBudgetAsync(Shift candidate, Guid? existingId, ShiftStatus? status, CancellationToken ct)
     {
         if (_budget is null || _tenant?.TenantId is not { } tenantId) return ShiftBudgetOutcome.Quiet;
         return await _budget.CheckAsync(new ShiftBudgetRequest(
             tenantId, candidate.ParticipantId, existingId == Guid.Empty ? null : existingId, candidate.ServiceDate, candidate.StartTime, candidate.EndTime, candidate.EndsNextDay,
-            candidate.Ratio, candidate.NightType, status, requestedPatternId, CallerIsAdmin), ct);
+            candidate.Ratio, candidate.NightType, status, CallerIsAdmin), ct);
     }
 
     /// <summary>

@@ -52,7 +52,7 @@ public class ShiftBudgetPostgresTests : IClassFixture<PostgresFixture>
     }
 
     private static ShiftBudgetRequest Request(Participant participant, DateOnly date, Guid? shiftId = null, int endHour = 17, bool admin = false) =>
-        new(participant.TenantId, participant.Id, shiftId, date, new TimeOnly(9, 0), new TimeOnly(endHour, 0), false, SupportRatio.OneToOne, SleepoverType.None, null, null, admin);
+        new(participant.TenantId, participant.Id, shiftId, date, new TimeOnly(9, 0), new TimeOnly(endHour, 0), false, SupportRatio.OneToOne, SleepoverType.None, null, admin);
 
     [SkippableFact]
     public async Task TheCheck_OfANewAndAnEditedShift_ReturnsTheLedgersFiguresToTheCent_AndHonoursTheModeAndTheSavedPatternLink()

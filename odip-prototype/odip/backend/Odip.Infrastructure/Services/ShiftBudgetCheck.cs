@@ -78,12 +78,12 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
 }
 
 /// <summary>
-/// One shift to check. <paramref name="TargetStatus"/> is the status it would be saved with (null: the shift's own, or a new Draft); <paramref name="RequestedPatternId"/> is the pattern the request names, which
-/// counts only for a new shift and only when it is a pattern of this participant. <paramref name="CallerIsAdmin"/> is an Admin or SuperAdmin.
+/// One shift to check. <paramref name="TargetStatus"/> is the status it would be saved with (null: the shift's own, or a new Draft). <paramref name="CallerIsAdmin"/> is an Admin or SuperAdmin. There is no
+/// pattern link on the request: only a link the SERVER set on a saved shift counts (the phase 3 review, C3).
 /// </summary>
 public sealed record ShiftBudgetRequest(
     Guid TenantId, Guid ParticipantId, Guid? ExistingShiftId, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay, SupportRatio Ratio, SleepoverType NightType,
-    ShiftStatus? TargetStatus, Guid? RequestedPatternId, bool CallerIsAdmin);
+    ShiftStatus? TargetStatus, bool CallerIsAdmin);
 
 /// <summary>What the check found: the findings (none when the participant has no plan, the pool cannot be mapped, or the shift cannot be priced) and, when it could not price, why.</summary>
 public sealed record ShiftBudgetOutcome(IReadOnlyList<RosterFinding> Findings, string? NotCheckedReason = null)
@@ -102,7 +102,7 @@ public sealed record ShiftBudgetOutcome(IReadOnlyList<RosterFinding> Findings, s
 ///   cancelled; or it has already started or finished. Delivered work, claims and agreements are never touched by this.</item>
 /// <item><b>Raises</b> is judged in the shift's own pool and period: the new cost against what the old version already put there. Moving a shift into a tighter period raises that period, which is what stops
 ///   a hard limit being walked round by creating a shift in a free period and moving it.</item>
-/// <item><b>One-off</b> is judged from the saved shift's pattern link; a new shift counts as routine only if the pattern it names is a pattern of this participant. A request cannot dodge the limit by naming one.</item>
+/// <item><b>One-off</b> is judged from the saved shift's pattern link, the one the server set when it generated the shift; a new shift has none, and a link a request names is never read. A request cannot dodge the limit by naming one.</item>
 /// </list>
 /// The ledger and the estimator are called, never reimplemented: the figures are the ledger's, the price is the estimator's.
 /// </summary>
@@ -172,12 +172,13 @@ public sealed class ShiftBudgetCheck
         return new ShiftBudgetOutcome(findings);
     }
 
-    /// <summary>Made from a pattern: the saved shift's own link when it exists (the roster panel never sends one), else the one a new shift names; either must be a pattern of this participant.</summary>
-    private async Task<bool> IsRoutineAsync(ShiftBudgetRequest request, Guid? savedPatternId, CancellationToken ct)
-    {
-        var patternId = request.ExistingShiftId is not null ? savedPatternId : request.RequestedPatternId;
-        return patternId is { } pattern && await _db.ShiftPatterns.AsNoTracking().AnyAsync(p => p.Id == pattern && p.ParticipantId == request.ParticipantId, ct);
-    }
+    /// <summary>
+    /// Made from a pattern: only the saved shift's own link counts, the one the server set when it generated the shift (the roster panel never sends one, and a link a request names is dropped before it gets
+    /// here). It must be a pattern of THIS participant, so a shift moved to someone else is a one-off for them.
+    /// </summary>
+    private async Task<bool> IsRoutineAsync(ShiftBudgetRequest request, Guid? savedPatternId, CancellationToken ct) =>
+        request.ExistingShiftId is not null && savedPatternId is { } pattern
+        && await _db.ShiftPatterns.AsNoTracking().AnyAsync(p => p.Id == pattern && p.ParticipantId == request.ParticipantId, ct);
 
     /// <summary>The ledger item a shift is, as <see cref="BudgetLedgerService"/> would make it: booked ahead from today, or pending once its day has passed unresolved.</summary>
     private static LedgerItem ItemFor(DateOnly date, ShiftCostEstimate.Priced price, PlanType planType, Guid? shiftId, ShiftStatus status, DateOnly today)

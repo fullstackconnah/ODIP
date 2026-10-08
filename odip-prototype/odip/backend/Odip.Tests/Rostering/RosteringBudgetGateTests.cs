@@ -110,6 +110,18 @@ public class RosteringBudgetGateTests : IDisposable
 
     private int ShiftCount() => _kit.Db.Shifts.IgnoreQueryFilters().Count();
 
+    private ShiftPattern SeedPattern(DayOfWeek day)
+    {
+        var pattern = new ShiftPattern
+        {
+            Id = Guid.NewGuid(), TenantId = _kit.TenantId, ParticipantId = _participant.Id, DayOfWeek = day, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0),
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 7, 1), IsActive = true,
+        };
+        _kit.Db.ShiftPatterns.Add(pattern);
+        _kit.Db.SaveChanges();
+        return pattern;
+    }
+
     private User SeedStaff(bool screeningExpired = false)
     {
         var staff = new User
@@ -360,22 +372,45 @@ public class RosteringBudgetGateTests : IDisposable
         Assert.Empty(_kit.Db.BookingTasks);
     }
 
+    // Only a pattern link the SERVER set makes a shift routine (the phase 3 review, C3): a request that names a pattern of the participant used to be treated as a pattern shift, which only warns, and dodged the
+    // hard limit with no marker, no reason and no review task. The roster panel never sends a link, so nothing legitimate is lost.
     [Fact]
-    public async Task APatternShift_OnlyWarns_UnderAHardLimit_EvenForACoordinator()
+    public async Task NamingAPatternOnACreate_DoesNotMakeTheShiftRoutine_ItIsStillRefused()
     {
         var controller = Rig("Coordinator");
-        var pattern = new ShiftPattern
-        {
-            Id = Guid.NewGuid(), TenantId = _kit.TenantId, ParticipantId = _participant.Id, DayOfWeek = DayOfWeek.Wednesday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0),
-            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 7, 1), IsActive = true,
-        };
-        _kit.Db.ShiftPatterns.Add(pattern);
-        _kit.Db.SaveChanges();
+        var pattern = SeedPattern(DayOfWeek.Wednesday);
+
+        var refused = Refused(await controller.CreateShift(Create(Wed14Oct) with { ShiftPatternId = pattern.Id }, default));
+
+        Assert.Equal(RosterFindingSeverity.Blocking, Budget(refused.Data!)!.Severity);
+        Assert.Equal(2, ShiftCount());
+    }
+
+    [Fact]
+    public async Task NamingAPatternOnACreateThatIsAllowed_IsIgnored_TheShiftIsAOneOffWithNoLink()
+    {
+        var controller = Rig("Coordinator", BudgetLimitMode.Warn);
+        var pattern = SeedPattern(DayOfWeek.Wednesday);
 
         var saved = Ok(await controller.CreateShift(Create(Wed14Oct) with { ShiftPatternId = pattern.Id }, default));
 
-        Assert.Equal(RosterFindingSeverity.Warning, Budget(saved.Findings)!.Severity);
-        Assert.Equal(3, ShiftCount());
+        Assert.Null(saved.ShiftPatternId);
+        Assert.Null(_kit.Db.Shifts.Single(s => s.Id == saved.Id).ShiftPatternId);
+    }
+
+    [Fact]
+    public async Task NamingAPatternOnAnUpdate_DoesNotMakeAOneOffRoutine_SoTheNextEditStillMeetsTheLimit()
+    {
+        // Two steps used to dodge it: a PUT naming the pattern at the same cost stored the link, and the next PUT, which raised the cost, saved because the saved link now made the shift routine.
+        var controller = Rig("Coordinator", october: 300m, booked: false);
+        var pattern = SeedPattern(DayOfWeek.Monday);
+        var shift = _kit.SeedShift(_participant, Mon12Oct);
+
+        var named = Ok(await controller.UpdateShift(shift.Id, Update(shift, notes: "named the pattern") with { ShiftPatternId = pattern.Id }, default));
+        var raised = await controller.UpdateShift(shift.Id, Update(shift, endHour: 19), default);
+
+        Assert.Null(named.ShiftPatternId);
+        Assert.Equal(RosterFindingSeverity.Blocking, Budget(Refused(raised).Data!)!.Severity);
     }
 
     // ── The emergency or safety path ────────────────────────────────────────
