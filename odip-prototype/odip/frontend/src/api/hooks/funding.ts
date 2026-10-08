@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPut } from '../client'
+import { refreshBudgetFigures } from './funding-ledger'
 import type {
   ApplyPlanDatesResult, BillingSourcesHintDto, BudgetSettingsDto, FundingPlanDto, FundingPlansDto, PaceCategoryDto, SaveFundingPlanDto, UpdateBudgetSettingsDto,
 } from '../types'
@@ -96,6 +97,10 @@ export function useUpdateBudgetSettings() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (data: UpdateBudgetSettingsDto) => apiPut<BudgetSettingsDto>('/funding/settings', data),
-    onSuccess: (saved) => { queryClient.setQueryData(SETTINGS_KEY, saved) },
+    onSuccess: (saved) => {
+      queryClient.setQueryData(SETTINGS_KEY, saved)
+      // The "approaching" percentage decides every participant's status, so every ledger held (and the claim pages' budget blocks) is read again.
+      refreshBudgetFigures(queryClient)
+    },
   })
 }
