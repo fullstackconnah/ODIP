@@ -768,6 +768,8 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.TotalAmount).HasPrecision(18, 2);
             entity.Property(e => e.TotalApprovedAmount).HasPrecision(18, 2);
             entity.Property(e => e.Notes).HasMaxLength(2000);
+            // The NDIA's code for a rejected claim (budget phase 2b): nullable, no default, so the column is added to a live table without touching a row.
+            entity.Property(e => e.RejectionCode).HasMaxLength(NdiaRejectionCodes.MaxLength);
 
             entity.HasOne(e => e.TripInstance)
                 .WithMany(t => t.TripClaims)
