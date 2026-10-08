@@ -91,6 +91,21 @@ public record LedgerPoolDto
     /// <summary>The same sums over the whole plan, against the sum of the limits.</summary>
     public LedgerFiguresDto PlanTotal { get; init; } = new();
     public int PastUnresolvedCount { get; init; }
+    /// <summary>The NDIA's "the funds ran out" word on this pool, while it is active (budget phase 2b); omitted when it has none. The ledger service does not set it: the ledger controller adds it.</summary>
+    public NdiaRejectionDto? NdiaRejection { get; init; }
+}
+
+/// <summary>
+/// A claim the NDIA refused for want of funds (V17, V18, V27 or V28), as the Funding tab says it on the pool the claim's lines belong to: "NDIA rejected a claim on {date}: not enough funds ({code})".
+/// It carries no money. It is there while the funding period the claim's lines fall in is the one running, and not after a later period has started or a new plan has been recorded.
+/// </summary>
+public record NdiaRejectionDto
+{
+    /// <summary>The provider's calendar day the claim was marked Rejected.</summary>
+    public DateOnly Date { get; init; }
+    public string Code { get; init; } = string.Empty;
+    public Guid ClaimId { get; init; }
+    public string ClaimReference { get; init; } = string.Empty;
 }
 
 /// <summary>Rows that are in no pool or period of the plan: shown, never dropped.</summary>

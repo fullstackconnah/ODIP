@@ -4,7 +4,9 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 using Odip.Tests.Postgres;
 using Xunit;
 
@@ -66,6 +68,71 @@ public class NdiaRejectionPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(new[] { TripClaimStatus.Submitted, TripClaimStatus.Paid, TripClaimStatus.Rejected }, claims.Select(c => c.Status));
         Assert.Equal(new[] { 1250.5m, 400m, 99.99m }, claims.Select(c => c.TotalAmount));
         Assert.All(claims, c => { Assert.Null(c.RejectionCode); Assert.Null(c.RejectedDate); });
+    }
+
+    /// <summary>A migrated scratch database and a kit over a tenant of it (a provider in NSW, the community access catalogue in). Pass the connection string to get a second organisation of the same database.</summary>
+    private async Task<(LedgerKit Kit, string ConnectionString)> KitAsync(string? connectionString = null)
+    {
+        var cs = connectionString;
+        if (cs is null)
+        {
+            cs = await _pg.CreateDatabaseAsync();
+            await using var migrate = PostgresFixture.NewContext(cs);
+            await migrate.Database.MigrateAsync();
+        }
+        var (db, tenantId) = await _pg.NewTenantContextAsync(cs);
+        var kit = LedgerKit.Wrap(db, tenantId);
+        kit.SeedProvider("NSW");
+        kit.EnsureCommunityAccessCatalogue();
+        return (kit, cs);
+    }
+
+    private static Participant WithPlan(LedgerKit kit, string last)
+    {
+        var participant = kit.SeedParticipant(last: last);
+        var plan = kit.SeedPlan(participant, new DateOnly(2026, 10, 1), new DateOnly(2027, 6, 30), LedgerKit.Core(PlanType.PlanManaged, LedgerKit.Q(2, 8000m), LedgerKit.Q(3, 8000m), LedgerKit.Q(4, 8000m)));
+        plan.CreatedAt = new DateTime(2026, 9, 20, 0, 0, 0, DateTimeKind.Utc);
+        kit.Db.SaveChanges();
+        return participant;
+    }
+
+    [SkippableFact]
+    public async Task TheSignal_IsFoundThroughShiftAndBookingLines_TheLatestWins_AndNeverCrossesOrganisations()
+    {
+        RequirePostgres();
+        var (a, cs) = await KitAsync();
+        var (b, _) = await KitAsync(cs);
+        using var _a = a;
+        using var _b = b;
+        var mine = WithPlan(a, "Mine");
+        var theirs = WithPlan(b, "Theirs");
+
+        // Mine: a shift claim refused with V27, and a later trip claim refused with V28, both against the Core pool in the quarter running now.
+        var shift = a.SeedShift(mine, new DateOnly(2026, 10, 2), ShiftStatus.Completed);
+        var shiftClaim = a.SeedShiftClaim(mine, TripClaimStatus.Rejected, 400.55m, shift);
+        shiftClaim.RejectionCode = "V27";
+        shiftClaim.RejectedDate = new DateTime(2026, 10, 3, 1, 0, 0, DateTimeKind.Utc);
+        var trip = a.SeedTrip(new DateOnly(2026, 10, 1), 2, TripStatus.Completed);
+        var (tripClaim, _) = a.SeedTripClaim(trip, a.SeedBooking(trip, mine), TripClaimStatus.Rejected, 300m, new DateOnly(2026, 10, 1));
+        tripClaim.RejectionCode = "V28";
+        tripClaim.RejectedDate = new DateTime(2026, 10, 3, 5, 0, 0, DateTimeKind.Utc);
+        // Theirs: one refused with V17.
+        var theirShift = b.SeedShift(theirs, new DateOnly(2026, 10, 2), ShiftStatus.Completed);
+        var theirClaim = b.SeedShiftClaim(theirs, TripClaimStatus.Rejected, 100m, theirShift);
+        theirClaim.RejectionCode = "V17";
+        theirClaim.RejectedDate = new DateTime(2026, 10, 3, 6, 0, 0, DateTimeKind.Utc);
+        a.Db.SaveChanges();
+        b.Db.SaveChanges();
+        var reader = new NdiaRejectionReader(a.Db, a.Clock);
+
+        // Even named together, only my organisation's lines come back: the claims have no tenant column, and the shifts and trips they hang from are filtered by theirs.
+        var lines = await reader.RejectedLinesQuery(a.TenantId, new[] { mine.Id, theirs.Id }).ToListAsync();
+        Assert.Equal(new[] { "V27", "V28" }, lines.Select(l => l.Code).OrderBy(c => c, StringComparer.Ordinal));
+        Assert.All(lines, l => Assert.Equal(mine.Id, l.ParticipantId));
+
+        var note = Assert.Single(await reader.ForParticipantAsync(a.TenantId, mine.Id, CancellationToken.None));
+        Assert.Equal(("V28", tripClaim.ClaimReference), (note.Value.Code, note.Value.ClaimReference));
+        Assert.Empty(await reader.ForParticipantAsync(a.TenantId, theirs.Id, CancellationToken.None));
     }
 
     [SkippableFact]

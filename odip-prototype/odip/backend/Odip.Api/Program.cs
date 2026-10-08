@@ -183,6 +183,8 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.DemoJourneySimulationSer
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantDocumentService>();
 
 // ── Participant Risk Alerts (task 6c) — computed, not persisted ──
+builder.Services.AddScoped<Odip.Infrastructure.Services.NdiaRejectionReader>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetAlertSource>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantAlertsService>();
 
 // ── Participant preferred-staff <-> rostering compatibility matrix link (task 6d) ──
