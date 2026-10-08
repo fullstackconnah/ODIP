@@ -174,6 +174,26 @@ describe('the ledger table', () => {
     expect(screen.getByRole('link', { name: 'Coastal weekend · 3 days' })).toHaveAttribute('href', '/trips/trip-9')
   })
 
+  it('counts the shifts the claim cannot price yet, names why, and says the figures leave them out', () => {
+    const period = ledgerPeriod({ rows: [], rowCount: 0, unpricedShiftCount: 3, unpricedShiftReasons: ['a 1:3 group shift', 'a sleepover'] })
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods: [period] })] }))
+
+    // Beside the figures, in the warning tone: they are $0 in every figure above, so the forecast is low by whatever they will cost.
+    expect(screen.getByText('3 shifts are not priced yet (a 1:3 group shift and a sleepover), so the figures above leave them out.')).toHaveClass('text-[var(--color-on-warning-container)]')
+  })
+
+  it('says nothing about unpriced shifts when every shift is priced', () => {
+    renderLedger(participantLedger())
+
+    expect(screen.queryByText(/not priced yet/)).not.toBeInTheDocument()
+  })
+
+  it('names, under the ledger, the shifts it does not count yet', () => {
+    renderLedger(participantLedger())
+
+    expect(screen.getByText(/shift claims price community access only for now, so sleepover, passive-night and group shifts are not counted yet\./)).toBeInTheDocument()
+  })
+
   it('says nothing about started trips when there are none', () => {
     renderLedger(participantLedger())
 

@@ -534,6 +534,8 @@ public sealed class BudgetLedgerService
             // A shift with no price is counted as $0 and says why (a sleepover or a group shift the shift claim does not price yet, or no catalogue rate); one that is priced but not
             // worked out fully (an overnight shift: evening and night rates are not applied yet) carries the estimator's caveat.
             Note = outcome.NotPricedBecause is { } because ? NotCountedNote(because) : outcome.Caveat,
+            // The marker the period counts: a shift the estimator refused is $0 in every figure, so the figures say how many they leave out and why.
+            NotPricedKinds = outcome.NotPricedKinds,
         };
     }
 
@@ -663,6 +665,7 @@ public sealed class BudgetLedgerService
     {
         Id = pool.Pool.Id, Name = pool.Pool.Name, Kind = pool.Pool.Kind, PaceCategory = pool.Pool.PaceCategory, ManagementType = pool.Pool.ManagementType, HasSetAside = pool.HasSetAside,
         Periods = pool.Periods.Select(PeriodDto).ToList(), PastUnresolvedCount = pool.Total.PastUnresolvedCount, StartedUnclaimedTripCount = pool.Total.StartedUnclaimedTripCount,
+        UnpricedShiftCount = pool.Total.UnpricedShiftCount,
         PlanTotal = new LedgerFiguresDto
         {
             Limit = pool.Total.Limit, Carried = 0m, Available = pool.Total.Available, Claimed = pool.Total.Claimed, Pending = pool.Total.Pending, Used = pool.Total.Used,
@@ -677,7 +680,8 @@ public sealed class BudgetLedgerService
         Limit = period.Limit, Carried = period.Carried, Available = period.Available, Claimed = period.Claimed, Pending = period.Pending, Used = period.Used, BookedAhead = period.BookedAhead,
         Forecast = period.Forecast, UnpricedTripDayCount = period.UnpricedTripDayCount,
         Remaining = period.Available - period.Used, ForecastRemaining = period.Available - period.Forecast, Status = period.Status,
-        PastUnresolvedCount = period.PastUnresolvedCount, StartedUnclaimedTripCount = period.StartedUnclaimedTripCount, RowCount = period.Items.Count,
+        PastUnresolvedCount = period.PastUnresolvedCount, StartedUnclaimedTripCount = period.StartedUnclaimedTripCount, UnpricedShiftCount = period.UnpricedShiftCount,
+        UnpricedShiftReasons = period.Items.SelectMany(i => i.NotPricedKinds).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList(), RowCount = period.Items.Count,
         Rows = period.Items.Take(RowsPerPeriod).Select(ToRow).ToList(),
     };
 

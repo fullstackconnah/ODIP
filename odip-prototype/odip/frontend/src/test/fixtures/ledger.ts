@@ -30,7 +30,7 @@ export function q2Rows(): LedgerRow[] {
 export function ledgerPeriod(overrides: Partial<LedgerPeriod> = {}): LedgerPeriod {
   const rows = overrides.rows ?? []
   return {
-    id: 'period-q2', position: 1, periodStart: '2026-10-01', periodEnd: '2026-12-31', isCurrent: true, pastUnresolvedCount: 0, startedUnclaimedTripCount: 0, rowCount: rows.length, rows, ...figures(), ...overrides,
+    id: 'period-q2', position: 1, periodStart: '2026-10-01', periodEnd: '2026-12-31', isCurrent: true, pastUnresolvedCount: 0, startedUnclaimedTripCount: 0, unpricedShiftCount: 0, unpricedShiftReasons: [], rowCount: rows.length, rows, ...figures(), ...overrides,
   }
 }
 
@@ -53,7 +53,7 @@ export function quarterLedgers(): LedgerPeriod[] {
 
 export function ledgerPool(overrides: Partial<LedgerPool> = {}): LedgerPool {
   return {
-    id: 'pool-core', name: 'Core (flexible)', kind: 'CoreFlexible', paceCategory: 0, managementType: 'PlanManaged', hasSetAside: true, periods: quarterLedgers(), pastUnresolvedCount: 0, startedUnclaimedTripCount: 0,
+    id: 'pool-core', name: 'Core (flexible)', kind: 'CoreFlexible', paceCategory: 0, managementType: 'PlanManaged', hasSetAside: true, periods: quarterLedgers(), pastUnresolvedCount: 0, startedUnclaimedTripCount: 0, unpricedShiftCount: 0,
     planTotal: figures({ limit: 8000, carried: 0, available: 8000, claimed: 2700, pending: 480, used: 3180, bookedAhead: 960, forecast: 4140, remaining: 4820, forecastRemaining: 3860, status: 'OnTrack' }), ...overrides,
   }
 }

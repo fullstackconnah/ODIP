@@ -19,7 +19,7 @@ public class LedgerRecordShapeTests
             new[]
             {
                 "Period", "IsCurrent", "Limit", "Carried", "Claimed", "Pending", "BookedAhead", "PastUnresolvedCount", "UnpricedTripDayCount", "Status", "Items",
-                "StartedUnclaimedTripCount",
+                "StartedUnclaimedTripCount", "UnpricedShiftCount",
             },
             ConstructorParameters(typeof(PeriodLedger)));
     }
@@ -28,7 +28,7 @@ public class LedgerRecordShapeTests
     public void PoolTotalsKeepsItsOriginalParameterOrder_AndTheNewCountsComeLast()
     {
         Assert.Equal(
-            new[] { "Limit", "Claimed", "Pending", "BookedAhead", "PastUnresolvedCount", "UnpricedTripDayCount", "Status", "StartedUnclaimedTripCount" },
+            new[] { "Limit", "Claimed", "Pending", "BookedAhead", "PastUnresolvedCount", "UnpricedTripDayCount", "Status", "StartedUnclaimedTripCount", "UnpricedShiftCount" },
             ConstructorParameters(typeof(PoolTotals)));
     }
 }

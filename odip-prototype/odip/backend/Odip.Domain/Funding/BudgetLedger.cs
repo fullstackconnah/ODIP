@@ -44,6 +44,16 @@ public sealed record LedgerItem
     /// as it takes a booked-ahead one (see <c>BudgetLedgerService.EffectOfLinesAsync</c>), whatever its group.
     /// </summary>
     public bool IsStartedUnclaimedTrip => Kind == LedgerRowKind.TripBooking && Group == LedgerGroup.Pending;
+
+    /// <summary>
+    /// Why this shift has no price, in a few words each ("a sleepover", "a 1:3 group shift", "no catalogue rate for the date"); empty for anything that is priced and for everything that
+    /// is not a shift. A shift the estimator refuses is counted as $0 in every figure, so this is what lets a period count them (<see cref="PeriodLedger.UnpricedShiftCount"/>) and say why,
+    /// instead of the figures leaving them out with nothing but a note on the shift's own row.
+    /// </summary>
+    public IReadOnlyList<string> NotPricedKinds { get; init; } = Array.Empty<string>();
+
+    /// <summary>A shift the estimator could not price: it is in the figures as $0.</summary>
+    public bool IsUnpricedShift => NotPricedKinds.Count > 0;
 }
 
 /// <summary>Where an item landed.</summary>
@@ -66,7 +76,7 @@ public readonly record struct LedgerPlace(LedgerPlacement Placement, FundingPool
 /// </summary>
 public sealed record PeriodLedger(
     FundingPeriod Period, bool IsCurrent, decimal Limit, decimal Carried, decimal Claimed, decimal Pending, decimal BookedAhead, int PastUnresolvedCount, int UnpricedTripDayCount,
-    BudgetStatus Status, IReadOnlyList<LedgerItem> Items, int StartedUnclaimedTripCount)
+    BudgetStatus Status, IReadOnlyList<LedgerItem> Items, int StartedUnclaimedTripCount, int UnpricedShiftCount)
 {
     /// <summary>The limit plus what earlier periods of the plan left unspent (rolled over, not confirmed: somebody else may have used it).</summary>
     public decimal Available => Limit + Carried;
@@ -79,7 +89,8 @@ public sealed record PeriodLedger(
 /// The counts added after the first release come LAST, as on <see cref="PeriodLedger"/>.
 /// </summary>
 public sealed record PoolTotals(
-    decimal Limit, decimal Claimed, decimal Pending, decimal BookedAhead, int PastUnresolvedCount, int UnpricedTripDayCount, BudgetStatus Status, int StartedUnclaimedTripCount)
+    decimal Limit, decimal Claimed, decimal Pending, decimal BookedAhead, int PastUnresolvedCount, int UnpricedTripDayCount, BudgetStatus Status, int StartedUnclaimedTripCount,
+    int UnpricedShiftCount)
 {
     public decimal Available => Limit;
     public decimal Used => Claimed + Pending;
@@ -191,7 +202,8 @@ public static class BudgetLedgerCalculator
                 held.Sum(i => i.UnpricedTripDayCount),
                 StatusOf(available, used, used + booked, approachingPercent), held,
                 // A booking priced in more than one category has an item for each: it is one trip however many parts it is split into.
-                held.Where(i => i.IsStartedUnclaimedTrip).Select(i => i.BookingId).Distinct().Count()));
+                held.Where(i => i.IsStartedUnclaimedTrip).Select(i => i.BookingId).Distinct().Count(),
+                held.Count(i => i.IsUnpricedShift)));
             carried = Math.Max(0m, available - used);   // what this period leaves unspent rolls into the next, and chains
         }
 
@@ -202,7 +214,8 @@ public static class BudgetLedgerCalculator
         var total = new PoolTotals(
             totalLimit, totalClaimed, totalPending, totalBooked, periods.Sum(p => p.PastUnresolvedCount), periods.Sum(p => p.UnpricedTripDayCount),
             StatusOf(totalLimit, totalClaimed + totalPending, totalClaimed + totalPending + totalBooked, approachingPercent),
-            periods.Sum(p => p.StartedUnclaimedTripCount));
+            periods.Sum(p => p.StartedUnclaimedTripCount),
+            periods.Sum(p => p.UnpricedShiftCount));
         return new PoolLedger(pool, hasSetAside, periods, total);
     }
 

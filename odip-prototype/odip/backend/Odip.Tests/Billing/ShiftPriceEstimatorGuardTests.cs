@@ -38,6 +38,7 @@ public class ShiftPriceEstimatorGuardTests
         Assert.Null(outcome.NotPricedBecause);
         Assert.Null(outcome.NotPricedSentence);
         Assert.Null(outcome.Caveat);
+        Assert.Empty(outcome.NotPricedKinds);
     }
 
     [Theory]
@@ -55,6 +56,7 @@ public class ShiftPriceEstimatorGuardTests
         Assert.Null(outcome.Price);
         Assert.Equal($"it is {phrase}, which shift claims do not price yet", outcome.NotPricedBecause);
         Assert.Equal($"It is {phrase}, which shift claims do not price yet.", outcome.NotPricedSentence);
+        Assert.Equal(new[] { phrase }, outcome.NotPricedKinds);   // the reason in a few words, for a figure that counts such shifts
     }
 
     [Theory]
@@ -66,6 +68,7 @@ public class ShiftPriceEstimatorGuardTests
 
         Assert.False(outcome.IsPriced);
         Assert.Equal($"it is {phrase}, which shift claims do not price yet", outcome.NotPricedBecause);
+        Assert.Equal(new[] { phrase }, outcome.NotPricedKinds);
     }
 
     [Fact]
@@ -86,6 +89,7 @@ public class ShiftPriceEstimatorGuardTests
 
         Assert.False(outcome.IsPriced);
         Assert.Equal("it is a 1:3 group shift and a sleepover, which shift claims do not price yet", outcome.NotPricedBecause);
+        Assert.Equal(new[] { "a 1:3 group shift", "a sleepover" }, outcome.NotPricedKinds);   // each named once, so a list of reasons across shifts never reads "A and B and A"
     }
 
     [Fact]
@@ -108,6 +112,7 @@ public class ShiftPriceEstimatorGuardTests
         Assert.False(outcome.IsPriced);
         Assert.Equal(ShiftPriceEstimator.NoCatalogueRateBecause, outcome.NotPricedBecause);
         Assert.Equal("No catalogue rate covers this date.", outcome.NotPricedSentence);
+        Assert.Equal(new[] { "no catalogue rate for the date" }, outcome.NotPricedKinds);
     }
 
     [Fact]

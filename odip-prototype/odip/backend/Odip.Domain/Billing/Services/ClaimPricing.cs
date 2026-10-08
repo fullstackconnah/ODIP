@@ -67,6 +67,12 @@ public sealed record ShiftPriceOutcome(ShiftPrice? Price, string? NotPricedBecau
 {
     public bool IsPriced => Price is not null;
 
+    /// <summary>
+    /// The reasons there is no price, each in a few words ("a sleepover", "a 1:3 group shift", "no catalogue rate for the date"), for a figure that counts the shifts left out and names why.
+    /// A shift that is more than one unsupported thing names each once. Empty when the shift is priced.
+    /// </summary>
+    public IReadOnlyList<string> NotPricedKinds { get; init; } = Array.Empty<string>();
+
     /// <summary>The reason as a sentence ("It is a sleepover, which shift claims do not price yet."), or null when the shift is priced.</summary>
     public string? NotPricedSentence => NotPricedBecause is { Length: > 0 } because ? char.ToUpperInvariant(because[0]) + because[1..] + "." : null;
 }
@@ -87,6 +93,9 @@ public static class ShiftPriceEstimator
 {
     /// <summary>Why a shift has no price when no row of the group is valid on its date for its day type.</summary>
     public const string NoCatalogueRateBecause = "no catalogue rate covers this date";
+
+    /// <summary>The same reason in a few words, for a figure that counts the shifts left out and lists why (<see cref="ShiftPriceOutcome.NotPricedKinds"/>).</summary>
+    public const string NoCatalogueRateKind = "no catalogue rate for the date";
 
     /// <summary>What is said about a priced overnight shift: the engine prices it as hours at one day rate.</summary>
     public const string ActiveNightCaveat = "Evening and night rates are not applied yet.";
@@ -130,11 +139,11 @@ public static class ShiftPriceEstimator
         // The kind of shift comes first: a shift that would be wrong to price is not priced however good its rate, and its own kind is the useful thing to say.
         var unpriced = new[] { UnpricedRatio(ratio), UnpricedNightType(nightType) }.OfType<string>().ToList();
         if (unpriced.Count > 0)
-            return new ShiftPriceOutcome(null, $"it is {string.Join(" and ", unpriced)}, which shift claims do not price yet", null);
+            return new ShiftPriceOutcome(null, $"it is {string.Join(" and ", unpriced)}, which shift claims do not price yet", null) { NotPricedKinds = unpriced };
 
         var dayType = DayTypeResolver.Resolve(serviceDate, publicHolidays);
         var item = EffectiveCatalogueResolver.FindForDay(communityAccessItems, dayType, isIntensive, serviceDate);
-        if (item == null) return new ShiftPriceOutcome(null, NoCatalogueRateBecause, null);
+        if (item == null) return new ShiftPriceOutcome(null, NoCatalogueRateBecause, null) { NotPricedKinds = new[] { NoCatalogueRateKind } };
 
         var unitPrice = CatalogueStatePrice.For(item, state);
         return new ShiftPriceOutcome(
