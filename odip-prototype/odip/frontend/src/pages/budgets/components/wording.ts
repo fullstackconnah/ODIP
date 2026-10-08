@@ -1,0 +1,44 @@
+// The words the budget warning surfaces share, in one JSX-free module so no two of them spell a state differently. Pure data and sentence builders: nothing here reads a clock, formats money or
+// decides a status.
+//
+// Every sentence here is built from fixed words, never Intl, so it cannot change with an ICU build (the rule lib/format.ts follows).
+
+import { plural } from '@/lib/format'
+
+/** A pool with a recorded limit of nothing. Distinct from "no limit recorded", which is `NoBudget`. */
+export const configuredZero = 'Recorded as $0.00 for this period. Nothing has been drawn on it, and nothing is available to draw on.'
+
+/** A row the server could not put a number on. `reason` is the server's own words when it sent any. */
+export function unavailableFigure(reason?: string): string {
+  return reason ? `Not available. ${reason}` : 'Not available.'
+}
+
+/** The dash that stands where a figure is not, and the reason beside it, read once by a screen reader and once by a sighted user. */
+export const NO_FIGURE = '–'
+
+/** "{n} participants with no budget recorded", behind the count that keeps them off the list. */
+export function noBudgetHiddenLabel(count: number): string {
+  return `${plural(count, 'participant')} with no budget recorded`
+}
+
+/** Why a participant with no row has none: nothing was recorded, or the plan they have has ended. */
+export const NO_BUDGET_REASON = 'No budget recorded'
+
+/** The line under the no-budget count: a participant with no budget is never warned about, because there is no limit to be near. */
+export const noBudgetNote = 'A participant with no budget recorded is never warned about: there is no limit to be near.'
+
+// ── The agreement budget bar ────────────────────────────────────────────────────────────────────────────────────────────
+
+/** What the bar says when the participant has no budget recorded (it links to the Funding tab where one is recorded). */
+export const AGREEMENT_NO_BUDGET = 'No budget recorded for this participant, so there is nothing to compare the agreement against.'
+
+/** The one line that makes the warning's nature plain: it is a warning, in every mode. */
+export const AGREEMENT_WARNING_ONLY = 'This is a warning only: the plan can still be saved and approved.'
+
+/** The verdict word of a line that fits. A line that does not says "Over by" and the amount. */
+export const WITHIN_WORD = 'Within'
+export const OVER_BY_WORD = 'Over by'
+
+export function periodsCountLabel(count: number): string {
+  return plural(count, 'period')
+}

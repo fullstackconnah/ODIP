@@ -1,30 +1,29 @@
 import type {
   AgreementBudgetBreakdownView,
   AgreementBudgetLine,
-  BudgetAttentionBandView,
+  AgreementBudgetPool,
   BudgetRiskRow,
   BudgetRiskTableState,
+  NoBudgetEntry,
 } from './viewModel'
 
-// Small, explicit fixtures for these components' own tests. They are view-models, NOT server DTOs and NOT mock API responses: a test that
-// wants a different state changes one field here, so a test cannot accidentally become an integration test, and nothing here pretends to
-// be an endpoint's answer. The values are whole dollars, matching the funding endpoints' own shape.
+// Small, explicit fixtures for these components' own tests. They are view-models, NOT server DTOs and NOT mock API responses: a test that wants a different state changes one field here, so a
+// test cannot accidentally become an integration test, and nothing here pretends to be an endpoint's answer. The values are whole dollars, matching the funding endpoints' own shape.
 
 /** A row in the normal case: a recorded budget, a used figure, a forecast, a next action. */
 export function riskRow(overrides: Partial<BudgetRiskRow> = {}): BudgetRiskRow {
   return {
     id: 'participant-1:pool-core:2026-07-01',
     participantLabel: 'Amara Okonkwo-Bell',
-    poolLabel: 'Core (flexible)',
+    poolLabel: 'Core',
     periodStart: '2026-07-01',
     periodEnd: '2026-09-30',
     status: 'OnTrack',
     figures: { visible: true },
     available: 2000,
     used: 640.5,
-    committed: 120,
     bookedAhead: 90.25,
-    forecast: 850.75,
+    forecast: 730.75,
     ...overrides,
   }
 }
@@ -45,7 +44,6 @@ export function noBudgetRow(overrides: Partial<BudgetRiskRow> = {}): BudgetRiskR
     status: 'NoBudget',
     available: null,
     used: null,
-    committed: null,
     bookedAhead: null,
     forecast: null,
     unavailableReason: 'No budget is recorded for this participant yet.',
@@ -53,30 +51,33 @@ export function noBudgetRow(overrides: Partial<BudgetRiskRow> = {}): BudgetRiskR
   })
 }
 
+/** An NDIS-funded participant with no budget in force. */
+export function noBudgetEntry(overrides: Partial<NoBudgetEntry> = {}): NoBudgetEntry {
+  return { id: 'participant-3', participantLabel: 'Chen Wei', reason: 'No budget recorded', action: { label: 'Open funding tab', to: '/participants/participant-3?tab=funding' }, ...overrides }
+}
+
 /** A ready table state holding whatever rows it is given, in the order it is given: the sort is the server's, never this fixture's. */
-export function readyTable(rows: BudgetRiskRow[], extra: { hiddenNoBudgetCount?: number; onShowNoBudget?: () => void } = {}): BudgetRiskTableState {
+export function readyTable(rows: BudgetRiskRow[], extra: { noBudget?: NoBudgetEntry[] } = {}): BudgetRiskTableState {
   return { status: 'ready', rows, ...extra }
 }
 
-export function band(overrides: Partial<BudgetAttentionBandView> = {}): BudgetAttentionBandView {
-  return { label: 'Budgets at risk', counts: { Over: 0, ForecastOver: 0, Approaching: 0 }, ...overrides }
-}
-
-/** One pool and period of the agreement, within the limit, priced from the provider's set-aside. */
+/** One funding period of one pool the agreement touches, within what is left. */
 export function agreementLine(overrides: Partial<AgreementBudgetLine> = {}): AgreementBudgetLine {
   return {
-    poolLabel: 'Core (flexible)',
-    periodStart: '2026-07-01',
-    periodEnd: '2026-09-30',
-    allowance: { planAmount: 2000, setAside: 1200, limitSource: 'setAside' },
-    committed: 860,
-    forecast: 1040,
+    periodStart: '2026-10-01',
+    periodEnd: '2026-12-31',
+    cost: 2355.5,
+    remaining: 3120,
     withinLimit: true,
     overBy: null,
     ...overrides,
   }
 }
 
+export function agreementPool(overrides: Partial<AgreementBudgetPool> = {}): AgreementBudgetPool {
+  return { poolLabel: 'Core', lines: [agreementLine()], ...overrides }
+}
+
 export function breakdown(overrides: Partial<AgreementBudgetBreakdownView> = {}): AgreementBudgetBreakdownView {
-  return { status: 'ready', figures: { visible: true }, lines: [agreementLine()], ...overrides }
+  return { status: 'ready', figures: { visible: true }, pools: [agreementPool()], notInARecordedPool: null, outsideThePlan: null, ...overrides }
 }

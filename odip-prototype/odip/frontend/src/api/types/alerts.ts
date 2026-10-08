@@ -14,7 +14,7 @@ export interface ParticipantAlertDto {
   severity: AlertSeverity
   message: string
   deepLinkTab: string
-  linkTo: string | null
+  linkTo?: string | null
 }
 
 /** Ranked alerts (Critical first) for one participant, plus per-severity counts. */

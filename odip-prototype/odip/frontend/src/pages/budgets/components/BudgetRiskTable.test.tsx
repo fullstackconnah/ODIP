@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { BudgetRiskTable } from './BudgetRiskTable'
-import { hiddenRow, noBudgetRow, readyTable, riskRow } from './fixtures'
+import { hiddenRow, noBudgetEntry, noBudgetRow, readyTable, riskRow } from './fixtures'
 import type { BudgetRiskRow } from './viewModel'
 import { NO_FIGURE, configuredZero, noBudgetHiddenLabel, unavailableFigure } from './wording'
 
@@ -88,12 +88,12 @@ describe('BudgetRiskTable: a real row', () => {
     renderTable(readyTable([row]))
 
     expect(screen.getByText('Amara Okonkwo-Bell')).toBeInTheDocument()
-    expect(screen.getByText('Core (flexible)')).toBeInTheDocument()
+    expect(screen.getByText('Core')).toBeInTheDocument()
     expect(screen.getByText('1 Jul – 30 Sep 2026')).toBeInTheDocument()
     expect(screen.getByText('On track')).toBeInTheDocument()
     expect(screen.getByText('$2,000.00')).toBeInTheDocument()   // available
     expect(screen.getByText('$640.50')).toBeInTheDocument()     // used
-    expect(screen.getByText('$850.75')).toBeInTheDocument()     // forecast
+    expect(screen.getByText('$730.75')).toBeInTheDocument()     // forecast
   })
 
   it('renders every column header once, so the card layout at 390 labels every value', () => {
@@ -115,11 +115,11 @@ describe('BudgetRiskTable: a real row', () => {
     expect(labels[3]).toBe('Status')
     expect(figuresIn(cellFor('Available'))).toEqual(['$2,000.00'])
     expect(figuresIn(cellFor('Used'))).toEqual(['$640.50'])
-    expect(figuresIn(cellFor('Forecast'))).toEqual(['$850.75'])
+    expect(figuresIn(cellFor('Forecast'))).toEqual(['$730.75'])
   })
 
-  it('draws a dash in a column the server left out entirely (no committed/ahead figure at all)', () => {
-    const withoutAhead = riskRow({ bookedAhead: undefined, committed: undefined })
+  it('draws a dash in a column the server left out entirely (no booked-ahead figure at all)', () => {
+    const withoutAhead = riskRow({ bookedAhead: undefined })
     renderTable(readyTable([withoutAhead]))
 
     const ahead = cellOf('Amara Okonkwo-Bell', 'Booked ahead')
@@ -153,7 +153,7 @@ describe('BudgetRiskTable: a real row', () => {
 
 describe('BudgetRiskTable: zero, missing, and unknown are three different things', () => {
   it('a configured zero is a real figure and says so out loud, so nobody reads it as missing', () => {
-    renderTable(readyTable([riskRow({ available: 0, used: 0, committed: 0, bookedAhead: 0, forecast: 0 })]))
+    renderTable(readyTable([riskRow({ available: 0, used: 0, bookedAhead: 0, forecast: 0 })]))
 
     const available = cellOf('Amara Okonkwo-Bell', 'Available')
     expect(available).toHaveTextContent('$0.00')
@@ -162,7 +162,7 @@ describe('BudgetRiskTable: zero, missing, and unknown are three different things
   })
 
   it('a null figure is a dash with the server’s own reason beside it, never $0.00', () => {
-    renderTable(readyTable([riskRow({ forecast: null, estimate: 'about $2k over', unavailableReason: 'The forecast engine could not price the booked shifts.' })]))
+    renderTable(readyTable([riskRow({ forecast: null, unavailableReason: 'The forecast engine could not price the booked shifts.' })]))
 
     const forecast = cellOf('Amara Okonkwo-Bell', 'Forecast')
     expect(forecast).toHaveTextContent(NO_FIGURE)
@@ -184,19 +184,6 @@ describe('BudgetRiskTable: zero, missing, and unknown are three different things
     const forecast = cellOf('Amara Okonkwo-Bell', 'Forecast')
     expect(forecast).toHaveTextContent(unavailableFigure())
     expect(figuresIn(forecast)).toEqual([])
-  })
-
-  it('shows the server’s coarse estimate only where there is no exact figure, and as text not money', () => {
-    const { unmount } = renderTable(readyTable([riskRow({ forecast: null, estimate: 'about $2k over' })]))
-    const forecast = cellOf('Amara Okonkwo-Bell', 'Forecast')
-    expect(forecast).toHaveTextContent('About about $2k over')
-    // The estimate is the server's own words, never run through the money formatter: no "$2,000.00" can appear beside it.
-    expect(figuresIn(forecast).filter(f => f.includes(','))).toEqual([])
-    expect(forecast.textContent).not.toMatch(/\$[\d,]+\.\d{2}/)
-    unmount()
-
-    renderTable(readyTable([riskRow({ forecast: 850.75, estimate: 'about $2k over' })]))
-    expect(cellOf('Amara Okonkwo-Bell', 'Forecast')).not.toHaveTextContent('about $2k over')   // never shown beside a real figure
   })
 
   it('a participant with no budget recorded is a state of its own, not a row of zeroes', () => {
@@ -226,7 +213,7 @@ describe('BudgetRiskTable: the privacy contract', () => {
     renderTable(readyTable([hiddenRow({ status: 'Over' })]))
 
     const row = rowFor('Amara Okonkwo-Bell')
-    expect(within(row).getByText('Core (flexible)')).toBeInTheDocument()
+    expect(within(row).getByText('Core')).toBeInTheDocument()
     expect(within(row).getByText('1 Jul – 30 Sep 2026')).toBeInTheDocument()
     expect(within(row).getByText('Over')).toBeInTheDocument()
   })
@@ -263,13 +250,13 @@ describe('BudgetRiskTable: long and awkward content', () => {
   })
 
   it('prints a very large money figure in full, with its cents, not an ellipsis of it', () => {
-    renderTable(readyTable([riskRow({ available: 254_999.99, used: 249_001.5, forecast: 251_000, committed: 90.25 })]))
+    renderTable(readyTable([riskRow({ available: 254_999.99, used: 249_001.5, forecast: 251_000 })]))
     const row = rowFor('Amara Okonkwo-Bell')
 
     expect(figuresIn(cellOf('Amara Okonkwo-Bell', 'Available'))).toEqual(['$254,999.99'])
     expect(figuresIn(cellOf('Amara Okonkwo-Bell', 'Used'))).toEqual(['$249,001.50'])
     expect(figuresIn(cellOf('Amara Okonkwo-Bell', 'Forecast'))).toEqual(['$251,000.00'])
-    expect(figuresIn(row)).toHaveLength(4)   // available, used, committed, forecast: bookedAhead is set separately by the fixture
+    expect(figuresIn(row)).toHaveLength(4)   // available, used, booked ahead (the fixture's own) and forecast
   })
 
   it('keeps both ends and the year of a period that crosses two years', () => {
@@ -290,7 +277,7 @@ describe('BudgetRiskTable: the next action', () => {
   it('links the row to the exact destination the caller named, and its accessible name says whose it is', async () => {
     renderTable(readyTable([riskRow({ action: { label: 'Open funding', to: '/participants/participant-1?tab=funding' } })]))
 
-    const link = screen.getByRole('link', { name: 'Open funding Amara Okonkwo-Bell' })
+    const link = screen.getByRole('link', { name: 'Open funding for Amara Okonkwo-Bell' })
     expect(link).toHaveAttribute('href', '/participants/participant-1?tab=funding')
     await tabTo(link)
     expect(link).toHaveFocus()
@@ -308,7 +295,7 @@ describe('BudgetRiskTable: the next action', () => {
     const buttons = screen.getAllByRole('button', { name: /^Review / })
     expect(buttons.map(b => b.textContent)).toEqual(['Review', 'Review'])   // both read "Review": the name carries the person
 
-    await userEvent.click(screen.getByRole('button', { name: 'Review First Person' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Review for First Person' }))
     expect(onSelect).toHaveBeenCalledTimes(1)
   })
 
@@ -321,17 +308,22 @@ describe('BudgetRiskTable: the next action', () => {
 })
 
 describe('BudgetRiskTable: the no-budget tail', () => {
-  it('keeps them behind a count that says what it is, and says why they are not warned about', () => {
-    renderTable(readyTable([riskRow()], { hiddenNoBudgetCount: 7 }))
+  const entries = () => [
+    noBudgetEntry({ id: 'p3', participantLabel: 'Chen Wei' }),
+    noBudgetEntry({ id: 'p4', participantLabel: 'Dara Okafor', reason: 'Plan ended 30 Jun 2026', action: { label: 'Open funding tab', to: '/participants/p4?tab=funding' } }),
+  ]
 
-    expect(screen.getByText(noBudgetHiddenLabel(7))).toBeInTheDocument()
+  it('keeps them behind a count that says what it is, closed, and says why they are not warned about', () => {
+    renderTable(readyTable([riskRow()], { noBudget: entries() }))
+
+    const toggle = screen.getByRole('button', { name: noBudgetHiddenLabel(2) })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByText(/A participant with no budget recorded is never warned about: there is no limit to be near\./)).toBeInTheDocument()
+    expect(document.getElementById(toggle.getAttribute('aria-controls')!)).not.toBeVisible()
   })
 
-  it('calls the caller’s handler when the count is opened, and names the element it controls', async () => {
-    const onShowNoBudget = vi.fn()
-    renderTable(readyTable([riskRow()], { hiddenNoBudgetCount: 2, onShowNoBudget }))
-
+  it('opens on a click or from the keyboard, lists each participant with the reason and the way to record a budget, and closes again', async () => {
+    renderTable(readyTable([riskRow()], { noBudget: entries() }))
     const toggle = screen.getByRole('button', { name: noBudgetHiddenLabel(2) })
     const controlled = document.getElementById(toggle.getAttribute('aria-controls')!)
     expect(controlled).not.toBeNull()
@@ -339,13 +331,24 @@ describe('BudgetRiskTable: the no-budget tail', () => {
     await tabTo(toggle)
     expect(toggle).toHaveFocus()
     await userEvent.keyboard('{Enter}')
-    expect(onShowNoBudget).toHaveBeenCalledTimes(1)
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(controlled).toBeVisible()
+    expect(within(controlled!).getByText('Chen Wei')).toBeVisible()
+    expect(within(controlled!).getByText('Plan ended 30 Jun 2026')).toBeVisible()
+    expect(within(controlled!).getByRole('link', { name: 'Open funding tab for Dara Okafor' })).toHaveAttribute('href', '/participants/p4?tab=funding')
+    expect(figuresIn(controlled!)).toEqual([])   // not one dollar figure: there is no budget to state
+
+    await userEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(controlled).not.toBeVisible()
   })
 
-  it('has no tail at all when there is nothing to hide', () => {
+  it('has no tail at all when there is nothing to keep behind it', () => {
     renderTable(readyTable([riskRow()]))
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByText(/no budget recorded/i)).not.toBeInTheDocument()
   })
 })
 

@@ -52,6 +52,7 @@ const BillingPage = React.lazy(() => import('@/pages/BillingPage'))
 const ClaimBatchesPage = React.lazy(() => import('@/pages/ClaimBatchesPage'))
 const ClaimBatchDetailPage = React.lazy(() => import('@/pages/ClaimBatchDetailPage'))
 const ClaimBatchBuilderPage = React.lazy(() => import('@/pages/ClaimBatchBuilderPage'))
+const BudgetsPage = React.lazy(() => import('@/pages/BudgetsPage'))
 const RosterBoardPage = React.lazy(() => import('@/pages/rostering/RosterBoardPage'))
 const PatternsPage = React.lazy(() => import('@/pages/rostering/PatternsPage'))
 const CompatibilityPage = React.lazy(() => import('@/pages/rostering/CompatibilityPage'))
@@ -164,6 +165,7 @@ const router = createBrowserRouter(
         <Route path="/billing/claim-batches" element={<PrivateRoute page="billing"><ClaimBatchesPage /></PrivateRoute>} />
         <Route path="/billing/claim-batches/new" element={<PrivateRoute page="billing" requiresWrite><ClaimBatchBuilderPage /></PrivateRoute>} />
         <Route path="/billing/claim-batches/:id" element={<PrivateRoute page="billing"><ClaimBatchDetailPage /></PrivateRoute>} />
+        <Route path="/budgets" element={<PrivateRoute page="budgets"><BudgetsPage /></PrivateRoute>} />
         <Route path="/rostering" element={<PrivateRoute page="rostering"><RosterBoardPage /></PrivateRoute>} />
         <Route path="/rostering/patterns" element={<PrivateRoute page="rostering"><PatternsPage /></PrivateRoute>} />
         <Route path="/rostering/compatibility" element={<PrivateRoute page="rostering"><CompatibilityPage /></PrivateRoute>} />

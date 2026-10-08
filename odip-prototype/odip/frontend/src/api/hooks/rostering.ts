@@ -1,6 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPut, apiDelete } from '../client'
 import { awaitsData } from '@/lib/queryPhase'
+import { refreshBudgetWarnings } from './funding-warnings'
 import type {
   RosterBoardDto,
   ShiftDto,
@@ -49,11 +50,20 @@ export function useCheckShift() {
   })
 }
 
+/**
+ * A shift written (made, changed, removed) moves the roster board, and what its cost does to a participant's budget: the alerts, the Budgets list and any agreement check are read again with it
+ * (budget phase 2b). Returns the board's refresh, as the one-line `onSuccess` it replaces did, so the mutation still waits for it.
+ */
+function refreshAfterShiftWrite(qc: QueryClient) {
+  refreshBudgetWarnings(qc)
+  return qc.invalidateQueries({ queryKey: ['roster-board'] })
+}
+
 export function useCreateShift() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: CreateShiftDto) => apiPost<ShiftDto>('/rostering/shifts', data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+    onSuccess: () => refreshAfterShiftWrite(qc),
   })
 }
 
@@ -62,7 +72,7 @@ export function useUpdateShift() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateShiftDto }) =>
       apiPut<ShiftDto>(`/rostering/shifts/${id}`, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+    onSuccess: () => refreshAfterShiftWrite(qc),
   })
 }
 
@@ -70,7 +80,7 @@ export function useDeleteShift() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => apiDelete(`/rostering/shifts/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+    onSuccess: () => refreshAfterShiftWrite(qc),
   })
 }
 
@@ -181,6 +191,7 @@ export function useApproveCompletion() {
       qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
       qc.invalidateQueries({ queryKey: ['rostering-completion-review', shiftId] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
+      refreshBudgetWarnings(qc)   // an approved completion is pending money in the participant's budget, no longer only booked ahead
     },
   })
 }
@@ -195,6 +206,7 @@ export function useReturnCompletion() {
       qc.invalidateQueries({ queryKey: ['rostering-completion', vars.shiftId] })
       qc.invalidateQueries({ queryKey: ['rostering-completion-review', vars.shiftId] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
+      refreshBudgetWarnings(qc)
     },
   })
 }
@@ -210,6 +222,7 @@ export function useApproveCompletionsBatch() {
       // Any open review is now stale: a batch names many shifts, and the prefix key covers every one of them.
       qc.invalidateQueries({ queryKey: ['rostering-completion-review'] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
+      refreshBudgetWarnings(qc)
     },
   })
 }
@@ -297,6 +310,7 @@ export function useGeneratePattern() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['roster-board'] })
       qc.invalidateQueries({ queryKey: ['roster-patterns'] })
+      refreshBudgetWarnings(qc)   // the generated shifts are booked ahead
     },
   })
 }

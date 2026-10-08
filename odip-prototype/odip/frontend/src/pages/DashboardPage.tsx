@@ -14,6 +14,8 @@ import { Card } from '@/components/Card'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { AttentionBand, type BandItem } from './dashboard/AttentionBand'
+import { BUDGET_OVER_ALERT, budgetsAtRisk } from '@/lib/budgetRisk'
+import { budgetsAtRiskItem } from './budgets/budgetBand'
 import { Link } from 'react-router-dom'
 import {
   Map, ListChecks, ChevronRight, ShieldAlert
@@ -117,11 +119,15 @@ export default function DashboardPage() {
     .filter((p) => p.isActive)
     .flatMap((p) =>
       p.alerts
-        .filter((a) => a.severity === 'Critical')
+        .filter((a) => a.severity === 'Critical' && a.type !== BUDGET_OVER_ALERT)   // "over budget" is the Budgets at risk tile's: see budgetRisk below
         .map((a) => ({ participantId: p.participantId, participantName: p.participantName, alert: a }))
     )
   // How many participants those alerts belong to: one flagged row each on the Participants table.
   const criticalParticipantCount = new Set(criticalAlertItems.map((i) => i.participantId)).size
+  // Budgets at risk (phase 2b) counts participants from the same aggregate. A participant already over budget has a Critical alert, which would be counted a second time as a Critical Participant
+  // Alert beside this tile, so that one alert (and only that one) is left out of the Critical count and list: the tile, in the danger tone, is where "over" reaches the dashboard. The NDIA's
+  // "the funds ran out" alert is a different fact and stays with the Critical alerts.
+  const budgetRisk = budgetsAtRisk(alertsAggregate)
 
   // The needs-attention band: every item the dashboard counts, in a fixed order, handed to the band, which makes a tile of each one that needs somebody and names the rest
   // in one "All clear" row. An item is left out only by what the role can open: Qualification Issues needs the Qualifications page, the alerts item needs canViewAlerts,
@@ -164,6 +170,11 @@ export default function DashboardPage() {
       loading: alertsLoading,
       error: alertsError,
     })
+  }
+  // Budgets at risk: counted from the same alerts, so while they are loading or failed the Critical Participant Alerts tile above is already the en dash that says so, and this one is simply not
+  // there (a tile is only ever a count that arrived). The tile opens the Budgets list, so only a role that can open it is offered it. At zero it is a name in the All clear row, never a tile.
+  if (canViewAlerts && canAccessPage('budgets') && !alertsLoading && !alertsError) {
+    attentionItems.push(budgetsAtRiskItem(budgetRisk))
   }
   // ReadOnly reaches the Schedule but its writes are refused (permissions.ts keeps canWrite for it and the server answers 403), so it is offered the page and not a verb it
   // cannot use. Both links go to the same page, so they may share a name.
