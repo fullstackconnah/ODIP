@@ -53,8 +53,10 @@ export function AgreementBudgetBreakdown({ view }: { view: AgreementBudgetBreakd
   const { figures } = view
 
   if (view.status === 'loading') {
+    // Not a live region: the bar has one polite status and nothing else in it is live (a status inserted holding its text is not reliably spoken, and this one would speak on every first check).
+    // The bar is aria-busy while it is up.
     return (
-      <p role="status" className={NOTE}>
+      <p className={NOTE}>
         Checking the agreement against the participant&rsquo;s budget…
       </p>
     )

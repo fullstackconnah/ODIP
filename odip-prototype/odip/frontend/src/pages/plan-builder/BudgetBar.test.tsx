@@ -1,15 +1,27 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import type { PlanBudget } from '@/api/hooks'
 import type { PlanIssue } from '@/api/types'
 import { budgetOf, emptyTotals } from '@/test/fixtures/planPricing'
+import { agreementLine, agreementPool, breakdown } from '../budgets/components/fixtures'
 import { BudgetBar } from './BudgetBar'
 
 const budget = (): PlanBudget => budgetOf()
 
+/** The agreement against the participant's pools, as the bar is handed it (the plan builder maps the server's answer): one pool and one period, with $3,120.00 left, and it fits. */
+const FITS = breakdown()
+/** The same agreement against a period with $1,000.00 left: $1,355.50 over. */
+const OVER = breakdown({ pools: [agreementPool({ lines: [agreementLine({ cost: 2355.5, remaining: 1000, withinLimit: false, overBy: 1355.5 })] })] })
+/** More over still: the figure in the bar moves, the announcement must not. */
+const OVER_MORE = breakdown({ pools: [agreementPool({ lines: [agreementLine({ cost: 2355.5, remaining: 500, withinLimit: false, overBy: 1855.5 })] })] })
+
 const ready = (props: Partial<Parameters<typeof BudgetBar>[0]> = {}) =>
-  render(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} {...props} />)
+  render(<BudgetBar status="ready" budget={budget()} budgetCheck={FITS} {...props} />)
+
+/** The comparison the bar draws: its own region, named for what it holds. */
+const check = () => screen.getByRole('region', { name: 'Agreement against the participant\'s budget' })
 
 /** A ResizeObserver the test drives: nothing is measured until it says the size changed. */
 class FakeResizeObserver {
@@ -36,41 +48,68 @@ describe('BudgetBar', () => {
     expect(within(categories).getByText('Community participation $30,610.28')).toHaveAttribute('title', 'Assistance with Social, Economic and Community Participation')
   })
 
-  it('compares the agreement with the plan budget: how much of it is used and how much is left', () => {
+  it('compares the agreement with what the participant’s pool has left, in the pool and the period it falls in', () => {
     ready()
 
-    expect(screen.getByText('Plan budget')).toBeInTheDocument()
-    expect(screen.getByText(/\$40,000\.00/)).toBeInTheDocument()
-    expect(screen.getByText('77% used')).toBeInTheDocument()
-    expect(screen.getByText('$9,389.72 left.')).toBeInTheDocument()
-    expect(screen.queryByText(/Over the plan budget/)).not.toBeInTheDocument()
+    expect(screen.getByText('Participant budget')).toBeInTheDocument()
+    expect(check()).toHaveTextContent('Agreement $2,355.50 against $3,120.00 left in 1 Oct – 31 Dec 2026')
+    expect(check()).toHaveTextContent('Within')
+    expect(check()).not.toHaveTextContent('Over by')
+    expect(screen.queryByText('Over budget')).not.toBeInTheDocument()
   })
 
-  it('warns when the plan is over its budget, in words, and says it does not stop the save', () => {
-    ready({ planBudget: { total: 25000, count: 2 } })
+  it('compares per pool and per period: each is a line of its own', () => {
+    ready({
+      budgetCheck: breakdown({
+        pools: [
+          agreementPool({ poolLabel: 'Core', lines: [agreementLine(), agreementLine({ periodStart: '2027-01-01', periodEnd: '2027-03-31', cost: 1000, remaining: 400, withinLimit: false, overBy: 600 })] }),
+          agreementPool({ poolLabel: 'Improved Daily Living Skills', lines: [agreementLine({ cost: 300, remaining: 900 })] }),
+        ],
+      }),
+    })
 
-    const warning = screen.getByText(/Over the plan budget by \$5,610\.28/)
-    expect(warning).toHaveTextContent('You can still save the draft.')
-    expect(screen.getByText('122% used')).toBeInTheDocument()
+    const lines = within(check()).getAllByRole('listitem')
+    expect(lines).toHaveLength(3)
+    expect(screen.getByText('Improved Daily Living Skills')).toBeInTheDocument()
+    expect(lines[0]).toHaveTextContent('Agreement $2,355.50 against $3,120.00 left in 1 Oct – 31 Dec 2026')
+    expect(lines[1]).toHaveTextContent('Agreement $1,000.00 against $400.00 left in 1 Jan – 31 Mar 2027')
+    expect(lines[1]).toHaveTextContent('Over by $600.00')
+    expect(lines[2]).toHaveTextContent('Agreement $300.00 against $900.00 left')
+    expect(check().textContent?.match(/Within/g)).toHaveLength(2)
+  })
+
+  it('warns when the agreement is over what a pool has left, in words, and says it never stops a save or an approval', () => {
+    ready({ budgetCheck: OVER })
+
+    const line = within(check()).getByRole('listitem')
+    expect(line).toHaveTextContent('Agreement $2,355.50 against $1,000.00 left in 1 Oct – 31 Dec 2026')
+    expect(line).toHaveTextContent('Over by $1,355.50')
+    expect(check()).toHaveTextContent('One period would be over what is left. This is a warning only: it never stops a save or an approval.')
     expect(screen.getByText('Over budget')).toBeInTheDocument()   // and on the one-line form a phone shows
-    // Design 2: the cell takes the warning tint, and the sentence is text, not a pill. Design 8: the figures are not live regions, so nothing speaks on every recalculation.
-    expect(screen.getByText('Plan budget').parentElement).toHaveClass('bg-[var(--color-warning-container)]')
-    expect(warning.closest('[role="status"]')).toBeNull()
+    // The line takes the warning tint and says "Over by" in words (colour is never the only cue); the figures are not live regions, so nothing speaks on every recalculation.
+    expect(line).toHaveClass('bg-[var(--color-warning-container)]')
+    expect(line.closest('[role="status"]')).toBeNull()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  // Code review N11: at ae279094 the over-budget line was a status; design 8 took the live regions off the figures, and a screen reader that adds the block that tips the plan over was told nothing.
-  describe('the plan crossing its budget', () => {
-    const over = { planBudget: { total: 25000, count: 1 } }
-    const under = { planBudget: { total: 40000, count: 1 } }
+  it('has no control that could refuse a save: being over is a sentence and a chip, never a disabled Save', () => {
+    ready({ budgetCheck: OVER, unsaved: { onSave: vi.fn(), saving: false } })
 
-    it('has one polite status, visually hidden, that says so when the plan is over and is empty when it is not', () => {
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+  })
+
+  // Code review N11: at ae279094 the over-budget line was a status; design 8 took the live regions off the figures, and a screen reader that adds the block that tips the plan over was told nothing.
+  describe('the agreement crossing what a pool has left', () => {
+    const over = { budgetCheck: OVER }
+    const under = { budgetCheck: FITS }
+
+    it('has one polite status, visually hidden, that says so when the agreement is over and is empty when it is not', () => {
       const { rerender } = ready(under)
       const region = screen.getByRole('status')
       expect(region.textContent).toBe('')
 
       rerender(<BudgetBar status="ready" budget={budget()} {...over} />)
-      expect(screen.getByRole('status')).toHaveTextContent('Over the plan budget.')
+      expect(screen.getByRole('status')).toHaveTextContent('Over the participant\'s budget.')
       expect(screen.getByRole('status').querySelector('p')).toHaveClass('sr-only')
       expect(screen.getAllByRole('status')).toHaveLength(1)
     })
@@ -80,7 +119,7 @@ describe('BudgetBar', () => {
       rerender(<BudgetBar status="ready" budget={budget()} {...over} />)
       const sentence = screen.getByRole('status').textContent
 
-      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 20000, count: 1 }} />)    // more over: the figure in the bar moves, the announcement does not
+      rerender(<BudgetBar status="ready" budget={budget()} budgetCheck={OVER_MORE} />)    // more over: the figure in the bar moves, the announcement does not
       expect(screen.getByRole('status').textContent).toBe(sentence)
       expect(screen.getByRole('status').textContent).not.toMatch(/\$|\d/)
     })
@@ -92,7 +131,17 @@ describe('BudgetBar', () => {
 
       rerender(<BudgetBar status="ready" budget={budget()} {...over} />)
       expect(screen.getByRole('status')).toBe(region)             // the same node: filled in place, not inserted already holding its text
-      expect(region).toHaveTextContent('Over the plan budget.')
+      expect(region).toHaveTextContent('Over the participant\'s budget.')
+    })
+
+    it('says nothing while the check is loading, failed or has no budget to compare, because nothing is over', () => {
+      const { rerender } = ready(over)
+      expect(screen.getByRole('status')).toHaveTextContent('Over the participant\'s budget.')
+
+      for (const status of ['loading', 'failed', 'none'] as const) {
+        rerender(<BudgetBar status="ready" budget={budget()} budgetCheck={breakdown({ status, pools: [] })} />)
+        expect(screen.getByRole('status').textContent, status).toBe('')
+      }
     })
   })
 
@@ -105,7 +154,7 @@ describe('BudgetBar', () => {
       const region = screen.getByRole('status')
       expect(region.textContent).toBe('')
 
-      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} unsaved={unsaved()} />)
+      rerender(<BudgetBar status="ready" budget={budget()} budgetCheck={FITS} unsaved={unsaved()} />)
 
       expect(screen.getByRole('status')).toBe(region)
       expect(region).toHaveTextContent('The plan has changes that are not saved.')
@@ -117,8 +166,8 @@ describe('BudgetBar', () => {
       const { rerender } = ready({ unsaved: unsaved() })
       const before = screen.getByRole('status').innerHTML
 
-      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 41000, count: 1 }} unsaved={unsaved()} refreshing />)       // typing: a new quote is on its way, the figures move
-      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 42000, count: 1 }} unsaved={unsaved()} />)
+      rerender(<BudgetBar status="ready" budget={budget()} budgetCheck={FITS} unsaved={unsaved()} refreshing />)       // typing: a new quote is on its way, the figures move
+      rerender(<BudgetBar status="ready" budget={budget()} budgetCheck={FITS} unsaved={unsaved()} />)
 
       expect(screen.getByRole('status').innerHTML).toBe(before)
     })
@@ -127,7 +176,7 @@ describe('BudgetBar', () => {
       const { rerender } = ready({ unsaved: unsaved() })
       expect(screen.getByRole('status')).toHaveTextContent('The plan has changes that are not saved.')
 
-      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} saved="Saved as version 5." />)
+      rerender(<BudgetBar status="ready" budget={budget()} budgetCheck={FITS} saved="Saved as version 5." />)
 
       expect(screen.getByRole('status')).toHaveTextContent('Saved as version 5.')
       expect(screen.getByRole('status')).not.toHaveTextContent('not saved')
@@ -141,27 +190,63 @@ describe('BudgetBar', () => {
     expect(within(dock).getByText('Block 1 cannot be priced yet, so the plan cannot be saved.').closest('[role="alert"]')).not.toBeNull()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
 
-    rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} />)
+    rerender(<BudgetBar status="ready" budget={budget()} budgetCheck={FITS} />)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  // Design review D3: the amber cell said "You can still save the draft" while the Callout said the plan cannot be saved and Save draft was off.
-  it('does not say the draft can still be saved while a block is refused', () => {
-    const { rerender } = ready({ planBudget: { total: 25000, count: 1 } })
-    expect(screen.getByText(/Over the plan budget by/)).toHaveTextContent('You can still save the draft.')
+  // Design review D3: the amber cell said "You can still save the draft" while the Callout said the plan cannot be saved and Save draft was off. The sentence now says only what is always true:
+  // the budget never stops a save or an approval, so it cannot contradict a plan that cannot be saved for another reason.
+  it('does not promise the draft can be saved while a block is refused: it says only that the budget does not stop it', () => {
+    const { rerender } = ready({ budgetCheck: OVER })
+    expect(check()).toHaveTextContent('it never stops a save or an approval')
 
-    rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 25000, count: 1 }} blocked />)
-    expect(screen.getByText(/Over the plan budget by \$5,610\.28/)).not.toHaveTextContent(/save the draft/)
+    rerender(<BudgetBar status="ready" budget={budget()} budgetCheck={OVER} blocked />)
+    expect(check()).toHaveTextContent('it never stops a save or an approval')
+    expect(check()).not.toHaveTextContent(/can still be saved|save the draft/)
   })
 
-  it('shows the totals on their own, and says so, when no plan budget is recorded or it could not be read', () => {
-    const { rerender } = ready({ planBudget: null })
-    expect(screen.getByText('Not recorded for this participant. The totals stand alone.')).toBeInTheDocument()
-    expect(screen.queryByText(/% used/)).not.toBeInTheDocument()
-    expect(screen.queryByText('Over budget')).not.toBeInTheDocument()
+  it('says no budget is recorded, links to the Funding tab, and shows the totals on their own, with nothing warned', () => {
+    const none = breakdown({ status: 'none', pools: [], noBudgetAction: { label: 'Open the Funding tab', to: '/participants/p-1?tab=funding' } })
+    render(<MemoryRouter><BudgetBar status="ready" budget={budget()} budgetCheck={none} /></MemoryRouter>)
 
-    rerender(<BudgetBar status="ready" budget={budget()} planBudget={null} planBudgetUnreadable />)
-    expect(screen.getByText('The plan budget could not be read, so there is no comparison.')).toBeInTheDocument()
+    expect(screen.getByText('No budget recorded for this participant, so there is nothing to compare the agreement against.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open the Funding tab' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
+    expect(screen.queryByText('Over budget')).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Running budget' })).toHaveTextContent('$30,610.28')   // the totals stand alone
+    expect(screen.queryByText(/Over by/)).not.toBeInTheDocument()
+  })
+
+  it('says the check could not be made, and offers to ask again, while the plan can still be saved', async () => {
+    const user = userEvent.setup()
+    const onRetry = vi.fn()
+    ready({ budgetCheck: breakdown({ status: 'failed', pools: [], onRetry }), unsaved: { onSave: vi.fn(), saving: false } })
+
+    expect(screen.getByRole('alert')).toHaveTextContent('The agreement could not be checked against the budget')
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+  })
+
+  it('says the check is under way, and states no comparison, until its answer arrives', () => {
+    ready({ budgetCheck: breakdown({ status: 'loading', pools: [] }) })
+
+    expect(screen.getByText(/Checking the agreement against the participant/)).toBeInTheDocument()
+    expect(screen.queryByText(/Agreement \$/)).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Running budget' })).toHaveAttribute('aria-busy', 'true')   // said to a screen reader as busy, not as a second live region
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+  })
+
+  it('is busy, and keeps the last answer on screen, while a newer check replaces it', () => {
+    ready({ budgetCheck: { ...FITS, refreshing: true } })
+
+    expect(screen.getByRole('region', { name: 'Running budget' })).toHaveAttribute('aria-busy', 'true')
+    expect(check()).toHaveTextContent('Agreement $2,355.50 against $3,120.00 left')
+  })
+
+  it('has no Participant budget column at all when there is nothing to compare yet', () => {
+    ready({ budgetCheck: null })
+
+    expect(screen.queryByText('Participant budget')).not.toBeInTheDocument()
   })
 
   it('names the plans it cannot give a week for, and what is flagged, and what it left out', () => {
@@ -217,11 +302,6 @@ describe('BudgetBar', () => {
     })
   })
 
-  it('counts the funding sources a plan budget is the sum of', () => {
-    ready({ planBudget: { total: 45000, count: 2 } })
-    expect(screen.getByText('$14,389.72 left, across 2 funding sources.')).toBeInTheDocument()
-  })
-
   it('has one line, and a Details toggle that opens the rest, for a phone', async () => {
     const user = userEvent.setup()
     ready()
@@ -237,7 +317,7 @@ describe('BudgetBar', () => {
   })
 
   it('says it is pricing, never a zero, while the first answer is on its way', () => {
-    render(<BudgetBar status="loading" planBudget={null} />)
+    render(<BudgetBar status="loading" />)
 
     expect(screen.getByRole('region', { name: 'Running budget' })).toHaveAttribute('aria-busy', 'true')
     expect(screen.getAllByText('Pricing the plan…')).toHaveLength(2)                 // the one line, and the details; aria-busy says it to a screen reader
@@ -246,7 +326,7 @@ describe('BudgetBar', () => {
   })
 
   it('asks for a block while there is nothing to price', () => {
-    render(<BudgetBar status="idle" planBudget={null} />)
+    render(<BudgetBar status="idle" />)
     expect(screen.getByText('Add a block to see the weekly hours and cost, and what the agreement comes to.')).toBeInTheDocument()
   })
 
@@ -254,13 +334,13 @@ describe('BudgetBar', () => {
   it('says why a plan could not be priced, announced, with a way to try again only when trying again can help', async () => {
     const user = userEvent.setup()
     const onRetry = vi.fn()
-    const { rerender } = render(<BudgetBar status="error" error={{ response: { status: 429, data: {} } }} onRetry={onRetry} planBudget={null} />)
+    const { rerender } = render(<BudgetBar status="error" error={{ response: { status: 429, data: {} } }} onRetry={onRetry} />)
 
     expect(screen.getByRole('alert')).toHaveTextContent('The pricing service is busy.')
     await user.click(screen.getByRole('button', { name: 'Try again' }))
     expect(onRetry).toHaveBeenCalledTimes(1)
 
-    rerender(<BudgetBar status="error" error={{ response: { status: 400, data: { errors: ['The agreement period ends before it starts.'] } } }} onRetry={onRetry} planBudget={null} />)
+    rerender(<BudgetBar status="error" error={{ response: { status: 400, data: { errors: ['The agreement period ends before it starts.'] } } }} onRetry={onRetry} />)
     expect(screen.getByRole('alert')).toHaveTextContent('The agreement period ends before it starts.')
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   })
@@ -282,7 +362,7 @@ describe('BudgetBar', () => {
       const { rerender } = ready({ unsaved: { onSave: vi.fn(), saving: true } })
       expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled()
 
-      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} unsaved={{ onSave: vi.fn(), saving: false }} blocked />)
+      rerender(<BudgetBar status="ready" budget={budget()} budgetCheck={FITS} unsaved={{ onSave: vi.fn(), saving: false }} blocked />)
       expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
     })
 
@@ -294,7 +374,7 @@ describe('BudgetBar', () => {
   })
 
   it('shows the error outside the collapsible details, and only once', () => {
-    render(<BudgetBar status="error" error={{ response: { status: 429, data: {} } }} onRetry={vi.fn()} planBudget={null} />)
+    render(<BudgetBar status="error" error={{ response: { status: 429, data: {} } }} onRetry={vi.fn()} />)
 
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(screen.getByRole('alert').closest('#plan-budget-details')).toBeNull()
@@ -305,7 +385,7 @@ describe('BudgetBar', () => {
   it('reads the framework\'s validation answer without throwing, and says it in words', () => {
     const error = { response: { status: 400, data: { title: 'One or more validation errors occurred.', status: 400, errors: { 'blocks[0].block.sleepoverActiveHours': ['The JSON value could not be converted to System.Decimal. Path: $.blocks[0]...'] } } } }
 
-    expect(() => render(<BudgetBar status="error" error={error} onRetry={vi.fn()} planBudget={null} />)).not.toThrow()
+    expect(() => render(<BudgetBar status="error" error={error} onRetry={vi.fn()} />)).not.toThrow()
 
     expect(screen.getByRole('alert')).toHaveTextContent('A box in the plan is empty or is not a number.')
   })
@@ -336,14 +416,15 @@ describe('BudgetBar', () => {
       expect(screen.getByText('– h · – a week · – in all').parentElement).toHaveTextContent('Not fully priced')
     })
 
-    it('does not say any of the plan budget is left, or how much of it is used, and says there is nothing to compare', () => {
-      ready({ budget: nothing(), planBudget: { total: 20000, count: 1 } })
+    it('does not compare the agreement with the participant’s budget, and says there is nothing to compare', () => {
+      ready({ budget: nothing(), budgetCheck: OVER })
 
-      expect(screen.getByText('Plan budget').nextElementSibling).toHaveTextContent('$20,000.00')
+      expect(screen.getByText('Participant budget')).toBeInTheDocument()
+      expect(screen.getByText('Nothing is priced yet, so there is nothing to compare.')).toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Agreement against the participant\'s budget' })).not.toBeInTheDocument()
       expect(screen.queryByText(/left/)).not.toBeInTheDocument()
-      expect(screen.queryByText(/% used/)).not.toBeInTheDocument()
-      expect(screen.getByText('Nothing is priced yet, so there is nothing to compare with it.')).toBeInTheDocument()
       expect(screen.queryByText('Over budget')).not.toBeInTheDocument()
+      expect(screen.getByRole('status').textContent).toBe('')    // and says nothing is over
     })
 
     it('is the same when every line is there and not one has a price, and when the agreement is shorter than a week', () => {
@@ -369,7 +450,7 @@ describe('BudgetBar', () => {
     const note = 'Enter the agreement dates to price the plan'
 
     it('says what is missing, as idle: not "Pricing the plan…", not busy, and no figure', () => {
-      render(<BudgetBar status="idle" idleNote={note} planBudget={{ total: 40000, count: 1 }} />)
+      render(<BudgetBar status="idle" idleNote={note} budgetCheck={FITS} />)
 
       const bar = screen.getByRole('region', { name: 'Running budget' })
       expect(bar).toHaveAttribute('aria-busy', 'false')
@@ -380,7 +461,7 @@ describe('BudgetBar', () => {
     })
 
     it('says an agreement that ends before it starts in its own words', () => {
-      render(<BudgetBar status="idle" idleNote="The agreement ends before it starts, so the plan cannot be priced" planBudget={null} />)
+      render(<BudgetBar status="idle" idleNote="The agreement ends before it starts, so the plan cannot be priced" />)
 
       expect(screen.getByText('The agreement ends before it starts, so the plan cannot be priced')).toBeInTheDocument()
       expect(screen.getByRole('region', { name: 'Running budget' })).toHaveAttribute('aria-busy', 'false')
@@ -395,7 +476,7 @@ describe('BudgetBar', () => {
       expect(line).toHaveTextContent('· updating…')
       expect(screen.getByRole('region', { name: 'Running budget' })).toHaveAttribute('aria-busy', 'true')
 
-      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} />)
+      rerender(<BudgetBar status="ready" budget={budget()} budgetCheck={FITS} />)
       expect(screen.getByText('8 h · $588.64 a week · $30,610.28 in all').parentElement).not.toHaveTextContent('updating')
       expect(screen.getByRole('region', { name: 'Running budget' })).toHaveAttribute('aria-busy', 'false')
     })
@@ -432,7 +513,7 @@ describe('BudgetBar', () => {
       expect(onDockHeight).toHaveBeenLastCalledWith(120)
       expect(FakeResizeObserver.all).toHaveLength(1)
 
-      rerender(<BudgetBar status="ready" budget={budget()} planBudget={{ total: 40000, count: 1 }} onDockHeight={onDockHeight} notice={<p>The draft was not saved</p>} />)
+      rerender(<BudgetBar status="ready" budget={budget()} budgetCheck={FITS} onDockHeight={onDockHeight} notice={<p>The draft was not saved</p>} />)
       FakeResizeObserver.all[0].fire()                      // the notice made the dock taller
       expect(onDockHeight).toHaveBeenLastCalledWith(420)
 

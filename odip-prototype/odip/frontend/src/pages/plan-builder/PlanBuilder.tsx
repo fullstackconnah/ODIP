@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Plus } from 'lucide-react'
 import type { AgreementState, DraftBlock, PlanIssue, PlanPriceZone } from '@/api/types'
-import { useFundingSources, usePlanBudget, usePlanPricingSettings, type PlanBudget } from '@/api/hooks'
+import { useAgreementCheck, usePlanBudget, usePlanPricingSettings, type PlanBudget } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { formatCurrency } from '@/lib/utils'
 import { blockProblems, describeBlock, duplicateBlock, formatHours, nextBlockId, normaliseBlock, stampLocation, type PlanStepKey } from '@/lib/planBlocks'
-import { periodProblem, periodPrompt, planBudgetFor, refusalSentence, refusals } from '@/lib/planQuote'
+import { periodProblem, periodPrompt, refusalSentence, refusals } from '@/lib/planQuote'
 import { templateByKey, type PlanTemplate } from '@/lib/planTemplates'
+import { agreementBudgetView } from './agreementBudgetView'
 import { BudgetBar } from './BudgetBar'
 import { PlanOverview } from './PlanOverview'
 import { PlanStepper } from './PlanStepper'
@@ -101,7 +102,6 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
   const [dockHeight, setDockHeight] = useState(0)
   const canQuote = !readOnly
   const settings = usePlanPricingSettings(canQuote).data
-  const funding = useFundingSources({ participantId })
 
   const blocksNow = useMemo(() => {
     const entriesNow = session?.mode === 'edit' && session.index !== null
@@ -113,6 +113,9 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
   const settled = useDebouncedValue(blocksNow.quoted)
   const settling = JSON.stringify(settled) !== JSON.stringify(blocksNow.quoted)
   const budget = usePlanBudget(settled, from, to, canQuote && settled.length > 0)
+  // The agreement against the participant's real pools (phase 2b), which the server prices in process: it is asked of the same debounced blocks, so one pause is one request, and only once the running
+  // budget's own quotes have finished, so the two never add up to more than the quotes an organisation may have in flight at once (and never a third per keystroke).
+  const check = useAgreementCheck(participantId, settled, from, to, canQuote && !budget.isFetching && !budget.isError)
   // Dates that cannot be priced over (not typed, no day, an end before the start) are asked of nobody: the query is off for them, and with it off nothing is "pricing" and nothing on the screen may be the
   // answer for the dates there were before (the query keeps the previous answer while a new one is on its way, and keeps it when none will come). The bar says what is missing instead (review N1).
   const dates = periodProblem(from, to)
@@ -121,7 +124,14 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
   const answer = readOnly && stored ? stored : live
   // Nothing to price only when no block is complete or the dates are not there; a block just added is "pricing" through the pause before the quote is asked for, never "add a block".
   const status = readOnly && stored ? 'ready' : !canQuote || blocksNow.quoted.length === 0 || dates !== null ? 'idle' : answer ? 'ready' : budget.isError ? 'error' : 'loading'
-  const planBudget = planBudgetFor(funding.data, from, to)
+  // A warning and never a block: nothing below reads the comparison to decide whether the plan can be saved. With no budget recorded it says so and links to the Funding tab.
+  const budgetCheck = agreementBudgetView(participantId, {
+    wanted: canQuote && blocksNow.quoted.length > 0 && dates === null,
+    data: check.data,
+    failed: check.isError,
+    pending: settling || budget.isFetching || check.isFetching || check.isPlaceholderData,
+    onRetry: () => { void check.refetch() },
+  })
   const planIssues = answer?.period.issues ?? []
   const refused = refusals(planIssues)
 
@@ -262,8 +272,7 @@ export function PlanBuilder({ participantId, state, zone, from, to, entries, onC
           refreshing={settling || (budget.isFetching && !!answer)}
           error={budget.error}
           onRetry={() => { void budget.refetch() }}
-          planBudget={planBudget}
-          planBudgetUnreadable={funding.isError}
+          budgetCheck={budgetCheck}
           incompleteBlocks={blocksNow.incomplete}
           blocked={refused.length > 0}
           blockedReason={refused.length > 0 ? refusalSentence(refused, blocksNow.named) : undefined}

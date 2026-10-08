@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { FundingSourceDto, PlannedLine, PlanBlock, PlanFailureReason, PlanIssue, PlanQuote } from '@/api/types'
+import type { PlannedLine, PlanBlock, PlanFailureReason, PlanIssue, PlanQuote } from '@/api/types'
 import { emptyBlock } from './planBlocks'
 
 // The backend does not always sit beside the frontend (an image build has only the frontend). A test that reads the C# is skipped THEN, where the run says so, and is never a pass that checked nothing.
@@ -9,8 +9,8 @@ const BACKEND = resolve(__dirname, '../../../backend')
 const PRICING = resolve(BACKEND, 'Odip.Domain/Billing/Pricing')
 const hasBackend = existsSync(PRICING)
 import {
-  CATEGORY_SHORT, NO_FIGURE, REASON_COPY, addDays, asSentence, bandLabel, categoryLabel, compareBudget, conflictVersionOf, describeQuoteError, describeSaveError, formatServiceDate, friendlyMessage, groupLines,
-  groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, periodProblem, periodPrompt, planBudgetFor, pricedNothing, quantityLabel, questionShort, referenceWeek, refusalSentence, refusals, ruleWords, shiftsNotPriced, shiftsNotPricedAtLeast, totalsCaption,
+  CATEGORY_SHORT, NO_FIGURE, REASON_COPY, addDays, asSentence, bandLabel, categoryLabel, conflictVersionOf, describeQuoteError, describeSaveError, formatServiceDate, friendlyMessage, groupLines,
+  groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, periodProblem, periodPrompt, pricedNothing, quantityLabel, questionShort, referenceWeek, refusalSentence, refusals, ruleWords, shiftsNotPriced, shiftsNotPricedAtLeast, totalsCaption,
 } from './planQuote'
 
 const line = (changes: Partial<PlannedLine>): PlannedLine => ({
@@ -432,25 +432,7 @@ describe('issues read as one thing, not one per item', () => {
   })
 })
 
-describe('the plan budget', () => {
-  it('compares a plan with its budget: within, over by how much, or unknown when none is recorded', () => {
-    expect(compareBudget(30000, 40000)).toEqual({ status: 'within', budget: 40000, used: 30000, remaining: 10000, percent: 75 })
-    expect(compareBudget(41234.56, 40000)).toEqual({ status: 'over', budget: 40000, used: 41234.56, remaining: -1234.56, percent: 103 })
-    expect(compareBudget(40000, 40000).status).toBe('within')   // exactly the budget is not over it
-    for (const none of [null, undefined, 0]) expect(compareBudget(100, none)).toEqual({ status: 'unknown', budget: null, used: 100, remaining: null, percent: null })
-  })
-
-  it('reads the plan budget off the participant\'s active NDIS funding sources that meet the agreement, and says nothing when none records one', () => {
-    const source = (changes: Partial<FundingSourceDto>): FundingSourceDto => ({
-      id: 'f', participantId: 'p', participantName: null, routeType: 'PlanManaged', budgetCategory: 'Core - Social & Community Participation', ndisPlanNumber: null, planStartDate: '2026-07-01', planEndDate: '2027-06-30',
-      budget: 20000, payerName: null, payerEmail: null, isActive: true, ...changes,
-    })
-    expect(planBudgetFor([source({}), source({ id: 'g', routeType: 'AgencyManaged', budget: 5000.5 })], '2026-10-01', '2027-03-31')).toEqual({ total: 25000.5, count: 2 })
-    expect(planBudgetFor([source({ isActive: false }), source({ routeType: 'Private' }), source({ budget: null }), source({ planEndDate: '2026-09-30' }), source({ planStartDate: '2027-04-01' })], '2026-10-01', '2027-03-31')).toBeNull()
-    expect(planBudgetFor([source({ planStartDate: null, planEndDate: null })], '2026-10-01', '2027-03-31')).toEqual({ total: 20000, count: 1 })
-    expect(planBudgetFor(undefined, '2026-10-01', '2027-03-31')).toBeNull()
-  })
-
+describe('the budget categories', () => {
   it('names the budget categories short enough for a bar and keeps the engine\'s name for one it does not know', () => {
     expect(Object.values(CATEGORY_SHORT).length).toBe(4)
     expect(categoryLabel({ paceCategory: 4, name: 'Assistance with Social, Economic and Community Participation' })).toBe('Community participation')

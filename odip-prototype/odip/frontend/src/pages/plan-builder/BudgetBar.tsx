@@ -5,9 +5,11 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { TONE } from '@/lib/tone'
 import { formatHours } from '@/lib/planBlocks'
-import { NO_FIGURE, asSentence, categoryLabel, compareBudget, describeQuoteError, pricedNothing, totalsCaption } from '@/lib/planQuote'
+import { NO_FIGURE, asSentence, categoryLabel, describeQuoteError, pricedNothing, totalsCaption } from '@/lib/planQuote'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
+import { AgreementBudgetBreakdown } from '../budgets/components/AgreementBudgetBreakdown'
+import type { AgreementBudgetBreakdownView } from '../budgets/components/viewModel'
 
 type BudgetBarProps = {
   /** What the query is doing: `idle` (nothing to price yet), `loading` (the first answer), `error`, `ready`. */
@@ -22,10 +24,12 @@ type BudgetBarProps = {
   idleNote?: string
   error?: unknown
   onRetry?: () => void
-  /** The participant's plan budget as the funding sources record it (null when none does). */
-  planBudget: { total: number; count: number } | null
-  /** The funding sources could not be read, so the comparison is left out. */
-  planBudgetUnreadable?: boolean
+  /**
+   * The agreement against the participant's real pools (budget phase 2b): for each pool and funding period it touches, what the agreement costs, what is left, and whether it fits. The server works
+   * it out (POST participants/{id}/funding/agreement-check); the plan builder maps the answer. Null when there is nothing to compare yet (no block, or no dates to price over). It replaces the sum
+   * of the Billing funding sources the bar used to compare the agreement with, with no fallback to it: with no budget recorded the bar says so and links to the Funding tab.
+   */
+  budgetCheck?: AgreementBudgetBreakdownView | null
   /** Blocks left out of the figures because they are not complete yet. */
   incompleteBlocks?: number
   /**
@@ -64,12 +68,13 @@ const NOTE = 'text-[13px] text-[var(--color-muted-foreground)]'
 const CHIP = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${TONE.warning.solid}`
 
 /**
- * The running budget, docked at the foot through every step: hours and cost in an ordinary week, the cost of the agreement period by budget category, and how that stands against
- * the plan budget. It is the point of the screen, so its figures are the largest thing on it. Over the plan budget is a warning and never a block; with no plan budget recorded the
- * totals stand alone and say so. A total that leaves work out says so beside the figure, in shifts, and a chip says it on the one-line form. Below 1280px it is one line and a Details
- * toggle (the full bar is a third of a tablet's screen). Every figure is the pricing engine's, for the plan as it would be saved.
+ * The running budget, docked at the foot through every step: hours and cost in an ordinary week, the cost of the agreement period by budget category, and how that stands against the
+ * participant's real pools (each pool and funding period the agreement touches: "Agreement $2,355 against $3,120 left in 1 Oct to 31 Dec"). It is the point of the screen, so its figures are the
+ * largest thing on it. Over what a pool has left is a warning and never a block, in every mode; with no budget recorded the totals stand alone and the bar says so and links to the Funding tab.
+ * A total that leaves work out says so beside the figure, in shifts, and a chip says it on the one-line form. Below 1280px it is one line and a Details toggle (the full bar is a third of a
+ * tablet's screen). Every figure is the pricing engine's, for the plan as it would be saved, and the comparison is the server's.
  */
-export function BudgetBar({ status, budget, refreshing = false, idleNote, error, onRetry, planBudget, planBudgetUnreadable = false, incompleteBlocks = 0, blocked = false, blockedReason, unsaved, notice, saved = null, onDockHeight }: BudgetBarProps) {
+export function BudgetBar({ status, budget, refreshing = false, idleNote, error, onRetry, budgetCheck = null, incompleteBlocks = 0, blocked = false, blockedReason, unsaved, notice, saved = null, onDockHeight }: BudgetBarProps) {
   const [open, setOpen] = useState(false)
   const dock = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -84,16 +89,18 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
   }, [onDockHeight])
   const period = budget?.period
   const weekly = budget?.weekly ?? null
-  const comparison = compareBudget(period?.totals.amount ?? 0, planBudget?.total)
-  const over = status === 'ready' && comparison.status === 'over'
   const caption = period ? totalsCaption(period) : { text: '', notFullyPriced: false }
   const notFullyPriced = status === 'ready' && caption.notFullyPriced
   const failure = status === 'error' ? describeQuoteError(error) : null
-  // A plan that prices to nothing has no total to show: $0.00 would read as a price, and the whole plan budget as left (review N6).
+  // A plan that prices to nothing has no total to show: $0.00 would read as a price, and a comparison with the participant's budget as a verdict (review N6).
   const nothingPriced = status === 'ready' && !!period && pricedNothing(period)
+  // Over what a pool has left in some period: the server's verdict on each line, and the bar only reads it. Nothing is compared here, and nothing is said of a plan that prices to nothing.
+  const over = status === 'ready' && !nothingPriced && budgetCheck?.status === 'ready' && budgetCheck.pools.some(pool => pool.lines.some(line => !line.withinLimit))
   // The reference week can price to nothing while the agreement does not (an agreement that starts before the first catalogue date): its figure is an en dash too, not "0 h . $0.00 a week" (review L2).
   const weekNothing = nothingPriced || (status === 'ready' && !!weekly && pricedNothing(weekly))
   const updating = status === 'ready' && refreshing
+  // The agreement check has its own answer to wait for: busy while the first one is on its way and while a newer one replaces the last.
+  const checking = status === 'ready' && (budgetCheck?.status === 'loading' || budgetCheck?.refreshing === true)
 
   const oneLine = status === 'ready' && period
     ? `${weekly ? (weekNothing ? `${NO_FIGURE} h · ${NO_FIGURE} a week · ` : `${formatHours(weekly.totals.supportHours)} h · ${formatCurrency(weekly.totals.amount)} a week · `) : ''}${nothingPriced ? NO_FIGURE : formatCurrency(period.totals.amount)} in all`
@@ -111,10 +118,10 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
           after it: the sentence does not change). Nothing else in the bar is live. */}
       <div role="status">
         {saved && <p className="mb-2 text-sm font-medium">{saved}</p>}
-        <p className="sr-only">{over ? 'Over the plan budget.' : ''}</p>
+        <p className="sr-only">{over ? 'Over the participant\'s budget.' : ''}</p>
         <p className="sr-only">{unsaved ? 'The plan has changes that are not saved.' : ''}</p>
       </div>
-      <section aria-label="Running budget" aria-busy={status === 'loading' || updating}>
+      <section aria-label="Running budget" aria-busy={status === 'loading' || updating || checking}>
         {/* A plan that could not be priced says so wherever it is read, on a phone too: not inside the Details a phone keeps shut. */}
         {failure && (
           <div role="alert" className="flex flex-wrap items-center gap-3 text-sm">
@@ -185,23 +192,16 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
                   {caption.text && <p className={`mt-0.5 text-[13px] ${notFullyPriced ? TONE.warning.ink : 'text-[var(--color-muted-foreground)]'}`}>{asSentence(caption.text)}.</p>}
                 </div>
 
-                {planBudgetUnreadable || comparison.status === 'unknown' ? (
-                  <div>
-                    <p className={LABEL}>Plan budget</p>
-                    <p className="text-sm text-[var(--color-muted-foreground)]">{planBudgetUnreadable ? 'The plan budget could not be read, so there is no comparison.' : 'Not recorded for this participant. The totals stand alone.'}</p>
-                  </div>
-                ) : (
-                  // Over the plan budget is the thing to act on: the cell takes the warning tint, and the sentence is text at 13px, not a pill.
-                  <div className={over ? `rounded-[var(--radius-md)] p-2 ${TONE.warning.solid}` : ''}>
-                    <p className={over ? 'text-xs' : LABEL}>Plan budget</p>
-                    <p className={HEADLINE}>{formatCurrency(comparison.budget ?? 0)}{!nothingPriced && <> <span className={`text-[13px] font-normal ${over ? '' : 'text-[var(--color-muted-foreground)]'}`}>{comparison.percent}% used</span></>}</p>
+                {/* The participant's budget (phase 2b): per pool and funding period, the agreement against what is left. A warning only - it is the pricing engine's cost against the ledger's remaining, both
+                    the server's - so a plan that cannot be priced says nothing here, and one with no budget recorded says so and links to the Funding tab. */}
+                {(nothingPriced || budgetCheck) && (
+                  <div className="min-w-0">
+                    <p className={LABEL}>Participant budget</p>
                     {nothingPriced ? (
-                      <p className={`mt-0.5 ${NOTE}`}>Nothing is priced yet, so there is nothing to compare with it.</p>
-                    ) : over ? (
-                      <p className="mt-0.5 flex items-start gap-1 text-[13px]"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span>Over the plan budget by {formatCurrency(Math.abs(comparison.remaining ?? 0))}.{blocked ? '' : ' You can still save the draft.'}</span></p>
-                    ) : (
-                      <p className={`mt-0.5 ${NOTE}`}>{formatCurrency(comparison.remaining ?? 0)} left{planBudget && planBudget.count > 1 ? `, across ${plural(planBudget.count, 'funding source')}` : ''}.</p>
-                    )}
+                      <p className={NOTE}>Nothing is priced yet, so there is nothing to compare.</p>
+                    ) : budgetCheck ? (
+                      <AgreementBudgetBreakdown view={budgetCheck} />
+                    ) : null}
                   </div>
                 )}
               </>

@@ -21,7 +21,8 @@ describe('AgreementBudgetBreakdown: the states that are not an answer', () => {
   it('says the check is under way, and states no figure', () => {
     renderView({ status: 'loading', figures: { visible: true }, pools: [], notInARecordedPool: null, outsideThePlan: null })
 
-    expect(screen.getByRole('status')).toHaveTextContent('Checking the agreement against the participant’s budget')
+    expect(screen.getByText('Checking the agreement against the participant’s budget…')).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()   // the bar has one polite status and nothing else in it is live
     expect(screen.queryByText(/\$/)).not.toBeInTheDocument()
   })
 

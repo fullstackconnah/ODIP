@@ -24,7 +24,8 @@ vi.mock('@/api/hooks', () => ({
   usePlanPricingSettings: () => ({ data: makeSettings() }),
   usePlanBudget: () => budget(),
   usePlanBlockQuote: () => ({ data: quote(), isLoading: false, isError: false, refetch: vi.fn() }),
-  useFundingSources: () => ({ data: [], isError: false }),
+  // The agreement budget bar's check (budget phase 2b) has its own tests (plan-builder/PlanBuilder.test.tsx, BudgetBar.test.tsx): here it has no answer yet.
+  useAgreementCheck: () => ({ data: undefined, isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() }),
   useDemoJourneySimulation: () => {
     const [result, setResult] = React.useState<{ data?: { banner: string; signing: string; activation: string; booking: string; rateLabel: string }; error?: { response: { data: { message: string } } } }>({})
     return {

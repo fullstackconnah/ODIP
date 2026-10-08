@@ -33,7 +33,7 @@ export const noBudgetNote = 'A participant with no budget recorded is never warn
 export const AGREEMENT_NO_BUDGET = 'No budget recorded for this participant, so there is nothing to compare the agreement against.'
 
 /** The one line that makes the warning's nature plain: it is a warning, in every mode. */
-export const AGREEMENT_WARNING_ONLY = 'This is a warning only: the plan can still be saved and approved.'
+export const AGREEMENT_WARNING_ONLY = 'This is a warning only: it never stops a save or an approval.'
 
 /** The verdict word of a line that fits. A line that does not says "Over by" and the amount. */
 export const WITHIN_WORD = 'Within'
