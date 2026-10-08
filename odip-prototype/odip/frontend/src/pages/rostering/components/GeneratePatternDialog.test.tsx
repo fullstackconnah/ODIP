@@ -160,3 +160,38 @@ describe('GeneratePatternDialog — the server\'s refusal reaches the user', () 
     expect(mockGenerate).toHaveBeenCalledTimes(2)
   })
 })
+
+// ── What the shifts did to the budget (budget phase 3) ──────────────────────────────────
+// A warning in the result, never a reason to refuse: the shifts were made.
+describe('GeneratePatternDialog — the budget warnings', () => {
+  const generate = async (result: object) => {
+    const user = userEvent.setup()
+    mockGenerate.mockResolvedValue(result)
+    render(<GeneratePatternDialog pattern={pattern} onClose={vi.fn()} />)
+    await user.type(screen.getByLabelText(/from/i), '2026-10-12')
+    await user.type(screen.getByLabelText(/^to/i), '2026-11-30')
+    await user.click(screen.getByRole('button', { name: 'Generate' }))
+  }
+
+  it('shows the server\u2019s warning for each pool and period beside the counts, and says the shifts were made', async () => {
+    await generate({
+      created: 8, skipped: 0,
+      budgetWarnings: [{
+        poolName: 'Core (flexible)', periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 1000, used: 0, forecast: 3840, added: 3840, overBy: 2840, count: 8,
+        message: 'These 8 shifts take Core (flexible) to $3,840.00 of $1,000.00 for 1 Oct–31 Dec 2026.',
+      }],
+    })
+
+    expect(await screen.findByText('Shifts generated')).toBeInTheDocument()
+    expect(screen.getByText('These 8 shifts take Core (flexible) to $3,840.00 of $1,000.00 for 1 Oct–31 Dec 2026.')).toBeInTheDocument()
+    expect(screen.getByText('This is a warning only. The shifts were made.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Done' })).toBeEnabled()
+  })
+
+  it('draws no warning when the server sent none', async () => {
+    await generate({ created: 8, skipped: 0 })
+
+    expect(await screen.findByText('Shifts generated')).toBeInTheDocument()
+    expect(screen.queryByText(/Past the budget/)).not.toBeInTheDocument()
+  })
+})

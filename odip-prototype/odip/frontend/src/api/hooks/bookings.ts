@@ -3,6 +3,7 @@ import { apiGet, apiPostRaw, apiPutRaw, apiPatchRaw, apiDeleteRaw } from '../cli
 import { fetchPagedList } from './pagedList'
 import type {
   BookingListDto,
+  BookingDetailDto,
   CreateBookingDto,
   UpdateBookingDto,
   PatchBookingDto,
@@ -32,7 +33,7 @@ export function useTripBookings(tripId: string | undefined) {
 export function useCreateBooking() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: CreateBookingDto) => apiPostRaw<BookingListDto>('/bookings', data),
+    mutationFn: (data: CreateBookingDto) => apiPostRaw<BookingDetailDto>('/bookings', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['bookings'] })
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
@@ -46,7 +47,7 @@ export function useUpdateBooking() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateBookingDto }) =>
-      apiPutRaw<BookingListDto>(`/bookings/${id}`, data),
+      apiPutRaw<BookingDetailDto>(`/bookings/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['bookings'] })
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
@@ -61,7 +62,7 @@ export function usePatchBooking() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: PatchBookingDto }) =>
-      apiPatchRaw<BookingListDto>(`/bookings/${id}`, data),
+      apiPatchRaw<BookingDetailDto>(`/bookings/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trip'] })

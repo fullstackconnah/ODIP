@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useApprovalPreview, useApproveServiceAgreementDraft } from '@/api/hooks'
 import type { ApprovalReasonDto, DraftApprovalPreviewDto, OverlappingPatternDto, PlanBlock, ServiceAgreementDraftDto } from '@/api/types'
+import { BudgetWarnings } from '@/components/BudgetWarnings'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { CheckboxField } from '@/components/CheckboxField'
@@ -172,6 +173,8 @@ function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge
       {preview.shiftsToCreate === 0 && (preview.shiftsNote
         ? <p>{preview.shiftsNote}</p>
         : <p>{topUpOn ? "No unfilled shifts yet. They are added each day as the agreement's dates come near." : 'No unfilled shifts are made now.'}</p>)}
+      {/* Budget phase 3: where the shifts approval would make take a pool past its funding. Read in order with the rest of what approval does, so it does not announce itself; and never a reason to refuse. */}
+      <BudgetWarnings warnings={preview.budgetWarnings} note="This is a warning only. Approving is not blocked." announce={false} />
       {oldCount > 0 && old.firstDate && (
         <p>
           {old.open} unfilled and {old.assigned} assigned {oneOld ? 'shift' : 'shifts'}{old.fromVersion !== undefined ? ` from version ${old.fromVersion}` : ''}, from {formatServiceDate(old.firstDate)} on, {oneOld ? 'stays' : 'stay'} on the roster. The new version&apos;s unfilled shifts will sit beside {oneOld ? 'it' : 'them'} on the same days.{' '}

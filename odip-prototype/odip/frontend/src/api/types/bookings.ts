@@ -1,4 +1,5 @@
 import type { BookingStatus, SupportRatio, InsuranceStatus, PaymentStatus, PlanType } from './enums'
+import type { BudgetWarningDto } from './rostering'
 
 export interface BookingListDto {
   id: string
@@ -37,6 +38,8 @@ export interface BookingDetailDto extends BookingListDto {
   /** What is still missing for the booked participant, shown verbatim as a quiet warning. Present on the create
    * response in Warn mode (the booking goes through); omitted by the server when nothing is missing. */
   readinessIssues?: string[]
+  /** Set on the response of the write that left the booking Confirmed (budget phase 3): where the trip takes a pool past the participant's funding for a period. A warning only: the booking is confirmed whatever it says. */
+  budgetWarnings?: BudgetWarningDto[]
 }
 
 export interface CreateBookingDto {

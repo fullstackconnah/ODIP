@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { BudgetWarnings } from '@/components/BudgetWarnings'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
 import { useGeneratePattern } from '@/api/hooks'
@@ -64,6 +65,8 @@ export function GeneratePatternDialog({ pattern, onClose }: GeneratePatternDialo
               Skipped <strong className="text-foreground">{result.skipped}</strong> — already on the roster from this pattern{pattern?.sourceDraftId ? ', or a public holiday the agreement skips' : ''}.
             </p>
             <p className="text-xs opacity-80">Running this again for the same range changes nothing further.</p>
+            {/* Budget phase 3: where these shifts take a pool past its funding, one line for each pool and period. A warning only, in every mode: the shifts are made. */}
+            <BudgetWarnings warnings={result.budgetWarnings} note="This is a warning only. The shifts were made." className="mt-2" />
           </>
         }
         footer={
