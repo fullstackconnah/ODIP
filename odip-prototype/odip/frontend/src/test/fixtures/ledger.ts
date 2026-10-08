@@ -60,6 +60,11 @@ export function ledgerPool(overrides: Partial<LedgerPool> = {}): LedgerPool {
 
 const noBucket: LedgerBucket = { count: 0, amount: 0, rows: [] }
 
+/** A bucket as the server sends it: the count and the one summed amount of everything in it, and the first rows (the amount is the server's; a screen never adds it up). */
+export function ledgerBucket(rows: LedgerRow[] = [], overrides: Partial<LedgerBucket> = {}): LedgerBucket {
+  return { count: rows.length, amount: rows.reduce((total, row) => total + row.amount, 0), rows, ...overrides }
+}
+
 export function participantLedger(overrides: Partial<ParticipantLedgerDto> = {}): ParticipantLedgerDto {
   return {
     planId: 'plan-1', planStart: '2026-07-01', planEnd: '2027-06-30', planIsCurrent: true, asOf: '2026-10-04', timeBasis: 'Australia/Sydney', approachingPercent: 80,

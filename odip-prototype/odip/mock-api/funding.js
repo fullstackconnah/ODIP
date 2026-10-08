@@ -6,8 +6,8 @@
 //
 // Budget phase 2a adds the LEDGER (GET funding/ledger and funding/ledger/rows). Its arithmetic is mock-ledger.js, which follows the same rules as the server's
 // BudgetLedgerCalculator, so the demo's numbers are worked out rather than typed: p-0002's Core (flexible) pool is FORECAST OVER in the current quarter and its Improved
-// Daily Living Skills pool is APPROACHING, p-0004's Core (flexible) is ON TRACK, and p-0002 has a row in no recorded pool and one dated before its plan, so both
-// buckets can be seen.
+// Daily Living Skills pool is APPROACHING, p-0004's Core (flexible) is ON TRACK, and p-0002 has a row in no recorded pool and one dated after its plan ends, so both
+// buckets can be seen on the Funding tab.
 
 const { ledgerFor, rowsPage } = require('./mock-ledger.js')
 

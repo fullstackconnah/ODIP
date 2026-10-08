@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useFundingLedger } from '@/api/hooks'
-import type { LedgerPeriod, LedgerPool, LedgerRow, ParticipantLedgerDto } from '@/api/types'
+import type { LedgerBucket, LedgerPeriod, LedgerPool, LedgerRow, ParticipantLedgerDto } from '@/api/types'
 import { BUDGET_STATUS_LABELS } from '@/api/types/funding'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -65,24 +65,44 @@ export default function FundingLedger({ participantId, enabled = true }: { parti
 /** The whole ledger for a loaded answer, so the sections can be rendered from a fixture with no query behind it. */
 export function LedgerBody({ data }: { data: ParticipantLedgerDto }) {
   const noPlan = !data.planId || data.pools.length === 0
+  // Money that fits no recorded pool, or is dated outside the plan, is shown and never dropped (the brief's rule): the server sends both buckets, and each shows only when it holds something.
+  const buckets = (
+    <>
+      <BucketSection
+        heading="Not in a recorded pool"
+        explanation="The plan records no pool for these supports, so they are not part of any pool's figures above."
+        bucket={data.notInARecordedPool}
+      />
+      <BucketSection
+        heading="Outside the plan dates"
+        explanation="These are dated after the plan ends, or fall in none of a pool's periods, so they are not part of any pool's figures above."
+        bucket={data.outsideThePlanDates}
+      />
+    </>
+  )
+
   if (noPlan) {
     return (
-      <Card>
-        <div className="flex max-w-prose flex-col items-start gap-2">
-          <h3 className="text-sm font-semibold">No budget figures yet</h3>
-          <p className="text-sm text-[var(--color-muted-foreground)]">
-            {data.planIsCurrent
-              ? 'This plan has no pools recorded, so there is nothing to spend against yet.'
-              : 'No plan has started, so there is nothing to spend against yet. The figures come from the plan the participant shares, or their plan manager.'}
-          </p>
-        </div>
-      </Card>
+      <>
+        <Card>
+          <div className="flex max-w-prose flex-col items-start gap-2">
+            <h3 className="text-sm font-semibold">No budget figures yet</h3>
+            <p className="text-sm text-[var(--color-muted-foreground)]">
+              {data.planIsCurrent
+                ? 'This plan has no pools recorded, so there is nothing to spend against yet.'
+                : 'No plan has started, so there is nothing to spend against yet. The figures come from the plan the participant shares, or their plan manager.'}
+            </p>
+          </div>
+        </Card>
+        {buckets}
+      </>
     )
   }
 
   return (
     <>
       {data.pools.map(pool => <PoolLedger key={pool.id} pool={pool} />)}
+      {buckets}
       <p className="text-[13px] text-[var(--color-muted-foreground)]">
         {quietEstimateLine} Figures are as of {formatDayMonth(data.asOf)} ({data.timeBasis}). These are ODIP's own figures against the recorded plan, not an NDIA balance.
       </p>
@@ -227,18 +247,48 @@ function PeriodLedger({ period }: { period: LedgerPeriod }) {
   )
 }
 
-function Group({ heading, note, rows }: { heading: string; note: string; rows: LedgerRow[] }) {
+/**
+ * Rows that are in no pool, or dated outside the plan: the server's own total and count, the rows grouped the way a period's are (so a claim is told from an estimate), and the plain
+ * statement that none of it is part of any pool's figures. Nothing is shown for a bucket with nothing in it. The amount is the server's sum of the whole bucket (claimed, pending and
+ * booked ahead together): this screen adds nothing up, and it says how many items the first page leaves out.
+ */
+function BucketSection({ heading, explanation, bucket }: { heading: string; explanation: string; bucket: LedgerBucket }) {
+  if (bucket.count <= 0) return null
+  const groups = rowsByGroup(bucket.rows).filter(({ rows }) => rows.length > 0)
+  const hidden = Math.max(0, bucket.count - bucket.rows.length)
+
+  return (
+    <Card>
+      <section aria-label={heading} className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-sm font-semibold">{heading}</h3>
+          <span className="text-sm font-medium tabular-nums">{money(bucket.amount)}</span>
+        </div>
+        <p className="text-[13px] text-[var(--color-muted-foreground)]">{plural(bucket.count, 'item')} in all. {explanation}</p>
+        {groups.map(({ group, rows }) => <Group key={group} heading={GROUP_HEADINGS[group]} rows={rows} as="h4" />)}
+        {hidden > 0 && (
+          <p className="text-[13px] text-[var(--color-muted-foreground)]">
+            {plural(hidden, 'more item')} {hidden === 1 ? 'is' : 'are'} not shown here. Open the claim, shift or trip to see {hidden === 1 ? 'it' : 'them'}.
+          </p>
+        )}
+      </section>
+    </Card>
+  )
+}
+
+/** One group of a ledger's rows under its heading (a period's groups are fifth-level headings; a bucket's, directly under its own, are fourth-level). The note is a period's explanation of the group. */
+function Group({ heading, note, rows, as: Heading = 'h5' }: { heading: string; note?: string; rows: LedgerRow[]; as?: 'h4' | 'h5' }) {
   if (rows.length === 0) {
     return (
       <div>
-        <h5 className="text-sm font-medium">{heading}</h5>
+        <Heading className="text-sm font-medium">{heading}</Heading>
         <p className="text-[13px] text-[var(--color-muted-foreground)]">{note} Nothing here this period.</p>
       </div>
     )
   }
   return (
     <div>
-      <h5 className="text-sm font-medium">{heading}</h5>
+      <Heading className="text-sm font-medium">{heading}</Heading>
       <DataTable
         data={rows.map((row, i) => ({ ...row, _key: `${row.id}-${i}` }))}
         keyField="_key"
@@ -259,7 +309,7 @@ function Group({ heading, note, rows }: { heading: string; note: string; rows: L
           { key: 'amount', header: 'Amount', type: 'currency', align: 'right', className: 'tabular-nums font-medium max-md:text-left' },
         ]}
       />
-      <p className="mt-1 text-[13px] text-[var(--color-muted-foreground)]">{note}</p>
+      {note && <p className="mt-1 text-[13px] text-[var(--color-muted-foreground)]">{note}</p>}
     </div>
   )
 }

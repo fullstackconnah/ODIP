@@ -59,7 +59,9 @@ function computeLedger(plan, today, approachingPercent, items) {
   const notInAPool = []
   const outsideThePlan = []
   for (const item of items) {
-    if (item.date < plan.planStart || item.date > plan.planEnd) { outsideThePlan.push(item); continue }
+    // What happened before the plan began is the earlier plan's: the server cuts it off and shows it nowhere in this ledger.
+    if (item.date < plan.planStart) continue
+    if (item.date > plan.planEnd) { outsideThePlan.push(item); continue }
     const pool = poolFor(plan, item.paceCategory, item.managementType)
     if (!pool) { notInAPool.push(item); continue }
     const period = pool.periods
@@ -153,9 +155,9 @@ const demoItems = {
     row('d5', 'ClaimLine', 'Claimed', '2026-10-20', 'TC-4302-20261020 · 15_Weekday_STD · 6 h', 414, 'Approved', '/claims/claim-115', 15, AGENCY),
     row('d6', 'CompletedShift', 'Pending', '2026-10-22', 'Shift 10:00–15:00 · 5 h', 345, 'Completed', '/rostering?date=2026-10-22', 15, AGENCY),
     row('d7', 'ClaimLine', 'Pending', '2026-10-27', 'TC-4302-20261027 · 15_Weekday_STD · 5 h', 345, 'Ready', '/claims/claim-116', 15, AGENCY),
-    // In no recorded pool, and before the plan: shown, never dropped.
+    // In no recorded pool, and dated after the plan ends: shown, never dropped (the Funding tab lists both, with the amount and the rows).
     row('x1', 'ClaimLine', 'Claimed', '2026-10-11', 'TC-4302-20261011 · 09_Weekday_STD · 3 h', 207, 'Submitted', '/claims/claim-117', 9, AGENCY),
-    row('x2', 'ClaimLine', 'Claimed', '2026-06-20', 'TC-4301-20260620 · 04_Weekday_STD · 4 h', 276, 'Paid', '/claims/claim-090', 4, AGENCY),
+    row('x2', 'FutureShift', 'BookedAhead', '2027-07-05', 'Shift 09:00–17:00 · 8 h', 552, 'Published', '/rostering?date=2027-07-05', 4, AGENCY),
   ],
   // p-0005's plan: Core (flexible) is OVER — claims and pending shifts have already passed what was
   // set aside for the quarter, and nothing is booked after them. The one genuinely-over pool in the demo.
