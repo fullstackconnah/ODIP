@@ -2013,14 +2013,34 @@ function claimDetail(c) {
  * vitest suite (mock-api isn't in that test's path), not by manual/dev-preview testing. */
 function shiftClaimPreview() {
   return {
-    totalAmount: 320,
+    totalAmount: 640,
     lineItems: [
       {
         shiftId: 'sh-mock-1', serviceDate: '2026-08-10', dayTypeLabel: 'Weekday', dayType: 'Weekday',
         supportItemCode: '01_002_0117_1_1', hours: 8, unitPrice: 40, totalAmount: 320,
       },
+      // An overnight shift is priced as hours at one day rate and says so on its line (evening and night rates are not applied yet).
+      {
+        shiftId: 'sh-mock-3', serviceDate: '2026-08-12', dayTypeLabel: 'Weekday', dayType: 'Weekday',
+        supportItemCode: '01_002_0117_1_1', hours: 8, unitPrice: 40, totalAmount: 320, note: SHIFT_CLAIM_CAVEAT,
+      },
     ],
+    // A completed shift the claim cannot price (a sleepover or a group shift) is left out and listed with the reason, as the real endpoint does (L3-02).
+    leftOut: shiftClaimLeftOut(),
   }
+}
+
+const SHIFT_CLAIM_CAVEAT = 'Evening and night rates are not applied yet.'
+
+/** The shifts that are in the generated claim but carry the caveat: the claim line has nowhere to keep it, so the generate answer echoes them. */
+function shiftClaimFlagged() {
+  return [{ shiftId: 'sh-mock-3', serviceDate: '2026-08-12', description: 'Shift 18:00–02:00 · 8 h', caveat: SHIFT_CLAIM_CAVEAT }]
+}
+
+function shiftClaimLeftOut() {
+  return [
+    { shiftId: 'sh-mock-2', serviceDate: '2026-08-11', description: 'Shift 22:00–06:00 · 8 h', reason: 'It is a sleepover, which shift claims do not price yet.' },
+  ]
 }
 
 // Notifications (docs/specs/2026-09-08-notifications-design.md §6) — preference grid for
@@ -2684,7 +2704,7 @@ const postRoutes = [
     id: 'claim-mock-0001', kind: 'Shift', participantId: id,
     periodFrom: body?.from ?? '2026-08-01', periodTo: body?.to ?? '2026-08-14',
     tripName: '', status: 'Draft', claimReference: `TC-MOCK-${id}`,
-    totalAmount: 320, createdAt: new Date().toISOString(),
+    totalAmount: 640, createdAt: new Date().toISOString(), leftOut: shiftClaimLeftOut(), flagged: shiftClaimFlagged(),
   })],
 
   // Notifications (design spec §2/§6) — stateless like every other POST here: retry doesn't

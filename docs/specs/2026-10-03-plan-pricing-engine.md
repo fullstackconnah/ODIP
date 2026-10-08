@@ -109,6 +109,8 @@ migration), and a whole-day holiday can also be added with `POST api/v1/public-h
 `POST api/v1/public-holidays/sync` are SuperAdmin only (the table is global and a row moves every tenant's prices), the state must be one of the eight
 codes or left out for a national holiday, and `PublicHoliday` is an audited entity like the overrides (review M6).
 
+**Who reads them (2026-10-08 review, L3-01 and L3-05).** One loader, `PublicHolidayLoader`, reads the synced rows and the override rows for every consumer: this quote (whole-day and part-day rows), the shift claim, the trip claim, the participant budget ledger and the roster's PUBLIC_HOLIDAY finding (whole-day rows only: a claim prices a whole shift or trip day at one day type and has no intra-day split yet, so a part-day row stays quote-only). It reads every state and matches the state in memory in any case, so a row written "nsw" is the same state as "NSW". Boxing Day 2026 in NSW is therefore a public holiday on the quote, the claim, the budget estimate and the roster alike.
+
 One migration, `AddPlanPricingSettingsAndHolidayOverrides`: two `CreateTable`s, their indexes and the seed rows. It touches nothing that exists. Each seed row
 has its own literal id (never one derived from its place in the list: a row inserted mid-list would renumber the rest and `HasData` would rewrite rows the owner
 has edited).

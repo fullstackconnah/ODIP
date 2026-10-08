@@ -647,3 +647,13 @@ be audited against the new nullability in PR 3 (all confirmed by direct read in 
    Coordinator role (a working coordinator covering their own shift)? Nothing in the brief
    addresses self-review, and `RosteringController`'s role gate has no self-exclusion
    anywhere else in the codebase to draw a precedent from.
+
+## Amendment 2026-10-08: what a shift claim does not price yet
+
+The shift claim prices a shift as its rostered hours at the community access one-to-one rate. A shift made from an approved agreement can be a sleepover, a passive night or a group shift (1:2 to 1:5, shared, other), which the agreement quotes differently (a sleepover is one fixed item, a 1:3 group shift is a third of the hourly rate), so priced that way it was claimed at up to three times the quote. Until the claim prices them properly (through the plan pricing engine, a follow-up), the shared `ShiftPriceEstimator` gives them no price and says why:
+
+- **Not priced:** ratio 1:2, 1:3, 1:4, 1:5, shared support or other; night type sleepover or passive night. **Still priced:** one-to-one and two-to-one (two one-to-one shifts are the quote). **Priced and flagged:** an active night ("Evening and night rates are not applied yet.").
+- **Never dropped silently.** The claim preview and the generated claim list each shift they leave out and the reason (`leftOut`), the shift stays completed and unclaimed, and a refusal because nothing could be claimed says shifts were left out instead of "No completed, unclaimed shifts found". A shift no catalogue rate covers is listed the same way.
+- **The budget agrees.** The ledger counts such a shift as $0 with the same reason, through its unpriced-shift note, so the forecast no longer overstates it.
+- **The caveat is echoed, not stored.** A claim line has no column for the active-night caveat, so the generate response also lists the shifts it priced with one (`flagged`: shift, date, caveat) and the claims tab says so on its "Claim generated" step, beside the shifts that were left out. Keeping the caveat on the line is a column and a migration, left to the follow-up that prices overnight shifts properly.
+- **The budget counts what it leaves out.** Each period and pool of the ledger counts the shifts that have no price (`unpricedShiftCount`) and the period names why (`unpricedShiftReasons`), because those shifts are $0 in every figure; the Funding tab prints one warning line for them.

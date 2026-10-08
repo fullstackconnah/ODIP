@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { useApplyPlanDatesToProfile, useFundingPlans } from '@/api/hooks'
+import { useApplyPlanDatesToProfile, useFundingLedger, useFundingPlans } from '@/api/hooks'
 import type { FundingPlanDto } from '@/api/types'
 import type { PlanType } from '@/api/types/enums'
 import { Button } from '@/components/Button'
@@ -41,7 +41,12 @@ export default function FundingTab({ participantId, planType }: { participantId:
   const [editing, setEditing] = useState<Editing | null>(null)
   const [applied, setApplied] = useState(false)
   const actionsRef = useRef<HTMLDivElement>(null)
-  const today = useMemo(() => localIsoDate(), [])
+  // Which plan is running is decided on the PROVIDER's date, the one the server works the ledger out for (its `asOf`), not on the viewer's: a viewer in another zone, near midnight, would
+  // otherwise see a plan as running (or ended) that the ledger under it says is not. The ledger's own request is the one FundingLedger makes (one cache entry); the browser's date stands in
+  // only until it has answered, and if it never does.
+  const ledgerQuery = useFundingLedger(participantId, (plansQuery.data?.plans ?? []).length > 0)   // nothing recorded, nothing to ask about
+  const browserToday = useMemo(() => localIsoDate(), [])
+  const today = ledgerQuery.data?.asOf ?? browserToday
 
   const data = plansQuery.data
   if (plansQuery.isLoading) return <PageState kind="loading" noun="budget" />
@@ -126,7 +131,8 @@ export default function FundingTab({ participantId, planType }: { participantId:
         <PlanRecord plan={current} />
       </Card>
 
-      <FundingLedger participantId={participantId} />
+      {/* When the plan above has not started, the ledger is of the plan before it (or of none): it says so rather than showing that plan's figures under this plan's card. */}
+      <FundingLedger participantId={participantId} nextPlanStart={planStatus(current, today) === 'Upcoming' ? current.planStart : undefined} />
 
       <PlanGroup title="Upcoming plans" plans={upcoming} today={today} />
       <PlanGroup title="Past plans" plans={past} today={today} />

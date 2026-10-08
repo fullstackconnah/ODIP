@@ -224,6 +224,15 @@ export interface LedgerPeriod extends LedgerFigures {
   isCurrent: boolean
   /** Shifts in the period never completed or cancelled although their day has passed (counted as pending). */
   pastUnresolvedCount: number
+  /** Confirmed trip bookings in the period whose trip has started and has no claim yet (counted as pending: the trip claim waits for the trip to be completed). */
+  startedUnclaimedTripCount: number
+  /**
+   * Shifts in the period the shift claim cannot price yet (a sleepover, a passive night, a group or shared shift, or one no catalogue rate covers). They are $0 in every figure, so the figures leave
+   * them out: this says how many and `unpricedShiftReasons` why. A count of shifts, apart from `unpricedTripDayCount`, which counts trip days.
+   */
+  unpricedShiftCount: number
+  /** The distinct reasons behind `unpricedShiftCount`, each in a few words ("a sleepover", "a 1:3 group shift"); empty when nothing is unpriced. */
+  unpricedShiftReasons: string[]
   /** How many rows the period has in all; `rows` holds the first page. */
   rowCount: number
   rows: LedgerRow[]
@@ -242,6 +251,9 @@ export interface LedgerPool {
   /** The same sums over the whole plan, against the sum of the limits. */
   planTotal: LedgerFigures
   pastUnresolvedCount: number
+  startedUnclaimedTripCount: number
+  /** The periods' unpriced shifts over the whole plan. */
+  unpricedShiftCount: number
 }
 
 /** Rows that are in no pool, or outside the plan: shown, never dropped. */

@@ -452,7 +452,7 @@ public class BudgetLedgerServiceTests
     }
 
     [Fact]
-    public async Task OnlyConfirmedBookingsCount_CancelledEnquiredHeldOnesAndACancelledTripAreNot_AndATripAlreadyStartedIsNotBookedAhead()
+    public async Task OnlyConfirmedBookingsCount_CancelledEnquiredHeldOnesAndACancelledTripAreNot_AndATripAlreadyStartedIsPendingNotBookedAhead()
     {
         var (kit, mine, _) = Arrange();
         var trip = kit.SeedTrip(new DateOnly(2026, 10, 20), 3);
@@ -460,13 +460,17 @@ public class BudgetLedgerServiceTests
             kit.SeedBooking(trip, mine, status);
         var cancelledTrip = kit.SeedTrip(new DateOnly(2026, 11, 3), 2, TripStatus.Cancelled);
         kit.SeedBooking(cancelledTrip, mine);                                       // confirmed, but the trip is cancelled
-        var started = kit.SeedTrip(new DateOnly(2026, 10, 3), 3);                   // started yesterday: not "from today"
+        var started = kit.SeedTrip(new DateOnly(2026, 10, 3), 3);                   // started yesterday: not "from today", so not booked ahead
         kit.SeedBooking(started, mine);
 
         var q2 = Q2Of((await kit.Ledger.ComputeAsync(kit.TenantId, new[] { mine.Id }, Ct))[mine.Id].Ledger!);
 
+        // Nothing is booked ahead: none of the other bookings counts, and the trip that has started is pending, not dropped (L5-01):
+        // Sat 3, Sun 4 and Mon 5 Oct is 8 h x ($84 + $108 + $60), and it is the period's only item.
         Assert.Equal(0m, q2.BookedAhead);
-        Assert.Empty(q2.Items);
+        var item = Assert.Single(q2.Items);
+        Assert.Equal(LedgerGroup.Pending, item.Group);
+        Assert.Equal(2016m, q2.Pending);
     }
 
     [Fact]
