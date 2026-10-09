@@ -3,10 +3,11 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BudgetWarnings } from './BudgetWarnings'
 import type { BudgetWarningDto } from '@/api/types'
+import { SERVER_PERIOD } from '@/test/fixtures/budgets'
 
 const warning = (over: Partial<BudgetWarningDto> = {}): BudgetWarningDto => ({
   poolName: 'Core (flexible)', periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 1000, used: 0, forecast: 3840, added: 3840, overBy: 2840, count: 8,
-  message: 'These 8 shifts take Core (flexible) to $3,840.00 of $1,000.00 for 1 Oct–31 Dec 2026.', ...over,
+  message: `These 8 shifts take Core (flexible) to $3,840.00 of $1,000.00 for ${SERVER_PERIOD}.`, ...over,
 })
 
 describe('BudgetWarnings', () => {
@@ -17,13 +18,13 @@ describe('BudgetWarnings', () => {
   })
 
   it('prints the server\u2019s own sentence for each pool and period, as a warning, with the caller\u2019s note that nothing was blocked', () => {
-    render(<BudgetWarnings warnings={[warning(), warning({ poolName: 'Daily Activities', message: 'These 2 shifts take Daily Activities to $900.00 of $500.00 for 1 Oct–31 Dec 2026.' })]} note="This is a warning only. The shifts were made." />)
+    render(<BudgetWarnings warnings={[warning(), warning({ poolName: 'Daily Activities', message: `These 2 shifts take Daily Activities to $900.00 of $500.00 for ${SERVER_PERIOD}.` })]} note="This is a warning only. The shifts were made." />)
 
     const alert = screen.getByRole('alert')
     expect(alert).toHaveTextContent('Over budget')   // the one word the rest of the budget screens use (design review L3)
     expect(screen.getAllByRole('listitem').map(li => li.textContent)).toEqual([
-      'These 8 shifts take Core (flexible) to $3,840.00 of $1,000.00 for 1 Oct–31 Dec 2026.',
-      'These 2 shifts take Daily Activities to $900.00 of $500.00 for 1 Oct–31 Dec 2026.',
+      `These 8 shifts take Core (flexible) to $3,840.00 of $1,000.00 for ${SERVER_PERIOD}.`,
+      `These 2 shifts take Daily Activities to $900.00 of $500.00 for ${SERVER_PERIOD}.`,
     ])
     expect(screen.getByText('This is a warning only. The shifts were made.')).toBeInTheDocument()
   })

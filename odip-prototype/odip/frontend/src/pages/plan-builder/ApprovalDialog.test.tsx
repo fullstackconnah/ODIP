@@ -7,6 +7,7 @@ import { REASON_COPY } from '@/lib/planQuote'
 import { draftBlock, mondayWednesday } from '@/test/fixtures/planPricing'
 import { ApprovalDialog } from './ApprovalDialog'
 import { BUDGET_WARNINGS_TITLE } from '@/components/BudgetWarnings'
+import { SERVER_PERIOD, asWritten } from '@/test/fixtures/budgets'
 
 const { previewCall, previewState, approveMutate, approveState } = vi.hoisted(() => ({
   previewCall: vi.fn(),
@@ -462,7 +463,7 @@ describe('ApprovalDialog: loading and failing', () => {
 describe('ApprovalDialog: what the shifts would do to the budget (budget phase 3)', () => {
   const warning = {
     poolName: 'Core (flexible)', periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 1000, used: 0, forecast: 9600, added: 9600, overBy: 8600, count: 40,
-    message: 'These 40 shifts take Core (flexible) to $9,600.00 of $1,000.00 for 1 Oct–31 Dec 2026.',
+    message: `These 40 shifts take Core (flexible) to $9,600.00 of $1,000.00 for ${SERVER_PERIOD}.`,
   }
 
   it('shows the server\u2019s warning for each pool and period as a warning only, and still lets the revision be approved', async () => {
@@ -471,7 +472,7 @@ describe('ApprovalDialog: what the shifts would do to the budget (budget phase 3
     const handlers = setUp()
 
     const dialog = screen.getByRole('dialog', { name: 'Approve version 2 for rostering?' })
-    expect(within(dialog).getByText('These 40 shifts take Core (flexible) to $9,600.00 of $1,000.00 for 1 Oct–31 Dec 2026.')).toBeInTheDocument()
+    expect(within(dialog).getByText(`These 40 shifts take Core (flexible) to $9,600.00 of $1,000.00 for ${SERVER_PERIOD}.`, { normalizer: asWritten })).toBeInTheDocument()
     expect(within(dialog).getByText('This is a warning only. Approving is not blocked.')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Approve' }))
 

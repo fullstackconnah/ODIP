@@ -59,7 +59,10 @@ export interface BudgetWarningDto {
   overBy: number
   /** How many shifts (or bookings) the action puts in this pool and period. */
   count: number
-  /** The warning in a sentence: "These 8 shifts take Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct – 31 Dec 2026, $640.00 over." */
+  /**
+   * The warning in a sentence: "These 8 shifts take Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct – 31 Dec 2026, $640.00 over." The period is one unbreakable block, as `ShiftBudgetAssessor.Period` writes it: no-break
+   * spaces inside each date and on each side of the en dash, and a word joiner (U+2060) after the dash. Screens print it as it comes, and a test input that stands for it is written the same way (`SERVER_PERIOD` in `test/fixtures/budgets`).
+   */
   message: string
   /** Whose budget this is, for a trip booking: the bulk confirm of several bookings lists each line with its participant. Absent for shifts. */
   participantName?: string

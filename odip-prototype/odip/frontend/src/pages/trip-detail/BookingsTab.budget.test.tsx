@@ -7,6 +7,7 @@ import type { TripDetailDto } from '@/api/types/trips'
 import type { BookingListDto } from '@/api/types/bookings'
 import type { ParticipantListDto } from '@/api/types/participants'
 import { BUDGET_WARNINGS_TITLE } from '@/components/BudgetWarnings'
+import { SERVER_PERIOD, asWritten } from '@/test/fixtures/budgets'
 
 // Confirming a booking on a trip says what it does to the participant's budget (budget phase 3): in the response of the write that confirms it, shown as a warning that can be dismissed. It never blocks.
 
@@ -34,7 +35,7 @@ const participant = { id: 'participant-2', fullName: 'Noah Reid', isActive: true
 
 const warning = {
   poolName: 'Core (flexible)', periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 1000, used: 0, forecast: 1440, added: 1440, overBy: 440, count: 1,
-  message: 'This booking takes Core (flexible) to $1,440.00 of $1,000.00 for 1 Oct–31 Dec 2026.',
+  message: `This booking takes Core (flexible) to $1,440.00 of $1,000.00 for ${SERVER_PERIOD}.`,
 }
 
 type Callbacks = { onSuccess?: (response: unknown) => void }
@@ -64,7 +65,7 @@ describe('BookingsTab — the budget warning of a booking just confirmed', () =>
     await user.click(await screen.findByRole('option', { name: 'Confirmed' }))
 
     expect(patchMutate).toHaveBeenCalledWith({ id: 'booking-1', data: { bookingStatus: 'Confirmed' } }, expect.objectContaining({ onSuccess: expect.any(Function) }))
-    expect(screen.getByText('This booking takes Core (flexible) to $1,440.00 of $1,000.00 for 1 Oct–31 Dec 2026.')).toBeInTheDocument()
+    expect(screen.getByText(`This booking takes Core (flexible) to $1,440.00 of $1,000.00 for ${SERVER_PERIOD}.`, { normalizer: asWritten })).toBeInTheDocument()
     expect(screen.getByText('This is a warning only. Sophie Brown’s booking is confirmed.')).toBeInTheDocument()
   })
 

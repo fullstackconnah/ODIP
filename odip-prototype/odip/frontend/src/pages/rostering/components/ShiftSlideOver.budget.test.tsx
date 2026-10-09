@@ -5,6 +5,7 @@ import { ShiftSlideOver } from './ShiftSlideOver'
 import { makeShift, makeFinding } from '../test-fixtures'
 import { forecastOverFinding, forecastOverWarningForAdmin, forecastOverWithFigures, approachingFinding } from './parallel-budget-override/fixtures'
 import type { RosterFindingDto, ShiftCheckResult } from '@/api/types'
+import { SERVER_PERIOD, asWritten } from '@/test/fixtures/budgets'
 
 // The budget moments of the shift panel (budget phase 3): a warning in Warn mode, an Admin's reason, a Coordinator's refusal and the "Emergency or safety" way through, the marker a saved shift carries,
 // and the one informational line a shift the budget could not check gets. Only the API layer is mocked; every other collaborator is the real component, so this exercises the real save gate.
@@ -65,7 +66,7 @@ const description = () => screen.getByLabelText(/What made this an emergency or 
 
 const forecastOverWithCost: RosterFindingDto = {
   ...forecastOverWithFigures,
-  message: 'Takes Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct–31 Dec 2026. This shift: about $292.32.',
+  message: `Takes Core (flexible) to $8,640.00 of $8,000.00 for ${SERVER_PERIOD}. This shift: about $292.32.`,
 }
 
 describe('a budget warning (Warn mode)', () => {
@@ -75,7 +76,7 @@ describe('a budget warning (Warn mode)', () => {
     answerCheckWith({ findings: [warning] })
     renderCreate()
 
-    expect(await screen.findByText('Takes Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct–31 Dec 2026. This shift: about $292.32.')).toBeInTheDocument()
+    expect(await screen.findByText(`Takes Core (flexible) to $8,640.00 of $8,000.00 for ${SERVER_PERIOD}. This shift: about $292.32.`, { normalizer: asWritten })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Emergency or safety/i })).not.toBeInTheDocument()   // nothing is refused, so there is nothing to get through
     // M1: nothing is overridden in Warn mode, so the button does not say so, and there is no box for a reason the server would throw away.
     expect(saveButton()).toHaveTextContent('Save anyway')

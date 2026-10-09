@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { bookingBudgetNote, bookingBudgetNotice, mergeBookingBudgetNotices } from './bookingBudget'
 import type { BudgetWarningDto } from '@/api/types'
+import { SERVER_PERIOD } from '@/test/fixtures/budgets'
 
 // The phase 3 review, C5: ticking six participants of a trip and confirming them shows the warnings of the four that are over, and a line that does not say whose pool it is cannot be acted on.
 
 const warning = (over: Partial<BudgetWarningDto> = {}): BudgetWarningDto => ({
   poolName: 'Core (flexible)', periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 1000, used: 0, forecast: 1440, added: 1440, overBy: 440, count: 1,
-  message: 'This booking takes Core (flexible) to $1,440.00 of $1,000.00 for 1 Oct\u00A0\u2013\u00A031 Dec 2026, $440.00 over.', ...over,
+  message: `This booking takes Core (flexible) to $1,440.00 of $1,000.00 for ${SERVER_PERIOD}, $440.00 over.`, ...over,
 })
 
 describe('bookingBudgetNotice', () => {

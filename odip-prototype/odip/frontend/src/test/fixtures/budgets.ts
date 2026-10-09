@@ -6,6 +6,15 @@ import type {
 // every figure out, so a test never makes a screen add anything up - and a member with no value is LEFT OUT, as the API leaves it (it omits nulls: Program.cs's WhenWritingNull), so `== null`
 // is the only test a screen may use for one. The provider's today in these fixtures is 8 Oct 2026, in the Oct to Dec quarter.
 
+/**
+ * "1 Oct – 31 Dec 2026" as the SERVER writes a period into a finding or a warning (ShiftBudgetAssessor.Period): each date is one unit (no-break spaces inside it), and the en dash has a no-break space on each side
+ * and a word joiner (U+2060) after it, so a line never splits there. A test input that stands for a sentence of the server's uses this, not a period typed with plain spaces.
+ */
+export const SERVER_PERIOD = '1 Oct –⁠ 31 Dec 2026'
+
+/** Testing Library's default matcher collapses every whitespace, a no-break space too, in the page's text; a sentence the server wrote with no-break spaces is found as written with this normalizer. */
+export const asWritten = (text: string) => text
+
 export function budgetRow(overrides: Partial<BudgetListRow> = {}): BudgetListRow {
   const row = {
     participantId: 'p-0002', participantName: 'Sienna Williams', poolId: 'pool-core', poolName: 'Core', kind: 'CoreFlexible' as const, managementType: 'AgencyManaged' as const,
