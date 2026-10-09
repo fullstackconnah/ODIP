@@ -33,6 +33,10 @@ public record TripClaimDetailDto : TripClaimListDto
     public Guid? AuthorisedByStaffId { get; init; }
     public string? AuthorisedByStaffName { get; init; }
     public DateTime? PaidDate { get; init; }
+    /// <summary>When the claim was marked Rejected (a UTC instant); omitted while it is not rejected, and for a claim rejected before this was recorded.</summary>
+    public DateTime? RejectedDate { get; init; }
+    /// <summary>The NDIA's code for the rejection, when one was recorded (V17, V18, V27 and V28 say the funds ran out); omitted otherwise.</summary>
+    public string? RejectionCode { get; init; }
     public string? Notes { get; init; }
     public List<ClaimLineItemDto> LineItems { get; init; } = new();
     /// <summary>What this claim does to the participants' budgets as of now (budget feature, phase 2a); omitted when none of them has a plan that has started. A warning, never a block.</summary>
@@ -73,6 +77,12 @@ public record UpdateClaimDto
     [StringLength(2000)]
     public string? Notes { get; init; }
     public TripClaimStatus? Status { get; init; }
+    /// <summary>
+    /// The NDIA's code for rejecting the claim (budget phase 2b), sent with the Rejected status or later on a claim that is already rejected: V17, V18, V27 or V28 (any case), or anything else the NDIA gave, as typed.
+    /// Left out, the code is unchanged; blank clears it. Refused on a claim that is not rejected.
+    /// </summary>
+    [StringLength(Odip.Domain.Funding.NdiaRejectionCodes.MaxLength)]
+    public string? RejectionCode { get; init; }
 }
 
 public record UpdateClaimLineItemDto

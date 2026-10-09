@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import ClaimDetailPage from './ClaimDetailPage'
 import type { ClaimLineItemDto, TripClaimDetailDto } from '@/api/types'
@@ -244,6 +245,188 @@ describe('ClaimDetailPage — failed request vs. missing record (PageState)', ()
     mockUseClaim.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
     renderPage()
     expect(screen.getByRole('status')).toHaveTextContent('Loading claim…')
+  })
+})
+
+// Budget phase 2b: the NDIA's code for a rejection. A provider cannot see a participant's budget in the NDIA's portal, so a rejection with V17, V18, V27 or V28 is the only direct sign a pool is empty.
+describe('ClaimDetailPage — Mark as Rejected asks for the NDIA code', () => {
+  const submitted = () => ({ ...baseClaim([baseLineItem()]), status: 'Submitted' as const })
+  const openRejection = async () => {
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Mark as Rejected' }))
+    return { user, dialog: screen.getByRole('alertdialog', { name: 'Mark as rejected?' }) }
+  }
+
+  beforeEach(() => { mockUseClaim.mockReturnValue({ data: submitted(), isLoading: false }) })
+  afterEach(() => mockUpdateClaim.mockReset())
+
+  it('sends the status alone when no code is given: a rejection with no code is still a rejection', async () => {
+    renderPage()
+    const { user, dialog } = await openRejection()
+
+    expect(within(dialog).getByRole('combobox', { name: 'NDIA rejection code (optional)' })).toHaveValue('')
+    await user.click(within(dialog).getByRole('button', { name: 'Mark as Rejected' }))
+
+    expect(mockUpdateClaim).toHaveBeenCalledTimes(1)
+    expect(mockUpdateClaim.mock.calls[0][0]).toEqual({ claimId: 'claim-1', data: { status: 'Rejected' } })
+  })
+
+  it.each(['V17', 'V18', 'V27', 'V28'])('sends the chosen code %s with the status, in the one request', async code => {
+    renderPage()
+    const { user, dialog } = await openRejection()
+
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'NDIA rejection code (optional)' }), code)
+    await user.click(within(dialog).getByRole('button', { name: 'Mark as Rejected' }))
+
+    expect(mockUpdateClaim.mock.calls[0][0]).toEqual({ claimId: 'claim-1', data: { status: 'Rejected', rejectionCode: code } })
+  })
+
+  it('sends another code as it was typed, trimmed, under Other', async () => {
+    renderPage()
+    const { user, dialog } = await openRejection()
+
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'NDIA rejection code (optional)' }), 'Other')
+    await user.type(within(dialog).getByRole('textbox', { name: 'The code the NDIA gave' }), ' E104 ')
+    await user.click(within(dialog).getByRole('button', { name: 'Mark as Rejected' }))
+
+    expect(mockUpdateClaim.mock.calls[0][0]).toEqual({ claimId: 'claim-1', data: { status: 'Rejected', rejectionCode: 'E104' } })
+  })
+
+  it('closes the dialog when the claim is rejected, and keeps it open, saying why, when the server refuses', async () => {
+    renderPage()
+    const first = await openRejection()
+    mockUpdateClaim.mockImplementationOnce((_vars, opts) => opts?.onError?.({ response: { data: { errors: ['The NDIA code is at most 10 characters.'] } } }))
+    await first.user.click(within(first.dialog).getByRole('button', { name: 'Mark as Rejected' }))
+    expect(within(first.dialog).getByRole('alert')).toHaveTextContent('The NDIA code is at most 10 characters.')
+
+    mockUpdateClaim.mockImplementationOnce((_vars, opts) => opts?.onSuccess?.())
+    await first.user.click(within(first.dialog).getByRole('button', { name: 'Mark as Rejected' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('calls off with Cancel and sends nothing', async () => {
+    renderPage()
+    const { user, dialog } = await openRejection()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(mockUpdateClaim).not.toHaveBeenCalled()
+  })
+
+  it('leaves Mark as Submitted and Mark as Paid as plain confirmations: they have no code to ask for', async () => {
+    const user = userEvent.setup()
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem()]), isLoading: false })   // a draft
+    const { unmount } = renderPage()
+    await user.click(screen.getByRole('button', { name: 'Mark as Submitted' }))
+    let dialog = screen.getByRole('alertdialog', { name: 'Mark as submitted?' })
+    expect(within(dialog).queryByRole('combobox')).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Mark as Submitted' }))
+    expect(mockUpdateClaim.mock.calls[0][0]).toEqual({ claimId: 'claim-1', data: { status: 'Submitted' } })
+    unmount()
+
+    mockUseClaim.mockReturnValue({ data: submitted(), isLoading: false })
+    renderPage()
+    await user.click(screen.getByRole('button', { name: 'Mark as Paid' }))
+    dialog = screen.getByRole('alertdialog', { name: 'Mark as paid?' })
+    expect(within(dialog).queryByRole('combobox')).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Mark as Paid' }))
+    expect(mockUpdateClaim.mock.calls[1][0]).toEqual({ claimId: 'claim-1', data: { status: 'Paid' } })
+  })
+
+  describe('on a claim the NDIA has rejected', () => {
+    const rejected = (changes: Record<string, unknown> = {}) => ({ ...baseClaim([baseLineItem({ status: 'Rejected' })]), status: 'Rejected' as const, ...changes })
+    const day = (instant: string) => new Date(instant).toLocaleDateString('en-AU')
+
+    it('shows when it was rejected and the code the NDIA gave', () => {
+      mockUseClaim.mockReturnValue({ data: rejected({ rejectedDate: '2026-10-08T03:00:00Z', rejectionCode: 'V27' }), isLoading: false })
+      renderPage()
+
+      expect(screen.getByText(/NDIA code V27/)).toHaveTextContent(`${day('2026-10-08T03:00:00Z')} · NDIA code V27`)
+    })
+
+    it('says no code was recorded, rather than leaving a gap, when the claim was rejected without one', () => {
+      mockUseClaim.mockReturnValue({ data: rejected({ rejectedDate: '2026-10-08T03:00:00Z' }), isLoading: false })
+      renderPage()
+
+      expect(screen.getByText(/no NDIA code recorded/)).toHaveTextContent(`${day('2026-10-08T03:00:00Z')} · no NDIA code recorded`)
+    })
+
+    it('shows an en dash for the day of a claim rejected before the day was kept', () => {
+      mockUseClaim.mockReturnValue({ data: rejected(), isLoading: false })
+      renderPage()
+
+      expect(screen.getByText(/no NDIA code recorded/)).toHaveTextContent('— · no NDIA code recorded')
+    })
+
+    it.each([
+      ['V17', 'not enough in the plan'], ['V18', 'not enough in the plan'], ['V27', 'not enough in the funding period'], ['V28', 'not enough in the funding period'],
+    ])('says what %s means in the words the dialog used when it was chosen: %s', (code, meaning) => {
+      mockUseClaim.mockReturnValue({ data: rejected({ rejectedDate: '2026-10-08T03:00:00Z', rejectionCode: code }), isLoading: false })
+      renderPage()
+
+      expect(screen.getByText(/NDIA code/)).toHaveTextContent(`NDIA code ${code} (${meaning})`)
+    })
+
+    it('prints any other code as it was typed, with no meaning made up for it', () => {
+      mockUseClaim.mockReturnValue({ data: rejected({ rejectedDate: '2026-10-08T03:00:00Z', rejectionCode: 'E104' }), isLoading: false })
+      renderPage()
+
+      expect(screen.getByText(/NDIA code E104/).textContent).toMatch(/NDIA code E104$/)
+    })
+
+    // The reason a claim was refused often arrives after its status was set, and the code is the one input that switches the warning on: a claim rejected with no code must be able to be given one.
+    it('offers to record the code on a claim rejected without one, and not on a claim that has one', () => {
+      mockUseClaim.mockReturnValue({ data: rejected({ rejectedDate: '2026-10-08T03:00:00Z' }), isLoading: false })
+      const first = renderPage()
+      expect(screen.getByRole('button', { name: 'Record the NDIA code' })).toBeInTheDocument()
+      first.unmount()
+
+      mockUseClaim.mockReturnValue({ data: rejected({ rejectedDate: '2026-10-08T03:00:00Z', rejectionCode: 'V27' }), isLoading: false })
+      renderPage()
+      expect(screen.queryByRole('button', { name: 'Record the NDIA code' })).not.toBeInTheDocument()
+    })
+
+    it('records the code on its own, with no status in the request: the claim stays as it is', async () => {
+      const user = userEvent.setup()
+      mockUseClaim.mockReturnValue({ data: rejected({ rejectedDate: '2026-10-08T03:00:00Z' }), isLoading: false })
+      renderPage()
+
+      await user.click(screen.getByRole('button', { name: 'Record the NDIA code' }))
+      const dialog = screen.getByRole('alertdialog', { name: 'Record the NDIA code' })
+      await user.selectOptions(within(dialog).getByRole('combobox', { name: 'NDIA rejection code' }), 'V18')
+      await user.click(within(dialog).getByRole('button', { name: 'Save the code' }))
+
+      expect(mockUpdateClaim).toHaveBeenCalledTimes(1)
+      expect(mockUpdateClaim.mock.calls[0][0]).toEqual({ claimId: 'claim-1', data: { rejectionCode: 'V18' } })
+    })
+
+    it('says the server\'s refusal in the dialog and keeps it open, so the code can be tried again', async () => {
+      const user = userEvent.setup()
+      mockUseClaim.mockReturnValue({ data: rejected({ rejectedDate: '2026-10-08T03:00:00Z' }), isLoading: false })
+      renderPage()
+      mockUpdateClaim.mockImplementationOnce((_vars, opts) => opts?.onError?.({ response: { data: { errors: ['The NDIA code is at most 10 characters.'] } } }))
+
+      await user.click(screen.getByRole('button', { name: 'Record the NDIA code' }))
+      const dialog = screen.getByRole('alertdialog', { name: 'Record the NDIA code' })
+      await user.selectOptions(within(dialog).getByRole('combobox', { name: 'NDIA rejection code' }), 'V27')
+      await user.click(within(dialog).getByRole('button', { name: 'Save the code' }))
+
+      expect(within(dialog).getByRole('alert')).toHaveTextContent('The NDIA code is at most 10 characters.')
+    })
+
+    it('offers nothing more to do with the status', () => {
+      mockUseClaim.mockReturnValue({ data: rejected({ rejectionCode: 'V27' }), isLoading: false })
+      renderPage()
+
+      expect(screen.queryByRole('button', { name: /^Mark as/ })).not.toBeInTheDocument()
+    })
+  })
+
+  it('says nothing of a rejection on a claim that is not rejected', () => {
+    renderPage()
+
+    expect(screen.queryByText(/NDIA code/)).not.toBeInTheDocument()
   })
 })
 

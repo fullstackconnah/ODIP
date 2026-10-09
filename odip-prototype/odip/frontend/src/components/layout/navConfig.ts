@@ -161,6 +161,8 @@ export const navItems: NavEntry[] = [
         // A claim is opened from a trip or a participant, so /claims/:id has no entry of its own: it belongs with the batches.
         matchActive: pathname => pathname.startsWith('/billing/claim-batches') || pathname.startsWith('/claims/'),
       },
+      // Every participant's budget for the funding period running now, sorted by risk (budget phase 2b). Money, so its own page key: SupportWorker's allow-list does not name it and ReadOnly is refused it.
+      { to: '/budgets', label: 'Budgets', msIcon: 'account_balance_wallet', page: 'budgets' },
     ],
   },
   { to: '/incidents', label: 'Incidents', msIcon: 'emergency', page: 'incidents', bar: { order: 5, audience: 'field' } },

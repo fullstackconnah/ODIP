@@ -532,7 +532,7 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
       '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles', '/tasks',
       '/participants', '/medications', '/caregiver-submissions',
       '/rostering', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/staff', '/qualifications',
-      '/billing', '/billing/claim-batches',
+      '/billing', '/billing/claim-batches', '/budgets',
       '/incidents', '/settings',
     ])
   })
@@ -590,7 +590,7 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
     'Participants: Participants | Medications | Caregiver forms',
     'Staff & roster: Board | Patterns | Compatibility | Leave | Completions | Staff | Qualifications',
-    'Finance: Billing | Claim batches',
+    'Finance: Billing | Claim batches | Budgets',
     'Incidents',
     'Settings',
   ]
@@ -624,7 +624,7 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     signIn('ReadOnly')
     renderAt('/')
     expect(navShape()).toEqual(READ_ONLY_MENU)
-    for (const name of [/Board$/, /Patterns$/, /Compatibility$/, /Leave$/, /Completions$/, /Billing$/, /Claim batches$/, /Caregiver forms$/, /Settings$/]) {
+    for (const name of [/Board$/, /Patterns$/, /Compatibility$/, /Leave$/, /Completions$/, /Billing$/, /Claim batches$/, /Budgets$/, /Caregiver forms$/, /Settings$/]) {
       expect(screen.queryByRole('link', { name }), String(name)).not.toBeInTheDocument()
     }
     expect(screen.queryByRole('button', { name: /Finance$/ })).not.toBeInTheDocument()

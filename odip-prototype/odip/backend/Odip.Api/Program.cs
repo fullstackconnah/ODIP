@@ -168,6 +168,8 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.CatalogueImportService>(
 builder.Services.AddScoped<Odip.Infrastructure.Services.PlanPricingService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.FundingPlanService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetLedgerService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetListService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.AgreementCheckService>();
 // Budget phase 3: the roster's budget check, with the one seam to the shift estimator (the ledger's own pricing).
 builder.Services.AddScoped<Odip.Infrastructure.Services.IShiftCostSource, Odip.Infrastructure.Services.LedgerShiftCostSource>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftBudgetCheck>();
@@ -187,6 +189,8 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.DemoJourneySimulationSer
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantDocumentService>();
 
 // ── Participant Risk Alerts (task 6c) — computed, not persisted ──
+builder.Services.AddScoped<Odip.Infrastructure.Services.NdiaRejectionReader>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetAlertSource>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantAlertsService>();
 
 // ── Participant preferred-staff <-> rostering compatibility matrix link (task 6d) ──

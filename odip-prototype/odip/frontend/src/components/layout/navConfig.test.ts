@@ -139,7 +139,7 @@ describe('navConfig — who sees what', () => {
       'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
       'Participants: Participants | Medications | Caregiver forms',
       'Staff & roster: Board | Patterns | Compatibility | Leave | Completions | Staff | Qualifications',
-      'Finance: Billing | Claim batches',
+      'Finance: Billing | Claim batches | Budgets',
       'Incidents',
       'Settings',
     ])

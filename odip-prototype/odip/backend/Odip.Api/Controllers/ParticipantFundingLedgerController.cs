@@ -21,11 +21,14 @@ public class ParticipantFundingLedgerController : ControllerBase
 {
     private readonly ICurrentTenant _tenant;
     private readonly BudgetLedgerService _ledger;
+    private readonly NdiaRejectionReader? _ndia;
 
-    public ParticipantFundingLedgerController(ICurrentTenant tenant, BudgetLedgerService ledger)
+    /// <param name="ndia">Reads the NDIA's "funds ran out" word for the pools (phase 2b). Left out, the pools carry no note.</param>
+    public ParticipantFundingLedgerController(ICurrentTenant tenant, BudgetLedgerService ledger, NdiaRejectionReader? ndia = null)
     {
         _tenant = tenant;
         _ledger = ledger;
+        _ndia = ndia;
     }
 
     /// <summary>
@@ -40,9 +43,22 @@ public class ParticipantFundingLedgerController : ControllerBase
         if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<ParticipantLedgerDto>.Fail(ParticipantFundingController.ChooseOrganisation));
 
         var ledger = await _ledger.GetLedgerAsync(tenantId, participantId, ct);
-        return ledger is null
-            ? NotFound(ApiResponse<ParticipantLedgerDto>.Fail(FundingPlanService.ParticipantNotFound))
-            : Ok(ApiResponse<ParticipantLedgerDto>.Ok(ledger));
+        if (ledger is null) return NotFound(ApiResponse<ParticipantLedgerDto>.Fail(FundingPlanService.ParticipantNotFound));
+
+        // The NDIA's word on a pool (phase 2b) is read beside the ledger and put on the pool it is about; the ledger's own figures are untouched.
+        if (_ndia is not null && ledger.PlanId is not null)
+        {
+            var notes = await _ndia.ForParticipantAsync(tenantId, participantId, ct);
+            if (notes.Count > 0)
+                ledger = ledger with
+                {
+                    Pools = ledger.Pools.Select(pool => notes.TryGetValue(pool.Id, out var note)
+                        ? pool with { NdiaRejection = new NdiaRejectionDto { Date = note.Date, Code = note.Code, ClaimId = note.ClaimId, ClaimReference = note.ClaimReference } }
+                        : pool).ToList(),
+                };
+        }
+
+        return Ok(ApiResponse<ParticipantLedgerDto>.Ok(ledger));
     }
 
     /// <summary>One more page of the rows of one period of one pool, for "show more" once the first <see cref="BudgetLedgerService.RowsPerPeriod"/> are on screen.</summary>

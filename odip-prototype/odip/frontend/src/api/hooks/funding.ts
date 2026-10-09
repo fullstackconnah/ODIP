@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPut } from '../client'
-import { refreshBudgetFigures } from './funding-ledger'
+import { refreshBudgetFigures, refreshBudgetWarnings } from './funding-ledger'
 import type {
   ApplyPlanDatesResult, BillingSourcesHintDto, BudgetSettingsDto, FundingPlanDto, FundingPlansDto, PaceCategoryDto, SaveFundingPlanDto, UpdateBudgetSettingsDto,
 } from '../types'
@@ -56,6 +56,7 @@ export function useCreateFundingPlan(participantId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: fundingKey(participantId) })
       refreshOnboarding(queryClient, participantId)
+      refreshBudgetWarnings(queryClient)   // a new plan is a new budget to warn about, and ends the NDIA's signal about the old one
     },
   })
 }
@@ -68,6 +69,7 @@ export function useUpdateFundingPlan(participantId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: fundingKey(participantId) })
       refreshOnboarding(queryClient, participantId)
+      refreshBudgetWarnings(queryClient)   // the limits themselves changed
     },
   })
 }
@@ -99,7 +101,8 @@ export function useUpdateBudgetSettings() {
     mutationFn: (data: UpdateBudgetSettingsDto) => apiPut<BudgetSettingsDto>('/funding/settings', data),
     onSuccess: (saved) => {
       queryClient.setQueryData(SETTINGS_KEY, saved)
-      // The "approaching" percentage decides every participant's status, so every ledger held (and the claim pages' budget blocks) is read again.
+      // The "approaching" percentage decides every participant's status, so every ledger held (and the claim pages' budget blocks) is read again, and with them the alerts, the Budgets list and any
+      // agreement check, which are worked out from the same figures (refreshBudgetFigures marks all of them).
       refreshBudgetFigures(queryClient)
     },
   })

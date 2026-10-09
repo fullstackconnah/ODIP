@@ -1,3 +1,4 @@
+import type { PlanBlock } from './plan-pricing'
 import type { PlanType } from './enums'
 import type { FundingRouteType } from './billing'
 
@@ -238,6 +239,18 @@ export interface LedgerPeriod extends LedgerFigures {
   rows: LedgerRow[]
 }
 
+/**
+ * A claim the NDIA refused for want of funds (V17, V18, V27 or V28), as the Funding tab says it on the pool the claim's lines belong to: "NDIA rejected a claim on {date}: not enough funds
+ * in the funding period ({code})" (the plan, for V17 and V18). It carries no money, and it is there while the funding period the claim's lines fall in is the one running (a later period, or a new plan, ends it).
+ */
+export interface NdiaRejection {
+  /** The provider's calendar day the claim was marked Rejected. */
+  date: string
+  code: string
+  claimId: string
+  claimReference: string
+}
+
 export interface LedgerPool {
   id: string
   name: string
@@ -254,6 +267,8 @@ export interface LedgerPool {
   startedUnclaimedTripCount: number
   /** The periods' unpriced shifts over the whole plan. */
   unpricedShiftCount: number
+  /** The NDIA's "the funds ran out" word on this pool, while it is active (budget phase 2b). Absent when there is none. */
+  ndiaRejection?: NdiaRejection
 }
 
 /** Rows that are in no pool, or outside the plan: shown, never dropped. */
@@ -285,4 +300,136 @@ export interface LedgerRowsPage {
   total: number
   skip: number
   rows: LedgerRow[]
+}
+
+// ── The Budgets list (phase 2b) ─────────────────────────────────────────────
+// GET api/v1/funding/budgets: every active participant's pools for the funding period running now, from the ledger's own figures, sorted by risk (Over, Forecast over, Approaching, On track).
+// SuperAdmin, Admin and Coordinator only (money). No screen adds anything up.
+
+/** One pool of one participant's current plan, for the funding period running now. */
+export interface BudgetListRow {
+  participantId: string
+  participantName: string
+  poolId: string
+  /** The pool as a sentence names it: "Core", the stated support's name, or "Core (plan managed)" when the plan holds two Core pools. */
+  poolName: string
+  kind: FundingPoolKind
+  managementType: PlanType
+  periodStart: string
+  periodEnd: string
+  /** The period's limit plus what earlier periods left unspent. */
+  available: number
+  /** How much of `available` is rolled over from earlier periods of the plan (0 when none): not confirmed, because somebody else may have used it. */
+  carried: number
+  /** Claimed plus pending. */
+  used: number
+  /** Available minus used: what is left, or, below zero, how far over the period already is. The server works it out, so no screen subtracts. */
+  remaining: number
+  bookedAhead: number
+  /** Used plus booked ahead. */
+  forecast: number
+  status: BudgetStatus
+  /** How many shifts of this period the shift claim cannot price yet (a sleepover, a passive night, a group shift): each is $0 in every figure above, so they leave those shifts out. 0 when every shift priced. */
+  unpricedShiftCount: number
+  /** The NDIA's own word that this pool's funds ran out (a claim of the pool refused for want of funds, while its funding period is the one running); left out when it has none. ODIP's figures can say On track beside it. */
+  ndiaRejection?: NdiaRejection
+}
+
+/**
+ * Why an NDIS-funded participant has no row: no plan is recorded, the plan they have has ended, or a plan is recorded for later (and `planStart` is its first day: the soonest one, which outranks a
+ * plan that ended, because the next plan is already there).
+ */
+export const BUDGET_LIST_NO_BUDGET_REASONS = ['NotRecorded', 'PlanEnded', 'NotStarted'] as const
+export type BudgetListNoBudgetReason = typeof BUDGET_LIST_NO_BUDGET_REASONS[number]
+
+/** An NDIS-funded participant with no budget in force: no figure, and nothing ever warns about them. */
+export interface BudgetListNoBudget {
+  participantId: string
+  participantName: string
+  reason: BudgetListNoBudgetReason
+  /** The last day of the plan that ended; absent when none was recorded. */
+  planEnd?: string
+  /** The first day of the soonest plan recorded for later, for `NotStarted`; absent otherwise. */
+  planStart?: string
+}
+
+export interface BudgetListDto {
+  /** The provider's today, which every "current period" was decided against. */
+  asOf: string
+  approachingPercent: number
+  /** Sorted by risk, then by name. */
+  rows: BudgetListRow[]
+  /** NDIS-funded participants with no budget in force, by name. */
+  noBudget: BudgetListNoBudget[]
+}
+
+// ── The agreement check (phase 2b) ──────────────────────────────────────────
+// POST api/v1/participants/{id}/funding/agreement-check: what an agreement would cost against what the participant's real pools have left, for each pool and funding period it touches. The
+// agreement is priced in process by the plan pricing engine and placed with the ledger's own rule. A warning and nothing more: it never blocks a save or an approval.
+
+/** Say what to price in ONE of two ways: the draft's blocks with the agreement's dates, or the id of a saved draft. */
+export interface AgreementCheckRequest {
+  draftId?: string
+  blocks?: PlanBlock[]
+  periodFrom?: string
+  periodTo?: string
+}
+
+export interface AgreementCheckPeriod {
+  periodId: string
+  periodStart: string
+  periodEnd: string
+  isCurrent: boolean
+  /** What the agreement costs in this period. */
+  agreementCost: number
+  /** The period's limit plus what earlier periods would leave unspent once this agreement had spent its share of them (the ledger's figure when no earlier period has an agreement cost). */
+  available: number
+  /** Claimed plus pending (the ledger's figure). */
+  used: number
+  /** Available minus used. May be below zero when the period is already over before the agreement. */
+  remaining: number
+  /** How far the agreement passes what is left; 0 when it fits. */
+  overBy: number
+}
+
+export interface AgreementCheckPool {
+  poolId: string
+  poolName: string
+  kind: FundingPoolKind
+  managementType: PlanType
+  /** What the agreement costs in this pool over all the periods it touches. */
+  agreementCost: number
+  /** Some period would be over. */
+  over: boolean
+  /** How far the agreement passes what the pool has across the periods it touches: the sum of the periods' own over-bys (each overspend leaves nothing to carry), 0 when every period fits. */
+  overBy: number
+  /**
+   * The part of `overBy` that the pool was already over before the agreement: the sum, over the periods the agreement touches, of what is used past what they have (a period's negative remaining).
+   * A period's over-by is the agreement's cost PLUS that, so `overBy` can pass the agreement's cost; `overBy` less this is the agreement's own overshoot. 0 when no period was over before.
+   */
+  alreadyOverBy: number
+  /** The periods the agreement touches, in date order. */
+  periods: AgreementCheckPeriod[]
+}
+
+export interface AgreementCheck {
+  /** The participant has a plan that is running now to check against. False is "No budget recorded": the answer then has no pools and no figures. */
+  hasBudget: boolean
+  /** Why there is nothing to compare with, when `hasBudget` is false, in the Budgets list's own two words: no plan that has started is recorded, or the plan ended (and `planEnd` is its last day). */
+  noBudgetReason?: BudgetListNoBudgetReason
+  planId?: string
+  planStart?: string
+  planEnd?: string
+  /** The provider's today. */
+  asOf: string
+  periodFrom: string
+  periodTo: string
+  /** Everything the engine could price in the agreement, in the pools or not. */
+  agreementCost: number
+  /** Only the pools and periods the agreement touches, in the plan's order of pools. */
+  pools: AgreementCheckPool[]
+  /** The part of the agreement whose category no recorded pool of the plan covers: shown, never dropped. */
+  notInARecordedPool: number
+  /** The part of the agreement delivered outside the plan's dates: shown, never dropped. */
+  outsideThePlan: number
 }

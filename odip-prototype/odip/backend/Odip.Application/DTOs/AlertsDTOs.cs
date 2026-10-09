@@ -46,6 +46,13 @@ public record ParticipantAlertsDto
     /// </summary>
     public bool IsActive { get; init; }
 
+    /// <summary>
+    /// The participant has a funding plan running now, so a budget can warn about them (budget phase 2b, fix round 1). It is not an alert: it is what lets a screen tell "no budget is at risk"
+    /// (a plan is running and nothing is over) from "no budget is recorded" (the commonest state at first, about which a screen must say nothing, least of all "all clear"). False when no plan
+    /// has started, the plan has ended, or the service was built without a budget source.
+    /// </summary>
+    public bool BudgetInForce { get; init; }
+
     /// <summary>Ranked Critical-first, then Warning, then Info (see <see cref="AlertSeverity"/>).</summary>
     public List<ParticipantAlertDto> Alerts { get; init; } = new();
     public int CriticalCount { get; init; }

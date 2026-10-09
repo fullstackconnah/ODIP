@@ -8,8 +8,13 @@
 // BudgetLedgerCalculator, so the demo's numbers are worked out rather than typed: p-0002's Core (flexible) pool is FORECAST OVER in the current quarter and its Improved
 // Daily Living Skills pool is APPROACHING, p-0004's Core (flexible) is ON TRACK, and p-0002 has a row in no recorded pool and one dated after its plan ends, so both
 // buckets can be seen on the Funding tab.
+//
+// Budget phase 2b adds the places a warning shows (mock-budgets.js): the Budgets list (GET funding/budgets), the participant alerts (GET participants/alerts and participants/{id}/alerts, budget
+// kinds only) and the agreement check (POST participants/{id}/funding/agreement-check). The demo has one pool over (p-0005's Core), one forecast over (p-0002's Core), one approaching (p-0002's
+// Improved Daily Living Skills), and one on which the NDIA has refused a claim for want of funds (p-0004's Core, V27), so every alert and every state of the list can be seen.
 
 const { ledgerFor, rowsPage } = require('./mock-ledger.js')
+const { agreementCheckOf, alertsDto, budgetList } = require('./mock-budgets.js')
 
 const DAY = 86_400_000
 const day = (iso) => Date.parse(`${iso}T00:00:00Z`) / DAY
@@ -168,13 +173,24 @@ function build(body, participantId, existing) {
 /**
  * Routes in the mock's own shape: [pattern, handler(...pathIds, body|searchParams)]. `respond` and `failEnvelope` come from server.js, so the dispatcher's status handling is reused.
  */
-function create({ respond, fundingSources }) {
+function create({ respond, fundingSources, people = [], priceLines = () => [] }) {
   billingSources = fundingSources
   const answer = (result) => (result.status ? respond(result.status, result.body) : result)
+  const todayIso = () => new Date().toISOString().slice(0, 10)
+  const ledgerOf = (id) => ledgerFor(plansOf, id, todayIso(), settings.approachingPercent)
 
   const get = [
     ['funding/pace-categories', () => PACE_CATEGORIES],
     ['funding/settings', () => settings],
+    // The Budgets list (phase 2b): every active participant's pools for the period running now, by risk, and the NDIS-funded participants with no budget in force. mock-budgets.js.
+    ['funding/budgets', () => budgetList(people, ledgerOf, todayIso(), settings.approachingPercent)],
+    // The participant alerts the dashboard's Budgets at risk tile and the participant banners read. The mock knows only the budget kinds. `participants/alerts` is before `participants/:id` in the
+    // route table (funding.get is first), so the word is never taken for an id.
+    ['participants/alerts', () => people.filter((p) => p.isActive && !p.isDraft).map((p) => alertsDto(p, ledgerOf(p.id)))],
+    ['participants/:id/alerts', (id) => {
+      const person = people.find((p) => p.id === id)
+      return person ? alertsDto(person, ledgerOf(id)) : respond(404, fail(['Participant not found.']))
+    }],
     ['participants/:id/funding/plans', (id) => ({
       plans: [...plansOf(id)].sort((a, b) => (a.planStart < b.planStart ? 1 : -1)),
       profilePlanDates: profileDates[id] || {},
@@ -214,6 +230,17 @@ function create({ respond, fundingSources }) {
   ]
 
   const post = [
+    // What the agreement being built would cost against what the participant's pools have left, per pool and funding period (phase 2b). A question: nothing is written, nothing is blocked. The
+    // agreement is priced by the mock's own pricing engine (planPricing.js), as the real one prices it in process.
+    ['participants/:id/funding/agreement-check', (id, body) => {
+      const person = people.find((p) => p.id === id)
+      if (!person) return respond(404, fail(['Participant not found.']))
+      if (!Array.isArray(body.blocks) || !body.periodFrom || !body.periodTo) return respond(400, fail(['Send the draft\'s blocks with the agreement\'s first and last day, or the id of a saved draft.']))
+      if (body.periodFrom > body.periodTo) return respond(400, fail(['The agreement period ends before it starts.']))
+      const ledger = ledgerOf(id)
+      const lines = ledger.planId && ledger.planIsCurrent ? priceLines(body.blocks, body.periodFrom, body.periodTo) : []
+      return agreementCheckOf(ledger, person.planType, lines, body.periodFrom, body.periodTo, todayIso())
+    }],
     ['participants/:id/funding/plans', (id, body) => {
       const errors = validate(body)
       if (errors.length > 0) return respond(400, fail(errors))
