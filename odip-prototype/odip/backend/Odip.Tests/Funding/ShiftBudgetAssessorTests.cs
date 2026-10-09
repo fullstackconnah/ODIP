@@ -146,22 +146,33 @@ public class ShiftBudgetAssessorTests
 
     // ── What each finding says, and the figures behind it ──────────────────
 
-    [Fact]
-    public void TheForecastOverMessage_NamesThePoolTheForecastTheAvailableAndThePeriod_ThenTheShiftsCost()
-    {
-        var finding = Find(ShiftBudgetAssessor.Assess(Figures(available: 8000m, used: 1000m, forecast: 8640m, cost: 292.32m), Context()), BudgetFindingCodes.ForecastOver)!;
+    // A period is written with a no-break space on each side of its en dash, so a line never splits at the dash (the phase 3 design review, M3).
+    private const string Dash = "\u00A0\u2013\u00A0";
 
-        Assert.Equal("Takes Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct–31 Dec 2026. This shift: about $292.32.", finding.Message);
+    [Fact]
+    public void TheForecastOverMessage_NamesThePoolTheForecastTheAvailableThePeriodAndHowFarOver_ThenTheShiftsCost()
+    {
+        var finding = Find(ShiftBudgetAssessor.Assess(Figures(available: 8000m, used: 1000m, forecast: 8040m, cost: 292.32m), Context()), BudgetFindingCodes.ForecastOver)!;
+
+        Assert.Equal($"Takes Core (flexible) to $8,040.00 of $8,000.00 for 1 Oct{Dash}31 Dec 2026, $40.00 over. This shift: about $292.32.", finding.Message);
     }
 
     [Fact]
-    public void TheOverMessage_SaysTheyAreAlreadyOver_AndTheApproachingMessageSaysHowFarUsed()
+    public void WhenThePeriodWasAlreadyOverWithoutThisShift_TheForecastOverMessageSaysSo_SoItDoesNotReadAsIfThisShiftCausedIt()
+    {
+        var finding = Find(ShiftBudgetAssessor.Assess(Figures(available: 8000m, used: 1000m, forecast: 8640m, cost: 292.32m), Context()), BudgetFindingCodes.ForecastOver)!;
+
+        Assert.Equal($"Takes Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct{Dash}31 Dec 2026, $640.00 over. It was already $347.68 over without this shift. This shift: about $292.32.", finding.Message);
+    }
+
+    [Fact]
+    public void TheOverAndApproachingMessages_SayTheStateOfThePeriod_AndDoNotRepeatTheShiftsCost()
     {
         var over = Find(ShiftBudgetAssessor.Assess(Figures(available: 8000m, used: 8100m, forecast: 8400m, cost: 300m), Context()), BudgetFindingCodes.Over)!;
         var approaching = Find(ShiftBudgetAssessor.Assess(Figures(available: 8000m, used: 6800m, forecast: 6800m, cost: 300m), Context()), BudgetFindingCodes.Approaching)!;
 
-        Assert.Equal("Core (flexible) is already over for 1 Oct–31 Dec 2026: $8,100.00 used of $8,000.00. This shift: about $300.00.", over.Message);
-        Assert.Equal("Core (flexible) is 85% used for 1 Oct–31 Dec 2026: $6,800.00 of $8,000.00. This shift: about $300.00.", approaching.Message);
+        Assert.Equal($"Core (flexible) is already over for 1 Oct{Dash}31 Dec 2026: $8,100.00 used of $8,000.00.", over.Message);
+        Assert.Equal($"Core (flexible) is 85% used for 1 Oct{Dash}31 Dec 2026: $6,800.00 of $8,000.00.", approaching.Message);
     }
 
     [Fact]
@@ -171,7 +182,7 @@ public class ShiftBudgetAssessorTests
 
         var finding = Find(ShiftBudgetAssessor.Assess(figures, Context()), BudgetFindingCodes.ForecastOver)!;
 
-        Assert.Contains("for 1 Jul 2026–30 Jun 2027.", finding.Message);
+        Assert.Contains($"for 1 Jul 2026{Dash}30 Jun 2027,", finding.Message);
     }
 
     [Fact]
@@ -198,6 +209,17 @@ public class ShiftBudgetAssessorTests
         Assert.All(findings, f => Assert.Equal(figures, f.Budget));
         Assert.Equal(-100m, figures.Remaining);
         Assert.Equal(400m, figures.OverBy);
+        Assert.Equal(8100m, figures.ForecastWithout);   // the forecast without this shift, which the sentence compares with what is available
+    }
+
+    [Fact]
+    public void TheFiguresAlsoCarryWhatWasBookedAheadAndHowManyShiftsCouldNotBePriced_ForTheDisclosureToPrint()
+    {
+        var figures = new BudgetFindingFigures("Core (flexible)", QStart, QEnd, 8000m, 1000m, 8640m, 292.32m, BookedAhead: 7347.68m, UnpricedShiftCount: 2);
+
+        var finding = Find(ShiftBudgetAssessor.Assess(figures, Context()), BudgetFindingCodes.ForecastOver)!;
+
+        Assert.Equal((7347.68m, 2), (finding.Budget!.BookedAhead, finding.Budget.UnpricedShiftCount));
     }
 
     [Fact]

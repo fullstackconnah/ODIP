@@ -86,8 +86,25 @@ public class ShiftBudgetCheckTests : IDisposable
 
         var finding = Assert.Single(outcome.Findings);
         Assert.Equal((BudgetFindingCodes.ForecastOver, RosterFindingSeverity.Warning, false), (finding.Code, finding.Severity, finding.RequiresReason));
-        Assert.Equal("Takes Core (flexible) to $1,440.00 of $1,000.00 for 1 Oct–31 Dec 2026. This shift: about $480.00.", finding.Message);
-        Assert.Equal(new BudgetFindingFigures("Core (flexible)", new DateOnly(2026, 10, 1), new DateOnly(2026, 12, 31), 1000m, 0m, 1440m, 480m), finding.Budget);
+        Assert.Equal("Takes Core (flexible) to $1,440.00 of $1,000.00 for 1 Oct\u00A0\u2013\u00A031 Dec 2026, $440.00 over. This shift: about $480.00.", finding.Message);
+        Assert.Equal(new BudgetFindingFigures("Core (flexible)", new DateOnly(2026, 10, 1), new DateOnly(2026, 12, 31), 1000m, 0m, 1440m, 480m, BookedAhead: 960m, UnpricedShiftCount: 0), finding.Budget);
+    }
+
+    [Fact]
+    public async Task TheFindingsFiguresCountThePeriodsShiftsThatCouldNotBePriced_BecauseTheyAreLeftOutOfTheForecast()
+    {
+        // The fix branch counts, in each period, the shifts the estimator refuses (a sleepover, a group shift, no rate): they are $0 in every figure, so the figures say how many were left out.
+        var (participant, _) = Seed(october: 1000m);
+        _kit.SeedShift(participant, Mon12Oct);   // $480 booked ahead
+        _kit.SeedShift(participant, Tue13Oct);   // $960 in all
+        var sleepover = _kit.SeedShift(participant, new DateOnly(2026, 10, 15));
+        sleepover.NightType = SleepoverType.Sleepover;
+        _kit.Db.SaveChanges();
+
+        var outcome = await Service().CheckAsync(Request(participant, Wed14Oct), default);
+
+        var figures = Find(outcome, BudgetFindingCodes.ForecastOver)!.Budget!;
+        Assert.Equal((1, 960m), (figures.UnpricedShiftCount, figures.BookedAhead));
     }
 
     [Theory]

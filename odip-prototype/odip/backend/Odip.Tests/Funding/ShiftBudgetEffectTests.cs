@@ -47,7 +47,7 @@ public class ShiftBudgetEffectTests : IDisposable
         var warning = Assert.Single(warnings);
         Assert.Equal(("Core (flexible)", new DateOnly(2026, 10, 1), new DateOnly(2026, 12, 31)), (warning.PoolName, warning.PeriodStart, warning.PeriodEnd));
         Assert.Equal((1000m, 0m, 3840m, 3840m, 2840m, 8), (warning.Available, warning.Used, warning.Forecast, warning.Added, warning.OverBy, warning.Count));
-        Assert.Equal("These 8 shifts take Core (flexible) to $3,840.00 of $1,000.00 for 1 Oct–31 Dec 2026.", warning.Message);
+        Assert.Equal("These 8 shifts take Core (flexible) to $3,840.00 of $1,000.00 for 1 Oct\u00A0\u2013\u00A031 Dec 2026, $2,840.00 over.", warning.Message);
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public class ShiftBudgetEffectTests : IDisposable
 
         var warning = Assert.Single(await Effect().ForShiftsAsync(_kit.TenantId, participant.Id, new[] { Day(new DateOnly(2026, 10, 12)) }, default));
 
-        Assert.Equal("This shift takes Core (flexible) to $480.00 of $100.00 for 1 Oct–31 Dec 2026.", warning.Message);
+        Assert.Equal("This shift takes Core (flexible) to $480.00 of $100.00 for 1 Oct\u00A0\u2013\u00A031 Dec 2026, $380.00 over.", warning.Message);
     }
 
     [Fact]
@@ -178,8 +178,9 @@ public class ShiftBudgetEffectTests : IDisposable
 
         var warning = Assert.Single(await Effect().ForBookingAsync(_kit.TenantId, participant.Id, booking.Id, default));
 
-        Assert.Equal("This booking takes Core (flexible) to $1,440.00 of $1,000.00 for 1 Oct–31 Dec 2026.", warning.Message);
+        Assert.Equal("This booking takes Core (flexible) to $1,440.00 of $1,000.00 for 1 Oct\u00A0\u2013\u00A031 Dec 2026, $440.00 over.", warning.Message);
         Assert.Equal((1440m, 1, 440m), (warning.Added, warning.Count, warning.OverBy));
+        Assert.Equal("Sophie Brown", warning.ParticipantName);   // the bulk confirm of several participants says whose pool each line is about (the phase 3 review, C5)
     }
 
     [Fact]

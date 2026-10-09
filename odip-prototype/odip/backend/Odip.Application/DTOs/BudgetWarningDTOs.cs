@@ -20,6 +20,8 @@ public record BudgetWarningDto
     public decimal OverBy { get; init; }
     /// <summary>How many shifts (or bookings) the action puts in this pool and period.</summary>
     public int Count { get; init; }
-    /// <summary>The warning in a sentence: "These 8 shifts take Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct–31 Dec 2026."</summary>
+    /// <summary>The warning in a sentence: "These 8 shifts take Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct - 31 Dec 2026, $640.00 over."</summary>
     public string Message { get; init; } = string.Empty;
+    /// <summary>Whose budget this is, for a trip booking (omitted for shifts, which are one participant's by their screen). The bulk confirm of several bookings lists each line with its participant (the phase 3 review, C5).</summary>
+    public string? ParticipantName { get; init; }
 }

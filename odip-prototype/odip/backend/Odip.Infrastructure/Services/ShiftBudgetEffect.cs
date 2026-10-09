@@ -74,7 +74,9 @@ public sealed class ShiftBudgetEffect
         if (!ledgers.TryGetValue(participantId, out var participantLedger) || participantLedger.Ledger is null) return new List<BudgetWarningDto>();
 
         var items = participantLedger.Items.Where(i => i.BookingId == bookingId).ToList();
-        return items.Count == 0 ? new List<BudgetWarningDto>() : Warnings(participantLedger.Ledger.Plan, participantLedger.Ledger, items, "booking");
+        if (items.Count == 0) return new List<BudgetWarningDto>();
+        // The bulk confirm of several bookings lists their warnings together, so each says whose pool it is.
+        return Warnings(participantLedger.Ledger.Plan, participantLedger.Ledger, items, "booking").Select(w => w with { ParticipantName = participantLedger.Name }).ToList();
     }
 
     /// <summary>One warning for each pool and period that <paramref name="added"/> put money into and the forecast of which is now above what is available.</summary>
@@ -98,7 +100,7 @@ public sealed class ShiftBudgetEffect
             {
                 PoolName = pool.Name, PeriodStart = figures.PeriodStart, PeriodEnd = figures.PeriodEnd, Available = figures.Available, Used = figures.Used, Forecast = figures.Forecast, Added = cost,
                 OverBy = figures.OverBy, Count = count,
-                Message = $"{subject} {pool.Name} to {ShiftBudgetAssessor.Money(figures.Forecast)} of {ShiftBudgetAssessor.Money(figures.Available)} for {ShiftBudgetAssessor.Period(figures)}.",
+                Message = $"{subject} {pool.Name} to {ShiftBudgetAssessor.Money(figures.Forecast)} of {ShiftBudgetAssessor.Money(figures.Available)} for {ShiftBudgetAssessor.Period(figures)}, {ShiftBudgetAssessor.Money(figures.OverBy)} over.",
             }, pool.Position));
         }
 

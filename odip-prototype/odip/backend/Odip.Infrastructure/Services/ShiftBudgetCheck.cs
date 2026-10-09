@@ -164,7 +164,10 @@ public sealed class ShiftBudgetCheck
         var without = participantLedger.Items.Where(i => request.ExistingShiftId is null || i.ShiftId != request.ExistingShiftId).ToList();
         var after = BudgetLedgerCalculator.Compute(plan, participantLedger.Today, participantLedger.ApproachingPercent, without.Append(newItem));
         var period = after.Pools.First(p => p.Pool.Id == place.Pool!.Id).Periods.First(p => p.Period.Id == place.Period!.Id);
-        var figures = new BudgetFindingFigures(place.Pool!.Name, period.Period.PeriodStart, period.Period.PeriodEnd, period.Available, period.Used, period.Forecast, priced.Amount);
+        // Booked ahead BEFORE this shift (the new item is booked ahead when its day is today or later), so used + booked ahead + this shift is the forecast the panel prints.
+        var bookedAheadBefore = period.BookedAhead - (newItem.Group == LedgerGroup.BookedAhead ? priced.Amount : 0m);
+        var figures = new BudgetFindingFigures(
+            place.Pool!.Name, period.Period.PeriodStart, period.Period.PeriodEnd, period.Available, period.Used, period.Forecast, priced.Amount, bookedAheadBefore, period.UnpricedShiftCount);
 
         var mode = await _db.BudgetSettings.AsNoTracking().Where(b => b.TenantId == request.TenantId).Select(b => (BudgetLimitMode?)b.Mode).FirstOrDefaultAsync(ct) ?? BudgetSettings.DefaultMode;
         var oneOff = !await IsRoutineAsync(request, saved?.ShiftPatternId, ct);

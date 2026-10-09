@@ -42,8 +42,12 @@ public record BudgetFindingFiguresDto
     public decimal Remaining { get; init; }
     /// <summary>Used plus booked ahead, with this shift counted.</summary>
     public decimal Forecast { get; init; }
+    /// <summary>What the period had booked ahead BEFORE this shift, so used + booked ahead + this shift is the forecast and a screen needs no sum of its own.</summary>
+    public decimal BookedAhead { get; init; }
     /// <summary>The estimate of the shift itself, priced the way ODIP will claim it.</summary>
     public decimal ShiftCost { get; init; }
+    /// <summary>How many of the period's shifts could not be priced (a sleepover, a group shift, no rate): they are $0 in every figure above, so the figures are not the whole period.</summary>
+    public int UnpricedShiftCount { get; init; }
     /// <summary>How far the forecast is past what is available; zero when it is not.</summary>
     public decimal OverBy { get; init; }
 }

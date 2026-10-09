@@ -36,15 +36,20 @@ public static class BudgetFindingCodes
 
 /// <summary>
 /// The figures behind a budget finding, for one pool in one funding period with the shift in question already counted: what is available, what is used, what is forecast, and what the shift is estimated
-/// to cost. Worked out by the server so that no screen does a sum of its own.
+/// to cost. Worked out by the server so that no screen does a sum of its own. <paramref name="BookedAhead"/> is what the period had booked ahead BEFORE this shift, so that used + booked ahead + this shift is the
+/// forecast the panel prints; <paramref name="UnpricedShiftCount"/> is how many of the period's shifts could not be priced and so are left out of every figure (the ledger counts them as $0).
 /// </summary>
-public sealed record BudgetFindingFigures(string PoolName, DateOnly PeriodStart, DateOnly PeriodEnd, decimal Available, decimal Used, decimal Forecast, decimal ShiftCost)
+public sealed record BudgetFindingFigures(
+    string PoolName, DateOnly PeriodStart, DateOnly PeriodEnd, decimal Available, decimal Used, decimal Forecast, decimal ShiftCost, decimal BookedAhead = 0m, int UnpricedShiftCount = 0)
 {
     /// <summary>What the period has left after what is used (negative once it is over).</summary>
     public decimal Remaining => Available - Used;
 
     /// <summary>How far the forecast is past what is available; zero when it is not.</summary>
     public decimal OverBy => Math.Max(0m, Forecast - Available);
+
+    /// <summary>The forecast without this shift: what the period already held, which the sentence compares with what is available to say whether this shift is what put it over.</summary>
+    public decimal ForecastWithout => Forecast - ShiftCost;
 }
 
 /// <summary>What decides how a finding is raised: the organisation's mode and "approaching" percentage, whether the shift is a one-off, whether the change raises the cost in this period, and who is saving it.</summary>
@@ -70,9 +75,12 @@ public static class ShiftBudgetAssessor
         {
             var hard = context.Mode == BudgetLimitMode.HardLimit && context.IsOneOff && context.Raises;
             var severity = hard && !context.CallerIsAdmin ? RosterFindingSeverity.Blocking : RosterFindingSeverity.Warning;
+            // The sentence the spec names ("Takes {pool} to {forecast} of {available} for {period}"), then how far over, and, when the period was already over without this shift, that it was (so the line never reads as
+            // if a $240 shift caused a $1,500 overrun), then the shift's own cost.
+            var already = figures.ForecastWithout > figures.Available ? $" It was already {Money(figures.ForecastWithout - figures.Available)} over without this shift." : string.Empty;
             findings.Add(new RosterFinding(
                 BudgetFindingCodes.ForecastOver, severity,
-                string.Create(CultureInfo.InvariantCulture, $"Takes {figures.PoolName} to {Money(figures.Forecast)} of {Money(figures.Available)} for {Period(figures)}.{Cost(figures)}"),
+                string.Create(CultureInfo.InvariantCulture, $"Takes {figures.PoolName} to {Money(figures.Forecast)} of {Money(figures.Available)} for {Period(figures)}, {Money(figures.OverBy)} over.{already}{Cost(figures)}"),
                 RequiresReason: hard && context.CallerIsAdmin, Budget: figures));
         }
 
@@ -80,7 +88,7 @@ public static class ShiftBudgetAssessor
         {
             findings.Add(new RosterFinding(
                 BudgetFindingCodes.Over, RosterFindingSeverity.Warning,
-                string.Create(CultureInfo.InvariantCulture, $"{figures.PoolName} is already over for {Period(figures)}: {Money(figures.Used)} used of {Money(figures.Available)}.{Cost(figures)}"),
+                string.Create(CultureInfo.InvariantCulture, $"{figures.PoolName} is already over for {Period(figures)}: {Money(figures.Used)} used of {Money(figures.Available)}."),
                 Budget: figures));
         }
         else if (figures.Available > 0m && figures.Used * 100m >= context.ApproachingPercent * figures.Available)
@@ -88,7 +96,7 @@ public static class ShiftBudgetAssessor
             var percent = (int)Math.Floor(figures.Used * 100m / figures.Available);
             findings.Add(new RosterFinding(
                 BudgetFindingCodes.Approaching, RosterFindingSeverity.Warning,
-                string.Create(CultureInfo.InvariantCulture, $"{figures.PoolName} is {percent}% used for {Period(figures)}: {Money(figures.Used)} of {Money(figures.Available)}.{Cost(figures)}"),
+                string.Create(CultureInfo.InvariantCulture, $"{figures.PoolName} is {percent}% used for {Period(figures)}: {Money(figures.Used)} of {Money(figures.Available)}."),
                 Budget: figures));
         }
 
@@ -98,14 +106,14 @@ public static class ShiftBudgetAssessor
     /// <summary>Money as the findings say it: dollars and cents, thousands separated, whatever the culture of the server.</summary>
     public static string Money(decimal amount) => "$" + amount.ToString("N2", CultureInfo.InvariantCulture);
 
-    /// <summary>A funding period as the findings say it: "1 Oct–31 Dec 2026", or with both years when it crosses one.</summary>
+    /// <summary>A funding period as the findings say it: "1 Oct – 31 Dec 2026", or with both years when it crosses one. A no-break space sits on each side of the en dash, so a line never splits at the dash.</summary>
     public static string Period(BudgetFindingFigures figures) => Period(figures.PeriodStart, figures.PeriodEnd);
 
     public static string Period(DateOnly start, DateOnly end) =>
         start.Year == end.Year
-            ? string.Create(CultureInfo.InvariantCulture, $"{start:d MMM}–{end:d MMM yyyy}")
-            : string.Create(CultureInfo.InvariantCulture, $"{start:d MMM yyyy}–{end:d MMM yyyy}");
+            ? string.Create(CultureInfo.InvariantCulture, $"{start:d MMM}\u00A0\u2013\u00A0{end:d MMM yyyy}")
+            : string.Create(CultureInfo.InvariantCulture, $"{start:d MMM yyyy}\u00A0\u2013\u00A0{end:d MMM yyyy}");
 
-    /// <summary>The estimate of the shift itself, said after every finding: "This shift: about $292.32." Nothing when the shift adds nothing.</summary>
+    /// <summary>The estimate of the shift itself, said after the forecast-over finding only (the over and approaching findings are about the period, not this shift): "This shift: about $292.32." Nothing when the shift adds nothing.</summary>
     private static string Cost(BudgetFindingFigures figures) => figures.ShiftCost > 0m ? $" This shift: about {Money(figures.ShiftCost)}." : string.Empty;
 }

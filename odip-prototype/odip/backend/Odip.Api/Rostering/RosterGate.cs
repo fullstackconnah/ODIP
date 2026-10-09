@@ -20,7 +20,7 @@ public static class RosterGate
             ? new BudgetFindingFiguresDto
             {
                 PoolName = b.PoolName, PeriodStart = b.PeriodStart, PeriodEnd = b.PeriodEnd, Available = b.Available, Used = b.Used, Remaining = b.Remaining,
-                Forecast = b.Forecast, ShiftCost = b.ShiftCost, OverBy = b.OverBy,
+                Forecast = b.Forecast, ShiftCost = b.ShiftCost, OverBy = b.OverBy, BookedAhead = b.BookedAhead, UnpricedShiftCount = b.UnpricedShiftCount,
             }
             : null,
     };

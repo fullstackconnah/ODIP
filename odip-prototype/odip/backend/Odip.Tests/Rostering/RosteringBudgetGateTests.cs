@@ -736,6 +736,8 @@ public class RosteringBudgetGateTests : IDisposable
         Assert.Equal("2026-10-01", budget.GetProperty("periodStart").GetString());
         Assert.Equal("2026-12-31", budget.GetProperty("periodEnd").GetString());
         Assert.Equal(480m, budget.GetProperty("shiftCost").GetDecimal());
+        Assert.Equal(960m, budget.GetProperty("bookedAhead").GetDecimal());   // what is booked ahead before this shift, so the disclosure adds up without a sum of its own
+        Assert.Equal(0, budget.GetProperty("unpricedShiftCount").GetInt32());
         Assert.False(doc.RootElement[1].TryGetProperty("budget", out _));
     }
 }
