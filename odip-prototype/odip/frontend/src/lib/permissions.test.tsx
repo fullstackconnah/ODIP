@@ -293,13 +293,13 @@ describe('usePermissions.canAccessPage — ReadOnly', () => {
   })
 
   // Each of these sits behind a controller that admits only SuperAdmin, Admin and Coordinator, reads included: see READ_ONLY_REFUSED_PAGES.
-  const REFUSED: PageKey[] = ['rostering', 'leave-approvals', 'billing', 'claims', 'settings', 'caregiver-submissions', 'agreement-drafts']
+  const REFUSED: PageKey[] = ['rostering', 'leave-approvals', 'billing', 'claims', 'settings', 'caregiver-submissions', 'agreement-drafts', 'budgets']
   const ALLOWED: PageKey[] = [
     'dashboard', 'portal', 'portal-leave', 'trips', 'schedule', 'participants', 'accommodation', 'vehicles', 'staff', 'tasks', 'incidents', 'bookings',
     'qualifications', 'medications',
   ]
 
-  it('refuses ReadOnly the pages its API refuses (rostering, leave, billing, claims, caregiver forms, settings, agreement drafts)', () => {
+  it('refuses ReadOnly the pages its API refuses (rostering, leave, billing, claims, caregiver forms, settings, agreement drafts, the Budgets list)', () => {
     setUserRole('ReadOnly')
     render(<PermissionsProbe pages={REFUSED} />)
     for (const page of REFUSED) expect(screen.getByTestId(`page-${page}`), page).toHaveTextContent('false')
@@ -330,6 +330,21 @@ describe('usePermissions.canAccessPage — ReadOnly', () => {
     expect(screen.getByTestId('page-agreement-drafts')).toHaveTextContent('false')
     expect(screen.getByTestId('page-billing')).toHaveTextContent('false')
     expect(screen.getByTestId('page-participants')).toHaveTextContent('true')
+  })
+
+  // Budget phase 2b: the Budgets list is every participant's money, behind a controller that admits only SuperAdmin, Admin and Coordinator (canManageFunding is its rule), so neither SupportWorker nor ReadOnly is offered it.
+  it('keeps the Budgets list off a SupportWorker (it is not on their allow-list) and a ReadOnly viewer, and offers it to the three management roles', () => {
+    setUserRole('SupportWorker')
+    const { unmount } = render(<PermissionsProbe pages={['budgets', 'participants']} />)
+    expect(screen.getByTestId('page-budgets')).toHaveTextContent('false')
+    expect(screen.getByTestId('page-participants')).toHaveTextContent('true')
+    unmount()
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator'] as UserRole[]) {
+      setUserRole(role)
+      const view = render(<PermissionsProbe pages={['budgets']} />)
+      expect(screen.getByTestId('page-budgets'), role).toHaveTextContent('true')
+      view.unmount()
+    }
   })
 
   it("keeps Caregiver forms off a SupportWorker's pages too, as it was (their allow-list does not name it)", () => {
@@ -366,6 +381,7 @@ describe('PrivateRoute — pages ReadOnly is refused', () => {
     ['/settings', 'settings', false],
     ['/caregiver-submissions', 'caregiver-submissions', true],
     ['/participants/p-1/agreement-draft', 'agreement-drafts', false],
+    ['/budgets', 'budgets', false],
   ])('sends ReadOnly away from %s, and still admits a Coordinator', (path, page, requiresWrite) => {
     const { unmount } = renderGuarded('ReadOnly', path, { page, requiresWrite })
     expect(screen.getByText('Redirected')).toBeInTheDocument()

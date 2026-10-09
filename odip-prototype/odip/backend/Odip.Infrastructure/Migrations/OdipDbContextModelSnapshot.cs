@@ -4287,6 +4287,13 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly?>("PeriodTo")
                         .HasColumnType("date");
 
+                    b.Property<DateTime?>("RejectedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("RejectionCode")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 

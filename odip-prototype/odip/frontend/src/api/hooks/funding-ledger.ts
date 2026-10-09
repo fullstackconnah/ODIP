@@ -1,6 +1,7 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { apiGet } from '../client'
 import type { LedgerRowsPage, ParticipantLedgerDto } from '../types'
+import { AGREEMENT_CHECK_KEY, BUDGET_LIST_KEY } from './funding-warnings'
 
 // The budget ledger (budget feature, phase 2a). The server works every figure out on each read; this only asks for it, under the same ['participant-funding', participantId] prefix the plan
 // record uses, so a plan write refreshes the figures with the record they belong to. Money is on this endpoint and nowhere else, so pass `enabled: false` for any role that must not see it.
@@ -41,10 +42,27 @@ export function refreshClaimBudgets(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ['claim'] })
 }
 
-/** Everything that shows the ledger's figures: the ledgers (the participants named, else the ones held) and the claim pages. */
+/**
+ * What is worked out from the same figures and warns about them (budget phase 2b): the participant alerts the dashboard's Budgets at risk tile and the participant banners read, the Budgets list,
+ * and any agreement check on screen. A write that moves a participant's money (a claim, a shift, a trip booking, a plan record, the "approaching" percentage) leaves all of them stale, so they are
+ * read again. They are not narrowed to the participants a write names: the aggregate and the list hold everybody, and the keys are few.
+ */
+export function refreshBudgetWarnings(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: ['participant-alerts-aggregate'] })
+  void queryClient.invalidateQueries({ queryKey: ['participant-alerts'] })
+  void queryClient.invalidateQueries({ queryKey: BUDGET_LIST_KEY })
+  void queryClient.invalidateQueries({ queryKey: [AGREEMENT_CHECK_KEY] })
+}
+
+/**
+ * Everything that shows the ledger's figures, or a warning worked out from them: the ledgers (the participants named, else the ones held), the claim pages, and the alerts, the Budgets list and the
+ * agreement checks. A write that calls this refreshes the warnings with the figures. A write that moves money with no ledger to name, like a plan record (its key prefix already covers its ledger),
+ * or a claim (which narrows the claim pages to its own), calls the pieces it needs.
+ */
 export function refreshBudgetFigures(queryClient: QueryClient, participantIds: readonly string[] = []) {
   refreshLedgers(queryClient, participantIds)
   refreshClaimBudgets(queryClient)
+  refreshBudgetWarnings(queryClient)
 }
 
 /**

@@ -270,6 +270,13 @@ describe('StatCard — attention variant, the tall action tile', () => {
     expect(parts[0].parentElement).toBe(parts[3].parentElement)
   })
 
+  // A line that wraps ("2 participants: 1 over, 1 forecast to go over") must not leave one word alone on its second line: the line balances its wrap.
+  it('balances the wrap of the line, so a word is not left alone on its second line', () => {
+    renderTall()
+
+    expect(within(group()).getByText('Tasks past their due date and still open.')).toHaveClass('text-balance')
+  })
+
   it('sets the figure at the display step in tabular figures, the label at the title step and the line at the 13px secondary step', () => {
     renderTall()
 

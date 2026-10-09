@@ -28,6 +28,10 @@ export interface TripClaimDetailDto extends TripClaimListDto {
   authorisedByStaffId: string | null
   authorisedByStaffName: string | null
   paidDate: string | null
+  /** When the claim was marked Rejected (a UTC instant). Absent while it is not rejected, and for a claim rejected before this was recorded. */
+  rejectedDate?: string
+  /** The NDIA's code for the rejection, when one was recorded: V17, V18, V27 and V28 say the funds ran out; anything else is as it was typed. Absent otherwise. */
+  rejectionCode?: string
   notes: string | null
   lineItems: ClaimLineItemDto[]
   /** What this claim does to the participants' budgets, as of now (budget phase 2a). Absent when none of them has a plan that has started. A warning, never a block. */
@@ -65,6 +69,11 @@ export interface UpdateClaimDto {
   authorisedByStaffId?: string
   notes?: string
   status?: TripClaimStatus
+  /**
+   * The NDIA's code for rejecting the claim (budget phase 2b), sent with `status: 'Rejected'` (or later, on a claim that is already rejected). At most 10 characters; V17, V18, V27 and V28
+   * (any case) say the funds ran out. Left out, the code is unchanged; blank clears it. The server refuses it on a claim that is not rejected.
+   */
+  rejectionCode?: string
 }
 
 export interface UpdateClaimLineItemDto {

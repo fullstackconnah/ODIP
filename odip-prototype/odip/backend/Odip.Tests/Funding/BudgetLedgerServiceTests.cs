@@ -631,6 +631,37 @@ public class BudgetLedgerServiceTests
     }
 
     [Fact]
+    public async Task TheDayTheSoonestUpcomingPlanStarts_IsSaidForWhoeverHasOne_WhateverElseTheyHave()
+    {
+        var kit = LedgerKit.Create();
+        kit.SeedProvider("NSW");
+        kit.SeedCommunityAccessCatalogue();
+        // A plan of the given first and last day, with one period of $6,000 over all of it.
+        void Plan(Participant person, DateOnly start, DateOnly end) => kit.SeedPlan(person, start, end, Core(PlanType.PlanManaged, new PeriodSpec(start, end, 6000m)));
+
+        var upcoming = kit.SeedParticipant(last: "Upcoming");
+        Plan(upcoming, new DateOnly(2027, 7, 1), new DateOnly(2028, 6, 30));
+        Plan(upcoming, new DateOnly(2026, 11, 1), new DateOnly(2027, 6, 30));
+        var ended = kit.SeedParticipant(last: "Ended");
+        Plan(ended, new DateOnly(2025, 7, 1), new DateOnly(2026, 6, 30));
+        var succeeded = kit.SeedParticipant(last: "Succeeded");
+        Plan(succeeded, new DateOnly(2025, 7, 1), new DateOnly(2026, 6, 30));
+        Plan(succeeded, new DateOnly(2027, 1, 1), new DateOnly(2027, 6, 30));
+        var running = kit.SeedParticipant(last: "Running");
+        Plan(running, new DateOnly(2026, 7, 1), new DateOnly(2027, 6, 30));
+        Plan(running, new DateOnly(2027, 7, 1), new DateOnly(2028, 6, 30));
+        var none = kit.SeedParticipant(last: "None");
+
+        var all = await kit.Ledger.ComputeAsync(kit.TenantId, new[] { upcoming.Id, ended.Id, succeeded.Id, running.Id, none.Id }, Ct);
+
+        Assert.Equal(new DateOnly(2026, 11, 1), all[upcoming.Id].NextPlanStart);    // the soonest of two
+        Assert.Null(all[ended.Id].NextPlanStart);                                    // a plan that ended is not one that has yet to start
+        Assert.Equal(new DateOnly(2027, 1, 1), all[succeeded.Id].NextPlanStart);     // a plan that ended, and its successor recorded for later
+        Assert.Equal(new DateOnly(2027, 7, 1), all[running.Id].NextPlanStart);       // said whatever else the participant has now
+        Assert.Null(all[none.Id].NextPlanStart);
+    }
+
+    [Fact]
     public async Task TheStatusUsesTheOrganisationsApproachingPercentage_EightyByDefault()
     {
         var (kit, person, _) = Arrange(CoreQuarters(each: 1000m));

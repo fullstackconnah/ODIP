@@ -4,29 +4,30 @@ import userEvent from '@testing-library/user-event'
 import * as React from 'react'
 import { useState } from 'react'
 import { MemoryRouter } from 'react-router-dom'
-import type { DraftBlock, FundingSourceDto, PlanIssue } from '@/api/types'
+import type { DraftBlock, PlanIssue } from '@/api/types'
+import { agreementCheck, agreementPeriod, agreementPool, noBudgetCheck } from '@/test/fixtures/budgets'
 import { budgetOf, draftBlock, mondayWednesday, quote, settings as makeSettings } from '@/test/fixtures/planPricing'
 import { PlanBuilder } from './PlanBuilder'
 
-const { blockQuoteState, budgetCall, budgetState, fundingState, settingsState } = vi.hoisted(() => ({
+const { blockQuoteState, budgetCall, budgetState, checkCall, checkRefetch, checkState, settingsState } = vi.hoisted(() => ({
   blockQuoteState: { current: undefined as unknown },
   budgetCall: vi.fn(),
   budgetState: { current: {} as Record<string, unknown> },
-  fundingState: { current: { data: [] as unknown[], isError: false } },
+  checkCall: vi.fn(),
+  checkRefetch: vi.fn(),
+  checkState: { current: {} as Record<string, unknown> },
   settingsState: { current: { data: undefined as unknown } },
 }))
 
 vi.mock('@/api/hooks', () => ({
   usePlanPricingSettings: () => settingsState.current,
-  useFundingSources: () => fundingState.current,
   usePlanBudget: (blocks: unknown[], from: string, to: string, enabled: boolean) => { budgetCall(blocks, from, to, enabled); return { ...budgetState.current, refetch: vi.fn() } },
+  useAgreementCheck: (participantId: string | undefined, blocks: unknown[], from: string, to: string, enabled: boolean) => {
+    checkCall(participantId, blocks, from, to, enabled)
+    return { isFetching: false, isPlaceholderData: false, isError: false, ...checkState.current, refetch: checkRefetch }
+  },
   usePlanBlockQuote: () => ({ data: blockQuoteState.current ?? quote(), isLoading: false, isError: false, refetch: vi.fn() }),
 }))
-
-const source = (changes: Partial<FundingSourceDto> = {}): FundingSourceDto => ({
-  id: 'f', participantId: 'p-1', participantName: null, routeType: 'PlanManaged', budgetCategory: null, ndisPlanNumber: null, planStartDate: '2026-07-01', planEndDate: '2027-06-30',
-  budget: 40000, payerName: null, payerEmail: null, isActive: true, ...changes,
-})
 
 /** The plan belongs to the page; this is the smallest page. */
 function Page({ initial = [] as DraftBlock[], readOnly = false, onPlan, footer, unsaved, from = '2026-10-01', to = '2027-06-30', saveNotice, stored, readOnlyNote, readOnlyAction }: { initial?: DraftBlock[]; readOnly?: boolean; onPlan?: (entries: DraftBlock[]) => void; footer?: React.ComponentProps<typeof PlanBuilder>['footer']; unsaved?: React.ComponentProps<typeof PlanBuilder>['unsaved']; from?: string; to?: string; saveNotice?: React.ReactNode; stored?: React.ComponentProps<typeof PlanBuilder>['stored']; readOnlyNote?: string; readOnlyAction?: React.ReactNode }) {
@@ -45,9 +46,11 @@ function Page({ initial = [] as DraftBlock[], readOnly = false, onPlan, footer, 
 beforeEach(() => {
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
   budgetCall.mockReset()
+  checkCall.mockReset()
+  checkRefetch.mockReset()
   blockQuoteState.current = undefined
   budgetState.current = { data: { ...budgetOf('b1') }, isError: false, isFetching: false, error: null }
-  fundingState.current = { data: [source()], isError: false }
+  checkState.current = { data: agreementCheck() }
   settingsState.current = { data: makeSettings() }
 })
 afterEach(() => localStorage.clear())
@@ -337,32 +340,103 @@ describe('PlanBuilder and the budget', () => {
     expect([from, to, enabled]).toEqual(['2026-10-01', '2027-06-30', true])
   })
 
-  it('shows the running budget below the plan, with the plan budget from the funding sources and the comparison', () => {
+  it('shows the running budget below the plan, with the agreement compared with what the participant\'s pool has left (the server\'s figures)', () => {
     render(<Page initial={twoBlocks()} />)
 
     const bar = screen.getByRole('region', { name: 'Running budget' })
     expect(bar).toHaveTextContent('$30,610.28')
-    expect(bar).toHaveTextContent('$40,000.00')
-    expect(bar).toHaveTextContent('77% used')
+    expect(within(bar).getByRole('region', { name: 'Agreement against the participant\'s budget' })).toHaveTextContent('Agreement $2,355.50 against $3,120.00 left in 1 Oct – 31 Dec 2026')
+    expect(bar).not.toHaveTextContent('% used')   // the old comparison with the sum of the Billing funding sources is gone
   })
 
-  it('says over the plan budget in a warning that does not stop anything', () => {
-    fundingState.current = { data: [source({ budget: 10000 }), source({ id: 'g', budget: 5000 })], isError: false }
+  it('says over in a warning that does not stop anything, in the pool and the period it falls in', () => {
+    checkState.current = { data: agreementCheck({ pools: [agreementPool({ poolName: 'Core (plan managed)', periods: [agreementPeriod({ remaining: 1000, overBy: 1355.5 })] })] }) }
     render(<Page initial={twoBlocks()} />)
 
-    expect(screen.getByText(/Over the plan budget by \$15,610\.28/)).toHaveTextContent('You can still save the draft.')
+    const comparison = screen.getByRole('region', { name: 'Agreement against the participant\'s budget' })
+    expect(comparison).toHaveTextContent('Core (plan managed)')
+    expect(comparison).toHaveTextContent('Over by $1,355.50')
+    expect(comparison).toHaveTextContent('This is a warning only: it never stops a save or an approval.')
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeEnabled()
   })
 
-  it('says there is no plan budget to compare with when no funding source records one, and when they could not be read', () => {
-    fundingState.current = { data: [], isError: false }
-    const { unmount } = render(<Page initial={twoBlocks()} />)
-    expect(screen.getByText('Not recorded for this participant. The totals stand alone.')).toBeInTheDocument()
-    unmount()
-
-    fundingState.current = { data: undefined as never, isError: true }
+  it('says no budget is recorded, and links to the Funding tab, when the participant has no plan running; the totals stand alone', () => {
+    checkState.current = { data: noBudgetCheck() }
     render(<Page initial={twoBlocks()} />)
-    expect(screen.getByText('The plan budget could not be read, so there is no comparison.')).toBeInTheDocument()
+
+    expect(screen.getByText('No budget recorded for this participant, so there is nothing to compare the agreement against.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open the Funding tab' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
+    expect(screen.getByRole('region', { name: 'Running budget' })).toHaveTextContent('$30,610.28')
+    expect(screen.queryByText('Over budget')).not.toBeInTheDocument()
+  })
+
+  it('says the check could not be made, offers to ask again, and still lets the draft be saved', async () => {
+    const user = userEvent.setup()
+    checkState.current = { data: undefined, isError: true }
+    render(<Page initial={twoBlocks()} />)
+
+    expect(screen.getByText(/The agreement could not be checked against the budget/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(checkRefetch).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeEnabled()
+  })
+
+  it('says the check is under way while the first answer is on its way', () => {
+    checkState.current = { data: undefined, isFetching: true }
+    render(<Page initial={twoBlocks()} />)
+
+    expect(screen.getByText(/Checking the agreement against the participant/)).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Running budget' })).toHaveAttribute('aria-busy', 'true')
+  })
+
+  // The service allows two quotes at once for an organisation, and the check is the heaviest kind: it asks of the same debounced blocks as the running budget, so a pause is one request of each, and
+  // only once the running budget has finished, so it is never a third concurrent request on a keystroke.
+  describe('when the check is asked for', () => {
+    const lastAsk = () => checkCall.mock.calls[checkCall.mock.calls.length - 1] as [string, unknown[], string, string, boolean]
+
+    it('asks of the same blocks and the agreement dates the running budget is priced from, once it has finished', async () => {
+      render(<Page initial={twoBlocks()} />)
+
+      await waitFor(() => expect(checkCall).toHaveBeenCalled())
+      const [participantId, blocks, from, to, enabled] = lastAsk()
+      expect([participantId, from, to, enabled]).toEqual(['p-1', '2026-10-01', '2027-06-30', true])
+      expect(blocks).toHaveLength(2)
+      expect(blocks).toEqual((budgetCall.mock.calls[budgetCall.mock.calls.length - 1] as unknown[])[0])
+    })
+
+    it('is held back while the running budget is being priced, and while its quote has failed', () => {
+      budgetState.current = { data: { ...budgetOf('b1') }, isError: false, isFetching: true, error: null }
+      const { unmount } = render(<Page initial={twoBlocks()} />)
+      expect(lastAsk()[4]).toBe(false)
+      unmount()
+
+      budgetState.current = { data: undefined, isError: true, isFetching: false, error: { response: { status: 429, data: {} } } }
+      render(<Page initial={twoBlocks()} />)
+      expect(lastAsk()[4]).toBe(false)
+    })
+
+    it('is never asked for a plan nobody can change', () => {
+      render(<Page initial={twoBlocks()} readOnly />)
+
+      expect(lastAsk()[4]).toBe(false)
+      expect(screen.queryByRole('region', { name: 'Running budget' })).not.toBeInTheDocument()
+    })
+
+    it('shows no comparison, and no column for it, while there is nothing to compare: no dates to price over', () => {
+      render(<Page initial={twoBlocks()} from="" to="" />)
+
+      expect(screen.queryByText('Participant budget')).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Agreement against the participant\'s budget' })).not.toBeInTheDocument()
+    })
+
+    it('keeps the last comparison on screen, and says it is updating, while a newer one is on its way', () => {
+      checkState.current = { data: agreementCheck(), isFetching: true, isPlaceholderData: true }
+      render(<Page initial={twoBlocks()} />)
+
+      expect(screen.getByRole('region', { name: 'Agreement against the participant\'s budget' })).toHaveTextContent('Agreement $2,355.50 against $3,120.00 left')
+      expect(screen.getByRole('region', { name: 'Agreement against the participant\'s budget' })).toHaveTextContent('Updating…')
+      expect(screen.getByRole('region', { name: 'Running budget' })).toHaveAttribute('aria-busy', 'true')
+    })
   })
 
   it('leaves a block that is not complete out of the figures, and says so', async () => {

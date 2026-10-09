@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Funding;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
@@ -22,13 +24,15 @@ public class ClaimsController : ControllerBase
     private readonly InvoiceService _invoiceService;
     private readonly BudgetLedgerService _ledger;
     private readonly ICurrentTenant _tenant;
+    private readonly TimeProvider _clock;
 
     public ClaimsController(OdipDbContext db, ClaimGenerationService generator,
         ShiftClaimGenerationService shiftGenerator, BprCsvService bprService, InvoiceService invoiceService,
-        BudgetLedgerService ledger, ICurrentTenant tenant)
+        BudgetLedgerService ledger, ICurrentTenant tenant, TimeProvider? clock = null)
     {
         _ledger = ledger;
         _tenant = tenant;
+        _clock = clock ?? TimeProvider.System;
         _db = db;
         _generator = generator;
         _shiftGenerator = shiftGenerator;
@@ -208,7 +212,7 @@ public class ClaimsController : ControllerBase
             ParticipantId = c.ParticipantId, PeriodFrom = c.PeriodFrom, PeriodTo = c.PeriodTo,
             Status = c.Status, ClaimReference = c.ClaimReference,
             TotalAmount = c.TotalAmount, TotalApprovedAmount = c.TotalApprovedAmount,
-            CreatedAt = c.CreatedAt, SubmittedDate = c.SubmittedDate, PaidDate = c.PaidDate,
+            CreatedAt = c.CreatedAt, SubmittedDate = c.SubmittedDate, PaidDate = c.PaidDate, RejectedDate = c.RejectedDate, RejectionCode = c.RejectionCode,
             AuthorisedByStaffId = c.AuthorisedByUserId,
             AuthorisedByStaffName = c.AuthorisedByUser != null ? $"{c.AuthorisedByUser.FirstName} {c.AuthorisedByUser.LastName}" : null,
             Notes = c.Notes,
@@ -246,17 +250,54 @@ public class ClaimsController : ControllerBase
         var c = await _db.TripClaims.FirstOrDefaultAsync(x => x.Id == claimId, ct);
         if (c == null) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
 
+        // The NDIA's code for a rejection (budget phase 2b) is checked before anything is changed, so a refusal writes nothing: no control characters (Postgres refuses a NUL in text), at most ten
+        // characters, and only with a claim that is, or is being made, Rejected.
+        var code = NdiaRejectionCodes.Normalise(dto.RejectionCode);
+        if (dto.RejectionCode != null)
+        {
+            if (dto.RejectionCode.Any(char.IsControl)) return BadRequest(ApiResponse<bool>.Fail("The NDIA code cannot contain a control character (a line break, a tab, a NUL)."));
+            if (code is { Length: > NdiaRejectionCodes.MaxLength }) return BadRequest(ApiResponse<bool>.Fail($"The NDIA code is at most {NdiaRejectionCodes.MaxLength} characters."));
+            if (code != null && (dto.Status ?? c.Status) != TripClaimStatus.Rejected)
+                return BadRequest(ApiResponse<bool>.Fail("An NDIA rejection code goes with a rejected claim: mark the claim as Rejected to record it."));
+        }
+
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var before = c.Status;
         if (dto.AuthorisedByStaffId.HasValue) c.AuthorisedByUserId = dto.AuthorisedByStaffId;
         if (dto.Notes != null) c.Notes = dto.Notes;
         if (dto.Status.HasValue)
         {
             c.Status = dto.Status.Value;
-            if (dto.Status.Value == TripClaimStatus.Submitted) c.SubmittedDate = DateTime.UtcNow;
-            if (dto.Status.Value == TripClaimStatus.Paid) c.PaidDate = DateTime.UtcNow;
+            if (dto.Status.Value == TripClaimStatus.Submitted) c.SubmittedDate = now;
+            if (dto.Status.Value == TripClaimStatus.Paid) c.PaidDate = now;
+        }
+        KeepRejectionRecord(c, before, now);
+        if (dto.RejectionCode != null && c.Status == TripClaimStatus.Rejected)
+        {
+            c.RejectionCode = code;
+            // A claim marked Rejected before the day was kept has no day, and the NDIA's word (the alert and the Funding tab's note) needs one: recording its code is the first day the claim is known
+            // to have been refused, so that is the day. A day that is already there never moves.
+            if (code != null && c.RejectedDate is null) c.RejectedDate = now;
         }
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
+    }
+
+    /// <summary>
+    /// What a claim remembers about being rejected, kept in step with its status whichever way the status moved (the claim's own Mark as Rejected, or every line rejected): the moment it became Rejected
+    /// is stamped once, and a claim that is no longer Rejected forgets the moment and the NDIA's code, so a later rejection starts afresh.
+    /// </summary>
+    private static void KeepRejectionRecord(TripClaim claim, TripClaimStatus before, DateTime now)
+    {
+        if (claim.Status == TripClaimStatus.Rejected)
+        {
+            if (before != TripClaimStatus.Rejected) claim.RejectedDate = now;
+            return;
+        }
+
+        claim.RejectedDate = null;
+        claim.RejectionCode = null;
     }
 
     // PATCH /api/v1/claims/{claimId}/line-items/{id}
@@ -296,11 +337,13 @@ public class ClaimsController : ControllerBase
 
         // Auto-update claim status based on line item statuses
         var statuses = otherItems.Select(l => l.Status).Append(item.Status).ToList();
+        var claimBefore = item.TripClaim.Status;
         if (statuses.All(s => s == ClaimLineItemStatus.Paid))
             item.TripClaim.Status = TripClaimStatus.Paid;
         else if (statuses.All(s => s == ClaimLineItemStatus.Rejected))
             item.TripClaim.Status = TripClaimStatus.Rejected;
         // NOTE: TripClaimStatus.PartiallyPaid exists (value 4) but partial auto-promotion is omitted intentionally
+        KeepRejectionRecord(item.TripClaim, claimBefore, _clock.GetUtcNow().UtcDateTime);
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));

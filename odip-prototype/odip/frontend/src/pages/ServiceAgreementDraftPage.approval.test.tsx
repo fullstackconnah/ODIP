@@ -23,7 +23,7 @@ vi.mock('@/api/hooks', () => ({
   usePlanPricingSettings: () => ({ data: makeSettings() }),
   usePlanBudget: (blocks: unknown[], from: string, to: string, enabled: boolean) => { budgetCall(blocks, from, to, enabled); return budget() },
   usePlanBlockQuote: () => ({ data: quote(), isLoading: false, isError: false, refetch: vi.fn() }),
-  useFundingSources: () => ({ data: [], isError: false }),
+  useAgreementCheck: () => ({ data: undefined, isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() }),
 }))
 
 const asRole = (role: string) => localStorage.setItem('odip_user', JSON.stringify({ role, id: 'u-1' }))

@@ -168,6 +168,8 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.CatalogueImportService>(
 builder.Services.AddScoped<Odip.Infrastructure.Services.PlanPricingService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.FundingPlanService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetLedgerService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetListService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.AgreementCheckService>();
 // The plan quote is the one heavy request: about two in flight per organisation (a resource filter, because the rate limiter runs before authentication).
 builder.Services.AddSingleton<Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter>();
 builder.Services.AddScoped<Odip.Api.RateLimiting.PlanQuoteConcurrencyFilter>();
@@ -183,6 +185,8 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.DemoJourneySimulationSer
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantDocumentService>();
 
 // ── Participant Risk Alerts (task 6c) — computed, not persisted ──
+builder.Services.AddScoped<Odip.Infrastructure.Services.NdiaRejectionReader>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetAlertSource>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantAlertsService>();
 
 // ── Participant preferred-staff <-> rostering compatibility matrix link (task 6d) ──

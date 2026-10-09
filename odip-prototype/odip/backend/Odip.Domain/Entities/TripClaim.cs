@@ -37,6 +37,18 @@ public class TripClaim
     public DateTime? SubmittedDate { get; set; }
     public DateTime? PaidDate { get; set; }
 
+    /// <summary>
+    /// The instant the claim was marked Rejected (a UTC instant, like <see cref="SubmittedDate"/> and <see cref="PaidDate"/>); null while it is not rejected, and for a claim rejected before this was
+    /// recorded. The budget feature dates the NDIA's "the funds ran out" signal by it.
+    /// </summary>
+    public DateTime? RejectedDate { get; set; }
+
+    /// <summary>
+    /// The NDIA's code for why it refused the claim, when somebody recorded one (at most <see cref="Odip.Domain.Funding.NdiaRejectionCodes.MaxLength"/> characters): V17, V18, V27 and V28 say the money ran
+    /// out (see <see cref="Odip.Domain.Funding.NdiaRejectionCodes.MeansNotEnoughFunds"/>); anything else is kept as it was typed. Set only while the claim is Rejected, and cleared when it leaves that status.
+    /// </summary>
+    public string? RejectionCode { get; set; }
+
     public Guid? AuthorisedByUserId { get; set; }
     public User? AuthorisedByUser { get; set; }
 

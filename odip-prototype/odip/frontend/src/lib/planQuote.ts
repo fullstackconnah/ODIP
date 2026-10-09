@@ -2,7 +2,7 @@
 // lines of an agreement, what each flag, rule and refusal means in plain words, how a plan compares with its budget, and what a failed request says.
 // The engine is the authority on every number: nothing here prices anything, and a line's total is always the server's total.
 import type { AxiosError } from 'axios'
-import type { FundingSourceDto, PlanFailureReason, PlannedLine, PlannedLineKind, PlanIssue, PlanBlock, PlanQuote } from '@/api/types'
+import type { PlanFailureReason, PlannedLine, PlannedLineKind, PlanIssue, PlanBlock, PlanQuote } from '@/api/types'
 import { isDateOnly, parseDateOnly, formatDayNumber } from './dateOnly'
 import { formatHours, type PlanStepKey } from './planBlocks'
 import { plural } from './format'
@@ -414,36 +414,9 @@ export function refusalSentence(refused: readonly PlanIssue[], blocks: readonly 
   return places.length > 0 ? `${blocksNamed(places)} cannot be priced yet, so the plan cannot be saved.` : 'This plan cannot be priced yet, so it cannot be saved.'
 }
 
-// ── The plan budget ───────────────────────────────────────────────────────────
-
-export interface BudgetComparison {
-  /** `unknown`: no plan budget is recorded, so the totals stand alone. */
-  status: 'unknown' | 'within' | 'over'
-  budget: number | null
-  used: number
-  remaining: number | null
-  /** The share of the budget the plan uses, a whole number (null when unknown). */
-  percent: number | null
-}
-
-export function compareBudget(used: number, budget: number | null | undefined): BudgetComparison {
-  if (budget === null || budget === undefined || !(budget > 0)) return { status: 'unknown', budget: null, used, remaining: null, percent: null }
-  const remaining = roundCents(budget - used)
-  return { status: used > budget ? 'over' : 'within', budget, used, remaining, percent: Math.round((used / budget) * 100) }
-}
-
-const NDIS_ROUTES = new Set(['AgencyManaged', 'PlanManaged', 'SelfManaged'])
-
-/**
- * The participant's plan budget as the funding sources record it: the active NDIS ones with a budget whose plan dates meet the agreement. The sources keep their budget category as
- * free text, so only the total is compared, never a category. null when none records a budget.
- */
-export function planBudgetFor(sources: readonly FundingSourceDto[] | undefined, from: string, to: string): { total: number; count: number } | null {
-  const picked = (sources ?? []).filter(source => source.isActive && NDIS_ROUTES.has(source.routeType) && typeof source.budget === 'number' && source.budget > 0
-    && (!source.planStartDate || source.planStartDate <= to) && (!source.planEndDate || source.planEndDate >= from))
-  if (picked.length === 0) return null
-  return { total: roundCents(picked.reduce((sum, source) => sum + (source.budget ?? 0), 0)), count: picked.length }
-}
+// ── The budget categories ─────────────────────────────────────────────────────
+// (The agreement is compared with the participant's real pools by the server - POST participants/{id}/funding/agreement-check - and not here: the sum of the Billing funding sources this file used
+// to compare it with is gone, with no fallback.)
 
 /** The PACE categories the engine totals by, in words short enough for a bar. */
 export const CATEGORY_SHORT: Record<number, string> = { 1: 'Daily life', 2: 'Transport', 4: 'Community participation', 16: 'Home and living' }

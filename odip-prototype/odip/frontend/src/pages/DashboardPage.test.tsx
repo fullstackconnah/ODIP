@@ -489,15 +489,27 @@ const tileFor = (label: string) => tiles().find((tile) => labelOf(tile) === labe
 const clearRow = () => screen.queryByText('All clear', { selector: 'span.font-semibold' })?.closest('p') ?? null
 
 const FULL_ORDER = [
-  'Qualification Issues', 'Critical Participant Alerts', 'Overdue', 'Missing Accommodation',
+  'Qualification Issues', 'Critical Participant Alerts', 'Budgets at risk', 'Overdue', 'Missing Accommodation',
   'Missing Vehicles', 'Missing Staff', 'Open Incidents', 'QSC Overdue', 'Pending Leave', 'Shift Completions',
 ]
 
-// Every item above zero, for a Coordinator: all ten are tiles, each with the count 3 (the staff list and the alerts give 3 issues and 3 alerts).
+// The same alerts, with three more participants whose budgets are at risk (two over, one forecast to go over). The Critical alerts are still the three on two participants: an over-budget alert is
+// the Budgets at risk tile's, and is not counted a second time as a Critical one.
+const threeAlertsOnTwoParticipantsAndThreeBudgetsAtRisk = {
+  data: [
+    ...threeAlertsOnTwoParticipants.data,
+    { participantId: 'p3', participantName: 'Olive Over', isActive: true, criticalCount: 1, warningCount: 0, infoCount: 0, alerts: [{ type: 'budget-over', severity: 'Critical', message: 'Core is $1,000 over this period\'s $8,000 (to 31 Dec 2026)', deepLinkTab: 'funding' }] },
+    { participantId: 'p4', participantName: 'Olga Over', isActive: true, criticalCount: 1, warningCount: 0, infoCount: 0, alerts: [{ type: 'budget-over', severity: 'Critical', message: 'Core is $20 over this period\'s $800 (to 31 Dec 2026)', deepLinkTab: 'funding' }] },
+    { participantId: 'p5', participantName: 'Ford Cast', isActive: true, criticalCount: 0, warningCount: 1, infoCount: 0, alerts: [{ type: 'budget-forecast-over', severity: 'Warning', message: 'Booked shifts would take Core $640 over this period\'s $8,000 by 31 Dec 2026', deepLinkTab: 'funding' }] },
+  ],
+  isLoading: false,
+}
+
+// Every item above zero, for a Coordinator: all eleven are tiles (the staff list and the alerts give 3 issues and 3 alerts, and three participants have a budget at risk).
 function showAll() {
   asRole('Coordinator')
   mockUseStaff.mockReturnValue(staffWithThreeIssues)
-  mockUseParticipantAlertsAggregate.mockReturnValue(threeAlertsOnTwoParticipants)
+  mockUseParticipantAlertsAggregate.mockReturnValue(threeAlertsOnTwoParticipantsAndThreeBudgetsAtRisk)
   mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(3))
   mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(3))
   mockUseDashboard.mockReturnValue(summaryData({
@@ -841,7 +853,7 @@ describe('DashboardPage — a paused request is waiting, not a settled zero', ()
 })
 
 describe('DashboardPage — needs-attention band: a tile for what needs you', () => {
-  it('holds every item in its fixed order for a Coordinator with all ten above zero: one named region', () => {
+  it('holds every item in its fixed order for a Coordinator with all eleven above zero: one named region', () => {
     showAll()
     renderPage()
 
@@ -862,15 +874,17 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     }))
     renderPage()
 
-    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => label !== 'Missing Vehicles'))
+    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => label !== 'Missing Vehicles' && label !== 'Budgets at risk'))
     expect(screen.queryByRole('group', { name: /Missing Vehicles/ })).not.toBeInTheDocument()
+    // No budget is in force for anybody here, so the band does not name Budgets at risk at all: it cannot say it checked what nobody recorded. The other zero is a name in the row.
     expect(clearRow()).toHaveTextContent('All clear on trips missing vehicles')
+    expect(clearRow()).not.toHaveTextContent(/budgets/)
   })
 
   it('leaves out the alerts item, Pending Leave, Shift Completions and Qualification Issues for a role without canViewAlerts / canApproveLeave / canReviewCompletions / the Qualifications page', () => {
     asRole('SupportWorker')
     mockUseStaff.mockReturnValue(staffWithThreeIssues)
-    mockUseParticipantAlertsAggregate.mockReturnValue(threeAlertsOnTwoParticipants)
+    mockUseParticipantAlertsAggregate.mockReturnValue(threeAlertsOnTwoParticipantsAndThreeBudgetsAtRisk)
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(3))
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(3))
     mockUseDashboard.mockReturnValue(summaryData({
@@ -878,7 +892,8 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     }))
     renderPage()
 
-    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => !['Critical Participant Alerts', 'Pending Leave', 'Shift Completions', 'Qualification Issues'].includes(label)))
+    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => !['Critical Participant Alerts', 'Budgets at risk', 'Pending Leave', 'Shift Completions', 'Qualification Issues'].includes(label)))
+    expect(screen.queryByText(/Budgets at risk/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Critical Participant Alerts/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Pending Leave/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Shift Completions/)).not.toBeInTheDocument()
@@ -952,6 +967,7 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
   const EXPECTED = [
     ['Qualification Issues', 'Expired, undated or due within 30 days, across 2 staff members.', 'Review qualifications', '/qualifications'],
     ['Critical Participant Alerts', 'Critical alerts across 2 participants.', 'Review participants', '/participants'],
+    ['Budgets at risk', '3 participants: 2 over, 1 forecast to go over', 'Review budgets', '/budgets'],
     ['Overdue', 'Tasks past their due date and still open.', 'Open overdue tasks', '/tasks?status=Overdue'],
     ['Missing Accommodation', 'Trips start within 60 days with no accommodation reserved.', 'Open trips', '/trips'],
     ['Missing Vehicles', 'Trips start within 60 days with no vehicle assigned.', 'Assign vehicles', '/schedule'],
@@ -1063,7 +1079,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     renderPage()
 
     // danger -> the error container; warning -> the warning container (the trip glance strip's own tints).
-    const danger = ['Qualification Issues', 'Critical Participant Alerts', 'Overdue', 'QSC Overdue']
+    const danger = ['Qualification Issues', 'Critical Participant Alerts', 'Budgets at risk', 'Overdue', 'QSC Overdue']
     const warning = ['Missing Accommodation', 'Missing Vehicles', 'Missing Staff', 'Open Incidents', 'Pending Leave', 'Shift Completions']
     for (const label of danger) {
       expect(tileFor(label)).toHaveAttribute('data-attention', 'error')
@@ -1531,7 +1547,7 @@ describe('DashboardPage — needs-attention band: accessibility', () => {
     renderPage()
 
     expect(band().innerHTML).not.toMatch(/text-(?:xl|2xl|3xl|4xl|5xl|6xl|\[(?:1[0-2]|1[5-9]|[2-9]\d)px\]|\[0?\.\d+rem\])/)
-    expect(band().querySelectorAll('.text-display')).toHaveLength(10)
+    expect(band().querySelectorAll('.text-display')).toHaveLength(11)
   })
 
   it('still has exactly one h1 whatever the band shows', () => {
@@ -1699,5 +1715,213 @@ describe('DashboardPage — due dates and participant ratios', () => {
 
     expect(screen.getByText('5 / 6 pax')).toBeInTheDocument()
     expect(screen.getByText('3 / — pax')).toBeInTheDocument()
+  })
+})
+
+// Budgets at risk (budget phase 2b): one more item in the page's existing needs-attention band, counted from the participant alerts the page already reads. A tile only when somebody is over or forecast
+// to go over; at zero a name in the All clear row; while the alerts load or fail no tile at all (the Critical Participant Alerts tile, from the same request, is already the en dash that says so).
+describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
+  const critical = (type: string) => type === 'budget-over' || type === 'budget-ndia-exhausted'
+  const budgetParticipant = (id: string, name: string, type: string, extra: Record<string, unknown> = {}) => ({
+    participantId: id, participantName: name, isActive: true,
+    criticalCount: critical(type) ? 1 : 0, warningCount: critical(type) ? 0 : 1, infoCount: 0,
+    alerts: [{ type, severity: critical(type) ? 'Critical' : 'Warning', message: `${name}: ${type}`, deepLinkTab: 'funding' }],
+    ...extra,
+  })
+  const withAlerts = (...data: Array<ReturnType<typeof budgetParticipant>>) => mockUseParticipantAlertsAggregate.mockReturnValue({ data, isLoading: false })
+  const budgetTile = () => tileFor('Budgets at risk')
+
+  it('is a tile whose figure is the participants over or forecast to go over, with the line "{n} participants: {a} over, {b} forecast to go over" and a link to the Budgets list', () => {
+    asRole('Coordinator')
+    withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over'), budgetParticipant('p2', 'Olga Over', 'budget-over'), budgetParticipant('p3', 'Ford Cast', 'budget-forecast-over'))
+    renderPage()
+
+    expect(budgetTile()).toHaveAccessibleName('Budgets at risk 3')
+    expect(budgetTile()).toHaveTextContent('3 participants: 2 over, 1 forecast to go over')
+    expect(within(budgetTile()).getByRole('link', { name: 'Review budgets' })).toHaveAttribute('href', '/budgets')
+  })
+
+  it('is in the danger tone when any participant is already over', () => {
+    asRole('Coordinator')
+    withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over'), budgetParticipant('p3', 'Ford Cast', 'budget-forecast-over'))
+    renderPage()
+
+    expect(budgetTile()).toHaveAttribute('data-attention', 'error')
+  })
+
+  it('is in the warning tone when nobody is over and some are only forecast to go over', () => {
+    asRole('Coordinator')
+    withAlerts(budgetParticipant('p3', 'Ford Cast', 'budget-forecast-over'), budgetParticipant('p4', 'Fern Cast', 'budget-forecast-over'))
+    renderPage()
+
+    expect(budgetTile()).toHaveAttribute('data-attention', 'warning')
+    expect(budgetTile()).toHaveTextContent('2 participants forecast to go over')
+    expect(budgetTile()).not.toHaveTextContent('0 over')   // a clause that is zero is dropped
+  })
+
+  it('counts a participant once however many pools are at risk, in their worst state', () => {
+    asRole('Coordinator')
+    withAlerts(budgetParticipant('p1', 'Two Pools', 'budget-forecast-over', {
+      alerts: [
+        { type: 'budget-forecast-over', severity: 'Warning', message: 'Pool A', deepLinkTab: 'funding' },
+        { type: 'budget-over', severity: 'Critical', message: 'Pool B', deepLinkTab: 'funding' },
+      ],
+    }))
+    renderPage()
+
+    expect(budgetTile()).toHaveAccessibleName('Budgets at risk 1')
+    expect(budgetTile()).toHaveTextContent('1 participant over')
+    expect(budgetTile()).not.toHaveTextContent('0 forecast')
+  })
+
+  // At zero the band names an item in its All clear row, "checked, and nothing": true only of a budget somebody has recorded. A participant on track has no alert, so the alerts say who has a budget in
+  // force (budgetInForce), and the item is named only where somebody does.
+  it('is not a tile at zero, and is a name in the one All clear row instead, where a budget is in force; approaching does not make it a tile', () => {
+    asRole('Coordinator')
+    withAlerts(budgetParticipant('p1', 'Appa Roach', 'budget-approaching', { budgetInForce: true }), budgetParticipant('p2', 'Ontrack Olive', 'budget-approaching', { budgetInForce: true, alerts: [], warningCount: 0 }))
+    renderPage()
+
+    // Everything else is at zero too, so the whole band is the all-clear field, and it names the budgets among what it checked.
+    expect(screen.queryByRole('group', { name: /Budgets at risk/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/^Checked and at zero:/)).toHaveTextContent('budgets over or forecast to go over')
+  })
+
+  it('is not named at all where no budget is in force for anybody: the band cannot say it checked what nobody recorded', () => {
+    asRole('Coordinator')
+    withAlerts(budgetParticipant('p1', 'No Plan', 'plan-expiring-soon', { budgetInForce: false }), budgetParticipant('p2', 'Older Answer', 'plan-expiring-soon'))
+    renderPage()
+
+    expect(screen.queryByRole('group', { name: /Budgets at risk/ })).not.toBeInTheDocument()
+    expect(band()).not.toHaveTextContent(/budgets/i)
+  })
+
+  it('is not named at zero while the NDIA says the funds ran out for somebody: an all clear about budgets would contradict the Critical tile beside it', () => {
+    asRole('Coordinator')
+    withAlerts(budgetParticipant('p1', 'Noor Refused', 'budget-ndia-exhausted', { budgetInForce: true }))
+    renderPage()
+
+    expect(tileLabels()).toContain('Critical Participant Alerts')
+    expect(tileLabels()).not.toContain('Budgets at risk')
+    expect(band()).not.toHaveTextContent(/budgets over or forecast to go over/)
+  })
+
+  it('is still a tile when somebody is over, whether or not the NDIA has also refused a claim', () => {
+    asRole('Coordinator')
+    withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over', { budgetInForce: true }), budgetParticipant('p2', 'Noor Refused', 'budget-ndia-exhausted', { budgetInForce: true }))
+    renderPage()
+
+    expect(budgetTile()).toHaveAccessibleName('Budgets at risk 1')
+  })
+
+  it('is not a tile while the alerts are loading, and the band is not an all clear: the Critical alerts tile is the en dash that says so', () => {
+    asRole('Coordinator')
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isPending: true, isLoading: true, isError: false })
+    renderPage()
+
+    expect(tileLabels()).toEqual(['Critical Participant Alerts'])
+    expect(tileFor('Critical Participant Alerts')).toHaveAttribute('aria-busy', 'true')
+    expect(band()).not.toHaveTextContent('Budgets at risk')
+    expect(band()).not.toHaveTextContent('budgets at risk')
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
+  })
+
+  it('is not a tile when the alerts failed to load, and the band is not an all clear', () => {
+    asRole('Coordinator')
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isLoading: false, isError: true })
+    renderPage()
+
+    expect(tileLabels()).toEqual(['Critical Participant Alerts'])
+    expect(within(tileFor('Critical Participant Alerts')).getByText("Couldn't load")).toBeInTheDocument()
+    expect(band()).not.toHaveTextContent('Budgets at risk')
+    expect(band()).not.toHaveTextContent('budgets at risk')
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
+  })
+
+  it('leaves out an archived participant', () => {
+    asRole('Coordinator')
+    withAlerts(budgetParticipant('p1', 'Archie Gone', 'budget-over', { isActive: false }))
+    renderPage()
+
+    // Nobody counts, not even as having a budget in force, so the whole band is the all-clear field and it does not name budgets among what it checked.
+    expect(screen.getByText(/^Checked and at zero:/)).not.toHaveTextContent(/budgets/)
+    expect(screen.queryByRole('group', { name: /Budgets at risk/ })).not.toBeInTheDocument()
+  })
+
+  it('is offered only to a role that can open the Budgets list: SuperAdmin, Admin and Coordinator', () => {
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator']) {
+      asRole(role)
+      withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over'))
+      const { unmount } = renderPage()
+      expect(tileLabels(), role).toContain('Budgets at risk')
+      unmount()
+      localStorage.clear()
+    }
+    for (const role of ['ReadOnly', 'SupportWorker']) {
+      asRole(role)
+      withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over'))
+      const { unmount } = renderPage()
+      expect(screen.queryByText(/budgets at risk/i), role).not.toBeInTheDocument()
+      unmount()
+      localStorage.clear()
+    }
+  })
+
+  it('links to a route the app really has', () => {
+    asRole('Coordinator')
+    withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over'))
+    renderPage()
+
+    expect(routeExists(new URL(within(budgetTile()).getByRole('link', { name: 'Review budgets' }).getAttribute('href')!, 'http://odip.test').pathname)).toBe(true)
+  })
+
+  describe('and the Critical alerts beside it', () => {
+    it('does not count an over-budget alert a second time: the tile is where "over" reaches the dashboard', () => {
+      asRole('Coordinator')
+      withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over', { alerts: [{ type: 'budget-over', severity: 'Critical', message: 'Core is $1,000 over this period\'s $8,000 (to 31 Dec 2026)', deepLinkTab: 'funding' }] }))
+      renderPage()
+
+      expect(budgetTile()).toHaveAccessibleName('Budgets at risk 1')
+      expect(tileLabels()).not.toContain('Critical Participant Alerts')   // its only Critical alert is the one the budget tile counts
+      expect(screen.queryByText('Core is $1,000 over this period\'s $8,000 (to 31 Dec 2026)')).not.toBeInTheDocument()   // nor is it listed with the Critical alerts below the band
+    })
+
+    it('still counts and lists the NDIA’s "the funds ran out" alert, a different fact, as a Critical alert', () => {
+      asRole('Coordinator')
+      withAlerts(budgetParticipant('p1', 'Noor Refused', 'budget-ndia-exhausted', {
+        alerts: [{ type: 'budget-ndia-exhausted', severity: 'Critical', message: 'NDIA rejected a claim for Core on 8 Oct 2026: not enough funds in the funding period (V27)', deepLinkTab: 'funding' }],
+      }))
+      renderPage()
+
+      expect(tileFor('Critical Participant Alerts')).toHaveAccessibleName('Critical Participant Alerts 1')
+      expect(tileLabels()).not.toContain('Budgets at risk')
+      expect(screen.getByText('NDIA says the funds ran out')).toBeInTheDocument()
+      const card = screen.getByText('NDIA rejected a claim for Core on 8 Oct 2026: not enough funds in the funding period (V27)').closest('a')!
+      expect(card).toHaveAttribute('href', '/participants/p1?tab=funding')
+    })
+
+    it('counts a participant who is both over and refused once in each tile, for two different facts', () => {
+      asRole('Coordinator')
+      withAlerts(budgetParticipant('p1', 'Both', 'budget-over', {
+        criticalCount: 2,
+        alerts: [
+          { type: 'budget-ndia-exhausted', severity: 'Critical', message: 'Core: NDIA rejected a claim', deepLinkTab: 'funding' },
+          { type: 'budget-over', severity: 'Critical', message: 'Core is over', deepLinkTab: 'funding' },
+        ],
+      }))
+      renderPage()
+
+      expect(budgetTile()).toHaveAccessibleName('Budgets at risk 1')
+      expect(tileFor('Critical Participant Alerts')).toHaveAccessibleName('Critical Participant Alerts 1')
+    })
+
+    it('keeps counting the Critical alerts that are not about budgets, as before', () => {
+      asRole('Coordinator')
+      mockUseParticipantAlertsAggregate.mockReturnValue(threeAlertsOnTwoParticipantsAndThreeBudgetsAtRisk)
+      renderPage()
+
+      expect(tileFor('Critical Participant Alerts')).toHaveAccessibleName('Critical Participant Alerts 3')
+      expect(tileFor('Critical Participant Alerts')).toHaveTextContent('Critical alerts across 2 participants')
+      expect(budgetTile()).toHaveAccessibleName('Budgets at risk 3')
+    })
   })
 })

@@ -195,7 +195,7 @@ function ActionTile({ label, value, className, tone = 'neutral', detail, action 
       <div className="flex flex-1 flex-col gap-1">
         <span className="text-display tabular-nums">{value}</span>
         <span className="text-sm font-semibold leading-tight">{label}</span>
-        {detail && <span className="text-[13px] leading-snug">{detail}</span>}
+        {detail && <span className="text-[13px] leading-snug text-balance">{detail}</span>}
         <Link to={action.to} className={ACTION_LINK}>
           {action.label}
           <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />

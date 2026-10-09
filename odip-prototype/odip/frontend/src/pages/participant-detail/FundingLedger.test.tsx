@@ -372,6 +372,84 @@ describe('unpriced shifts in the period that is opened', () => {
   })
 })
 
+// Budget phase 2b: the NDIA's own word that a pool has run out. A provider cannot see a participant's budget in the NDIA's portal, so a claim refused with V17, V18, V27 or V28 is the only direct sign.
+describe('the NDIA rejecting a claim for want of funds', () => {
+  const rejection = { date: '2026-10-08', code: 'V27', claimId: 'claim-9', claimReference: 'CLM-0009' }
+
+  it('says it on the pool the claim belongs to, with the day and the code, and links to the claim', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ ndiaRejection: rejection })] }))
+
+    const note = screen.getByText(/NDIA rejected a claim on/)
+    expect(note).toHaveTextContent('NDIA rejected a claim on 8 Oct 2026: not enough funds in the funding period (V27). Claim CLM-0009')
+    expect(note.textContent?.match(/:/g)).toHaveLength(1)
+    expect(within(note).getByRole('link', { name: 'Claim CLM-0009' })).toHaveAttribute('href', '/claims/claim-9')
+  })
+
+  it('is in words and in the danger tone with a mark that is not colour, and carries no money', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ ndiaRejection: rejection })] }))
+
+    const note = screen.getByText(/NDIA rejected a claim on/).closest('p')!
+    expect(note).toHaveClass('bg-[var(--color-error-container)]')
+    expect(note.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    expect(note.textContent).not.toMatch(/\$/)
+  })
+
+  it('says it once per pool that has it, and not on a pool that has not', () => {
+    renderLedger(participantLedger({
+      pools: [ledgerPool({ id: 'pool-a', name: 'Core', ndiaRejection: rejection }), ledgerPool({ id: 'pool-b', name: 'Improved Daily Living Skills' })],
+    }))
+
+    expect(screen.getAllByText(/NDIA rejected a claim on/)).toHaveLength(1)
+  })
+
+  // ODIP's arithmetic says fine and the NDIA has just refused a claim for want of funds: the one case this feature exists to catch. The note used to be the last and smallest thing in the card, under
+  // an On track chip three times over.
+  it('puts the note directly under the pool title, above the figures, so it is the first thing said about the pool', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ ndiaRejection: rejection })] }))
+
+    const note = screen.getByText(/NDIA rejected a claim on/).closest('p')!
+    expect(note.compareDocumentPosition(screen.getByText('Available')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(note.compareDocumentPosition(screen.getByText(content => content.includes(' this period (to '))) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('wears a danger pill in the title row beside the status chip, in the label the alert has', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ ndiaRejection: rejection })] }))
+
+    const pill = screen.getByText('NDIA says the funds ran out')
+    const row = pill.parentElement!
+    expect(pill).toHaveClass('bg-[var(--color-error-container)]')
+    expect(within(row).getByText('Forecast over')).toBeInTheDocument()   // ODIP's own word stays (the fixture's pool is forecast to go over): it is ODIP's arithmetic, and the NDIA's is beside it
+  })
+
+  it('says whose figures they are when the NDIA has spoken: ODIP\'s own', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ ndiaRejection: rejection })] }))
+
+    expect(screen.getByText(/^Core, by ODIP's figures: /)).toBeInTheDocument()
+  })
+
+  it('has neither the pill nor that lead-in on a pool the NDIA has said nothing about', () => {
+    renderLedger(participantLedger())
+
+    expect(screen.queryByText('NDIA says the funds ran out')).not.toBeInTheDocument()
+    expect(screen.queryByText(/by ODIP's figures/)).not.toBeInTheDocument()
+  })
+
+  it('prints the status word once in the glance strip: the chip was beside the same word', () => {
+    renderLedger(participantLedger())
+
+    // The glance strip's label (the ledger table below has a Status column header of its own); the label sits in a div under the cell.
+    const label = screen.getAllByText('Status').find(element => element.closest('div')?.className.includes('order-2'))!
+    const cell = label.closest('div')!.parentElement!
+    expect(cell.textContent?.match(/Forecast over/g)).toHaveLength(1)
+  })
+
+  it('says nothing of the NDIA when the server sent no rejection for the pool', () => {
+    renderLedger(participantLedger())
+
+    expect(document.body).not.toHaveTextContent('NDIA rejected')
+  })
+})
+
 describe('no plan, no figure', () => {
   it('says there is nothing to spend against yet and shows no figure at all, never a zero balance', () => {
     renderLedger(noLedger())

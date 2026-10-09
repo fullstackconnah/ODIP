@@ -42,6 +42,10 @@ namespace Odip.Infrastructure.Services;
 ///    <c>IncidentsController.GetOverdueQsc</c> both use — extracted to
 ///    <see cref="Odip.Domain.Incidents.QscReporting"/> so the three call sites cannot drift apart.
 ///    Also links to <c>/incidents/{id}</c>.
+/// 8 to 11. <b>budget-over</b> (Critical) / <b>budget-forecast-over</b> and <b>budget-approaching</b> (Warning) / <b>budget-ndia-exhausted</b> (Critical)
+///    (budget phase 2b) — the participant's budget against the plan recorded for them, for the funding period running now, all opening the Funding tab. The rules are
+///    <see cref="BudgetAlertRules"/>'s and their figures come from <see cref="BudgetAlertSource"/>, which calls the ledger ONCE for the whole set (the aggregate route runs on every
+///    dashboard view), so the number of queries does not grow with the number of participants. Left out when the service is built without a source.
 ///
 /// Dropped: a medication/support-profile "review overdue" rule was NOT added here — it would
 /// duplicate <c>MedicationsController.ToListDto</c>'s existing per-medication
@@ -58,11 +62,14 @@ public class ParticipantAlertsService
 
     private readonly OdipDbContext _db;
     private readonly TimeProvider _clock;
+    private readonly BudgetAlertSource? _budget;
 
-    public ParticipantAlertsService(OdipDbContext db, TimeProvider? clock = null)
+    /// <param name="budget">Where the budget rules (8 to 11) get their figures. Left out, those rules are simply not run, which is how the older tests build the service.</param>
+    public ParticipantAlertsService(OdipDbContext db, TimeProvider? clock = null, BudgetAlertSource? budget = null)
     {
         _db = db;
         _clock = clock ?? TimeProvider.System;
+        _budget = budget;
     }
 
     /// <summary>Narrow projection of a recent <see cref="MedicationAdministration"/> — just what rules 2/5 need.</summary>
@@ -270,13 +277,24 @@ public class ParticipantAlertsService
             }
         }
 
+        // ── Rules 8 to 11: the participant's budget (phase 2b) ──
+        // One call for the whole set: the ledger is worked out for every participant at once, in a fixed number of queries, never one by one.
+        IReadOnlySet<Guid> budgetInForce = new HashSet<Guid>();
+        if (_budget is not null)
+        {
+            var budget = await _budget.ForSetAsync(participantIds, ct);
+            foreach (var (pid, budgetAlerts) in budget.Alerts)
+                alertsByParticipant[pid].AddRange(budgetAlerts);
+            budgetInForce = budget.InForce;
+        }
+
         // ── Assemble, rank Critical-first within each participant ──
         var result = new List<ParticipantAlertsDto>();
         foreach (var p in participants)
         {
             var alerts = alertsByParticipant[p.Id]
                 .OrderBy(a => (int)a.Severity)
-                .ThenBy(a => a.Type, StringComparer.Ordinal)
+                .ThenBy(a => SortKey(a.Type), StringComparer.Ordinal)
                 .ToList();
 
             result.Add(new ParticipantAlertsDto
@@ -284,6 +302,7 @@ public class ParticipantAlertsService
                 ParticipantId = p.Id,
                 ParticipantName = string.IsNullOrEmpty(p.PreferredName) ? $"{p.FirstName} {p.LastName}" : $"{p.PreferredName} {p.LastName}",
                 IsActive = p.IsActive,
+                BudgetInForce = budgetInForce.Contains(p.Id),
                 Alerts = alerts,
                 CriticalCount = alerts.Count(a => a.Severity == AlertSeverity.Critical),
                 WarningCount = alerts.Count(a => a.Severity == AlertSeverity.Warning),
@@ -293,4 +312,18 @@ public class ParticipantAlertsService
 
         return result;
     }
+
+    /// <summary>
+    /// What alerts of one severity are put in order by: their type name, except that the budget kinds come worse first (the NDIA's word, then over, forecast over, approaching) and not in the
+    /// order of their names, which put "approaching" ahead of "forecast over". The participant banner shows three alerts and "+N more" behind them, so the milder warning must not crowd out the worse
+    /// one. Every other kind keeps its place among the names.
+    /// </summary>
+    private static string SortKey(string type) => type switch
+    {
+        BudgetAlertRules.NdiaExhaustedType => "budget-0",
+        BudgetAlertRules.OverType => "budget-1",
+        BudgetAlertRules.ForecastOverType => "budget-2",
+        BudgetAlertRules.ApproachingType => "budget-3",
+        _ => type,
+    };
 }

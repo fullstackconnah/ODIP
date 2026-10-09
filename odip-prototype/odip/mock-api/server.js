@@ -1960,6 +1960,13 @@ const claims = [
     tripName: '', status: 'Draft', claimReference: 'TC-43015828-20260810', totalAmount: 640,
     createdAt: '2026-08-10T08:00:00Z',
   },
+  // The claim the NDIA refused for want of funds (budget phase 2b): V27, not enough in the funding period. Grace's Core (flexible) is on track by ODIP's own figures, and the NDIA's portal shows a
+  // provider no budget, so this is the only direct sign her pool is empty: the Funding tab and the alerts say so (mock-ledger.js holds the same claim).
+  {
+    id: 'claim-0003', kind: 'Shift', participantId: 'p-0004', periodFrom: '2026-10-01', periodTo: '2026-10-07',
+    tripName: '', status: 'Rejected', claimReference: 'TC-43000412-20261008', totalAmount: 552,
+    createdAt: '2026-10-07T08:00:00Z', submittedDate: '2026-10-07T09:00:00Z', rejectedDate: '2026-10-08T01:30:00Z', rejectionCode: 'V27',
+  },
 ]
 
 const claimLineItemsByClaimId = {
@@ -1992,6 +1999,17 @@ const claimLineItemsByClaimId = {
       hours: 8, unitPrice: 40, totalAmount: 320, gstCode: 'GST', claimType: 'Standard',
       cancellationReason: null, participantApproved: false, status: 'Draft',
       rejectionReason: null, paidAmount: null,
+    },
+  ],
+  'claim-0003': [
+    {
+      id: 'cli-0004', tripClaimId: 'claim-0003', shiftId: 'sh-0003', participantId: 'p-0004',
+      participantName: 'Grace Palmer-Hughes', ndisNumber: '43•••••34', planType: 'PlanManaged',
+      supportItemCode: '04_104_0125_6_1', dayType: 'Weekday',
+      supportsDeliveredFrom: '2026-10-02', supportsDeliveredTo: '2026-10-02',
+      hours: 8, unitPrice: 69, totalAmount: 552, gstCode: 'GST', claimType: 'Standard',
+      cancellationReason: null, participantApproved: false, status: 'Rejected',
+      rejectionReason: 'Not enough funds in the funding period', paidAmount: null,
     },
   ],
 }
@@ -2288,7 +2306,9 @@ function saveDraft(participantId, body) {
     { block: block('b2', { supportType: 'GroupActivity', days: ['Saturday'], start: '09:00:00', end: '15:00:00', participantsPresent: 3 }), requirements: none },
     { block: block('b3', { supportType: 'PersonalCare', days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], start: '07:00:00', end: '09:00:00', setting: 'AtHome' }), requirements: { ...none, skills: ['ManualHandling'] } },
   ]
-  for (const participantId of ['p-0003', 'p-0004']) {
+  // p-0005 has a draft too (budget phase 2b), so the agreement budget bar can be seen OVER: her Core (flexible) pool is already over for the quarter (mock-ledger.js), so any agreement is. p-0003's
+  // plan has ended and p-0004's is far from its limit, so the bar shows "No budget recorded" for the first and "Within" for the second.
+  for (const participantId of ['p-0003', 'p-0004', 'p-0005']) {
     // p-0004's plan has decided its public holidays (Charge), so it can be approved for rostering; p-0003's has not (Review, the default), so approving it is refused with the holidays named.
     const blocksFor = participantId === 'p-0004' ? plan.map((entry) => ({ ...entry, block: { ...entry.block, onPublicHoliday: 'Charge' } })) : plan
     const body = { ...base, blocks: blocksFor }
@@ -2300,7 +2320,11 @@ function saveDraft(participantId, body) {
 })()
 
 // Participant budgets (phase 1): the plan record, its hint from the Billing funding sources, the support category list and the budget settings. See funding.js.
-const funding = fundingModule.create({ respond, fundingSources })
+// Phase 2b adds the places a warning shows: it reads the participants (names, how their money is managed) and prices an agreement with the same engine as the plan builder's quote.
+const funding = fundingModule.create({
+  respond, fundingSources, people: participants,
+  priceLines: (blocks, periodFrom, periodTo) => planPricing.quote({ blocks, periodFrom, periodTo, includeLines: false }, planPricingSettings)._lines,
+})
 
 const routes = [
   ...funding.get,
@@ -2724,6 +2748,26 @@ const postRoutes = [
 const putRoutes = [
   ...packageRoutesPut,
   ...funding.put,
+  // A claim's status and notes, and, with a rejection, the NDIA's code (budget phase 2b: at most 10 characters, and only with a claim that is being marked Rejected). Kept in the fixture, so the next
+  // GET shows it. A claim that stops being rejected forgets the moment and the code, as the server's does.
+  ['claims/:id', (id, body) => {
+    const claim = claims.find((c) => c.id === id)
+    if (!claim) return respond(404, failEnvelope(null, ['Claim not found']))
+    const code = typeof body.rejectionCode === 'string' ? body.rejectionCode.trim() : null
+    if (code && code.length > 10) return respond(400, failEnvelope(null, ['The NDIA code is at most 10 characters.']))
+    if (code && (body.status || claim.status) !== 'Rejected') return respond(400, failEnvelope(null, ['An NDIA rejection code goes with a rejected claim: mark the claim as Rejected to record it.']))
+    if (typeof body.notes === 'string') claim.notes = body.notes
+    if (body.status) {
+      const before = claim.status
+      claim.status = body.status
+      if (body.status === 'Submitted') claim.submittedDate = new Date().toISOString()
+      if (body.status === 'Paid') claim.paidDate = new Date().toISOString()
+      if (body.status === 'Rejected' && before !== 'Rejected') claim.rejectedDate = new Date().toISOString()
+      if (body.status !== 'Rejected') { delete claim.rejectedDate; delete claim.rejectionCode }
+    }
+    if (code && claim.status === 'Rejected') claim.rejectionCode = code
+    return true
+  }],
   // A pattern edited or switched off on the Patterns page (phase D keeps the patterns an approval made in memory). The fields the real PUT takes; where it came from is never the form's to change.
   ['rostering/patterns/:id', (id, body) => {
     const pattern = rosterPatterns.find((p) => p.id === id)
