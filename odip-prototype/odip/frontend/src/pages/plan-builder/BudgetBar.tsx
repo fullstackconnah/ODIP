@@ -10,6 +10,7 @@ import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 import { AgreementBudgetBreakdown } from '../budgets/components/AgreementBudgetBreakdown'
 import type { AgreementBudgetBreakdownView } from '../budgets/components/viewModel'
+import { CHECK_COULD_NOT_BE_MADE, CHIP_NOT_CHECKED, CHIP_NO_BUDGET, CHIP_PLAN_ENDED } from '../budgets/components/wording'
 
 type BudgetBarProps = {
   /** What the query is doing: `idle` (nothing to price yet), `loading` (the first answer), `error`, `ready`. */
@@ -66,6 +67,8 @@ const LABEL = 'text-xs text-[var(--color-muted-foreground)]'
 const HEADLINE = 'text-xl font-bold tabular-nums leading-tight'
 const NOTE = 'text-[13px] text-[var(--color-muted-foreground)]'
 const CHIP = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${TONE.warning.solid}`
+/** For "nothing to compare" and "could not be checked": neutral, because being over is what earns the warning tone, and these are not a warning. */
+const NEUTRAL_CHIP = 'inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-muted)] px-2 py-0.5 text-xs text-[var(--color-muted-foreground)]'
 
 /**
  * The running budget, docked at the foot through every step: hours and cost in an ordinary week, the cost of the agreement period by budget category, and how that stands against the
@@ -101,6 +104,11 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
   const updating = status === 'ready' && refreshing
   // The agreement check has its own answer to wait for: busy while the first one is on its way and while a newer one replaces the last.
   const checking = status === 'ready' && (budgetCheck?.status === 'loading' || budgetCheck?.refreshing === true)
+  // What the one-line form says when there is nothing to compare with, or the comparison failed: below 1280px that line is all a phone or tablet reads, and silence there reads as "fits". A plan that
+  // prices to nothing has nothing to compare, and the Details say so.
+  const checkState = status === 'ready' && !nothingPriced ? budgetCheck?.status : undefined
+  const checkFailed = checkState === 'failed'
+  const checkChip = checkState === 'none' ? (budgetCheck?.noBudgetReason === 'PlanEnded' ? CHIP_PLAN_ENDED : CHIP_NO_BUDGET) : checkFailed ? CHIP_NOT_CHECKED : null
 
   const oneLine = status === 'ready' && period
     ? `${weekly ? (weekNothing ? `${NO_FIGURE} h · ${NO_FIGURE} a week · ` : `${formatHours(weekly.totals.supportHours)} h · ${formatCurrency(weekly.totals.amount)} a week · `) : ''}${nothingPriced ? NO_FIGURE : formatCurrency(period.totals.amount)} in all`
@@ -119,6 +127,7 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
       <div role="status">
         {saved && <p className="mb-2 text-sm font-medium">{saved}</p>}
         <p className="sr-only">{over ? 'Over the participant\'s budget.' : ''}</p>
+        <p className="sr-only">{checkFailed ? CHECK_COULD_NOT_BE_MADE : ''}</p>
         <p className="sr-only">{unsaved ? 'The plan has changes that are not saved.' : ''}</p>
       </div>
       <section aria-label="Running budget" aria-busy={status === 'loading' || updating || checking}>
@@ -140,7 +149,7 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
                   <span className="font-normal text-[var(--color-muted-foreground)]">{updating && ' · updating…'}{incompleteBlocks > 0 && ` · ${plural(incompleteBlocks, 'block')} left out`}</span>
                 )}
               </p>
-              {(unsaved || over || notFullyPriced) && (
+              {(unsaved || over || notFullyPriced || checkChip) && (
                 <p className="mt-1 flex flex-wrap items-center gap-1.5">
                   {unsaved && (
                     <span className="inline-flex items-center gap-1.5">
@@ -150,6 +159,7 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
                   )}
                   {notFullyPriced && <span className={CHIP}><AlertTriangle className="h-3 w-3" aria-hidden="true" />Not fully priced</span>}
                   {over && <span className={CHIP}><AlertTriangle className="h-3 w-3" aria-hidden="true" />Over budget</span>}
+                  {checkChip && <span className={NEUTRAL_CHIP}>{checkChip}</span>}
                 </p>
               )}
             </div>
@@ -160,7 +170,7 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
         )}
 
         {status !== 'error' && (
-          <div id="plan-budget-details" className={`${open ? 'mt-2 grid max-xl:max-h-[45vh] max-xl:overflow-y-auto' : 'hidden'} grid-cols-1 gap-x-6 gap-y-3 xl:mt-0 xl:grid xl:grid-cols-[minmax(11rem,auto)_1fr_minmax(14rem,auto)]`}>
+          <div id="plan-budget-details" className={`${open ? 'mt-2 grid max-xl:max-h-[45vh] max-xl:overflow-y-auto' : 'hidden'} grid-cols-1 gap-x-6 gap-y-3 xl:mt-0 xl:grid xl:grid-cols-[minmax(11rem,auto)_1fr_minmax(14rem,26rem)]`}>
             {status === 'idle' && <p className="text-sm text-[var(--color-muted-foreground)] xl:col-span-3">{idleNote ? `${idleNote}. The dates are in Draft details, above the plan.` : 'Add a block to see the weekly hours and cost, and what the agreement comes to.'}</p>}
 
             {status === 'loading' && <p className="text-sm text-[var(--color-muted-foreground)] xl:col-span-3">Pricing the plan…</p>}

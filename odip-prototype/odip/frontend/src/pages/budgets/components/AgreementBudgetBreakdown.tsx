@@ -2,12 +2,11 @@ import { AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { TONE } from '@/lib/tone'
-import { writtenSpan } from '@/lib/fundingPlan'
-import { plural } from '@/lib/format'
+import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { formatCurrency } from '@/lib/utils'
 import type { AgreementBudgetBreakdownView, AgreementBudgetLine, AgreementBudgetPool, BudgetAttentionAction, BudgetFigureVisibility } from './viewModel'
 import { BudgetFigure } from './BudgetFigure'
-import { AGREEMENT_NO_BUDGET, AGREEMENT_WARNING_ONLY, OVER_BY_WORD, WITHIN_WORD } from './wording'
+import { AGREEMENT_NO_BUDGET, AGREEMENT_WARNING_ONLY, OVER_BY_WORD, WITHIN_WORD, agreementNoBudgetEnded } from './wording'
 
 // The agreement budget bar's comparison: for each pool the agreement touches, and each funding period of it, what the agreement costs against what that period has left. The server
 // (POST participants/{id}/funding/agreement-check) computes every figure - the cost is the pricing engine's, "left" is the ledger's available minus used, "over by" is the server's - and this
@@ -28,12 +27,19 @@ function ActionButton({ action }: { action: BudgetAttentionAction }) {
 /** One funding period of one pool. Every figure goes through `BudgetFigure`, so a withheld amount cannot leak into a title or an aria. */
 function Line({ line, poolLabel, figures }: { line: AgreementBudgetLine; poolLabel: string; figures: BudgetFigureVisibility }) {
   const period = writtenSpan(line.periodStart, line.periodEnd)
+  // A period that is already over before the agreement has less than nothing "left", and "against -$1,563.21 left" is hard to parse and says two different overs. The Funding tab never prints a
+  // minus; it says "$X over", so this does: nothing is left, and how far over the period already is. (The verdict below stays the server's "Over by".)
+  const alreadyOver = figures.visible && line.remaining !== null && line.remaining < 0 ? -line.remaining : null
   return (
     <li className={`flex flex-col gap-0.5 rounded-[var(--radius-sm)] px-2 py-1 ${line.withinLimit ? '' : TONE.warning.solid}`}>
       <p className="text-[13px] tabular-nums">
         <span className="sr-only">{poolLabel}, </span>
-        Agreement <span className="font-semibold"><BudgetFigure figures={figures} amount={line.cost} /></span> against{' '}
-        <span className="font-semibold"><BudgetFigure figures={figures} amount={line.remaining} /></span> left in {period}
+        Agreement <span className="font-semibold"><BudgetFigure figures={figures} amount={line.cost} /></span>
+        {alreadyOver !== null ? (
+          <> in {period}; nothing left (already <span className="font-semibold"><BudgetFigure figures={figures} amount={alreadyOver} /></span> over)</>
+        ) : (
+          <> against{' '}<span className="font-semibold"><BudgetFigure figures={figures} amount={line.remaining} /></span> left in {period}</>
+        )}
       </p>
       <p className={`flex items-start gap-1 text-[13px] ${line.withinLimit ? 'text-[var(--color-muted-foreground)]' : 'font-medium'}`}>
         {!line.withinLimit && <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
@@ -50,26 +56,46 @@ function Line({ line, poolLabel, figures }: { line: AgreementBudgetLine; poolLab
   )
 }
 
-/** How many periods of one pool are drawn before the rest go behind a disclosure: the bar is docked, and a plan with monthly funding periods would otherwise fill the screen. */
-export const MAX_LINES_SHOWN = 3
-
-/** One pool the agreement touches: its first periods, and any more behind a native disclosure that says how many there are and how many of them are over (a count of the server's own verdicts). */
+/**
+ * One pool the agreement touches. A pool that falls in ONE funding period is that period's sentence and verdict. A pool that spans several (a plan funded monthly is twelve) gets ONE line in the dock,
+ * because the bar is docked and the sentences used to fill a quarter of a laptop screen: what the agreement costs there in all, in how many of the periods it would be over and by how much in all (the
+ * server's own counts and sum: nothing is added up here), and every period's sentence behind a native disclosure, still in the page, that says how many there are.
+ */
 function Pool({ pool, figures }: { pool: AgreementBudgetPool; figures: BudgetFigureVisibility }) {
-  const shown = pool.lines.slice(0, MAX_LINES_SHOWN)
-  const rest = pool.lines.slice(MAX_LINES_SHOWN)
-  const restOver = rest.filter(line => !line.withinLimit).length
   const lineOf = (line: AgreementBudgetLine) => <Line key={`${line.periodStart}-${line.periodEnd}`} line={line} poolLabel={pool.poolLabel} figures={figures} />
+  const count = pool.lines.length
+  const overCount = pool.lines.filter(line => !line.withinLimit).length
   return (
-    <div className="flex flex-col gap-0.5">
+    <div role="group" aria-label={pool.poolLabel} className="flex flex-col gap-0.5">
       <p className={`${LABEL} font-medium`}>{pool.poolLabel}</p>
-      <ul className="flex flex-col gap-1">{shown.map(lineOf)}</ul>
-      {rest.length > 0 && (
-        <details className="mt-1">
-          <summary className="flex min-h-[var(--control-h)] cursor-pointer select-none items-center text-[13px] text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
-            {plural(rest.length, 'more period')}, {restOver > 0 ? `${restOver} over` : 'all within'}
-          </summary>
-          <ul className="mt-1 flex flex-col gap-1">{rest.map(lineOf)}</ul>
-        </details>
+      {count <= 1 ? (
+        <ul className="flex flex-col gap-1">{pool.lines.map(lineOf)}</ul>
+      ) : (
+        <>
+          <div className={`flex flex-col gap-0.5 rounded-[var(--radius-sm)] px-2 py-1 ${overCount > 0 ? TONE.warning.solid : ''}`}>
+            <p className="text-[13px] tabular-nums">
+              <span className="sr-only">{pool.poolLabel}, </span>
+              Agreement <span className="font-semibold"><BudgetFigure figures={figures} amount={pool.cost} /></span> across {count} periods
+            </p>
+            <p className={`flex items-start gap-1 text-[13px] ${overCount > 0 ? 'font-medium' : 'text-[var(--color-muted-foreground)]'}`}>
+              {overCount > 0 && <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+              {overCount > 0 ? (
+                <span>
+                  Over in {overCount} of {count} periods
+                  {figures.visible && pool.overBy !== null && <>, <span className="tabular-nums">{formatCurrency(pool.overBy)}</span> in all</>}
+                </span>
+              ) : (
+                <span>{WITHIN_WORD} in all {count} periods</span>
+              )}
+            </p>
+          </div>
+          <details className="mt-1">
+            <summary className="flex min-h-[var(--control-h)] cursor-pointer select-none items-center text-[13px] text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
+              Each of the {count} periods
+            </summary>
+            <ul className="mt-1 flex flex-col gap-1">{pool.lines.map(lineOf)}</ul>
+          </details>
+        </>
       )}
     </div>
   )
@@ -91,7 +117,8 @@ export function AgreementBudgetBreakdown({ view }: { view: AgreementBudgetBreakd
   if (view.status === 'failed') {
     return (
       <div className="flex flex-col items-start gap-2">
-        <Callout tone="warning" className="max-w-prose">
+        {/* Not announced by itself: an advisory check that fails (a 429, a network blip) would interrupt a person typing in a block each time it recurs. The bar's one polite status says it, once. */}
+        <Callout tone="warning" announce={false} className="max-w-prose">
           {view.failureMessage ?? 'The agreement could not be checked against the budget, so no comparison is shown. The plan can still be saved.'}
         </Callout>
         {view.onRetry && <Button size="sm" variant="secondary" onClick={view.onRetry}>Try again</Button>}
@@ -103,7 +130,7 @@ export function AgreementBudgetBreakdown({ view }: { view: AgreementBudgetBreakd
     // "No budget recorded" is the commonest state and must link to where a budget is recorded, never warn (SHAPE-BRIEF §5).
     return (
       <div className={`flex flex-wrap items-center gap-2 ${NOTE}`}>
-        <p>{AGREEMENT_NO_BUDGET}</p>
+        <p>{view.noBudgetReason === 'PlanEnded' && view.planEnd ? agreementNoBudgetEnded(writtenDay(view.planEnd)) : AGREEMENT_NO_BUDGET}</p>
         {view.noBudgetAction && <ActionButton action={view.noBudgetAction} />}
       </div>
     )

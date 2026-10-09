@@ -21,7 +21,7 @@ describe('agreementBudgetView', () => {
       status: 'ready',
       figures: { visible: true },
       refreshing: false,
-      pools: [{ poolLabel: 'Core', lines: [{ periodStart: '2026-10-01', periodEnd: '2026-12-31', cost: 2355.5, remaining: 3120, withinLimit: true, overBy: null }] }],
+      pools: [{ poolLabel: 'Core', cost: 2355.5, overBy: null, lines: [{ periodStart: '2026-10-01', periodEnd: '2026-12-31', cost: 2355.5, remaining: 3120, withinLimit: true, overBy: null }] }],
       notInARecordedPool: 0,
       outsideThePlan: 0,
     })
@@ -70,9 +70,39 @@ describe('agreementBudgetView', () => {
     const view = agreementBudgetView('p-1', state({ data: noBudgetCheck() }))
 
     expect(view).toEqual({
-      status: 'none', figures: { visible: true }, pools: [], notInARecordedPool: null, outsideThePlan: null, refreshing: false,
+      status: 'none', figures: { visible: true }, pools: [], notInARecordedPool: null, outsideThePlan: null, refreshing: false, noBudgetReason: 'NotRecorded',
       noBudgetAction: { label: 'Open the Funding tab', to: '/participants/p-1?tab=funding' },
     })
+  })
+
+  // An ended plan is not "no budget was ever recorded": the Funding tab shows it, so the bar says it ended, and the way on is to record a new plan there.
+  it('says the recorded plan ended, and when, and offers to record a new plan on the Funding tab', () => {
+    const view = agreementBudgetView('p-1', state({ data: noBudgetCheck({ noBudgetReason: 'PlanEnded', planEnd: '2026-06-30' }) }))
+
+    expect(view).toMatchObject({
+      status: 'none', noBudgetReason: 'PlanEnded', planEnd: '2026-06-30',
+      noBudgetAction: { label: 'Record a new plan', to: '/participants/p-1?tab=funding' },
+    })
+  })
+
+  it('reads an answer with no reason, from an older server, as nothing recorded', () => {
+    const data = noBudgetCheck() as Partial<ReturnType<typeof noBudgetCheck>>
+    delete data.noBudgetReason
+
+    expect(agreementBudgetView('p-1', state({ data: data as ReturnType<typeof noBudgetCheck> }))).toMatchObject({ status: 'none', noBudgetReason: 'NotRecorded' })
+  })
+
+  it('carries what the agreement costs in a pool and how far over it is in all, as the server sent them, and nothing when it fits', () => {
+    const view = agreementBudgetView('p-1', state({
+      data: agreementCheck({
+        pools: [
+          agreementPool({ poolName: 'Core', periods: [agreementPeriod({ agreementCost: 1000, remaining: 400, overBy: 600 }), agreementPeriod({ periodStart: '2027-01-01', periodEnd: '2027-03-31', agreementCost: 500, remaining: 100, overBy: 400 })] }),
+          agreementPool({ poolId: 'pool-ildl', poolName: 'Improved Daily Living Skills', periods: [agreementPeriod({ agreementCost: 300, remaining: 900, overBy: 0 })] }),
+        ],
+      }),
+    }))
+
+    expect(view?.pools.map(pool => [pool.poolLabel, pool.cost, pool.overBy])).toEqual([['Core', 1500, 1000], ['Improved Daily Living Skills', 300, null]])
   })
 
   it('is loading while the first answer is on its way, and failed, with a way to ask again, when it never came: neither states a figure', () => {

@@ -134,14 +134,32 @@ describe('BudgetBar', () => {
       expect(region).toHaveTextContent('Over the participant\'s budget.')
     })
 
-    it('says nothing while the check is loading, failed or has no budget to compare, because nothing is over', () => {
+    it('says nothing about being over while the check is loading, failed or has no budget to compare, because nothing is over', () => {
       const { rerender } = ready(over)
       expect(screen.getByRole('status')).toHaveTextContent('Over the participant\'s budget.')
 
       for (const status of ['loading', 'failed', 'none'] as const) {
         rerender(<BudgetBar status="ready" budget={budget()} budgetCheck={breakdown({ status, pools: [] })} />)
-        expect(screen.getByRole('status').textContent, status).toBe('')
+        expect(screen.getByRole('status').textContent, status).not.toContain('Over the participant')
       }
+    })
+
+    // A check that fails is advisory, so it must not interrupt a person typing in a block (it is not an alert): the bar's one polite status says it once instead.
+    it('says the budget could not be checked in that same status, once, and does not repeat it while it stays failed', () => {
+      const { rerender } = ready({ budgetCheck: breakdown({ status: 'failed', pools: [], onRetry: vi.fn() }) })
+      const region = screen.getByRole('status')
+      expect(region).toHaveTextContent('The budget could not be checked.')
+      expect(region.querySelector('p')).toHaveClass('sr-only')
+      expect(screen.getAllByRole('status')).toHaveLength(1)
+      const sentence = region.textContent
+
+      rerender(<BudgetBar status="ready" budget={budget()} budgetCheck={breakdown({ status: 'failed', pools: [], onRetry: vi.fn() })} />)
+      expect(screen.getByRole('status')).toBe(region)
+      expect(screen.getByRole('status').textContent).toBe(sentence)
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+      rerender(<BudgetBar status="ready" budget={budget()} budgetCheck={FITS} />)   // asked again and answered: the sentence goes
+      expect(screen.getByRole('status').textContent).toBe('')
     })
   })
 
@@ -221,10 +239,73 @@ describe('BudgetBar', () => {
     const onRetry = vi.fn()
     ready({ budgetCheck: breakdown({ status: 'failed', pools: [], onRetry }), unsaved: { onSave: vi.fn(), saving: false } })
 
-    expect(screen.getByRole('alert')).toHaveTextContent('The agreement could not be checked against the budget')
+    expect(screen.getByText('The agreement could not be checked against the budget, so no comparison is shown. The plan can still be saved.')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()   // an advisory check that fails does not interrupt: the polite status says it
     await user.click(screen.getByRole('button', { name: 'Try again' }))
     expect(onRetry).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+  })
+
+  // Below 1280px the bar is one line and the Details are shut. With no budget recorded, or a check that failed, it said nothing there, and silence reads as "fits": the brief wants the bar to say a
+  // budget is missing. Neutral chips (a warning tone is for being over), and nothing for Within, which stays quiet.
+  describe('the one-line form says when there is nothing to compare, or the comparison failed', () => {
+    const none = (extra: Partial<Parameters<typeof breakdown>[0]> = {}) =>
+      breakdown({ status: 'none', pools: [], noBudgetAction: { label: 'Open the Funding tab', to: '/participants/p-1?tab=funding' }, ...extra })
+    const renderBar = (budgetCheck: ReturnType<typeof breakdown> | null, props: Partial<Parameters<typeof BudgetBar>[0]> = {}) =>
+      render(<MemoryRouter><BudgetBar status="ready" budget={budget()} budgetCheck={budgetCheck} {...props} /></MemoryRouter>)
+    const oneLine = () => screen.getByText(/in all$/).closest('div')!.parentElement!
+
+    it('has a No budget recorded chip beside the figure, in a neutral tone', () => {
+      renderBar(none())
+
+      const chip = within(oneLine()).getByText('No budget recorded')
+      expect(chip.tagName).toBe('SPAN')
+      expect(chip.className).not.toContain('var(--color-warning-container)')
+    })
+
+    it('says Plan ended when the recorded plan has ended', () => {
+      renderBar(none({ noBudgetReason: 'PlanEnded', planEnd: '2026-06-30' }))
+
+      expect(within(oneLine()).getByText('Plan ended')).toBeInTheDocument()
+      expect(within(oneLine()).queryByText('No budget recorded')).not.toBeInTheDocument()
+    })
+
+    it('has a Budget not checked chip when the check failed', () => {
+      renderBar(breakdown({ status: 'failed', pools: [], onRetry: vi.fn() }))
+
+      expect(within(oneLine()).getByText('Budget not checked')).toBeInTheDocument()
+    })
+
+    it('has neither while the check is under way, and none beside a comparison that fits or one that is over', () => {
+      const { rerender } = renderBar(breakdown({ status: 'loading', pools: [] }))
+      for (const check of [breakdown({ status: 'loading', pools: [] }), FITS, OVER, null]) {
+        rerender(<MemoryRouter><BudgetBar status="ready" budget={budget()} budgetCheck={check} /></MemoryRouter>)
+        expect(screen.queryByText('No budget recorded'), String(check?.status)).not.toBeInTheDocument()
+        expect(screen.queryByText('Plan ended')).not.toBeInTheDocument()
+        expect(screen.queryByText('Budget not checked')).not.toBeInTheDocument()
+      }
+    })
+
+    it('has none for a plan that prices to nothing: there is nothing to compare, and the Details say so', () => {
+      const base = budget()
+      renderBar(none(), { budget: { period: { ...base.period, totals: { ...emptyTotals(), lineCount: 6, unpricedLines: 6 } }, weekly: null, week: null } })
+
+      expect(screen.queryByText('No budget recorded')).not.toBeInTheDocument()
+    })
+
+    it('keeps the Not saved chip and its Save beside them', () => {
+      renderBar(none(), { unsaved: { onSave: vi.fn(), saving: false } })
+
+      expect(within(oneLine()).getByText('Not saved')).toBeInTheDocument()
+      expect(within(oneLine()).getByText('No budget recorded')).toBeInTheDocument()
+    })
+  })
+
+  // The dock covers a laptop screen while somebody edits blocks, and the budget column's sentence used to take whatever width it wanted and squeeze the figures beside it.
+  it('caps the width of the budget column so a long sentence wraps there instead of squeezing the figures beside it', () => {
+    ready()
+
+    expect(document.getElementById('plan-budget-details')!.className).toContain('xl:grid-cols-[minmax(11rem,auto)_1fr_minmax(14rem,26rem)]')
   })
 
   it('says the check is under way, and states no comparison, until its answer arrives', () => {

@@ -3,13 +3,14 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { TONE } from '@/lib/tone'
-import { AgreementBudgetBreakdown, MAX_LINES_SHOWN } from './AgreementBudgetBreakdown'
+import { AgreementBudgetBreakdown } from './AgreementBudgetBreakdown'
 import { agreementLine, agreementPool, breakdown } from './fixtures'
 import type { AgreementBudgetBreakdownView } from './viewModel'
 import { AGREEMENT_NO_BUDGET, AGREEMENT_WARNING_ONLY, NO_FIGURE } from './wording'
 
 // The agreement budget bar's comparison. What these tests hold:
-//   - each pool the agreement touches is a heading, and each funding period of it is one sentence: "Agreement {cost} against {remaining} left in {period}", then the verdict;
+//   - each pool the agreement touches is a heading, and each funding period of it is one sentence: "Agreement {cost} against {remaining} left in {period}", then the verdict; a pool that spans several
+//     periods gets ONE line in the dock (what the agreement costs there, in how many periods it is over, by how much in all) and the sentences behind a disclosure;
 //   - over and within are told apart in words as well as in tone, and over is a WARNING ONLY: nothing in the component can block anything;
 //   - the commonest state, no budget recorded, links to where one is recorded and never warns;
 //   - loading and failed are never drawn as an answer, and a zero is a figure while a missing figure is a dash.
@@ -30,15 +31,23 @@ describe('AgreementBudgetBreakdown: the states that are not an answer', () => {
     const onRetry = vi.fn()
     renderView({ status: 'failed', figures: { visible: true }, pools: [], notInARecordedPool: null, outsideThePlan: null, onRetry })
 
-    expect(screen.getByRole('alert')).toHaveTextContent('The agreement could not be checked against the budget, so no comparison is shown. The plan can still be saved.')
+    expect(screen.getByText('The agreement could not be checked against the budget, so no comparison is shown. The plan can still be saved.')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(onRetry).toHaveBeenCalledTimes(1)
+  })
+
+  // An advisory check that fails (a 429, a network blip) must not interrupt a person typing in a block, each time it recurs: the bar has ONE polite status and says it there, once.
+  it('does not announce a failed check by itself: it is a plain note, and the bar’s one polite status says it', () => {
+    renderView({ status: 'failed', figures: { visible: true }, pools: [], notInARecordedPool: null, outsideThePlan: null, onRetry: vi.fn() })
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(document.querySelector('[aria-live]')).toBeNull()
   })
 
   it('shows the caller’s own failure sentence when it has one, and no Try again when it cannot ask again', () => {
     renderView({ status: 'failed', failureMessage: 'The pricing engine is busy.', figures: { visible: true }, pools: [], notInARecordedPool: null, outsideThePlan: null })
 
-    expect(screen.getByRole('alert')).toHaveTextContent('The pricing engine is busy.')
+    expect(screen.getByText('The pricing engine is busy.')).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
@@ -52,6 +61,18 @@ describe('AgreementBudgetBreakdown: the states that are not an answer', () => {
     expect(screen.getByRole('link', { name: 'Open the Funding tab' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByText(/\$/)).not.toBeInTheDocument()
+  })
+
+  // The spec's sentence stays ("No budget recorded for this participant ..."), and for a plan that ended it says so, as the Funding tab shows that plan: it must not read as if none was ever recorded.
+  it('says the recorded plan ended, and when, after the same words, and offers to record a new plan', () => {
+    renderView({
+      status: 'none', figures: { visible: true }, pools: [], notInARecordedPool: null, outsideThePlan: null, noBudgetReason: 'PlanEnded', planEnd: '2026-06-30',
+      noBudgetAction: { label: 'Record a new plan', to: '/participants/p-1?tab=funding' },
+    })
+
+    expect(screen.getByText('No budget recorded for this participant: the recorded plan ended on 30 Jun 2026, so there is nothing to compare the agreement against.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Record a new plan' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('says no budget is recorded without a link when there is nowhere to point', () => {
@@ -99,6 +120,22 @@ describe('AgreementBudgetBreakdown: an agreement that does not fit', () => {
     expect(verdict).toHaveTextContent('Over by $688.50')
     expect(verdict.closest('li')!.className).toContain('var(--color-warning-container)')
     expect(screen.getByRole('region')).toHaveTextContent('Agreement $2,355.50 against $1,667.00 left in 1 Oct – 31 Dec 2026')
+  })
+
+  // A period that is over before the agreement has less than nothing "left": "against -$1,563.21 left" is hard to parse and states two different overs. The Funding tab never prints a minus; it says "$X over".
+  it('says nothing is left, and how far over the period already is, instead of printing a negative amount', () => {
+    renderView(breakdown({ pools: [agreementPool({ lines: [agreementLine({ cost: 21363.1, remaining: -1563.21, withinLimit: false, overBy: 22926.31 })] })] }))
+
+    const region = screen.getByRole('region')
+    expect(region).toHaveTextContent('Agreement $21,363.10 in 1 Oct – 31 Dec 2026; nothing left (already $1,563.21 over)')
+    expect(region).toHaveTextContent('Over by $22,926.31')   // the verdict stays
+    expect(region.textContent).not.toMatch(/-\$|−\$|against/)
+  })
+
+  it('still says what is left when it is exactly nothing: a zero is a figure, not a negative', () => {
+    renderView(breakdown({ pools: [agreementPool({ lines: [agreementLine({ cost: 100, remaining: 0, withinLimit: false, overBy: 100 })] })] }))
+
+    expect(screen.getByRole('region')).toHaveTextContent('Agreement $100.00 against $0.00 left in 1 Oct – 31 Dec 2026')
   })
 
   it('says it is a warning only: the plan can still be saved and approved', () => {
@@ -150,58 +187,75 @@ describe('AgreementBudgetBreakdown: several pools and periods', () => {
   })
 })
 
-// The bar is docked at the foot of the screen, so a pool funded monthly (a year of agreement is twelve periods) must not fill it: the first periods are drawn, the rest sit behind a disclosure
-// that says how many there are and how many of them are over, and every one of them is still there to open.
-describe('AgreementBudgetBreakdown: a pool with many periods', () => {
+// The bar is docked at the foot of the screen, so a pool that spans several funding periods (a plan funded monthly is twelve) must not fill it: the dock gets ONE line for the pool (what the agreement
+// costs there, in how many periods it would be over, by how much in all), and the sentence for every period sits behind a disclosure that is still in the page.
+describe('AgreementBudgetBreakdown: a pool with several periods', () => {
   const month = (n: number, extra: Partial<Parameters<typeof agreementLine>[0]> = {}) =>
     agreementLine({ periodStart: `2026-${String(n).padStart(2, '0')}-01`, periodEnd: `2026-${String(n).padStart(2, '0')}-28`, cost: 100, remaining: 5000, ...extra })
 
-  it('draws no more than three periods of a pool, and no disclosure at all for a pool with three or fewer', () => {
-    renderView(breakdown({ pools: [agreementPool({ lines: [month(1), month(2), month(3)] })] }))
+  it('gives a pool of one period its sentence and no disclosure: the dock stays as small as it can', () => {
+    renderView(breakdown({ pools: [agreementPool({ lines: [month(1)] })] }))
 
-    expect(MAX_LINES_SHOWN).toBe(3)
-    expect(screen.getAllByRole('listitem')).toHaveLength(3)
     expect(document.querySelector('details')).toBeNull()
+    expect(screen.getByRole('region')).toHaveTextContent('Agreement $100.00 against $5,000.00 left in')
+    expect(screen.getByRole('region')).not.toHaveTextContent('across')
   })
 
-  it('puts the rest behind a disclosure that counts them: all within', () => {
-    renderView(breakdown({ pools: [agreementPool({ lines: [1, 2, 3, 4, 5].map(n => month(n)) })] }))
+  it('gives a pool of several periods one line that says it is within in all of them', () => {
+    renderView(breakdown({ pools: [agreementPool({ lines: [1, 2, 3, 4].map(n => month(n)) })] }))
+
+    const pool = screen.getByRole('group', { name: 'Core' })
+    expect(pool).toHaveTextContent('Agreement $400.00 across 4 periods')
+    expect(pool).toHaveTextContent('Within in all 4 periods')
+    expect(pool).not.toHaveTextContent('Over')
+  })
+
+  it('says in how many periods it is over, and by how much in all (the server’s sum), in words and not by colour alone', () => {
+    const lines = [month(1, { withinLimit: false, overBy: 7000.5, remaining: -6900.5 }), month(2, { withinLimit: false, overBy: 100, remaining: 0 }), month(3), month(4)]
+    renderView(breakdown({ pools: [agreementPool({ lines })] }))
+
+    const pool = screen.getByRole('group', { name: 'Core' })
+    expect(pool).toHaveTextContent('Over in 2 of 4 periods, $7,100.50 in all')
+    expect(pool).toHaveTextContent('Agreement $400.00 across 4 periods')
+  })
+
+  it('keeps every period’s sentence behind a native disclosure that is closed, named by what it holds, and still in the page', async () => {
+    const user = userEvent.setup()
+    renderView(breakdown({ pools: [agreementPool({ lines: [1, 2, 3].map(n => month(n)) })] }))
 
     const details = document.querySelector('details') as HTMLDetailsElement
     expect(details).not.toHaveAttribute('open')
-    expect(within(details).getByText('2 more periods, all within')).toBeInTheDocument()
-    expect(within(details).getAllByRole('listitem')).toHaveLength(2)    // still in the page, behind the disclosure
-    expect(within(screen.getByRole('region')).getAllByRole('listitem')).toHaveLength(5)
+    const summary = within(details).getByText('Each of the 3 periods')
+    expect(summary.tagName).toBe('SUMMARY')
+    expect(within(details).getAllByRole('listitem')).toHaveLength(3)
+    await user.click(summary)
+    expect(details).toHaveAttribute('open')
   })
 
-  it('says how many of the hidden periods are over, so an over period is never out of sight unannounced', () => {
-    renderView(breakdown({ pools: [agreementPool({ lines: [1, 2, 3].map(n => month(n)).concat([month(4, { withinLimit: false, overBy: 70, remaining: 30 }), month(5, { withinLimit: false, overBy: 20, remaining: 80 }), month(6)]) })] }))
+  it('counts the periods that would be over across every pool, hidden behind a disclosure or not, in the sentence at the foot', () => {
+    renderView(breakdown({ pools: [agreementPool({ lines: [1, 2, 3].map(n => month(n)).concat([month(4, { withinLimit: false, overBy: 70, remaining: 30 }), month(5, { withinLimit: false, overBy: 20, remaining: 80 })]) })] }))
 
-    const details = document.querySelector('details') as HTMLDetailsElement
-    expect(within(details).getByText('3 more periods, 2 over')).toBeInTheDocument()
-    // The summary above the pools counts every over period, hidden or not.
     expect(screen.getByRole('region')).toHaveTextContent('2 periods would be over what is left.')
   })
 
-  it('opens with the keyboard like any native disclosure: the summary is the control, named by what it holds', async () => {
-    const user = userEvent.setup()
-    renderView(breakdown({ pools: [agreementPool({ lines: [1, 2, 3, 4].map(n => month(n)) })] }))
-
-    const summary = screen.getByText('1 more period, all within')
-    expect(summary.tagName).toBe('SUMMARY')
-    await user.click(summary)
-    expect(document.querySelector('details')).toHaveAttribute('open')
-  })
-
-  it('counts each pool\'s periods apart: one with few and one with many', () => {
+  it('treats each pool on its own: one with several periods and one with a single period', () => {
     renderView(breakdown({
       pools: [
         agreementPool({ poolLabel: 'Core', lines: [1, 2, 3, 4].map(n => month(n)) }),
-        agreementPool({ poolLabel: 'Improved Daily Living Skills', lines: [month(1), month(2)] }),
+        agreementPool({ poolLabel: 'Improved Daily Living Skills', lines: [month(1)] }),
       ],
     }))
 
     expect(document.querySelectorAll('details')).toHaveLength(1)
+    expect(screen.getByRole('group', { name: 'Improved Daily Living Skills' })).toHaveTextContent('Agreement $100.00 against $5,000.00 left in')
+  })
+
+  it('withholds the amounts of the one line from a viewer who may not see them, as it does everywhere', () => {
+    const lines = [month(1, { withinLimit: false, overBy: 70, remaining: 30 }), month(2)]
+    const { container } = renderView(breakdown({ figures: { visible: false, reason: 'Budget figures are for coordinators and administrators.' }, pools: [agreementPool({ lines, cost: 200, overBy: 70 })] }))
+
+    expect(dollarsIn(container)).toEqual([])
+    expect(screen.getByRole('group', { name: 'Core' })).toHaveTextContent('Over in 1 of 2 periods')
   })
 })
 

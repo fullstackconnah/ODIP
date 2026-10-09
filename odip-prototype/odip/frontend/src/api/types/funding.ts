@@ -377,11 +377,11 @@ export interface AgreementCheckPeriod {
   isCurrent: boolean
   /** What the agreement costs in this period. */
   agreementCost: number
-  /** The period's limit plus what earlier periods left unspent (the ledger's figure). */
+  /** The period's limit plus what earlier periods would leave unspent once this agreement had spent its share of them (the ledger's figure when no earlier period has an agreement cost). */
   available: number
   /** Claimed plus pending (the ledger's figure). */
   used: number
-  /** Available minus used. */
+  /** Available minus used. May be below zero when the period is already over before the agreement. */
   remaining: number
   /** How far the agreement passes what is left; 0 when it fits. */
   overBy: number
@@ -396,6 +396,8 @@ export interface AgreementCheckPool {
   agreementCost: number
   /** Some period would be over. */
   over: boolean
+  /** How far the agreement passes what the pool has across the periods it touches: the sum of the periods' own over-bys (each overspend leaves nothing to carry), 0 when every period fits. */
+  overBy: number
   /** The periods the agreement touches, in date order. */
   periods: AgreementCheckPeriod[]
 }
@@ -403,6 +405,8 @@ export interface AgreementCheckPool {
 export interface AgreementCheck {
   /** The participant has a plan that is running now to check against. False is "No budget recorded": the answer then has no pools and no figures. */
   hasBudget: boolean
+  /** Why there is nothing to compare with, when `hasBudget` is false, in the Budgets list's own two words: no plan that has started is recorded, or the plan ended (and `planEnd` is its last day). */
+  noBudgetReason?: 'NotRecorded' | 'PlanEnded'
   planId?: string
   planStart?: string
   planEnd?: string

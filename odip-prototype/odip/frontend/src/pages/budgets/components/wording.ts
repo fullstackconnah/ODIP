@@ -42,6 +42,22 @@ export const UNPRICED_LEGEND = 'A triangle beside a forecast means it leaves out
 /** What the bar says when the participant has no budget recorded (it links to the Funding tab where one is recorded). */
 export const AGREEMENT_NO_BUDGET = 'No budget recorded for this participant, so there is nothing to compare the agreement against.'
 
+/**
+ * The same words when the participant's recorded plan has ended (the Funding tab shows that plan, so the bar must not read as if none were ever recorded): the spec's sentence, then why there is
+ * nothing to compare. `endedOn` is the plan's last day, already written ("30 Jun 2026").
+ */
+export function agreementNoBudgetEnded(endedOn: string): string {
+  return `No budget recorded for this participant: the recorded plan ended on ${endedOn}, so there is nothing to compare the agreement against.`
+}
+
+/** The neutral chips the bar's one-line form shows when there is nothing to compare or the comparison failed (a phone or tablet reads that line and nothing else): silence would read as "fits". */
+export const CHIP_NO_BUDGET = 'No budget recorded'
+export const CHIP_PLAN_ENDED = 'Plan ended'
+export const CHIP_NOT_CHECKED = 'Budget not checked'
+
+/** What the bar's one polite status says, once, when the check could not be made. A failed advisory check does not interrupt: it is not an alert. */
+export const CHECK_COULD_NOT_BE_MADE = 'The budget could not be checked.'
+
 /** The one line that makes the warning's nature plain: it is a warning, in every mode. */
 export const AGREEMENT_WARNING_ONLY = 'This is a warning only: it never stops a save or an approval.'
 

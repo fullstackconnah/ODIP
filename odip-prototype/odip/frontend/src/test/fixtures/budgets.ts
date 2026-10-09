@@ -57,7 +57,7 @@ export function agreementPeriod(overrides: Partial<AgreementCheckPeriod> = {}): 
 export function agreementPool(overrides: Partial<AgreementCheckPool> = {}): AgreementCheckPool {
   const periods = overrides.periods ?? [agreementPeriod()]
   return {
-    poolId: 'pool-core', poolName: 'Core', kind: 'CoreFlexible', managementType: 'PlanManaged', agreementCost: periods.reduce((sum, p) => sum + p.agreementCost, 0), over: periods.some(p => p.overBy > 0), periods, ...overrides,
+    poolId: 'pool-core', poolName: 'Core', kind: 'CoreFlexible', managementType: 'PlanManaged', agreementCost: periods.reduce((sum, p) => sum + p.agreementCost, 0), over: periods.some(p => p.overBy > 0), overBy: periods.reduce((sum, p) => sum + p.overBy, 0), periods, ...overrides,
   }
 }
 
@@ -70,7 +70,7 @@ export function agreementCheck(overrides: Partial<AgreementCheck> = {}): Agreeme
   }
 }
 
-/** No plan is running: no budget recorded. The server answers with the day and nothing else. */
+/** No plan is running: no budget recorded (or the plan ended: say so with noBudgetReason and planEnd). The server answers with the day and the reason, nothing else. */
 export function noBudgetCheck(overrides: Partial<AgreementCheck> = {}): AgreementCheck {
-  return { hasBudget: false, asOf: '2026-10-08', periodFrom: '2026-10-12', periodTo: '2026-12-20', agreementCost: 0, pools: [], notInARecordedPool: 0, outsideThePlan: 0, ...overrides }
+  return { hasBudget: false, noBudgetReason: 'NotRecorded', asOf: '2026-10-08', periodFrom: '2026-10-12', periodTo: '2026-12-20', agreementCost: 0, pools: [], notInARecordedPool: 0, outsideThePlan: 0, ...overrides }
 }

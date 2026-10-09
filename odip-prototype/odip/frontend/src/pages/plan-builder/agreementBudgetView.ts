@@ -31,11 +31,20 @@ export function agreementBudgetView(participantId: string, state: AgreementCheck
   const { data } = state
   if (!data) return state.failed ? { ...empty, status: 'failed', onRetry: state.onRetry } : { ...empty, status: 'loading' }
 
-  // No plan is running: nothing to compare against, never a warning. The Funding tab is where a budget is recorded.
-  if (!data.hasBudget) return { ...empty, status: 'none', refreshing: state.pending, noBudgetAction: { label: 'Open the Funding tab', to: fundingTabPath(participantId) } }
+  // No plan is running: nothing to compare against, never a warning. The Funding tab is where a budget is recorded. An ended plan is told apart from none recorded (the Funding tab shows that plan), and
+  // its way on is to record a new one; an answer from an older server that gives no reason reads as nothing recorded.
+  if (!data.hasBudget) {
+    const ended = data.noBudgetReason === 'PlanEnded'
+    return {
+      ...empty, status: 'none', refreshing: state.pending, noBudgetReason: ended ? 'PlanEnded' : 'NotRecorded', ...(ended && data.planEnd ? { planEnd: data.planEnd } : {}),
+      noBudgetAction: { label: ended ? 'Record a new plan' : 'Open the Funding tab', to: fundingTabPath(participantId) },
+    }
+  }
 
   const pools: AgreementBudgetPool[] = data.pools.map(pool => ({
     poolLabel: pool.poolName,
+    cost: pool.agreementCost,
+    overBy: pool.overBy > 0 ? pool.overBy : null,
     lines: pool.periods.map(period => ({
       periodStart: period.periodStart,
       periodEnd: period.periodEnd,

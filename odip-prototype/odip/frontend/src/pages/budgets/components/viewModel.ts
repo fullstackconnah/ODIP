@@ -145,6 +145,10 @@ export type AgreementBudgetLine = {
 export type AgreementBudgetPool = {
   poolLabel: string
   lines: AgreementBudgetLine[]
+  /** What the agreement costs in this pool over all the periods it touches: the pricing engine's sum, for the one line a pool that spans several periods gets in the dock. */
+  cost: BudgetAmount
+  /** How far the agreement passes what the pool has across those periods (the server's sum of the periods' over-bys). `null` when every period fits. */
+  overBy: BudgetAmount
 }
 
 /**
@@ -165,6 +169,10 @@ export type AgreementBudgetBreakdownView = {
   notInARecordedPool: BudgetAmount
   /** The part delivered outside the plan's dates: shown, never dropped. */
   outsideThePlan: BudgetAmount
+  /** Why there is none, when `status` is `none`: nothing is recorded, or the recorded plan ended on `planEnd`. Omitted means nothing is recorded. */
+  noBudgetReason?: 'NotRecorded' | 'PlanEnded'
+  /** The last day of the plan that ended, when `noBudgetReason` is `PlanEnded`. */
+  planEnd?: string
   /** Where the viewer records a budget when there is none. Omitted when there is nothing to point at. */
   noBudgetAction?: BudgetAttentionAction
   /** Asks again after a failure. Omitted when there is nothing to ask. */
