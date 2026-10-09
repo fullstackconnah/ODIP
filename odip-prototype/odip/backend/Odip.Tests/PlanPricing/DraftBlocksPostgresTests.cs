@@ -9,6 +9,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Catalogue;
@@ -211,6 +212,75 @@ public class DraftBlocksPostgresTests : IClassFixture<PostgresFixture>
         var only = Assert.Single(await read.ServiceAgreementDrafts.AsNoTracking().Include(d => d.Blocks).ToListAsync());
         Assert.Equal(1, only.Version);
         Assert.Equal(2, only.Blocks.Count);
+    }
+
+    [SkippableFact]
+    public async Task SavingAgain_DeletesTheOlderUnapprovedRevisionWithItsBlocksAndLines_AndKeepsTheApprovedRosteredAndSignedOnes_AgainstTheRealKeys()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+
+        async Task<Guid> SaveAsync(int baseVersion)
+        {
+            await using var save = Open(cs, tenantId);
+            var result = await new ServiceAgreementDraftService(save).SaveAsync(tenantId, participantId, Request(Entry(MonWed()), Entry(SaturdayOuting())) with { BaseVersion = baseVersion }, "actor", CancellationToken.None);
+            return Assert.IsType<ServiceAgreementDraft>(result.Draft).Id;
+        }
+
+        // Version 1 is approved, version 2 has a roster pattern made from it, version 3 has signing evidence, and version 4 did nothing.
+        var approved = await SaveAsync(0);
+        await using (var db = Open(cs, tenantId))
+        {
+            db.ServiceAgreementDraftApprovals.Add(new ServiceAgreementDraftApproval
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, DraftId = approved, ParticipantId = participantId, DraftVersion = 1,
+                ApprovedAt = new DateTime(2026, 10, 5, 1, 0, 0, DateTimeKind.Utc), ApprovedByName = "Alex Admin",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var rostered = await SaveAsync(1);
+        await using (var db = Open(cs, tenantId))
+        {
+            db.ShiftPatterns.Add(new ShiftPattern
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0),
+                EffectiveFrom = Monday, IsActive = true, SourceDraftId = rostered, SourceBlockKey = "b1", WorkerSlot = 1,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var signed = await SaveAsync(2);
+        await using (var db = Open(cs, tenantId))
+        {
+            db.ElectronicSigningSnapshots.Add(new ElectronicSigningSnapshot
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, DraftId = signed, DraftVersion = 3, DocumentJson = "{}", DocumentHash = new string('a', 64),
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var plain = await SaveAsync(3);
+        await using (var before = Open(cs, tenantId))
+            Assert.Equal(new[] { 1, 2, 3, 4 }, await before.ServiceAgreementDrafts.AsNoTracking().OrderBy(d => d.Version).Select(d => d.Version).ToListAsync());   // each save replaced nothing: the revision before it had a use
+
+        var newest = await SaveAsync(4);                   // version 4 did nothing, so this save replaces it
+
+        await using var read = Open(cs, tenantId);
+        Assert.Equal(new[] { 1, 2, 3, 5 }, await read.ServiceAgreementDrafts.AsNoTracking().OrderBy(d => d.Version).Select(d => d.Version).ToListAsync());      // gapped, and still increasing
+        async Task<(int Blocks, int Lines)> ChildrenAsync(Guid draftId) =>
+            (await read.ServiceAgreementDraftBlocks.AsNoTracking().CountAsync(b => b.DraftId == draftId), await read.ServiceAgreementDraftLines.AsNoTracking().CountAsync(l => l.DraftId == draftId));
+        Assert.Equal((0, 0), await ChildrenAsync(plain));                                  // the revision went with its blocks and lines
+        foreach (var kept in new[] { approved, rostered, signed, newest }) Assert.Equal((2, 2), await ChildrenAsync(kept));
+
+        // And the keys are what the guard stands on: the database itself refuses to delete a revision that was approved or rostered. (A signing snapshot has no key, so only the guard keeps its revision.)
+        foreach (var protectedId in new[] { approved, rostered })
+        {
+            await using var delete = Open(cs, tenantId);
+            delete.ServiceAgreementDrafts.Remove(await delete.ServiceAgreementDrafts.SingleAsync(d => d.Id == protectedId));
+            var failure = await Assert.ThrowsAsync<DbUpdateException>(() => delete.SaveChangesAsync());
+            Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, Assert.IsType<PostgresException>(failure.InnerException).SqlState);
+        }
     }
 
     [SkippableFact]
