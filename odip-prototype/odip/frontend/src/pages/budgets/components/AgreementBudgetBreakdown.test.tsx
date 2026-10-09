@@ -227,6 +227,8 @@ describe('AgreementBudgetBreakdown: a pool with several periods', () => {
     expect(details).not.toHaveAttribute('open')
     const summary = within(details).getByText('Each of the 3 periods')
     expect(summary.tagName).toBe('SUMMARY')
+    // A summary that is a flex row loses the browser's disclosure marker, so it carries its own chevron (not read aloud): without one nothing says the periods are there to open.
+    expect(summary.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     expect(within(details).getAllByRole('listitem')).toHaveLength(3)
     await user.click(summary)
     expect(details).toHaveAttribute('open')

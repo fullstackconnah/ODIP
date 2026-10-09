@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { TONE } from '@/lib/tone'
@@ -89,8 +89,10 @@ function Pool({ pool, figures }: { pool: AgreementBudgetPool; figures: BudgetFig
               )}
             </p>
           </div>
-          <details className="mt-1">
-            <summary className="flex min-h-[var(--control-h)] cursor-pointer select-none items-center text-[13px] text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
+          <details className="group mt-1">
+            <summary className="flex min-h-[var(--control-h)] cursor-pointer select-none items-center gap-1 text-[13px] text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
+              {/* A flex summary loses the browser's own disclosure marker, so it carries a chevron that turns when it is open. */}
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
               Each of the {count} periods
             </summary>
             <ul className="mt-1 flex flex-col gap-1">{pool.lines.map(lineOf)}</ul>
