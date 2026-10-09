@@ -294,7 +294,7 @@ public class ParticipantAlertsService
         {
             var alerts = alertsByParticipant[p.Id]
                 .OrderBy(a => (int)a.Severity)
-                .ThenBy(a => a.Type, StringComparer.Ordinal)
+                .ThenBy(a => SortKey(a.Type), StringComparer.Ordinal)
                 .ToList();
 
             result.Add(new ParticipantAlertsDto
@@ -312,4 +312,18 @@ public class ParticipantAlertsService
 
         return result;
     }
+
+    /// <summary>
+    /// What alerts of one severity are put in order by: their type name, except that the budget kinds come worse first (the NDIA's word, then over, forecast over, approaching) and not in the
+    /// order of their names, which put "approaching" ahead of "forecast over". The participant banner shows three alerts and "+N more" behind them, so the milder warning must not crowd out the worse
+    /// one. Every other kind keeps its place among the names.
+    /// </summary>
+    private static string SortKey(string type) => type switch
+    {
+        BudgetAlertRules.NdiaExhaustedType => "budget-0",
+        BudgetAlertRules.OverType => "budget-1",
+        BudgetAlertRules.ForecastOverType => "budget-2",
+        BudgetAlertRules.ApproachingType => "budget-3",
+        _ => type,
+    };
 }

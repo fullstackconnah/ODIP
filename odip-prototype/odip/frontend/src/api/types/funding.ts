@@ -319,14 +319,20 @@ export interface BudgetListRow {
   periodEnd: string
   /** The period's limit plus what earlier periods left unspent. */
   available: number
+  /** How much of `available` is rolled over from earlier periods of the plan (0 when none): not confirmed, because somebody else may have used it. */
+  carried: number
   /** Claimed plus pending. */
   used: number
+  /** Available minus used: what is left, or, below zero, how far over the period already is. The server works it out, so no screen subtracts. */
+  remaining: number
   bookedAhead: number
   /** Used plus booked ahead. */
   forecast: number
   status: BudgetStatus
   /** How many shifts of this period the shift claim cannot price yet (a sleepover, a passive night, a group shift): each is $0 in every figure above, so they leave those shifts out. 0 when every shift priced. */
   unpricedShiftCount: number
+  /** The NDIA's own word that this pool's funds ran out (a claim of the pool refused for want of funds, while its funding period is the one running); left out when it has none. ODIP's figures can say On track beside it. */
+  ndiaRejection?: NdiaRejection
 }
 
 /** Why an NDIS-funded participant has no row: nothing was recorded that has started, or the plan they have has ended. */

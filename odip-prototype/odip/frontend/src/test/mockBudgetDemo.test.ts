@@ -57,14 +57,18 @@ describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (
     const { asOf, rows, noBudget } = list()
 
     expect(asOf).toBe('2026-10-08')
+    // The NDIA has refused a claim of Gracie's Core, which ODIP's own figures call on track: the list ranks it straight after Over, with the NDIA's word on the row.
     expect(rows.map(row => [row.participantName, row.poolName, row.status])).toEqual([
       ['Dylan Marchetti', 'Core', 'Over'],
+      ['Gracie Palmer-Hughes', 'Core', 'OnTrack'],
       ['Sisi Whitfield', 'Core', 'ForecastOver'],
       ['Sisi Whitfield', 'Improved Daily Living Skills', 'Approaching'],
       ['Dylan Marchetti', 'Improved Daily Living Skills', 'OnTrack'],
-      ['Gracie Palmer-Hughes', 'Core', 'OnTrack'],
     ])
-    expect(rows.map(row => row.unpricedShiftCount)).toEqual([0, 1, 0, 0, 0])   // only Sienna's Core, which has the sleepover
+    expect(rows.map(row => row.ndiaRejection)).toEqual([undefined, { date: '2026-10-08', code: 'V27', claimId: 'claim-0003', claimReference: 'TC-43000412-20261008' }, undefined, undefined, undefined])
+    // What is left, or how far over (available minus used), and how much of what is available was rolled over.
+    expect(rows.map(row => [row.remaining, row.carried])).toEqual([[-1563.21, 0], [38899, 0], [1541.32, 448.66], [108.22, 864.86], [1740.44, 1008.22]])
+    expect(rows.map(row => row.unpricedShiftCount)).toEqual([0, 0, 1, 0, 0])   // only Sienna's Core, which has the sleepover
     expect(noBudget).toEqual([
       { participantId: 'p-0001', participantName: 'Liam Okafor', reason: 'NotRecorded' },
       { participantId: 'p-0003', participantName: 'Marcus Tran', reason: 'PlanEnded', planEnd: '2026-06-30' },
@@ -73,10 +77,11 @@ describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (
 
   it('has one pool over, one forecast over, one approaching, and the NDIA\'s word on a pool that is on track, each as an alert that opens the Funding tab, in the server\'s words', () => {
     expect(alertsOf('p-0005')).toEqual([{ type: 'budget-over', severity: 'Critical', message: 'Core is $1,563.21 over this period\'s $403.29', deepLinkTab: 'funding' }])
-    expect(alertsOf('p-0002').map(alert => [alert.type, alert.severity])).toEqual([['budget-approaching', 'Warning'], ['budget-forecast-over', 'Warning']])
+    // Worse first: the banner shows three and "+N more" behind them, so the milder warning must not crowd out the worse one.
+    expect(alertsOf('p-0002').map(alert => [alert.type, alert.severity])).toEqual([['budget-forecast-over', 'Warning'], ['budget-approaching', 'Warning']])
     // Sienna's Core has a sleepover in the quarter, which the shift claim cannot price yet: the alert says the figures leave it out.
-    expect(alertsOf('p-0002')[1].message).toBe('Booked shifts would take Core $1,354.68 over by 31 Dec 2026. 1 shift in this period is not priced yet, so this leaves it out')
-    expect(alertsOf('p-0002')[0].message).toBe('Improved Daily Living Skills is at 94% of this period\'s $2,074.72 (to 31 Dec 2026)')
+    expect(alertsOf('p-0002')[0].message).toBe('Booked shifts would take Core $1,354.68 over by 31 Dec 2026. 1 shift in this period is not priced yet, so this leaves it out')
+    expect(alertsOf('p-0002')[1].message).toBe('Improved Daily Living Skills is at 94% of this period\'s $2,074.72 (to 31 Dec 2026)')
     expect(alertsOf('p-0004')).toEqual([{ type: 'budget-ndia-exhausted', severity: 'Critical', message: 'Core: NDIA rejected a claim on 8 Oct 2026: not enough funds (V27)', deepLinkTab: 'funding' }])
   })
 

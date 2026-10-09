@@ -266,6 +266,24 @@ public class ParticipantBudgetAlertsTests
         Assert.False((await new ParticipantAlertsService(s.Kit.Db, s.Kit.Clock).GetAlertsAsync(participant.Id)).Single().BudgetInForce);   // built the way the older tests build it
     }
 
+    // ── The order they come in ──────────────────────────────────────────────
+
+    // The banner shows three alerts and "+N more" behind them, so the worse warning must come first: the alerts used to sort by type name, which put "approaching" ahead of "forecast over".
+    [Fact]
+    public async Task TheBudgetAlertsOfOneParticipantComeWorseFirst_ForecastOverBeforeApproaching_NotInTheOrderOfTheirNames()
+    {
+        using var s = Setup.Create();
+        s.Kit.SeedItem("15_001", 15);
+        var participant = s.Kit.SeedParticipant();
+        OctoberPlan(s.Kit, participant, 1000m, Stated(15, PlanType.AgencyManaged, Q(2, 1000m), Q(3, 1000m), Q(4, 1000m)));
+        foreach (var day in new[] { 5, 6, 7 }) s.Kit.SeedShift(participant, D(2026, 10, day));   // three shifts of $480 against Core's $1,000: forecast over
+        ClaimOf(s.Kit, participant, TripClaimStatus.Paid, 850m, D(2026, 10, 2), "15_001");        // 85% of the stated pool's $1,000: approaching
+
+        var alerts = await s.BudgetAlertsAsync(participant.Id);
+
+        Assert.Equal(new[] { "budget-forecast-over", "budget-approaching" }, alerts.Select(a => a.Type));
+    }
+
     // ── Whose money ─────────────────────────────────────────────────────────
 
     [Fact]

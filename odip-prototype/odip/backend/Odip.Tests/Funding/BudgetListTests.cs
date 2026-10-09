@@ -29,7 +29,7 @@ public class BudgetListTests
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(tenantId ?? kit.TenantId);
         tenant.Setup(t => t.IsSuperAdmin).Returns(false);
-        return new BudgetsController(tenant.Object, new BudgetListService(kit.Db, kit.Ledger, kit.Clock));
+        return new BudgetsController(tenant.Object, new BudgetListService(kit.Db, kit.Ledger, new NdiaRejectionReader(kit.Db, kit.Clock), kit.Clock));
     }
 
     private static LedgerKit Arrange()
@@ -182,6 +182,106 @@ public class BudgetListTests
         Assert.Equal("budget-over", Assert.Single(alerts[person.Id]).Type);
     }
 
+    // ── What the NDIA has said, and what is left ────────────────────────────
+
+    /// <summary>A claim of the participant that the NDIA refused for want of funds on the fixed day. Its plan must have been recorded before it (a plan recorded after a rejection ends its word).</summary>
+    private static TripClaim RejectedClaim(LedgerKit kit, Participant participant, string code = "V27", string? itemCode = null)
+    {
+        var shift = kit.SeedShift(participant, D(2026, 10, 2), ShiftStatus.Completed);
+        var claim = kit.SeedShiftClaim(participant, TripClaimStatus.Rejected, 400m, shift, itemCode);
+        claim.RejectionCode = code;
+        claim.RejectedDate = FundingTestKit.Now.UtcDateTime;
+        kit.Db.SaveChanges();
+        return claim;
+    }
+
+    private static FundingPlan RecordedInSeptember(FundingPlan plan, LedgerKit kit)
+    {
+        plan.CreatedAt = new DateTime(2026, 9, 20, 0, 0, 0, DateTimeKind.Utc);
+        kit.Db.SaveChanges();
+        return plan;
+    }
+
+    // ODIP's arithmetic can say On track while the NDIA has just refused a claim for want of funds: the one case the feature exists to catch. The list carries the NDIA's word, as the alerts and the Funding tab do.
+    [Fact]
+    public async Task ARowCarriesTheNdiasWordForItsPool_WhateverTheLedgerSays()
+    {
+        using var kit = Arrange();
+        var refused = kit.SeedParticipant(first: "Rae", last: "Refused");
+        var fine = kit.SeedParticipant(first: "Finn", last: "Fine");
+        RecordedInSeptember(OctoberPlan(kit, refused, 8000m), kit);
+        RecordedInSeptember(OctoberPlan(kit, fine, 8000m), kit);
+        var claim = RejectedClaim(kit, refused, "V27");
+
+        var rows = Body(await ListAsync(kit)).Rows.ToDictionary(r => r.ParticipantName);
+
+        Assert.Equal(BudgetStatus.OnTrack, rows["Rae Refused"].Status);   // ODIP's own arithmetic says fine
+        var word = rows["Rae Refused"].NdiaRejection!;
+        Assert.Equal(("V27", D(2026, 10, 4), claim.Id, claim.ClaimReference), (word.Code, word.Date, word.ClaimId, word.ClaimReference));
+        Assert.Null(rows["Finn Fine"].NdiaRejection);
+    }
+
+    [Fact]
+    public async Task TheNdiasWordIsOnTheRowOfThePoolItsClaimBelongsTo_NotOnTheOthers()
+    {
+        using var kit = Arrange();
+        kit.SeedItem("15_001", 15);
+        var person = kit.SeedParticipant();
+        RecordedInSeptember(OctoberPlan(kit, person, 8000m, Stated(15, PlanType.AgencyManaged, Q(2, 1000m), Q(3, 1000m), Q(4, 1000m))), kit);
+        RejectedClaim(kit, person, "V18", "15_001");
+
+        var rows = Body(await ListAsync(kit)).Rows.ToDictionary(r => r.PoolName);
+
+        Assert.Equal("V18", rows["Improved Daily Living Skills"].NdiaRejection!.Code);
+        Assert.Null(rows["Core"].NdiaRejection);
+    }
+
+    [Fact]
+    public async Task APoolTheNdiaHasRefused_RanksStraightAfterOver_AheadOfForecastOverAndApproaching()
+    {
+        using var kit = Arrange();
+        var onTrack = kit.SeedParticipant(first: "Alma", last: "Fine");
+        var refused = kit.SeedParticipant(first: "Rae", last: "Refused");
+        var over = kit.SeedParticipant(first: "Zed", last: "Over");
+        var overAndRefused = kit.SeedParticipant(first: "Olive", last: "Both");
+        var forecast = kit.SeedParticipant(first: "Ford", last: "Cast");
+        var approaching = kit.SeedParticipant(first: "Appa", last: "Roach");
+        foreach (var p in new[] { onTrack, refused, over, overAndRefused, forecast, approaching }) RecordedInSeptember(OctoberPlan(kit, p, 1000m), kit);
+        Claim(kit, onTrack, 100m);
+        Claim(kit, over, 1500m);
+        Claim(kit, overAndRefused, 1100m);
+        Claim(kit, approaching, 850m);
+        RejectedClaim(kit, refused);
+        RejectedClaim(kit, overAndRefused);
+        kit.SeedShift(forecast, D(2026, 10, 5)); kit.SeedShift(forecast, D(2026, 10, 6)); kit.SeedShift(forecast, D(2026, 10, 7));   // three shifts of $480 against $1,000
+
+        var rows = Body(await ListAsync(kit)).Rows;
+
+        Assert.Equal(new[] { "Olive Both", "Zed Over", "Rae Refused", "Ford Cast", "Appa Roach", "Alma Fine" }, rows.Select(r => r.ParticipantName));
+        Assert.Equal(new[] { BudgetStatus.Over, BudgetStatus.Over, BudgetStatus.OnTrack, BudgetStatus.ForecastOver, BudgetStatus.Approaching, BudgetStatus.OnTrack }, rows.Select(r => r.Status));
+    }
+
+    [Fact]
+    public async Task ARowSaysWhatIsLeftOrHowFarOver_AndHowMuchOfWhatIsAvailableIsRolledOver()
+    {
+        using var kit = Arrange();
+        var over = kit.SeedParticipant(first: "Olive", last: "Over");
+        var rolled = kit.SeedParticipant(first: "Rae", last: "Rolled");
+        OctoberPlan(kit, over, 8000m);
+        Claim(kit, over, 9000m);                                                       // $1,000 over this quarter's $8,000
+        kit.SeedPlan(rolled, D(2026, 7, 1), D(2027, 6, 30), Core(PlanType.PlanManaged, Q(1, 8000m), Q(2, 8000m), Q(3, 8000m), Q(4, 8000m)));
+        var september = kit.SeedShift(rolled, D(2026, 9, 10), ShiftStatus.Completed);
+        kit.SeedShiftClaim(rolled, TripClaimStatus.Paid, 1000m, september);           // $1,000 of July to September's $8,000: $7,000 rolls into this quarter
+        Claim(kit, rolled, 500m);
+
+        var rows = Body(await ListAsync(kit)).Rows.ToDictionary(r => r.ParticipantName);
+
+        var o = rows["Olive Over"];
+        Assert.Equal((8000m, 0m, 9000m, -1000m), (o.Available, o.Carried, o.Used, o.Remaining));
+        var r = rows["Rae Rolled"];
+        Assert.Equal((15000m, 7000m, 500m, 14500m), (r.Available, r.Carried, r.Used, r.Remaining));
+    }
+
     // ── The participants with no budget in force ────────────────────────────
 
     [Fact]
@@ -278,7 +378,7 @@ public class BudgetListTests
         tenant.Setup(t => t.TenantId).Returns((Guid?)null);
         tenant.Setup(t => t.IsSuperAdmin).Returns(true);
 
-        var result = await new BudgetsController(tenant.Object, new BudgetListService(kit.Db, kit.Ledger, kit.Clock)).List(CancellationToken.None);
+        var result = await new BudgetsController(tenant.Object, new BudgetListService(kit.Db, kit.Ledger, new NdiaRejectionReader(kit.Db, kit.Clock), kit.Clock)).List(CancellationToken.None);
 
         Assert.Equal(400, Assert.IsAssignableFrom<ObjectResult>(result.Result).StatusCode);
     }
@@ -306,8 +406,9 @@ public class BudgetListTests
         for (var i = 0; i < participants; i++)
         {
             var participant = kit.SeedParticipant(first: "Person", last: $"No{i:00}");
-            OctoberPlan(kit, participant, 1000m);
+            RecordedInSeptember(OctoberPlan(kit, participant, 1000m), kit);
             Claim(kit, participant, 900m);
+            RejectedClaim(kit, participant);   // the NDIA's word is read for every participant in a fixed number of queries too
             kit.SeedShift(participant, D(2026, 10, 5));
             kit.SeedBooking(trip, participant);
         }

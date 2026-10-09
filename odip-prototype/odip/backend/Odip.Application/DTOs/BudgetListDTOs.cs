@@ -21,8 +21,18 @@ public record BudgetListRowDto
     public DateOnly PeriodEnd { get; init; }
     /// <summary>The period's limit plus what earlier periods left unspent.</summary>
     public decimal Available { get; init; }
+    /// <summary>
+    /// How much of <see cref="Available"/> is rolled over from earlier periods of the plan (0 when none): the ledger labels it "not confirmed", because somebody else may have used it, and the list
+    /// says so beside Available so a row that is on track by rolled-over money does not read as if it were the period's own.
+    /// </summary>
+    public decimal Carried { get; init; }
     /// <summary>Claimed plus pending.</summary>
     public decimal Used { get; init; }
+    /// <summary>
+    /// Available minus used: what is left, or, when it is below zero, how far over the period already is (the Funding tab says "$X over"). The first question about a row that is Over is by how
+    /// much, and the server answers it so that no screen subtracts.
+    /// </summary>
+    public decimal Remaining { get; init; }
     public decimal BookedAhead { get; init; }
     /// <summary>Used plus booked ahead.</summary>
     public decimal Forecast { get; init; }
@@ -32,6 +42,11 @@ public record BudgetListRowDto
     /// they leave those shifts out: this says how many, and the row says so. The ledger's own count for the period; zero when every shift priced.
     /// </summary>
     public int UnpricedShiftCount { get; init; }
+    /// <summary>
+    /// The NDIA's own word that this pool's funds ran out (a claim of the pool refused with V17, V18, V27 or V28, while the funding period it was refused in is the one running); omitted when it
+    /// has none. ODIP's arithmetic can say On track while the NDIA has refused a claim for want of funds, and the list must not be silent about it. The same shape and rule as the Funding tab's note.
+    /// </summary>
+    public NdiaRejectionDto? NdiaRejection { get; init; }
 }
 
 /// <summary>Why an NDIS-funded participant has no row.</summary>
@@ -54,8 +69,8 @@ public record BudgetListNoBudgetDto
 }
 
 /// <summary>
-/// <c>GET api/v1/funding/budgets</c>. <see cref="Rows"/> are sorted by risk - Over, then Forecast over, then Approaching, then On track - and then by participant name and the plan's own order of
-/// pools. <see cref="NoBudget"/> are the NDIS-funded participants that have no row, by name. Archived participants and drafts are left out, as they are from the participant alerts.
+/// <c>GET api/v1/funding/budgets</c>. <see cref="Rows"/> are sorted by risk - Over, then the pools the NDIA has refused a claim of for want of funds, then Forecast over, then Approaching, then On
+/// track - and then by participant name and the plan's own order of pools. <see cref="NoBudget"/> are the NDIS-funded participants that have no row, by name. Archived participants and drafts are left out, as they are from the participant alerts.
 /// </summary>
 public record BudgetListDto
 {

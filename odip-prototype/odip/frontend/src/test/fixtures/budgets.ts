@@ -7,10 +7,12 @@ import type {
 // is the only test a screen may use for one. The provider's today in these fixtures is 8 Oct 2026, in the Oct to Dec quarter.
 
 export function budgetRow(overrides: Partial<BudgetListRow> = {}): BudgetListRow {
-  return {
-    participantId: 'p-0002', participantName: 'Sienna Williams', poolId: 'pool-core', poolName: 'Core', kind: 'CoreFlexible', managementType: 'AgencyManaged',
-    periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 9000, used: 3180, bookedAhead: 960, forecast: 4140, status: 'OnTrack', unpricedShiftCount: 0, ...overrides,
+  const row = {
+    participantId: 'p-0002', participantName: 'Sienna Williams', poolId: 'pool-core', poolName: 'Core', kind: 'CoreFlexible' as const, managementType: 'AgencyManaged' as const,
+    periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 9000, carried: 0, used: 3180, bookedAhead: 960, forecast: 4140, status: 'OnTrack' as const, unpricedShiftCount: 0, ...overrides,
   }
+  // The server sends what is left (or how far over); a fixture that did not say gets it from its own two figures, rounded to the cent.
+  return { ...row, remaining: overrides.remaining ?? Math.round((row.available - row.used) * 100) / 100 }
 }
 
 export function noBudget(overrides: Partial<BudgetListNoBudget> = {}): BudgetListNoBudget {
