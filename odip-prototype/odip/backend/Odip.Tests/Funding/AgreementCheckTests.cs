@@ -179,6 +179,36 @@ public class AgreementCheckTests
     }
 
     [Fact]
+    public async Task APoolAlreadyOverBeforeTheAgreement_SaysHowMuchOfItsOverByWasAlreadyThere()
+    {
+        using var a = await ArrangeAsync();
+        a.Kit.SeedPlan(a.Person, D(2026, 10, 1), D(2026, 12, 31), Core(PlanType.PlanManaged, Month(10, 600m), Month(11, 1000m), Month(12, 1000m)));
+        // Over before the agreement in both months it touches: $700 claimed of October's $600 and $1,100 of November's $1,000.
+        a.Kit.SeedShiftClaim(a.Person, TripClaimStatus.Paid, 700m, a.Kit.SeedShift(a.Person, D(2026, 10, 2), ShiftStatus.Completed));
+        a.Kit.SeedShiftClaim(a.Person, TripClaimStatus.Paid, 1100m, a.Kit.SeedShift(a.Person, D(2026, 11, 3), ShiftStatus.Completed));
+
+        var core = Assert.Single(Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays()), CancellationToken.None)).Pools);
+
+        Assert.Equal(new[] { -100m, -100m }, core.Periods.Select(p => p.Remaining));
+        Assert.Equal(2 * (TwoBlocks + 100m), core.OverBy);                      // each month's over-by counts the $100 it was already over, so the sum passes the agreement's cost...
+        Assert.Equal(200m, core.AlreadyOverBy);                                 // ...and the pool says how much of it was there before, so no screen adds anything up
+        Assert.Equal(core.AgreementCost, core.OverBy - core.AlreadyOverBy);     // what is left is the agreement's own overshoot: all of it, there being nothing left in either month
+    }
+
+    [Fact]
+    public async Task APoolThatIsOverOnlyBecauseOfTheAgreement_HasNothingAlreadyOver()
+    {
+        using var a = await ArrangeAsync();
+        TwoPoolPlan(a);
+        a.Kit.SeedShiftClaim(a.Person, TripClaimStatus.Paid, 100m, a.Kit.SeedShift(a.Person, D(2026, 10, 2), ShiftStatus.Completed));   // $100 of Core used in October: $500 left, not over
+
+        var check = Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays(), Wednesdays()), CancellationToken.None));
+
+        Assert.All(check.Pools, pool => Assert.True(pool.Over));
+        Assert.All(check.Pools, pool => Assert.Equal(0m, pool.AlreadyOverBy));
+    }
+
+    [Fact]
     public async Task WhatTheAgreementLeavesUnspentInAnEarlierPeriodStillRollsForward()
     {
         using var a = await ArrangeAsync();

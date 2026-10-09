@@ -14,8 +14,12 @@ public static class AgreementCarry
     /// <summary>One period of the pool: its limit, what is used in it already (claimed plus pending), and what the agreement costs in it (0 for a period the agreement does not touch).</summary>
     public readonly record struct PeriodInput(decimal Limit, decimal Used, decimal AgreementCost);
 
-    /// <summary>What a period has once the agreement has spent its share of the earlier ones: what carried in, the limit plus that, what is left after what is used, and how far the agreement passes it.</summary>
-    public readonly record struct PeriodOutcome(decimal CarriedIn, decimal Available, decimal Remaining, decimal OverBy);
+    /// <summary>
+    /// What a period has once the agreement has spent its share of the earlier ones: what carried in, the limit plus that, what is left after what is used, and how far the agreement passes it.
+    /// <c>OverBy</c> counts what the period was ALREADY over before the agreement (used past what it has: a negative remaining), because all of the agreement's cost is past what is left then;
+    /// <c>AlreadyOverBy</c> is that part, so <c>OverBy - AlreadyOverBy</c> is the agreement's own overshoot and is never more than its cost.
+    /// </summary>
+    public readonly record struct PeriodOutcome(decimal CarriedIn, decimal Available, decimal Remaining, decimal OverBy, decimal AlreadyOverBy);
 
     /// <param name="carriedIntoFirst">What the ledger says carries into the first period of the walk (0 for the first period of a plan; nothing carries across plans).</param>
     /// <param name="periods">The pool's periods in date order, including the ones the agreement does not touch: their unspent money carries too.</param>
@@ -27,7 +31,7 @@ public static class AgreementCarry
         {
             var available = period.Limit + carry;
             var remaining = available - period.Used;
-            outcomes.Add(new PeriodOutcome(carry, available, remaining, Math.Max(0m, period.AgreementCost - remaining)));
+            outcomes.Add(new PeriodOutcome(carry, available, remaining, Math.Max(0m, period.AgreementCost - remaining), Math.Max(0m, -remaining)));
             carry = Math.Max(0m, remaining - period.AgreementCost);
         }
 

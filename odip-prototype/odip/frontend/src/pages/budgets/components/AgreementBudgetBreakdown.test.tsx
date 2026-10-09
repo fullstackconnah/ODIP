@@ -138,13 +138,15 @@ describe('AgreementBudgetBreakdown: an agreement that does not fit', () => {
     expect(screen.getByRole('region')).toHaveTextContent('Agreement $100.00 against $0.00 left in 1 Oct – 31 Dec 2026')
   })
 
-  it('says it is a warning only: the plan can still be saved and approved', () => {
+  it('says it is a warning only: the plan can still be saved and approved, in that one sentence', () => {
     renderView(over())
 
-    expect(screen.getByRole('region')).toHaveTextContent(`One period would be over what is left. ${AGREEMENT_WARNING_ONLY}`)
+    expect(screen.getByRole('region')).toHaveTextContent(AGREEMENT_WARNING_ONLY)
+    // The verdict above it already says the period is over: the sentence under it does not say so a second time.
+    expect(screen.getByRole('region')).not.toHaveTextContent('would be over what is left')
   })
 
-  it('counts the periods that would be over, across pools', () => {
+  it('says the warning once, whatever the number of periods that are over, across pools', () => {
     renderView(breakdown({
       pools: [
         agreementPool({ poolLabel: 'Core', lines: [agreementLine({ withinLimit: false, overBy: 10 }), agreementLine({ periodStart: '2027-01-01', periodEnd: '2027-03-31' })] }),
@@ -152,7 +154,8 @@ describe('AgreementBudgetBreakdown: an agreement that does not fit', () => {
       ],
     }))
 
-    expect(screen.getByRole('region')).toHaveTextContent('2 periods would be over what is left.')
+    expect(screen.getAllByText(AGREEMENT_WARNING_ONLY)).toHaveLength(1)
+    expect(screen.getByRole('region')).not.toHaveTextContent('periods would be over')
   })
 
   it('cannot block anything: no button, no disabled control, only the sentence', () => {
@@ -219,6 +222,30 @@ describe('AgreementBudgetBreakdown: a pool with several periods', () => {
     expect(pool).toHaveTextContent('Agreement $400.00 across 4 periods')
   })
 
+  // A period that was already over before the agreement counts that excess in its own over-by (all of the agreement's cost is past what is left), so the sum of them can pass what the agreement costs.
+  // The pool says how much of it was there already (the server's figure; nothing is added up here), so the line never reads as an overspend bigger than the agreement.
+  it('says how much of the sum was already over before the agreement, so it never reads bigger than the agreement costs', () => {
+    const lines = [month(1, { withinLimit: false, overBy: 7000.5, remaining: -6900.5 }), month(2, { withinLimit: false, overBy: 100, remaining: 0 }), month(3), month(4)]
+    renderView(breakdown({ pools: [agreementPool({ lines, alreadyOverBy: 6900.5 })] }))
+
+    expect(screen.getByText(/^Over in 2 of 4 periods/).textContent).toBe('Over in 2 of 4 periods, $7,100.50 in all, of which $6,900.50 was already over')
+  })
+
+  it('says nothing about what was already over when nothing was', () => {
+    const lines = [month(1, { withinLimit: false, overBy: 70, remaining: 30 }), month(2, { withinLimit: false, overBy: 100, remaining: 0 }), month(3)]
+    renderView(breakdown({ pools: [agreementPool({ lines, alreadyOverBy: null })] }))
+
+    expect(screen.getByText(/^Over in 2 of 3 periods/).textContent).toBe('Over in 2 of 3 periods, $170.00 in all')
+  })
+
+  it('withholds what was already over from a viewer who may not see money, as it does the sum', () => {
+    const lines = [month(1, { withinLimit: false, overBy: 7000.5, remaining: -6900.5 }), month(2)]
+    const { container } = renderView(breakdown({ figures: { visible: false, reason: 'Budget figures are for coordinators and administrators.' }, pools: [agreementPool({ lines, alreadyOverBy: 6900.5 })] }))
+
+    expect(dollarsIn(container)).toEqual([])
+    expect(screen.getByText(/^Over in 1 of 2 periods/).textContent).toBe('Over in 1 of 2 periods')
+  })
+
   it('keeps every period’s sentence behind a native disclosure that is closed, named by what it holds, and still in the page', async () => {
     const user = userEvent.setup()
     renderView(breakdown({ pools: [agreementPool({ lines: [1, 2, 3].map(n => month(n)) })] }))
@@ -234,10 +261,11 @@ describe('AgreementBudgetBreakdown: a pool with several periods', () => {
     expect(details).toHaveAttribute('open')
   })
 
-  it('counts the periods that would be over across every pool, hidden behind a disclosure or not, in the sentence at the foot', () => {
+  it('says the warning once at the foot when the periods that are over sit behind a disclosure', () => {
     renderView(breakdown({ pools: [agreementPool({ lines: [1, 2, 3].map(n => month(n)).concat([month(4, { withinLimit: false, overBy: 70, remaining: 30 }), month(5, { withinLimit: false, overBy: 20, remaining: 80 })]) })] }))
 
-    expect(screen.getByRole('region')).toHaveTextContent('2 periods would be over what is left.')
+    expect(screen.getAllByText(AGREEMENT_WARNING_ONLY)).toHaveLength(1)
+    expect(screen.getByText(/^Over in/)).toHaveTextContent('Over in 2 of 5 periods')
   })
 
   it('treats each pool on its own: one with several periods and one with a single period', () => {

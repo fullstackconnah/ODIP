@@ -398,6 +398,11 @@ export interface AgreementCheckPool {
   over: boolean
   /** How far the agreement passes what the pool has across the periods it touches: the sum of the periods' own over-bys (each overspend leaves nothing to carry), 0 when every period fits. */
   overBy: number
+  /**
+   * The part of `overBy` that the pool was already over before the agreement: the sum, over the periods the agreement touches, of what is used past what they have (a period's negative remaining).
+   * A period's over-by is the agreement's cost PLUS that, so `overBy` can pass the agreement's cost; `overBy` less this is the agreement's own overshoot. 0 when no period was over before.
+   */
+  alreadyOverBy: number
   /** The periods the agreement touches, in date order. */
   periods: AgreementCheckPeriod[]
 }

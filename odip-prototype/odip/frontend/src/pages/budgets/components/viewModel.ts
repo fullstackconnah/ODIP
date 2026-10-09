@@ -158,6 +158,11 @@ export type AgreementBudgetPool = {
   cost: BudgetAmount
   /** How far the agreement passes what the pool has across those periods (the server's sum of the periods' over-bys). `null` when every period fits. */
   overBy: BudgetAmount
+  /**
+   * The part of `overBy` the pool was already over before the agreement (the server's sum of the periods' negative remainders): a period over already counts that excess in its own over-by, so
+   * `overBy` can pass the agreement's cost, and the line says how much of it was there. `null` when none was.
+   */
+  alreadyOverBy: BudgetAmount
 }
 
 /**

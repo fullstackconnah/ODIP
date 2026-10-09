@@ -79,4 +79,35 @@ public class AgreementCarryTests
         Assert.Equal(0m, Walk(-5m, new[] { Period(600m, 0m, 0m) })[0].CarriedIn);
         Assert.Empty(Walk(0m, Array.Empty<PeriodInput>()));
     }
+
+    // ── What a period was already over before the agreement (fix round 2) ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void WhatAPeriodWasOverBeforeTheAgreementIsSaidApart()
+    {
+        // $700 used of $600: $100 over before the agreement, so an agreement of $100 makes the period $200 over, of which $100 was already there.
+        var walk = Walk(0m, new[] { Period(600m, 700m, 100m), Period(1000m, 0m, 500m) });
+
+        Assert.Equal((200m, 100m), (walk[0].OverBy, walk[0].AlreadyOverBy));
+        Assert.Equal((0m, 0m), (walk[1].OverBy, walk[1].AlreadyOverBy));
+    }
+
+    [Fact]
+    public void APeriodThatIsOverOnlyBecauseOfTheAgreement_HasNothingAlreadyOver()
+    {
+        var walk = Walk(0m, new[] { Period(600m, 0m, 900m), Period(1000m, 0m, 500m) });
+
+        Assert.Equal((300m, 0m), (walk[0].OverBy, walk[0].AlreadyOverBy));
+    }
+
+    [Fact]
+    public void TheAgreementsOwnOvershootIsNeverMoreThanItCostsInThePeriod()
+    {
+        // Three periods, every one already over (the design reviewer's shape): whatever was there, the over-by less it is at most what the agreement costs.
+        var costs = new[] { 400m, 250m, 300m };
+        var walk = Walk(0m, new[] { Period(600m, 750m, costs[0]), Period(500m, 640m, costs[1]), Period(500m, 520m, costs[2]) });
+
+        Assert.Equal(new[] { 150m, 140m, 20m }, walk.Select(w => w.AlreadyOverBy));
+        for (var i = 0; i < walk.Count; i++) Assert.True(walk[i].OverBy - walk[i].AlreadyOverBy <= costs[i], $"period {i}");
+    }
 }

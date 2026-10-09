@@ -122,6 +122,7 @@ public sealed class AgreementCheckService
             var ordered = pool.Periods.OrderBy(p => p.Period.PeriodStart).ToList();
             var walk = AgreementCarry.Walk(ordered[0].Carried, ordered.Select(p => new AgreementCarry.PeriodInput(p.Limit, p.Used, byPeriod.GetValueOrDefault(p.Period.Id))).ToList());
             var periods = new List<AgreementCheckPeriodDto>();
+            var alreadyOver = 0m;
             for (var i = 0; i < ordered.Count; i++)
             {
                 var p = ordered[i];
@@ -131,12 +132,13 @@ public sealed class AgreementCheckService
                     PeriodId = p.Period.Id, PeriodStart = p.Period.PeriodStart, PeriodEnd = p.Period.PeriodEnd, IsCurrent = p.IsCurrent, AgreementCost = cost,
                     Available = walk[i].Available, Used = p.Used, Remaining = walk[i].Remaining, OverBy = walk[i].OverBy,
                 });
+                alreadyOver += walk[i].AlreadyOverBy;
             }
 
             pools.Add(new AgreementCheckPoolDto
             {
                 PoolId = pool.Pool.Id, PoolName = BudgetText.PoolLabel(pool.Pool, severalCorePools), Kind = pool.Pool.Kind, ManagementType = pool.Pool.ManagementType,
-                AgreementCost = periods.Sum(p => p.AgreementCost), Over = periods.Any(p => p.OverBy > 0m), OverBy = periods.Sum(p => p.OverBy), Periods = periods,
+                AgreementCost = periods.Sum(p => p.AgreementCost), Over = periods.Any(p => p.OverBy > 0m), OverBy = periods.Sum(p => p.OverBy), AlreadyOverBy = alreadyOver, Periods = periods,
             });
         }
 

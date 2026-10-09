@@ -21,7 +21,7 @@ describe('agreementBudgetView', () => {
       status: 'ready',
       figures: { visible: true },
       refreshing: false,
-      pools: [{ poolLabel: 'Core', cost: 2355.5, overBy: null, lines: [{ periodStart: '2026-10-01', periodEnd: '2026-12-31', cost: 2355.5, remaining: 3120, withinLimit: true, overBy: null }] }],
+      pools: [{ poolLabel: 'Core', cost: 2355.5, overBy: null, alreadyOverBy: null, lines: [{ periodStart: '2026-10-01', periodEnd: '2026-12-31', cost: 2355.5, remaining: 3120, withinLimit: true, overBy: null }] }],
       notInARecordedPool: 0,
       outsideThePlan: 0,
     })
@@ -103,6 +103,28 @@ describe('agreementBudgetView', () => {
     }))
 
     expect(view?.pools.map(pool => [pool.poolLabel, pool.cost, pool.overBy])).toEqual([['Core', 1500, 1000], ['Improved Daily Living Skills', 300, null]])
+  })
+
+  // A period already over before the agreement counts that excess in its over-by, so the sum can pass the agreement's cost: the server says how much of it was there already, and it is carried as sent.
+  it('carries how much of a pool over-by was already over before the agreement, as the server sent it, and nothing when none was', () => {
+    const view = agreementBudgetView('p-1', state({
+      data: agreementCheck({
+        pools: [
+          agreementPool({ poolName: 'Core', alreadyOverBy: 769.79, periods: [agreementPeriod({ agreementCost: 1000, remaining: -300, overBy: 1300 })] }),
+          agreementPool({ poolId: 'pool-ildl', poolName: 'Improved Daily Living Skills', periods: [agreementPeriod({ agreementCost: 300, remaining: 100, overBy: 200 })] }),
+        ],
+      }),
+    }))
+
+    expect(view?.pools.map(pool => [pool.poolLabel, pool.overBy, pool.alreadyOverBy])).toEqual([['Core', 1300, 769.79], ['Improved Daily Living Skills', 200, null]])
+  })
+
+  it('reads an answer with no already-over figure, from an older server, as nothing was already over', () => {
+    const pool = { ...agreementPool({ periods: [agreementPeriod({ agreementCost: 300, remaining: 100, overBy: 200 })] }) } as Partial<ReturnType<typeof agreementPool>>
+    delete pool.alreadyOverBy
+    const view = agreementBudgetView('p-1', state({ data: agreementCheck({ pools: [pool as ReturnType<typeof agreementPool>] }) }))
+
+    expect(view?.pools[0]).toMatchObject({ overBy: 200, alreadyOverBy: null })
   })
 
   it('is loading while the first answer is on its way, and failed, with a way to ask again, when it never came: neither states a figure', () => {

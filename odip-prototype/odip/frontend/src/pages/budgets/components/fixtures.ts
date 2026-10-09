@@ -82,7 +82,7 @@ export function agreementPool(overrides: Partial<AgreementBudgetPool> = {}): Agr
   const lines = overrides.lines ?? [agreementLine()]
   const overBy = lines.reduce((sum, line) => sum + (line.overBy ?? 0), 0)
   // The pool's own two figures are the server's; a fixture that does not say gets them from its lines, so a test names only the lines.
-  return { poolLabel: 'Core', lines, cost: lines.reduce((sum, line) => sum + (line.cost ?? 0), 0), overBy: overBy > 0 ? overBy : null, ...overrides }
+  return { poolLabel: 'Core', lines, cost: lines.reduce((sum, line) => sum + (line.cost ?? 0), 0), overBy: overBy > 0 ? overBy : null, alreadyOverBy: null, ...overrides }
 }
 
 export function breakdown(overrides: Partial<AgreementBudgetBreakdownView> = {}): AgreementBudgetBreakdownView {

@@ -61,6 +61,12 @@ public record AgreementCheckPoolDto
     /// next, so the sum is the pool's whole shortfall; 0 when every period fits. The bar's one line for a pool that spans several periods says it without adding anything up.
     /// </summary>
     public decimal OverBy { get; init; }
+    /// <summary>
+    /// The part of <see cref="OverBy"/> that the pool was already over before the agreement: for each period the agreement touches, what is used past what the period has (its negative remaining, as a
+    /// positive amount), added up. A period's over-by is the agreement's cost PLUS that, so the sum of them can read bigger than the agreement; <c>OverBy - AlreadyOverBy</c> is the agreement's own
+    /// overshoot and never more than its cost. 0 when no period was over before the agreement. The bar says it beside the sum, so no screen adds anything up.
+    /// </summary>
+    public decimal AlreadyOverBy { get; init; }
     /// <summary>The periods the agreement touches, in date order.</summary>
     public List<AgreementCheckPeriodDto> Periods { get; init; } = new();
 }

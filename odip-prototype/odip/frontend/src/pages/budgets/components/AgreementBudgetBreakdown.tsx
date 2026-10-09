@@ -83,6 +83,8 @@ function Pool({ pool, figures }: { pool: AgreementBudgetPool; figures: BudgetFig
                 <span>
                   Over in {overCount} of {count} periods
                   {figures.visible && pool.overBy !== null && <>, <span className="tabular-nums">{formatCurrency(pool.overBy)}</span> in all</>}
+                  {/* A period over before the agreement counts that excess in its own over-by, so the sum can read bigger than the agreement costs: say how much of it was there already. */}
+                  {figures.visible && pool.overBy !== null && pool.alreadyOverBy !== null && <>, of which <span className="tabular-nums">{formatCurrency(pool.alreadyOverBy)}</span> was already over</>}
                 </span>
               ) : (
                 <span>{WITHIN_WORD} in all {count} periods</span>
@@ -138,7 +140,7 @@ export function AgreementBudgetBreakdown({ view }: { view: AgreementBudgetBreakd
     )
   }
 
-  const over = view.pools.flatMap(pool => pool.lines).filter(line => !line.withinLimit).length
+  const anyOver = view.pools.some(pool => pool.lines.some(line => !line.withinLimit))
   const hasBucket = (view.notInARecordedPool ?? 0) > 0 || (view.outsideThePlan ?? 0) > 0
 
   return (
@@ -157,12 +159,11 @@ export function AgreementBudgetBreakdown({ view }: { view: AgreementBudgetBreakd
           <BudgetFigure figures={figures} amount={view.outsideThePlan} /> of the agreement is delivered outside the plan&rsquo;s dates, so it is not compared.
         </p>
       )}
-      {over > 0 && (
+      {/* The verdicts above already say which periods are over and by how much, so the sentence under them is the warning's nature and nothing else. */}
+      {anyOver && (
         <p className="flex items-start gap-1 text-[13px] font-medium">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          <span>
-            {over === 1 ? 'One period would' : `${over} periods would`} be over what is left. {AGREEMENT_WARNING_ONLY}
-          </span>
+          <span>{AGREEMENT_WARNING_ONLY}</span>
         </p>
       )}
       {view.refreshing === true && <p className={NOTE}>Updating…</p>}

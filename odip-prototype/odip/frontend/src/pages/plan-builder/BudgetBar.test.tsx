@@ -84,7 +84,8 @@ describe('BudgetBar', () => {
     const line = within(check()).getByRole('listitem')
     expect(line).toHaveTextContent('Agreement $2,355.50 against $1,000.00 left in 1 Oct – 31 Dec 2026')
     expect(line).toHaveTextContent('Over by $1,355.50')
-    expect(check()).toHaveTextContent('One period would be over what is left. This is a warning only: it never stops a save or an approval.')
+    expect(check()).toHaveTextContent('This is a warning only: it never stops a save or an approval.')
+    expect(check()).not.toHaveTextContent('would be over what is left')   // the verdict above it already says so
     expect(screen.getByText('Over budget')).toBeInTheDocument()   // and on the one-line form a phone shows
     // The line takes the warning tint and says "Over by" in words (colour is never the only cue); the figures are not live regions, so nothing speaks on every recalculation.
     expect(line).toHaveClass('bg-[var(--color-warning-container)]')

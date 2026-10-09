@@ -132,18 +132,20 @@ function agreementCheckOf(ledger, planType, lines, periodFrom, periodTo, today) 
     const ordered = [...pool.periods].sort((a, b) => (a.periodStart < b.periodStart ? -1 : a.periodStart > b.periodStart ? 1 : 0))
     let carry = Math.max(0, ordered[0].carried || 0)
     const periods = []
+    let alreadyOver = 0
     for (const p of ordered) {
       const cost = byPeriod.has(p.id) ? round2(byPeriod.get(p.id)) : 0
       const available = round2(p.limit + carry)
       const remaining = round2(available - p.used)
       if (byPeriod.has(p.id)) {
         periods.push({ periodId: p.id, periodStart: p.periodStart, periodEnd: p.periodEnd, isCurrent: p.isCurrent, agreementCost: cost, available, used: p.used, remaining, overBy: Math.max(0, round2(cost - remaining)) })
+        alreadyOver += Math.max(0, -remaining)   // what the period was over before the agreement: its negative remaining
       }
       carry = Math.max(0, round2(remaining - cost))
     }
     pools.push({
       poolId: pool.id, poolName: poolLabel(pool, ledger.pools), kind: pool.kind, managementType: pool.managementType,
-      agreementCost: round2(periods.reduce((sum, p) => sum + p.agreementCost, 0)), over: periods.some((p) => p.overBy > 0), overBy: round2(periods.reduce((sum, p) => sum + p.overBy, 0)), periods,
+      agreementCost: round2(periods.reduce((sum, p) => sum + p.agreementCost, 0)), over: periods.some((p) => p.overBy > 0), overBy: round2(periods.reduce((sum, p) => sum + p.overBy, 0)), alreadyOverBy: round2(alreadyOver), periods,
     })
   }
   return {

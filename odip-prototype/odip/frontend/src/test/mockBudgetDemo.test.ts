@@ -133,6 +133,23 @@ describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (
     expect(check.notInARecordedPool).toBe(0)
   })
 
+  // Dylan's Core is already over in the first quarter (-$1,563.21 left), so the agreement's cost there is all past what is left and the period's over-by counts that excess too: the check says how much
+  // of the pool's over-by was already there, so the sum never reads as an overspend bigger than the agreement (AgreementCarry's AlreadyOverBy on the server).
+  it('says how much of a pool over-by was already over before the agreement', () => {
+    const check = handler(mock.post, 'participants/:id/funding/agreement-check')('p-0005', {
+      blocks: [{ id: 'b1' }], periodFrom: '2026-10-12', periodTo: '2027-01-31',
+    }) as { pools: Array<{ poolName: string; over: boolean; agreementCost: number; overBy: number; alreadyOverBy: number; periods: Array<Record<string, unknown>> }> }
+
+    const core = check.pools[0]
+    expect(core).toMatchObject({ poolName: 'Core', over: true, agreementCost: 1177.28 })
+    expect(core.periods[0]).toMatchObject({ remaining: -1563.21, agreementCost: 588.64, overBy: 2151.85 })
+    expect(core.alreadyOverBy).toBe(1563.21)
+    expect(core.overBy - core.alreadyOverBy).toBeLessThanOrEqual(core.agreementCost)
+    // Nothing was already over in a pool that is not: Sienna's pools say 0, and a pool over only by the agreement does too.
+    const sienna = handler(mock.post, 'participants/:id/funding/agreement-check')('p-0002', { blocks: [{ id: 'b1' }], periodFrom: '2026-10-12', periodTo: '2027-01-31' }) as { pools: Array<{ alreadyOverBy: number }> }
+    expect(sienna.pools.map(pool => pool.alreadyOverBy)).toEqual([0, 0])
+  })
+
   it('says there is no budget when no plan is running, and prices nothing', () => {
     const check = handler(mock.post, 'participants/:id/funding/agreement-check')('p-0001', { blocks: [{ id: 'b1' }], periodFrom: '2026-10-12', periodTo: '2027-01-31' }) as Record<string, unknown>
 

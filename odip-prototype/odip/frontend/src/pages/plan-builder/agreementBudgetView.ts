@@ -45,6 +45,7 @@ export function agreementBudgetView(participantId: string, state: AgreementCheck
     poolLabel: pool.poolName,
     cost: pool.agreementCost,
     overBy: pool.overBy > 0 ? pool.overBy : null,
+    alreadyOverBy: pool.alreadyOverBy > 0 ? pool.alreadyOverBy : null,
     lines: pool.periods.map(period => ({
       periodStart: period.periodStart,
       periodEnd: period.periodEnd,

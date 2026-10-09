@@ -57,7 +57,8 @@ export function agreementPeriod(overrides: Partial<AgreementCheckPeriod> = {}): 
 export function agreementPool(overrides: Partial<AgreementCheckPool> = {}): AgreementCheckPool {
   const periods = overrides.periods ?? [agreementPeriod()]
   return {
-    poolId: 'pool-core', poolName: 'Core', kind: 'CoreFlexible', managementType: 'PlanManaged', agreementCost: periods.reduce((sum, p) => sum + p.agreementCost, 0), over: periods.some(p => p.overBy > 0), overBy: periods.reduce((sum, p) => sum + p.overBy, 0), periods, ...overrides,
+    poolId: 'pool-core', poolName: 'Core', kind: 'CoreFlexible', managementType: 'PlanManaged', agreementCost: periods.reduce((sum, p) => sum + p.agreementCost, 0), over: periods.some(p => p.overBy > 0), overBy: periods.reduce((sum, p) => sum + p.overBy, 0),
+    alreadyOverBy: periods.reduce((sum, p) => sum + (p.overBy > 0 && p.remaining < 0 ? -p.remaining : 0), 0), periods, ...overrides,
   }
 }
 
