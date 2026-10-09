@@ -156,6 +156,30 @@ owner decision (collected under Open Flags at the end).
   hard-limit mode for one-off shifts with the Admin override and the emergency path (an
   Admin reviews it afterwards), and the pattern-generate and trip-booking warnings.
   Depends on FUND-04.
+  - Follow-ups left by the phase 2b reviews (small, none blocks; the review files are
+    `P2B-DESIGN-REVIEW.md` and `P2B-REVIEW.md` in the 2b builder's scratch, and the builder's
+    `P2B-REPORT.md`):
+    - **The phone caveat for a rolled-over Available** (design review, round 2, N6). The
+      bent-arrow mark has its words only in a legend after the last card and in a tooltip that
+      does not exist on touch; below `md` print "incl. $X rolled over, not confirmed" in the
+      card cell, or move both legends above the cards. Do it with the lead-line change below.
+    - **A DataTable lead-line option for the 390 cards** (design review, round 1, L5, and
+      round 2 "What stays open"). The Budgets list's five cards take about 1,130px; a fixed
+      first line of participant and status pill, then pool and period, then the four figures
+      in two columns would put each card near 150px.
+    - **The agreement bar's dock trims** (design review, round 2 "What stays open"). The dock
+      is 185px when a pool is over in several periods: the pool line repeats the agreement
+      figure that sits in the column beside it when there is one pool, and the "warning only"
+      sentence could share a line with the "Each of the N periods" disclosure.
+    - **What a stamped late code means** (code review, round 1, N1, and both round 2
+      reviews). `UpdateClaim` stamps `RejectedDate` with the day a code is recorded on a claim
+      that was marked Rejected before the day was kept, so the claim page, the Funding note and
+      the alert print that day as the day the NDIA refused the claim. Only legacy rows can be
+      stamped; if it ever matters, say "recorded on" for a stamped day.
+    - **A running plan with no pools and a later plan recorded** (code review, round 2, on the
+      builder's veto call 4). The Budgets list's tail reads "Plan starts {date}" for it while
+      the Funding tab says the running plan has no pools; decide which sentence a plan that
+      is running but empty should get.
 
 ### F. Living Arrangements
 
