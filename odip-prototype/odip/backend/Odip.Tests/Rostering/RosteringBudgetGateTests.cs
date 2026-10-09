@@ -231,6 +231,25 @@ public class RosteringBudgetGateTests : IDisposable
         Assert.Equal(ShiftStatus.Cancelled, cancelled.Status);
     }
 
+    [Fact]
+    public async Task Update_DoesNotLetACancelledRowWithNoLengthBeReopenedWithTheSameTimes()
+    {
+        // Cancelling is exempt (a row saved before the rule can always be cancelled), but reopening is somebody setting the shift live again: the same times must not bring a shift with no length back to life
+        // (phase 3 review, N1). Annotating the cancelled row is still fine.
+        var controller = Rig(booked: false);
+        var legacy = _kit.SeedShift(_participant, Wed14Oct);
+        legacy.EndTime = legacy.StartTime;
+        legacy.Status = ShiftStatus.Cancelled;
+        _kit.Db.SaveChanges();
+
+        var annotated = Ok(await controller.UpdateShift(legacy.Id, Update(legacy, notes: "Family cancelled by phone"), default));
+        var reopened = await controller.UpdateShift(legacy.Id, Update(legacy, status: ShiftStatus.Published), default);
+
+        Assert.Equal(ShiftStatus.Cancelled, annotated.Status);
+        Assert.Equal(EndsBeforeItStarts, Said(reopened));
+        Assert.Equal(ShiftStatus.Cancelled, _kit.Db.Shifts.Single(s => s.Id == legacy.Id).Status);
+    }
+
     // ── The dry run ─────────────────────────────────────────────────────────
 
     [Fact]

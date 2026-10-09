@@ -569,8 +569,10 @@ public class RosteringController : ControllerBase
 
         // A shift has to end after it starts. The rule is for times somebody is setting now: an edit that leaves the shift's times alone, or cancels it, never trips it, because rows saved before this rule
         // may already be wrong and the panel must still be able to annotate, assign and cancel them (a started shift's times are locked and could not be mended at all).
+        // Reopening a cancelled shift is somebody setting it live again: the same times must not bring a shift with no length back to life (phase 3 review, N1).
         var timesChanged = dto.StartTime != shift.StartTime || dto.EndTime != shift.EndTime || dto.EndsNextDay != shift.EndsNextDay;
-        if (timesChanged && dto.Status != ShiftStatus.Cancelled && Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m)
+        var reopening = shift.Status == ShiftStatus.Cancelled && dto.Status != ShiftStatus.Cancelled;
+        if ((timesChanged || reopening) && dto.Status != ShiftStatus.Cancelled && Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m)
             return BadRequest(ApiResponse<ShiftDto>.Fail(ShiftEndsBeforeItStartsMessage));
 
         // An existing legacy shift can still be status-managed after readiness is lost. Moving
@@ -1175,6 +1177,8 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftPatternDto>>> CreatePattern(
         [FromBody] CreateShiftPatternDto dto, CancellationToken ct)
     {
+        // A pattern makes shifts, so it needs a length like one (phase 3 review, N2): a pattern with none would make shifts the budget cannot price.
+        if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ShiftEndsBeforeItStartsMessage));
         if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
         if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
@@ -1201,6 +1205,10 @@ public class RosteringController : ControllerBase
     {
         var pattern = await _db.ShiftPatterns.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<ShiftPatternDto>.Fail("Pattern not found."));
+
+        // The rule is for times somebody is setting now, as for a shift: an edit that leaves the times alone (deactivating a pattern saved before the rule) is never refused.
+        var timesChanged = dto.StartTime != pattern.StartTime || dto.EndTime != pattern.EndTime || dto.EndsNextDay != pattern.EndsNextDay;
+        if (timesChanged && Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ShiftEndsBeforeItStartsMessage));
 
         if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
