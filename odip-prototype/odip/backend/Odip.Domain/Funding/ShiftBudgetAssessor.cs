@@ -106,13 +106,13 @@ public static class ShiftBudgetAssessor
     /// <summary>Money as the findings say it: dollars and cents, thousands separated, whatever the culture of the server.</summary>
     public static string Money(decimal amount) => "$" + amount.ToString("N2", CultureInfo.InvariantCulture);
 
-    /// <summary>A funding period as the findings say it: "1 Oct – 31 Dec 2026", or with both years when it crosses one. A no-break space sits on each side of the en dash, so a line never splits at the dash.</summary>
+    /// <summary>A funding period as the findings say it: "1 Oct – 31 Dec 2026", or with both years when it crosses one. A no-break space sits on each side of the en dash and a word joiner (U+2060) follows it, so a line never splits at the dash: an en dash allows a break after it even in front of a no-break space (Unicode line breaking, UAX #14), which is where the lines were splitting.</summary>
     public static string Period(BudgetFindingFigures figures) => Period(figures.PeriodStart, figures.PeriodEnd);
 
     public static string Period(DateOnly start, DateOnly end) =>
         start.Year == end.Year
-            ? string.Create(CultureInfo.InvariantCulture, $"{start:d MMM}\u00A0\u2013\u00A0{end:d MMM yyyy}")
-            : string.Create(CultureInfo.InvariantCulture, $"{start:d MMM yyyy}\u00A0\u2013\u00A0{end:d MMM yyyy}");
+            ? string.Create(CultureInfo.InvariantCulture, $"{start:d MMM}\u00A0\u2013\u2060\u00A0{end:d MMM yyyy}")
+            : string.Create(CultureInfo.InvariantCulture, $"{start:d MMM yyyy}\u00A0\u2013\u2060\u00A0{end:d MMM yyyy}");
 
     /// <summary>The estimate of the shift itself, said after the forecast-over finding only (the over and approaching findings are about the period, not this shift): "This shift: about $292.32." Nothing when the shift adds nothing.</summary>
     private static string Cost(BudgetFindingFigures figures) => figures.ShiftCost > 0m ? $" This shift: about {Money(figures.ShiftCost)}." : string.Empty;

@@ -24,14 +24,16 @@ const RATE = 60
 const BLOCKING = 'Blocking'
 const NBSP = ' '
 const EN_DASH = '–'
+const WORD_JOINER = '⁠'
 const WRITTEN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const NO_LENGTH_MESSAGE = "The shift must end after it starts. Tick 'Ends the next day' for an overnight shift."
 const round2 = (n) => Math.round(n * 100) / 100
 const money = (n) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const dayMonth = (isoDate) => { const [, m, d] = isoDate.split('-').map(Number); return `${d} ${WRITTEN[m - 1]}` }
 const dayMonthYear = (isoDate) => { const [y, m, d] = isoDate.split('-').map(Number); return `${d} ${WRITTEN[m - 1]} ${y}` }
-// A no-break space on each side of the en dash, so a line never splits at the dash (the server's ShiftBudgetAssessor.Period).
-const periodWords = (start, end) => (start.slice(0, 4) === end.slice(0, 4) ? `${dayMonth(start)}${NBSP}${EN_DASH}${NBSP}${dayMonthYear(end)}` : `${dayMonthYear(start)}${NBSP}${EN_DASH}${NBSP}${dayMonthYear(end)}`)
+// A no-break space on each side of the en dash and a word joiner after it, so a line never splits at the dash (the server's ShiftBudgetAssessor.Period: an en dash allows a break after it even in front of a no-break space).
+const dash = `${NBSP}${EN_DASH}${WORD_JOINER}${NBSP}`
+const periodWords = (start, end) => (start.slice(0, 4) === end.slice(0, 4) ? `${dayMonth(start)}${dash}${dayMonthYear(end)}` : `${dayMonthYear(start)}${dash}${dayMonthYear(end)}`)
 
 function minutesOf(t) {
   const [h, m] = String(t).split(':').map(Number)

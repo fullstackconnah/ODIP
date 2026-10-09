@@ -41,7 +41,7 @@ public class ApprovalPreviewBudgetWarningsTests
         var warning = Assert.Single(preview.BudgetWarnings!);
         Assert.Equal(("Core (flexible)", new DateOnly(2026, 10, 1), new DateOnly(2026, 12, 31)), (warning.PoolName, warning.PeriodStart, warning.PeriodEnd));
         Assert.Equal((1000m, 9600m, 9600m, 8600m, 40), (warning.Available, warning.Forecast, warning.Added, warning.OverBy, warning.Count));
-        Assert.Equal("These 40 shifts take Core (flexible) to $9,600.00 of $1,000.00 for 1 Oct\u00A0\u2013\u00A031 Dec 2026, $8,600.00 over.", warning.Message);
+        Assert.Equal("These 40 shifts take Core (flexible) to $9,600.00 of $1,000.00 for 1 Oct\u00A0\u2013\u2060\u00A031 Dec 2026, $8,600.00 over.", warning.Message);
     }
 
     [Fact]

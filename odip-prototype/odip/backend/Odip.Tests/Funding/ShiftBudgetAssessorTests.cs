@@ -147,7 +147,7 @@ public class ShiftBudgetAssessorTests
     // ── What each finding says, and the figures behind it ──────────────────
 
     // A period is written with a no-break space on each side of its en dash, so a line never splits at the dash (the phase 3 design review, M3).
-    private const string Dash = "\u00A0\u2013\u00A0";
+    private const string Dash = "\u00A0\u2013\u2060\u00A0";
 
     [Fact]
     public void TheForecastOverMessage_NamesThePoolTheForecastTheAvailableThePeriodAndHowFarOver_ThenTheShiftsCost()
