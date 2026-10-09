@@ -249,13 +249,15 @@ public class DraftPdfScheduleTests
         draft.ParticipantNameSnapshot = "Alex Sample";
         draft.Representative = "Sam Sample (parent)";
         draft.ServiceTypesJson = """["Community access","Group activity","Personal care"]""";
+        draft.CreatedAt = new DateTime(2026, 10, 5, 14, 30, 0, DateTimeKind.Utc);
+        var provider = AgreementProvider.From(new ProviderSettings { OrganisationName = "Oassist", ABN = "12345678901", RegistrationNumber = "4-ABC-123", State = "NSW" });
 
-        var pdf = ServiceAgreementDraftPdfRenderer.Render(draft);
+        var pdf = ServiceAgreementDraftPdfRenderer.Render(draft, provider);
 
         Assert.StartsWith("%PDF-", System.Text.Encoding.ASCII.GetString(pdf, 0, 5));
         if (Environment.GetEnvironmentVariable("ODIP_SAMPLE_PDF") is not { Length: > 0 } path) return;
         File.WriteAllBytes(path, pdf);
-        var pages = ServiceAgreementDraftPdfRenderer.Compose(draft).GenerateImages(new ImageGenerationSettings { ImageFormat = ImageFormat.Png, RasterDpi = 110 }).ToList();
+        var pages = ServiceAgreementDraftPdfRenderer.Compose(draft, provider).GenerateImages(new ImageGenerationSettings { ImageFormat = ImageFormat.Png, RasterDpi = 110 }).ToList();
         for (var page = 0; page < pages.Count; page++) File.WriteAllBytes(Path.ChangeExtension(path, null) + $"-page-{page + 1}.png", pages[page]);
     }
 }

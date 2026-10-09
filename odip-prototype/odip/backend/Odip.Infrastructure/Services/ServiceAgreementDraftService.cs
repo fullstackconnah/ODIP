@@ -328,7 +328,9 @@ public sealed class ServiceAgreementDraftService
         var draft = await _db.ServiceAgreementDrafts.Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery()
             .SingleOrDefaultAsync(x => x.Id == draftId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (draft == null) return (null, "Draft not found.");
-        return (new AgreementPdf(ServiceAgreementDraftPdfRenderer.Render(draft), ServiceAgreementDraftPdfRenderer.FileName(draft)), null);
+        // Who it is from: the organisation's own settings, named by tenant (a SuperAdmin's context has no query filter, so it could hand back another organisation's).
+        var provider = AgreementProvider.From(await _db.ProviderSettings.AsNoTracking().FirstOrDefaultAsync(x => x.TenantId == tenantId, ct));
+        return (new AgreementPdf(ServiceAgreementDraftPdfRenderer.Render(draft, provider), ServiceAgreementDraftPdfRenderer.FileName(draft)), null);
     }
 
     private static decimal PriceForState(SupportCatalogueItem item, string state) => state switch

@@ -5,22 +5,24 @@ using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 using Odip.Domain.Entities;
+using Odip.Domain.Rostering;
 
 namespace Odip.Infrastructure.Services;
 
 /// <summary>
-/// Renders an agreement revision as the one PDF for the participant: who it is for, the plan's dates, the weekly schedule of supports, the catalogue lines behind its cost and the template's review
-/// sections. It carries no stamp and none of the draft's furniture (a banner, a header line, the revision number, the template's name and hashes); each page has only its number at the foot.
+/// Renders an agreement revision as the one PDF for the participant: a title that names the provider and the day it was prepared, who it is for, the plan's dates, the weekly schedule of supports, the
+/// catalogue lines behind its cost and the template's review sections. It carries no stamp and none of the draft's furniture (a banner, a header line, the revision number, the template's name and hashes); each page has only its number at the foot.
 /// Signing is not decided here: the template's state (<c>ProvisionalAgreementTemplate</c>) keeps signing closed, and the PDF does not read it.
 /// </summary>
 public static class ServiceAgreementDraftPdfRenderer
 {
-    public static byte[] Render(ServiceAgreementDraft draft) => Compose(draft).GeneratePdf();
+    public static byte[] Render(ServiceAgreementDraft draft, AgreementProvider? provider = null) => Compose(draft, provider).GeneratePdf();
 
-    /// <summary>The document before it is written out, so a test can draw its pages as images and look at them.</summary>
-    public static Document Compose(ServiceAgreementDraft draft)
+    /// <summary>The document before it is written out, so a test can draw its pages as images and look at them. With no <paramref name="provider"/> the title has no provider line.</summary>
+    public static Document Compose(ServiceAgreementDraft draft, AgreementProvider? provider = null)
     {
         QuestPDF.Settings.License = LicenseType.Community;
+        provider ??= AgreementProvider.From(null);
         return Document.Create(document => document.Page(page =>
         {
             page.Size(PageSizes.A4);
@@ -28,6 +30,7 @@ public static class ServiceAgreementDraftPdfRenderer
             page.DefaultTextStyle(style => style.FontSize(10));
             page.Content().PaddingTop(16).Column(column =>
             {
+                Title(column, draft, provider);
                 Field(column, "Participant", draft.ParticipantNameSnapshot);
                 Field(column, "NDIS number", draft.NdisNumberSnapshot ?? "Not recorded");
                 Field(column, "Date of birth", draft.DateOfBirthSnapshot is { } birth ? Date(birth) : "Not recorded");
@@ -95,6 +98,18 @@ public static class ServiceAgreementDraftPdfRenderer
             return types.Count == 0 ? "Not recorded" : string.Join(", ", types);
         }
         catch (JsonException) { return serviceTypesJson; }
+    }
+
+    /// <summary>
+    /// The top of the first page: the title, who the agreement is from (only what the organisation has set; no line at all when it has set nothing) and the day it was prepared, which is the day the
+    /// revision was saved in the provider's zone, so the same revision always says the same day.
+    /// </summary>
+    private static void Title(ColumnDescriptor column, ServiceAgreementDraft draft, AgreementProvider provider)
+    {
+        column.Item().Text("Service agreement").Bold().FontSize(16);
+        if (provider.Line is { } line) column.Item().PaddingTop(2).Text(line).FontColor(Colors.Grey.Darken1);
+        column.Item().PaddingTop(2).Text($"Prepared {Date(ProviderLocalTime.TodayIn(draft.CreatedAt, provider.Zone))}").FontColor(Colors.Grey.Darken1);
+        column.Item().Height(8);
     }
 
     /// <summary>A date as the PDF writes it, "12 Oct 2026", whatever culture the machine has (a culture that spells July out in full would make the same PDF differ from host to host).</summary>
