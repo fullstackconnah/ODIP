@@ -429,10 +429,10 @@ public class ServiceAgreementApprovalServiceTests
         var theirs = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, tenantId: TenantB, participantId: otherParticipant);
         var mine = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
 
-        Assert.Equal(ApprovalStatus.NotFound, (await ApproveAsync(f, theirs)).Status);                                                                 // another tenant's draft, a participant that is not mine
+        Assert.Equal(ApprovalStatus.Superseded, (await ApproveAsync(f, theirs)).Status);                                                              // another tenant's draft id under my participant, who has revisions: it cannot be told from one a save replaced (ServiceAgreementApprovalReplacedTests)
         Assert.Equal(ApprovalStatus.NotFound, (await f.Service.ApproveAsync(TenantA, otherParticipant, theirs.Id, false, Admin, CancellationToken.None)).Status);   // another tenant's participant
         Assert.Equal(ApprovalStatus.NotFound, (await f.Service.ApproveAsync(TenantB, f.ParticipantId, mine.Id, false, Admin, CancellationToken.None)).Status);       // my participant, asked as another tenant
-        Assert.Equal(ApprovalStatus.NotFound, (await f.Service.PreviewAsync(TenantA, f.ParticipantId, Guid.NewGuid(), Admin, CancellationToken.None)).Status);
+        Assert.Equal(ApprovalStatus.Superseded, (await f.Service.PreviewAsync(TenantA, f.ParticipantId, Guid.NewGuid(), Admin, CancellationToken.None)).Status);   // my participant has revisions: a revision that is not there may have been replaced by a save (ServiceAgreementApprovalReplacedTests)
         Assert.Empty(await f.Db.ServiceAgreementDraftApprovals.ToListAsync());
     }
 
