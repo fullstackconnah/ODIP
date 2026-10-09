@@ -42,14 +42,36 @@ function load(): Created {
 const handler = (routes: Route[], pattern: string) => (routes.find(route => route[0] === pattern) as Route)[1]
 
 const BUDGETS = join(__dirname, '../../../mock-api/mock-budgets.js')
+type MockBudgets = {
+  budgetAlertsOf: (ledger: unknown) => Array<{ type: string; message: string }>
+  budgetList: (people: unknown[], ledgerOf: (id: string) => unknown, today: string, approaching: number) => { noBudget: Array<Record<string, unknown>> }
+  agreementCheckOf: (ledger: unknown, planType: string, lines: unknown[], from: string, to: string, today: string) => Record<string, unknown>
+}
+
+/**
+ * The mock lives next to the frontend in the repository but is not copied into the frontend's Docker build context, so
+ * this suite skips itself there (the existsSync guard below) and runs for real everywhere the mock is present.
+ *
+ * The require therefore cannot sit in the describe body: vitest still runs the body of a skipped describe to collect its
+ * tests, so requiring there throws `Cannot find module` at collection time and fails the whole file, skipped suite or not.
+ * Loading it in beforeEach keeps it out of collection - a beforeEach does not run for a skipped suite - which is how the
+ * funding suite below already loads its mock.
+ */
+function loadBudgets(): MockBudgets {
+  const require = createRequire(import.meta.url)
+  return require(BUDGETS) as MockBudgets
+}
 
 // A plan recorded for later (fix round 2): the mock's ledger carries the soonest start as nextPlanStart, as the server's ParticipantLedger.NextPlanStart does, and the list and the check say it.
 describe.skipIf(!existsSync(BUDGETS))('the mock says when a plan recorded for later starts', () => {
-  const { budgetList, agreementCheckOf, budgetAlertsOf } = createRequire(import.meta.url)(BUDGETS) as {
-    budgetAlertsOf: (ledger: unknown) => Array<{ type: string; message: string }>
-    budgetList: (people: unknown[], ledgerOf: (id: string) => unknown, today: string, approaching: number) => { noBudget: Array<Record<string, unknown>> }
-    agreementCheckOf: (ledger: unknown, planType: string, lines: unknown[], from: string, to: string, today: string) => Record<string, unknown>
-  }
+  let budgetList: MockBudgets['budgetList']
+  let agreementCheckOf: MockBudgets['agreementCheckOf']
+  let budgetAlertsOf: MockBudgets['budgetAlertsOf']
+
+  beforeEach(() => {
+    ({ budgetList, agreementCheckOf, budgetAlertsOf } = loadBudgets())
+  })
+
   const person = { id: 'p-x', firstName: 'Una', lastName: 'Upcoming', preferredName: null, planType: 'PlanManaged', isActive: true }
   const upcomingOnly = { planIsCurrent: false, nextPlanStart: '2026-11-01', pools: [] }
   const endedThenUpcoming = { planId: 'plan-1', planIsCurrent: false, planStart: '2025-07-01', planEnd: '2026-06-30', nextPlanStart: '2026-11-01', pools: [] }
