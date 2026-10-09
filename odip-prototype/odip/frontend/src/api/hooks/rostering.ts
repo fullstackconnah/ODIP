@@ -61,6 +61,7 @@ export function useCreateShift() {
     mutationFn: (data: CreateShiftDto) => apiPost<ShiftDto>('/rostering/shifts', data),
     onSuccess: (_, data) => {
       refreshBudgetFigures(qc, [data.participantId])   // a new shift is booked ahead in its participant's budget
+      qc.invalidateQueries({ queryKey: ['tasks'] })   // an emergency save raises the Admin's review task in the same write: the Tasks list must not be served stale
       return qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
   })
@@ -73,6 +74,7 @@ export function useUpdateShift() {
       apiPut<ShiftDto>(`/rostering/shifts/${id}`, data),
     onSuccess: () => {
       refreshBudgetFigures(qc)   // its times, status or day changed what it costs, and where; the update names no participant, so every ledger held is refreshed
+      qc.invalidateQueries({ queryKey: ['tasks'] })   // an emergency save raises the Admin's review task in the same write
       return qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
   })
