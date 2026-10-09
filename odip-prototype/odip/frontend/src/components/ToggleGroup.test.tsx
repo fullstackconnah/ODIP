@@ -9,6 +9,25 @@ const options = [
   { key: 'c', label: 'Option C' },
 ]
 
+describe('ToggleGroup description', () => {
+  it('points the radiogroup at the element that explains the choice', () => {
+    render(
+      <>
+        <ToggleGroup options={options} value="a" onChange={vi.fn()} ariaLabel="Mode" ariaDescribedby="what-each-does" />
+        <p id="what-each-does">A does this and B does that.</p>
+      </>,
+    )
+
+    expect(screen.getByRole('radiogroup', { name: 'Mode' })).toHaveAccessibleDescription('A does this and B does that.')
+  })
+
+  it('has no description when none is given', () => {
+    render(<ToggleGroup options={options} value="a" onChange={vi.fn()} ariaLabel="Mode" />)
+
+    expect(screen.getByRole('radiogroup', { name: 'Mode' })).not.toHaveAttribute('aria-describedby')
+  })
+})
+
 describe('ToggleGroup semantics', () => {
   it('exposes a radiogroup of radios, not a set of plain buttons — this is single-select-from-a-set', () => {
     render(<ToggleGroup options={options} value="a" onChange={vi.fn()} />)

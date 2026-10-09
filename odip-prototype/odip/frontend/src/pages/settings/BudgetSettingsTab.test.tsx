@@ -54,6 +54,23 @@ describe('Budgets tab: what is shown', () => {
     expect(line.compareDocumentPosition(percentHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()   // inside the first section, before the percentage
   })
 
+  it('says a hard limit cannot see the shifts the system cannot price yet, so the Admin who chooses the policy knows what it does not cover (design review M4, code review C6)', () => {
+    renderTab()
+
+    const line = screen.getByText(/Shifts the system cannot price yet \(sleepovers, passive nights and shared support at 1:2 or more\) are not checked, so a hard limit does not see them\./)
+    const percentHeading = screen.getByRole('heading', { name: /When a participant is approaching/ })
+    expect(line.compareDocumentPosition(percentHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()   // said in the first section, beside what both modes leave alone
+  })
+
+  it('ties the mode choice to the list that says what each mode does, so a screen reader hears the consequence with the choice (design review L8)', () => {
+    const { container } = renderTab()
+
+    const group = screen.getByRole('radiogroup', { name: 'Budget check mode' })
+    expect(group).toHaveAccessibleDescription(/Warn only\. Shows a warning when a one-off roster shift/)
+    expect(group).toHaveAccessibleDescription(/Hard limit for one-off shifts\. Refuses a one-off roster shift/)
+    expect(container.querySelector('.max-w-prose')).toBeNull()   // the callouts are as wide as the sections under them
+  })
+
   it('states that the emergency or safety path is always on, as a line to read and not a control, in either mode', async () => {
     const user = userEvent.setup()
     renderTab()

@@ -21,6 +21,8 @@ export type ToggleGroupProps = {
    * this), so that shape must pass `ariaLabel` explicitly to get a real name at all.
    */
   ariaLabel?: string
+  /** The id of the element that says what each option does, so a screen reader hears the consequence with the choice (`aria-describedby` on the radiogroup). */
+  ariaDescribedby?: string
   /**
    * Locks the whole group: every radio is `disabled` (not focusable, not clickable) and the group is `aria-disabled`, for a setting
    * the user may read but not change. The selected option still reads as selected. There is no per-option disabled.
@@ -33,7 +35,7 @@ export type ToggleGroupProps = {
 // what aria-pressed communicates). role="radiogroup"/"radio" + aria-checked matches what this
 // actually is, and gets a roving tabindex with arrow-key movement per the ARIA APG radio pattern
 // (Tab enters/exits the group once; Left/Right/Up/Down move — and select — within it).
-export function ToggleGroup({ options, value, onChange, className, ariaLabel, disabled }: ToggleGroupProps) {
+export function ToggleGroup({ options, value, onChange, className, ariaLabel, ariaDescribedby, disabled }: ToggleGroupProps) {
   const selectedIndex = options.findIndex(opt => opt.key === value)
 
   function handleKeyDown(e: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -58,7 +60,7 @@ export function ToggleGroup({ options, value, onChange, className, ariaLabel, di
   }
 
   return (
-    <div role="radiogroup" aria-label={ariaLabel} aria-disabled={disabled || undefined} className={`flex gap-2 ${className ?? ''}`}>
+    <div role="radiogroup" aria-label={ariaLabel} aria-describedby={ariaDescribedby} aria-disabled={disabled || undefined} className={`flex gap-2 ${className ?? ''}`}>
       {options.map((opt, index) => {
         const checked = value === opt.key
         // Roving tabindex: only the checked option (or the first, if none matches) is a Tab stop;
