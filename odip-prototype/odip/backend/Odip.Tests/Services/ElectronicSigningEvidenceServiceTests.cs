@@ -88,6 +88,36 @@ public class ElectronicSigningEvidenceServiceTests
         }
     }
 
+    // The agreement PDF no longer says "UNAPPROVED / NOT FOR SIGNING". That is only what it prints: the template's state is what keeps signing closed, and it is what it was.
+    [Fact]
+    public async Task A_pdf_with_no_unapproved_banner_does_not_open_signing_the_state_and_both_refusals_are_what_they_were()
+    {
+        var tenantId = Guid.NewGuid(); var (db, _) = CreateDb(tenantId); using (db)
+        {
+            var (participant, draft) = AddDraft(db, tenantId); await db.SaveChangesAsync();
+            const string refusal = "Electronic signing evidence is unavailable because the selected agreement source is not approved.";
+
+            var text = Odip.Tests.PlanPricing.DraftSigningAndPdfTests.TextOf(ServiceAgreementDraftPdfRenderer.Render(draft));
+
+            Assert.DoesNotContain(Odip.Tests.PlanPricing.DraftSigningAndPdfTests.Skeleton("UNAPPROVED"), text);
+            Assert.Equal("UnapprovedDraft", ProvisionalAgreementTemplate.State);
+            Assert.False(ProvisionalAgreementTemplate.AllowsElectronicSigningEvidence);
+            var service = new ElectronicSigningEvidenceService(db);
+            var (snapshot, snapshotError) = await service.CreateSnapshotAsync(tenantId, participant.Id, new() { DraftId = draft.Id, DraftVersion = draft.Version }, CancellationToken.None);
+            Assert.Null(snapshot);
+            Assert.Equal(refusal, snapshotError);
+            var stored = db.ElectronicSigningSnapshots.Add(new ElectronicSigningSnapshot
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, DraftId = draft.Id, DraftVersion = draft.Version, DocumentJson = "{}", DocumentHash = new string('a', 64),
+            }).Entity;
+            await db.SaveChangesAsync();
+            var (evidence, evidenceError) = await service.SubmitAsync(tenantId, participant.Id, stored.Id, Attestation(), CancellationToken.None);
+            Assert.Null(evidence);
+            Assert.Equal(refusal, evidenceError);
+            Assert.Empty(db.ElectronicSigningEvidence.IgnoreQueryFilters());
+        }
+    }
+
     private static ServiceAgreementDraft AddNewerRevision(OdipDbContext db, Guid tenantId, Participant participant, ServiceAgreementDraft older) =>
         db.ServiceAgreementDrafts.Add(new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, Version = older.Version + 1, State = "NSW", ParticipantNameSnapshot = "Ada Participant", CreatedBy = "test" }).Entity;
 

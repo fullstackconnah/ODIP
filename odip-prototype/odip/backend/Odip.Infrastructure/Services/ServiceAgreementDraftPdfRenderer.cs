@@ -6,7 +6,11 @@ using Odip.Domain.Entities;
 
 namespace Odip.Infrastructure.Services;
 
-/// <summary>Renders an informational draft only. It intentionally contains no legal terms, signature, or billing status.</summary>
+/// <summary>
+/// Renders an agreement revision as the one PDF for the participant: who it is for, the plan's dates, the weekly schedule of supports, the catalogue lines behind its cost and the template's review
+/// sections. It carries no stamp and none of the draft's furniture (the revision number, the template's name and hashes). Signing is not decided here: the template's state
+/// (<c>ProvisionalAgreementTemplate</c>) keeps signing closed, and the PDF does not read it.
+/// </summary>
 public static class ServiceAgreementDraftPdfRenderer
 {
     public static byte[] Render(ServiceAgreementDraft draft) => Compose(draft).GeneratePdf();
@@ -22,21 +26,17 @@ public static class ServiceAgreementDraftPdfRenderer
             page.DefaultTextStyle(style => style.FontSize(10));
             page.Header().Column(column =>
             {
-                column.Item().AlignCenter().Text("UNAPPROVED / NOT FOR SIGNING OR LIVE USE").Bold().FontSize(18).FontColor(Colors.Red.Darken2);
-                column.Item().PaddingTop(4).Text("ODIP Service Agreement — provisional blank draft. Legal review required; not signed, active, roster-ready, an invoice, claim authority, or billing authority.").AlignCenter().FontColor(Colors.Grey.Darken1);
+                column.Item().Text("ODIP Service Agreement — provisional blank draft. Legal review required; not signed, active, roster-ready, an invoice, claim authority, or billing authority.").AlignCenter().FontColor(Colors.Grey.Darken1);
                 column.Item().PaddingTop(8).LineHorizontal(1);
             });
             page.Content().PaddingTop(16).Column(column =>
             {
-                column.Item().Text($"Draft version {draft.Version} — template {ProvisionalAgreementTemplate.Version} ({ProvisionalAgreementTemplate.State})").Bold().FontSize(14);
-                Field(column, "Imported template DOCX", $"{ProvisionalAgreementTemplate.DocxFileName} · SHA-256 {ProvisionalAgreementTemplate.DocxSha256}");
-                Field(column, "Matching review PDF", $"{ProvisionalAgreementTemplate.PdfFileName} · SHA-256 {ProvisionalAgreementTemplate.PdfSha256}");
                 Field(column, "Participant", draft.ParticipantNameSnapshot);
                 Field(column, "NDIS number", draft.NdisNumberSnapshot ?? "Not recorded");
-                Field(column, "Date of birth", draft.DateOfBirthSnapshot?.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) ?? "Not recorded");
+                Field(column, "Date of birth", draft.DateOfBirthSnapshot is { } birth ? Date(birth) : "Not recorded");
                 Field(column, "Representative", draft.Representative ?? "Not recorded");
-                Field(column, "Plan dates", $"{draft.PlanStartDate:dd MMM yyyy} — {draft.PlanEndDate:dd MMM yyyy}");
-                Field(column, "Draft agreement dates", $"{draft.AgreementStartDate:dd MMM yyyy} — {draft.AgreementEndDate:dd MMM yyyy}");
+                Field(column, "Plan dates", $"{Date(draft.PlanStartDate)} — {Date(draft.PlanEndDate)}");
+                Field(column, "Draft agreement dates", $"{Date(draft.AgreementStartDate)} — {Date(draft.AgreementEndDate)}");
                 Field(column, "Service types", draft.ServiceTypesJson);
                 Schedule(column, draft);
                 column.Item().PaddingTop(16).Text("Catalogue-priced draft lines").Bold().FontSize(12);
@@ -50,7 +50,7 @@ public static class ServiceAgreementDraftPdfRenderer
                         table.Cell().Padding(4).Text(line.Band is null ? line.ServiceType : $"{line.ServiceType} — {line.Band}");
                         table.Cell().Padding(4).Text(line.Hours.ToString("0.##", CultureInfo.InvariantCulture) + (line.Unit switch { "E" => " each", "D" => " nights", _ => string.Empty }));
                         table.Cell().Padding(4).Text(line.ItemCode);
-                        table.Cell().Padding(4).Text($"{line.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture)} ({line.CatalogueVersion}, {line.CatalogueEffectiveFrom:dd MMM yyyy})"
+                        table.Cell().Padding(4).Text($"{line.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture)} ({line.CatalogueVersion}, {Date(line.CatalogueEffectiveFrom)})"
                             + (line.Total is { } total ? $" — {total.ToString("0.00", CultureInfo.InvariantCulture)} for {line.Occurrences} shifts" : string.Empty));
                     }
                 });
@@ -72,11 +72,13 @@ public static class ServiceAgreementDraftPdfRenderer
                 Section(column, "6. Responsibilities, cancellation and service changes", "Complete approved responsibilities, cancellation, late-change, provider cancellation, emergency, replacement, variation, review, termination and transition terms. No notice period or fee is agreed here.");
                 Section(column, "7. Concerns and complaints", "Insert approved provider contact, response and escalation pathway; confirm any external reference at use time.");
                 Section(column, "8. Signatures — non-operative layout only", "A signature block is a future layout placeholder. This revision rejects signing and evidence approval; it does not establish identity, authority, informed consent or acceptance.");
-                column.Item().PaddingTop(18).AlignCenter().Text("UNAPPROVED / NOT FOR SIGNING OR LIVE USE / NOT ACTIVE / NO ROSTER, INVOICE OR CLAIM AUTHORITY").Bold().FontColor(Colors.Red.Darken2);
             });
-            page.Footer().AlignCenter().Text(text => { text.Span("UNAPPROVED — NOT FOR SIGNING OR LIVE USE — Page "); text.CurrentPageNumber(); });
+            page.Footer().AlignCenter().Text(text => { text.Span("Page "); text.CurrentPageNumber(); });
         }));
     }
+
+    /// <summary>A date as the PDF writes it, "12 Oct 2026", whatever culture the machine has (a culture that spells July out in full would make the same PDF differ from host to host).</summary>
+    private static string Date(DateOnly date) => date.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
 
     /// <summary>
     /// The weekly schedule of supports: what is delivered, on which days and at what times, at what ratio, and what each support comes to over the agreement. Read from the revision's stored blocks and

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -262,5 +263,64 @@ public class DraftSigningAndPdfTests
         var clean = TextOf(ServiceAgreementDraftPdfRenderer.Render(BlockBuilt()));
         Assert.DoesNotContain(Skeleton("Read before relying on these totals"), clean);
         Assert.Contains(Skeleton("Total of the priced lines"), clean);
+    }
+
+    // ── The PDF carries no stamp and none of the draft's furniture (the owner dropped it; signing stays closed) ──
+
+    [Fact]
+    public void The_pdf_has_no_unapproved_not_for_signing_banner_at_the_top_the_end_or_the_foot_of_any_page()
+    {
+        var text = TextOf(ServiceAgreementDraftPdfRenderer.Render(BlockBuilt()));
+
+        foreach (var stamp in new[] { "UNAPPROVED", "NOT FOR SIGNING OR LIVE USE", "NOT ACTIVE", "NO ROSTER, INVOICE OR CLAIM AUTHORITY" })
+            Assert.DoesNotContain(Skeleton(stamp), text);
+        Assert.Contains(Skeleton("Page 1"), text);                // the foot of each page still numbers it
+    }
+
+    [Fact]
+    public void The_pdf_has_no_draft_version_line_and_prints_neither_the_templates_name_nor_its_hashes()
+    {
+        var draft = BlockBuilt();
+
+        var text = TextOf(ServiceAgreementDraftPdfRenderer.Render(draft));
+
+        foreach (var furniture in new[]
+        {
+            $"Draft version {draft.Version}", "Imported template", "Matching review PDF", ProvisionalAgreementTemplate.Version, ProvisionalAgreementTemplate.State,
+            ProvisionalAgreementTemplate.DocxFileName, ProvisionalAgreementTemplate.PdfFileName, ProvisionalAgreementTemplate.DocxSha256, ProvisionalAgreementTemplate.PdfSha256,
+        })
+            Assert.DoesNotContain(Skeleton(furniture), text);
+    }
+
+    [Fact]
+    public void Every_section_of_the_template_is_still_on_the_pdf()
+    {
+        var text = TextOf(ServiceAgreementDraftPdfRenderer.Render(BlockBuilt()));
+
+        foreach (var heading in new[]
+        {
+            "1. Parties and representatives", "2. Supports, delivery and schedule", "3. Proposed fees, travel and other costs", "4. Funding and payment",
+            "5. Communication, privacy and records", "6. Responsibilities, cancellation and service changes", "7. Concerns and complaints", "8. Signatures — non-operative layout only",
+        })
+            Assert.Contains(Skeleton(heading), text);
+    }
+
+    [Fact]
+    public void The_dates_on_the_pdf_print_the_same_on_a_machine_with_another_culture()
+    {
+        CultureInfo australian;
+        try { australian = new CultureInfo("en-AU"); }
+        catch (CultureNotFoundException) { return; }              // a host with no culture data has only the invariant one, which is what the dates are written in
+        var before = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = australian;               // spells July and June out in full
+
+            var text = TextOf(ServiceAgreementDraftPdfRenderer.Render(BlockBuilt()));
+
+            Assert.Contains(Skeleton("01 Jul 2026 — 30 Jun 2027"), text);
+            Assert.Contains(Skeleton("(2026-27, 01 Jul 2026)"), text);
+        }
+        finally { CultureInfo.CurrentCulture = before; }
     }
 }
