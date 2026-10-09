@@ -81,7 +81,15 @@ public sealed class AgreementCheckService
         var ledgers = await _ledger.ComputeAsync(tenantId, new[] { participantId }, ct);
         var ledger = ledgers[participantId];
         if (ledger.Ledger is not { PlanIsCurrent: true } plan)
-            return AgreementCheckResult.Answer(new AgreementCheckDto { HasBudget = false, AsOf = ledger.Today, PeriodFrom = from, PeriodTo = to });
+        {
+            // The same two reasons as the Budgets list: no plan that has started is recorded, or the one there is has ended.
+            var ended = ledger.Ledger is { PlanIsCurrent: false } endedPlan ? endedPlan.Plan : null;
+            return AgreementCheckResult.Answer(new AgreementCheckDto
+            {
+                HasBudget = false, AsOf = ledger.Today, PeriodFrom = from, PeriodTo = to,
+                NoBudgetReason = ended is null ? BudgetListNoBudgetReason.NotRecorded : BudgetListNoBudgetReason.PlanEnded, PlanEnd = ended?.PlanEnd,
+            });
+        }
 
         var quote = await _pricing.QuoteAsync(tenantId, blocks, from, to, ct);
 
@@ -128,7 +136,7 @@ public sealed class AgreementCheckService
             pools.Add(new AgreementCheckPoolDto
             {
                 PoolId = pool.Pool.Id, PoolName = BudgetText.PoolLabel(pool.Pool, severalCorePools), Kind = pool.Pool.Kind, ManagementType = pool.Pool.ManagementType,
-                AgreementCost = periods.Sum(p => p.AgreementCost), Over = periods.Any(p => p.OverBy > 0m), Periods = periods,
+                AgreementCost = periods.Sum(p => p.AgreementCost), Over = periods.Any(p => p.OverBy > 0m), OverBy = periods.Sum(p => p.OverBy), Periods = periods,
             });
         }
 

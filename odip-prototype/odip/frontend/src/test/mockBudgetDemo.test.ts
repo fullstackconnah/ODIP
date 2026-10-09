@@ -112,7 +112,7 @@ describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (
   it('splits an agreement over the pools and funding periods it touches, with what is left in each and how far over', () => {
     const check = handler(mock.post, 'participants/:id/funding/agreement-check')('p-0002', {
       blocks: [{ id: 'b1' }], periodFrom: '2026-10-12', periodTo: '2027-01-31',
-    }) as { hasBudget: boolean; agreementCost: number; pools: Array<{ poolName: string; over: boolean; periods: Array<Record<string, unknown>> }>; notInARecordedPool: number }
+    }) as { hasBudget: boolean; agreementCost: number; pools: Array<{ poolName: string; over: boolean; overBy: number; periods: Array<Record<string, unknown>> }>; notInARecordedPool: number }
 
     expect(check.hasBudget).toBe(true)
     expect(check.pools.map(pool => [pool.poolName, pool.periods.map(period => period.periodStart)])).toEqual([
@@ -128,6 +128,7 @@ describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (
     const ledgerSecond = ledger.pools[0].periods.find(period => period.periodStart <= '2027-01-12' && '2027-01-12' <= period.periodEnd) as { available: number }
     expect(secondQuarter.available).toBe(Math.round((ledgerSecond.available - 588.64) * 100) / 100)
     expect(check.pools[1].periods[0]).toMatchObject({ agreementCost: 100, remaining: 108.22, overBy: 0 })
+    expect(check.pools.map(pool => pool.overBy)).toEqual([0, 0])   // the pool's whole shortfall: nothing here is over
     expect(check.agreementCost).toBe(1277.28)   // a line that is not priced adds nothing
     expect(check.notInARecordedPool).toBe(0)
   })
@@ -135,7 +136,11 @@ describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (
   it('says there is no budget when no plan is running, and prices nothing', () => {
     const check = handler(mock.post, 'participants/:id/funding/agreement-check')('p-0001', { blocks: [{ id: 'b1' }], periodFrom: '2026-10-12', periodTo: '2027-01-31' }) as Record<string, unknown>
 
-    expect(check).toEqual({ hasBudget: false, asOf: '2026-10-08', periodFrom: '2026-10-12', periodTo: '2027-01-31', agreementCost: 0, pools: [], notInARecordedPool: 0, outsideThePlan: 0 })
+    expect(check).toEqual({ hasBudget: false, noBudgetReason: 'NotRecorded', asOf: '2026-10-08', periodFrom: '2026-10-12', periodTo: '2027-01-31', agreementCost: 0, pools: [], notInARecordedPool: 0, outsideThePlan: 0 })
+
+    // Marcus's plan has ended: the answer says so, and when, in the Budgets list's own two words.
+    const ended = handler(mock.post, 'participants/:id/funding/agreement-check')('p-0003', { blocks: [{ id: 'b1' }], periodFrom: '2026-10-12', periodTo: '2027-01-31' }) as Record<string, unknown>
+    expect(ended).toMatchObject({ hasBudget: false, noBudgetReason: 'PlanEnded', planEnd: '2026-06-30', pools: [] })
   })
 
   it('refuses what the real API refuses: no blocks or dates, an end before the start, and a participant that is not there', () => {

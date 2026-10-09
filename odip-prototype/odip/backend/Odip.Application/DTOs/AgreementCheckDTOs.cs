@@ -56,6 +56,11 @@ public record AgreementCheckPoolDto
     public decimal AgreementCost { get; init; }
     /// <summary>Some period would be over.</summary>
     public bool Over { get; init; }
+    /// <summary>
+    /// How far the agreement passes what the pool has across the periods it touches: the sum of the periods' own over-bys. Each period's overspend leaves nothing to carry and is not charged to the
+    /// next, so the sum is the pool's whole shortfall; 0 when every period fits. The bar's one line for a pool that spans several periods says it without adding anything up.
+    /// </summary>
+    public decimal OverBy { get; init; }
     /// <summary>The periods the agreement touches, in date order.</summary>
     public List<AgreementCheckPeriodDto> Periods { get; init; } = new();
 }
@@ -64,6 +69,11 @@ public record AgreementCheckDto
 {
     /// <summary>The participant has a plan that is running now to check against. False is "No budget recorded": the answer then has no pools and no figures, and the bar links to the Funding tab.</summary>
     public bool HasBudget { get; init; }
+    /// <summary>
+    /// Why there is no budget to compare with, when <see cref="HasBudget"/> is false, in the Budgets list's own two words: no plan that has started is recorded (<c>NotRecorded</c>), or the plan
+    /// ended and no successor is recorded (<c>PlanEnded</c>, and <see cref="PlanEnd"/> is its last day). The bar says "No budget recorded" either way and, for an ended plan, that it ended. Omitted when there is a budget.
+    /// </summary>
+    public BudgetListNoBudgetReason? NoBudgetReason { get; init; }
     public Guid? PlanId { get; init; }
     public DateOnly? PlanStart { get; init; }
     public DateOnly? PlanEnd { get; init; }

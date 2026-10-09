@@ -103,7 +103,11 @@ function budgetList(people, ledgerOf, today, approachingPercent) {
  * dates are sums of their own. With no plan running now there is nothing to compare with, and the answer is only that.
  */
 function agreementCheckOf(ledger, planType, lines, periodFrom, periodTo, today) {
-  if (!ledger.planId || !ledger.planIsCurrent) return { hasBudget: false, asOf: today, periodFrom, periodTo, agreementCost: 0, pools: [], notInARecordedPool: 0, outsideThePlan: 0 }
+  // Nothing to compare with: no plan that has started is recorded (NotRecorded), or the one there is has ended (PlanEnded, and its last day): the Budgets list's own two words.
+  if (!ledger.planId || !ledger.planIsCurrent) {
+    const ended = ledger.planId && !ledger.planIsCurrent
+    return { hasBudget: false, noBudgetReason: ended ? 'PlanEnded' : 'NotRecorded', ...(ended ? { planEnd: ledger.planEnd } : {}), asOf: today, periodFrom, periodTo, agreementCost: 0, pools: [], notInARecordedPool: 0, outsideThePlan: 0 }
+  }
 
   const plan = { pools: ledger.pools.map((pool, position) => ({ ...pool, position })) }
   const byPeriod = new Map()
@@ -139,7 +143,7 @@ function agreementCheckOf(ledger, planType, lines, periodFrom, periodTo, today) 
     }
     pools.push({
       poolId: pool.id, poolName: poolLabel(pool, ledger.pools), kind: pool.kind, managementType: pool.managementType,
-      agreementCost: round2(periods.reduce((sum, p) => sum + p.agreementCost, 0)), over: periods.some((p) => p.overBy > 0), periods,
+      agreementCost: round2(periods.reduce((sum, p) => sum + p.agreementCost, 0)), over: periods.some((p) => p.overBy > 0), overBy: round2(periods.reduce((sum, p) => sum + p.overBy, 0)), periods,
     })
   }
   return {

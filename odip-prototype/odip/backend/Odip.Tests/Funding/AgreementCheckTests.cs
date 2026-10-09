@@ -126,6 +126,7 @@ public class AgreementCheckTests
         var core = check.Pools[0];
         Assert.Equal(2 * TwoBlocks, core.AgreementCost);
         Assert.True(core.Over);
+        Assert.Equal(TwoBlocks - 500m, core.OverBy);   // October is $88.64 over and November fits: the pool's whole shortfall
         Assert.Equal(new[] { D(2026, 10, 1), D(2026, 11, 1) }, core.Periods.Select(p => p.PeriodStart));
         Assert.Equal((TwoBlocks, 600m, 100m, 500m, TwoBlocks - 500m), Figures(core.Periods[0]));       // October: $588.64 against $500 left: over by $88.64
         Assert.Equal((TwoBlocks, 1000m, 0m, 1000m, 0m), Figures(core.Periods[1]));                     // November: October's $500 was spent by this agreement (it costs $588.64), so nothing rolls in; its own $1,000 is plenty
@@ -134,6 +135,7 @@ public class AgreementCheckTests
 
         var stated = check.Pools[1];
         Assert.True(stated.Over);
+        Assert.Equal((TwoBlocks - 300m) + (TwoBlocks - 100m), stated.OverBy);   // over in both periods, and each overspend leaves nothing to carry
         Assert.Equal((TwoBlocks, 300m, 0m, 300m, TwoBlocks - 300m), Figures(stated.Periods[0]));
         Assert.Equal((TwoBlocks, 100m, 0m, 100m, TwoBlocks - 100m), Figures(stated.Periods[1]));      // its own $100: the $300 October had is spent by the agreement, and more
         Assert.Equal((0m, 0m), (check.NotInARecordedPool, check.OutsideThePlan));
@@ -150,8 +152,10 @@ public class AgreementCheckTests
 
         var check = Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays()), CancellationToken.None));
 
+        Assert.Null(check.NoBudgetReason);   // there is a budget
         var core = Assert.Single(check.Pools);
         Assert.False(core.Over);
+        Assert.Equal(0m, core.OverBy);
         Assert.Equal(4 * Block, core.AgreementCost);
         Assert.Equal(new[] { Block * 2, Block * 2 }, core.Periods.Select(p => p.AgreementCost));
         Assert.All(core.Periods, p => Assert.Equal(0m, p.OverBy));
@@ -228,10 +232,19 @@ public class AgreementCheckTests
         Assert.False(none.HasBudget);
         Assert.Empty(none.Pools);
         Assert.Null(none.PlanId);
+        Assert.Equal((BudgetListNoBudgetReason.NotRecorded, (DateOnly?)null), (none.NoBudgetReason, none.PlanEnd));   // nothing was recorded
 
-        a.Kit.SeedPlan(a.Person, D(2025, 7, 1), D(2026, 6, 30), Core(PlanType.PlanManaged, new PeriodSpec(D(2025, 7, 1), D(2026, 6, 30), 5000m)));   // ended
+        // A plan that has not started is not one to compare with either, and reads as nothing recorded, as the Budgets list says it.
         a.Kit.SeedPlan(a.Person, D(2027, 1, 1), D(2027, 12, 31), Core(PlanType.PlanManaged, new PeriodSpec(D(2027, 1, 1), D(2027, 12, 31), 5000m)));   // not started
-        Assert.False(Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays()), CancellationToken.None)).HasBudget);
+        var upcoming = Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays()), CancellationToken.None));
+        Assert.False(upcoming.HasBudget);
+        Assert.Equal((BudgetListNoBudgetReason.NotRecorded, (DateOnly?)null), (upcoming.NoBudgetReason, upcoming.PlanEnd));
+
+        // A plan that has ended says so, and when, so the bar can say "the recorded plan ended" instead of implying that none was ever recorded.
+        a.Kit.SeedPlan(a.Person, D(2025, 7, 1), D(2026, 6, 30), Core(PlanType.PlanManaged, new PeriodSpec(D(2025, 7, 1), D(2026, 6, 30), 5000m)));   // ended
+        var ended = Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays()), CancellationToken.None));
+        Assert.False(ended.HasBudget);
+        Assert.Equal((BudgetListNoBudgetReason.PlanEnded, (DateOnly?)D(2026, 6, 30)), (ended.NoBudgetReason, ended.PlanEnd));
     }
 
     // ── A saved draft ───────────────────────────────────────────────────────
