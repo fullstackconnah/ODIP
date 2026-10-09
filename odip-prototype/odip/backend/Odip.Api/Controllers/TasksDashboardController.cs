@@ -43,7 +43,7 @@ public class TasksController : ControllerBase
         [FromQuery] bool? dueThisWeek, [FromQuery] Guid? ownerId, CancellationToken ct)
     {
         var query = _db.BookingTasks.Include(t => t.TripInstance).Include(t => t.Owner).AsQueryable();
-        // The Admin's review of an emergency past budget names a participant whose budget is spent: only the roles that see budget standing elsewhere see it (the phase 3 review, C7).
+        // The Admin's review of an emergency over budget names a participant whose budget is spent: only the roles that see budget standing elsewhere see it (the phase 3 review, C7).
         if (!BudgetReviewAudience.MaySee(User)) query = query.Where(t => t.TaskType != TaskType.BudgetEmergencyReview);
         if (tripId.HasValue) query = query.Where(t => t.TripInstanceId == tripId.Value);
         if (status == TaskItemStatus.Overdue)
@@ -147,7 +147,7 @@ public class TasksController : ControllerBase
         var t = await _db.BookingTasks.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
 
-        // The review of an emergency booking past budget is an Admin's: complete, cancel, delete or retype it only as an Admin or SuperAdmin, and neither retype it away nor retype another task into it (C2).
+        // The review of an emergency booking over budget is an Admin's: complete, cancel, delete or retype it only as an Admin or SuperAdmin, and neither retype it away nor retype another task into it (C2).
         var isReview = t.TaskType == TaskType.BudgetEmergencyReview || dto.TaskType == TaskType.BudgetEmergencyReview;
         if (isReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
 
@@ -455,7 +455,7 @@ public class DashboardController : ControllerBase
                 LeadCoordinatorName = t.LeadCoordinator != null ? t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName : null
             }).ToListAsync(ct);
 
-        // The Admin's review of an emergency past budget is left out for a role that may not see budget standing, in the list and in the counts (the phase 3 review, C7).
+        // The Admin's review of an emergency over budget is left out for a role that may not see budget standing, in the list and in the counts (the phase 3 review, C7).
         var mayReview = BudgetReviewAudience.MaySee(User);
         var overdueTasks = await _db.BookingTasks.Include(t => t.TripInstance).Include(t => t.Owner)
             .Where(TaskOverdue.IsOverdueExpr(today))

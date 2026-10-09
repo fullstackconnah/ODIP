@@ -129,14 +129,14 @@ describe('TasksPage — obligation-engine tasks (item 9)', () => {
   it('shows an Admin the emergency booking review task by its human label, with the way to the shift on the roster board', () => {
     mockUseTasks.mockReturnValue({
       data: [
-        { id: 't6', title: 'Review emergency shift past budget: Mia Chen on 17 Aug 2026', taskType: 'BudgetEmergencyReview', ownerName: null, dueDate: '2026-08-18', priority: 'Medium', status: 'NotStarted', linkTo: '/rostering?date=2026-08-17&participant=p-1' },
+        { id: 't6', title: 'Review emergency shift over budget: Mia Chen on 17 Aug 2026', taskType: 'BudgetEmergencyReview', ownerName: null, dueDate: '2026-08-18', priority: 'Medium', status: 'NotStarted', linkTo: '/rostering?date=2026-08-17&participant=p-1' },
       ],
       isLoading: false,
     })
     renderPage()
 
     expect(screen.getByText('Budget emergency review')).toBeInTheDocument()
-    expect(screen.getByText('Review emergency shift past budget: Mia Chen on 17 Aug 2026')).toBeInTheDocument()
+    expect(screen.getByText('Review emergency shift over budget: Mia Chen on 17 Aug 2026')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/rostering?date=2026-08-17&participant=p-1')
   })
 
@@ -181,11 +181,11 @@ describe('TasksPage — column budget', () => {
   })
 })
 
-// The Admin's review of an emergency booking past budget (phase 3 review C2, C7, design review M9, M10): only an Admin or SuperAdmin may close it (the server forbids everyone else, and this page does not offer what
+// The Admin's review of an emergency booking over budget (phase 3 review C2, C7, design review M9, M10): only an Admin or SuperAdmin may close it (the server forbids everyone else, and this page does not offer what
 // the server would refuse), it is owned by "Admins" until somebody takes it, and its title is the way in, wrapped rather than cut so the participant and the day, the only parts that tell two emergencies apart, show.
 describe('TasksPage — the emergency review task', () => {
   const review = {
-    id: 't6', title: 'Review emergency shift past budget: Sienna Whitfield on 9 Oct 2026', taskType: 'BudgetEmergencyReview', ownerName: null, dueDate: '2026-10-10', priority: 'Medium', status: 'NotStarted',
+    id: 't6', title: 'Review emergency shift over budget: Sienna Whitfield on 9 Oct 2026', taskType: 'BudgetEmergencyReview', ownerName: null, dueDate: '2026-10-10', priority: 'Medium', status: 'NotStarted',
     linkTo: '/rostering?date=2026-10-09&participant=p-1',
   }
   const ordinary = { id: 't7', title: 'Find leave cover', taskType: 'LeaveCoverage', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted', linkTo: '/rostering/leave' }

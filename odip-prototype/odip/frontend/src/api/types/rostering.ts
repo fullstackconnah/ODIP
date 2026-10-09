@@ -65,7 +65,7 @@ export interface BudgetWarningDto {
   participantName?: string
 }
 
-/** Where the Admin's review of an emergency or safety booking past the budget stands. There is no "approved": it saves at once and is reviewed afterwards. */
+/** Where the Admin's review of an emergency or safety booking over budget stands. There is no "approved": it saves at once and is reviewed afterwards. */
 export type BudgetReviewState = 'Pending' | 'Reviewed'
 
 export interface BudgetReviewDto {
@@ -98,9 +98,9 @@ export interface ShiftDto {
   shiftPatternId: string | null
   notes: string | null
   overrideReason: string | null
-  /** The finding codes the server stored when it saved this shift. The over-budget marker is read from these (`markerForAcknowledgedCodes`): `BUDGET_EMERGENCY` for an emergency or safety booking, `BUDGET_FORECAST_OVER` for one an Admin pushed past the budget with a written reason. Omitted when none. */
+  /** The finding codes the server stored when it saved this shift. The over-budget marker is read from these (`markerForAcknowledgedCodes`): `BUDGET_EMERGENCY` for an emergency or safety booking, `BUDGET_FORECAST_OVER` for one an Admin pushed over budget with a written reason. Omitted when none. */
   acknowledgedFindingCodes?: string[]
-  /** The Admin review of an emergency or safety booking past the budget; omitted for every other shift. */
+  /** The Admin review of an emergency or safety booking over budget; omitted for every other shift. */
   budgetReview?: BudgetReviewDto
   findings: RosterFindingDto[]
   /** True when this shift's assigned staff member has approved leave covering it — set after the
@@ -412,8 +412,8 @@ export interface CreateShiftDto {
   overrideReason: string | null
   acknowledgedFindingCodes: string[]
   /**
-   * "Emergency or safety" (budget phase 3): save past the budget now and have an Admin review it afterwards. The description goes in `overrideReason` (at least 10 characters once trimmed). Only
-   * means something when the check found the shift past the budget; the server refuses a description that is too short.
+   * "Emergency or safety" (budget phase 3): save over budget now and have an Admin review it afterwards. The description goes in `overrideReason` (at least 10 characters once trimmed). Only
+   * means something when the check found the shift over budget; the server refuses a description that is too short.
    */
   emergency?: boolean
 }

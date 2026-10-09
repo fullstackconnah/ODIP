@@ -23,7 +23,7 @@ const TASK_STATUS_ITEMS = [
   { value: 'Cancelled', label: 'Cancelled' },
 ]
 
-/** The Admin's review of an emergency booking past budget. Only an Admin or SuperAdmin closes it: the server forbids everyone else, so this page does not offer what it would refuse. */
+/** The Admin's review of an emergency booking over budget. Only an Admin or SuperAdmin closes it: the server forbids everyone else, so this page does not offer what it would refuse. */
 const isBudgetReview = (task: { taskType?: string }) => task.taskType === 'BudgetEmergencyReview'
 
 export default function TasksPage() {

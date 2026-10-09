@@ -17,8 +17,8 @@ const MODE_OPTIONS: { key: BudgetLimitMode; label: string }[] = [
 ]
 
 const MODE_WORDS: Record<BudgetLimitMode, string> = {
-  Warn: "Shows a warning when a one-off roster shift would take a participant's forecast (what is used so far plus shifts already booked) past their budget for the funding period. The shift is still saved.",
-  HardLimit: "Refuses a one-off roster shift that would take a participant's forecast past their budget for the funding period, unless an Admin saves it with a written reason, which is recorded in the audit log.",
+  Warn: "Shows a warning when a one-off roster shift would take a participant's forecast (what is used so far plus shifts already booked) over their budget for the funding period. The shift is still saved.",
+  HardLimit: "Refuses a one-off roster shift that would take a participant's forecast over their budget for the funding period, unless an Admin saves it with a written reason, which is recorded in the audit log.",
 }
 
 /**
@@ -37,7 +37,7 @@ const PERCENT_ITEMS = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95].map(percent => ({
 type Pick<T> = { value: T; base: T }
 
 /**
- * Settings, Budgets (Admin and SuperAdmin): what the roster's budget check does about a one-off roster shift that would take a participant past their budget, and the percentage of the budget
+ * Settings, Budgets (Admin and SuperAdmin): what the roster's budget check does about a one-off roster shift that would put a participant over budget, and the percentage of the budget
  * used at which a participant counts as approaching it. The page says precisely what each mode does, what neither mode ever does, and, as a line to read and not a control, that the emergency or safety
  * path is always on (the owner decided it cannot be switched off). A change of mode is audited by the server.
  *
@@ -85,7 +85,7 @@ export default function BudgetSettingsTab() {
       {settings.isDefault && <Callout tone="info">Nothing has been saved yet: these are the defaults (Warn only, and approaching at 80%).</Callout>}
 
       <section className="flex flex-col gap-[var(--field-gap-y)]" aria-labelledby="budget-mode-heading">
-        <h2 id="budget-mode-heading" className="font-semibold">When a one-off shift would go over a participant&rsquo;s budget</h2>
+        <h2 id="budget-mode-heading" className="font-semibold">When a one-off shift would put a participant over budget</h2>
         <ToggleGroup
           className="flex-wrap"
           ariaLabel="Budget check mode"

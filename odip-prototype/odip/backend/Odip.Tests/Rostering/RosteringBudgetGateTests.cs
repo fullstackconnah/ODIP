@@ -383,7 +383,7 @@ public class RosteringBudgetGateTests : IDisposable
     [Fact]
     public async Task TheClientCannotForgeTheOverBudgetCodes_ButItsOtherCodesStillGoThroughAsBefore()
     {
-        var controller = Rig("Coordinator", BudgetLimitMode.Warn);   // past the budget, but only a warning: nothing was overridden
+        var controller = Rig("Coordinator", BudgetLimitMode.Warn);   // over budget, but only a warning: nothing was overridden
 
         var saved = Ok(await controller.CreateShift(Create(Wed14Oct, codes: new List<string> { BudgetFindingCodes.Emergency, BudgetFindingCodes.ForecastOver, "SOME_OTHER_CODE" }), default));
 
@@ -445,7 +445,7 @@ public class RosteringBudgetGateTests : IDisposable
         Assert.Equal(new[] { BudgetFindingCodes.Emergency }, saved.AcknowledgedFindingCodes);
         var task = Assert.Single(_kit.Db.BookingTasks);
         Assert.Equal((TaskType.BudgetEmergencyReview, $"budget-emergency:{saved.Id}", saved.Id), (task.TaskType, task.SourceKey, task.ShiftId));
-        Assert.Equal("Review emergency shift past budget: Sophie Brown on 14 Oct 2026", task.Title);
+        Assert.Equal("Review emergency shift over budget: Sophie Brown on 14 Oct 2026", task.Title);
         Assert.Equal(new DateOnly(2026, 10, 5), task.DueDate);   // the provider's tomorrow: today is Sunday 4 Oct
         Assert.Equal($"/rostering?date=2026-10-14&participant={_participant.Id}", task.LinkTo);
         Assert.Equal((_participant.TenantId, TaskItemStatus.NotStarted), (task.TenantId, task.Status));
@@ -517,7 +517,7 @@ public class RosteringBudgetGateTests : IDisposable
 
         Assert.Null(saved.AcknowledgedFindingCodes);
         Assert.Null(saved.OverrideReason);
-        Assert.Empty(_kit.Db.BookingTasks);   // nothing past the budget to review
+        Assert.Empty(_kit.Db.BookingTasks);   // nothing over budget to review
     }
 
     [Fact]

@@ -110,16 +110,16 @@ describe('an Admin’s override (a warning that asks for a reason)', () => {
     expect(saveButton()).toHaveTextContent('Save with override')   // a reason IS being asked for here
     // M5: the field says why it is asked for and that it is kept, in the budget's own words.
     expect(screen.getByLabelText(/reason for override/i)).toHaveAccessibleDescription('The hard limit is on. This reason is recorded in the audit log.')
-    expect(screen.getByPlaceholderText('Why this shift should go ahead past the budget')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Why this shift should go ahead over budget')).toBeInTheDocument()
 
     await user.click(saveButton())
     expect(mockCreateMutateAsync).not.toHaveBeenCalled()
-    expect(screen.getByText('Add a reason to save this shift past the budget.')).toBeInTheDocument()
+    expect(screen.getByText('Add a reason to save this shift over budget.')).toBeInTheDocument()
     expect(screen.queryByText(/A reason is required to save over the warnings/)).not.toBeInTheDocument()
 
     // M6: the error goes the moment there is a real answer under it, not only on the next save.
     await user.type(screen.getByLabelText(/reason for override/i), 'C')
-    expect(screen.queryByText('Add a reason to save this shift past the budget.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Add a reason to save this shift over budget.')).not.toBeInTheDocument()
     expect(screen.getByLabelText(/reason for override/i)).not.toBeInvalid()
     await user.type(screen.getByLabelText(/reason for override/i), 'lient’s carer is in hospital')
     await user.click(saveButton())
@@ -290,11 +290,11 @@ describe('a shift the budget could not check', () => {
   })
 })
 
-describe('a shift saved past the budget', () => {
+describe('a shift saved over budget', () => {
   const emergencyShift = makeShift({
     overrideReason: 'Emergency or safety: Participant unsafe at home tonight',
     acknowledgedFindingCodes: ['BUDGET_EMERGENCY'],
-    budgetReview: { state: 'Pending', recordedAt: '2026-10-04T03:12:00Z', reviewTaskTitle: 'Review emergency shift past budget: Mia Chen on 17 Aug 2026' },
+    budgetReview: { state: 'Pending', recordedAt: '2026-10-04T03:12:00Z', reviewTaskTitle: 'Review emergency shift over budget: Mia Chen on 17 Aug 2026' },
   })
 
   function renderEdit(shift = emergencyShift) {
@@ -308,7 +308,7 @@ describe('a shift saved past the budget', () => {
     expect(within(marker).getByText('Over budget: emergency')).toBeInTheDocument()
     expect(within(marker).getByText('Admin review pending')).toBeInTheDocument()
     expect(within(marker).getByText('Participant unsafe at home tonight')).toBeInTheDocument()   // the server's prefix is the pill's job, not a second line of the box
-    expect(within(marker).getByText('Review emergency shift past budget: Mia Chen on 17 Aug 2026')).toBeInTheDocument()
+    expect(within(marker).getByText('Review emergency shift over budget: Mia Chen on 17 Aug 2026')).toBeInTheDocument()
   })
 
   it('does not copy the stored emergency text into the ordinary reason field, and a later save sends no reason and no flag', async () => {
@@ -387,7 +387,7 @@ describe('the reason box keeps the generic words when the budget is not the only
     await screen.findAllByText(/Reason required/)
 
     expect(screen.getByPlaceholderText('Why this assignment should proceed despite the warnings above')).toBeInTheDocument()
-    expect(screen.queryByPlaceholderText('Why this shift should go ahead past the budget')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Why this shift should go ahead over budget')).not.toBeInTheDocument()
   })
 })
 

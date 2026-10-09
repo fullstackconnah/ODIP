@@ -180,7 +180,7 @@ describe('a privacy-restricted view', () => {
     render(<BudgetEmergencyReviewMarker details={restrictedPendingEmergency} />)
     const text = document.body.textContent ?? ''
     expect(text).not.toContain('Participant was unsafe')
-    expect(text).not.toContain('Review emergency shift past budget')
+    expect(text).not.toContain('Review emergency shift over budget')
   })
 
   it('renders no detail rows at all, rather than rows of dashes', () => {
@@ -251,7 +251,7 @@ describe('a long reason at a phone width', () => {
     const long: EmergencyReviewDetails = {
       ...pendingEmergency,
       reviewTaskTitle:
-        'Review emergency shift past budget: a participant with a deliberately long display name on a day',
+        'Review emergency shift over budget: a participant with a deliberately long display name on a day',
     }
     render(<BudgetEmergencyReviewMarker details={long} />)
     expect(valueOf('Review task')).toContain('deliberately long display name')

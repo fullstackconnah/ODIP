@@ -1722,7 +1722,7 @@ public class RosteringController : ControllerBase
     }
 
     /// <summary>
-    /// Raises the Admin's review of a shift just accepted as an emergency or safety booking past the budget: one open task for the shift at a time (idempotent on its source key, so a retry or a second save of
+    /// Raises the Admin's review of a shift just accepted as an emergency or safety booking over budget: one open task for the shift at a time (idempotent on its source key, so a retry or a second save of
     /// the same shift never doubles it), due the provider's tomorrow, owned by the shift's organisation, and committed with the shift in the caller's own save. The first review is
     /// <c>budget-emergency:{shiftId}</c>. A review an Admin has closed is never reopened, so a further emergency on the same shift (a bigger overrun nobody has looked at) gets its own,
     /// <c>budget-emergency:{shiftId}:2</c>, then <c>:3</c>, so the shift's marker never reads "Reviewed" over an overrun that was never reviewed (the phase 3 review, C4).
@@ -1744,7 +1744,7 @@ public class RosteringController : ControllerBase
         await _obligationTasks.EnsureAsync(new Odip.Application.Interfaces.ObligationTaskSpec(
             SourceKey: sourceKey,
             Type: TaskType.BudgetEmergencyReview,
-            Title: string.Create(CultureInfo.InvariantCulture, $"Review emergency shift past budget: {participant.FullName} on {shift.ServiceDate:d MMM yyyy}"),
+            Title: string.Create(CultureInfo.InvariantCulture, $"Review emergency shift over budget: {participant.FullName} on {shift.ServiceDate:d MMM yyyy}"),
             DueDate: today.AddDays(1),
             LinkTo: $"/rostering?date={date}&participant={participant.Id}",
             ShiftId: shift.Id,

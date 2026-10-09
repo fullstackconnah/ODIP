@@ -9,7 +9,7 @@ namespace Odip.Api.Rostering;
 /// <list type="bullet">
 /// <item><b>The emergency or safety path.</b> A request that carries <c>emergency: true</c> and a description of at least ten characters (in the override reason) is accepted past a BUDGET_FORECAST_OVER finding, whatever its
 ///   severity and in every mode: that one finding no longer gates the save. Every other finding still does. A request that says emergency when the check found no BUDGET_FORECAST_OVER is simply a save: there is nothing
-///   past the budget to record, and a false marker and a needless review task would be worse than ignoring a flag.</item>
+///   over budget to record, and a false marker and a needless review task would be worse than ignoring a flag.</item>
 /// <item><b>What is stored.</b> <c>Shift.AcknowledgedFindingCodes</c> is the audit truth the over-budget marker is read from, so the client never decides it: a BUDGET_FORECAST_OVER or BUDGET_EMERGENCY the client sends is
 ///   dropped; BUDGET_FORECAST_OVER is stored only for a genuine Admin override (a finding that required a reason, saved with one), BUDGET_EMERGENCY only for an emergency the server accepted. A warn-mode warning is not an override.</item>
 /// <item><b>Carried forward.</b> A save that does not decide the budget again (assigning a worker, editing a note, any edit that is not a new override) keeps the budget acknowledgement the shift already had, and its

@@ -30,14 +30,14 @@ public enum FundingPoolKind
 }
 
 /// <summary>
-/// What a budget check does when a one-off roster shift would take a participant's forecast past their budget for the funding period. Chosen per organisation
+/// What a budget check does when a one-off roster shift would take a participant's forecast over their budget for the funding period. Chosen per organisation
 /// on <see cref="BudgetSettings.Mode"/>. Warn is the default for every existing and new organisation. The integer values are persisted (0 = Warn is also the
 /// column's database default): never renumber or reorder.
 /// </summary>
 public enum BudgetLimitMode
 {
     Warn = 0,
-    /// <summary>Refuses a one-off roster shift that would take the forecast past the budget, unless an Admin overrides it with a reason. Emergency or safety bookings are always allowed.</summary>
+    /// <summary>Refuses a one-off roster shift that would take the forecast over budget, unless an Admin overrides it with a reason. Emergency or safety bookings are always allowed.</summary>
     HardLimit = 1,
 }
 

@@ -52,7 +52,7 @@ public record BudgetFindingFiguresDto
     public decimal OverBy { get; init; }
 }
 
-/// <summary>Where the Admin's review of an emergency or safety booking past the budget stands. There is no "approved": an emergency saves at once and is reviewed afterwards.</summary>
+/// <summary>Where the Admin's review of an emergency or safety booking over budget stands. There is no "approved": an emergency saves at once and is reviewed afterwards.</summary>
 public enum BudgetReviewState
 {
     Pending = 0,
@@ -98,10 +98,10 @@ public record ShiftDto
     public string? OverrideReason { get; init; }
     /// <summary>
     /// The finding codes the server stored when it saved this shift, for the over-budget marker on the board chip and in the panel: BUDGET_EMERGENCY for a shift accepted as an emergency or safety booking,
-    /// BUDGET_FORECAST_OVER for one an Admin pushed past the budget with a written reason. The server never stores either for a mere warning, so a marker read from here is never forged. Omitted when none.
+    /// BUDGET_FORECAST_OVER for one an Admin pushed over budget with a written reason. The server never stores either for a mere warning, so a marker read from here is never forged. Omitted when none.
     /// </summary>
     public List<string>? AcknowledgedFindingCodes { get; init; }
-    /// <summary>The Admin review of an emergency or safety booking past the budget; omitted for every other shift.</summary>
+    /// <summary>The Admin review of an emergency or safety booking over budget; omitted for every other shift.</summary>
     public BudgetReviewDto? BudgetReview { get; init; }
     public List<RosterFindingDto> Findings { get; init; } = new();
     /// <summary>
@@ -300,8 +300,8 @@ public record CreateShiftDto
     /// <summary>Finding codes the coordinator is acknowledging. Defaults to every current finding's code when omitted.</summary>
     public List<string>? AcknowledgedFindingCodes { get; init; }
     /// <summary>
-    /// "Emergency or safety" (budget phase 3): the shift goes ahead past the budget without an Admin first, and an Admin reviews it afterwards. The description is <see cref="OverrideReason"/>
-    /// (at least 10 characters once trimmed). It only means something when the check found the shift past the budget; the path is open in every mode and cannot be switched off.
+    /// "Emergency or safety" (budget phase 3): the shift goes ahead over budget without an Admin first, and an Admin reviews it afterwards. The description is <see cref="OverrideReason"/>
+    /// (at least 10 characters once trimmed). It only means something when the check found the shift over budget; the path is open in every mode and cannot be switched off.
     /// </summary>
     public bool Emergency { get; init; }
 }

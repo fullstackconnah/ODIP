@@ -5,7 +5,7 @@
 //
 // What it answers is chosen by switches, like MOCK_COMPETENCY. Each is an environment variable AND can be changed while the mock runs, with POST /api/v1/mock/budget (a test harness that cannot set the mock's
 // environment, like the server screenshot run, changes the scene between states this way):
-//   MOCK_BUDGET_MODE=warn|hard          the organisation's budget mode (default warn). Under hard, a one-off shift that raises the cost past the budget is Blocking for a Coordinator.
+//   MOCK_BUDGET_MODE=warn|hard          the organisation's budget mode (default warn). Under hard, a one-off shift that raises the cost over budget is Blocking for a Coordinator.
 //   MOCK_BUDGET_CALLER=coordinator|admin who is saving (default coordinator). An Admin gets the same finding as a warning that needs a reason.
 //   MOCK_BUDGET_WARNINGS=over           makes Generate, an approval preview and a confirmed booking each return a budget warning (Sienna's Core pool, which is forecast over this quarter).
 // The body of POST /api/v1/mock/budget is any of { mode, caller, warnings, unpriced, review, reset }:
@@ -125,7 +125,7 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
     if (tasks.some((t) => t.id === id)) return
     tasks.push({
       id, participantBookingId: null, accommodationReservationId: null, vehicleAssignmentId: null, staffAssignmentId: null, taskType: 'BudgetEmergencyReview',
-      title: `Review emergency shift past budget: ${participantName} on ${dayMonthYear(shift.serviceDate)}`, ownerId: null, ownerName: null, priority: 'Medium',
+      title: `Review emergency shift over budget: ${participantName} on ${dayMonthYear(shift.serviceDate)}`, ownerId: null, ownerName: null, priority: 'Medium',
       dueDate: new Date(Date.parse(`${today()}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10), status: 'NotStarted', completedDate: null,
       linkTo: `/rostering?date=${shift.serviceDate}&participant=${shift.participantId}`, sourceKey: `budget-emergency:${shift.id}`, shiftId: shift.id,
     })
@@ -196,7 +196,7 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
         startTime: `${String(body.startTime).slice(0, 5)}:00`, endTime: `${String(body.endTime).slice(0, 5)}:00`, endsNextDay: !!body.endsNextDay,
         durationHours: hoursOf(body.startTime, body.endTime, body.endsNextDay), ratio: body.ratio, nightType: body.nightType, status: 'Draft', shiftPatternId: null, notes: body.notes || null,
         overrideReason: emergency ? `Emergency or safety: ${body.overrideReason.trim()}` : adminOverride ? body.overrideReason.trim() : null, assigneeOnApprovedLeave: false, findings: [],
-        ...(emergency ? { acknowledgedFindingCodes: ['BUDGET_EMERGENCY'], budgetReview: { state: 'Pending', recordedAt: new Date().toISOString(), reviewTaskTitle: `Review emergency shift past budget: ${who ? who.fullName : 'Participant'} on ${dayMonthYear(body.serviceDate)}` } } : adminOverride ? { acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'] } : {}),
+        ...(emergency ? { acknowledgedFindingCodes: ['BUDGET_EMERGENCY'], budgetReview: { state: 'Pending', recordedAt: new Date().toISOString(), reviewTaskTitle: `Review emergency shift over budget: ${who ? who.fullName : 'Participant'} on ${dayMonthYear(body.serviceDate)}` } } : adminOverride ? { acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'] } : {}),
       }
       rosterShifts.push(shift)
       if (emergency) raiseTask(shift, who ? who.fullName : 'Participant')

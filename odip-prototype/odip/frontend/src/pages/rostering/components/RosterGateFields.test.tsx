@@ -50,12 +50,12 @@ describe('the reason box (M1: a note nobody keeps is not offered)', () => {
       <Gate
         findings={[reasonRequired]}
         reasonRequired
-        reasonCopy={{ hint: 'The hard limit is on. This reason is recorded in the audit log.', placeholder: 'Why this shift should go ahead past the budget', error: 'Add a reason to save this shift past the budget.' }}
+        reasonCopy={{ hint: 'The hard limit is on. This reason is recorded in the audit log.', placeholder: 'Why this shift should go ahead over budget', error: 'Add a reason to save this shift over budget.' }}
       />,
     )
 
-    expect(screen.getByPlaceholderText('Why this shift should go ahead past the budget')).toBeInTheDocument()
-    expect(screen.getByText('Add a reason to save this shift past the budget.')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Why this shift should go ahead over budget')).toBeInTheDocument()
+    expect(screen.getByText('Add a reason to save this shift over budget.')).toBeInTheDocument()
     expect(screen.queryByText(/A reason is required to save over the warnings/)).not.toBeInTheDocument()
   })
 

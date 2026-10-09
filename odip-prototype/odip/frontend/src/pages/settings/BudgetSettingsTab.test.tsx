@@ -34,7 +34,7 @@ describe('Budgets tab: what is shown', () => {
     expect(screen.getByRole('radio', { name: 'Warn only' })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' })).not.toBeChecked()
     expect(screen.getByRole('button', { name: /Warn when used reaches/ })).toHaveTextContent('80%')
-    expect(screen.getByText(/Refuses a one-off roster shift that would take a participant's forecast past their budget for the funding period, unless an Admin saves it with a written reason, which is recorded in the audit log\./)).toBeInTheDocument()
+    expect(screen.getByText(/Refuses a one-off roster shift that would take a participant's forecast over their budget for the funding period, unless an Admin saves it with a written reason, which is recorded in the audit log\./)).toBeInTheDocument()
   })
 
   it('no longer says the checks arrive later: they are live, and the page says what they do', () => {
@@ -48,7 +48,7 @@ describe('Budgets tab: what is shown', () => {
     renderTab()
 
     const line = screen.getByText(/In both modes, a shift made from a pattern, a trip booking, an agreement and a claim only ever warn\. Cancelling a shift, an edit that lowers its cost, and a shift that has started or been delivered are never refused\./)
-    const heading = screen.getByRole('heading', { name: /When a one-off shift would go over/ })
+    const heading = screen.getByRole('heading', { name: /When a one-off shift would put a participant over budget/ })
     const percentHeading = screen.getByRole('heading', { name: /When a participant is approaching/ })
     expect(heading.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(line.compareDocumentPosition(percentHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()   // inside the first section, before the percentage
@@ -96,7 +96,7 @@ describe('Budgets tab: what is shown', () => {
 
     expect(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' })).toBeInTheDocument()
     expect(screen.queryByText(/ad-hoc/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/Shows a warning when a one-off roster shift would take a participant's forecast \(what is used so far plus shifts already booked\) past their budget for the funding period\. The shift is still saved\./)).toBeInTheDocument()
+    expect(screen.getByText(/Shows a warning when a one-off roster shift would take a participant's forecast \(what is used so far plus shifts already booked\) over their budget for the funding period\. The shift is still saved\./)).toBeInTheDocument()
     expect(screen.getAllByText(/forecast \(what is used/)).toHaveLength(1)   // defined where it is first met, not repeated
   })
 

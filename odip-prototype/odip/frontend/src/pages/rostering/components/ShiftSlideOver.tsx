@@ -70,8 +70,8 @@ const BUDGET_REFUSAL_SENTENCE = "The hard limit is on, so this shift can't be sa
 /** What the reason field says when the budget is the only thing asking for a reason (an Admin under the hard limit). */
 const BUDGET_REASON_COPY = {
   hint: 'The hard limit is on. This reason is recorded in the audit log.',
-  placeholder: 'Why this shift should go ahead past the budget',
-  error: 'Add a reason to save this shift past the budget.',
+  placeholder: 'Why this shift should go ahead over budget',
+  error: 'Add a reason to save this shift over budget.',
 } as const
 
 /** Sort-boost order for the Staff dropdown: Preferred first, then Allowed/no row, Excluded last. */

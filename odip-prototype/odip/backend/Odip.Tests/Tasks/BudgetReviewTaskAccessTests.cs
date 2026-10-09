@@ -15,7 +15,7 @@ using Xunit;
 namespace Odip.Tests.Tasks;
 
 /// <summary>
-/// Who may touch the Admin's review of an emergency booking past budget (the phase 3 review, C2, C7 and the design review's M10). The owner's decision is that an Admin reviews an emergency afterwards, so the
+/// Who may touch the Admin's review of an emergency booking over budget (the phase 3 review, C2, C7 and the design review's M10). The owner's decision is that an Admin reviews an emergency afterwards, so the
 /// server holds the task to that: only an Admin or SuperAdmin may complete, cancel, delete or retype it (a Coordinator, who is the one who made the emergency, may not tick it off), and a role that must never see
 /// budget standing (SupportWorker, ReadOnly) does not see the task at all. Whoever completes it becomes its owner, which is how the shift panel can say who reviewed it.
 /// </summary>
@@ -59,7 +59,7 @@ public class BudgetReviewTaskAccessTests : IDisposable
     {
         var task = new BookingTask
         {
-            Id = Guid.NewGuid(), TaskType = type, Title = title ?? (type == TaskType.BudgetEmergencyReview ? "Review emergency shift past budget: Sienna Whitfield on 9 Oct 2026" : "Ring the venue"),
+            Id = Guid.NewGuid(), TaskType = type, Title = title ?? (type == TaskType.BudgetEmergencyReview ? "Review emergency shift over budget: Sienna Whitfield on 9 Oct 2026" : "Ring the venue"),
             SourceKey = type == TaskType.BudgetEmergencyReview ? $"budget-emergency:{Guid.NewGuid()}" : null, DueDate = due, Status = TaskItemStatus.NotStarted, Priority = TaskPriority.Medium,
         };
         _db.BookingTasks.Add(task);
@@ -114,7 +114,7 @@ public class BudgetReviewTaskAccessTests : IDisposable
     public async Task ACoordinatorCannotCreateAReviewTask()
     {
         var result = await Tasks("Coordinator").Create(
-            new CreateTaskDto { TripInstanceId = Guid.NewGuid(), TaskType = TaskType.BudgetEmergencyReview, Title = "Review emergency shift past budget: nobody" }, CancellationToken.None);
+            new CreateTaskDto { TripInstanceId = Guid.NewGuid(), TaskType = TaskType.BudgetEmergencyReview, Title = "Review emergency shift over budget: nobody" }, CancellationToken.None);
 
         Assert.IsType<ForbidResult>(result.Result);
         Assert.Empty(_db.BookingTasks);
