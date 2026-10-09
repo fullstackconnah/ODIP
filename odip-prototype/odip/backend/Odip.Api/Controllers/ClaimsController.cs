@@ -272,7 +272,13 @@ public class ClaimsController : ControllerBase
             if (dto.Status.Value == TripClaimStatus.Paid) c.PaidDate = now;
         }
         KeepRejectionRecord(c, before, now);
-        if (dto.RejectionCode != null && c.Status == TripClaimStatus.Rejected) c.RejectionCode = code;
+        if (dto.RejectionCode != null && c.Status == TripClaimStatus.Rejected)
+        {
+            c.RejectionCode = code;
+            // A claim marked Rejected before the day was kept has no day, and the NDIA's word (the alert and the Funding tab's note) needs one: recording its code is the first day the claim is known
+            // to have been refused, so that is the day. A day that is already there never moves.
+            if (code != null && c.RejectedDate is null) c.RejectedDate = now;
+        }
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
