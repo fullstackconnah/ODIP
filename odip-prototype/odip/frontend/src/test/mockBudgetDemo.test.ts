@@ -45,7 +45,8 @@ const BUDGETS = join(__dirname, '../../../mock-api/mock-budgets.js')
 
 // A plan recorded for later (fix round 2): the mock's ledger carries the soonest start as nextPlanStart, as the server's ParticipantLedger.NextPlanStart does, and the list and the check say it.
 describe.skipIf(!existsSync(BUDGETS))('the mock says when a plan recorded for later starts', () => {
-  const { budgetList, agreementCheckOf, budgetAlertsOf } = createRequire(import.meta.url)(BUDGETS) as {
+  // Loaded inside each test, not here: vitest still runs a skipped describe's body while it collects, and the image build has no mock-api folder for a require in this body to find.
+  const budgets = () => createRequire(import.meta.url)(BUDGETS) as {
     budgetAlertsOf: (ledger: unknown) => Array<{ type: string; message: string }>
     budgetList: (people: unknown[], ledgerOf: (id: string) => unknown, today: string, approaching: number) => { noBudget: Array<Record<string, unknown>> }
     agreementCheckOf: (ledger: unknown, planType: string, lines: unknown[], from: string, to: string, today: string) => Record<string, unknown>
@@ -59,6 +60,7 @@ describe.skipIf(!existsSync(BUDGETS))('the mock says when a plan recorded for la
   it.each([
     ['V17', ' in the plan'], ['V18', ' in the plan'], ['V27', ' in the funding period'], ['V28', ' in the funding period'], ['E104', ''],
   ])('words the NDIA alert for %s with its scope', (code, scope) => {
+    const { budgetAlertsOf } = budgets()
     const pool = { id: 'pool-core', name: 'Core (flexible)', kind: 'CoreFlexible', managementType: 'PlanManaged', ndiaRejection: { date: '2026-10-08', code },
       periods: [{ isCurrent: true, status: 'OnTrack', periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 1000, used: 0 }] }
 
@@ -68,6 +70,7 @@ describe.skipIf(!existsSync(BUDGETS))('the mock says when a plan recorded for la
   })
 
   it('puts a participant with only a later plan in the list tail as NotStarted, with the day, and keeps the other two reasons as they were', () => {
+    const { budgetList } = budgets()
     const tail = (ledger: unknown) => budgetList([person], () => ledger, '2026-10-08', 80).noBudget[0]
 
     expect(tail(upcomingOnly)).toEqual({ participantId: 'p-x', participantName: 'Una Upcoming', reason: 'NotStarted', planStart: '2026-11-01' })
@@ -77,6 +80,7 @@ describe.skipIf(!existsSync(BUDGETS))('the mock says when a plan recorded for la
   })
 
   it('says it in the agreement check too, as the server does, and prices nothing', () => {
+    const { agreementCheckOf } = budgets()
     const check = (ledger: unknown) => agreementCheckOf(ledger, 'PlanManaged', [], '2026-10-12', '2027-01-31', '2026-10-08')
 
     expect(check(upcomingOnly)).toMatchObject({ hasBudget: false, noBudgetReason: 'NotStarted', planStart: '2026-11-01', pools: [], agreementCost: 0 })
