@@ -2627,6 +2627,8 @@ const postRoutes = [
   ['staff-assignments/check', () => []],
   // The shift panel's live dry-run (a pure preview), and shift create (rosterBudget.js): the budget findings, the emergency path, the markers. Without a check route the panel, open for a moment, set its findings to whatever the generic answer was and crashed.
   ...rosterBudget.post,
+  // A pattern made on the Patterns page: refused with no length, as the server refuses it (the code and sentence of the shift's own 400); otherwise the same echo with an id the generic fallback gives any write.
+  ['rostering/patterns', (body) => rosterBudget.refusePatternNoLength(null, body || {}) || { id: (body && body.id) || `mock-${Date.now()}`, ...body }],
 
   ['leave/:id/approve', (id) => ({
     leave: withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Approved', null),
@@ -2785,6 +2787,9 @@ const putRoutes = [
       && rosterPatterns.some((p) => p.id !== pattern.id && p.sourceDraftId === pattern.sourceDraftId && p.sourceBlockKey === pattern.sourceBlockKey && p.workerSlot === pattern.workerSlot && p.dayOfWeek === body.dayOfWeek)) {
       return respond(409, failEnvelope(null, ['This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.']))
     }
+    // No length is refused only when the edit changes the times, as on the server, so a pattern saved before the rule can still be switched off.
+    const noLength = rosterBudget.refusePatternNoLength(pattern, body || {})
+    if (noLength) return noLength
     for (const key of ['dayOfWeek', 'startTime', 'endTime', 'endsNextDay', 'ratio', 'nightType', 'effectiveFrom', 'effectiveTo', 'isActive', 'notes', 'defaultStaffId']) if (body && key in body) pattern[key] = body[key]
     return pattern
   }],

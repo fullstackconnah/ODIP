@@ -27,6 +27,7 @@ const EN_DASH = '–'
 const WORD_JOINER = '⁠'
 const WRITTEN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const NO_LENGTH_MESSAGE = "The shift must end after it starts. Tick 'Ends the next day' for an overnight shift."
+const NO_LENGTH_CODE = 'shift-no-length'
 const round2 = (n) => Math.round(n * 100) / 100
 const money = (n) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const dayMonth = (isoDate) => { const [, m, d] = isoDate.split('-').map(Number); return `${d} ${WRITTEN[m - 1]}` }
@@ -152,6 +153,20 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
 
   const dtoOf = (shift, findings) => ({ ...shift, findings })
 
+  /** The server's 400 for a pair of times with no length, with its code (RosteringController.ShiftNoLengthCode); null when the pair has a length. */
+  const refuseNoLength = (times) => (lengthMinutes(times.startTime, times.endTime, times.endsNextDay) <= 0 ? respond(400, failEnvelope(null, [NO_LENGTH_MESSAGE], NO_LENGTH_CODE)) : null)
+
+  /**
+   * A pattern's create (`existing` null) or update, as the server refuses it: the times it would have give no length. An update is only refused when it CHANGES the times (the form sends them back as "HH:mm"
+   * where the store holds "HH:mm:ss"), so a pattern saved before the rule can still be switched off or have its notes edited.
+   */
+  function refusePatternNoLength(existing, body) {
+    const next = { startTime: body.startTime ?? existing?.startTime, endTime: body.endTime ?? existing?.endTime, endsNextDay: body.endsNextDay ?? existing?.endsNextDay }
+    const hhmm = (time) => String(time).slice(0, 5)
+    if (existing && hhmm(next.startTime) === hhmm(existing.startTime) && hhmm(next.endTime) === hhmm(existing.endTime) && !!next.endsNextDay === !!existing.endsNextDay) return null
+    return refuseNoLength(next)
+  }
+
   const get = []
   const post = [
     // The scene, for a harness that cannot set the mock's environment (see the header). Answers the settings now in force.
@@ -167,13 +182,15 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
     }],
     // The shift panel's live dry run: the findings, and the informational line in the envelope's message when the shift could not be checked.
     ['rostering/shifts/check', (body) => {
-      if (lengthMinutes(body.startTime, body.endTime, body.endsNextDay) <= 0) return respond(400, failEnvelope(null, [NO_LENGTH_MESSAGE]))
+      const noLength = refuseNoLength(body)
+      if (noLength) return noLength
       const { findings, note } = assess(body)
       return note ? respond(200, { success: true, data: findings, message: note, errors: null }) : findings
     }],
     // Create: refuses what the server refuses, accepts an emergency (with the Admin's review task), and keeps the shift so the board shows it and its marker.
     ['rostering/shifts', (body) => {
-      if (lengthMinutes(body.startTime, body.endTime, body.endsNextDay) <= 0) return respond(400, failEnvelope(null, [NO_LENGTH_MESSAGE]))
+      const noLength = refuseNoLength(body)
+      if (noLength) return noLength
       const { findings } = assess(body)
       const forecastOver = findings.find((f) => f.code === 'BUDGET_FORECAST_OVER')
       const emergency = !!body.emergency && !!forecastOver
@@ -226,7 +243,7 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
     }]
   }
 
-  return { get, post, put, assess, sampleWarnings, raiseTask }
+  return { get, post, put, assess, sampleWarnings, raiseTask, refuseNoLength, refusePatternNoLength }
 }
 
 module.exports = { create }
