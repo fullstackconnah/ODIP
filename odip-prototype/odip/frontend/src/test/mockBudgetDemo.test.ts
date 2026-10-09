@@ -45,7 +45,8 @@ const BUDGETS = join(__dirname, '../../../mock-api/mock-budgets.js')
 
 // A plan recorded for later (fix round 2): the mock's ledger carries the soonest start as nextPlanStart, as the server's ParticipantLedger.NextPlanStart does, and the list and the check say it.
 describe.skipIf(!existsSync(BUDGETS))('the mock says when a plan recorded for later starts', () => {
-  const { budgetList, agreementCheckOf } = createRequire(import.meta.url)(BUDGETS) as {
+  const { budgetList, agreementCheckOf, budgetAlertsOf } = createRequire(import.meta.url)(BUDGETS) as {
+    budgetAlertsOf: (ledger: unknown) => Array<{ type: string; message: string }>
     budgetList: (people: unknown[], ledgerOf: (id: string) => unknown, today: string, approaching: number) => { noBudget: Array<Record<string, unknown>> }
     agreementCheckOf: (ledger: unknown, planType: string, lines: unknown[], from: string, to: string, today: string) => Record<string, unknown>
   }
@@ -53,6 +54,18 @@ describe.skipIf(!existsSync(BUDGETS))('the mock says when a plan recorded for la
   const upcomingOnly = { planIsCurrent: false, nextPlanStart: '2026-11-01', pools: [] }
   const endedThenUpcoming = { planId: 'plan-1', planIsCurrent: false, planStart: '2025-07-01', planEnd: '2026-06-30', nextPlanStart: '2026-11-01', pools: [] }
   const endedOnly = { planId: 'plan-1', planIsCurrent: false, planStart: '2025-07-01', planEnd: '2026-06-30', pools: [] }
+
+  // The alert's scope words are the server's (NdiaRejectionCodes.ScopeOf): the plan for V17 and V18, the funding period for V27 and V28, nothing made up for any other code.
+  it.each([
+    ['V17', ' in the plan'], ['V18', ' in the plan'], ['V27', ' in the funding period'], ['V28', ' in the funding period'], ['E104', ''],
+  ])('words the NDIA alert for %s with its scope', (code, scope) => {
+    const pool = { id: 'pool-core', name: 'Core (flexible)', kind: 'CoreFlexible', managementType: 'PlanManaged', ndiaRejection: { date: '2026-10-08', code },
+      periods: [{ isCurrent: true, status: 'OnTrack', periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 1000, used: 0 }] }
+
+    const alerts = budgetAlertsOf({ planId: 'plan-1', planIsCurrent: true, pools: [pool] })
+
+    expect(alerts.map(alert => [alert.type, alert.message])).toEqual([['budget-ndia-exhausted', `NDIA rejected a claim for Core on 8 Oct 2026: not enough funds${scope} (${code})`]])
+  })
 
   it('puts a participant with only a later plan in the list tail as NotStarted, with the day, and keeps the other two reasons as they were', () => {
     const tail = (ledger: unknown) => budgetList([person], () => ledger, '2026-10-08', 80).noBudget[0]

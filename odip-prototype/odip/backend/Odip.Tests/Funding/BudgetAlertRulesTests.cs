@@ -228,6 +228,13 @@ public class BudgetAlertRulesTests
         Assert.Equal("funding", alert.DeepLinkTab);
     }
 
+    // A fifth code added to NotEnoughFunds without a scope would raise an alert that says only "not enough funds (V99)": this fails first.
+    [Fact]
+    public void EveryFundsCodeHasAScope()
+    {
+        Assert.All(NdiaRejectionCodes.NotEnoughFunds, code => Assert.NotNull(NdiaRejectionCodes.ScopeOf(code)));
+    }
+
     // The dialog tells the plan (V17, V18) from the funding period (V27, V28), which changes what the coordinator does next, so the alert does too. One colon: the pool is named in the sentence.
     [Theory]
     [InlineData("V17", "in the plan")]
