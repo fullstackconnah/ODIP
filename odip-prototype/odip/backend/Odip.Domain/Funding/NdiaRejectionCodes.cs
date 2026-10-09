@@ -24,6 +24,17 @@ public static class NdiaRejectionCodes
         return NotEnoughFunds.FirstOrDefault(known => string.Equals(known, code, StringComparison.OrdinalIgnoreCase)) ?? code;
     }
 
+    /// <summary>
+    /// What ran out, in the budget's words: "the plan" for V17 and V18, "the funding period" for V27 and V28 (whatever the case of the code); null for any other code. The alert and the Funding tab's
+    /// note say which, because it changes what the coordinator does next.
+    /// </summary>
+    public static string? ScopeOf(string? code) => Normalise(code) switch
+    {
+        "V17" or "V18" => "the plan",
+        "V27" or "V28" => "the funding period",
+        _ => null,
+    };
+
     /// <summary>Whether the code says the NDIA has no more funds to pay from (V17, V18, V27 or V28), whatever its case.</summary>
     public static bool MeansNotEnoughFunds(string? code) => Normalise(code) is { } normalised && NotEnoughFunds.Contains(normalised, StringComparer.Ordinal);
 }

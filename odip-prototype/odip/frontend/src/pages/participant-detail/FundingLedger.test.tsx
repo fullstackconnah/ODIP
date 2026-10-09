@@ -380,7 +380,8 @@ describe('the NDIA rejecting a claim for want of funds', () => {
     renderLedger(participantLedger({ pools: [ledgerPool({ ndiaRejection: rejection })] }))
 
     const note = screen.getByText(/NDIA rejected a claim on/)
-    expect(note).toHaveTextContent('NDIA rejected a claim on 8 Oct 2026: not enough funds (V27). Claim CLM-0009')
+    expect(note).toHaveTextContent('NDIA rejected a claim on 8 Oct 2026: not enough funds in the funding period (V27). Claim CLM-0009')
+    expect(note.textContent?.match(/:/g)).toHaveLength(1)
     expect(within(note).getByRole('link', { name: 'Claim CLM-0009' })).toHaveAttribute('href', '/claims/claim-9')
   })
 

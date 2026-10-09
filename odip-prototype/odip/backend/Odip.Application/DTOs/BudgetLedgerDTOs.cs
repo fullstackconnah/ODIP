@@ -113,7 +113,7 @@ public record LedgerPoolDto
 }
 
 /// <summary>
-/// A claim the NDIA refused for want of funds (V17, V18, V27 or V28), as the Funding tab says it on the pool the claim's lines belong to: "NDIA rejected a claim on {date}: not enough funds ({code})".
+/// A claim the NDIA refused for want of funds (V17, V18, V27 or V28), as the Funding tab says it on the pool the claim's lines belong to: "NDIA rejected a claim on {date}: not enough funds in the funding period ({code})" (the plan, for V17 and V18).
 /// It carries no money. It is there while the funding period the claim's lines fall in is the one running, and not after a later period has started or a new plan has been recorded.
 /// </summary>
 public record NdiaRejectionDto

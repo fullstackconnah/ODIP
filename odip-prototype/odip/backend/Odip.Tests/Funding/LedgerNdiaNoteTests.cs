@@ -15,7 +15,7 @@ using static Odip.Tests.Funding.LedgerKit;
 namespace Odip.Tests.Funding;
 
 /// <summary>
-/// The Funding tab's note on a pool (budget phase 2b): "NDIA rejected a claim on {date}: not enough funds ({code})". It rides on the ledger response, on the pool the claim's lines belong to, for as long
+/// The Funding tab's note on a pool (budget phase 2b): "NDIA rejected a claim on {date}: not enough funds in the funding period ({code})" (the page words it; the server sends the date, the code and the claim). It rides on the ledger response, on the pool the claim's lines belong to, for as long
 /// as the rejection is active (see <see cref="NdiaRejectionReader"/>), and is absent from every other pool. It carries no money.
 /// </summary>
 public class LedgerNdiaNoteTests

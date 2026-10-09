@@ -224,8 +224,25 @@ public class BudgetAlertRulesTests
 
         Assert.Equal("budget-ndia-exhausted", alert.Type);
         Assert.Equal(AlertSeverity.Critical, alert.Severity);
-        Assert.Equal("Core: NDIA rejected a claim on 8 Oct 2026: not enough funds (V27)", alert.Message);
+        Assert.Equal("NDIA rejected a claim for Core on 8 Oct 2026: not enough funds in the funding period (V27)", alert.Message);
         Assert.Equal("funding", alert.DeepLinkTab);
+    }
+
+    // The dialog tells the plan (V17, V18) from the funding period (V27, V28), which changes what the coordinator does next, so the alert does too. One colon: the pool is named in the sentence.
+    [Theory]
+    [InlineData("V17", "in the plan")]
+    [InlineData("V18", "in the plan")]
+    [InlineData("V27", "in the funding period")]
+    [InlineData("V28", "in the funding period")]
+    public void TheNdiaAlertSaysWhetherThePlanOrTheFundingPeriodRanOut_WithOneColon(string code, string scope)
+    {
+        var plan = CorePlan();
+        var rejection = new PoolNdiaRejection(plan.Pools.Single().Id, Guid.NewGuid(), "TC-0001", new DateOnly(2026, 10, 8), code);
+
+        var alert = Assert.Single(AlertsOf(LedgerOf(plan, Cost(LedgerGroup.Claimed, 1000m)), rejection));
+
+        Assert.Equal($"NDIA rejected a claim for Core on 8 Oct 2026: not enough funds {scope} ({code})", alert.Message);
+        Assert.Equal(1, alert.Message.Count(c => c == ':'));
     }
 
     [Fact]

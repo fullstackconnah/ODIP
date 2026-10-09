@@ -241,7 +241,7 @@ export interface LedgerPeriod extends LedgerFigures {
 
 /**
  * A claim the NDIA refused for want of funds (V17, V18, V27 or V28), as the Funding tab says it on the pool the claim's lines belong to: "NDIA rejected a claim on {date}: not enough funds
- * ({code})". It carries no money, and it is there while the funding period the claim's lines fall in is the one running (a later period, or a new plan, ends it).
+ * in the funding period ({code})" (the plan, for V17 and V18). It carries no money, and it is there while the funding period the claim's lines fall in is the one running (a later period, or a new plan, ends it).
  */
 export interface NdiaRejection {
   /** The provider's calendar day the claim was marked Rejected. */

@@ -81,8 +81,15 @@ public static class BudgetAlertRules
     private static string WithTheGap(string message, PeriodLedger period) =>
         period.UnpricedShiftCount > 0 ? $"{message}. {BudgetText.UnpricedShifts(period.UnpricedShiftCount)}" : message;
 
-    private static ParticipantAlertDto NdiaAlert(string label, PoolNdiaRejection rejection) =>
-        Alert(NdiaExhaustedType, AlertSeverity.Critical, $"{label}: NDIA rejected a claim on {BudgetText.Day(rejection.Date)}: not enough funds ({rejection.Code})");
+    /// <summary>
+    /// "NDIA rejected a claim for Core on 8 Oct 2026: not enough funds in the funding period (V27)": one colon, the pool named in the sentence, and which of the two ran out (the plan, for V17 and
+    /// V18, or the funding period, for V27 and V28). The Funding tab's note says the same after "NDIA rejected a claim on {date}".
+    /// </summary>
+    private static ParticipantAlertDto NdiaAlert(string label, PoolNdiaRejection rejection)
+    {
+        var scope = NdiaRejectionCodes.ScopeOf(rejection.Code) is { } ran ? $" in {ran}" : string.Empty;
+        return Alert(NdiaExhaustedType, AlertSeverity.Critical, $"NDIA rejected a claim for {label} on {BudgetText.Day(rejection.Date)}: not enough funds{scope} ({rejection.Code})");
+    }
 
     private static ParticipantAlertDto Alert(string type, AlertSeverity severity, string message) =>
         new() { Type = type, Severity = severity, Message = message, DeepLinkTab = FundingTab };

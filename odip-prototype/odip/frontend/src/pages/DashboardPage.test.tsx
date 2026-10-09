@@ -1888,14 +1888,14 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
     it('still counts and lists the NDIA’s "the funds ran out" alert, a different fact, as a Critical alert', () => {
       asRole('Coordinator')
       withAlerts(budgetParticipant('p1', 'Noor Refused', 'budget-ndia-exhausted', {
-        alerts: [{ type: 'budget-ndia-exhausted', severity: 'Critical', message: 'Core: NDIA rejected a claim on 8 Oct 2026: not enough funds (V27)', deepLinkTab: 'funding' }],
+        alerts: [{ type: 'budget-ndia-exhausted', severity: 'Critical', message: 'NDIA rejected a claim for Core on 8 Oct 2026: not enough funds in the funding period (V27)', deepLinkTab: 'funding' }],
       }))
       renderPage()
 
       expect(tileFor('Critical Participant Alerts')).toHaveAccessibleName('Critical Participant Alerts 1')
       expect(tileLabels()).not.toContain('Budgets at risk')
       expect(screen.getByText('NDIA says the funds ran out')).toBeInTheDocument()
-      const card = screen.getByText('Core: NDIA rejected a claim on 8 Oct 2026: not enough funds (V27)').closest('a')!
+      const card = screen.getByText('NDIA rejected a claim for Core on 8 Oct 2026: not enough funds in the funding period (V27)').closest('a')!
       expect(card).toHaveAttribute('href', '/participants/p1?tab=funding')
     })
 

@@ -39,6 +39,9 @@ const withTheGap = (message, period) => {
   return n === 1 ? `${message}. 1 shift in this period is not priced yet, so this leaves it out` : `${message}. ${n} shifts in this period are not priced yet, so this leaves them out`
 }
 
+/** What ran out, as the alert words it (NdiaRejectionCodes.ScopeOf on the server): " in the plan" for V17 and V18, " in the funding period" for V27 and V28, nothing for any other code. */
+const fundsScope = (code) => ({ V17: ' in the plan', V18: ' in the plan', V27: ' in the funding period', V28: ' in the funding period' }[String(code).toUpperCase()] ?? '')
+
 const nameOf = (person) => `${person.preferredName || person.firstName} ${person.lastName}`
 
 // ── The participant alerts ───────────────────────────────────────────────────
@@ -57,7 +60,7 @@ function budgetAlertsOf(ledger) {
     if (period.status === 'Over') alerts.push(alert('budget-over', 'Critical', withTheGap(`${label} is ${money(period.used - period.available)} over this period's ${money(period.available)} (to ${end})`, period)))
     else if (period.status === 'ForecastOver') alerts.push(alert('budget-forecast-over', 'Warning', withTheGap(`Booked shifts would take ${label} ${money(period.forecast - period.available)} over this period's ${money(period.available)} by ${end}`, period)))
     else if (period.status === 'Approaching') alerts.push(alert('budget-approaching', 'Warning', withTheGap(`${label} is at ${Math.floor((period.used * 100) / period.available)}% of this period's ${money(period.available)} (to ${end})`, period)))
-    if (pool.ndiaRejection) alerts.push(alert('budget-ndia-exhausted', 'Critical', `${label}: NDIA rejected a claim on ${say(pool.ndiaRejection.date)}: not enough funds (${pool.ndiaRejection.code})`))
+    if (pool.ndiaRejection) alerts.push(alert('budget-ndia-exhausted', 'Critical', `NDIA rejected a claim for ${label} on ${say(pool.ndiaRejection.date)}: not enough funds${fundsScope(pool.ndiaRejection.code)} (${pool.ndiaRejection.code})`))
   }
   return alerts
 }

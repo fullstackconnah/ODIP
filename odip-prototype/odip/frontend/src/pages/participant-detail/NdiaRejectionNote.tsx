@@ -2,6 +2,7 @@ import { AlertTriangle } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { NdiaRejection } from '@/api/types'
 import { writtenDay } from '@/lib/fundingPlan'
+import { ndiaFundsNote } from '@/lib/ndiaCodes'
 import { TONE } from '@/lib/tone'
 
 /**
@@ -14,7 +15,7 @@ export function NdiaRejectionNote({ rejection }: { rejection: NdiaRejection }) {
     <p className={`mt-3 flex items-start gap-2 rounded-[var(--radius-sm)] px-3 py-2 text-sm ${TONE.danger.solid}`}>
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       <span>
-        NDIA rejected a claim on {writtenDay(rejection.date)}: not enough funds ({rejection.code}).{' '}
+        NDIA rejected a claim on {writtenDay(rejection.date)}: {ndiaFundsNote(rejection.code)}.{' '}
         <Link to={`/claims/${rejection.claimId}`} className="font-medium underline">Claim {rejection.claimReference}</Link>
       </span>
     </p>

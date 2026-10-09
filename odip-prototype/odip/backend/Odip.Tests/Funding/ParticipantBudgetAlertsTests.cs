@@ -337,7 +337,7 @@ public class ParticipantBudgetAlertsTests
         var alert = Assert.Single(await s.BudgetAlertsAsync(participant.Id));
 
         Assert.Equal(("budget-ndia-exhausted", AlertSeverity.Critical, "funding"), (alert.Type, alert.Severity, alert.DeepLinkTab));
-        Assert.Equal("Core: NDIA rejected a claim on 4 Oct 2026: not enough funds (V27)", alert.Message);
+        Assert.Equal("NDIA rejected a claim for Core on 4 Oct 2026: not enough funds in the funding period (V27)", alert.Message);
     }
 
     [Theory]
@@ -381,7 +381,7 @@ public class ParticipantBudgetAlertsTests
         // 20:00 UTC on 3 Oct is 06:00 or 07:00 on 4 Oct in Sydney, whichever side of the clocks changing that night the host puts it on.
         RejectedClaim(s.Kit, participant, "V28", D(2026, 10, 2), rejectedAt: new DateTime(2026, 10, 3, 20, 0, 0, DateTimeKind.Utc));
 
-        Assert.Equal("Core: NDIA rejected a claim on 4 Oct 2026: not enough funds (V28)", Assert.Single(await s.BudgetAlertsAsync(participant.Id)).Message);
+        Assert.Equal("NDIA rejected a claim for Core on 4 Oct 2026: not enough funds in the funding period (V28)", Assert.Single(await s.BudgetAlertsAsync(participant.Id)).Message);
     }
 
     [Fact]
@@ -489,7 +489,7 @@ public class ParticipantBudgetAlertsTests
 
         var alert = Assert.Single(await s.BudgetAlertsAsync(participant.Id));
 
-        Assert.Equal("Improved Daily Living Skills: NDIA rejected a claim on 4 Oct 2026: not enough funds (V18)", alert.Message);
+        Assert.Equal("NDIA rejected a claim for Improved Daily Living Skills on 4 Oct 2026: not enough funds in the plan (V18)", alert.Message);
     }
 
     [Fact]
@@ -503,7 +503,7 @@ public class ParticipantBudgetAlertsTests
 
         var alert = Assert.Single(await s.BudgetAlertsAsync(participant.Id));
 
-        Assert.Equal("Core: NDIA rejected a claim on 3 Oct 2026: not enough funds (V28)", alert.Message);
+        Assert.Equal("NDIA rejected a claim for Core on 3 Oct 2026: not enough funds in the funding period (V28)", alert.Message);
     }
 
     [Fact]
