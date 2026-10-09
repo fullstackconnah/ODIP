@@ -49,9 +49,14 @@ export function FindingsList({ findings, className, answered }: FindingsListProp
               // The warning ink, not the amber fill: the fill is about 1.9:1 on this box, under what an icon needs.
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-on-warning-container)]" aria-hidden="true" />
             )}
-            <span>{finding.message}</span>
-            {isAnswered && answered && (
-              <span className="ml-auto shrink-0 rounded-sm border border-[var(--color-on-warning-container)]/40 px-1.5 py-0.5 text-xs font-medium">{answered.label}</span>
+            {isAnswered && answered ? (
+              // The label goes under the sentence, not beside it: beside it the sentence was squeezed into a narrow column in a phone-width panel.
+              <div className="flex min-w-0 flex-col items-start gap-1">
+                <span>{finding.message}</span>
+                <span className="rounded-sm border border-[var(--color-on-warning-container)]/40 px-1.5 py-0.5 text-xs font-medium">{answered.label}</span>
+              </div>
+            ) : (
+              <span>{finding.message}</span>
             )}
             {!blocking && finding.requiresReason && (
               <span className="ml-auto shrink-0 rounded-sm bg-[var(--color-warning-container)] px-1.5 py-0.5 text-xs font-medium text-[var(--color-on-warning-container)]">

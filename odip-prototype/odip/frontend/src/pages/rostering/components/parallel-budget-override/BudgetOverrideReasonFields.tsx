@@ -2,6 +2,7 @@ import { useEffect, useId, useRef } from 'react'
 import { Loader2, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { FormField } from '@/components/FormField'
+import { bringIntoView } from '@/lib/bringIntoView'
 import {
   MAX_EMERGENCY_LENGTH,
   MIN_REASON_LENGTH,
@@ -61,17 +62,23 @@ export function BudgetOverrideReasonFields({
   const descriptionId = useId()
   const reasonRef = useRef<HTMLTextAreaElement>(null)
   const choiceRef = useRef<HTMLDivElement>(null)
+  const cardRef = useRef<HTMLElement>(null)
   const wasEmergency = useRef(choice === 'emergency')
   const isEmergency = choice === 'emergency'
   const readOnly = disabled || pending
   const message = reasonError(choice, reason, submitted)
   const stillNeeded = charactersStillNeeded(reason)
 
-  // Choosing the path moves focus to the description, so a keyboard or screen-reader user lands on the one thing left to do. Only on the change: a re-render (or an initial render already in the path) never steals it.
+  // Choosing the path moves focus to the description, so a keyboard or screen-reader user lands on the one thing left to do, and brings the whole card into view: it has just grown, and on a phone its character count and
+  // "Back" were left behind the footer. Only on the change: a re-render (or an initial render already in the path) never steals focus or scrolls.
   // Stepping back removes the button that was just pressed, which would drop focus to the page: it goes to the "Emergency or safety" button that takes its place (nothing to focus when the whole card has gone).
   useEffect(() => {
-    if (isEmergency && !wasEmergency.current) reasonRef.current?.focus()
-    else if (!isEmergency && wasEmergency.current) choiceRef.current?.querySelector('button')?.focus()
+    if (isEmergency && !wasEmergency.current) {
+      reasonRef.current?.focus({ preventScroll: true })
+      bringIntoView(cardRef.current)
+    } else if (!isEmergency && wasEmergency.current) {
+      choiceRef.current?.querySelector('button')?.focus()
+    }
     wasEmergency.current = isEmergency
   }, [isEmergency])
 
@@ -79,6 +86,7 @@ export function BudgetOverrideReasonFields({
 
   return (
     <section
+      ref={cardRef}
       aria-label="Emergency or safety"
       data-emergency-panel=""
       className={`flex flex-col gap-3 rounded-[var(--radius-sm)] border p-3 ${

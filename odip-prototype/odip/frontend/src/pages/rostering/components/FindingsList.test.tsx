@@ -28,6 +28,35 @@ describe('two findings with one code (L7)', () => {
   })
 })
 
+describe('a Blocking finding another control has answered (design review L5)', () => {
+  const refusal = { ...forecastOverWithFigures, severity: 'Blocking' as const, message: 'Takes Core (flexible) to $8,640.00 of $8,000.00.' }
+
+  it('reads as answered, in the warning wash with its label, and no longer as a standing red refusal', () => {
+    render(<FindingsList findings={[refusal]} answered={{ codes: ['BUDGET_FORECAST_OVER'], label: 'Booking as an emergency' }} />)
+
+    const row = screen.getByText(refusal.message).closest('li')!
+    expect(row.className).toContain('--color-warning-container')
+    expect(row.className).not.toContain('error-container')
+    expect(row).toHaveTextContent('Booking as an emergency')
+  })
+
+  it('puts the label under the sentence, not beside it: beside it the sentence was squeezed into a narrow column on a phone', () => {
+    render(<FindingsList findings={[refusal]} answered={{ codes: ['BUDGET_FORECAST_OVER'], label: 'Booking as an emergency' }} />)
+
+    const sentence = screen.getByText(refusal.message)
+    const label = screen.getByText('Booking as an emergency')
+    expect(label.parentElement).toBe(sentence.parentElement)
+    expect(sentence.parentElement).toHaveClass('flex-col')
+    expect(sentence.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('leaves a Blocking finding the control did not answer as it was', () => {
+    render(<FindingsList findings={[refusal, makeFinding({ code: 'WSC_EXPIRED', severity: 'Blocking', message: 'Screening has expired' })]} answered={{ codes: ['BUDGET_FORECAST_OVER'], label: 'Booking as an emergency' }} />)
+
+    expect(screen.getByText('Screening has expired').closest('li')!.className).toContain('error-container')
+  })
+})
+
 describe('the warning triangle (L1)', () => {
   it('is drawn in the warning ink, not the amber fill: the fill is 1.9:1 on the box', () => {
     render(<FindingsList findings={[makeFinding({ message: 'Needs a look' })]} />)

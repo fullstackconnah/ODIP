@@ -122,6 +122,44 @@ describe('choosing the path', () => {
     expect(screen.getByRole('button', { name: /Emergency or safety/i })).toHaveFocus()
   })
 
+  it('brings the whole card into view when the path opens, so the character count and Back are not left behind the footer on a phone', async () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    try {
+      const user = userEvent.setup()
+      render(<Host />)
+
+      await user.click(screen.getByRole('button', { name: /Emergency or safety/i }))
+
+      expect(scrollIntoView).toHaveBeenCalledTimes(1)
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', behavior: 'auto' })
+      const card = scrollIntoView.mock.contexts[0] as HTMLElement
+      expect(card).toBe(screen.getByRole('region', { name: 'Emergency or safety' }))
+      expect(card).toContainElement(description())
+      expect(card).toContainElement(screen.getByRole('button', { name: /^Back$/ }))
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
+    }
+  })
+
+  it('does not scroll on a re-render that was already in the path, or when the user steps back', async () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    try {
+      const user = userEvent.setup()
+      render(<Host />)
+      await user.click(screen.getByRole('button', { name: /Emergency or safety/i }))
+      scrollIntoView.mockClear()
+
+      await user.type(description(), 'Unsafe tonight')
+      await user.click(screen.getByRole('button', { name: /^Back$/ }))
+
+      expect(scrollIntoView).not.toHaveBeenCalled()
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
+    }
+  })
+
   it('says once that the shift saves at once and an Admin reviews it afterwards, and leaves the policy for Settings (L5)', async () => {
     const user = userEvent.setup()
     render(<Host />)

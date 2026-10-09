@@ -25,6 +25,7 @@ import {
 import { Button } from '@/components/Button'
 import { SlideOver } from '@/components/SlideOver'
 import { TAP_FLOOR } from '@/components/tapArea'
+import { bringIntoView } from '@/lib/bringIntoView'
 import { modalGrid } from '@/lib/formGrid'
 import { getRosterGate } from '../lib/rosterGate'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange } from '../lib/roster'
@@ -220,10 +221,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const refusal = findings.find(f => f.code === BUDGET_FINDING_CODES.forecastOver && f.severity === 'Blocking')
   const refusalKey = refusal ? `${refusal.budget?.poolName ?? ''}|${refusal.budget?.periodStart ?? ''}` : null
   useEffect(() => {
-    const block = gateBlockRef.current
-    if (refusalKey === null || !canWrite || !block || typeof block.scrollIntoView !== 'function') return
-    const reduced = typeof window.matchMedia !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    block.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' })
+    if (refusalKey !== null && canWrite) bringIntoView(gateBlockRef.current)
   }, [refusalKey, canWrite])
 
   if (!open) return null
