@@ -32,7 +32,7 @@ export const BUDGET_RISK_STATUS: Record<BudgetRiskStatus, { label: string; tone:
  * The one risk order, stated once: Over, then Forecast over, then Approaching, then On track, then no budget recorded (SPEC-P2B item 3). It is an index, not a label, so a status cannot be added
  * to the vocabulary without being placed in it.
  *
- * The table's Status column sorts on this. Nothing else re-derives it: the server's own ordering still arrives as `rows` in the order the server sent, and this rank only decides where a
+ * The table's Status column sorts on `budgetRiskRank`, which is built from this. Nothing else re-derives it: the server's own ordering still arrives as `rows` in the order the server sent, and this rank only decides where a
  * user-placed sort puts things.
  */
 export const BUDGET_RISK_ORDER: Record<BudgetRiskStatus, number> = {
@@ -41,6 +41,17 @@ export const BUDGET_RISK_ORDER: Record<BudgetRiskStatus, number> = {
   Approaching: 2,
   OnTrack: 3,
   NoBudget: 4,
+}
+
+/**
+ * Where a ROW stands in the one risk order, for the Status column's sort: the same rule the server ranks the list by (`BudgetListService.Rank`). Over is first; a pool the NDIA has refused for want of
+ * funds comes straight after it (the NDIA's word outranks ODIP's forecast and approaching, and ODIP's own status can say On track beside it); then Forecast over, Approaching, On track, and no budget
+ * recorded last. Declared here, once, so the header's sort and the list's own order cannot drift apart.
+ */
+export function budgetRiskRank(row: Pick<BudgetRiskRow, 'status' | 'ndiaWord'>): number {
+  if (row.status === 'Over') return 0
+  if (row.ndiaWord) return 1
+  return BUDGET_RISK_ORDER[row.status] + 1
 }
 
 // ── Null semantics, stated once, honoured by every component ───────────────────────────────────────────────────────────

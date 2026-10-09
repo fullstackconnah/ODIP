@@ -566,6 +566,40 @@ describe('BudgetRiskTable: sorting by risk', () => {
     expect(labelsNow()).toEqual(['Amy', 'Zoe'])
   })
 
+  // The server lists a pool the NDIA has refused for want of funds straight after Over (its word outranks ODIP's forecast: BudgetListService.Rank). The header's sort says the same, or one click on it
+  // drops that pool into the On track group, where ODIP's own status alone would put it, and away from where the list had it.
+  const refused = { date: '2026-10-08', code: 'V27' }
+
+  it('puts a pool the NDIA has refused straight after Over, as the list does, and not among On track', async () => {
+    const fay = riskRow({ id: 'f', participantLabel: 'Fay', status: 'OnTrack', ndiaWord: refused })
+    renderTable(readyTable([...oneEach(), fay]))
+
+    await userEvent.click(statusHeader())
+
+    expect(labelsNow()).toEqual(['Ada', 'Fay', 'Bea', 'Cleo', 'Dev', 'Eli'])
+  })
+
+  it('ranks Over before the NDIA’s word when a pool has both, and the NDIA’s word before Forecast over, ties by name', async () => {
+    const fay = riskRow({ id: 'f', participantLabel: 'Fay', status: 'OnTrack', ndiaWord: refused })
+    const gus = riskRow({ id: 'g', participantLabel: 'Gus', status: 'Over', ndiaWord: refused })
+    const hal = riskRow({ id: 'h', participantLabel: 'Hal', status: 'ForecastOver', ndiaWord: refused })
+    renderTable(readyTable([...oneEach(), hal, gus, fay]))
+
+    await userEvent.click(statusHeader())
+
+    expect(labelsNow()).toEqual(['Ada', 'Gus', 'Fay', 'Hal', 'Bea', 'Cleo', 'Dev', 'Eli'])
+  })
+
+  it('runs the same order in reverse, the NDIA’s word included', async () => {
+    const fay = riskRow({ id: 'f', participantLabel: 'Fay', status: 'OnTrack', ndiaWord: refused })
+    renderTable(readyTable([...oneEach(), fay]))
+
+    await userEvent.click(statusHeader())
+    await userEvent.click(statusHeader())
+
+    expect(labelsNow()).toEqual(['Eli', 'Dev', 'Cleo', 'Bea', 'Fay', 'Ada'])
+  })
+
   it('is reachable and operable from the keyboard alone', async () => {
     renderTable(readyTable(oneEach()))
 

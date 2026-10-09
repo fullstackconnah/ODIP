@@ -7,7 +7,7 @@ import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TONE } from '@/lib/tone'
 import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
-import { BUDGET_RISK_ORDER, BUDGET_RISK_STATUS, type BudgetAttentionAction, type BudgetRiskRow, type BudgetRiskTableState, type NoBudgetEntry } from './viewModel'
+import { BUDGET_RISK_STATUS, budgetRiskRank, type BudgetAttentionAction, type BudgetRiskRow, type BudgetRiskTableState, type NoBudgetEntry } from './viewModel'
 import { BudgetFigure } from './BudgetFigure'
 import { NDIA_FUNDS_RAN_OUT, NOTHING_TRACKED, NO_FIGURE, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, noBudgetNote, unavailableFigure, unpricedForecastLabel } from './wording'
 
@@ -15,7 +15,7 @@ import { NDIA_FUNDS_RAN_OUT, NOTHING_TRACKED, NO_FIGURE, UNPRICED_LEGEND, config
 //
 // What this component deliberately does NOT do:
 //   - it does not sort by risk. The order is the server's (it holds the "no budget recorded" tail and the search); a client sort would need to know the server's ranking rule, and SHAPE-BRIEF §5
-//     says a participant with no budget never warns. (The Status column's header does sort, on BUDGET_RISK_ORDER, when a person asks it to.)
+//     says a participant with no budget never warns. (The Status column's header does sort, on `budgetRiskRank`, when a person asks it to.)
 //   - it does not add any two figures, and it does not derive a status from them. `status` is the server's word.
 //   - it does not treat a null as a zero, or a zero as missing.
 //   - it does not show an amount to a viewer the privacy contract withheld it from, in the cell, in `title`, in `aria`, or in any attribute.
@@ -138,10 +138,10 @@ function columnsFor(): Column<BudgetRiskRow>[] {
       minWidth: '7rem',
       sortable: true,
       // F-15: without an explicit `sortFn`, `DataTable.defaultComparator` falls through to `String(a).localeCompare(b)` and sorts the risk words ALPHABETICALLY - Approaching, ForecastOver,
-      // OnTrack, Over - the exact reverse of the order the spec requires. The rank is declared once, in BUDGET_RISK_ORDER, and this column is the only thing that reads it. Ties fall back to
-      // the participant's name so a re-sort is stable rather than arbitrary.
+      // OnTrack, Over - the exact reverse of the order the spec requires. The rank is declared once, in `budgetRiskRank` (the server's own: a pool the NDIA has refused sits straight after Over), and
+      // this column is the only thing that reads it. Ties fall back to the participant's name so a re-sort is stable rather than arbitrary.
       sortFn: (a, b) => {
-        const rank = BUDGET_RISK_ORDER[a.status] - BUDGET_RISK_ORDER[b.status]
+        const rank = budgetRiskRank(a) - budgetRiskRank(b)
         return rank !== 0 ? rank : a.participantLabel.localeCompare(b.participantLabel, 'en-AU')
       },
       render: row => <StatusCell row={row} />,
