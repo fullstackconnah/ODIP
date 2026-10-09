@@ -229,7 +229,7 @@ export default function ClaimDetailPage() {
                     {' · '}{claim.rejectionCode ? `NDIA code ${claim.rejectionCode}${ndiaCodeMeaning(claim.rejectionCode) ? ` (${ndiaCodeMeaning(claim.rejectionCode)})` : ''}` : 'no NDIA code recorded'}
                   </span>
                   {/* The code is the one input that switches the budget warning on, and the reason often arrives after the status is set: a claim rejected with none can be given one here. */}
-                  {!claim.rejectionCode && <Button variant="ghost" size="sm" onClick={() => { setStatusError(null); setRecordingCode(true) }}>Record the NDIA code</Button>}
+                  {!claim.rejectionCode && <Button variant="secondary" size="sm" className="ml-2" onClick={() => { setStatusError(null); setRecordingCode(true) }}>Record the NDIA code</Button>}
                 </>
               ),
             }]
