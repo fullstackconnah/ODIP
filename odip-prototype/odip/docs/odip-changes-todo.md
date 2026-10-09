@@ -162,6 +162,45 @@ owner decision (collected under Open Flags at the end).
   the approval preview, the daily top-up's log and a confirmed trip booking. A shift the
   estimator cannot price gets no finding, only "Budget not checked: {reason}". Spec:
   `docs/specs/2026-10-04-participant-budgets.md` (Phase 3). Depends on FUND-04.
+  Follow-ups left by the two review rounds, none blocking, each with the reviewers' view
+  (`P3-REVIEW.md`, `P3-DESIGN-REVIEW.md`):
+  - [ ] **Two saves at the same moment (C8).** The roster check reads the ledger and the
+    save commits afterwards, so two one-off shifts saved in the same instant can both pass
+    and leave the forecast one shift over, with no marker and no review. Take the
+    per-participant advisory lock that generation and approval already take
+    (`RosterGenerationLock`) around the check and the save under a hard limit, with a
+    Postgres concurrency test. Accepted limit in the spec until then. The same race can
+    meet the review task's unique key (`budget-emergency:{id}:2`) for one of two
+    simultaneous emergencies on a closed review.
+  - [ ] **Cancel the review when its shift goes (C11a).** Cancelling or deleting an
+    emergency shift leaves its review open in the Admin's list for a shift that costs
+    nothing. It should CANCEL (not complete, which reads Reviewed) the shift's open
+    BudgetEmergencyReview: `IObligationTaskService` has no cancel-by-shift, so it needs an
+    interface method, an implementation and tests.
+  - [ ] **Keep the siren while a review is open (C11b, design view).** An Admin override
+    saved over an emergency shift drops `BUDGET_EMERGENCY`, so the board shows the key and
+    the pending review disappears from it. While a review is open the board keeps the
+    siren, not the key. The gate owns the marker's audit truth, so this is a product call.
+  - [ ] **A notice after an emergency save (L6).** The panel closes silently. Use
+    `useNotices` and `NoticesRegion` (polite, dismissible, stays where the person acted):
+    one region directly under the week toolbar, above the grid, at every width (at 390 it
+    pushes the grid down by one callout, which is the point). Title: the participant's
+    name. Message: "Saved as an emergency. An Admin will review it." (an Admin override:
+    "Saved over budget with your reason."). Subject: the shift id. The panel's `onSaved`
+    passes the kind and the participant.
+  - [ ] **The unpriced sentence on its own line (design N6).** In Settings, Budgets, "Shifts
+    the system cannot price yet ..." is the last sentence of a 13 px muted paragraph headed
+    "In both modes", though it is only about the hard limit. Give it its own line under the
+    hard-limit description, where the choice is made. It goes when the claim engine prices
+    those shifts.
+  - [ ] **Bring a warning into view once on a phone (design N7).** At 390 a Warn-mode
+    warning sits below the fold and "Save anyway" is the only cue. Bring a budget warning
+    into view once, on first appearance, at a coarse pointer only, with `bringIntoView`
+    (block nearest does nothing where it is already in view).
+  - [ ] **One pool label (decision).** The pool reads "Core (flexible)" in the shift
+    panel's findings and "Core" in phase 2's alerts and Budgets list (the plan's own pool
+    name against phase 2's `PoolLabel`). Pick one label across the sentences; it is a
+    product call, and the server's sentences would take `PoolLabel`.
 
 ### F. Living Arrangements
 
