@@ -499,6 +499,25 @@ describe('ShiftChip over-budget marker (budget phase 3)', () => {
       expect(withFindings.className).not.toContain('-top-')
     })
 
+    it('makes room for the part of the disc that hangs off the chip, so the board’s sticky day header never cuts it (the first row sits right under it)', () => {
+      const top = markerOf(emergency())
+      expect(top.parentElement).toHaveClass('mt-2')
+      expect(top.parentElement).not.toHaveClass('mb-2')
+      cleanup()
+
+      const bottom = markerOf(makeShift({ ...emergency(), findings: [makeFinding({ severity: 'Warning' })] }))
+      expect(bottom.parentElement).toHaveClass('mb-2')
+      expect(bottom.parentElement).not.toHaveClass('mt-2')
+    })
+
+    it('adds no room to a chip with no marker', () => {
+      renderChip(<ShiftChip shift={makeShift()} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+      const chip = screen.getByRole('button', { name: /^Drag to move/ }).parentElement as HTMLElement
+      expect(chip).not.toHaveClass('mt-2')
+      expect(chip).not.toHaveClass('mb-2')
+    })
+
     it('keeps the words as a bonus on a wide chip: in the name row, and display:none below 18rem, never clipped', () => {
       renderChip(<ShiftChip shift={makeShift({ ...emergency(), participantName: 'Grace Palmer' })} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 

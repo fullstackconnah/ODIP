@@ -166,7 +166,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
       title={onApprovedLeave ? onLeaveTitle : undefined}
       className={`group @container relative flex min-h-[calc(var(--row-h)_-_6px)] items-stretch rounded-sm border bg-surface-container-low text-[13px] transition-opacity duration-150 ${
         dashed || onApprovedLeave ? 'border-dashed border-border' : 'border-border'
-      } ${isDragging ? 'opacity-50' : ''}`}
+      } ${isDragging ? 'opacity-50' : ''} ${budgetMarker ? (hasFindings ? 'mb-2' : 'mt-2') : ''}`}
     >
       {/* Drag activation lives on its own handle, separate from the open button below. Both used
           to share one element with dnd-kit's listeners spread onto the same button that opens the
@@ -296,10 +296,11 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
 
       {/* The over-budget marker (design review H1): a 20 px disc on the chip's corner, not a 12 px shield in the name row. It is out of the flow, so the label never gives way to it, and it is
           pointer-events-none like the severity marker, so it never takes a click from the chip or the menu. It takes the top corner; a chip that already carries a severity marker at the top
-          takes the bottom one, so the two never sit on each other. It keeps its role="img", its words in the accessible name and the hover title, and its data attribute. */}
+          takes the bottom one, so the two never sit on each other. The part of the disc that hangs off the chip needs room to hang in: the chip leaves 8 px of margin on that side, because the first row sits
+          right under the board's sticky day header (z-20), which cut the top of the disc when it hung over nothing. It keeps its role="img", its words in the accessible name and the hover title, and its data attribute. */}
       {budgetMarker && budgetMarkerTitle && (
         <span
-          className={`pointer-events-none absolute z-10 flex h-5 w-5 items-center justify-center ring-2 ring-[var(--color-card)] ${hasFindings ? '-bottom-2' : '-top-2'} -right-2 ${budgetDisc.shape} ${budgetDisc.fill}`}
+          className={`pointer-events-none absolute z-10 flex h-5 w-5 items-center justify-center ring-2 ring-[var(--color-card)] ${hasFindings ? '-bottom-2' : '-top-2'} -right-1 ${budgetDisc.shape} ${budgetDisc.fill}`}
           role="img"
           aria-label={budgetMarkerName ?? undefined}
           title={budgetMarkerTitle}
