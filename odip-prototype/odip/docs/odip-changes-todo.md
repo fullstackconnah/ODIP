@@ -156,30 +156,82 @@ owner decision (collected under Open Flags at the end).
   hard-limit mode for one-off shifts with the Admin override and the emergency path (an
   Admin reviews it afterwards), and the pattern-generate and trip-booking warnings.
   Depends on FUND-04.
-  - Follow-ups left by the phase 2b reviews (small, none blocks; the review files are
-    `P2B-DESIGN-REVIEW.md` and `P2B-REVIEW.md` in the 2b builder's scratch, and the builder's
-    `P2B-REPORT.md`):
-    - **The phone caveat for a rolled-over Available** (design review, round 2, N6). The
-      bent-arrow mark has its words only in a legend after the last card and in a tooltip that
-      does not exist on touch; below `md` print "incl. $X rolled over, not confirmed" in the
-      card cell, or move both legends above the cards. Do it with the lead-line change below.
-    - **A DataTable lead-line option for the 390 cards** (design review, round 1, L5, and
-      round 2 "What stays open"). The Budgets list's five cards take about 1,130px; a fixed
-      first line of participant and status pill, then pool and period, then the four figures
-      in two columns would put each card near 150px.
-    - **The agreement bar's dock trims** (design review, round 2 "What stays open"). The dock
-      is 185px when a pool is over in several periods: the pool line repeats the agreement
-      figure that sits in the column beside it when there is one pool, and the "warning only"
-      sentence could share a line with the "Each of the N periods" disclosure.
-    - **What a stamped late code means** (code review, round 1, N1, and both round 2
-      reviews). `UpdateClaim` stamps `RejectedDate` with the day a code is recorded on a claim
-      that was marked Rejected before the day was kept, so the claim page, the Funding note and
-      the alert print that day as the day the NDIA refused the claim. Only legacy rows can be
-      stamped; if it ever matters, say "recorded on" for a stamped day.
-    - **A running plan with no pools and a later plan recorded** (code review, round 2, on the
-      builder's veto call 4). The Budgets list's tail reads "Plan starts {date}" for it while
-      the Funding tab says the running plan has no pools; decide which sentence a plan that
-      is running but empty should get.
+  - Follow-ups left by the phase 2b work (small; none blocks the merge):
+    - **B6, a tenancy gap in two claim writes.** `ClaimsController.UpdateClaim` (`PUT /claims/{id}`)
+      and `UpdateLineItem` (the line-item `PATCH`) read a claim by id with no tenant scope:
+      `TripClaim` is not a tenant entity, and claims are meant to be reached through the
+      tenant-filtered shifts or bookings of their lines. The gap predates phase 2b, which added
+      `rejectionCode` and `rejectedDate` to what these writes can set, so an Admin holding
+      another organisation's claim id could mark it Rejected with V27 and raise that
+      organisation's participant alert. Claim ids are GUIDs, so this is hardening, not an open
+      door. It is the same gap as week-review H8, awaiting the owner's go-ahead. The fix scopes
+      both writes through the tenant-filtered shifts or bookings of the claim's lines (as
+      `BudgetLedgerService.ForClaimAsync` and `NdiaRejectionReader` already do) and answers 404
+      otherwise, with cross-tenant tests.
+    - **B10, the alerts route depends on the whole-organisation budget ledger.**
+      `GET participants/alerts` feeds the dashboard's Critical tile and the Participants table,
+      which also carry the medication, restrictive-practice, incident and QSC alerts. It now calls
+      the budget ledger for every active participant, uncached and with no isolation, so one row
+      the ledger's in-memory pricing cannot handle would make the endpoint answer 500 and take
+      those safety alerts down with it. The fix catches and logs a failure of the budget block
+      and carries on without budget alerts (the Budgets list still tells the truth), and may add a
+      short per-tenant cache. The trade-off is that a swallowed failure makes the budget rules
+      silently absent, so it needs a loud log and the owner's decision.
+    - **B5, the NDIA alert's two edges.** Both follow the spec's wording and both need an owner
+      call (`NdiaRejectionReader`). (a) The alert is ignored when any plan was recorded after
+      the rejection, so a claim marked V27 before the participant's first plan is recorded loses
+      its alert for good once the plan is recorded (it cannot tell a replacement plan from a
+      first one). (b) V17 and V18 mean the plan is exhausted, yet the alert ends with the
+      funding period, and a V17 rejection of an earlier period's claim never raises one. The fix
+      applies the plan-recorded test only when an earlier plan existed, and for V17 and V18 skips
+      the period test and ends on a new plan only.
+    - **B3, unpriced lines vanish from the agreement check.** `AgreementCheckService` drops lines
+      the engine cannot price and sends no count, so "Within" cannot say it is a floor: a
+      sleepover with no catalogue rate beside a weekday block that fits reads Within while the
+      real cost is unknown. The bar's "Not fully priced" chip, from the other quote, is the only
+      hint and can lag the check. The fix sends the quote's unpriced-line count on
+      `AgreementCheckDto` (through the adapter, the breakdown and the mock) and says "Within, for
+      the priced lines" when it is above 0; the wording is the owner's choice.
+    - **B9, the Critical tile and the Participants table differ by the over-budget participants.**
+      The dashboard's Critical count leaves `budget-over` out (the Budgets at risk tile owns it)
+      while the Participants table still flags those participants with the red Critical badge, so
+      "Review participants" can open a table with more red rows than the tile counts. Either
+      reword the tile's line (DESIGN.md and four tests pin it) or take `budget-over` off the
+      table's badge, which hides an alert there: a product call.
+    - **B11, "never a third quote in flight" is proved only as an argument to mocked hooks.** The
+      design holds (a changed key makes `isFetching` true in the same render, a stale check is
+      cancelled by its signal, and the shared limiter covers any overlap with a 429 that is
+      retried), but no test uses the real hooks. The fix is one test with the real hooks and a
+      counting transport that asserts at most two simultaneous quote and check requests across a
+      typing burst (the harness in `funding-warnings.test.tsx` is enough).
+    - **L3, the bar's sentence is not the Funding tab's.** The bar prints cents ("$39,379.00 left
+      in 1 Jul 2026 - 30 Jun 2027") where the Funding tab prints "$39,379 left of the $40,000 ...
+      (to 30 Jun)". The first half is cosmetic (use `money()` from `lib/budgetLedger`; it pins
+      many strings); the second ("Within, $13,080.04 to spare") needs the server to send the
+      margin, as it sends `overBy`.
+    - **L4, the bar's "left" ignores what is booked ahead.** It is available minus used, so shifts
+      and trips already booked ahead, which the Funding tab's forecast counts, are not taken off,
+      and Within can read rosier than that tab's "to spare". The fix adds one muted clause when
+      booked ahead is above 0 ("Shifts already booked ahead ($276) are not counted"), and needs
+      booked ahead on the check's answer.
+    - **The phone caveat for a rolled-over Available.** The bent-arrow mark has its words only in a
+      legend after the last card and in a tooltip that does not exist on touch. Below `md`, print
+      "incl. $X rolled over, not confirmed" in the card cell, or move both legends above the
+      cards. Do it with the lead-line change below.
+    - **A DataTable lead-line option for the 390 cards (L5).** The Budgets list's five cards take
+      about 1,130px; a fixed first line of participant and status pill, then pool and period,
+      then the four figures in two columns would put each card near 150px.
+    - **The agreement bar's dock trims.** The dock is 185px when a pool is over in several
+      periods: the pool line repeats the agreement figure that sits in the column beside it when
+      there is one pool, and the "warning only" sentence could share a line with the "Each of the
+      N periods" disclosure.
+    - **What a stamped late code means.** `UpdateClaim` stamps `RejectedDate` with the day a code
+      is recorded on a claim that was marked Rejected before the day was kept, so the claim page,
+      the Funding note and the alert print that day as the day the NDIA refused the claim. Only
+      legacy rows can be stamped; if it ever matters, say "recorded on" for a stamped day.
+    - **A running plan with no pools and a later plan recorded.** The Budgets list's tail reads
+      "Plan starts {date}" for it while the Funding tab says the running plan has no pools;
+      decide which sentence a plan that is running but empty should get.
 
 ### F. Living Arrangements
 
