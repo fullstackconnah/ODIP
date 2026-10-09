@@ -76,7 +76,7 @@ public class ShiftBudgetPostgresTests : IClassFixture<PostgresFixture>
 
         var forecast = Assert.Single(created.Findings, f => f.Code == BudgetFindingCodes.ForecastOver);
         Assert.Equal(RosterFindingSeverity.Blocking, forecast.Severity);
-        Assert.Equal(new BudgetFindingFigures("Core (flexible)", new DateOnly(2026, 10, 1), new DateOnly(2026, 12, 31), 1234.56m, 960.00m, 2400.00m, 480.00m), forecast.Budget);
+        Assert.Equal(new BudgetFindingFigures("Core (flexible)", new DateOnly(2026, 10, 1), new DateOnly(2026, 12, 31), 1234.56m, 960.00m, 2400.00m, 480.00m, BookedAhead: 960.00m), forecast.Budget);   // $960.00 used + $960.00 booked ahead before this shift + this shift's $480.00 = $2,400.00
         Assert.Equal(1165.44m, forecast.Budget!.OverBy);
         Assert.Equal(RosterFindingSeverity.Blocking, raised.Findings.Single(f => f.Code == BudgetFindingCodes.ForecastOver).Severity);
         Assert.Equal(2040.00m, raised.Findings.Single(f => f.Code == BudgetFindingCodes.ForecastOver).Budget!.Forecast);   // $960.00 used and $1,080.00 booked: the old $480 replaced by $600, not added to
