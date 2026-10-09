@@ -109,7 +109,7 @@ public class DraftPdfScheduleTests
         var text = TextOf(ServiceAgreementDraftPdfRenderer.Render(Revision(MonWed(), SaturdayOuting())));
 
         var schedule = text.IndexOf(Skeleton("Schedule of supports"), StringComparison.Ordinal);
-        var lines = text.IndexOf(Skeleton("Catalogue-priced draft lines"), StringComparison.Ordinal);
+        var lines = text.IndexOf(Skeleton("Cost detail (NDIS catalogue prices)"), StringComparison.Ordinal);
         var total = text.IndexOf(Skeleton("Total of the priced lines"), StringComparison.Ordinal);
         Assert.True(schedule >= 0 && schedule < lines && lines < total, $"schedule at {schedule}, lines table at {lines}, total at {total}");
         Assert.Contains(Skeleton("04_104_0125_6_1"), text);       // the lines table still prints each line's catalogue code

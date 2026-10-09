@@ -10,8 +10,8 @@ namespace Odip.Infrastructure.Services;
 
 /// <summary>
 /// Renders an agreement revision as the one PDF for the participant: who it is for, the plan's dates, the weekly schedule of supports, the catalogue lines behind its cost and the template's review
-/// sections. It carries no stamp and none of the draft's furniture (the revision number, the template's name and hashes). Signing is not decided here: the template's state
-/// (<c>ProvisionalAgreementTemplate</c>) keeps signing closed, and the PDF does not read it.
+/// sections. It carries no stamp and none of the draft's furniture (a banner, a header line, the revision number, the template's name and hashes); each page has only its number at the foot.
+/// Signing is not decided here: the template's state (<c>ProvisionalAgreementTemplate</c>) keeps signing closed, and the PDF does not read it.
 /// </summary>
 public static class ServiceAgreementDraftPdfRenderer
 {
@@ -26,11 +26,6 @@ public static class ServiceAgreementDraftPdfRenderer
             page.Size(PageSizes.A4);
             page.Margin(40);
             page.DefaultTextStyle(style => style.FontSize(10));
-            page.Header().Column(column =>
-            {
-                column.Item().Text("ODIP Service Agreement — provisional blank draft. Legal review required; not signed, active, roster-ready, an invoice, claim authority, or billing authority.").AlignCenter().FontColor(Colors.Grey.Darken1);
-                column.Item().PaddingTop(8).LineHorizontal(1);
-            });
             page.Content().PaddingTop(16).Column(column =>
             {
                 Field(column, "Participant", draft.ParticipantNameSnapshot);
@@ -38,10 +33,10 @@ public static class ServiceAgreementDraftPdfRenderer
                 Field(column, "Date of birth", draft.DateOfBirthSnapshot is { } birth ? Date(birth) : "Not recorded");
                 Field(column, "Representative", draft.Representative ?? "Not recorded");
                 Field(column, "Plan dates", $"{Date(draft.PlanStartDate)} — {Date(draft.PlanEndDate)}");
-                Field(column, "Draft agreement dates", $"{Date(draft.AgreementStartDate)} — {Date(draft.AgreementEndDate)}");
+                Field(column, "Agreement dates", $"{Date(draft.AgreementStartDate)} — {Date(draft.AgreementEndDate)}");
                 Field(column, "Service types", ServiceTypesText(draft.ServiceTypesJson));
                 Schedule(column, draft);
-                column.Item().PaddingTop(16).Text("Catalogue-priced draft lines").Bold().FontSize(12);
+                column.Item().PaddingTop(16).EnsureSpace(90).Text("Cost detail (NDIS catalogue prices)").Bold().FontSize(12);
                 column.Item().PaddingTop(6).Table(table =>
                 {
                     table.ColumnsDefinition(columns => { columns.RelativeColumn(2); columns.RelativeColumn(); columns.RelativeColumn(); columns.RelativeColumn(); });
@@ -50,10 +45,10 @@ public static class ServiceAgreementDraftPdfRenderer
                     {
                         // A line the pricing engine generated from a block says its band, its unit and what it totals over the agreement; a hand-typed line prints exactly as it always did.
                         table.Cell().Padding(4).Text(line.Band is null ? line.ServiceType : $"{line.ServiceType} — {line.Band}");
-                        table.Cell().Padding(4).Text(line.Hours.ToString("0.##", CultureInfo.InvariantCulture) + (line.Unit switch { "E" => " each", "D" => " nights", _ => string.Empty }));
+                        table.Cell().Padding(4).Text(line.Hours.ToString("0.##", CultureInfo.InvariantCulture) + (line.Unit switch { "E" => " each", "D" => line.Hours == 1m ? " night" : " nights", _ => string.Empty }));
                         table.Cell().Padding(4).Text(line.ItemCode);
                         table.Cell().Padding(4).Text($"{line.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture)} ({line.CatalogueVersion}, {Date(line.CatalogueEffectiveFrom)})"
-                            + (line.Total is { } total ? $" — {total.ToString("0.00", CultureInfo.InvariantCulture)} for {line.Occurrences} shifts" : string.Empty));
+                            + (line.Total is { } total ? $" — {total.ToString("0.00", CultureInfo.InvariantCulture)} for {line.Occurrences} {(line.Occurrences == 1 ? "shift" : "shifts")}" : string.Empty));
                     }
                 });
                 if (draft.Lines.Any(x => x.Total is not null))
@@ -65,7 +60,7 @@ public static class ServiceAgreementDraftPdfRenderer
                     column.Item().PaddingTop(8).Text("Read before relying on these totals").Bold().FontColor(Colors.Orange.Darken3);
                     foreach (var caveat in caveats) column.Item().PaddingTop(2).Text("• " + caveat).FontColor(Colors.Orange.Darken3);
                 }
-                column.Item().PaddingTop(18).Text("Agreement review sections (all fields require approved, participant-specific completion)").Bold().FontSize(12);
+                column.Item().PaddingTop(18).EnsureSpace(90).Text("Agreement review sections (all fields require approved, participant-specific completion)").Bold().FontSize(12);
                 Section(column, "1. Parties and representatives", "Participant, authorised representative authority, provider legal entity, ABN, registration status and notices contacts are placeholders pending review.");
                 Section(column, "2. Supports, delivery and schedule", "Select eligible support code, arrangement/ratio, service delivery state or territory, location, dates, times, recurrence, exceptions and accessibility requirements per line. Standard 1:1 community access is only a suggestion, never a default charge.");
                 Section(column, "3. Proposed fees, travel and other costs", "Catalogue values are development snapshots, not agreed ODIP prices. Complete approved rate, pricing source/version, GST, travel, non-face-to-face work, transport, expenses, limits, approval, receipts and refund details before any use.");
@@ -112,7 +107,7 @@ public static class ServiceAgreementDraftPdfRenderer
     private static void Schedule(ColumnDescriptor column, ServiceAgreementDraft draft)
     {
         var schedule = AgreementSchedule.Of(draft);
-        column.Item().PaddingTop(16).Text("Schedule of supports").Bold().FontSize(12);
+        column.Item().PaddingTop(16).EnsureSpace(90).Text("Schedule of supports").Bold().FontSize(12);
         if (schedule.Rows.Count == 0 && schedule.Unreadable == 0)
         {
             column.Item().PaddingTop(4).Text("No weekly schedule was recorded for this agreement.");
@@ -142,8 +137,9 @@ public static class ServiceAgreementDraftPdfRenderer
             column.Item().PaddingTop(4).Text("Some supports in this agreement could not be read, so they are not listed here. Check the agreement before relying on this schedule.").FontColor(Colors.Orange.Darken3);
     }
 
+    // A section stays in one piece, so a numbered heading is never left at the foot of a page with its text on the next.
     private static void Section(ColumnDescriptor column, string heading, string body) =>
-        column.Item().PaddingTop(8).Column(section =>
+        column.Item().PaddingTop(8).ShowEntire().Column(section =>
         {
             section.Item().Text(heading).SemiBold();
             section.Item().Text(body);

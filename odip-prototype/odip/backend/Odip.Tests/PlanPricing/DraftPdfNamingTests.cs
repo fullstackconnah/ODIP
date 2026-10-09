@@ -28,7 +28,7 @@ public class DraftPdfNamingTests
         Block("b1", PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(9), T(13), b => b with { Days = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday } });
 
     /// <summary>The words of the PDF as they are drawn, with nothing taken out of them (the other PDF tests compare skeletons, which cannot tell a JSON list from a readable one).</summary>
-    private static string WordsOf(byte[] pdf)
+    internal static string WordsOf(byte[] pdf)
     {
         using var document = PdfDocument.Open(pdf);
         return string.Join(" ", document.GetPages().SelectMany(page => page.GetWords()).Select(word => word.Text));
