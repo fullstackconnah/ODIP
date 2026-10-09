@@ -66,7 +66,7 @@ export function GeneratePatternDialog({ pattern, onClose }: GeneratePatternDialo
             </p>
             <p className="text-xs opacity-80">Running this again for the same range changes nothing further.</p>
             {/* Budget phase 3: where these shifts take a pool past its funding, one line for each pool and period. A warning only, in every mode: the shifts are made. */}
-            <BudgetWarnings warnings={result.budgetWarnings} note="This is a warning only. The shifts were made." className="mt-2" />
+            <BudgetWarnings warnings={result.budgetWarnings} note="This is a warning only. The shifts were made." announce={false} className="mt-2" />
           </>
         }
         footer={

@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { GeneratePatternDialog } from './GeneratePatternDialog'
 import type { ShiftPatternDto } from '@/api/types'
+import { BUDGET_WARNINGS_TITLE } from '@/components/BudgetWarnings'
 
 const { mockGenerate } = vi.hoisted(() => ({ mockGenerate: vi.fn() }))
 
@@ -186,12 +187,14 @@ describe('GeneratePatternDialog — the budget warnings', () => {
     expect(screen.getByText('These 8 shifts take Core (flexible) to $3,840.00 of $1,000.00 for 1 Oct–31 Dec 2026.')).toBeInTheDocument()
     expect(screen.getByText('This is a warning only. The shifts were made.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Done' })).toBeEnabled()
+    // The dialog is an alertdialog, so its body is already read out: the callout does not interrupt a second time (design review L2).
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('draws no warning when the server sent none', async () => {
     await generate({ created: 8, skipped: 0 })
 
     expect(await screen.findByText('Shifts generated')).toBeInTheDocument()
-    expect(screen.queryByText(/Past the budget/)).not.toBeInTheDocument()
+    expect(screen.queryByText(BUDGET_WARNINGS_TITLE)).not.toBeInTheDocument()
   })
 })

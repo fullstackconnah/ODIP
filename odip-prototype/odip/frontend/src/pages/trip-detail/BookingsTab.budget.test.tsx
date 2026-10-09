@@ -6,6 +6,7 @@ import BookingsTab from './BookingsTab'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { BookingListDto } from '@/api/types/bookings'
 import type { ParticipantListDto } from '@/api/types/participants'
+import { BUDGET_WARNINGS_TITLE } from '@/components/BudgetWarnings'
 
 // Confirming a booking on a trip says what it does to the participant's budget (budget phase 3): in the response of the write that confirms it, shown as a warning that can be dismissed. It never blocks.
 
@@ -90,13 +91,13 @@ describe('BookingsTab — the budget warning of a booking just confirmed', () =>
     renderTab()
     await user.click(screen.getByRole('button', { name: /Held/ }))
     await user.click(await screen.findByRole('option', { name: 'Confirmed' }))
-    expect(screen.queryByText(/Past the budget/)).not.toBeInTheDocument()
+    expect(screen.queryByText(BUDGET_WARNINGS_TITLE)).not.toBeInTheDocument()
 
     answerWith(patchMutate, { data: { participantName: 'Sophie Brown', bookingStatus: 'Confirmed', budgetWarnings: [warning] } })
     await user.click(screen.getByRole('button', { name: /Held/ }))
     await user.click(await screen.findByRole('option', { name: 'Confirmed' }))
     await user.click(screen.getByRole('button', { name: 'Dismiss' }))
 
-    expect(screen.queryByText(/Past the budget/)).not.toBeInTheDocument()
+    expect(screen.queryByText(BUDGET_WARNINGS_TITLE)).not.toBeInTheDocument()
   })
 })

@@ -20,7 +20,7 @@ describe('BudgetWarnings', () => {
     render(<BudgetWarnings warnings={[warning(), warning({ poolName: 'Daily Activities', message: 'These 2 shifts take Daily Activities to $900.00 of $500.00 for 1 Oct–31 Dec 2026.' })]} note="This is a warning only. The shifts were made." />)
 
     const alert = screen.getByRole('alert')
-    expect(alert).toHaveTextContent('Past the budget')
+    expect(alert).toHaveTextContent('Over budget')   // the one word the rest of the budget screens use (design review L3)
     expect(screen.getAllByRole('listitem').map(li => li.textContent)).toEqual([
       'These 8 shifts take Core (flexible) to $3,840.00 of $1,000.00 for 1 Oct–31 Dec 2026.',
       'These 2 shifts take Daily Activities to $900.00 of $500.00 for 1 Oct–31 Dec 2026.',
@@ -51,5 +51,38 @@ describe('BudgetWarnings', () => {
     await user.click(screen.getByRole('button', { name: 'Dismiss' }))
 
     expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('BudgetWarnings — lines about several participants (phase 3 review C5)', () => {
+  const sophie = warning({ participantName: 'Sophie Brown', message: 'This booking takes Core (flexible) to $1,440.00 of $1,000.00.' })
+  const noah = warning({ participantName: 'Noah Reid', message: 'This booking takes Core (flexible) to $2,000.00 of $1,500.00.' })
+
+  it('starts each line with the participant it is about when the lines are about more than one', () => {
+    render(<BudgetWarnings warnings={[sophie, noah]} note="This is a warning only. The bookings are confirmed." />)
+
+    expect(screen.getAllByRole('listitem').map(li => li.textContent)).toEqual([
+      'Sophie Brown: This booking takes Core (flexible) to $1,440.00 of $1,000.00.',
+      'Noah Reid: This booking takes Core (flexible) to $2,000.00 of $1,500.00.',
+    ])
+  })
+
+  it('leaves the name off when every line is about the same participant: the closing note names them already', () => {
+    render(<BudgetWarnings warnings={[sophie, { ...sophie, poolName: 'Daily Activities', message: 'This booking takes Daily Activities to $900.00 of $500.00.' }]} note="This is a warning only. Sophie Brown’s booking is confirmed." />)
+
+    expect(screen.getAllByRole('listitem').map(li => li.textContent)).toEqual([
+      'This booking takes Core (flexible) to $1,440.00 of $1,000.00.',
+      'This booking takes Daily Activities to $900.00 of $500.00.',
+    ])
+  })
+
+  it('lists two lines that share a pool and a period, without a duplicate-key warning from React', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    render(<BudgetWarnings warnings={[sophie, noah]} note="n" />)
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+    expect(error.mock.calls.flat().join(' ')).not.toMatch(/same key/)
+    error.mockRestore()
   })
 })

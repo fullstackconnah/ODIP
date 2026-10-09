@@ -10,7 +10,9 @@ export type BookingBudgetNotice = { who: string | null; warnings: BudgetWarningD
 export function bookingBudgetNotice(response: { data?: { participantName?: string | null; budgetWarnings?: BudgetWarningDto[] } | null } | null | undefined): BookingBudgetNotice | null {
   const warnings = response?.data?.budgetWarnings
   if (!warnings || warnings.length === 0) return null
-  return { who: response?.data?.participantName ?? null, warnings, bookings: 1 }
+  const who = response?.data?.participantName ?? null
+  // Each line carries its participant, so merged with other bookings' lines it still says whose pool it is (the server names them too; this covers a line that arrives without).
+  return { who, warnings: warnings.map(warning => ({ ...warning, participantName: warning.participantName ?? who ?? undefined })), bookings: 1 }
 }
 
 /** The warnings of a batch of bookings confirmed together (the status changed for every ticked row), as one notice; null when none of them came back with one. */

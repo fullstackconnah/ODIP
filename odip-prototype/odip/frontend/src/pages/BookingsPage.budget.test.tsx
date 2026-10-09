@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import BookingsPage from './BookingsPage'
 import type { BookingListDto } from '@/api/types/bookings'
+import { BUDGET_WARNINGS_TITLE } from '@/components/BudgetWarnings'
 
 // Confirming a booking from the list says what it does to the participant's budget (budget phase 3), as a warning that can be dismissed. It never blocks: the status change has already gone through.
 
@@ -50,7 +51,7 @@ describe('BookingsPage — the budget warning of a booking just confirmed', () =
   it('shows nothing when the server sent no warning', async () => {
     await confirmFromList({ data: { participantName: 'Sophie Brown', bookingStatus: 'Confirmed' } })
 
-    expect(screen.queryByText(/Past the budget/)).not.toBeInTheDocument()
+    expect(screen.queryByText(BUDGET_WARNINGS_TITLE)).not.toBeInTheDocument()
   })
 
   it('can be dismissed', async () => {
@@ -58,7 +59,7 @@ describe('BookingsPage — the budget warning of a booking just confirmed', () =
 
     await user.click(screen.getByRole('button', { name: 'Dismiss' }))
 
-    expect(screen.queryByText(/Past the budget/)).not.toBeInTheDocument()
+    expect(screen.queryByText(BUDGET_WARNINGS_TITLE)).not.toBeInTheDocument()
   })
 
   it('goes away when the next status change starts, so a stale warning never sits beside a different booking', async () => {
@@ -68,6 +69,6 @@ describe('BookingsPage — the budget warning of a booking just confirmed', () =
     await user.click(screen.getByRole('button', { name: /Held|Confirmed/ }))
     await user.click(await screen.findByRole('option', { name: 'Waitlist' }))
 
-    expect(screen.queryByText(/Past the budget/)).not.toBeInTheDocument()
+    expect(screen.queryByText(BUDGET_WARNINGS_TITLE)).not.toBeInTheDocument()
   })
 })

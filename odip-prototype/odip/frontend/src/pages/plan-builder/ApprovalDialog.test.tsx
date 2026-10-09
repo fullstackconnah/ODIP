@@ -6,6 +6,7 @@ import type { ApprovalReasonDto, DraftApprovalPreviewDto, ServiceAgreementDraftD
 import { REASON_COPY } from '@/lib/planQuote'
 import { draftBlock, mondayWednesday } from '@/test/fixtures/planPricing'
 import { ApprovalDialog } from './ApprovalDialog'
+import { BUDGET_WARNINGS_TITLE } from '@/components/BudgetWarnings'
 
 const { previewCall, previewState, approveMutate, approveState } = vi.hoisted(() => ({
   previewCall: vi.fn(),
@@ -481,13 +482,13 @@ describe('ApprovalDialog: what the shifts would do to the budget (budget phase 3
   it('says nothing about a budget when the server sent no warning', () => {
     setUp()
 
-    expect(screen.queryByText(/Past the budget/)).not.toBeInTheDocument()
+    expect(screen.queryByText(BUDGET_WARNINGS_TITLE)).not.toBeInTheDocument()
   })
 
   it('is not part of a refusal: a revision that cannot be approved lists its reasons and no budget warning', () => {
     ready(preview({ canApprove: false, reasons: [{ code: 'HandTyped', message: 'Rebuild it from blocks.' }], budgetWarnings: [warning] }))
     setUp()
 
-    expect(screen.queryByText(/Past the budget/)).not.toBeInTheDocument()
+    expect(screen.queryByText(BUDGET_WARNINGS_TITLE)).not.toBeInTheDocument()
   })
 })
