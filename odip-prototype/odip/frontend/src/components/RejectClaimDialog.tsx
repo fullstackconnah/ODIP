@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { NDIA_FUNDS_CODES } from '@/lib/ndiaCodes'
 import { ConfirmDialog } from './ConfirmDialog'
 import { SelectField } from './SelectField'
 import { TextField } from './TextField'
@@ -9,13 +10,10 @@ export const NDIA_CODE_MAX_LENGTH = 10
 const NOT_GIVEN = ''
 const OTHER = 'Other'
 
-/** The codes the NDIA gives when the money is not there, in the words the budget uses: the plan, or the funding period. Anything else is typed under Other. */
+/** The codes the NDIA gives when the money is not there, in the words the budget uses (lib/ndiaCodes.ts, which the claim page prints from too). Anything else is typed under Other. */
 const CODE_OPTIONS = [
   { value: NOT_GIVEN, label: 'Not given' },
-  { value: 'V17', label: 'V17: not enough in the plan' },
-  { value: 'V18', label: 'V18: not enough in the plan' },
-  { value: 'V27', label: 'V27: not enough in the funding period' },
-  { value: 'V28', label: 'V28: not enough in the funding period' },
+  ...NDIA_FUNDS_CODES.map(entry => ({ value: entry.code, label: `${entry.code}: ${entry.meaning}` })),
   { value: OTHER, label: 'Other' },
 ]
 
@@ -33,14 +31,6 @@ type RejectClaimDialogProps = {
   onCancel: () => void
   /** The NDIA's code, or null when none was given. The caller sends it with the Rejected status (or alone, when only recording it). */
   onConfirm: (code: string | null) => void
-}
-
-/**
- * What a code means in the budget's own words, for a screen that prints one: V17 and V18 say the plan has not enough, V27 and V28 that the funding period has not. Any other code has no gloss and is
- * kept as it was typed.
- */
-export function ndiaCodeMeaning(code: string): string | null {
-  return CODE_OPTIONS.find(option => option.value === code && option.label.includes(': '))?.label.split(': ')[1] ?? null
 }
 
 /**
