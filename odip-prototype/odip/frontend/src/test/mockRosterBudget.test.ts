@@ -22,14 +22,14 @@ type Reply = { status: number; body: { success: boolean; errors?: string[]; code
 type Times = { startTime: string; endTime: string; endsNextDay?: boolean }
 type Created = {
   refuseNoLength: (body: Times) => Reply | null
-  refusePatternNoLength: (existing: Times | null, body: Partial<Times>) => Reply | null
+  refusePatternNoLength: (existing: Times | null, body: Partial<Times> & Record<string, unknown>) => Reply | null
   post: Array<[string, (body: unknown) => unknown]>
 }
 
 function load(): Created {
   const require = createRequire(import.meta.url)
   const respond = (status: number, body: Reply['body']): Reply => ({ status, body })
-  const failEnvelope = (data: unknown, errors: string[], code?: string) => ({ success: false, ...(errors ? { errors } : {}), ...(code ? { code } : {}) })
+  const failEnvelope = (_data: unknown, errors: string[], code?: string) => ({ success: false, ...(errors ? { errors } : {}), ...(code ? { code } : {}) })
   return require(ROSTER_BUDGET).create({
     funding: { settings: () => ({ approachingPercent: 80 }), plansOf: () => [] },
     respond, failEnvelope, rosterShifts: [], tasks: [], participants: [], today: () => '2026-10-09',
