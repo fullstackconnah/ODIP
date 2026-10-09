@@ -319,13 +319,16 @@ public sealed class ServiceAgreementDraftService
         return draft;
     }
 
-    public async Task<(byte[]? Pdf, string? Error)> RenderPdfAsync(Guid tenantId, Guid participantId, Guid draftId, CancellationToken ct)
+    /// <summary>The agreement PDF of a revision and the name it is downloaded as.</summary>
+    public sealed record AgreementPdf(byte[] Content, string FileName);
+
+    public async Task<(AgreementPdf? Pdf, string? Error)> RenderPdfAsync(Guid tenantId, Guid participantId, Guid draftId, CancellationToken ct)
     {
         // The blocks too: the PDF prints the weekly schedule from them. Two collections, so two queries and not their cross product.
         var draft = await _db.ServiceAgreementDrafts.Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery()
             .SingleOrDefaultAsync(x => x.Id == draftId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (draft == null) return (null, "Draft not found.");
-        return (ServiceAgreementDraftPdfRenderer.Render(draft), null);
+        return (new AgreementPdf(ServiceAgreementDraftPdfRenderer.Render(draft), ServiceAgreementDraftPdfRenderer.FileName(draft)), null);
     }
 
     private static decimal PriceForState(SupportCatalogueItem item, string state) => state switch

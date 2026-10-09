@@ -7,7 +7,9 @@
 
 The "Support plan" section of the service agreement draft page (`/participants/:id/agreement-draft`). A plan is a list of support blocks (phase B's `PlanBlock`); the
 server prices them, so nobody types an item code, a quantity or a price. Every save is a new immutable revision that stores the blocks, what each block asks of a
-worker, the engine's answer and the lines it produced. The page keeps one working copy (the agreement's details and the blocks), seeded from the newest revision, and
+worker, the engine's answer and the lines it produced. Saving again deletes the participant's older revisions that were never approved, rostered or signed, in the same transaction
+(a revision that did something is kept, so the version numbers can skip). The PDF of a revision prints its weekly schedule, read from the stored blocks and pricing, and carries no
+"unapproved" stamp; signing stays closed. The page keeps one working copy (the agreement's details and the blocks), seeded from the newest revision, and
 saves it whole.
 
 ## What a revision stores (backend)

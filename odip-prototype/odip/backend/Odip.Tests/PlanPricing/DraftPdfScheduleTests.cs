@@ -231,7 +231,7 @@ public class DraftPdfScheduleTests
         var (pdf, error) = await service.RenderPdfAsync(tenantId, participant.Id, saved.Id, CancellationToken.None);
 
         Assert.Null(error);
-        var text = TextOf(pdf!);
+        var text = TextOf(pdf!.Content);
         Assert.Contains(Row("Mon, Wed", "09:00 to 13:00", "Community access", "1:1", "NSW", "8", "$588.64"), text);
         Assert.Contains(Row("Sat", "09:00 to 15:00", "Group activity", "1:3", "NSW", "6", "$207.06"), text);
     }

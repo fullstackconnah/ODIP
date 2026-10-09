@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -37,7 +39,7 @@ public static class ServiceAgreementDraftPdfRenderer
                 Field(column, "Representative", draft.Representative ?? "Not recorded");
                 Field(column, "Plan dates", $"{Date(draft.PlanStartDate)} — {Date(draft.PlanEndDate)}");
                 Field(column, "Draft agreement dates", $"{Date(draft.AgreementStartDate)} — {Date(draft.AgreementEndDate)}");
-                Field(column, "Service types", draft.ServiceTypesJson);
+                Field(column, "Service types", ServiceTypesText(draft.ServiceTypesJson));
                 Schedule(column, draft);
                 column.Item().PaddingTop(16).Text("Catalogue-priced draft lines").Bold().FontSize(12);
                 column.Item().PaddingTop(6).Table(table =>
@@ -75,6 +77,29 @@ public static class ServiceAgreementDraftPdfRenderer
             });
             page.Footer().AlignCenter().Text(text => { text.Span("Page "); text.CurrentPageNumber(); });
         }));
+    }
+
+    /// <summary>
+    /// The file the PDF is downloaded as: "Service agreement - {participant} - {agreement start}.pdf". The name is the one printed on the PDF (the snapshot taken when the revision was saved), cut down to
+    /// letters, digits, spaces and hyphens, the same allowlist the participant's other documents use (<c>ParticipantDocumentService.BuildFileName</c>): nothing in it can end a header, name a folder or break the
+    /// page's own reading of Content-Disposition. A name with nothing left in it is "Participant".
+    /// </summary>
+    public static string FileName(ServiceAgreementDraft draft)
+    {
+        var name = Regex.Replace(Regex.Replace(draft.ParticipantNameSnapshot ?? string.Empty, "[^A-Za-z0-9 -]", string.Empty), @"\s+", " ").Trim(' ', '-');
+        return $"Service agreement - {(name.Length == 0 ? "Participant" : name)} - {draft.AgreementStartDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.pdf";
+    }
+
+    /// <summary>The revision's service types as a sentence, "Community access, Personal care": they are stored as a JSON list. Text that is not a list is printed as it is, and none is "Not recorded".</summary>
+    public static string ServiceTypesText(string? serviceTypesJson)
+    {
+        if (string.IsNullOrWhiteSpace(serviceTypesJson)) return "Not recorded";
+        try
+        {
+            var types = (JsonSerializer.Deserialize<List<string?>>(serviceTypesJson) ?? []).Where(type => !string.IsNullOrWhiteSpace(type)).Select(type => type!.Trim()).ToList();
+            return types.Count == 0 ? "Not recorded" : string.Join(", ", types);
+        }
+        catch (JsonException) { return serviceTypesJson; }
     }
 
     /// <summary>A date as the PDF writes it, "12 Oct 2026", whatever culture the machine has (a culture that spells July out in full would make the same PDF differ from host to host).</summary>

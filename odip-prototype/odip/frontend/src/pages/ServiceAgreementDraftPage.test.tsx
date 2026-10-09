@@ -815,6 +815,15 @@ describe('ServiceAgreementDraftPage: what is on the page around the plan', () =>
     expect(screen.queryByDisplayValue('430000001')).not.toBeInTheDocument()
   })
 
+  // The PDF endpoint admits Admin, Coordinator and SuperAdmin only (ServiceAgreementDraftsController.Pdf); the banner said any signed-in user could open it.
+  it('says the PDF is for Admins and Coordinators to open, as the endpoint allows, and not for any signed-in user', () => {
+    renderPage()
+
+    const banner = screen.getByText(/Participant identifiers/).closest('p') as HTMLElement
+    expect(banner).toHaveTextContent('printed on its PDF, which Admins and Coordinators can open')
+    expect(banner).not.toHaveTextContent(/signed-in user/i)
+  })
+
   it('shows a loading page, a failure with a way to try again, and a missing participant, as the other record pages do', async () => {
     const user = userEvent.setup()
     participant.mockReturnValue({ data: undefined, isLoading: true })
