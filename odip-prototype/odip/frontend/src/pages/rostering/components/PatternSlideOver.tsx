@@ -15,6 +15,7 @@ import { requirementLabels } from '@/lib/workerRequirements'
 import { extractErrorMessage } from '@/lib/utils'
 import { modalGrid } from '@/lib/formGrid'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS } from '../lib/roster'
+import { NO_LENGTH_MESSAGE, hasNoLength, oneHourAfter } from '../lib/shiftTimes'
 
 export type PatternSlideOverTarget =
   | { mode: 'create' }
@@ -53,7 +54,8 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
   const [defaultStaffId, setDefaultStaffId] = useState<string | null>(existing?.defaultStaffId ?? null)
   const [dayOfWeek, setDayOfWeek] = useState(existing?.dayOfWeek ?? 'Monday')
   const [startTime, setStartTime] = useState(toTimeInputValue(existing?.startTime))
-  const [endTime, setEndTime] = useState(toTimeInputValue(existing?.endTime))
+  // A new pattern opens with an end an hour after the start, so it opens with a length (09:00 gives 10:00); an existing one keeps its own.
+  const [endTime, setEndTime] = useState(existing?.endTime ? toTimeInputValue(existing.endTime) : oneHourAfter(toTimeInputValue(existing?.startTime)))
   const [endsNextDay, setEndsNextDay] = useState(existing?.endsNextDay ?? false)
   const [ratio, setRatio] = useState<SupportRatio>(existing?.ratio ?? 'OneToOne')
   const [nightType, setNightType] = useState<SleepoverType>(existing?.nightType ?? 'None')
@@ -94,6 +96,10 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
   const source = existing?.sourceDraftVersion !== undefined ? `agreement v${existing.sourceDraftVersion}` : 'an agreement'
   const isBusy = createPattern.isPending || updatePattern.isPending
   const canSave = !!participantId && !!effectiveFrom && !!startTime && !!endTime
+  // The length is said under End time, where the person is looking: by the form's own rule, and by the server's 400 for it (the backstop). Never as the alert at the foot.
+  const lengthError = hasNoLength(startTime, endTime, endsNextDay) || error === NO_LENGTH_MESSAGE ? NO_LENGTH_MESSAGE : undefined
+  // A save's refusal for the length is about the times it was for: changing one ends it.
+  const clearLengthRefusal = () => setError(previous => (previous === NO_LENGTH_MESSAGE ? null : previous))
 
   async function handleSave() {
     setError(null)
@@ -199,15 +205,15 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
 
         <div className={modalGrid}>
           <FormField label="Start time" required>
-            <input type="time" value={startTime} disabled={!canWrite} onChange={e => setStartTime(e.target.value)} />
+            <input type="time" value={startTime} disabled={!canWrite} onChange={e => { setStartTime(e.target.value); clearLengthRefusal() }} />
           </FormField>
-          <FormField label="End time" required>
-            <input type="time" value={endTime} disabled={!canWrite} onChange={e => setEndTime(e.target.value)} />
+          <FormField label="End time" required error={lengthError}>
+            <input type="time" value={endTime} disabled={!canWrite} onChange={e => { setEndTime(e.target.value); clearLengthRefusal() }} />
           </FormField>
         </div>
 
         <FormField label="Ends the next day" layout="checkbox">
-          <input type="checkbox" checked={endsNextDay} disabled={!canWrite} onChange={e => setEndsNextDay(e.target.checked)} />
+          <input type="checkbox" checked={endsNextDay} disabled={!canWrite} onChange={e => { setEndsNextDay(e.target.checked); clearLengthRefusal() }} />
         </FormField>
 
         <div className={modalGrid}>
@@ -244,7 +250,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
           <textarea rows={3} value={notes} disabled={!canWrite} onChange={e => setNotes(e.target.value)} placeholder="Optional notes for this pattern" />
         </FormField>
 
-        {error && (
+        {error && error !== NO_LENGTH_MESSAGE && (
           <div ref={errorRef} role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
             {error}
           </div>

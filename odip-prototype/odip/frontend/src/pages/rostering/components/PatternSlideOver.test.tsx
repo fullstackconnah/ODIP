@@ -283,7 +283,7 @@ describe('PatternSlideOver — the server\'s refusal reaches the user', () => {
       defaultStaffId: null,
       dayOfWeek: 'Monday',
       startTime: '09:00',
-      endTime: '09:00',
+      endTime: '10:00',
       endsNextDay: false,
       ratio: 'OneToOne',
       nightType: 'None',
@@ -534,5 +534,56 @@ describe('PatternSlideOver — a pattern an agreement made', () => {
         effectiveFrom: '2026-01-01', effectiveTo: null, isActive: true, notes: 'From agreement v2: Community access, community',
       },
     })
+  })
+})
+
+// ── The length of a pattern's shift (phase 3 review N2): the same rule as the shift panel ─────────────────────────────
+describe('PatternSlideOver — the length of the shift it makes', () => {
+  const NO_LENGTH = "The shift must end after it starts. Tick 'Ends the next day' for an overnight shift."
+  const endTimeField = () => screen.getByLabelText(/^End time/)
+  const openNew = () => render(<PatternSlideOver target={{ mode: 'create' }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+
+  it('opens a new pattern with an end an hour after the start, and no alert', () => {
+    openNew()
+
+    expect(screen.getByLabelText(/^Start time/)).toHaveValue('09:00')
+    expect(endTimeField()).toHaveValue('10:00')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('says under End time, as the field’s own error, when the end is at or before the start, and not once the next day is ticked', async () => {
+    const user = userEvent.setup()
+    openNew()
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '09:00')
+
+    expect(await screen.findByText(NO_LENGTH)).toBeInTheDocument()
+    expect(endTimeField()).toBeInvalid()
+    expect(endTimeField()).toHaveAccessibleDescription(NO_LENGTH)
+
+    await user.click(screen.getByLabelText('Ends the next day'))
+
+    expect(screen.queryByText(NO_LENGTH)).not.toBeInTheDocument()
+  })
+
+  it('shows the server’s 400 for no length under End time too, not in the alert at the foot, and clears it when the time is fixed', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(badRequest(NO_LENGTH))
+    openNew()
+    await user.click(screen.getByLabelText(/^participant/i))
+    await user.click(screen.getByRole('option', { name: 'Mia Chen' }))
+    await user.type(screen.getByLabelText(/effective from/i), '2026-10-05')
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText(NO_LENGTH)).toBeInTheDocument()
+    expect(endTimeField()).toHaveAccessibleDescription(NO_LENGTH)
+    expect(screen.getAllByRole('alert').every(alert => alert.tagName === 'P')).toBe(true)
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '11:00')
+
+    expect(screen.queryByText(NO_LENGTH)).not.toBeInTheDocument()
   })
 })

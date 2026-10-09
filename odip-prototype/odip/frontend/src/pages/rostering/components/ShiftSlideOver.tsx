@@ -29,6 +29,7 @@ import { bringIntoView } from '@/lib/bringIntoView'
 import { modalGrid } from '@/lib/formGrid'
 import { getRosterGate } from '../lib/rosterGate'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange } from '../lib/roster'
+import { NO_LENGTH_MESSAGE, hasNoLength, oneHourAfter } from '../lib/shiftTimes'
 import { getRelevantRoutines } from '../lib/routines'
 
 export type ShiftSlideOverTarget =
@@ -102,7 +103,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const [staffId, setStaffId] = useState<string | null>(existing?.staffId ?? (target?.mode === 'create' ? target.staffId ?? null : null))
   const [serviceDate, setServiceDate] = useState(existing?.serviceDate ?? (target?.mode === 'create' ? target.serviceDate ?? '' : ''))
   const [startTime, setStartTime] = useState(toTimeInputValue(existing?.startTime))
-  const [endTime, setEndTime] = useState(toTimeInputValue(existing?.endTime))
+  // A new shift opens with an end an hour after the start, so it opens with a length (09:00 gives 10:00) and the live check has something to say about it; an existing shift keeps its own.
+  const [endTime, setEndTime] = useState(existing?.endTime ? toTimeInputValue(existing.endTime) : oneHourAfter(toTimeInputValue(existing?.startTime)))
   const [endsNextDay, setEndsNextDay] = useState(existing?.endsNextDay ?? false)
   const [ratio, setRatio] = useState<SupportRatio>(existing?.ratio ?? 'OneToOne')
   const [nightType, setNightType] = useState<SleepoverType>(existing?.nightType ?? 'None')
@@ -184,10 +186,21 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
     ? getRelevantRoutines(participantRoutines, { serviceDate, startTime, endTime, endsNextDay })
     : []
 
+  // A pair of times with no length (the end at or before the start, and not ending the next day): a rule of the End time field, and no question for the live check.
+  const noLength = hasNoLength(startTime, endTime, endsNextDay)
+
   // Live dry-run: re-checks findings whenever the candidate shape changes, debounced so we
   // don't fire a request per keystroke. Never writes — POST /shifts/check is a pure preview.
   useEffect(() => {
     if (!canWrite || !participantId || !serviceDate || !startTime || !endTime) return
+    if (noLength) {
+      // Nothing to ask: the answer is known, and the End time field says it. Whatever the last answer said was about a different shift.
+      setFindings(previous => (previous.length > 0 ? [] : previous))
+      setBudgetNote(null)
+      setPreviewRefusal(null)
+      setBudgetChoice('none')
+      return
+    }
     const handle = setTimeout(() => {
       checkShift.mutate(
         // The status the shift would be saved with, for an existing shift: a cancel costs nothing and gets no budget finding.
@@ -273,6 +286,12 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const readinessIssues = participantReadiness?.[participantId] ?? existing?.readinessIssues
   // A save's own failure wins; otherwise the dry-run's refusal of exactly what is on screen now (one box, so the same text never shows twice).
   const shownError = error ?? (previewRefusal?.key === candidateKey ? previewRefusal.message : null)
+  // The length is said under End time, where the person is looking: by the form's own rule, and by the server's 400 for it (the backstop) from the live check or from a save. Never as the alert at the foot, and a cancel needs no length.
+  const serverSaidNoLength = shownError === NO_LENGTH_MESSAGE
+  const lengthError = (noLength && status !== 'Cancelled') || serverSaidNoLength ? NO_LENGTH_MESSAGE : undefined
+  const footError = serverSaidNoLength ? null : shownError
+  // A save's refusal for the length is about the times it was for: changing one ends it.
+  const clearLengthRefusal = () => setError(previous => (previous === NO_LENGTH_MESSAGE ? null : previous))
 
   // Typing a real answer under "a reason is required" ends the complaint at once, not only on the next save.
   function handleOverrideReasonChange(value: string) {
@@ -445,15 +464,15 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
 
         <div className={modalGrid}>
           <FormField label="Start time" required>
-            <input type="time" value={startTime} disabled={!canWrite} onChange={e => setStartTime(e.target.value)} />
+            <input type="time" value={startTime} disabled={!canWrite} onChange={e => { setStartTime(e.target.value); clearLengthRefusal() }} />
           </FormField>
-          <FormField label="End time" required>
-            <input type="time" value={endTime} disabled={!canWrite} onChange={e => setEndTime(e.target.value)} />
+          <FormField label="End time" required error={lengthError}>
+            <input type="time" value={endTime} disabled={!canWrite} onChange={e => { setEndTime(e.target.value); clearLengthRefusal() }} />
           </FormField>
         </div>
 
         <FormField label="Ends the next day" layout="checkbox">
-          <input type="checkbox" checked={endsNextDay} disabled={!canWrite} onChange={e => setEndsNextDay(e.target.checked)} />
+          <input type="checkbox" checked={endsNextDay} disabled={!canWrite} onChange={e => { setEndsNextDay(e.target.checked); clearLengthRefusal() }} />
         </FormField>
 
         <div className={modalGrid}>
@@ -612,9 +631,9 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         {/* Not a finding and never a block: a shift the estimator cannot price has nothing to check, and a quiet line says so rather than letting no warning read as an all clear. */}
         {budgetNote && <p className="text-[13px] text-[var(--color-muted-foreground)]">{budgetNote}</p>}
 
-        {shownError && (
+        {footError && (
           <div role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
-            {shownError}
+            {footError}
           </div>
         )}
       </SlideOver>

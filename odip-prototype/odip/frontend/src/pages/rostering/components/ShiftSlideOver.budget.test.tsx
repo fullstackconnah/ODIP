@@ -83,7 +83,7 @@ describe('a budget warning (Warn mode)', () => {
     await user.click(saveButton())
 
     expect(mockCreateMutateAsync).toHaveBeenCalledWith({
-      participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '09:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
+      participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '10:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
       status: 'Draft', notes: null, overrideReason: null, acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'],
     })
   })
@@ -170,7 +170,7 @@ describe('a Coordinator the budget refused', () => {
     await user.click(saveButton())
 
     expect(mockCreateMutateAsync).toHaveBeenCalledWith({
-      participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '09:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
+      participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '10:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
       status: 'Draft', notes: null, overrideReason: DESCRIPTION, emergency: true, acknowledgedFindingCodes: ['BUDGET_APPROACHING'],
     })
     await waitFor(() => expect(onClose).toHaveBeenCalled())
