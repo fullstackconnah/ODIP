@@ -162,19 +162,19 @@ describe('ServiceAgreementDraftPage: saving a plan built from blocks', () => {
     expect(status).not.toHaveTextContent('not saved')
   })
 
-  it('says it was saved as the next version, and then there is nothing to lose', async () => {
+  it('says it was saved as the next version, and that a save replaces the earlier unapproved one', async () => {
     createMutate.mockImplementation((_request, options) => options.onSuccess({ version: 3 }))
     renderPage()
     const user = await fillDetails()
     await addBlockFromTemplate(user)
-    expect(screen.getByText(/You have unsaved changes\./)).toHaveTextContent('Every save is a new version: earlier versions never change.')
+    expect(screen.getByText(/You have unsaved changes\./)).toHaveTextContent('Saving replaces your earlier unapproved version. An approved version is kept.')
 
     await user.click(screen.getByRole('button', { name: 'Save draft' }))
 
     // The answer is drawn with the budget bar, in its one polite status (see the describe on saving from the bar, below), and the save row goes back to what is always true of it.
     expect(await screen.findByText('Saved as version 3.')).toBeInTheDocument()
     expect(screen.getByText('Saved as version 3.').closest('[role="status"]')).not.toBeNull()
-    expect(screen.getByText('Every save is a new version: earlier versions never change.')).toBeInTheDocument()
+    expect(screen.getByText('Saving replaces your earlier unapproved version. An approved version is kept.')).toBeInTheDocument()
     expect(screen.queryByText(/You have unsaved changes/)).not.toBeInTheDocument()
   })
 

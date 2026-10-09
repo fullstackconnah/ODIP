@@ -294,7 +294,7 @@ function DraftPage() {
     <div className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-3">
       <div className="flex flex-wrap items-center gap-3">
         <Button data-plan-save onClick={save} disabled={create.isPending || loadingNewest || refused.length > 0}>{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}{create.isPending ? 'Saving draft…' : 'Save draft'}</Button>
-        <p className="text-sm text-[var(--color-muted-foreground)]">{dirty ? 'You have unsaved changes. ' : ''}Every save is a new version: earlier versions never change.</p>
+        <p className="text-sm text-[var(--color-muted-foreground)]">{dirty ? 'You have unsaved changes. ' : ''}Saving replaces your earlier unapproved version. An approved version is kept.</p>
       </div>
     </div>
   ) : null
