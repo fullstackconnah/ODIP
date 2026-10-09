@@ -292,6 +292,7 @@ public record CreateShiftDto
     public bool EndsNextDay { get; init; }
     public SupportRatio Ratio { get; init; }
     public SleepoverType NightType { get; init; }
+    /// <summary>Ignored: the server never takes a pattern link from a request. It sets the link itself when it generates a shift from a pattern, and the budget's one-off rule reads only that saved link, so naming a pattern cannot dodge a hard limit.</summary>
     public Guid? ShiftPatternId { get; init; }
     public string? Notes { get; init; }
     /// <summary>Required when the shift carries Warning findings; ignored (never enough) for Blocking findings.</summary>

@@ -406,6 +406,7 @@ export interface CreateShiftDto {
    * here is inert but kept required so callers can't accidentally omit it on Update.
    */
   status: ShiftStatus
+  /** Ignored by the server, which never takes a pattern link from a request: it sets the link itself when it generates a shift from a pattern. The roster panel never sends one. */
   shiftPatternId?: string | null
   notes?: string | null
   overrideReason: string | null
