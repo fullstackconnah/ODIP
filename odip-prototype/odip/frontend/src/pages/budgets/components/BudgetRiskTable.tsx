@@ -100,7 +100,7 @@ function ParticipantCell({ row }: { row: BudgetRiskRow }) {
 function UnpricedMark({ count }: { count: number }) {
   const words = unpricedForecastLabel(count)
   return (
-    <span role="img" aria-label={words} title={words} className={`ml-1 inline-flex align-middle ${TONE.warning.ink}`}>
+    <span role="img" aria-label={words} title={words} className={`mr-1 inline-flex align-middle ${TONE.warning.ink}`}>
       <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
     </span>
   )
@@ -114,7 +114,7 @@ function UnpricedMark({ count }: { count: number }) {
 function RolledOverMark({ amount }: { amount: number }) {
   const words = rolledOverLabel(formatCurrency(amount))
   return (
-    <span role="img" aria-label={words} title={words} className="ml-1 inline-flex align-middle text-[var(--color-muted-foreground)]">
+    <span role="img" aria-label={words} title={words} className="mr-1 inline-flex align-middle text-[var(--color-muted-foreground)]">
       <CornerDownRight className="h-3.5 w-3.5" aria-hidden="true" />
     </span>
   )
@@ -168,6 +168,9 @@ function columnsFor(): Column<BudgetRiskRow>[] {
       minWidth: '6.5rem',
       render: row => (
         <span className="max-md:text-left">
+          {/* Available includes money rolled over from earlier periods, which the Funding tab labels "not confirmed" (somebody else may have used it): a row that is on track by it says so, by a mark. The mark
+              is BEFORE the figure: in a right-aligned money column a mark after it pushes the digits left of an unmarked row's, and the column no longer lines up on the decimal point. */}
+          {row.figures.visible && row.carried !== null && row.carried > 0 && <RolledOverMark amount={row.carried} />}
           <BudgetFigure
             figures={row.figures}
             amount={row.available}
@@ -175,8 +178,6 @@ function columnsFor(): Column<BudgetRiskRow>[] {
             // A configured zero is a real answer and says so, so nobody reads it as a missing figure.
             srNote={row.available === 0 && row.figures.visible ? configuredZero : undefined}
           />
-          {/* Available includes money rolled over from earlier periods, which the Funding tab labels "not confirmed" (somebody else may have used it): a row that is on track by it says so, by a mark. */}
-          {row.figures.visible && row.carried !== null && row.carried > 0 && <RolledOverMark amount={row.carried} />}
         </span>
       ),
     },
@@ -212,8 +213,9 @@ function columnsFor(): Column<BudgetRiskRow>[] {
       minWidth: '6.5rem',
       render: row => (
         <span className="max-md:text-left">
-          <BudgetFigure figures={row.figures} amount={row.forecast} reason={row.unavailableReason ?? unavailableFigure()} />
+          {/* Before the figure, for the same reason as the roll-forward mark: the digits keep the column's right edge. */}
           {row.figures.visible && (row.unpricedShifts ?? 0) > 0 && <UnpricedMark count={row.unpricedShifts as number} />}
+          <BudgetFigure figures={row.figures} amount={row.forecast} reason={row.unavailableReason ?? unavailableFigure()} />
         </span>
       ),
     },

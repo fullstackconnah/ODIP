@@ -206,6 +206,17 @@ describe('BudgetRiskTable: a real row', () => {
     expect(within(cellOf('Plain Person', 'Available')).queryByRole('img')).not.toBeInTheDocument()
   })
 
+  // Money columns line up on the decimal point. The mark used to sit to the right of the figure in a right-aligned column, so a marked figure's digits ended about 18px left of an unmarked one's:
+  // it sits to the LEFT of the figure now, and the digits keep the column's right edge.
+  it('puts the roll-forward mark before the figure, so a marked Available ends where an unmarked one does', () => {
+    renderTable(readyTable([riskRow({ id: 'a', participantLabel: 'Rolled Person', available: 3473.32, carried: 448.66 })]))
+
+    const cell = cellOf('Rolled Person', 'Available')
+    const mark = within(cell).getByRole('img', { name: /rolled over/ })
+    const figure = within(cell).getByText('$3,473.32')
+    expect(mark.compareDocumentPosition(figure) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('says what the mark is once, under the table, when any row has it, and not otherwise', () => {
     const { unmount } = renderTable(readyTable([riskRow({ carried: 100 }), riskRow({ id: 'b', participantLabel: 'Bilal Nasser', carried: 5 })]))
 
@@ -432,6 +443,15 @@ describe('BudgetRiskTable: a forecast that leaves shifts out', () => {
     const one = within(cellOf('Amara Okonkwo-Bell', 'Forecast')).getByRole('img', { name: 'Leaves out 1 shift that is not priced yet' })
     expect(one).toHaveAttribute('title', 'Leaves out 1 shift that is not priced yet')
     expect(within(cellOf('Bilal Nasser', 'Forecast')).getByRole('img', { name: 'Leaves out 3 shifts that are not priced yet' })).toBeInTheDocument()
+  })
+
+  it('puts the mark before the forecast, so a marked Forecast ends where an unmarked one does', () => {
+    renderTable(readyTable([riskRow({ unpricedShifts: 1, forecast: 730.75 })]))
+
+    const cell = cellOf('Amara Okonkwo-Bell', 'Forecast')
+    const mark = within(cell).getByRole('img', { name: /not priced yet/ })
+    const figure = within(cell).getByText('$730.75')
+    expect(mark.compareDocumentPosition(figure) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('says what the mark is once, under the table, when any row has it', () => {
