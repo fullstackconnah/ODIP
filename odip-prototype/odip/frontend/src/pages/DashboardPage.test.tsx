@@ -967,7 +967,7 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
   const EXPECTED = [
     ['Qualification Issues', 'Expired, undated or due within 30 days, across 2 staff members.', 'Review qualifications', '/qualifications'],
     ['Critical Participant Alerts', 'Critical alerts across 2 participants.', 'Review participants', '/participants'],
-    ['Budgets at risk', '2 over, 1 forecast to go over', 'Review budgets', '/budgets'],
+    ['Budgets at risk', '3 participants: 2 over, 1 forecast to go over', 'Review budgets', '/budgets'],
     ['Overdue', 'Tasks past their due date and still open.', 'Open overdue tasks', '/tasks?status=Overdue'],
     ['Missing Accommodation', 'Trips start within 60 days with no accommodation reserved.', 'Open trips', '/trips'],
     ['Missing Vehicles', 'Trips start within 60 days with no vehicle assigned.', 'Assign vehicles', '/schedule'],
@@ -1731,13 +1731,13 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   const withAlerts = (...data: Array<ReturnType<typeof budgetParticipant>>) => mockUseParticipantAlertsAggregate.mockReturnValue({ data, isLoading: false })
   const budgetTile = () => tileFor('Budgets at risk')
 
-  it('is a tile whose figure is the participants over or forecast to go over, with the line "{n} over, {m} forecast to go over" and a link to the Budgets list', () => {
+  it('is a tile whose figure is the participants over or forecast to go over, with the line "{n} participants: {a} over, {b} forecast to go over" and a link to the Budgets list', () => {
     asRole('Coordinator')
     withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over'), budgetParticipant('p2', 'Olga Over', 'budget-over'), budgetParticipant('p3', 'Ford Cast', 'budget-forecast-over'))
     renderPage()
 
     expect(budgetTile()).toHaveAccessibleName('Budgets at risk 3')
-    expect(budgetTile()).toHaveTextContent('2 over, 1 forecast to go over')
+    expect(budgetTile()).toHaveTextContent('3 participants: 2 over, 1 forecast to go over')
     expect(within(budgetTile()).getByRole('link', { name: 'Review budgets' })).toHaveAttribute('href', '/budgets')
   })
 
@@ -1755,7 +1755,8 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
     renderPage()
 
     expect(budgetTile()).toHaveAttribute('data-attention', 'warning')
-    expect(budgetTile()).toHaveTextContent('0 over, 2 forecast to go over')
+    expect(budgetTile()).toHaveTextContent('2 participants forecast to go over')
+    expect(budgetTile()).not.toHaveTextContent('0 over')   // a clause that is zero is dropped
   })
 
   it('counts a participant once however many pools are at risk, in their worst state', () => {
@@ -1769,7 +1770,8 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
     renderPage()
 
     expect(budgetTile()).toHaveAccessibleName('Budgets at risk 1')
-    expect(budgetTile()).toHaveTextContent('1 over, 0 forecast to go over')
+    expect(budgetTile()).toHaveTextContent('1 participant over')
+    expect(budgetTile()).not.toHaveTextContent('0 forecast')
   })
 
   // At zero the band names an item in its All clear row, "checked, and nothing": true only of a budget somebody has recorded. A participant on track has no alert, so the alerts say who has a budget in

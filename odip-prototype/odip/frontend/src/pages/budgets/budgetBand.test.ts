@@ -13,7 +13,17 @@ describe('budgetsAtRiskItem', () => {
 
     expect(item.label).toBe('Budgets at risk')
     expect(item.count).toBe(3)
-    expect(item.detail).toBe('2 over, 1 forecast to go over')
+    expect(item.detail).toBe('3 participants: 2 over, 1 forecast to go over')
+  })
+
+  // The figure counts participants, so the line says so (DESIGN.md: a tile's line states what the count is), and a clause that is zero is dropped: with one clause left it is the whole line.
+  it('names the participants it counts, and drops a clause that is zero', () => {
+    expect(budgetsAtRiskItem(risk(1, 1))!.detail).toBe('2 participants: 1 over, 1 forecast to go over')
+    expect(budgetsAtRiskItem(risk(3, 0))!.detail).toBe('3 participants over')
+    expect(budgetsAtRiskItem(risk(1, 0))!.detail).toBe('1 participant over')
+    expect(budgetsAtRiskItem(risk(0, 2))!.detail).toBe('2 participants forecast to go over')
+    expect(budgetsAtRiskItem(risk(0, 1))!.detail).toBe('1 participant forecast to go over')
+    expect(budgetsAtRiskItem(risk(1, 1))!.detail).not.toMatch(/\b0 /)
   })
 
   it('is danger when anybody is already over', () => {

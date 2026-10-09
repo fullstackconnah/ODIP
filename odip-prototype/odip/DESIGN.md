@@ -610,7 +610,7 @@ terms, and a link to where it is fixed, a route that exists today:
 |---|---|---|---|
 | Qualification Issues (the Qualifications page) | danger | Expired, undated or due within 30 days, across 3 staff members. | Review qualifications, `/qualifications` |
 | Critical Participant Alerts (`canViewAlerts`) | danger | Critical alerts across 2 participants. | Review participants, `/participants` |
-| Budgets at risk (`canViewAlerts` and the Budgets page) | danger when any pool is over, else warning | 1 over, 1 forecast to go over. | Review budgets, `/budgets` |
+| Budgets at risk (`canViewAlerts` and the Budgets page) | danger when any pool is over, else warning | 2 participants: 1 over, 1 forecast to go over. A clause that is zero is dropped, and what is left is the whole line: "3 participants over", "1 participant forecast to go over". | Review budgets, `/budgets` |
 | Overdue | danger | Tasks past their due date and still open. | Open overdue tasks, `/tasks?status=Overdue` |
 | Missing Accommodation | warning | Trips start within 60 days with no accommodation reserved. | Open trips, `/trips` |
 | Missing Vehicles | warning | Trips start within 60 days with no vehicle assigned. | Assign vehicles, `/schedule` |
