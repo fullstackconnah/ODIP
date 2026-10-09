@@ -23,18 +23,32 @@ type RejectClaimDialogProps = {
   /** The server's refusal of the last try, said in the dialog. */
   error?: string | null
   loading?: boolean
-  /** How many claims are being marked Rejected at once (the trip's Claims tab can do several): one code is sent with all of them. Default one. */
+  /** How many claims are being marked Rejected at once (the trip's Claims tab can do several): one code is sent with all of them, and the field says so. Default one. */
   count?: number
+  /**
+   * The claim is already rejected and only its code is being recorded (the reason often arrives after the status was set): the dialog asks only for the code, which is then required, and says
+   * "Save the code". Default off, which is the rejection itself, with the code optional.
+   */
+  recordOnly?: boolean
   onCancel: () => void
-  /** The NDIA's code, or null when none was given. The caller sends it with the Rejected status. */
+  /** The NDIA's code, or null when none was given. The caller sends it with the Rejected status (or alone, when only recording it). */
   onConfirm: (code: string | null) => void
 }
 
 /**
- * "Mark as rejected?", asking, optionally, for the NDIA's code. A code that says the funds ran out (V17, V18, V27, V28) is the only direct sign a provider gets that a participant's pool is empty
- * (the NDIA's portal does not show a budget), so it warns on the participant's budget; any other code is kept as it was typed. Nothing here is required: a rejection with no code is still a rejection.
+ * What a code means in the budget's own words, for a screen that prints one: V17 and V18 say the plan has not enough, V27 and V28 that the funding period has not. Any other code has no gloss and is
+ * kept as it was typed.
  */
-export function RejectClaimDialog({ error, loading, count = 1, onCancel, onConfirm }: RejectClaimDialogProps) {
+export function ndiaCodeMeaning(code: string): string | null {
+  return CODE_OPTIONS.find(option => option.value === code && option.label.includes(': '))?.label.split(': ')[1] ?? null
+}
+
+/**
+ * "Mark as rejected?", asking, optionally, for the NDIA's code. A code that says the funds ran out (V17, V18, V27, V28) is the only direct sign a provider gets that a participant's pool is empty
+ * (the NDIA's portal does not show a budget), so it raises a warning on the participant's budget; any other code is kept as it was typed. Nothing here is required: a rejection with no code is still a
+ * rejection. With several claims the one code goes to all of them, and the field is named for that.
+ */
+export function RejectClaimDialog({ error, loading, count = 1, recordOnly = false, onCancel, onConfirm }: RejectClaimDialogProps) {
   const [choice, setChoice] = useState(NOT_GIVEN)
   const [typed, setTyped] = useState('')
   const [missing, setMissing] = useState(false)
@@ -46,27 +60,37 @@ export function RejectClaimDialog({ error, loading, count = 1, onCancel, onConfi
       onConfirm(code)
       return
     }
+    // Recording a code is only worth sending if there is one.
+    if (recordOnly && choice === NOT_GIVEN) { setMissing(true); return }
     onConfirm(choice === NOT_GIVEN ? null : choice)
   }
 
+  const several = count > 1
+  const label = recordOnly ? 'NDIA rejection code' : several ? `NDIA rejection code, applied to all ${count} claims (optional)` : 'NDIA rejection code (optional)'
   return (
     <ConfirmDialog
       open
       onCancel={onCancel}
       onConfirm={confirm}
-      title="Mark as rejected?"
-      confirmLabel="Mark as Rejected"
-      variant="danger"
+      title={recordOnly ? 'Record the NDIA code' : 'Mark as rejected?'}
+      confirmLabel={recordOnly ? 'Save the code' : 'Mark as Rejected'}
+      variant={recordOnly ? 'default' : 'danger'}
       loading={loading}
       message={
         <>
-          <p>{count > 1 ? `Mark these ${count} claims as rejected? This cannot be undone.` : 'Mark this claim as rejected? This cannot be undone.'}</p>
+          <p>
+            {recordOnly
+              ? 'Which code did the NDIA give for this claim?'
+              : several ? `Mark these ${count} claims as rejected? This cannot be undone.` : 'Mark this claim as rejected? This cannot be undone.'}
+          </p>
           <SelectField
-            label="NDIA rejection code (optional)"
+            label={label}
             value={choice}
-            options={CODE_OPTIONS}
+            options={recordOnly ? CODE_OPTIONS.filter(option => option.value !== NOT_GIVEN) : CODE_OPTIONS}
+            placeholder={recordOnly ? 'Choose the code' : undefined}
             onChange={event => { setChoice(event.target.value); setMissing(false) }}
-            hint="V17, V18, V27 and V28 say the funds ran out, and warn on the participant's budget."
+            error={recordOnly && missing && choice === NOT_GIVEN ? 'Choose the code the NDIA gave.' : undefined}
+            hint={`V17, V18, V27 and V28 say the funds ran out, and raise a warning on ${several ? 'each participant\'s' : 'the participant\'s'} budget.`}
           />
           {choice === OTHER && (
             <TextField
@@ -77,7 +101,7 @@ export function RejectClaimDialog({ error, loading, count = 1, onCancel, onConfi
               spellCheck={false}
               onChange={event => { setTyped(event.target.value); setMissing(false) }}
               hint={`Up to ${NDIA_CODE_MAX_LENGTH} characters.`}
-              error={missing ? 'Type the code the NDIA gave, or choose Not given.' : undefined}
+              error={missing ? (recordOnly ? 'Type the code the NDIA gave.' : 'Type the code the NDIA gave, or choose Not given.') : undefined}
             />
           )}
           {error && <p role="alert" className="text-[var(--color-destructive)]">{error}</p>}

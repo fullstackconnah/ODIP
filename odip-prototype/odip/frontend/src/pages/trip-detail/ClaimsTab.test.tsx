@@ -151,7 +151,8 @@ describe('ClaimsTab: several claims marked Rejected at once', () => {
     expect(dialog()).toHaveTextContent('Mark these 2 claims as rejected? This cannot be undone.')
     expect(puts()).toEqual([])
 
-    await user.selectOptions(within(dialog()).getByRole('combobox', { name: 'NDIA rejection code (optional)' }), 'V17')
+    // The one code goes to every claim selected, and the field says so.
+    await user.selectOptions(within(dialog()).getByRole('combobox', { name: 'NDIA rejection code, applied to all 2 claims (optional)' }), 'V17')
     await user.click(within(dialog()).getByRole('button', { name: 'Mark as Rejected' }))
 
     // Both are written (the bulk change used to wait for ever on the second), and the question closes.
