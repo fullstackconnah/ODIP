@@ -63,8 +63,9 @@ function StatusCell({ row }: { row: BudgetRiskRow }) {
       <span className="flex flex-wrap items-center gap-1">
         <RiskPill status={row.status} />
         {ndiaWord && (
-          <span title={`NDIA rejected a claim on ${writtenDay(ndiaWord.date)} (${ndiaWord.code})`}>
-            <StatusBadge tone="danger" label={NDIA_FUNDS_RAN_OUT} />
+          // Two short lines, not one long one: the Status column is the one the table can least afford to widen, and Forecast must stay on screen at 1366 and 1440.
+          <span title={`NDIA rejected a claim on ${writtenDay(ndiaWord.date)} (${ndiaWord.code})`} className="max-w-[6.5rem] whitespace-normal leading-tight">
+            <StatusBadge tone="danger" label={NDIA_FUNDS_RAN_OUT} className="inline-block" />
           </span>
         )}
       </span>
@@ -128,7 +129,8 @@ function columnsFor(): Column<BudgetRiskRow>[] {
       minWidth: '10rem',
       wrap: true,
       // A period is a range of two calendar days, written with the app's own range formatter: it never drops a year and never becomes "Sep" in one ICU build and "Sept" in another.
-      render: row => <CellText title={`${row.periodStart} to ${row.periodEnd}`}>{writtenSpan(row.periodStart, row.periodEnd)}</CellText>,
+      // Wraps at its dash (the dates keep their words together) so a plan-year period is two short lines and not one 11rem one.
+      render: row => <span title={`${row.periodStart} to ${row.periodEnd}`} className="block md:max-w-[7rem]">{writtenSpan(row.periodStart, row.periodEnd)}</span>,
     },
     {
       key: 'status',
@@ -160,7 +162,7 @@ function columnsFor(): Column<BudgetRiskRow>[] {
           />
           {/* Available includes money rolled over from earlier periods, which the Funding tab labels "not confirmed" (somebody else may have used it): a row that is on track by it says so. */}
           {row.figures.visible && row.carried !== null && row.carried > 0 && (
-            <span className="block text-xs text-[var(--color-muted-foreground)]">incl. <BudgetFigure figures={row.figures} amount={row.carried} /> rolled over, not confirmed</span>
+            <span className="block max-w-[9rem] whitespace-normal text-xs text-[var(--color-muted-foreground)] md:ml-auto md:text-right">incl. <BudgetFigure figures={row.figures} amount={row.carried} /> rolled over, not confirmed</span>
           )}
         </span>
       ),
