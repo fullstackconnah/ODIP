@@ -79,12 +79,12 @@ public static class ServiceAgreementDraftPdfRenderer
 
     /// <summary>
     /// The file the PDF is downloaded as: "Service agreement - {participant} - {agreement start}.pdf". The name is the one printed on the PDF (the snapshot taken when the revision was saved), cut down to
-    /// letters, digits, spaces and hyphens, the same allowlist the participant's other documents use (<c>ParticipantDocumentService.BuildFileName</c>): nothing in it can end a header, name a folder or break the
-    /// page's own reading of Content-Disposition. A name with nothing left in it is "Participant".
+    /// letters of any script (an accent typed as a combining mark stays with its letter), digits, spaces and hyphens: nothing in it can end a header or name a folder. The letters reach the browser in the RFC 5987
+    /// <c>filename*</c> that ASP.NET sends beside an ASCII <c>filename</c>, and the page reads that one (frontend <c>fileNameFromDisposition</c>). A name with nothing left in it is "Participant".
     /// </summary>
     public static string FileName(ServiceAgreementDraft draft)
     {
-        var name = Regex.Replace(Regex.Replace(draft.ParticipantNameSnapshot ?? string.Empty, "[^A-Za-z0-9 -]", string.Empty), @"\s+", " ").Trim(' ', '-');
+        var name = Regex.Replace(Regex.Replace(draft.ParticipantNameSnapshot ?? string.Empty, @"[^\p{L}\p{M}\p{N} -]", string.Empty), @"\s+", " ").Trim(' ', '-');
         return $"Service agreement - {(name.Length == 0 ? "Participant" : name)} - {draft.AgreementStartDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.pdf";
     }
 

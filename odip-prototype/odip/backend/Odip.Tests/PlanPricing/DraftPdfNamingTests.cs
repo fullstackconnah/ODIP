@@ -1,7 +1,10 @@
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Net.Http.Headers;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Odip.Api.Controllers;
 using Odip.Domain.Billing.Pricing;
@@ -86,25 +89,61 @@ public class DraftPdfNamingTests
         Assert.StartsWith("%PDF-", System.Text.Encoding.ASCII.GetString(download.FileContents, 0, 5));
     }
 
-    // The page reads the name out of Content-Disposition and decodes it (frontend api/hooks/service-agreement-drafts.ts); this is that pattern, run over the header ASP.NET writes for the file.
+    /// <summary>The Content-Disposition header MVC writes when it executes the result, which is what the browser receives.</summary>
+    private static async Task<string> HeaderOfAsync(FileContentResult result)
+    {
+        var context = new DefaultHttpContext { RequestServices = new ServiceCollection().AddLogging().AddMvcCore().Services.BuildServiceProvider() };
+        context.Response.Body = new MemoryStream();
+        await result.ExecuteResultAsync(new ActionContext(context, new RouteData(), new ActionDescriptor()));
+        return context.Response.Headers.ContentDisposition.ToString();
+    }
+
+    /// <summary>The name the page takes out of Content-Disposition (frontend api/hooks/service-agreement-drafts.ts, <c>fileNameFromDisposition</c>): the RFC 5987 <c>filename*</c> when there is one, else the plain <c>filename</c>.</summary>
+    private static string? NameTheHookReads(string header)
+    {
+        var star = Regex.Match(header, @"filename\*\s*=\s*[^';]*'[^';]*'([^;]+)", RegexOptions.IgnoreCase);
+        if (star.Success) return Uri.UnescapeDataString(star.Groups[1].Value.Trim().Trim('"'));
+        var plain = Regex.Match(header, @"filename\s*=\s*""?([^"";]+)""?", RegexOptions.IgnoreCase);
+        return plain.Success ? plain.Groups[1].Value : null;
+    }
+
+    // The download name is sent the way ASP.NET sends any file name (what FileResultExecutorBase does with FileDownloadName): an ASCII filename for simple clients and the RFC 5987 filename* with the
+    // real name, percent-encoded UTF-8. The page prefers the second, so the name arrives with its letters.
     [Theory]
     [InlineData("Synthetic Participant")]
+    [InlineData("José Núñez")]
+    [InlineData("Nguyễn Thị Hoa")]
+    [InlineData("Zoë O'Brien")]
     [InlineData("Mary-Jane O'Brien, \"MJ\"\r\n/\\:*?<>| café 100% ; 😀")]
-    public async Task The_name_survives_the_header_and_the_pages_own_way_of_reading_it_back(string participantName)
+    public async Task The_name_survives_the_header_and_the_pages_own_way_of_reading_it_back_with_its_letters(string participantName)
     {
         var (db, draft) = await StoredRevisionAsync(participantName);
         await using var _ = db;
-        var fileName = (await DownloadAsync(db, draft)).FileDownloadName;
-        var disposition = new ContentDispositionHeaderValue("attachment");
-        disposition.SetHttpFileName(fileName);
+        var download = await DownloadAsync(db, draft);
+        var fileName = download.FileDownloadName;
 
-        var header = disposition.ToString();
+        var header = await HeaderOfAsync(download);
 
-        var match = Regex.Match(header, @"filename\*?=(?:UTF-8'')?""?([^"";]+)""?", RegexOptions.IgnoreCase);
-        Assert.True(match.Success, header);
-        Assert.Equal(fileName, Uri.UnescapeDataString(match.Groups[1].Value));
+        Assert.Equal(fileName, NameTheHookReads(header));
         Assert.DoesNotContain('\n', header);
         Assert.DoesNotContain('\r', header);
+        var plain = Regex.Match(header, @"filename\s*=\s*""?([^"";]+)""?", RegexOptions.IgnoreCase);
+        Assert.True(plain.Success, header);
+        Assert.All(plain.Groups[1].Value, character => Assert.True(character < 128, $"the plain filename is ASCII for a client that cannot read filename*: {header}"));
+        if (fileName.Any(character => character > 127)) Assert.Matches(@"filename\*\s*=\s*UTF-8''", header);
+    }
+
+    [Theory]
+    [InlineData("José Núñez", "José Núñez")]
+    [InlineData("Nguyễn Thị Hoa", "Nguyễn Thị Hoa")]
+    public async Task The_download_of_a_participant_with_accents_keeps_every_letter_of_the_name(string participantName, string expectedName)
+    {
+        var (db, draft) = await StoredRevisionAsync(participantName);
+        await using var _ = db;
+
+        var download = await DownloadAsync(db, draft);
+
+        Assert.Equal($"Service agreement - {expectedName} - 2026-10-12.pdf", download.FileDownloadName);
     }
 
     // ── The words ─────────────────────────────────────────────────────────────────
@@ -115,7 +154,12 @@ public class DraftPdfNamingTests
     [InlineData("  Ann   Lee  ", "Service agreement - Ann Lee - 2026-10-12.pdf")]
     [InlineData("A/B\\C:D*E?F\"G<H>I|J", "Service agreement - ABCDEFGHIJ - 2026-10-12.pdf")]          // nothing a file system refuses
     [InlineData("100% real; \r\ninjected", "Service agreement - 100 real injected - 2026-10-12.pdf")]    // nothing that ends or splits a header, or that the page's decoding would choke on
-    [InlineData("日本語名前", "Service agreement - Participant - 2026-10-12.pdf")]                     // nothing left of the name: a word, not an empty segment
+    [InlineData("José Núñez", "Service agreement - José Núñez - 2026-10-12.pdf")]                    // the letters of the name stay, accents and all
+    [InlineData("Nguyễn Thị Hoa", "Service agreement - Nguyễn Thị Hoa - 2026-10-12.pdf")]
+    [InlineData("Zoë O'Brien", "Service agreement - Zoë OBrien - 2026-10-12.pdf")]                    // the apostrophe goes, the ë stays
+    [InlineData("José Lee", "Service agreement - José Lee - 2026-10-12.pdf")]            // an accent typed as a combining mark stays with its letter
+    [InlineData("日本語名前", "Service agreement - 日本語名前 - 2026-10-12.pdf")]                      // letters of any script
+    [InlineData("😀 - 😀", "Service agreement - Participant - 2026-10-12.pdf")]                        // nothing left of the name: a word, not an empty segment
     [InlineData("- -", "Service agreement - Participant - 2026-10-12.pdf")]
     [InlineData("", "Service agreement - Participant - 2026-10-12.pdf")]
     public void The_file_name_keeps_letters_digits_spaces_and_hyphens_of_the_name_and_nothing_else(string participantName, string expected) =>
