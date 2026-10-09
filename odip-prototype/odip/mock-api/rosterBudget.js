@@ -33,7 +33,9 @@ const dayMonth = (isoDate) => { const [, m, d] = isoDate.split('-').map(Number);
 const dayMonthYear = (isoDate) => { const [y, m, d] = isoDate.split('-').map(Number); return `${d} ${WRITTEN[m - 1]} ${y}` }
 // A no-break space on each side of the en dash and a word joiner after it, so a line never splits at the dash (the server's ShiftBudgetAssessor.Period: an en dash allows a break after it even in front of a no-break space).
 const dash = `${NBSP}${EN_DASH}${WORD_JOINER}${NBSP}`
-const periodWords = (start, end) => (start.slice(0, 4) === end.slice(0, 4) ? `${dayMonth(start)}${dash}${dayMonthYear(end)}` : `${dayMonthYear(start)}${dash}${dayMonthYear(end)}`)
+// Each date is one unit too (no-break spaces between its day, month and year), so "1 Oct" never splits.
+const whole = (date) => date.replace(/ /g, NBSP)
+const periodWords = (start, end) => (start.slice(0, 4) === end.slice(0, 4) ? `${whole(dayMonth(start))}${dash}${whole(dayMonthYear(end))}` : `${whole(dayMonthYear(start))}${dash}${whole(dayMonthYear(end))}`)
 
 function minutesOf(t) {
   const [h, m] = String(t).split(':').map(Number)

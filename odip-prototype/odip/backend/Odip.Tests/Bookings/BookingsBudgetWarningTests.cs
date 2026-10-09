@@ -66,7 +66,7 @@ public class BookingsBudgetWarningTests : IDisposable
         var booking = Created(await controller.Create(NewBooking(participant, trip, BookingStatus.Confirmed), default));
 
         var warning = Assert.Single(booking.BudgetWarnings!);
-        Assert.Equal("This booking takes Core (flexible) to $1,440.00 of $1,000.00 for 1 Oct\u00A0\u2013\u2060\u00A031 Dec 2026, $440.00 over.", warning.Message);
+        Assert.Equal("This booking takes Core (flexible) to $1,440.00 of $1,000.00 for 1\u00A0Oct\u00A0\u2013\u2060\u00A031\u00A0Dec\u00A02026, $440.00 over.", warning.Message);
         Assert.Equal("Sophie Brown", warning.ParticipantName);
         Assert.Equal((1440m, 440m), (warning.Added, warning.OverBy));
         Assert.Equal(BookingStatus.Confirmed, Saved(booking.Id).BookingStatus);   // never refused

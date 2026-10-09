@@ -68,7 +68,7 @@ public class GenerateBudgetWarningsTests : IDisposable
         var warning = Assert.Single(result.BudgetWarnings!);
         Assert.Equal(("Core (flexible)", new DateOnly(2026, 10, 1), new DateOnly(2026, 12, 31)), (warning.PoolName, warning.PeriodStart, warning.PeriodEnd));
         Assert.Equal((1000m, 3840m, 3840m, 2840m, 8), (warning.Available, warning.Forecast, warning.Added, warning.OverBy, warning.Count));
-        Assert.Equal("These 8 shifts take Core (flexible) to $3,840.00 of $1,000.00 for 1 Oct\u00A0\u2013\u2060\u00A031 Dec 2026, $2,840.00 over.", warning.Message);
+        Assert.Equal("These 8 shifts take Core (flexible) to $3,840.00 of $1,000.00 for 1\u00A0Oct\u00A0\u2013\u2060\u00A031\u00A0Dec\u00A02026, $2,840.00 over.", warning.Message);
     }
 
     [Fact]

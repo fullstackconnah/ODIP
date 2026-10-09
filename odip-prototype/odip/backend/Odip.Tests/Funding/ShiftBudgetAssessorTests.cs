@@ -154,7 +154,7 @@ public class ShiftBudgetAssessorTests
     {
         var finding = Find(ShiftBudgetAssessor.Assess(Figures(available: 8000m, used: 1000m, forecast: 8040m, cost: 292.32m), Context()), BudgetFindingCodes.ForecastOver)!;
 
-        Assert.Equal($"Takes Core (flexible) to $8,040.00 of $8,000.00 for 1 Oct{Dash}31 Dec 2026, $40.00 over. This shift: about $292.32.", finding.Message);
+        Assert.Equal($"Takes Core (flexible) to $8,040.00 of $8,000.00 for 1\u00A0Oct{Dash}31\u00A0Dec\u00A02026, $40.00 over. This shift: about $292.32.", finding.Message);
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public class ShiftBudgetAssessorTests
     {
         var finding = Find(ShiftBudgetAssessor.Assess(Figures(available: 8000m, used: 1000m, forecast: 8640m, cost: 292.32m), Context()), BudgetFindingCodes.ForecastOver)!;
 
-        Assert.Equal($"Takes Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct{Dash}31 Dec 2026, $640.00 over. It was already $347.68 over without this shift. This shift: about $292.32.", finding.Message);
+        Assert.Equal($"Takes Core (flexible) to $8,640.00 of $8,000.00 for 1\u00A0Oct{Dash}31\u00A0Dec\u00A02026, $640.00 over. It was already $347.68 over without this shift. This shift: about $292.32.", finding.Message);
     }
 
     [Fact]
@@ -171,8 +171,8 @@ public class ShiftBudgetAssessorTests
         var over = Find(ShiftBudgetAssessor.Assess(Figures(available: 8000m, used: 8100m, forecast: 8400m, cost: 300m), Context()), BudgetFindingCodes.Over)!;
         var approaching = Find(ShiftBudgetAssessor.Assess(Figures(available: 8000m, used: 6800m, forecast: 6800m, cost: 300m), Context()), BudgetFindingCodes.Approaching)!;
 
-        Assert.Equal($"Core (flexible) is already over for 1 Oct{Dash}31 Dec 2026: $8,100.00 used of $8,000.00.", over.Message);
-        Assert.Equal($"Core (flexible) is 85% used for 1 Oct{Dash}31 Dec 2026: $6,800.00 of $8,000.00.", approaching.Message);
+        Assert.Equal($"Core (flexible) is already over for 1\u00A0Oct{Dash}31\u00A0Dec\u00A02026: $8,100.00 used of $8,000.00.", over.Message);
+        Assert.Equal($"Core (flexible) is 85% used for 1\u00A0Oct{Dash}31\u00A0Dec\u00A02026: $6,800.00 of $8,000.00.", approaching.Message);
     }
 
     [Fact]
@@ -182,7 +182,7 @@ public class ShiftBudgetAssessorTests
 
         var finding = Find(ShiftBudgetAssessor.Assess(figures, Context()), BudgetFindingCodes.ForecastOver)!;
 
-        Assert.Contains($"for 1 Jul 2026{Dash}30 Jun 2027,", finding.Message);
+        Assert.Contains($"for 1\u00A0Jul\u00A02026{Dash}30\u00A0Jun\u00A02027,", finding.Message);
     }
 
     [Fact]
