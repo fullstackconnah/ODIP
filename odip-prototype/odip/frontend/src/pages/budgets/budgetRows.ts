@@ -55,6 +55,7 @@ export function noBudgetEntry(entry: BudgetListNoBudget): NoBudgetEntry {
     id: entry.participantId,
     participantLabel: entry.participantName,
     reason: noBudgetReasonText(entry),
+    ...(entry.reason === 'NotStarted' ? { notStarted: true } : {}),
     // The Funding tab's own button for a plan that ended is "Record a new plan"; for none recorded it is "Record budget"; a plan recorded for later is there already, so the link only opens it.
     action: { label: entry.reason === 'NotStarted' ? 'Open funding' : entry.reason === 'PlanEnded' ? 'Record a new plan' : 'Record budget', to: fundingTabPath(entry.participantId) },
   }

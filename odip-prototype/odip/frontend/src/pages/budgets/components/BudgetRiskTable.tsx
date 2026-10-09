@@ -10,7 +10,7 @@ import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { formatCurrency } from '@/lib/utils'
 import { BUDGET_RISK_STATUS, budgetRiskRank, type BudgetAttentionAction, type BudgetRiskRow, type BudgetRiskTableState, type NoBudgetEntry } from './viewModel'
 import { BudgetFigure } from './BudgetFigure'
-import { NDIA_FUNDS_RAN_OUT, NOTHING_TRACKED, NO_FIGURE, ROLLED_OVER_LEGEND, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, noBudgetNote, rolledOverLabel, unavailableFigure, unpricedForecastLabel } from './wording'
+import { NDIA_FUNDS_RAN_OUT, NOTHING_TRACKED, NO_FIGURE, ROLLED_OVER_LEGEND, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, noBudgetNote, noBudgetNoteUpcoming, rolledOverLabel, unavailableFigure, unpricedForecastLabel } from './wording'
 
 // The Budgets list's body: one row per participant and pool for the current funding period, in the DataTable idiom, with the server's own status and figures and nothing of its own invented.
 //
@@ -248,7 +248,7 @@ export function NoBudgetTail({ entries, defaultOpen = false }: { entries: NoBudg
         </button>
       </div>
       <div id={listId} hidden={!open} className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)]">
-        <p className="border-b border-[var(--color-border)] px-[var(--card-pad)] py-2">{noBudgetNote}</p>
+        <p className="border-b border-[var(--color-border)] px-[var(--card-pad)] py-2">{entries.some(entry => entry.notStarted) ? noBudgetNoteUpcoming : noBudgetNote}</p>
         <ul className="divide-y divide-[var(--color-border)]">
           {entries.map(entry => (
             <li key={entry.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-[var(--card-pad)] py-2">

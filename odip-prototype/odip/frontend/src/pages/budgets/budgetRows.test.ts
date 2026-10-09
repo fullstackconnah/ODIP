@@ -100,6 +100,12 @@ describe('noBudgetEntry', () => {
     expect(entry.action).toEqual({ label: 'Open funding', to: '/participants/p-0007?tab=funding' })
   })
 
+  it('marks an entry whose plan is recorded for later, so the tail can say so, and no other', () => {
+    expect(noBudgetEntry(noBudget({ reason: 'NotStarted', planStart: '2026-11-01' })).notStarted).toBe(true)
+    expect(noBudgetEntry(noBudget({ reason: 'PlanEnded', planEnd: '2026-06-30' }))).not.toHaveProperty('notStarted')
+    expect(noBudgetEntry(noBudget())).not.toHaveProperty('notStarted')
+  })
+
   it('still says a plan has not started when the server did not say which day', () => {
     expect(noBudgetEntry(noBudget({ reason: 'NotStarted' })).reason).toBe('Plan not started yet')
   })

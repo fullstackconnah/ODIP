@@ -494,6 +494,16 @@ describe('BudgetRiskTable: the no-budget tail', () => {
     expect(screen.queryByText(/never warned about|no limit to be near/)).not.toBeInTheDocument()
   })
 
+  // A row that says "Plan starts 1 Nov 2026" sat under a note that said "Record the plan to start tracking": with a plan recorded for later the note says so, and only then.
+  it('says, when a plan is recorded for later, that nothing can be warned of until a plan is running, and that the one that starts later can be opened', () => {
+    const upcoming = noBudgetEntry({ id: 'p5', participantLabel: 'Una Upcoming', reason: 'Plan starts 1 Nov 2026', notStarted: true, action: { label: 'Open funding', to: '/participants/p5?tab=funding' } })
+    renderTable(readyTable([riskRow()], { noBudget: [...entries(), upcoming] }))
+
+    const list = document.getElementById(screen.getByRole('button', { name: noBudgetHiddenLabel(3) }).getAttribute('aria-controls')!)!
+    expect(within(list).getByText('Until a plan is running, ODIP cannot warn about its budget. Record the plan, or open one that starts later.')).toBeInTheDocument()
+    expect(within(list).queryByText('ODIP cannot warn about a budget it does not hold. Record the plan to start tracking.')).not.toBeInTheDocument()
+  })
+
   it('is open from the start when it is told to be, as it is on a page where nobody has a budget yet', () => {
     renderTable(readyTable([], { noBudget: entries() }))
 

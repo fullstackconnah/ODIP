@@ -130,8 +130,10 @@ export type BudgetRiskRow = {
 export type NoBudgetEntry = {
   id: string
   participantLabel: string
-  /** Why there is no row: "No budget recorded", or that the plan ended on a day. */
+  /** Why there is no row: "No budget recorded", that the plan ended on a day, or that a plan recorded for later starts on one. */
   reason: string
+  /** A plan is recorded for later (`reason` says when it starts): the tail's note then says so. Omitted otherwise. */
+  notStarted?: boolean
   action?: BudgetAttentionAction
 }
 

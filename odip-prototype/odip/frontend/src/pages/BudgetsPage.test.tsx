@@ -200,6 +200,7 @@ describe('BudgetsPage: the participants with no budget in force', () => {
     const list = document.getElementById(screen.getByRole('button', { name: /no budget recorded/ }).getAttribute('aria-controls')!)!
     expect(within(list).getByText('Una Upcoming')).toBeVisible()
     expect(within(list).getByText('Plan starts 1 Nov 2026')).toBeVisible()
+    expect(within(list).getByText('Until a plan is running, ODIP cannot warn about its budget. Record the plan, or open one that starts later.')).toBeVisible()
     expect(within(list).getByRole('link', { name: 'Open funding for Una Upcoming' })).toHaveAttribute('href', '/participants/p-0007?tab=funding')
   })
 
