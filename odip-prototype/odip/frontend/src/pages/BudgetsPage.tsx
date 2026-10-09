@@ -55,22 +55,28 @@ export default function BudgetsPage() {
   const needle = search.trim().toLowerCase()
   const matchesName = (name: string) => needle === '' || name.toLowerCase().includes(needle)
   const rows = data?.rows ?? []
-  // How many rows each filter holds, for the filter's own label: a count of what the server sent, not a figure of any kind.
-  const counts: Record<StatusFilter, number> = { all: rows.length, Over: 0, ForecastOver: 0, Approaching: 0, OnTrack: 0 }
-  for (const row of rows) if (row.status in counts) counts[row.status as StatusFilter] += 1
+  // How many rows each filter holds, for the filter's own label: a count of the rows the server sent that the search leaves, not a figure of any kind. (Counting past the search promised rows it had
+  // taken away: "Over (1)" with a name typed that no over row has, and then "No budgets match these filters".)
+  const found = rows.filter(row => matchesName(row.participantName))
+  const counts: Record<StatusFilter, number> = { all: found.length, Over: 0, ForecastOver: 0, Approaching: 0, OnTrack: 0 }
+  for (const row of found) if (row.status in counts) counts[row.status as StatusFilter] += 1
 
-  const shown: BudgetListRow[] = rows.filter(row => (status === 'all' || row.status === status) && matchesName(row.participantName))
+  // Nobody has a budget in force (the commonest state at first): there is nothing to filter or rank, so the filters and the caption about risk order are not drawn, and the people who need a budget
+  // recorded, the only useful thing on the page, are open.
+  const nothingTracked = !!data && rows.length === 0
+  const activeStatus: StatusFilter = nothingTracked ? 'all' : status
+  const shown: BudgetListRow[] = found.filter(row => activeStatus === 'all' || row.status === activeStatus)
   // A participant with no budget has no status, so only "All" can show them; the search narrows them like everyone else.
-  const noBudget = status === 'all' ? (data?.noBudget ?? []).filter(entry => matchesName(entry.participantName)).map(noBudgetEntry) : []
+  const noBudget = activeStatus === 'all' ? (data?.noBudget ?? []).filter(entry => matchesName(entry.participantName)).map(noBudgetEntry) : []
   const clearFilters = () => { setSearch(''); setStatus('all') }
 
-  const nothingAtAll = !!data && rows.length === 0 && (data.noBudget?.length ?? 0) === 0
+  const nothingAtAll = nothingTracked && (data?.noBudget?.length ?? 0) === 0
   // There are budgets, and the filters leave none of them: that is not "nothing is tracked", so it says what happened and offers the way back. (The participants with no budget are still kept below it.)
   const matchesNothing = rows.length > 0 && shown.length === 0
 
   let state: BudgetRiskTableState
   if (phase === 'loading') state = { status: 'loading' }
-  else if (phase === 'error') state = { status: 'failed' }
+  else if (phase === 'error') state = { status: 'failed', onRetry: () => { void budgets.refetch() } }
   else if (nothingAtAll) state = { status: 'empty' }
   else state = { status: 'ready', rows: shown.map(row => budgetRiskRow(row, figures)), noBudget }
 
@@ -82,15 +88,20 @@ export default function BudgetsPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader title="Budgets" subtitle={subtitle}>
-        <ToggleGroup
-          ariaLabel="Filter budgets by status"
-          options={STATUS_FILTERS.map(key => ({ key, label: data ? `${STATUS_LABEL[key]} (${counts[key]})` : STATUS_LABEL[key] }))}
-          value={status}
-          onChange={setStatus}
-          // Five words with counts do not fit one row at 390px: they wrap onto a second row whole, rather than squeezing into boxes that cut them (each label stays on one line).
-          className="flex-wrap [&>button]:whitespace-nowrap"
-        />
-        <SearchInput value={search} onChange={setSearch} placeholder="Search participants..." label="Search participants" />
+        {/* Undrawn while there is no list to filter: loading, failed, or nobody with a budget. */}
+        {!!data && rows.length > 0 && (
+          <>
+            <ToggleGroup
+              ariaLabel="Filter budgets by status"
+              options={STATUS_FILTERS.map(key => ({ key, label: `${STATUS_LABEL[key]} (${counts[key]})` }))}
+              value={status}
+              onChange={setStatus}
+              // Five words with counts do not fit one row at 390px: they wrap onto a second row whole, rather than squeezing into boxes that cut them (each label stays on one line).
+              className="flex-wrap [&>button]:whitespace-nowrap"
+            />
+            <SearchInput value={search} onChange={setSearch} placeholder="Search participants..." label="Search participants" />
+          </>
+        )}
       </PageHeader>
 
       {matchesNothing ? (
@@ -102,7 +113,7 @@ export default function BudgetsPage() {
           <NoBudgetTail entries={noBudget} />
         </>
       ) : (
-        <BudgetRiskTable state={state} caption={phase === 'ready' && !nothingAtAll ? 'Riskiest first. A participant appears once for every pool of their plan, for the funding period running now.' : undefined} />
+        <BudgetRiskTable state={state} caption={phase === 'ready' && rows.length > 0 ? 'Riskiest first. A participant appears once for every pool of their plan, for the funding period running now.' : undefined} />
       )}
     </div>
   )

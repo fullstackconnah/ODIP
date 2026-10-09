@@ -2,14 +2,14 @@ import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/Button'
-import { Callout } from '@/components/Callout'
 import { CellText, DataTable, type Column } from '@/components/DataTable'
+import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TONE } from '@/lib/tone'
-import { writtenSpan } from '@/lib/fundingPlan'
+import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { BUDGET_RISK_ORDER, BUDGET_RISK_STATUS, type BudgetAttentionAction, type BudgetRiskRow, type BudgetRiskTableState, type NoBudgetEntry } from './viewModel'
 import { BudgetFigure } from './BudgetFigure'
-import { NO_FIGURE, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, noBudgetNote, unavailableFigure, unpricedForecastLabel } from './wording'
+import { NDIA_FUNDS_RAN_OUT, NOTHING_TRACKED, NO_FIGURE, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, noBudgetNote, unavailableFigure, unpricedForecastLabel } from './wording'
 
 // The Budgets list's body: one row per participant and pool for the current funding period, in the DataTable idiom, with the server's own status and figures and nothing of its own invented.
 //
@@ -43,13 +43,38 @@ function RowAction({ action, participantLabel }: { action: BudgetAttentionAction
 }
 
 /**
- * The word for a status in its own tone. A row that is over or forecast over is tinted in that same tone from md up, so its pill sits on the card fill there (a pill of the row's own colour would
- * vanish into the tint). Below md the rows are cards on the card fill, untinted, and the pill keeps its own tone.
+ * The word for a status in its own filled tone, on a tinted row or not. The row tints are a weak wash (the step the Qualifications table uses), so a pill needs no lifting onto the card fill, and
+ * Over, Forecast over and Approaching keep the colours that tell them apart.
  */
 function RiskPill({ status }: { status: BudgetRiskRow['status'] }) {
   const { label, tone } = BUDGET_RISK_STATUS[status]
-  const tinted = status === 'Over' || status === 'ForecastOver'
-  return <StatusBadge tone={tone} label={label} className={tinted ? 'md:bg-[var(--color-card)]' : undefined} />
+  return <StatusBadge tone={tone} label={label} />
+}
+
+/**
+ * The Status cell: ODIP's own word; then, when the NDIA has refused a claim of this pool for want of funds, the NDIA's word in a danger pill beside it (ODIP's arithmetic can say On track while the
+ * NDIA says the funds ran out, and a list that showed only the first would be silent about the case this feature exists to catch); then, in the Funding sentence's own words, how far over the
+ * period already is or what is left. The server works that out and sends it: nothing here subtracts. A viewer who may not see money sees the words and no amount.
+ */
+function StatusCell({ row }: { row: BudgetRiskRow }) {
+  const { remaining, ndiaWord } = row
+  return (
+    <span className="flex flex-col items-start gap-0.5">
+      <span className="flex flex-wrap items-center gap-1">
+        <RiskPill status={row.status} />
+        {ndiaWord && (
+          <span title={`NDIA rejected a claim on ${writtenDay(ndiaWord.date)} (${ndiaWord.code})`}>
+            <StatusBadge tone="danger" label={NDIA_FUNDS_RAN_OUT} />
+          </span>
+        )}
+      </span>
+      {row.figures.visible && remaining !== null && (
+        <span className="text-xs text-[var(--color-muted-foreground)]">
+          {remaining < 0 ? <><BudgetFigure figures={row.figures} amount={-remaining} /> over</> : <><BudgetFigure figures={row.figures} amount={remaining} /> left</>}
+        </span>
+      )}
+    </span>
+  )
 }
 
 /**
@@ -117,7 +142,7 @@ function columnsFor(): Column<BudgetRiskRow>[] {
         const rank = BUDGET_RISK_ORDER[a.status] - BUDGET_RISK_ORDER[b.status]
         return rank !== 0 ? rank : a.participantLabel.localeCompare(b.participantLabel, 'en-AU')
       },
-      render: row => <RiskPill status={row.status} />,
+      render: row => <StatusCell row={row} />,
     },
     {
       key: 'available',
@@ -133,6 +158,10 @@ function columnsFor(): Column<BudgetRiskRow>[] {
             // A configured zero is a real answer and says so, so nobody reads it as a missing figure.
             srNote={row.available === 0 && row.figures.visible ? configuredZero : undefined}
           />
+          {/* Available includes money rolled over from earlier periods, which the Funding tab labels "not confirmed" (somebody else may have used it): a row that is on track by it says so. */}
+          {row.figures.visible && row.carried !== null && row.carried > 0 && (
+            <span className="block text-xs text-[var(--color-muted-foreground)]">incl. <BudgetFigure figures={row.figures} amount={row.carried} /> rolled over, not confirmed</span>
+          )}
         </span>
       ),
     },
@@ -178,11 +207,12 @@ function columnsFor(): Column<BudgetRiskRow>[] {
 
 /**
  * The NDIS-funded participants with no budget in force, kept off the list behind a count: a disclosure (a button that says what it holds, whether it is open, and what it controls), then each
- * participant with the way to record a budget. They are never warned about - there is no limit to be near - and the line says so.
+ * participant with the way to record a budget. ODIP cannot warn about a budget it does not hold, and the list says so inside the opened list, where the people it is about are. It is open from the
+ * start on a page where nobody has a budget yet, because they are then the only useful thing on it.
  */
-export function NoBudgetTail({ entries }: { entries: NoBudgetEntry[] }) {
+export function NoBudgetTail({ entries, defaultOpen = false }: { entries: NoBudgetEntry[]; defaultOpen?: boolean }) {
   const listId = useId()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   if (entries.length === 0) return null
 
   const Chevron = open ? ChevronDown : ChevronRight
@@ -199,47 +229,47 @@ export function NoBudgetTail({ entries }: { entries: NoBudgetEntry[] }) {
           <Chevron className="h-3.5 w-3.5" aria-hidden="true" />
           {noBudgetHiddenLabel(entries.length)}
         </button>
-        <span>{noBudgetNote}</span>
       </div>
-      <ul id={listId} hidden={!open} className="divide-y divide-[var(--color-border)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)]">
-        {entries.map(entry => (
-          <li key={entry.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-[var(--card-pad)] py-2">
-            <span className="min-w-0 text-sm font-medium text-[var(--color-foreground)]">{entry.participantLabel}</span>
-            <span className="flex flex-wrap items-center gap-2">
-              <span>{entry.reason}</span>
-              {entry.action && <RowAction action={entry.action} participantLabel={entry.participantLabel} />}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <div id={listId} hidden={!open} className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)]">
+        <p className="border-b border-[var(--color-border)] px-[var(--card-pad)] py-2">{noBudgetNote}</p>
+        <ul className="divide-y divide-[var(--color-border)]">
+          {entries.map(entry => (
+            <li key={entry.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-[var(--card-pad)] py-2">
+              <span className="min-w-0 text-sm font-medium text-[var(--color-foreground)]">{entry.participantLabel}</span>
+              <span className="flex flex-wrap items-center gap-2">
+                <span>{entry.reason}</span>
+                {entry.action && <RowAction action={entry.action} participantLabel={entry.participantLabel} />}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   )
 }
 
+/** What the page says when no budget is being tracked for anybody, and what to do about it. */
+function NothingTracked() {
+  return (
+    <p className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-[var(--card-pad)] py-6 text-center text-sm text-[var(--color-muted-foreground)]">
+      {NOTHING_TRACKED}
+    </p>
+  )
+}
+
 export function BudgetRiskTable({ state, caption }: { state: BudgetRiskTableState; caption?: string }) {
-  if (state.status === 'loading') {
-    // A distinct row, not an empty table and not a dash in a figure: while the request is in flight there is no answer to show.
+  // The page-level states are the app's own (PageState), as on every record page and the Funding tab. A failure is never drawn as an empty list: that would read as "nobody is at risk".
+  if (state.status === 'loading') return <PageState kind="loading" noun="budget list" />
+  if (state.status === 'failed') return <PageState kind="error" noun="budget list" onRetry={state.onRetry} />
+  if (state.status === 'empty') return <NothingTracked />
+
+  // Nothing is tracked, but some people have no budget recorded: they are the only useful thing on the page, so they are open from the start.
+  if (state.rows.length === 0) {
     return (
-      <div role="status" className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] text-[13px] text-[var(--color-muted-foreground)]">
-        Loading the participant budgets…
+      <div className="flex flex-col gap-3">
+        <NothingTracked />
+        <NoBudgetTail entries={state.noBudget ?? []} defaultOpen />
       </div>
-    )
-  }
-
-  if (state.status === 'failed') {
-    // Never rendered as an empty list: an empty list would read as "nobody is at risk", which is the one thing a failure must not say.
-    return (
-      <Callout tone="danger" className="max-w-prose">
-        {state.message ?? 'The participant budgets could not be read, so nothing is being claimed about them.'}
-      </Callout>
-    )
-  }
-
-  if (state.status === 'empty') {
-    return (
-      <p className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-[var(--card-pad)] py-6 text-center text-sm text-[var(--color-muted-foreground)]">
-        No participant budgets are being tracked yet.
-      </p>
     )
   }
 
@@ -253,8 +283,9 @@ export function BudgetRiskTable({ state, caption }: { state: BudgetRiskTableStat
         // F-15: sorting is opt-in twice over - `sortable` on the table AND `sortable` on the column. Without them there is no sort affordance at all, and the `sortFn` above would be dead
         // code. The Status column is the one that carries risk order.
         sortable
-        emptyMessage="No participant budgets are being tracked yet."
-        rowClassName={row => (row.status === 'Over' ? TONE.danger.soft : row.status === 'ForecastOver' ? TONE.warning.soft : '')}
+        emptyMessage={NOTHING_TRACKED}
+        // The same weak wash for both, as the Qualifications table tints overdue and due soon: a stronger tint on the milder status ranked severity backwards, and the pill carries the status.
+        rowClassName={row => (row.status === 'Over' ? 'bg-[var(--color-error-container)]/10' : row.status === 'ForecastOver' ? 'bg-[var(--color-warning-container)]/10' : '')}
       />
       {state.rows.some(row => row.figures.visible && (row.unpricedShifts ?? 0) > 0) && (
         <p className="flex items-start gap-1 text-[13px] text-[var(--color-muted-foreground)]">

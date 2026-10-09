@@ -92,14 +92,23 @@ export type BudgetRiskRow = {
   figures: BudgetFigureVisibility
   /** What the period has: the limit plus what earlier periods left unspent (the server's figure). */
   available: BudgetAmount
+  /** How much of `available` is rolled over from earlier periods (the server's figure): not confirmed, because somebody else may have used it. 0 when none. */
+  carried: BudgetAmount
   /** What has been used against it: claimed plus pending. */
   used: BudgetAmount
+  /** Available minus used, the server's: what is left, or, below zero, how far over the period already is. Nothing here subtracts. */
+  remaining: BudgetAmount
   /** What is already booked ahead to the end of this period. */
   bookedAhead?: BudgetAmount
   /** Used plus booked ahead, as the server computed it. `null` when it could not compute one. */
   forecast: BudgetAmount
   /** How many shifts of this period the forecast leaves out because no price can be worked out for them yet (a sleepover, a passive night, a group shift). Omitted when there are none: the figures are then complete. */
   unpricedShifts?: number
+  /**
+   * The NDIA's own word that this pool's funds ran out (a claim of the pool refused for want of funds, V17, V18, V27 or V28), the day it was refused and the code. ODIP's own status can say On track
+   * beside it, so the row says it in its own pill. Omitted when the NDIA has said nothing.
+   */
+  ndiaWord?: { date: string; code: string }
   /** Why a figure or the forecast is missing, in the server's words. Shown beside the dash; never a generic "error". */
   unavailableReason?: string
   /** Where this row's next action goes. Omitted entirely when the viewer may not act on the row. */
@@ -118,7 +127,7 @@ export type NoBudgetEntry = {
 /** What the table is doing. `ready` is the only state in which rows are drawn. */
 export type BudgetRiskTableState =
   | { status: 'loading' }
-  | { status: 'failed'; message?: string }
+  | { status: 'failed'; /** Asks again: the list is read by a query, and a failure is not the end of the page. */ onRetry?: () => void }
   | { status: 'empty' }
   | { status: 'ready'; rows: BudgetRiskRow[]; /** The participants with no budget in force, kept at the end behind a count. */ noBudget?: NoBudgetEntry[] }
 

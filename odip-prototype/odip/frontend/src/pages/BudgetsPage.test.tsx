@@ -142,6 +142,14 @@ describe('BudgetsPage: searching for a participant', () => {
     expect(participants()).toEqual(['Ford Cast'])
   })
 
+  // "Over (1)" with a name typed that no over row has ended in "No budgets match these filters": the counts are of the rows the search leaves, so a filter that would show nothing says (0).
+  it('counts each status within the search, so a filter never promises rows the search has taken away', async () => {
+    renderPage()
+    await userEvent.type(screen.getByRole('textbox', { name: 'Search participants' }), 'ford')
+
+    for (const label of [/^All \(1\)$/, /^Over \(0\)$/, /^Forecast over \(1\)$/, /^Approaching \(0\)$/, /^On track \(0\)$/]) expect(filter(label)).toBeInTheDocument()
+  })
+
   it('combines with the status, and says so plainly when nothing matches, with a way back', async () => {
     renderPage()
     await userEvent.click(filter(/^Over \(1\)/))
@@ -178,6 +186,8 @@ describe('BudgetsPage: the participants with no budget in force', () => {
     expect(within(list).getByText('Edna Ended')).toBeVisible()
     expect(within(list).getByText('Plan ended 30 Jun 2026')).toBeVisible()
     expect(within(list).getByRole('link', { name: 'Record budget for Noor Hassan' })).toHaveAttribute('href', '/participants/p-0005?tab=funding')
+    expect(within(list).getByRole('link', { name: 'Record a new plan for Edna Ended' })).toHaveAttribute('href', '/participants/p-0006?tab=funding')   // the Funding tab's own button for a plan that ended
+    expect(within(list).getByText('ODIP cannot warn about a budget it does not hold. Record the plan to start tracking.')).toBeVisible()
   })
 
   it('is part of All only: a participant with no budget has no status to filter by', async () => {
@@ -196,39 +206,50 @@ describe('BudgetsPage: the participants with no budget in force', () => {
     expect(screen.getByRole('button', { name: '1 participant with no budget recorded' })).toBeInTheDocument()   // ...but one without a budget does
   })
 
-  it('is what the page says when nobody has a budget yet, with the table’s own words above it', () => {
+  it('is what the page says when nobody has a budget yet: no filters, no caption about risk order, the words, and the people open from the start', () => {
     mockUseBudgetList.mockReturnValue(ready(budgetList({ rows: [] })))
     renderPage()
 
-    expect(screen.getByText('No participant budgets are being tracked yet.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '2 participants with no budget recorded' })).toBeInTheDocument()
+    expect(screen.getByText('No budgets are being tracked yet. Record a participant’s plan to start.')).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /^All/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Search participants' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Riskiest first/)).not.toBeInTheDocument()
+    const toggle = screen.getByRole('button', { name: '2 participants with no budget recorded' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(within(document.getElementById(toggle.getAttribute('aria-controls')!)!).getByText('Noor Hassan')).toBeVisible()
   })
 })
 
 describe('BudgetsPage: loading, failed and empty are three different facts', () => {
-  it('says it is loading, and shows no filter count and no figure', () => {
+  it('says it is loading, as every page does, and draws no filter and no figure while there is nothing to filter', () => {
     mockUseBudgetList.mockReturnValue({ data: undefined, isLoading: true, isPending: true, isError: false, fetchStatus: 'fetching' })
     renderPage()
 
-    expect(screen.getByText(/Loading the participant budgets/)).toBeInTheDocument()
-    expect(filter(/^All$/)).toBeInTheDocument()   // no count while there is nothing to count
+    expect(screen.getByText('Loading budget list…')).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /^All/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Search participants' })).not.toBeInTheDocument()
     expect(screen.queryByText(/\$/)).not.toBeInTheDocument()
   })
 
-  it('says it failed, as an alert, and never as an empty list that would read as nobody at risk', () => {
-    mockUseBudgetList.mockReturnValue({ data: undefined, isLoading: false, isPending: false, isError: true, fetchStatus: 'idle' })
+  it('says it failed, as an alert with a way to ask again, and never as an empty list that would read as nobody at risk', async () => {
+    const refetch = vi.fn()
+    mockUseBudgetList.mockReturnValue({ data: undefined, isLoading: false, isPending: false, isError: true, fetchStatus: 'idle', refetch })
     renderPage()
 
-    expect(screen.getByRole('alert')).toHaveTextContent('The participant budgets could not be read, so nothing is being claimed about them.')
-    expect(screen.queryByText('No participant budgets are being tracked yet.')).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(/Couldn.t load this budget list. Check your connection and try again./)
+    expect(screen.queryByText(/No budgets are being tracked yet/)).not.toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /^All/ })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalledTimes(1)
   })
 
-  it('says nothing is tracked yet when the server sent no row and no participant', () => {
+  it('says nothing is tracked yet, and what to do, when the server sent no row and no participant', () => {
     mockUseBudgetList.mockReturnValue(ready(budgetList({ rows: [], noBudget: [] })))
     renderPage()
 
-    expect(screen.getByText('No participant budgets are being tracked yet.')).toBeInTheDocument()
+    expect(screen.getByText('No budgets are being tracked yet. Record a participant’s plan to start.')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /^All/ })).not.toBeInTheDocument()
   })
 })

@@ -45,10 +45,11 @@ async function tabTo(element: HTMLElement, limit = 30) {
 }
 
 describe('BudgetRiskTable: the states that are not rows', () => {
-  it('says it is loading, and says nothing about anyone’s figures', () => {
+  // The page-level states are the app's own (PageState), as on every record page and the Funding tab: a left-aligned card of its own, and a message that said "claimed" for "billed", were not.
+  it('says it is loading, as every page does, and says nothing about anyone’s figures', () => {
     renderTable({ status: 'loading' })
 
-    expect(screen.getByRole('status')).toHaveTextContent('Loading the participant budgets')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading budget list…')
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(screen.queryByText(/\$/)).not.toBeInTheDocument()
   })
@@ -56,28 +57,34 @@ describe('BudgetRiskTable: the states that are not rows', () => {
   it('never renders a failure as an empty list: an empty list would read as "nobody is at risk"', () => {
     renderTable({ status: 'failed' })
 
-    expect(screen.getByRole('alert')).toHaveTextContent('The participant budgets could not be read, so nothing is being claimed about them.')
+    expect(screen.getByRole('alert')).toHaveTextContent('Couldn\'t load this budget list. Check your connection and try again.')
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
-    expect(screen.queryByText('No participant budgets are being tracked yet.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/No budgets are being tracked yet/)).not.toBeInTheDocument()
   })
 
-  it('shows the caller’s own failure sentence when it has one', () => {
-    renderTable({ status: 'failed', message: 'The budget service is unavailable (503).' })
+  it('offers Try again when it can ask again, and not when it cannot', async () => {
+    const onRetry = vi.fn()
+    const { unmount } = renderTable({ status: 'failed', onRetry })
 
-    expect(screen.getByRole('alert')).toHaveTextContent('The budget service is unavailable (503).')
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
+    unmount()
+
+    renderTable({ status: 'failed' })
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   })
 
-  it('says plainly that nothing is tracked yet, as a real answer to a real question', () => {
+  it('says plainly that nothing is tracked yet and what to do, as a real answer to a real question', () => {
     renderTable({ status: 'empty' })
 
-    expect(screen.getByText('No participant budgets are being tracked yet.')).toBeInTheDocument()
+    expect(screen.getByText('No budgets are being tracked yet. Record a participant’s plan to start.')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('a ready state with no rows says the same thing as empty, rather than rendering a bare header', () => {
     renderTable(readyTable([]))
 
-    expect(screen.getByText('No participant budgets are being tracked yet.')).toBeInTheDocument()
+    expect(screen.getByText('No budgets are being tracked yet. Record a participant’s plan to start.')).toBeInTheDocument()
   })
 })
 
@@ -127,13 +134,15 @@ describe('BudgetRiskTable: a real row', () => {
     expect(figuresIn(ahead)).toEqual([])   // a dash, never a $0.00 invented for a field that is absent
   })
 
-  it('tints a row that is over, and a row forecast to go over, and leaves the rest on the card', () => {
-    const { unmount } = renderTable(readyTable([riskRow({ status: 'Over', available: 1000, used: 1400, forecast: 1400 })]))
-    expect(rowFor('Amara Okonkwo-Bell').className).toContain('var(--color-error-container)')
+  // Risk reads first by sort order, so the tint must not rank it backwards: "Over" used to wear the error container at 30% (barely pink) and "Forecast over" the full warning container, so the milder row
+  // was the louder one. Both take the same weak step as the Qualifications table's overdue and due-soon rows, and the pill (not the row) carries the status.
+  it('tints a row that is over and a row forecast to go over at the same weak step, and leaves the rest on the card', () => {
+    const { unmount } = renderTable(readyTable([riskRow({ status: 'Over', available: 1000, used: 1400, forecast: 1400, remaining: -400 })]))
+    expect(rowFor('Amara Okonkwo-Bell').className).toContain('bg-[var(--color-error-container)]/10')
     unmount()
 
     const warning = renderTable(readyTable([riskRow({ status: 'ForecastOver' })]))
-    expect(rowFor('Amara Okonkwo-Bell').className).toContain('var(--color-warning-container)')
+    expect(rowFor('Amara Okonkwo-Bell').className).toContain('bg-[var(--color-warning-container)]/10')
     warning.unmount()
 
     renderTable(readyTable([riskRow({ status: 'OnTrack' })]))
@@ -141,20 +150,82 @@ describe('BudgetRiskTable: a real row', () => {
     expect(rowFor('Amara Okonkwo-Bell').className).not.toContain('warning-container')
   })
 
-  it('puts the pill of a tinted row on the card fill from md up, so it does not vanish into its own tint, and keeps the pill of an untinted row in its tone', () => {
+  it('keeps every pill in its own filled tone, tinted row or not: Over red, Forecast over and Approaching amber', () => {
     renderTable(readyTable([
       riskRow({ id: 'a', participantLabel: 'Over Person', status: 'Over' }),
       riskRow({ id: 'b', participantLabel: 'Forecast Person', status: 'ForecastOver' }),
       riskRow({ id: 'c', participantLabel: 'Approaching Person', status: 'Approaching' }),
+      riskRow({ id: 'd', participantLabel: 'Fine Person', status: 'OnTrack' }),
     ]))
 
-    // Below md a row is an untinted card, so the pill keeps its own tone there; from md the row is tinted in that tone and the pill is lifted onto the card fill.
     expect(screen.getByText('Over').className).toContain('bg-[var(--color-error-container)]')
-    expect(screen.getByText('Over').className).toContain('md:bg-[var(--color-card)]')
     expect(screen.getByText('Forecast over').className).toContain('bg-[var(--color-warning-container)]')
-    expect(screen.getByText('Forecast over').className).toContain('md:bg-[var(--color-card)]')
     expect(screen.getByText('Approaching').className).toContain('bg-[var(--color-warning-container)]')
-    expect(screen.getByText('Approaching').className).not.toContain('md:bg-[var(--color-card)]')
+    expect(screen.getByText('On track').className).toContain('bg-[var(--color-primary-fixed)]')
+    for (const word of ['Over', 'Forecast over', 'Approaching', 'On track']) expect(screen.getByText(word).className, word).not.toContain('md:bg-[var(--color-card)]')
+  })
+
+  // The first question about an Over row is "by how much", and Available beside a larger Used reads like a mistake: the server sends what is left, or how far over, and the cell says it in the Funding
+  // sentence's own words. Available also includes what rolled over from earlier periods, which the Funding tab labels "not confirmed": the list says so too.
+  it('says how far over an over row is, and what is left on the others, under the status', () => {
+    renderTable(readyTable([
+      riskRow({ id: 'a', participantLabel: 'Over Person', status: 'Over', available: 1000, used: 1400, forecast: 1400, remaining: -400 }),
+      riskRow({ id: 'b', participantLabel: 'Fine Person', status: 'OnTrack', remaining: 1359.5 }),
+    ]))
+
+    expect(cellOf('Over Person', 'Status')).toHaveTextContent('Over$400.00 over')
+    expect(cellOf('Fine Person', 'Status')).toHaveTextContent('On track$1,359.50 left')
+  })
+
+  it('says exactly nothing left as a figure: $0.00 left, not over', () => {
+    renderTable(readyTable([riskRow({ status: 'Approaching', available: 1000, used: 1000, remaining: 0 })]))
+
+    expect(cellOf('Amara Okonkwo-Bell', 'Status')).toHaveTextContent('$0.00 left')
+    expect(cellOf('Amara Okonkwo-Bell', 'Status')).not.toHaveTextContent('over')
+  })
+
+  it('says nothing under the status when the server could not say what is left', () => {
+    renderTable(readyTable([noBudgetRow({ status: 'OnTrack' })]))
+
+    expect(cellOf('Bilal Nasser', 'Status')).not.toHaveTextContent(/left|over\b/)
+  })
+
+  it('says what part of Available was rolled over from earlier periods, and that it is not confirmed, and nothing when none was', () => {
+    renderTable(readyTable([
+      riskRow({ id: 'a', participantLabel: 'Rolled Person', available: 3473.32, carried: 448.66, remaining: 1541.32 }),
+      riskRow({ id: 'b', participantLabel: 'Plain Person', available: 2000, carried: 0 }),
+    ]))
+
+    expect(cellOf('Rolled Person', 'Available')).toHaveTextContent('$3,473.32incl. $448.66 rolled over, not confirmed')
+    expect(cellOf('Plain Person', 'Available')).not.toHaveTextContent(/rolled over/)
+  })
+
+  it('withholds what is left and what rolled over from a viewer who may not see money, like every other amount', () => {
+    renderTable(readyTable([hiddenRow({ carried: 448.66, remaining: 1541.32 })]))
+
+    expect(figuresIn(rowFor('Amara Okonkwo-Bell'))).toEqual([])
+    expect(rowFor('Amara Okonkwo-Bell')).not.toHaveTextContent(/rolled over|left/)
+  })
+
+  // ODIP's arithmetic can say On track while the NDIA has just refused a claim for want of funds, and the list is where the dashboard sends people: the row says the NDIA's word in a pill of its own.
+  it('says the NDIA word in a danger pill beside the status, even when ODIP own status is On track', () => {
+    renderTable(readyTable([
+      riskRow({ id: 'a', participantLabel: 'Refused Person', status: 'OnTrack', ndiaWord: { date: '2026-10-08', code: 'V27' } }),
+      riskRow({ id: 'b', participantLabel: 'Quiet Person', status: 'OnTrack' }),
+    ]))
+
+    const pill = within(cellOf('Refused Person', 'Status')).getByText('NDIA says the funds ran out')
+    expect(pill.className).toContain('bg-[var(--color-error-container)]')
+    expect(within(cellOf('Refused Person', 'Status')).getByText('On track')).toBeInTheDocument()
+    expect(within(cellOf('Quiet Person', 'Status')).queryByText('NDIA says the funds ran out')).not.toBeInTheDocument()
+  })
+
+  it('names the NDIA claim date and code to a pointer and a screen reader, and carries no money', () => {
+    renderTable(readyTable([riskRow({ ndiaWord: { date: '2026-10-08', code: 'V27' } })]))
+
+    const pill = screen.getByText('NDIA says the funds ran out')
+    expect(pill.closest('[title]')?.getAttribute('title')?.replace(/\s/g, ' ')).toBe('NDIA rejected a claim on 8 Oct 2026 (V27)')
+    expect(figuresIn(pill.parentElement!)).toEqual([])
   })
 
   it('leaves the row order exactly as the server sent it, and never re-ranks it by risk itself', () => {
@@ -266,13 +337,14 @@ describe('BudgetRiskTable: long and awkward content', () => {
   })
 
   it('prints a very large money figure in full, with its cents, not an ellipsis of it', () => {
-    renderTable(readyTable([riskRow({ available: 254_999.99, used: 249_001.5, forecast: 251_000 })]))
+    renderTable(readyTable([riskRow({ available: 254_999.99, used: 249_001.5, forecast: 251_000, remaining: 5_998.49 })]))
     const row = rowFor('Amara Okonkwo-Bell')
 
     expect(figuresIn(cellOf('Amara Okonkwo-Bell', 'Available'))).toEqual(['$254,999.99'])
     expect(figuresIn(cellOf('Amara Okonkwo-Bell', 'Used'))).toEqual(['$249,001.50'])
     expect(figuresIn(cellOf('Amara Okonkwo-Bell', 'Forecast'))).toEqual(['$251,000.00'])
-    expect(figuresIn(row)).toHaveLength(4)   // available, used, booked ahead (the fixture's own) and forecast
+    expect(figuresIn(cellOf('Amara Okonkwo-Bell', 'Status'))).toEqual(['$5,998.49'])   // what is left, under the status
+    expect(figuresIn(row)).toHaveLength(5)   // available, used, booked ahead (the fixture's own), forecast and what is left
   })
 
   it('keeps both ends and the year of a period that crosses two years', () => {
@@ -372,13 +444,32 @@ describe('BudgetRiskTable: the no-budget tail', () => {
     noBudgetEntry({ id: 'p4', participantLabel: 'Dara Okafor', reason: 'Plan ended 30 Jun 2026', action: { label: 'Open funding tab', to: '/participants/p4?tab=funding' } }),
   ]
 
-  it('keeps them behind a count that says what it is, closed, and says why they are not warned about', () => {
+  // The old line beside the toggle ("... is never warned about: there is no limit to be near") said the opposite of the truth: every plan has a limit, ODIP just does not hold it, and it read as
+  // reassurance. It now sits inside the opened list, where the people it is about are, and says what ODIP cannot do.
+  it('keeps them behind a count that says what it is, closed, and says inside the list that ODIP cannot warn about a budget it does not hold', () => {
     renderTable(readyTable([riskRow()], { noBudget: entries() }))
 
     const toggle = screen.getByRole('button', { name: noBudgetHiddenLabel(2) })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByText(/A participant with no budget recorded is never warned about: there is no limit to be near\./)).toBeInTheDocument()
-    expect(document.getElementById(toggle.getAttribute('aria-controls')!)).not.toBeVisible()
+    const list = document.getElementById(toggle.getAttribute('aria-controls')!)!
+    expect(list).not.toBeVisible()
+    expect(within(list).getByText('ODIP cannot warn about a budget it does not hold. Record the plan to start tracking.')).toBeInTheDocument()
+    expect(screen.queryByText(/never warned about|no limit to be near/)).not.toBeInTheDocument()
+  })
+
+  it('is open from the start when it is told to be, as it is on a page where nobody has a budget yet', () => {
+    renderTable(readyTable([], { noBudget: entries() }))
+
+    const toggle = screen.getByRole('button', { name: noBudgetHiddenLabel(2) })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(within(document.getElementById(toggle.getAttribute('aria-controls')!)!).getByText('Chen Wei')).toBeVisible()
+    expect(screen.getByText('No budgets are being tracked yet. Record a participant’s plan to start.')).toBeInTheDocument()
+  })
+
+  it('stays closed when there are rows to look at first', () => {
+    renderTable(readyTable([riskRow()], { noBudget: entries() }))
+
+    expect(screen.getByRole('button', { name: noBudgetHiddenLabel(2) })).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('opens on a click or from the keyboard, lists each participant with the reason and the way to record a budget, and closes again', async () => {

@@ -26,6 +26,20 @@ describe('budgetRiskRow', () => {
     expect(budgetRiskRow(budgetRow(), visible)).not.toHaveProperty('unpricedShifts')
   })
 
+  it('carries what is left and what rolled over as the server sent them, and adds nothing up', () => {
+    const row = budgetRiskRow(budgetRow({ available: 3473.32, carried: 448.66, used: 1932, remaining: 1541.32 }), visible)
+
+    expect([row.available, row.carried, row.used, row.remaining]).toEqual([3473.32, 448.66, 1932, 1541.32])
+    expect(budgetRiskRow(budgetRow({ available: 1000, used: 1400, remaining: -400 }), visible).remaining).toBe(-400)   // how far over, as the server worked it out
+  })
+
+  it('carries the NDIA word, with its day and code, when the server sent one, and nothing at all when it did not', () => {
+    const refused = budgetRiskRow(budgetRow({ ndiaRejection: { date: '2026-10-08', code: 'V27', claimId: 'claim-1', claimReference: 'TC-1' } }), visible)
+
+    expect(refused.ndiaWord).toEqual({ date: '2026-10-08', code: 'V27' })
+    expect(budgetRiskRow(budgetRow(), visible)).not.toHaveProperty('ndiaWord')
+  })
+
   it('names who, which pool and which period, and links the row to the participant’s Funding tab', () => {
     const row = budgetRiskRow(budgetRow({ participantId: 'p-0002', participantName: 'Sienna Williams', poolName: 'Improved Daily Living Skills' }), visible)
 
@@ -70,6 +84,12 @@ describe('noBudgetEntry', () => {
   it('says a plan ended, and on which day, when that is why there is no row', () => {
     // (the app's written dates keep their words together with non-breaking spaces, which read as spaces)
     expect(noBudgetEntry(noBudget({ reason: 'PlanEnded', planEnd: '2026-06-30' })).reason.replace(/\s/g, ' ')).toBe('Plan ended 30 Jun 2026')
+  })
+
+  it('offers the Funding tab\u2019s own button for a plan that ended: Record a new plan', () => {
+    const entry = noBudgetEntry(noBudget({ participantId: 'p-0006', reason: 'PlanEnded', planEnd: '2026-06-30' }))
+
+    expect(entry.action).toEqual({ label: 'Record a new plan', to: '/participants/p-0006?tab=funding' })
   })
 
   it('still says a plan ended when the server did not say which day (it omits what it does not have)', () => {

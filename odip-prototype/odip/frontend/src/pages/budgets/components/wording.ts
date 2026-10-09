@@ -24,8 +24,17 @@ export function noBudgetHiddenLabel(count: number): string {
 /** Why a participant with no row has none: nothing was recorded, or the plan they have has ended. */
 export const NO_BUDGET_REASON = 'No budget recorded'
 
-/** The line under the no-budget count: a participant with no budget is never warned about, because there is no limit to be near. */
-export const noBudgetNote = 'A participant with no budget recorded is never warned about: there is no limit to be near.'
+/**
+ * The line inside the opened list of participants with no budget recorded. Every plan has a limit; ODIP just does not hold it, so it cannot warn about it. (It used to say the participant is "never
+ * warned about: there is no limit to be near", which is the opposite of the truth and read as reassurance.)
+ */
+export const noBudgetNote = 'ODIP cannot warn about a budget it does not hold. Record the plan to start tracking.'
+
+/** What the Budgets page says when no budget is being tracked for anybody, and what to do about it. */
+export const NOTHING_TRACKED = 'No budgets are being tracked yet. Record a participant’s plan to start.'
+
+/** The pill beside a row's status when the NDIA has refused a claim of the pool for want of funds: the label the participant alert has (ALERT_TYPE_LABELS), in the NDIA's own voice. */
+export const NDIA_FUNDS_RAN_OUT = 'NDIA says the funds ran out'
 
 // ── A forecast that leaves shifts out ───────────────────────────────────────────────────────────────────────────────────
 

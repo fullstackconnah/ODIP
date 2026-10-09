@@ -29,11 +29,15 @@ export function budgetRiskRow(row: BudgetListRow, figures: BudgetFigureVisibilit
     status: STATUS[row.status],
     figures,
     available: row.available,
+    carried: row.carried,
     used: row.used,
+    remaining: row.remaining,
     bookedAhead: row.bookedAhead,
     forecast: row.forecast,
     // Only when there are some: a row with none has complete figures and says nothing.
     ...(row.unpricedShiftCount > 0 ? { unpricedShifts: row.unpricedShiftCount } : {}),
+    // The NDIA's word, only when it has one: a row it has said nothing about carries nothing.
+    ...(row.ndiaRejection ? { ndiaWord: { date: row.ndiaRejection.date, code: row.ndiaRejection.code } } : {}),
     action: { label: 'Open funding', to: fundingTabPath(row.participantId) },
   }
 }
@@ -44,6 +48,7 @@ export function noBudgetEntry(entry: BudgetListNoBudget): NoBudgetEntry {
     id: entry.participantId,
     participantLabel: entry.participantName,
     reason: entry.reason === 'PlanEnded' ? (entry.planEnd ? `Plan ended ${writtenDay(entry.planEnd)}` : 'Plan ended') : NO_BUDGET_REASON,
-    action: { label: 'Record budget', to: fundingTabPath(entry.participantId) },
+    // The Funding tab's own button for a plan that ended is "Record a new plan"; for none recorded it is "Record budget".
+    action: { label: entry.reason === 'PlanEnded' ? 'Record a new plan' : 'Record budget', to: fundingTabPath(entry.participantId) },
   }
 }
