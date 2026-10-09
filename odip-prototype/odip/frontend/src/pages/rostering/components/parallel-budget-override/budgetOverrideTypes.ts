@@ -183,6 +183,17 @@ export function markerForAcknowledgedCodes(codes: readonly string[] | null | und
   return codes.includes(BUDGET_FINDING_CODES.forecastOver) ? 'adminOverride' : null
 }
 
+/** The words the server puts in front of an emergency's stored reason (BudgetFindingCodes.EmergencyReasonPrefix). The marker's pill already says it, so the audit box shows the reason without it. */
+export const EMERGENCY_REASON_PREFIX = 'Emergency or safety: '
+
+/**
+ * The stored reason as the audit box shows it. An emergency's reason loses the server's own prefix, which the pill above it says again; an Admin override's reason is shown exactly as it was written,
+ * even when the Admin happened to type those words themselves (the marker follows the code, never the words, and so does this).
+ */
+export function shownReason(kind: OverBudgetMarkerKind, reason: string | null | undefined): string | null | undefined {
+  return kind === 'emergency' && reason?.startsWith(EMERGENCY_REASON_PREFIX) ? reason.slice(EMERGENCY_REASON_PREFIX.length) : reason
+}
+
 /** How far an emergency review obligation has got. There is no 'approved' state here. */
 export type EmergencyReviewState = 'pending' | 'reviewed'
 

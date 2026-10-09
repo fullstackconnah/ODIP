@@ -1,10 +1,11 @@
 import { ShieldAlert, ShieldCheck } from 'lucide-react'
 import { StatusBadge } from '@/components/StatusBadge'
-import { formatDateTimeAu } from '@/lib/format'
-import { formatDateAu } from '@/lib/utils'
+import { formatDateRange } from '@/lib/dateRange'
+import { formatNoteTimestamp } from '@/lib/format'
 import {
   OVER_BUDGET_MARKER,
   emergencyReviewBadge,
+  shownReason,
   type EmergencyReviewDetails,
 } from './budgetOverrideTypes'
 
@@ -28,7 +29,7 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
   return (
     <div className="contents">
       <dt className={LABEL}>{label}</dt>
-      <dd className={`${VALUE} whitespace-pre-wrap break-words`}>{value}</dd>
+      <dd className={`${VALUE} whitespace-pre-wrap break-words max-sm:mb-1.5`}>{value}</dd>
     </div>
   )
 }
@@ -38,7 +39,7 @@ function MissingRow({ label, note }: { label: string; note: string }) {
   return (
     <div className="contents">
       <dt className={LABEL}>{label}</dt>
-      <dd className={`${VALUE} text-[var(--color-muted-foreground)]`}>{note}</dd>
+      <dd className={`${VALUE} text-[var(--color-muted-foreground)] max-sm:mb-1.5`}>{note}</dd>
     </div>
   )
 }
@@ -77,15 +78,16 @@ export function BudgetEmergencyReviewMarker({ details, className }: BudgetEmerge
   const rows = restricted
     ? null
     : [
-        <DetailRow key="recorded" label="Recorded" value={details.recordedAt ? formatDateTimeAu(details.recordedAt) : null} />,
-        <DetailRow key="reason" label="Reason given" value={details.reason} />,
+        // The month is spelled out ("8 Oct 2026, 10:57 pm"): a numeric date sits beside a task title that spells it, and reads as another date to anyone used to the other order.
+        <DetailRow key="recorded" label="Recorded" value={details.recordedAt ? formatNoteTimestamp(details.recordedAt) : null} />,
+        <DetailRow key="reason" label="Reason given" value={shownReason(details.kind, details.reason)} />,
         !state
           ? null
           : reviewed
             ? <DetailRow key="reviewer" label="Reviewed by" value={details.reviewedBy} />
             : <MissingRow key="reviewer" label="Reviewed by" note="Not reviewed yet" />,
         reviewed
-          ? <DetailRow key="reviewedAt" label="Review completed" value={details.reviewedAt ? formatDateTimeAu(details.reviewedAt) : details.reviewedOn ? formatDateAu(details.reviewedOn) : null} />
+          ? <DetailRow key="reviewedAt" label="Review completed" value={details.reviewedAt ? formatNoteTimestamp(details.reviewedAt) : details.reviewedOn ? formatDateRange(details.reviewedOn, details.reviewedOn) : null} />
           : null,
         <DetailRow key="task" label="Review task" value={details.reviewTaskTitle} />,
       ].filter(Boolean)
@@ -113,7 +115,8 @@ export function BudgetEmergencyReviewMarker({ details, className }: BudgetEmerge
         {badge && <StatusBadge tone={badge.tone} label={badge.label} />}
       </div>
 
-      {rows && rows.length > 0 && <dl className="grid grid-cols-[9rem_1fr] gap-x-3">{rows}</dl>}
+      {/* Label over value on a phone, side by side from sm: a fixed 9rem label column left about 170 px for the value at 390, and a task title wrapped to three lines. */}
+      {rows && rows.length > 0 && <dl className="grid grid-cols-1 gap-x-3 sm:grid-cols-[9rem_1fr]">{rows}</dl>}
 
       {/* The one sentence that is always true of a pending emergency, whichever fields are absent.
           Without it, a marker with no reviewer reads as "nobody needed to review this". */}

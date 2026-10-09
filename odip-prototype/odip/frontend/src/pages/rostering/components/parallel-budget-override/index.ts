@@ -7,6 +7,7 @@ export { BudgetEmergencyReviewMarker, type BudgetEmergencyReviewMarkerProps } fr
 
 export {
   BUDGET_FINDING_CODES,
+  EMERGENCY_REASON_PREFIX,
   MAX_EMERGENCY_LENGTH,
   MIN_REASON_LENGTH,
   OVER_BUDGET_MARKER,
@@ -20,6 +21,7 @@ export {
   meetsEmergencyMinimum,
   normalisedReason,
   reasonError,
+  shownReason,
   markerForAcknowledgedCodes,
   type BudgetFigure,
   type BudgetFindingView,

@@ -62,10 +62,15 @@ describe('a shift saved as an emergency, not yet reviewed', () => {
     unmount()
   })
 
-  it('shows the reason that was recorded, including the server’s emergency prefix', () => {
+  it('shows the reason that was recorded, without the words the pill above it already says (design review L4)', () => {
     render(<BudgetEmergencyReviewMarker details={pendingEmergency} />)
-    expect(valueOf('Reason given')).toBe(pendingEmergency.reason)
-    expect(valueOf('Reason given')).toMatch(/^Emergency or safety: /)
+    expect(valueOf('Reason given')).toBe('Participant was unsafe at the time of the shift and needed support now')
+    expect(valueOf('Reason given')).not.toMatch(/^Emergency or safety: /)
+  })
+
+  it('keeps a reason that does not start with the server’s prefix exactly as it is', () => {
+    render(<BudgetEmergencyReviewMarker details={{ ...pendingEmergency, reason: 'Carer unwell, no cover' }} />)
+    expect(valueOf('Reason given')).toBe('Carer unwell, no cover')
   })
 
   it('shows the review task the server raised, so the review is traceable to its obligation', () => {
@@ -73,9 +78,9 @@ describe('a shift saved as an emergency, not yet reviewed', () => {
     expect(valueOf('Review task')).toBe(pendingEmergency.reviewTaskTitle)
   })
 
-  it('shows when the shift was recorded, in the app’s en-AU format', () => {
+  it('shows when the shift was recorded with the month spelled out, so it cannot be read as another date (design review L4)', () => {
     render(<BudgetEmergencyReviewMarker details={pendingEmergency} />)
-    expect(valueOf('Recorded')).toMatch(/\d{2}\/\d{2}\/\d{4}/)
+    expect(valueOf('Recorded')).toMatch(/^\d{1,2} Oct 2026, \d{1,2}:\d{2}\s?(am|pm)$/i)
   })
 
   it('shows no review timestamp while the review has not happened', () => {
@@ -116,7 +121,7 @@ describe('a shift whose review has happened', () => {
   it('shows the reviewer and when, from what the server sent', () => {
     render(<BudgetEmergencyReviewMarker details={reviewedEmergency} />)
     expect(valueOf('Reviewed by')).toBe('Priya Raman')
-    expect(valueOf('Review completed')).toMatch(/\d{2}\/\d{2}\/\d{4}/)
+    expect(valueOf('Review completed')).toMatch(/^\d{1,2} Oct 2026, \d{1,2}:\d{2}\s?(am|pm)$/i)
   })
 
   it('drops the not-approved sentence and the not-reviewed row, because neither is true any more', () => {
@@ -157,10 +162,10 @@ describe('an emergency whose review task could not be found', () => {
 })
 
 describe('a review day the server sends as a date', () => {
-  it('shows the day in the app’s en-AU format, without shifting it across a time zone', () => {
+  it('shows the day with the month spelled out, without shifting it across a time zone', () => {
     render(<BudgetEmergencyReviewMarker details={{ ...reviewedEmergency, reviewedAt: null, reviewedOn: '2026-10-05' }} />)
 
-    expect(valueOf('Review completed')).toBe('05/10/2026')
+    expect(valueOf('Review completed')).toBe('5 Oct 2026')
   })
 })
 
@@ -297,5 +302,21 @@ describe('status is colour plus text, never colour alone', () => {
     unmount()
     render(<BudgetEmergencyReviewMarker details={reviewedEmergency} />)
     expect(screen.getByText('Reviewed')).toBeInTheDocument()
+  })
+})
+
+describe('the rows at a phone width (design review L4)', () => {
+  it('stacks each label over its value below the sm breakpoint, and sets them side by side from there', () => {
+    render(<BudgetEmergencyReviewMarker details={pendingEmergency} />)
+
+    expect(document.querySelector('dl')).toHaveClass('grid-cols-1', 'sm:grid-cols-[9rem_1fr]')
+  })
+})
+
+describe('who reviewed it, from the completion record (design review M10)', () => {
+  it('names the Admin who completed the review task', () => {
+    render(<BudgetEmergencyReviewMarker details={{ ...reviewedEmergency, reviewedBy: 'Ada Admin' }} />)
+
+    expect(valueOf('Reviewed by')).toBe('Ada Admin')
   })
 })

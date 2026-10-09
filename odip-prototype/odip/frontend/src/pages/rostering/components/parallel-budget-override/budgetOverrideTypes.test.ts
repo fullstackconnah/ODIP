@@ -3,6 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   BUDGET_FINDING_CODES,
+  EMERGENCY_REASON_PREFIX,
   MAX_EMERGENCY_LENGTH,
   MIN_REASON_LENGTH,
   OVER_BUDGET_MARKER,
@@ -16,6 +17,7 @@ import {
   meetsEmergencyMinimum,
   normalisedReason,
   reasonError,
+  shownReason,
   markerForAcknowledgedCodes,
 } from './budgetOverrideTypes'
 import { RESTRICTED_FIGURE, figureIsKnown, figureText, overrunSentence } from './budgetFigures'
@@ -111,6 +113,22 @@ describe('isMeaningfulReason', () => {
 
   it('trims before deciding, so padding around a real reason does not matter', () => {
     expect(isMeaningfulReason('  Unsafe today  ')).toBe(true)
+  })
+})
+
+describe('shownReason', () => {
+  it('drops the server’s emergency prefix from an emergency’s reason: the pill already says it', () => {
+    expect(shownReason('emergency', `${EMERGENCY_REASON_PREFIX}Participant unsafe`)).toBe('Participant unsafe')
+  })
+
+  it('shows an Admin override’s reason exactly as written, even when it starts with those words', () => {
+    expect(shownReason('adminOverride', `${EMERGENCY_REASON_PREFIX}typed by hand`)).toBe(`${EMERGENCY_REASON_PREFIX}typed by hand`)
+  })
+
+  it('leaves a reason without the prefix, and a missing reason, alone', () => {
+    expect(shownReason('emergency', 'Carer unwell')).toBe('Carer unwell')
+    expect(shownReason('emergency', null)).toBeNull()
+    expect(shownReason('emergency', undefined)).toBeUndefined()
   })
 })
 

@@ -377,6 +377,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               reason: existing?.overrideReason,
               recordedAt: existing?.budgetReview?.recordedAt,
               reviewedOn: existing?.budgetReview?.reviewedOn,
+              // Whoever completed the review task: an Admin only, because the server lets nobody else close it.
+              reviewedBy: existing?.budgetReview?.reviewedBy,
               reviewTaskTitle: existing?.budgetReview?.reviewTaskTitle,
             } satisfies EmergencyReviewDetails}
           />

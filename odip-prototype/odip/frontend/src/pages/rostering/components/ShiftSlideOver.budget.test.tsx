@@ -307,7 +307,7 @@ describe('a shift saved past the budget', () => {
     const marker = document.querySelector('[data-budget-marker="emergency"]') as HTMLElement
     expect(within(marker).getByText('Over budget: emergency')).toBeInTheDocument()
     expect(within(marker).getByText('Admin review pending')).toBeInTheDocument()
-    expect(within(marker).getByText('Emergency or safety: Participant unsafe at home tonight')).toBeInTheDocument()
+    expect(within(marker).getByText('Participant unsafe at home tonight')).toBeInTheDocument()   // the server's prefix is the pill's job, not a second line of the box
     expect(within(marker).getByText('Review emergency shift past budget: Mia Chen on 17 Aug 2026')).toBeInTheDocument()
   })
 
@@ -342,11 +342,12 @@ describe('a shift saved past the budget', () => {
   })
 
   it('reads a reviewed emergency as reviewed, with the day it was reviewed', () => {
-    renderEdit(makeShift({ ...emergencyShift, budgetReview: { state: 'Reviewed', recordedAt: '2026-10-04T03:12:00Z', reviewedOn: '2026-10-05' } }))
+    renderEdit(makeShift({ ...emergencyShift, budgetReview: { state: 'Reviewed', recordedAt: '2026-10-04T03:12:00Z', reviewedOn: '2026-10-05', reviewedBy: 'Ada Admin' } }))
 
     const marker = document.querySelector('[data-budget-marker="emergency"]') as HTMLElement
     expect(within(marker).getByText('Reviewed')).toBeInTheDocument()
-    expect(within(marker).getByText('05/10/2026')).toBeInTheDocument()
+    expect(within(marker).getByText('5 Oct 2026')).toBeInTheDocument()
+    expect(within(marker).getByText('Ada Admin')).toBeInTheDocument()   // M10: who looked, from the completion record
   })
 
   it('asks the dry run about the status the shift would be saved with, so a cancel is checked as a cancel', async () => {
