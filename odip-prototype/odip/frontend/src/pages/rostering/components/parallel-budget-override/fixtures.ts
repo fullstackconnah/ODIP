@@ -40,7 +40,7 @@ export const forecastOverWarningForAdmin: BudgetFindingView = {
 export const forecastOverWithFigures: BudgetFindingView = {
   ...forecastOverFinding,
   budget: {
-    poolName: 'Core (flexible)', periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 8000, used: 4200, remaining: 3800, forecast: 8640, shiftCost: 292.32, overBy: 640,
+    poolName: 'Core (flexible)', periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 8000, used: 4200, remaining: 3800, forecast: 8640, shiftCost: 292.32, overBy: 640, bookedAhead: 4147.68, unpricedShiftCount: 0,
   },
 }
 
@@ -57,7 +57,8 @@ export const fullFigures: BudgetPeriodFigures = {
   pool: 'Core (flexible)',
   period: 'Oct–Dec 2026',
   available: amount(8000),
-  remaining: amount(3800),
+  used: amount(4200),
+  bookedAhead: amount(4147.68),
   shiftCost: amount(292.32),
   projectedTotal: amount(8640),
   projectedOverrun: amount(640),
@@ -68,7 +69,8 @@ export const emptyFigures: BudgetPeriodFigures = {
   pool: 'Core (flexible)',
   period: 'Oct–Dec 2026',
   available: notRecorded,
-  remaining: notRecorded,
+  used: notRecorded,
+  bookedAhead: notRecorded,
   shiftCost: amount(292.32),
   projectedTotal: unknown,
   projectedOverrun: unknown,
@@ -79,7 +81,8 @@ export const zeroFigures: BudgetPeriodFigures = {
   pool: 'Improved Daily Living Skills',
   period: 'Jan–Mar 2027',
   available: amount(0),
-  remaining: amount(0),
+  used: amount(0),
+  bookedAhead: amount(0),
   shiftCost: amount(0),
   projectedTotal: amount(0),
   projectedOverrun: amount(0),

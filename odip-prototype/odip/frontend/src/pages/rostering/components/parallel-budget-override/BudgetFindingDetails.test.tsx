@@ -37,7 +37,8 @@ const cellOf = (label: string) => screen.getByText(label, { selector: 'dt' }).pa
 const mixedFigures: BudgetPeriodFigures = {
   ...fullFigures,
   available: notRecorded,
-  remaining: unknown,
+  used: unknown,
+  bookedAhead: unknown,
   shiftCost: amount(0),
   projectedTotal: unknown,
   projectedOverrun: amount(640),
@@ -49,9 +50,10 @@ describe('the complete case', () => {
     expect(valueOf('Pool')).toBe('Core (flexible)')
     expect(valueOf('Funding period')).toBe('Oct–Dec 2026')
     expect(valueOf('Available this period')).toBe('$8,000.00')
-    expect(valueOf('Left in this period')).toBe('$3,800.00')
+    expect(valueOf('Used so far')).toBe('$4,200.00')
+    expect(valueOf('Booked ahead')).toBe('$4,147.68')
     expect(valueOf('This shift')).toBe('$292.32')
-    expect(valueOf('With this shift')).toBe('$8,640.00')
+    expect(valueOf('Forecast with this shift')).toBe('$8,640.00')
     expect(valueOf('Over by')).toBe('$640.00')
   })
 
@@ -63,8 +65,8 @@ describe('the complete case', () => {
   it('is a description list, so a screen reader can pair each label with its value', () => {
     render(<BudgetFindingDetails figures={fullFigures} />)
     const region = screen.getByRole('region', { name: 'Budget figures for this shift' })
-    expect(within(region).getAllByRole('term')).toHaveLength(7)
-    expect(within(region).getAllByRole('definition')).toHaveLength(7)
+    expect(within(region).getAllByRole('term')).toHaveLength(8)
+    expect(within(region).getAllByRole('definition')).toHaveLength(8)
   })
 
   it('names the pool, the forecast, the available amount and the period in one sentence', () => {
@@ -76,7 +78,7 @@ describe('the complete case', () => {
     render(<BudgetFindingDetails figures={fullFigures} sentence={false} />)
 
     expect(screen.queryByText(/^Takes Core/)).not.toBeInTheDocument()
-    expect(valueOf('With this shift')).toBe('$8,640.00')
+    expect(valueOf('Forecast with this shift')).toBe('$8,640.00')
     expect(valueOf('Over by')).toBe('$640.00')
   })
 })
@@ -85,19 +87,20 @@ describe('a missing figure is never a zero', () => {
   it('prints an en dash for a figure the server did not record', () => {
     render(<BudgetFindingDetails figures={emptyFigures} />)
     expect(valueOf('Available this period')).toBe('–')
-    expect(valueOf('With this shift')).toBe('–')
+    expect(valueOf('Forecast with this shift')).toBe('–')
   })
 
   it('prints an en dash for a figure the server has not worked out', () => {
     render(<BudgetFindingDetails figures={mixedFigures} />)
-    expect(valueOf('Left in this period')).toBe('–')
-    expect(valueOf('With this shift')).toBe('–')
+    expect(valueOf('Used so far')).toBe('–')
+    expect(valueOf('Booked ahead')).toBe('–')
+    expect(valueOf('Forecast with this shift')).toBe('–')
   })
 
   it('tells a screen reader which of the two it is, since the en dash alone does not', () => {
     render(<BudgetFindingDetails figures={emptyFigures} />)
     expect(cellOf('Available this period').textContent).toContain('not recorded')
-    expect(cellOf('With this shift').textContent).toContain('not available')
+    expect(cellOf('Forecast with this shift').textContent).toContain('not available')
   })
 
   it('never shows a $0.00 for a figure that is missing', () => {
@@ -105,7 +108,8 @@ describe('a missing figure is never a zero', () => {
     // The one row that genuinely is zero is $0.00; every other figure is a dash.
     expect(valueOf('This shift')).toBe('$0.00')
     expect(valueOf('Available this period')).not.toContain('$')
-    expect(valueOf('Left in this period')).not.toContain('$')
+    expect(valueOf('Used so far')).not.toContain('$')
+    expect(valueOf('Booked ahead')).not.toContain('$')
   })
 
   it('says the forecast is unavailable rather than writing a sentence with a hole in it', () => {
@@ -125,7 +129,8 @@ describe('a recorded zero is an answer', () => {
   it('prints every figure of an all-zero period as $0.00, not as a dash', () => {
     render(<BudgetFindingDetails figures={zeroFigures} />)
     expect(valueOf('Available this period')).toBe('$0.00')
-    expect(valueOf('Left in this period')).toBe('$0.00')
+    expect(valueOf('Used so far')).toBe('$0.00')
+    expect(valueOf('Booked ahead')).toBe('$0.00')
     expect(valueOf('This shift')).toBe('$0.00')
     expect(valueOf('Over by')).toBe('$0.00')
     // The visible text of the figure cells. Scanning the whole document would false-positive on
@@ -136,7 +141,7 @@ describe('a recorded zero is an answer', () => {
       return clone.textContent!.trim()
     })
     expect(figureCells).not.toContain('–')
-    expect(figureCells.filter(v => v.includes('$'))).toHaveLength(5)
+    expect(figureCells.filter(v => v.includes('$'))).toHaveLength(6)
   })
 
   it('does not mistake a zero allowance for an unrecorded budget in the note', () => {
@@ -165,11 +170,16 @@ describe('the wording is never a prohibition', () => {
   })
 
   it('does not compute anything: it prints the server’s numbers and no derived ones', () => {
-    // available 8000, remaining 3800, shift 292.32, projected 8640. If it summed, "With this
-    // shift" would be 3800 + 292.32 = 4092.32. It must be the server's 8640.
+    // used 4200, booked ahead 4147.68 and this shift 292.32 add up to 8640 here, so the fixture is made to disagree with its own rows
+    // (a roll-forward the server knows about and this component does not): the printed forecast must be the server's number.
+    render(<BudgetFindingDetails figures={{ ...fullFigures, projectedTotal: amount(8700) }} />)
+    expect(valueOf('Forecast with this shift')).toBe('$8,700.00')
+    expect(valueOf('Forecast with this shift')).not.toBe('$8,640.00')
+  })
+
+  it('does not say the server worked the figures out: the reader sees a forecast, not a system', () => {
     render(<BudgetFindingDetails figures={fullFigures} />)
-    expect(valueOf('With this shift')).toBe('$8,640.00')
-    expect(valueOf('With this shift')).not.toBe('$4,092.32')
+    expect(document.body.textContent).not.toMatch(/\bserver\b/i)
   })
 })
 
@@ -181,7 +191,7 @@ describe('a privacy-restricted view', () => {
 
   it('says the same word in every money cell, so no amount can be inferred from which row is blank', () => {
     render(<BudgetFindingDetails figures={restrictedFigures} />)
-    for (const label of ['Available this period', 'Left in this period', 'This shift', 'With this shift', 'Over by']) {
+    for (const label of ['Available this period', 'Used so far', 'Booked ahead', 'This shift', 'Forecast with this shift', 'Over by']) {
       expect(valueOf(label)).toBe(RESTRICTED_FIGURE)
     }
   })
@@ -210,16 +220,17 @@ describe('a privacy-restricted view', () => {
 })
 
 describe('the markup a phone width needs', () => {
-  it('keeps every figure reachable without horizontal scrolling: seven rows, none dropped', () => {
+  it('keeps every figure reachable without horizontal scrolling: eight rows, none dropped, in the Budgets list’s words and order', () => {
     render(<BudgetFindingDetails figures={fullFigures} />)
     const region = screen.getByRole('region', { name: 'Budget figures for this shift' })
     expect(within(region).getAllByRole('term').map(t => t.textContent)).toEqual([
       'Pool',
       'Funding period',
       'Available this period',
-      'Left in this period',
+      'Used so far',
+      'Booked ahead',
       'This shift',
-      'With this shift',
+      'Forecast with this shift',
       'Over by',
     ])
   })
@@ -250,5 +261,28 @@ describe('the component has no opinion about the plan', () => {
     expect(() => render(<BudgetFindingDetails figures={{ ...fullFigures, projectedOverrun: unknown }} />)).not.toThrow()
     expect(() => render(<BudgetFindingDetails figures={{ ...fullFigures, available: notRecorded }} />)).not.toThrow()
     expect(() => render(<BudgetFindingDetails figures={{ ...fullFigures, shiftCost: unknown }} />)).not.toThrow()
+  })
+})
+
+describe('shifts the period could not price (phase 3 design review M2, code review C6)', () => {
+  it('says how many shifts are left out of the figures, so a reader knows the period is not the whole picture', () => {
+    render(<BudgetFindingDetails figures={{ ...fullFigures, unpricedShiftCount: 3 }} />)
+    expect(screen.getByText('3 shifts in this period could not be priced and are left out of these figures.')).toBeInTheDocument()
+  })
+
+  it('says it in the singular for one', () => {
+    render(<BudgetFindingDetails figures={{ ...fullFigures, unpricedShiftCount: 1 }} />)
+    expect(screen.getByText('1 shift in this period could not be priced and is left out of these figures.')).toBeInTheDocument()
+  })
+
+  it.each([[0], [undefined]])('says nothing when the count is %s', count => {
+    render(<BudgetFindingDetails figures={{ ...fullFigures, unpricedShiftCount: count }} />)
+    expect(screen.queryByText(/could not be priced/)).not.toBeInTheDocument()
+  })
+
+  it('still says it to a restricted viewer: it is a count, not money', () => {
+    render(<BudgetFindingDetails figures={{ ...restrictedFigures, unpricedShiftCount: 2 }} />)
+    expect(screen.getByText(/2 shifts in this period could not be priced/)).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/\$/)
   })
 })

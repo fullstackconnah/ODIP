@@ -68,11 +68,22 @@ describe('figuresOf', () => {
       pool: 'Core (flexible)',
       period: '1 Oct – 31 Dec 2026',
       available: amount(8000),
-      remaining: amount(3800),
+      used: amount(4200),
+      bookedAhead: amount(4147.68),
       shiftCost: amount(292.32),
       projectedTotal: amount(8640),
       projectedOverrun: amount(640),
+      unpricedShiftCount: 0,
     })
+  })
+
+  it('carries the count of shifts the period could not price, so the readout can say the figures leave them out', () => {
+    const finding = { ...forecastOverWithFigures, budget: { ...forecastOverWithFigures.budget!, unpricedShiftCount: 4 } }
+    expect(figuresOf(finding)?.unpricedShiftCount).toBe(4)
+  })
+
+  it('does not hand the readout the server’s "remaining": the Budgets list’s used and booked ahead are the rows now', () => {
+    expect(figuresOf(forecastOverWithFigures)).not.toHaveProperty('remaining')
   })
 
   it('is null for a finding that carries no figures', () => {

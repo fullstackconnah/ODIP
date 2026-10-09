@@ -64,13 +64,14 @@ function MoneyRow({ label, figure, restricted }: { label: string; figure: Budget
 }
 
 /**
- * The authoritative figures behind a budget warning, readable in one place: the pool, the funding
- * period, what is left, what this shift costs, and how far the period would then be over.
+ * The authoritative figures behind a budget warning, readable in one place, in the words and order of the
+ * Budgets list: the pool, the funding period, what is available, what is used so far, what is booked ahead,
+ * what this shift costs, the forecast with it, and how far that is over.
  *
  * Rules this holds to, each of which is a way a real coordinator would be misled otherwise:
  *  - **no arithmetic.** Nothing here sums, subtracts or compares. Every number arrived from the
- *    server. A "Left in this period" row is the server's remaining, not Available minus Used,
- *    because the server knows about roll-forward and this component does not.
+ *    server. "Used so far" and "Booked ahead" add up to the forecast with this shift, and the server
+ *    knows about roll-forward and this component does not, so it does not check that they do.
  *  - **a missing figure is an en dash, never a 0.** A forecast the server did not compute is not a
  *    forecast of nothing, and a period with no money recorded is not a period with no money.
  *  - **a recorded $0.00 prints as $0.00.** Zero is an answer.
@@ -84,6 +85,7 @@ function MoneyRow({ label, figure, restricted }: { label: string; figure: Budget
 export function BudgetFindingDetails({ figures, sentence = true, className }: BudgetFindingDetailsProps) {
   const restricted = !!figures.restricted
   const hasOverrun = figureIsKnown(figures.projectedOverrun, restricted)
+  const unpriced = figures.unpricedShiftCount ?? 0
 
   return (
     <section
@@ -101,18 +103,27 @@ export function BudgetFindingDetails({ figures, sentence = true, className }: Bu
         <TextRow label="Pool" value={figures.pool} />
         <TextRow label="Funding period" value={figures.period} />
         <MoneyRow label="Available this period" figure={figures.available} restricted={restricted} />
-        <MoneyRow label="Left in this period" figure={figures.remaining} restricted={restricted} />
+        <MoneyRow label="Used so far" figure={figures.used} restricted={restricted} />
+        <MoneyRow label="Booked ahead" figure={figures.bookedAhead} restricted={restricted} />
         <MoneyRow label="This shift" figure={figures.shiftCost} restricted={restricted} />
-        <MoneyRow label="With this shift" figure={figures.projectedTotal} restricted={restricted} />
+        <MoneyRow label="Forecast with this shift" figure={figures.projectedTotal} restricted={restricted} />
         <MoneyRow label="Over by" figure={figures.projectedOverrun} restricted={restricted} />
       </dl>
+
+      {unpriced > 0 && (
+        <p className="text-[13px] text-[var(--color-on-warning-container)]">
+          {unpriced === 1
+            ? '1 shift in this period could not be priced and is left out of these figures.'
+            : `${unpriced} shifts in this period could not be priced and are left out of these figures.`}
+        </p>
+      )}
 
       <p className="text-xs text-[var(--color-muted-foreground)]">
         {restricted
           ? `These figures are hidden on this account. ${RESTRICTED_FIGURE} means an amount was not shown, never that there was none.`
           : hasOverrun
-            ? 'These are the figures the server worked out for this participant’s funding period. A shift that was actually delivered is never blocked by a budget warning.'
-            : 'A figure that is not shown was not worked out by the server. It has not been recorded as nothing.'}
+            ? 'A shift that was actually delivered is never blocked by a budget warning.'
+            : 'A figure that is not shown has not been worked out. It has not been recorded as nothing.'}
       </p>
     </section>
   )

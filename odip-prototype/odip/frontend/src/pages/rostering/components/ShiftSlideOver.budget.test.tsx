@@ -239,7 +239,8 @@ describe('the figures', () => {
 
     const region = screen.getByRole('region', { name: 'Budget figures for this shift' })
     expect(within(region).getByText('$8,000.00')).toBeInTheDocument()
-    expect(within(region).getByText('$3,800.00')).toBeInTheDocument()
+    expect(within(region).getByText('$4,200.00')).toBeInTheDocument()   // used so far
+    expect(within(region).getByText('$4,147.68')).toBeInTheDocument()   // booked ahead
     expect(within(region).getByText('$292.32')).toBeInTheDocument()
     expect(within(region).getByText('$640.00')).toBeInTheDocument()
     expect(within(region).queryByText(/^Takes Core/)).not.toBeInTheDocument()

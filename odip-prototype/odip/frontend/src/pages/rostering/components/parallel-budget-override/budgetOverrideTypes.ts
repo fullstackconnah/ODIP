@@ -55,8 +55,10 @@ export type BudgetPeriodFigures = {
    * amount (owner decision, shape round 1: "Both, ours enforced"). Null when neither is known.
    */
   available: BudgetFigure
-  /** What the period has left after what is already committed. Not derivable here. */
-  remaining: BudgetFigure
+  /** What the period has used so far (claimed and pending). */
+  used: BudgetFigure
+  /** What the period had booked ahead BEFORE this shift, so used + booked ahead + this shift is the forecast the readout prints, in the server's own words and order (the Budgets list's). */
+  bookedAhead: BudgetFigure
   /** The server's estimate of the shift being added/edited. */
   shiftCost: BudgetFigure
   /**
@@ -66,6 +68,11 @@ export type BudgetPeriodFigures = {
   projectedTotal: BudgetFigure
   /** How far the projected total is past `available`, when the server says it is over. */
   projectedOverrun: BudgetFigure
+  /**
+   * How many of the period's shifts could not be priced (a sleepover, a group shift, no rate). They are $0 in every figure above, so the readout says the figures leave them out. Zero or absent: none.
+   * A count, not money, so a restricted viewer may see it.
+   */
+  unpricedShiftCount?: number
   /**
    * A privacy-restricted viewer (SupportWorker, ReadOnly — SHAPE-BRIEF §5) may see that a budget
    * warning exists without any money in it. When true, every figure renders as "hidden" and no
@@ -239,9 +246,11 @@ export function figuresOf(finding: Pick<RosterFindingDto, 'budget'>): BudgetPeri
     pool: b.poolName,
     period: formatDateRange(b.periodStart, b.periodEnd),
     available: value(b.available),
-    remaining: value(b.remaining),
+    used: value(b.used),
+    bookedAhead: value(b.bookedAhead),
     shiftCost: value(b.shiftCost),
     projectedTotal: value(b.forecast),
     projectedOverrun: value(b.overBy),
+    unpricedShiftCount: b.unpricedShiftCount,
   }
 }

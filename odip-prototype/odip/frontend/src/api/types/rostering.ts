@@ -37,6 +37,10 @@ export interface BudgetFindingFiguresDto {
   shiftCost: number
   /** How far the forecast is past what is available; zero when it is not. */
   overBy: number
+  /** What the period had booked ahead BEFORE this shift, so used + booked ahead + this shift is the forecast and the screen needs no sum of its own. */
+  bookedAhead: number
+  /** How many of the period's shifts could not be priced (a sleepover, a group shift, no rate): they are $0 in every figure above, so the figures are not the whole period. */
+  unpricedShiftCount: number
 }
 
 /**
@@ -55,8 +59,10 @@ export interface BudgetWarningDto {
   overBy: number
   /** How many shifts (or bookings) the action puts in this pool and period. */
   count: number
-  /** The warning in a sentence: "These 8 shifts take Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct–31 Dec 2026." */
+  /** The warning in a sentence: "These 8 shifts take Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct – 31 Dec 2026, $640.00 over." */
   message: string
+  /** Whose budget this is, for a trip booking: the bulk confirm of several bookings lists each line with its participant. Absent for shifts. */
+  participantName?: string
 }
 
 /** Where the Admin's review of an emergency or safety booking past the budget stands. There is no "approved": it saves at once and is reviewed afterwards. */
@@ -69,6 +75,8 @@ export interface BudgetReviewDto {
   reviewTaskTitle?: string
   /** The provider's calendar date the review task was completed on; absent while it is pending. */
   reviewedOn?: string
+  /** The Admin who completed the review; absent while it is pending or when nobody is recorded. */
+  reviewedBy?: string
 }
 
 // ── Shift ─────────────────────────────────────────────────

@@ -22,8 +22,8 @@ The **server** decides everything about money and permission; these components r
 
 - **No role is read in the browser.** The server answers a Coordinator under a hard limit with `BUDGET_FORECAST_OVER` as `Blocking`, and an Admin with the same code as a `Warning` that has `requiresReason`.
   `emergencyOffered(findings)` is therefore "a blocking `BUDGET_FORECAST_OVER` came back". An Admin never sees the emergency action: the panel's existing "Reason for override" field answers the warning.
-- **The finding carries its figures.** `RosterFindingDto.budget` holds the pool, the period, and used / remaining / forecast / shift cost / over-by. `figuresOf(finding)` maps them to what the readout prints.
-  Nothing here sums or compares money.
+- **The finding carries its figures.** `RosterFindingDto.budget` holds the pool, the period, and available / used / booked ahead / shift cost / forecast / over-by, the Budgets list's words in its order, plus the count of shifts the period could not price. `figuresOf(finding)` maps them to what the readout prints.
+  Nothing here sums or compares money, so the rows are the server's own and a period it could not fully price says so instead of looking complete.
 - **The marker is read from codes the server stored** (`ShiftDto.acknowledgedFindingCodes`), never from the reason's words: `markerForAcknowledgedCodes`. The server stores `BUDGET_EMERGENCY` only for an
   emergency it accepted, and `BUDGET_FORECAST_OVER` only for an Admin override that carried a reason, and it drops both from anything the client sends. A warning leaves no marker.
 
