@@ -72,12 +72,17 @@ public sealed class BudgetListService
             }
 
             if (added == 0 && funding[participantId] == ParticipantFundingSource.Ndis)
+            {
+                // A plan recorded for later says when it starts (and outranks one that ended: the next plan is already there); failing that, a plan that ended says when; failing that, none is recorded.
+                var upcoming = ledger.NextPlanStart;
+                var ended = upcoming is null && plan is { PlanIsCurrent: false };
                 noBudget.Add(new BudgetListNoBudgetDto
                 {
                     ParticipantId = participantId, ParticipantName = ledger.Name,
-                    Reason = plan is { PlanIsCurrent: false } ? BudgetListNoBudgetReason.PlanEnded : BudgetListNoBudgetReason.NotRecorded,
-                    PlanEnd = plan is { PlanIsCurrent: false } ? plan.Plan.PlanEnd : null,
+                    Reason = upcoming is not null ? BudgetListNoBudgetReason.NotStarted : ended ? BudgetListNoBudgetReason.PlanEnded : BudgetListNoBudgetReason.NotRecorded,
+                    PlanStart = upcoming, PlanEnd = ended ? plan!.Plan.PlanEnd : null,
                 });
+            }
         }
 
         var first = ledgers.Values.First();

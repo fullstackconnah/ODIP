@@ -76,8 +76,9 @@ public record AgreementCheckDto
     /// <summary>The participant has a plan that is running now to check against. False is "No budget recorded": the answer then has no pools and no figures, and the bar links to the Funding tab.</summary>
     public bool HasBudget { get; init; }
     /// <summary>
-    /// Why there is no budget to compare with, when <see cref="HasBudget"/> is false, in the Budgets list's own two words: no plan that has started is recorded (<c>NotRecorded</c>), or the plan
-    /// ended and no successor is recorded (<c>PlanEnded</c>, and <see cref="PlanEnd"/> is its last day). The bar says "No budget recorded" either way and, for an ended plan, that it ended. Omitted when there is a budget.
+    /// Why there is no budget to compare with, when <see cref="HasBudget"/> is false, in the Budgets list's own three words: a plan is recorded for later (<c>NotStarted</c>, and <see cref="PlanStart"/>
+    /// is the soonest one's first day; it outranks a plan that ended), the plan ended and no plan is recorded for later (<c>PlanEnded</c>, and <see cref="PlanEnd"/> is its last day), or nothing is recorded
+    /// (<c>NotRecorded</c>). The bar says "No budget recorded" for the last and says which of the other two it is. Omitted when there is a budget.
     /// </summary>
     public BudgetListNoBudgetReason? NoBudgetReason { get; init; }
     public Guid? PlanId { get; init; }

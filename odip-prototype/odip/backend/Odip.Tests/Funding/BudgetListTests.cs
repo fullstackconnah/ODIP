@@ -285,7 +285,7 @@ public class BudgetListTests
     // ── The participants with no budget in force ────────────────────────────
 
     [Fact]
-    public async Task AnNdisParticipantWithNoPlanIsInTheTail_AndSoIsOneWhosePlanHasEnded()
+    public async Task AnNdisParticipantWithNoPlanIsInTheTail_AndSoIsOneWhosePlanHasEnded_OrHasNotStarted()
     {
         using var kit = Arrange();
         var none = kit.SeedParticipant(first: "Nora", last: "None");
@@ -302,7 +302,26 @@ public class BudgetListTests
         Assert.Equal(new[] { "Edna Ended", "Nora None", "Una Upcoming" }, list.NoBudget.Select(n => n.ParticipantName));
         var endedEntry = list.NoBudget.Single(n => n.ParticipantId == ended.Id);
         Assert.Equal((BudgetListNoBudgetReason.PlanEnded, (DateOnly?)D(2026, 6, 30)), (endedEntry.Reason, endedEntry.PlanEnd));
-        Assert.All(list.NoBudget.Where(n => n.ParticipantId != ended.Id), n => { Assert.Equal(BudgetListNoBudgetReason.NotRecorded, n.Reason); Assert.Null(n.PlanEnd); });
+        Assert.Equal((BudgetListNoBudgetReason.PlanEnded, (DateOnly?)null), (endedEntry.Reason, endedEntry.PlanStart));
+        var noneEntry = list.NoBudget.Single(n => n.ParticipantId == none.Id);
+        Assert.Equal((BudgetListNoBudgetReason.NotRecorded, (DateOnly?)null, (DateOnly?)null), (noneEntry.Reason, noneEntry.PlanEnd, noneEntry.PlanStart));
+        // A plan recorded for later is not "no budget recorded": the entry says when it starts.
+        var upcomingEntry = list.NoBudget.Single(n => n.ParticipantId == upcoming.Id);
+        Assert.Equal((BudgetListNoBudgetReason.NotStarted, (DateOnly?)null, (DateOnly?)D(2027, 1, 1)), (upcomingEntry.Reason, upcomingEntry.PlanEnd, upcomingEntry.PlanStart));
+    }
+
+    [Fact]
+    public async Task AParticipantWhosePlanEndedButWhoseNextPlanIsRecorded_SaysWhenTheSoonestStarts_NotThatTheOldOneEnded()
+    {
+        using var kit = Arrange();
+        var person = kit.SeedParticipant(first: "Sue", last: "Succeeded");
+        kit.SeedPlan(person, D(2025, 7, 1), D(2026, 6, 30), Core(PlanType.PlanManaged, new PeriodSpec(D(2025, 7, 1), D(2026, 6, 30), 5000m)));
+        kit.SeedPlan(person, D(2027, 7, 1), D(2028, 6, 30), Core(PlanType.PlanManaged, new PeriodSpec(D(2027, 7, 1), D(2028, 6, 30), 5000m)));
+        kit.SeedPlan(person, D(2027, 1, 1), D(2027, 6, 30), Core(PlanType.PlanManaged, new PeriodSpec(D(2027, 1, 1), D(2027, 6, 30), 5000m)));   // the sooner of the two that are to come
+
+        var entry = Assert.Single(Body(await ListAsync(kit)).NoBudget);
+
+        Assert.Equal((BudgetListNoBudgetReason.NotStarted, (DateOnly?)D(2027, 1, 1), (DateOnly?)null), (entry.Reason, entry.PlanStart, entry.PlanEnd));
     }
 
     [Fact]

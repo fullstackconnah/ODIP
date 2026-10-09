@@ -194,10 +194,12 @@ export type AgreementBudgetBreakdownView = {
   notInARecordedPool: BudgetAmount
   /** The part delivered outside the plan's dates: shown, never dropped. */
   outsideThePlan: BudgetAmount
-  /** Why there is none, when `status` is `none`: nothing is recorded, or the recorded plan ended on `planEnd`. Omitted means nothing is recorded. */
-  noBudgetReason?: 'NotRecorded' | 'PlanEnded'
+  /** Why there is none, when `status` is `none`: nothing is recorded, the recorded plan ended on `planEnd`, or a plan is recorded for later and starts on `planStart`. Omitted means nothing is recorded. */
+  noBudgetReason?: 'NotRecorded' | 'PlanEnded' | 'NotStarted'
   /** The last day of the plan that ended, when `noBudgetReason` is `PlanEnded`. */
   planEnd?: string
+  /** The first day of the plan recorded for later, when `noBudgetReason` is `NotStarted`. */
+  planStart?: string
   /** Where the viewer records a budget when there is none. Omitted when there is nothing to point at. */
   noBudgetAction?: BudgetAttentionAction
   /** Asks again after a failure. Omitted when there is nothing to ask. */

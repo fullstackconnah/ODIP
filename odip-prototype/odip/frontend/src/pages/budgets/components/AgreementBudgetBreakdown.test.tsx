@@ -75,6 +75,19 @@ describe('AgreementBudgetBreakdown: the states that are not an answer', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  // A plan recorded for later is not "no budget recorded": it says when it starts, and the Funding tab (where it is) is the link.
+  it('says the plan starts later, and when, and links to the Funding tab', () => {
+    renderView({
+      status: 'none', figures: { visible: true }, pools: [], notInARecordedPool: null, outsideThePlan: null, noBudgetReason: 'NotStarted', planStart: '2027-01-01',
+      noBudgetAction: { label: 'Open the Funding tab', to: '/participants/p-1?tab=funding' },
+    })
+
+    expect(screen.getByText('Plan starts 1 Jan 2027, so there is nothing to compare the agreement against yet.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open the Funding tab' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(/No budget recorded/)).not.toBeInTheDocument()
+  })
+
   it('says no budget is recorded without a link when there is nowhere to point', () => {
     renderView({ status: 'none', figures: { visible: true }, pools: [], notInARecordedPool: null, outsideThePlan: null })
 

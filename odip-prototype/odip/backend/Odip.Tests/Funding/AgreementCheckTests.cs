@@ -264,17 +264,17 @@ public class AgreementCheckTests
         Assert.Null(none.PlanId);
         Assert.Equal((BudgetListNoBudgetReason.NotRecorded, (DateOnly?)null), (none.NoBudgetReason, none.PlanEnd));   // nothing was recorded
 
-        // A plan that has not started is not one to compare with either, and reads as nothing recorded, as the Budgets list says it.
-        a.Kit.SeedPlan(a.Person, D(2027, 1, 1), D(2027, 12, 31), Core(PlanType.PlanManaged, new PeriodSpec(D(2027, 1, 1), D(2027, 12, 31), 5000m)));   // not started
-        var upcoming = Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays()), CancellationToken.None));
-        Assert.False(upcoming.HasBudget);
-        Assert.Equal((BudgetListNoBudgetReason.NotRecorded, (DateOnly?)null), (upcoming.NoBudgetReason, upcoming.PlanEnd));
-
         // A plan that has ended says so, and when, so the bar can say "the recorded plan ended" instead of implying that none was ever recorded.
         a.Kit.SeedPlan(a.Person, D(2025, 7, 1), D(2026, 6, 30), Core(PlanType.PlanManaged, new PeriodSpec(D(2025, 7, 1), D(2026, 6, 30), 5000m)));   // ended
         var ended = Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays()), CancellationToken.None));
         Assert.False(ended.HasBudget);
         Assert.Equal((BudgetListNoBudgetReason.PlanEnded, (DateOnly?)D(2026, 6, 30)), (ended.NoBudgetReason, ended.PlanEnd));
+
+        // A plan recorded for later is not "no budget recorded" either: it says when it starts, and a successor that is recorded outranks the plan that ended (the Funding tab shows both).
+        a.Kit.SeedPlan(a.Person, D(2027, 1, 1), D(2027, 12, 31), Core(PlanType.PlanManaged, new PeriodSpec(D(2027, 1, 1), D(2027, 12, 31), 5000m)));   // not started
+        var upcoming = Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays()), CancellationToken.None));
+        Assert.False(upcoming.HasBudget);
+        Assert.Equal((BudgetListNoBudgetReason.NotStarted, (DateOnly?)D(2027, 1, 1), (DateOnly?)null), (upcoming.NoBudgetReason, upcoming.PlanStart, upcoming.PlanEnd));
     }
 
     // ── A saved draft ───────────────────────────────────────────────────────

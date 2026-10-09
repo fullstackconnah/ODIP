@@ -79,8 +79,13 @@ function budgetList(people, ledgerOf, today, approachingPercent) {
   const noBudget = []
   for (const person of people.filter((p) => p.isActive && !p.isDraft && p.planType)) {
     const ledger = ledgerOf(person.id)
-    if (!ledger.planId) { noBudget.push({ participantId: person.id, participantName: nameOf(person), reason: 'NotRecorded' }); continue }
-    if (!ledger.planIsCurrent) { noBudget.push({ participantId: person.id, participantName: nameOf(person), reason: 'PlanEnded', planEnd: ledger.planEnd }); continue }
+    if (!ledger.planId || !ledger.planIsCurrent) {
+      // A plan recorded for later says when it starts (the soonest one, which outranks a plan that ended: the next plan is already there); failing that a plan that ended says when; failing that none is recorded.
+      const upcoming = ledger.nextPlanStart
+      const ended = Boolean(ledger.planId) && !upcoming
+      noBudget.push({ participantId: person.id, participantName: nameOf(person), reason: upcoming ? 'NotStarted' : ended ? 'PlanEnded' : 'NotRecorded', ...(upcoming ? { planStart: upcoming } : {}), ...(ended ? { planEnd: ledger.planEnd } : {}) })
+      continue
+    }
     ledger.pools.forEach((pool, position) => {
       const period = pool.periods.find((p) => p.isCurrent)
       if (!period) return
@@ -103,10 +108,12 @@ function budgetList(people, ledgerOf, today, approachingPercent) {
  * dates are sums of their own. With no plan running now there is nothing to compare with, and the answer is only that.
  */
 function agreementCheckOf(ledger, planType, lines, periodFrom, periodTo, today) {
-  // Nothing to compare with: no plan that has started is recorded (NotRecorded), or the one there is has ended (PlanEnded, and its last day): the Budgets list's own two words.
+  // Nothing to compare with: a plan is recorded for later (NotStarted, and its first day), or the one there is has ended (PlanEnded, and its last day), or none is recorded (NotRecorded): the Budgets
+  // list's own three words, a plan recorded for later outranking one that ended.
   if (!ledger.planId || !ledger.planIsCurrent) {
-    const ended = ledger.planId && !ledger.planIsCurrent
-    return { hasBudget: false, noBudgetReason: ended ? 'PlanEnded' : 'NotRecorded', ...(ended ? { planEnd: ledger.planEnd } : {}), asOf: today, periodFrom, periodTo, agreementCost: 0, pools: [], notInARecordedPool: 0, outsideThePlan: 0 }
+    const upcoming = ledger.nextPlanStart
+    const ended = Boolean(ledger.planId) && !upcoming
+    return { hasBudget: false, noBudgetReason: upcoming ? 'NotStarted' : ended ? 'PlanEnded' : 'NotRecorded', ...(upcoming ? { planStart: upcoming } : {}), ...(ended ? { planEnd: ledger.planEnd } : {}), asOf: today, periodFrom, periodTo, agreementCost: 0, pools: [], notInARecordedPool: 0, outsideThePlan: 0 }
   }
 
   const plan = { pools: ledger.pools.map((pool, position) => ({ ...pool, position })) }

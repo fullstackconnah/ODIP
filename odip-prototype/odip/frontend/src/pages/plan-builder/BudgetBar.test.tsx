@@ -271,6 +271,13 @@ describe('BudgetBar', () => {
       expect(within(oneLine()).queryByText('No budget recorded')).not.toBeInTheDocument()
     })
 
+    it('says when the plan starts when it is recorded for later', () => {
+      renderBar(none({ noBudgetReason: 'NotStarted', planStart: '2027-01-01' }))
+
+      expect(within(oneLine()).getByText('Plan starts 1 Jan 2027')).toBeInTheDocument()
+      expect(within(oneLine()).queryByText('No budget recorded')).not.toBeInTheDocument()
+    })
+
     it('has a Budget not checked chip when the check failed', () => {
       renderBar(breakdown({ status: 'failed', pools: [], onRetry: vi.fn() }))
 

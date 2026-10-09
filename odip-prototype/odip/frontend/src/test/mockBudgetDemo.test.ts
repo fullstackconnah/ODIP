@@ -41,6 +41,38 @@ function load(): Created {
 
 const handler = (routes: Route[], pattern: string) => (routes.find(route => route[0] === pattern) as Route)[1]
 
+const BUDGETS = join(__dirname, '../../../mock-api/mock-budgets.js')
+
+// A plan recorded for later (fix round 2): the mock's ledger carries the soonest start as nextPlanStart, as the server's ParticipantLedger.NextPlanStart does, and the list and the check say it.
+describe.skipIf(!existsSync(BUDGETS))('the mock says when a plan recorded for later starts', () => {
+  const { budgetList, agreementCheckOf } = createRequire(import.meta.url)(BUDGETS) as {
+    budgetList: (people: unknown[], ledgerOf: (id: string) => unknown, today: string, approaching: number) => { noBudget: Array<Record<string, unknown>> }
+    agreementCheckOf: (ledger: unknown, planType: string, lines: unknown[], from: string, to: string, today: string) => Record<string, unknown>
+  }
+  const person = { id: 'p-x', firstName: 'Una', lastName: 'Upcoming', preferredName: null, planType: 'PlanManaged', isActive: true }
+  const upcomingOnly = { planIsCurrent: false, nextPlanStart: '2026-11-01', pools: [] }
+  const endedThenUpcoming = { planId: 'plan-1', planIsCurrent: false, planStart: '2025-07-01', planEnd: '2026-06-30', nextPlanStart: '2026-11-01', pools: [] }
+  const endedOnly = { planId: 'plan-1', planIsCurrent: false, planStart: '2025-07-01', planEnd: '2026-06-30', pools: [] }
+
+  it('puts a participant with only a later plan in the list tail as NotStarted, with the day, and keeps the other two reasons as they were', () => {
+    const tail = (ledger: unknown) => budgetList([person], () => ledger, '2026-10-08', 80).noBudget[0]
+
+    expect(tail(upcomingOnly)).toEqual({ participantId: 'p-x', participantName: 'Una Upcoming', reason: 'NotStarted', planStart: '2026-11-01' })
+    expect(tail(endedThenUpcoming)).toMatchObject({ reason: 'NotStarted', planStart: '2026-11-01' })   // a successor that is recorded outranks the plan that ended
+    expect(tail(endedOnly)).toEqual({ participantId: 'p-x', participantName: 'Una Upcoming', reason: 'PlanEnded', planEnd: '2026-06-30' })
+    expect(tail({ planIsCurrent: false, pools: [] })).toEqual({ participantId: 'p-x', participantName: 'Una Upcoming', reason: 'NotRecorded' })
+  })
+
+  it('says it in the agreement check too, as the server does, and prices nothing', () => {
+    const check = (ledger: unknown) => agreementCheckOf(ledger, 'PlanManaged', [], '2026-10-12', '2027-01-31', '2026-10-08')
+
+    expect(check(upcomingOnly)).toMatchObject({ hasBudget: false, noBudgetReason: 'NotStarted', planStart: '2026-11-01', pools: [], agreementCost: 0 })
+    expect(check(endedThenUpcoming)).toMatchObject({ noBudgetReason: 'NotStarted', planStart: '2026-11-01' })
+    expect(check(endedThenUpcoming)).not.toHaveProperty('planEnd')
+    expect(check(endedOnly)).toMatchObject({ noBudgetReason: 'PlanEnded', planEnd: '2026-06-30' })
+  })
+})
+
 describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (phase 2b)', () => {
   let mock: Created
   beforeEach(() => {

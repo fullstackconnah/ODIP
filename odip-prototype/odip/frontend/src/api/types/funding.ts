@@ -335,8 +335,11 @@ export interface BudgetListRow {
   ndiaRejection?: NdiaRejection
 }
 
-/** Why an NDIS-funded participant has no row: nothing was recorded that has started, or the plan they have has ended. */
-export const BUDGET_LIST_NO_BUDGET_REASONS = ['NotRecorded', 'PlanEnded'] as const
+/**
+ * Why an NDIS-funded participant has no row: no plan is recorded, the plan they have has ended, or a plan is recorded for later (and `planStart` is its first day: the soonest one, which outranks a
+ * plan that ended, because the next plan is already there).
+ */
+export const BUDGET_LIST_NO_BUDGET_REASONS = ['NotRecorded', 'PlanEnded', 'NotStarted'] as const
 export type BudgetListNoBudgetReason = typeof BUDGET_LIST_NO_BUDGET_REASONS[number]
 
 /** An NDIS-funded participant with no budget in force: no figure, and nothing ever warns about them. */
@@ -346,6 +349,8 @@ export interface BudgetListNoBudget {
   reason: BudgetListNoBudgetReason
   /** The last day of the plan that ended; absent when none was recorded. */
   planEnd?: string
+  /** The first day of the soonest plan recorded for later, for `NotStarted`; absent otherwise. */
+  planStart?: string
 }
 
 export interface BudgetListDto {
@@ -411,7 +416,7 @@ export interface AgreementCheck {
   /** The participant has a plan that is running now to check against. False is "No budget recorded": the answer then has no pools and no figures. */
   hasBudget: boolean
   /** Why there is nothing to compare with, when `hasBudget` is false, in the Budgets list's own two words: no plan that has started is recorded, or the plan ended (and `planEnd` is its last day). */
-  noBudgetReason?: 'NotRecorded' | 'PlanEnded'
+  noBudgetReason?: BudgetListNoBudgetReason
   planId?: string
   planStart?: string
   planEnd?: string

@@ -92,6 +92,18 @@ describe('noBudgetEntry', () => {
     expect(entry.action).toEqual({ label: 'Record a new plan', to: '/participants/p-0006?tab=funding' })
   })
 
+  // A plan recorded for later is not "no budget recorded": the Funding tab already shows it, so the entry says when it starts and points there (there is nothing to record).
+  it('says when a plan starts, when it is recorded for later, and opens the Funding tab where it is', () => {
+    const entry = noBudgetEntry(noBudget({ participantId: 'p-0007', reason: 'NotStarted', planStart: '2026-11-01' }))
+
+    expect(entry.reason.split(String.fromCharCode(160)).join(' ')).toBe('Plan starts 1 Nov 2026')
+    expect(entry.action).toEqual({ label: 'Open funding', to: '/participants/p-0007?tab=funding' })
+  })
+
+  it('still says a plan has not started when the server did not say which day', () => {
+    expect(noBudgetEntry(noBudget({ reason: 'NotStarted' })).reason).toBe('Plan not started yet')
+  })
+
   it('still says a plan ended when the server did not say which day (it omits what it does not have)', () => {
     expect(noBudgetEntry(noBudget({ reason: 'PlanEnded' })).reason).toBe('Plan ended')
   })

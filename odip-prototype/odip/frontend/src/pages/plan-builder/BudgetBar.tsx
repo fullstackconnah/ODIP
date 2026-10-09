@@ -4,13 +4,14 @@ import type { PlanBudget } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { TONE } from '@/lib/tone'
+import { writtenDay } from '@/lib/fundingPlan'
 import { formatHours } from '@/lib/planBlocks'
 import { NO_FIGURE, asSentence, categoryLabel, describeQuoteError, pricedNothing, totalsCaption } from '@/lib/planQuote'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 import { AgreementBudgetBreakdown } from '../budgets/components/AgreementBudgetBreakdown'
 import type { AgreementBudgetBreakdownView } from '../budgets/components/viewModel'
-import { CHECK_COULD_NOT_BE_MADE, CHIP_NOT_CHECKED, CHIP_NO_BUDGET, CHIP_PLAN_ENDED } from '../budgets/components/wording'
+import { CHECK_COULD_NOT_BE_MADE, CHIP_NOT_CHECKED, CHIP_NO_BUDGET, CHIP_PLAN_ENDED, chipPlanStarts } from '../budgets/components/wording'
 
 type BudgetBarProps = {
   /** What the query is doing: `idle` (nothing to price yet), `loading` (the first answer), `error`, `ready`. */
@@ -108,7 +109,8 @@ export function BudgetBar({ status, budget, refreshing = false, idleNote, error,
   // prices to nothing has nothing to compare, and the Details say so.
   const checkState = status === 'ready' && !nothingPriced ? budgetCheck?.status : undefined
   const checkFailed = checkState === 'failed'
-  const checkChip = checkState === 'none' ? (budgetCheck?.noBudgetReason === 'PlanEnded' ? CHIP_PLAN_ENDED : CHIP_NO_BUDGET) : checkFailed ? CHIP_NOT_CHECKED : null
+  const noBudgetChip = budgetCheck?.noBudgetReason === 'NotStarted' && budgetCheck.planStart ? chipPlanStarts(writtenDay(budgetCheck.planStart)) : budgetCheck?.noBudgetReason === 'PlanEnded' ? CHIP_PLAN_ENDED : CHIP_NO_BUDGET
+  const checkChip = checkState === 'none' ? noBudgetChip : checkFailed ? CHIP_NOT_CHECKED : null
 
   const oneLine = status === 'ready' && period
     ? `${weekly ? (weekNothing ? `${NO_FIGURE} h · ${NO_FIGURE} a week · ` : `${formatHours(weekly.totals.supportHours)} h · ${formatCurrency(weekly.totals.amount)} a week · `) : ''}${nothingPriced ? NO_FIGURE : formatCurrency(period.totals.amount)} in all`

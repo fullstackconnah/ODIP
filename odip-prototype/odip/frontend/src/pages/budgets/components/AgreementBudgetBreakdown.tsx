@@ -6,7 +6,7 @@ import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { formatCurrency } from '@/lib/utils'
 import type { AgreementBudgetBreakdownView, AgreementBudgetLine, AgreementBudgetPool, BudgetAttentionAction, BudgetFigureVisibility } from './viewModel'
 import { BudgetFigure } from './BudgetFigure'
-import { AGREEMENT_NO_BUDGET, AGREEMENT_WARNING_ONLY, OVER_BY_WORD, WITHIN_WORD, agreementNoBudgetEnded } from './wording'
+import { AGREEMENT_NO_BUDGET, AGREEMENT_WARNING_ONLY, OVER_BY_WORD, WITHIN_WORD, agreementNoBudgetEnded, agreementPlanNotStarted } from './wording'
 
 // The agreement budget bar's comparison: for each pool the agreement touches, and each funding period of it, what the agreement costs against what that period has left. The server
 // (POST participants/{id}/funding/agreement-check) computes every figure - the cost is the pricing engine's, "left" is the ledger's available minus used, "over by" is the server's - and this
@@ -134,7 +134,11 @@ export function AgreementBudgetBreakdown({ view }: { view: AgreementBudgetBreakd
     // "No budget recorded" is the commonest state and must link to where a budget is recorded, never warn (SHAPE-BRIEF §5).
     return (
       <div className={`flex flex-wrap items-center gap-2 ${NOTE}`}>
-        <p>{view.noBudgetReason === 'PlanEnded' && view.planEnd ? agreementNoBudgetEnded(writtenDay(view.planEnd)) : AGREEMENT_NO_BUDGET}</p>
+        <p>
+          {view.noBudgetReason === 'NotStarted' && view.planStart
+            ? agreementPlanNotStarted(writtenDay(view.planStart))
+            : view.noBudgetReason === 'PlanEnded' && view.planEnd ? agreementNoBudgetEnded(writtenDay(view.planEnd)) : AGREEMENT_NO_BUDGET}
+        </p>
         {view.noBudgetAction && <ActionButton action={view.noBudgetAction} />}
       </div>
     )

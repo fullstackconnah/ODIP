@@ -85,6 +85,16 @@ describe('agreementBudgetView', () => {
     })
   })
 
+  // A plan recorded for later is not "no budget was ever recorded" either: the Funding tab shows it, so the bar says when it starts and points there.
+  it('says a plan starts later, and when, and points at the Funding tab where it is', () => {
+    const view = agreementBudgetView('p-1', state({ data: noBudgetCheck({ noBudgetReason: 'NotStarted', planStart: '2027-01-01' }) }))
+
+    expect(view).toMatchObject({
+      status: 'none', noBudgetReason: 'NotStarted', planStart: '2027-01-01',
+      noBudgetAction: { label: 'Open the Funding tab', to: '/participants/p-1?tab=funding' },
+    })
+  })
+
   it('reads an answer with no reason, from an older server, as nothing recorded', () => {
     const data = noBudgetCheck() as Partial<ReturnType<typeof noBudgetCheck>>
     delete data.noBudgetReason

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router-dom'
-import { budgetList, budgetRow } from '@/test/fixtures/budgets'
+import { budgetList, budgetRow, noBudget } from '@/test/fixtures/budgets'
 import BudgetsPage from './BudgetsPage'
 
 // The Budgets list page (budget phase 2b): every participant's pools for the funding period running now, riskiest first. The server sends the figures and the order; the page filters by status
@@ -188,6 +188,19 @@ describe('BudgetsPage: the participants with no budget in force', () => {
     expect(within(list).getByRole('link', { name: 'Record budget for Noor Hassan' })).toHaveAttribute('href', '/participants/p-0005?tab=funding')
     expect(within(list).getByRole('link', { name: 'Record a new plan for Edna Ended' })).toHaveAttribute('href', '/participants/p-0006?tab=funding')   // the Funding tab's own button for a plan that ended
     expect(within(list).getByText('ODIP cannot warn about a budget it does not hold. Record the plan to start tracking.')).toBeVisible()
+  })
+
+  // A plan recorded for later is not "no budget recorded": the entry says when it starts, and the Funding tab (where the plan is) is the link.
+  it('says when a plan starts for a participant whose plan is recorded for later, with the Funding tab as its link', async () => {
+    mockUseBudgetList.mockReturnValue(ready(budgetList({ noBudget: [noBudget({ participantId: 'p-0007', participantName: 'Una Upcoming', reason: 'NotStarted', planStart: '2026-11-01' })] })))
+    renderPage()
+
+    await userEvent.click(screen.getByRole('button', { name: '1 participant with no budget recorded' }))
+
+    const list = document.getElementById(screen.getByRole('button', { name: /no budget recorded/ }).getAttribute('aria-controls')!)!
+    expect(within(list).getByText('Una Upcoming')).toBeVisible()
+    expect(within(list).getByText('Plan starts 1 Nov 2026')).toBeVisible()
+    expect(within(list).getByRole('link', { name: 'Open funding for Una Upcoming' })).toHaveAttribute('href', '/participants/p-0007?tab=funding')
   })
 
   it('is part of All only: a participant with no budget has no status to filter by', async () => {

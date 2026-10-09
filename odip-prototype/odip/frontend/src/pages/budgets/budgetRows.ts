@@ -42,13 +42,20 @@ export function budgetRiskRow(row: BudgetListRow, figures: BudgetFigureVisibilit
   }
 }
 
+/** Why there is no row, in the list's own words: when a plan recorded for later starts, when a plan ended, or that none is recorded. */
+function noBudgetReasonText(entry: BudgetListNoBudget): string {
+  if (entry.reason === 'NotStarted') return entry.planStart ? `Plan starts ${writtenDay(entry.planStart)}` : 'Plan not started yet'
+  if (entry.reason === 'PlanEnded') return entry.planEnd ? `Plan ended ${writtenDay(entry.planEnd)}` : 'Plan ended'
+  return NO_BUDGET_REASON
+}
+
 /** An NDIS-funded participant with no budget in force: why, and the way to record one. No figure and no warning. */
 export function noBudgetEntry(entry: BudgetListNoBudget): NoBudgetEntry {
   return {
     id: entry.participantId,
     participantLabel: entry.participantName,
-    reason: entry.reason === 'PlanEnded' ? (entry.planEnd ? `Plan ended ${writtenDay(entry.planEnd)}` : 'Plan ended') : NO_BUDGET_REASON,
-    // The Funding tab's own button for a plan that ended is "Record a new plan"; for none recorded it is "Record budget".
-    action: { label: entry.reason === 'PlanEnded' ? 'Record a new plan' : 'Record budget', to: fundingTabPath(entry.participantId) },
+    reason: noBudgetReasonText(entry),
+    // The Funding tab's own button for a plan that ended is "Record a new plan"; for none recorded it is "Record budget"; a plan recorded for later is there already, so the link only opens it.
+    action: { label: entry.reason === 'NotStarted' ? 'Open funding' : entry.reason === 'PlanEnded' ? 'Record a new plan' : 'Record budget', to: fundingTabPath(entry.participantId) },
   }
 }

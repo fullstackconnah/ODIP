@@ -82,12 +82,14 @@ public sealed class AgreementCheckService
         var ledger = ledgers[participantId];
         if (ledger.Ledger is not { PlanIsCurrent: true } plan)
         {
-            // The same two reasons as the Budgets list: no plan that has started is recorded, or the one there is has ended.
-            var ended = ledger.Ledger is { PlanIsCurrent: false } endedPlan ? endedPlan.Plan : null;
+            // The same three reasons as the Budgets list: a plan is recorded for later (and says when it starts, outranking one that ended), or the one there is has ended, or none is recorded.
+            var upcoming = ledger.NextPlanStart;
+            var ended = upcoming is null && ledger.Ledger is { PlanIsCurrent: false } endedPlan ? endedPlan.Plan : null;
             return AgreementCheckResult.Answer(new AgreementCheckDto
             {
                 HasBudget = false, AsOf = ledger.Today, PeriodFrom = from, PeriodTo = to,
-                NoBudgetReason = ended is null ? BudgetListNoBudgetReason.NotRecorded : BudgetListNoBudgetReason.PlanEnded, PlanEnd = ended?.PlanEnd,
+                NoBudgetReason = upcoming is not null ? BudgetListNoBudgetReason.NotStarted : ended is null ? BudgetListNoBudgetReason.NotRecorded : BudgetListNoBudgetReason.PlanEnded,
+                PlanStart = upcoming, PlanEnd = ended?.PlanEnd,
             });
         }
 

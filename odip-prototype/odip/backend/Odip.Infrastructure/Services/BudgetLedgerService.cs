@@ -17,8 +17,11 @@ namespace Odip.Infrastructure.Services;
 /// </summary>
 public sealed record ClaimEffectLine(Guid ParticipantId, DateOnly Date, int? PaceCategory, PlanType PlanType, decimal Amount, Guid? ShiftId, Guid? BookingId);
 
-/// <summary>A participant's ledger as computed, with the items it was made from (kept so a claim's effect can be worked out without another query).</summary>
-public sealed record ParticipantLedger(Guid ParticipantId, string Name, DateOnly Today, string TimeBasis, int ApproachingPercent, PlanLedger? Ledger, IReadOnlyList<LedgerItem> Items);
+/// <summary>
+/// A participant's ledger as computed, with the items it was made from (kept so a claim's effect can be worked out without another query). <paramref name="NextPlanStart"/> is the first day of the
+/// soonest plan recorded for later (one that has not started), whatever else the participant has: it is how "no budget in force" says that a plan is on its way, and when.
+/// </summary>
+public sealed record ParticipantLedger(Guid ParticipantId, string Name, DateOnly Today, string TimeBasis, int ApproachingPercent, PlanLedger? Ledger, IReadOnlyList<LedgerItem> Items, DateOnly? NextPlanStart = null);
 
 /// <summary>
 /// The budget ledger (budget feature, phase 2a): per participant, per pool and per funding period of their current plan, what has been claimed, what is pending, what is booked ahead, and
@@ -116,11 +119,13 @@ public sealed class BudgetLedgerService
 
         var plans = await PlansAsync(tenantId, found, ct);
         var currentPlans = plans.GroupBy(p => p.ParticipantId).ToDictionary(g => g.Key, g => BudgetLedgerCalculator.CurrentPlanOf(g, today));
+        // The soonest plan recorded for later, for whoever has one (it is in memory already: the plans were read whole).
+        var nextStarts = plans.Where(p => p.PlanStart > today).GroupBy(p => p.ParticipantId).ToDictionary(g => g.Key, g => (DateOnly?)g.Min(p => p.PlanStart));
 
         var withPlan = new List<PersonRow>();
         foreach (var person in people)
         {
-            if (currentPlans.GetValueOrDefault(person.Id) is null) result[person.Id] = new ParticipantLedger(person.Id, person.Name, today, timeBasis, approaching, null, Array.Empty<LedgerItem>());
+            if (currentPlans.GetValueOrDefault(person.Id) is null) result[person.Id] = new ParticipantLedger(person.Id, person.Name, today, timeBasis, approaching, null, Array.Empty<LedgerItem>(), nextStarts.GetValueOrDefault(person.Id));
             else withPlan.Add(person);
         }
         if (withPlan.Count == 0) return result;
@@ -152,7 +157,7 @@ public sealed class BudgetLedgerService
             var plan = currentPlans[person.Id]!;
             // What happened before the plan began is the earlier plan's: it froze with it, and a claim keeps the period of its service date.
             var items = itemsByPerson[person.Id].Where(i => i.Date >= plan.PlanStart).ToList();
-            result[person.Id] = new ParticipantLedger(person.Id, person.Name, today, timeBasis, approaching, BudgetLedgerCalculator.Compute(plan, today, approaching, items), items);
+            result[person.Id] = new ParticipantLedger(person.Id, person.Name, today, timeBasis, approaching, BudgetLedgerCalculator.Compute(plan, today, approaching, items), items, nextStarts.GetValueOrDefault(person.Id));
         }
 
         return result;

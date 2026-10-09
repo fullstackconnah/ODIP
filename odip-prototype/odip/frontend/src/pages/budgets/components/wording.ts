@@ -59,10 +59,19 @@ export function agreementNoBudgetEnded(endedOn: string): string {
   return `No budget recorded for this participant: the recorded plan ended on ${endedOn}, so there is nothing to compare the agreement against.`
 }
 
+/** The same words when a plan is recorded for later (it is on the Funding tab already): when it starts, then why there is nothing to compare yet. `startsOn` is the plan's first day, already written ("1 Nov 2026"). */
+export function agreementPlanNotStarted(startsOn: string): string {
+  return `Plan starts ${startsOn}, so there is nothing to compare the agreement against yet.`
+}
+
 /** The neutral chips the bar's one-line form shows when there is nothing to compare or the comparison failed (a phone or tablet reads that line and nothing else): silence would read as "fits". */
 export const CHIP_NO_BUDGET = 'No budget recorded'
 export const CHIP_PLAN_ENDED = 'Plan ended'
 export const CHIP_NOT_CHECKED = 'Budget not checked'
+/** The chip for a plan recorded for later: `startsOn` is its first day, already written. */
+export function chipPlanStarts(startsOn: string): string {
+  return `Plan starts ${startsOn}`
+}
 
 /** What the bar's one polite status says, once, when the check could not be made. A failed advisory check does not interrupt: it is not an alert. */
 export const CHECK_COULD_NOT_BE_MADE = 'The budget could not be checked.'

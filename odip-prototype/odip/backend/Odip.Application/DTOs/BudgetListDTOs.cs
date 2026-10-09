@@ -52,10 +52,12 @@ public record BudgetListRowDto
 /// <summary>Why an NDIS-funded participant has no row.</summary>
 public enum BudgetListNoBudgetReason
 {
-    /// <summary>No plan budget has been recorded that has started (an upcoming plan does not count yet: there is nothing to spend against).</summary>
+    /// <summary>No plan budget is recorded at all (one that has ended, or is yet to start, is the next two).</summary>
     NotRecorded = 0,
-    /// <summary>A plan is recorded but it has ended and no successor is recorded.</summary>
+    /// <summary>A plan is recorded but it has ended and no plan is recorded for later.</summary>
     PlanEnded = 1,
+    /// <summary>A plan is recorded for later and none is running: there is nothing to spend against yet, and the entry says when it starts. It outranks a plan that ended: the next plan is already there.</summary>
+    NotStarted = 2,
 }
 
 /// <summary>An NDIS-funded participant with no budget in force, kept apart from the rows: there is no figure for them and nothing ever warns about them.</summary>
@@ -66,6 +68,8 @@ public record BudgetListNoBudgetDto
     public BudgetListNoBudgetReason Reason { get; init; }
     /// <summary>The last day of the plan that ended; omitted when none was recorded.</summary>
     public DateOnly? PlanEnd { get; init; }
+    /// <summary>The first day of the soonest plan recorded for later, for <see cref="BudgetListNoBudgetReason.NotStarted"/>; omitted otherwise.</summary>
+    public DateOnly? PlanStart { get; init; }
 }
 
 /// <summary>
