@@ -15,6 +15,7 @@ public sealed record ScheduleRow(string Days, string Time, string Support, strin
 public sealed record AgreementSchedule(IReadOnlyList<ScheduleRow> Rows, int Unreadable)
 {
     public const string NotPriced = "Not priced";
+    public const string PartPriced = "(part priced)";       // a no-break space: in the narrow cost column the words wrap together, under the figure
 
     private static readonly string[] ShortDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -31,7 +32,7 @@ public sealed record AgreementSchedule(IReadOnlyList<ScheduleRow> Rows, int Unre
             rows.Add(new ScheduleRow(
                 DaysText(block.Days), TimeText(block), ServiceAgreementDraftService.SupportTypeLabel(block.SupportType), RatioText(block),
                 string.IsNullOrWhiteSpace(block.Location?.State) ? draft.State : block.Location.State.Trim().ToUpperInvariant(),
-                HoursText(block), CostText(CostOf(draft, quote, stored.BlockKey))));
+                HoursText(block), CostText(CostOf(draft, quote, stored.BlockKey), quote is not null && DraftPricingCaveats.LeavesOutPartOf(quote, stored.BlockKey))));
         }
 
         return new AgreementSchedule(rows, unreadable);
@@ -84,6 +85,10 @@ public sealed record AgreementSchedule(IReadOnlyList<ScheduleRow> Rows, int Unre
         return amount > 0m ? amount : null;
     }
 
-    /// <summary>"$1,240.50", or "Not priced": a support nothing could be priced from has no cost yet, which is not the same as costing nothing.</summary>
-    private static string CostText(decimal? amount) => amount is { } cost ? "$" + cost.ToString("N2", CultureInfo.InvariantCulture) : NotPriced;
+    /// <summary>
+    /// "$1,240.50", or "Not priced": a support nothing could be priced from has no cost yet, which is not the same as costing nothing. A figure that leaves out part of the support (the quote holds a
+    /// left-out reason for it) is "$1,240.50 (part priced)", so a reader of the row does not take the part for the whole.
+    /// </summary>
+    private static string CostText(decimal? amount, bool partPriced) =>
+        amount is not { } cost ? NotPriced : "$" + cost.ToString("N2", CultureInfo.InvariantCulture) + (partPriced ? " " + PartPriced : string.Empty);
 }

@@ -101,6 +101,44 @@ public class DraftPdfScheduleTests
         var before = Row("Tue", "01:00 to 05:00", "Community access", "1:1", "NSW", "4");
         Assert.Contains(before + Skeleton("Not priced"), text);
         Assert.DoesNotContain(before + Skeleton("$0"), text);
+        Assert.DoesNotContain(Skeleton("part priced"), text);       // nothing priced is not "part priced"
+    }
+
+    // ── A support priced in part ──────────────────────────────────────────────────
+
+    /// <summary>Community access has no weekday night item, so of 22:00 to 02:00 the engine prices the part it has an item for and flags the rest (saved, and shown on the screen).</summary>
+    private static PlanBlock LateEvening() =>
+        Block("late", PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(22), T(2));
+
+    [Fact]
+    public void A_support_priced_only_in_part_says_so_beside_its_figure_and_a_fully_priced_one_does_not()
+    {
+        var draft = Revision(MonWed(), LateEvening());
+        var answer = DraftJson.ReadQuote(draft.PricingJson)!;
+        var late = answer.Totals.ByBlock.Single(b => b.BlockId == "late").Amount;
+        Assert.True(late > 0m);                                                                                       // the setup: something was priced from it ...
+        Assert.True(DraftPricingCaveats.ShiftsNotPriced(answer) > 0, string.Join(", ", answer.Issues.Select(issue => $"{issue.BlockId}:{issue.Reason}")));     // ... and something was left out
+        Assert.DoesNotContain(answer.Issues, issue => issue.BlockId == "b1");
+
+        var text = TextOf(ServiceAgreementDraftPdfRenderer.Render(draft));
+
+        Assert.Contains(Row("Mon", "22:00 to 02:00 (ends the next day)", "Community access", "1:1", "NSW", "4", Dollars(answer, "late")) + Skeleton("(part priced)"), text);
+        Assert.DoesNotContain(Row("Mon, Wed", "09:00 to 13:00", "Community access", "1:1", "NSW", "8", Dollars(answer, "b1")) + Skeleton("(part priced)"), text);
+        Assert.Equal(1, text.Split(Skeleton("(part priced)")).Length - 1);                                             // once, on the row that is short
+    }
+
+    [Fact]
+    public void An_issue_that_leaves_nothing_out_is_no_reason_to_say_part_priced()
+    {
+        var draft = Revision(MonWed("a"), MonWed("b"));                                                              // two supports at the same time: priced, and flagged as overlapping
+        var answer = DraftJson.ReadQuote(draft.PricingJson)!;
+        Assert.Contains(answer.Issues, issue => issue.Reason == PlanFailureReason.BlocksOverlap);
+        Assert.Equal(0, DraftPricingCaveats.ShiftsNotPriced(answer));
+        Assert.All(answer.Totals.ByBlock, total => Assert.True(total.Amount > 0m));
+
+        var text = TextOf(ServiceAgreementDraftPdfRenderer.Render(draft));
+
+        Assert.DoesNotContain(Skeleton("part priced"), text);
     }
 
     [Fact]
@@ -239,13 +277,13 @@ public class DraftPdfScheduleTests
     // ── A sample to look at ───────────────────────────────────────────────────────
 
     /// <summary>
-    /// Renders a sample plan (a weekday routine, a Saturday outing, an overnight support and one with no price) and, when ODIP_SAMPLE_PDF names a file, writes the PDF there and each of its pages
+    /// Renders a sample plan (a weekday routine, a Saturday outing, an overnight support, one priced in part and one with no price) and, when ODIP_SAMPLE_PDF names a file, writes the PDF there and each of its pages
     /// beside it as a PNG, so a person can look at the table. Without the variable it renders and checks only that it is a PDF.
     /// </summary>
     [Fact]
     public void A_sample_agreement_with_a_weekday_routine_an_overnight_support_and_one_without_a_price_renders()
     {
-        var draft = Revision(MonWed("community") with { Days = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday } }, SaturdayOuting(), FridayNight(), UnpricedNight());
+        var draft = Revision(MonWed("community") with { Days = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday } }, SaturdayOuting(), FridayNight(), LateEvening(), UnpricedNight());
         draft.ParticipantNameSnapshot = "Alex Sample";
         draft.Representative = "Sam Sample (parent)";
         draft.ServiceTypesJson = """["Community access","Group activity","Personal care"]""";

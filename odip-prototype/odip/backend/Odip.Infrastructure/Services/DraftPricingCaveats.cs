@@ -48,6 +48,10 @@ public static class DraftPricingCaveats
     public static int ShiftsNotPriced(PlanQuote quote) =>
         quote.Issues.Where(issue => LeftOut.Contains(issue.Reason)).GroupBy(issue => issue.BlockId).Sum(block => block.Max(issue => issue.Count));
 
+    /// <summary>Whether the quote says some of a block's work has no price (one of the left-out reasons is held for it), so its figure is the part that could be priced and not the whole.</summary>
+    public static bool LeavesOutPartOf(PlanQuote quote, string blockId) =>
+        quote.Issues.Any(issue => string.Equals(issue.BlockId, blockId, StringComparison.Ordinal) && LeftOut.Contains(issue.Reason));
+
     /// <summary>
     /// Whether <see cref="ShiftsNotPriced"/> is a lower bound and not the count. A block with one such issue counts exactly the shifts it was met on. A block with several (two items missing, or two gaps in the
     /// catalogue) counts its largest, and the others may touch shifts that one did not, so "186 shifts" printed as the count overstated what is known: it is "at least 186". The same rule as the screen's
