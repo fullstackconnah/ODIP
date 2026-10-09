@@ -88,7 +88,7 @@ public static class ShiftBudgetAssessor
         {
             findings.Add(new RosterFinding(
                 BudgetFindingCodes.Over, RosterFindingSeverity.Warning,
-                string.Create(CultureInfo.InvariantCulture, $"{figures.PoolName} is already over for {Period(figures)}: {Money(figures.Used)} used of {Money(figures.Available)}."),
+                string.Create(CultureInfo.InvariantCulture, $"{figures.PoolName} is {Money(figures.Used - figures.Available)} over this period's {Money(figures.Available)} (to {Day(figures.PeriodEnd)})."),
                 Budget: figures));
         }
         else if (figures.Available > 0m && figures.Used * 100m >= context.ApproachingPercent * figures.Available)
@@ -96,7 +96,7 @@ public static class ShiftBudgetAssessor
             var percent = (int)Math.Floor(figures.Used * 100m / figures.Available);
             findings.Add(new RosterFinding(
                 BudgetFindingCodes.Approaching, RosterFindingSeverity.Warning,
-                string.Create(CultureInfo.InvariantCulture, $"{figures.PoolName} is {percent}% used for {Period(figures)}: {Money(figures.Used)} of {Money(figures.Available)}."),
+                string.Create(CultureInfo.InvariantCulture, $"{figures.PoolName} is at {percent}% of this period's {Money(figures.Available)} (to {Day(figures.PeriodEnd)})."),
                 Budget: figures));
         }
 
@@ -114,6 +114,9 @@ public static class ShiftBudgetAssessor
 
     /// <summary>A date that cannot split: its spaces are no-break spaces.</summary>
     private static string Whole(string date) => date.Replace(' ', '\u00A0');
+
+    /// <summary>The last day of the period as the over and approaching sentences say it, in the words of phase 2b's participant alerts ("(to 31 Dec 2026)"), and whole.</summary>
+    private static string Day(DateOnly day) => Whole(day.ToString("d MMM yyyy", CultureInfo.InvariantCulture));
 
     /// <summary>The estimate of the shift itself, said after the forecast-over finding only (the over and approaching findings are about the period, not this shift): "This shift: about $292.32." Nothing when the shift adds nothing.</summary>
     private static string Cost(BudgetFindingFigures figures) => figures.ShiftCost > 0m ? $" This shift: about {Money(figures.ShiftCost)}." : string.Empty;

@@ -171,8 +171,9 @@ public class ShiftBudgetAssessorTests
         var over = Find(ShiftBudgetAssessor.Assess(Figures(available: 8000m, used: 8100m, forecast: 8400m, cost: 300m), Context()), BudgetFindingCodes.Over)!;
         var approaching = Find(ShiftBudgetAssessor.Assess(Figures(available: 8000m, used: 6800m, forecast: 6800m, cost: 300m), Context()), BudgetFindingCodes.Approaching)!;
 
-        Assert.Equal($"Core (flexible) is already over for 1\u00A0Oct{Dash}31\u00A0Dec\u00A02026: $8,100.00 used of $8,000.00.", over.Message);
-        Assert.Equal($"Core (flexible) is 85% used for 1\u00A0Oct{Dash}31\u00A0Dec\u00A02026: $6,800.00 of $8,000.00.", approaching.Message);
+        // The same sentences as phase 2b's participant alerts ("{pool} is $X over this period's $Y (to {end})"), so one condition is said one way in the banner, the Budgets list and the shift panel.
+        Assert.Equal("Core (flexible) is $100.00 over this period's $8,000.00 (to 31\u00A0Dec\u00A02026).", over.Message);
+        Assert.Equal("Core (flexible) is at 85% of this period's $8,000.00 (to 31\u00A0Dec\u00A02026).", approaching.Message);
     }
 
     [Fact]

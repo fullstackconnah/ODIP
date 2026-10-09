@@ -200,7 +200,11 @@ owner decision (collected under Open Flags at the end).
   - [ ] **One pool label (decision).** The pool reads "Core (flexible)" in the shift
     panel's findings and "Core" in phase 2's alerts and Budgets list (the plan's own pool
     name against phase 2's `PoolLabel`). Pick one label across the sentences; it is a
-    product call, and the server's sentences would take `PoolLabel`.
+    product call, and the server's sentences would take `PoolLabel`. The same goes for
+    money: the findings print "$8,000.00" (`ShiftBudgetAssessor.Money`, in Domain) where phase
+    2b's alerts print "$8,000" (`BudgetText.Money`, in Infrastructure). With phase 2b merged
+    the over and approaching findings already say what the alerts say ("{pool} is $X over
+    this period's $Y (to {end})"); only the label and the money format still differ.
   - Follow-ups left by the phase 2b work (small; none blocks the merge):
     - **B6, a tenancy gap in two claim writes.** `ClaimsController.UpdateClaim` (`PUT /claims/{id}`)
       and `UpdateLineItem` (the line-item `PATCH`) read a claim by id with no tenant scope:
