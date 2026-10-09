@@ -82,17 +82,33 @@ export function useApproveServiceAgreementDraft() {
   })
 }
 
+/**
+ * The file name in a Content-Disposition header. The server sends the RFC 5987 `filename*=UTF-8''...` (percent-encoded, so the letters of a name like José Núñez arrive) beside an ASCII
+ * `filename="..."` that has an underscore for each letter it cannot hold; the first is preferred, the second is the way back when it cannot be decoded. Null when the header names nothing.
+ */
+export function fileNameFromDisposition(disposition: string | undefined): string | null {
+  if (!disposition) return null
+  const star = /filename\*\s*=\s*utf-8'[^']*'([^;]+)/i.exec(disposition)
+  if (star) {
+    try {
+      return decodeURIComponent(star[1].trim().replace(/^"|"$/g, ''))
+    } catch {
+      // not valid UTF-8 percent-encoding: use the plain name below
+    }
+  }
+  const plain = /filename\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;\s]+))/i.exec(disposition)
+  return plain ? (plain[1] ?? plain[2]) : null
+}
+
 /** Downloads the raw non-binding draft PDF through the authenticated client. */
 export function useDownloadServiceAgreementDraftPdf() {
   return useMutation({
     mutationFn: async ({ participantId, id }: { participantId: string; id: string }) => {
       const response = await apiClient.get<Blob>(`${path(participantId)}/${id}/pdf`, { responseType: 'blob' })
-      const disposition = response.headers['content-disposition'] as string | undefined
-      const match = disposition ? /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition) : null
       const url = window.URL.createObjectURL(response.data)
       const link = document.createElement('a')
       link.href = url
-      link.download = match?.[1] ? decodeURIComponent(match[1]) : `service-agreement-draft-v${id}.pdf`
+      link.download = fileNameFromDisposition(response.headers['content-disposition'] as string | undefined) ?? `service-agreement-draft-v${id}.pdf`
       document.body.appendChild(link)
       link.click()
       link.remove()

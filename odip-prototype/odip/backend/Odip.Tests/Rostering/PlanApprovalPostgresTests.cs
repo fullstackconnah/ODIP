@@ -236,6 +236,53 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(40, await read.Shifts.CountAsync());
     }
 
+    /// <summary>On the first save that holds an approval to write, lets another request finish first (the save that replaces the revision), then lets this save run against what that request left.</summary>
+    private sealed class OtherRequestFinishesFirst(Func<Task> otherRequest) : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+    {
+        private bool _fired;
+
+        public override async ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+            Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (_fired || !eventData.Context!.ChangeTracker.Entries<ServiceAgreementDraftApproval>().Any(entry => entry.State == EntityState.Added)) return result;
+            _fired = true;
+            await otherRequest();
+            return result;
+        }
+    }
+
+    // A save deletes the participant's earlier unapproved revision. An approval that has passed its checks and is writing the patterns and the approval row meets the restricting keys of the
+    // revision that has just gone: PostgreSQL refuses (23503), the transaction is rolled back, and the answer is "superseded" with the newest version, not a server error.
+    [SkippableFact]
+    public async Task AnApprovalWhoseRevisionASaveReplacesMeanwhile_IsSupersededNotAServerError_AndWritesNothing()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        var v1 = await StoreAsync(cs, tenantId, participantId, 1);
+        var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
+        var interceptor = new OtherRequestFinishesFirst(async () =>
+        {
+            await using var other = Open(cs, tenantId);
+            var saved = await new ServiceAgreementDraftService(other).SaveAsync(tenantId, participantId, new CreateServiceAgreementDraftDto
+            {
+                PlanStartDate = new DateOnly(2026, 7, 1), PlanEndDate = new DateOnly(2027, 6, 30), AgreementStartDate = Start, AgreementEndDate = new DateOnly(2026, 12, 20), State = "NSW",
+                Blocks = new List<DraftBlockDto> { new() { Block = WeekdayBlock() } },
+            }, "another coordinator", CancellationToken.None);
+            Assert.Equal(2, Assert.IsType<ServiceAgreementDraft>(saved.Draft).Version);          // version 1 was nobody's, so this save replaces it
+        });
+        await using var racing = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(cs).AddInterceptors(interceptor).Options, TenantOf(tenantId));
+
+        var outcome = await new ServiceAgreementApprovalService(racing, new RosterPlacementGate(), new RosterShiftGenerator(), clock: clock).ApproveAsync(tenantId, participantId, v1.Id, false, Admin, CancellationToken.None);
+
+        Assert.Equal(ApprovalStatus.Superseded, outcome.Status);
+        Assert.Equal(2, outcome.NewestVersion);
+        await using var read = Open(cs, tenantId);
+        Assert.Empty(await read.ServiceAgreementDraftApprovals.ToListAsync());
+        Assert.Empty(await read.ShiftPatterns.ToListAsync());
+        Assert.Empty(await read.Shifts.ToListAsync());
+        Assert.Equal(new[] { 2 }, await read.ServiceAgreementDrafts.AsNoTracking().Select(d => d.Version).ToListAsync());
+    }
+
     [SkippableFact]
     public async Task ApprovingTheNextRevision_EndsTheOldPatterns_LeavesTheirShifts_AndTheTopUpThenWorksOnlyForTheLivePatterns()
     {

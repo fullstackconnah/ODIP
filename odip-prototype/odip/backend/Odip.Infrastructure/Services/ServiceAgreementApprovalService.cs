@@ -85,7 +85,7 @@ public sealed class ServiceAgreementApprovalService
     public async Task<ApprovalOutcome> PreviewAsync(Guid tenantId, Guid participantId, Guid draftId, ApprovalCaller caller, CancellationToken ct)
     {
         var found = await FindAsync(tenantId, participantId, draftId, ct);
-        if (found is null) return new ApprovalOutcome(ApprovalStatus.NotFound, Errors: new[] { "Draft not found." });
+        if (found is null) return await NotThereAsync(tenantId, participantId, caller, preview: true, ct);
         if (!await MayApproveAsync(tenantId, caller, ct)) return NotAnApprover();
 
         var (draft, participant) = found.Value;
@@ -98,7 +98,7 @@ public sealed class ServiceAgreementApprovalService
     public async Task<ApprovalOutcome> ApproveAsync(Guid tenantId, Guid participantId, Guid draftId, bool acknowledgeOverlaps, ApprovalCaller caller, CancellationToken ct)
     {
         var found = await FindAsync(tenantId, participantId, draftId, ct);
-        if (found is null) return new ApprovalOutcome(ApprovalStatus.NotFound, Errors: new[] { "Draft not found." });
+        if (found is null) return await NotThereAsync(tenantId, participantId, caller, preview: false, ct);
         if (!await MayApproveAsync(tenantId, caller, ct)) return NotAnApprover();
 
         try
@@ -119,7 +119,39 @@ public sealed class ServiceAgreementApprovalService
                 return await ReadAsync(ApprovalStatus.AlreadyApproved, tenantId, found.Value.Draft, null, ct);
             throw;
         }
+        // A save landed while this approval was being made: it deleted this revision (the participant's earlier unapproved one), and the patterns and the approval row this approval wrote point at a row that
+        // has gone, so a restricting key refused them and the transaction has been rolled back. Nothing of this one is kept; the answer is the one a newer revision always got.
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation })
+        {
+            _db.ChangeTracker.Clear();
+            // Only when the revision really is gone: a key can refuse a write for another reason, and that is not hidden as "superseded".
+            if (await NewestVersionAsync(tenantId, participantId, ct) is { } newest && !await _db.ServiceAgreementDrafts.AsNoTracking().AnyAsync(x => x.Id == draftId && x.TenantId == tenantId, ct))
+                return Superseded(newest);
+            throw;
+        }
     }
+
+    // ── A revision that is not there ──────────────────────────────────────────────
+
+    /// <summary>
+    /// A revision that cannot be found. Usually it never existed (another organisation's, or a made-up id): not found. But a save deletes the participant's earlier unapproved revision, so a page that
+    /// still holds one asks about a revision that was there a moment ago. When the participant is the caller's organisation's and has revisions, the answer is the one that page was given before a save
+    /// could delete anything: superseded, with the newest version (a preview says it cannot be approved; an approval is the 409 <c>draft-superseded</c>). A made-up id of such a participant gets the same
+    /// answer, because it cannot be told from one a save has replaced; it tells nothing the revisions list does not.
+    /// </summary>
+    private async Task<ApprovalOutcome> NotThereAsync(Guid tenantId, Guid participantId, ApprovalCaller caller, bool preview, CancellationToken ct)
+    {
+        if (await NewestVersionAsync(tenantId, participantId, ct) is not { } newest) return new ApprovalOutcome(ApprovalStatus.NotFound, Errors: new[] { "Draft not found." });
+        if (!await MayApproveAsync(tenantId, caller, ct)) return NotAnApprover();
+        return Superseded(newest, preview);
+    }
+
+    /// <summary>The newest version of the participant's revisions in this organisation; null when it has none (or the participant is not this organisation's).</summary>
+    private async Task<int?> NewestVersionAsync(Guid tenantId, Guid participantId, CancellationToken ct) =>
+        await _db.ServiceAgreementDrafts.Where(x => x.TenantId == tenantId && x.ParticipantId == participantId).MaxAsync(x => (int?)x.Version, ct);
+
+    private static ApprovalOutcome Superseded(int newestVersion, bool preview = false) => new(ApprovalStatus.Superseded, Errors: new[] { SupersededMessage }, NewestVersion: newestVersion,
+        Preview: preview ? new DraftApprovalPreviewDto { CanApprove = false, Reasons = [new ApprovalReasonDto { Code = "Superseded", Message = SupersededMessage }] } : null);
 
     private async Task<ApprovalOutcome> ApproveCoreAsync(Guid tenantId, ServiceAgreementDraft draft, Participant participant, bool acknowledgeOverlaps, ApprovalCaller caller, CancellationToken ct)
     {
