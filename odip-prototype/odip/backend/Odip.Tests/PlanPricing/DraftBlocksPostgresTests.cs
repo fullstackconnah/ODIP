@@ -283,6 +283,132 @@ public class DraftBlocksPostgresTests : IClassFixture<PostgresFixture>
         }
     }
 
+    // ── The races a save has with another writer, on a real database ──────────────
+
+    /// <summary>
+    /// On the first save that is deleting a revision, lets another writer finish first and then lets this save run against what that writer left. The save's two handlers (a restricting key that
+    /// refuses the delete, a delete that finds the row gone) are for exactly this; EF InMemory can only be told to throw, so these run on PostgreSQL.
+    /// </summary>
+    private sealed class OtherWriterFinishesFirst(Func<Task> otherWriter) : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+    {
+        private bool _fired;
+
+        public override async ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+            Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (_fired || !eventData.Context!.ChangeTracker.Entries<ServiceAgreementDraft>().Any(entry => entry.State == EntityState.Deleted)) return result;
+            _fired = true;
+            await otherWriter();
+            return result;
+        }
+    }
+
+    private static OdipDbContext OpenWith(string connectionString, Guid tenantId, Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor interceptor) =>
+        new(new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(connectionString).AddInterceptors(interceptor).Options, TenantOf(tenantId));
+
+    /// <summary>A revision nobody has done anything with, put straight into the database (two blocks and their two lines), so no save has pruned it on the way in.</summary>
+    private static async Task<ServiceAgreementDraft> StoreAsync(string connectionString, Guid tenantId, Guid participantId, int version)
+    {
+        await using var db = Open(connectionString, tenantId);
+        var draft = Rostering.ApprovalTestSupport.BuildRevision(tenantId, participantId, version, new[] { MonWed(), SaturdayOuting() });
+        db.ServiceAgreementDrafts.Add(draft);
+        await db.SaveChangesAsync();
+        return draft;
+    }
+
+    private static async Task<(int Blocks, int Lines)> ChildrenAsync(OdipDbContext db, Guid draftId) =>
+        (await db.ServiceAgreementDraftBlocks.AsNoTracking().CountAsync(b => b.DraftId == draftId), await db.ServiceAgreementDraftLines.AsNoTracking().CountAsync(l => l.DraftId == draftId));
+
+    private static Task<List<int>> VersionsAsync(OdipDbContext db) =>
+        db.ServiceAgreementDrafts.AsNoTracking().OrderBy(d => d.Version).Select(d => d.Version).ToListAsync();
+
+    [SkippableFact]
+    public async Task ARevisionApprovedWhileASaveIsReplacingIt_IsKeptWhole_AndTheSaveStillLands()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        var stored = new List<ServiceAgreementDraft>();
+        foreach (var version in new[] { 1, 2, 3, 4 }) stored.Add(await StoreAsync(cs, tenantId, participantId, version));
+        var approvedMeanwhile = stored[1];
+        // Another request approves version 2 after this save has read it as a plain revision and before it deletes it: the key refuses the delete, the save is rolled back and goes round once more without it.
+        var interceptor = new OtherWriterFinishesFirst(async () =>
+        {
+            await using var other = Open(cs, tenantId);
+            other.ServiceAgreementDraftApprovals.Add(new ServiceAgreementDraftApproval
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, DraftId = approvedMeanwhile.Id, ParticipantId = participantId, DraftVersion = 2,
+                ApprovedAt = new DateTime(2026, 10, 5, 1, 0, 0, DateTimeKind.Utc), ApprovedByName = "Alex Admin",
+            });
+            await other.SaveChangesAsync();
+        });
+        await using var racing = OpenWith(cs, tenantId, interceptor);
+
+        var result = await new ServiceAgreementDraftService(racing).SaveAsync(tenantId, participantId, Request(Entry(MonWed()), Entry(SaturdayOuting())) with { BaseVersion = 4 }, "me", CancellationToken.None);
+
+        Assert.Equal(5, Assert.IsType<ServiceAgreementDraft>(result.Draft).Version);
+        await using var read = Open(cs, tenantId);
+        Assert.Equal(new[] { 2, 5 }, await VersionsAsync(read));                                       // version 2 stays; 1, 3 and 4 went
+        Assert.Equal((2, 2), await ChildrenAsync(read, approvedMeanwhile.Id));                         // whole: its blocks and its lines are still there
+        Assert.True(await read.ServiceAgreementDraftApprovals.AnyAsync(a => a.DraftId == approvedMeanwhile.Id));
+        foreach (var gone in new[] { stored[0], stored[2], stored[3] }) Assert.Equal((0, 0), await ChildrenAsync(read, gone.Id));
+    }
+
+    [SkippableFact]
+    public async Task ARevisionRosteredWhileASaveIsReplacingIt_IsKeptWhole_AndTheSaveStillLands()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        var stored = new List<ServiceAgreementDraft>();
+        foreach (var version in new[] { 1, 2, 3 }) stored.Add(await StoreAsync(cs, tenantId, participantId, version));
+        var rosteredMeanwhile = stored[2];
+        // Another request approves version 3, which makes roster patterns that point at it, in the same instant.
+        var interceptor = new OtherWriterFinishesFirst(async () =>
+        {
+            await using var other = Open(cs, tenantId);
+            other.ShiftPatterns.Add(new ShiftPattern
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0),
+                EffectiveFrom = Monday, IsActive = true, SourceDraftId = rosteredMeanwhile.Id, SourceBlockKey = "b1", WorkerSlot = 1,
+            });
+            await other.SaveChangesAsync();
+        });
+        await using var racing = OpenWith(cs, tenantId, interceptor);
+
+        var result = await new ServiceAgreementDraftService(racing).SaveAsync(tenantId, participantId, Request(Entry(MonWed()), Entry(SaturdayOuting())) with { BaseVersion = 3 }, "me", CancellationToken.None);
+
+        Assert.Equal(4, Assert.IsType<ServiceAgreementDraft>(result.Draft).Version);
+        await using var read = Open(cs, tenantId);
+        Assert.Equal(new[] { 3, 4 }, await VersionsAsync(read));
+        Assert.Equal((2, 2), await ChildrenAsync(read, rosteredMeanwhile.Id));
+        Assert.Equal(1, await read.ShiftPatterns.CountAsync(p => p.SourceDraftId == rosteredMeanwhile.Id));
+        foreach (var gone in new[] { stored[0], stored[1] }) Assert.Equal((0, 0), await ChildrenAsync(read, gone.Id));
+    }
+
+    [SkippableFact]
+    public async Task AWholeSecondSaveThatLandsFirst_MakesTheSlowerSaveAConflictWithTheNewerVersion_NotAServerError()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        await StoreAsync(cs, tenantId, participantId, 1);
+        // Two coordinators save from version 1. The other one's whole save lands between this one's reading of version 1 and its delete: version 2 is in and version 1 is already gone.
+        var interceptor = new OtherWriterFinishesFirst(async () =>
+        {
+            await using var other = Open(cs, tenantId);
+            var winner = await new ServiceAgreementDraftService(other).SaveAsync(tenantId, participantId, Request(Entry(MonWed("winner"))) with { BaseVersion = 1 }, "the other coordinator", CancellationToken.None);
+            Assert.Equal(2, Assert.IsType<ServiceAgreementDraft>(winner.Draft).Version);
+        });
+        await using var racing = OpenWith(cs, tenantId, interceptor);
+
+        var loser = await new ServiceAgreementDraftService(racing).SaveAsync(tenantId, participantId, Request(Entry(MonWed("loser"))) with { BaseVersion = 1 }, "me", CancellationToken.None);
+
+        Assert.Null(loser.Draft);
+        Assert.Equal(2, loser.ConflictVersion);                                                      // the winner's version is the newest, and the answer is the 409's
+        await using var read = Open(cs, tenantId);
+        var only = Assert.Single(await read.ServiceAgreementDrafts.AsNoTracking().Include(d => d.Blocks).ToListAsync());
+        Assert.Equal(2, only.Version);
+        Assert.Equal("winner", Assert.Single(only.Blocks).BlockKey);                                 // and nothing of the loser's plan is kept
+    }
+
     [SkippableFact]
     public async Task ALegacyLine_InsertedWithoutTheNewColumns_ReadsAsItAlwaysDid()
     {
