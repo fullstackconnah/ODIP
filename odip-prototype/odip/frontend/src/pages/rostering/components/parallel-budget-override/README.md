@@ -30,18 +30,22 @@ The **server** decides everything about money and permission; these components r
 ## The flow in the shift panel
 
 1. The dry run (`POST rostering/shifts/check`) returns the findings, and, for a shift the budget could not check, an informational line in the envelope message (`budgetNote`). The line is not a finding.
-2. **Warn mode or a pattern shift**: the budget finding is a warning with the shift's cost in its sentence ("This shift: about $292.32"). Save is "Save with override" as for any warning; no reason.
-3. **Admin, hard limit**: the finding says "Reason required"; the existing reason field is required; the reason is stored with `BUDGET_FORECAST_OVER`.
-4. **Coordinator, hard limit**: Save is disabled and the refusal names the figures. `BudgetOverrideReasonFields` offers **Emergency or safety** as a secondary action. Choosing it opens the description
-   and **moves focus to it**; Save ("Save as emergency") stays disabled until the description is at least `MIN_REASON_LENGTH` trimmed characters. The request carries `emergency: true` and the description in
-   `overrideReason`; the server stores `Emergency or safety: {description}` with `BUDGET_EMERGENCY` and raises one Admin review task.
+2. **Warn mode or a pattern shift**: the budget finding is a warning with the shift's cost in its sentence ("This shift: about $292.32"). Save reads "Save anyway" and there is no reason box: nothing is asked for, and the server
+   discards a reason no finding requires, so a box would take a note and keep nothing.
+3. **Admin, hard limit**: the finding says "Reason required"; the existing reason field is required, and says why in the budget's own words ("The hard limit is on. This reason is recorded in the audit log."); Save reads
+   "Save with override"; the reason is stored with `BUDGET_FORECAST_OVER`. The "reason required" complaint goes the moment a real answer is typed.
+4. **Coordinator, hard limit**: the finding, one line ("The hard limit is on, so this shift can't be saved as it is."), then `BudgetOverrideReasonFields`, then the figures. The block scrolls into view when the refusal appears and
+   Save is disabled and points at the refusal line. The card names the three ways out and offers **Emergency or safety** as a secondary action. Choosing it opens the description and **moves focus to it**; **Back** returns focus
+   to the action. Save ("Save as emergency") stays disabled until the description is at least `MIN_REASON_LENGTH` trimmed characters (and the field stops at `MAX_EMERGENCY_LENGTH`). The request carries `emergency: true` and the
+   description in `overrideReason`; the server stores `Emergency or safety: {description}` with `BUDGET_EMERGENCY` and raises one Admin review task.
 5. A shift saved either way shows the marker on the board chip and, in the panel, `BudgetEmergencyReviewMarker`: an emergency says "Admin review pending" until the Admin completes the task; an Admin
    override has no review to wait for.
 
 ## Copy, and what it must never say
 
 - Warnings are the default. Hard limits are a Settings switch. **Only a one-off shift's overrun can be refused.** Nothing here blocks an agreement, a claim, a cancel, a cheaper edit, or delivered support.
-- The emergency or safety path **cannot be switched off**: there is no prop, setting or control for it, and the copy says so.
+- The emergency or safety path **cannot be switched off**: there is no prop, setting or control for it. Settings says so, once; the panel does not talk policy at a coordinator in an emergency.
+- The panel never says "the server": a coordinator is told what is true of this shift and what can be done, not how the system works.
 - An emergency saves at once and an Admin reviews it afterwards. Nothing says "approved".
 - A restricted viewer (`restricted`) gets no amount in the DOM. The roster itself is Admin, Coordinator and SuperAdmin only, so the shift panel never sets it; it is kept for any future surface.
 
