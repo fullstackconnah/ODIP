@@ -46,16 +46,17 @@ export function poolSentence(pool: LedgerPool, period: LedgerPeriod): string {
   const when = period.isCurrent ? 'this period' : 'in the last period'
   const rolled = period.carried > 0 ? `, including ${money(period.carried)} rolled over, not confirmed` : ''
   const stand = period.remaining >= 0 ? `${money(period.remaining)} left of ${of}` : `${money(-period.remaining)} over ${of}`
-  const first = `${name}: ${stand} ${when} (to ${formatDayMonth(period.periodEnd)})${rolled}.`
+  // When the NDIA has refused a claim of this pool for want of funds, ODIP's arithmetic may still say fine: say whose figures these are, beside the NDIA's word, with the pool's name ("Core, by ODIP's
+  // figures: ...") so the sentence has one colon.
+  const label = pool.ndiaRejection ? `${name}, by ODIP's figures:` : `${name}:`
+  const first = `${label} ${stand} ${when} (to ${formatDayMonth(period.periodEnd)})${rolled}.`
   const forecast = period.bookedAhead <= 0
     ? ''
     : period.forecastRemaining < 0
       ? ` Booked shifts would finish ${money(-period.forecastRemaining)} over.`
       : ` Booked shifts would finish with ${money(period.forecastRemaining)} to spare.`
   const gap = period.unpricedTripDayCount > 0 ? ` ${unpricedTripDaySentence(period.unpricedTripDayCount)}` : ''
-  // When the NDIA has refused a claim of this pool for want of funds, ODIP's arithmetic may still say fine: say whose figures these are, beside the NDIA's word.
-  const lead = pool.ndiaRejection ? "By ODIP's figures, " : ''
-  return `${lead}${first}${forecast}${gap}`
+  return `${first}${forecast}${gap}`
 }
 
 /**

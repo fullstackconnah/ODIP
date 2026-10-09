@@ -423,14 +423,14 @@ describe('the NDIA rejecting a claim for want of funds', () => {
   it('says whose figures they are when the NDIA has spoken: ODIP\'s own', () => {
     renderLedger(participantLedger({ pools: [ledgerPool({ ndiaRejection: rejection })] }))
 
-    expect(screen.getByText(/^By ODIP's figures, Core: /)).toBeInTheDocument()
+    expect(screen.getByText(/^Core, by ODIP's figures: /)).toBeInTheDocument()
   })
 
   it('has neither the pill nor that lead-in on a pool the NDIA has said nothing about', () => {
     renderLedger(participantLedger())
 
     expect(screen.queryByText('NDIA says the funds ran out')).not.toBeInTheDocument()
-    expect(screen.queryByText(/By ODIP's figures/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/by ODIP's figures/)).not.toBeInTheDocument()
   })
 
   it('prints the status word once in the glance strip: the chip was beside the same word', () => {

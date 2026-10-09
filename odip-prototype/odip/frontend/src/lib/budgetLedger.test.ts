@@ -50,12 +50,14 @@ describe('the sentence of a pool', () => {
     expect(poolSentence(core({ hasSetAside: false }), q2())).toBe('Core: $3,120 left of the plan\'s $8,000 this period (to 31 Dec). Booked shifts would finish $640 over.')
   })
 
-  // When the NDIA has refused a claim of the pool for want of funds, the sentence says whose figures these are: ODIP's own arithmetic, which can say fine beside the NDIA's word.
-  it("opens with \"By ODIP's figures,\" when the NDIA has refused a claim of the pool, and not otherwise", () => {
+  // When the NDIA has refused a claim of the pool for want of funds, the sentence says whose figures these are: ODIP's own arithmetic, which can say fine beside the NDIA's word. The words sit with the
+  // pool's name ("Core, by ODIP's figures: $3,120 left ..."), so there is one colon and no comma beside it.
+  it("names the pool \"Core, by ODIP's figures:\" when the NDIA has refused a claim of the pool, and not otherwise", () => {
     const refused = { date: '2026-10-08', code: 'V27', claimId: 'claim-9', claimReference: 'CLM-0009' }
 
-    expect(poolSentence(core({ ndiaRejection: refused }), q2())).toBe("By ODIP's figures, Core: $3,120 left of the $8,000 set aside this period (to 31 Dec). Booked shifts would finish $640 over.")
+    expect(poolSentence(core({ ndiaRejection: refused }), q2())).toBe("Core, by ODIP's figures: $3,120 left of the $8,000 set aside this period (to 31 Dec). Booked shifts would finish $640 over.")
     expect(poolSentence(core(), q2())).not.toContain('By ODIP')
+    expect(poolSentence(core(), q2())).not.toContain("ODIP's figures")
   })
 
   it('says over, not a negative left, once what is used is past what is available, and still says where the booked shifts take it', () => {
