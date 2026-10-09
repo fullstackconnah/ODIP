@@ -43,13 +43,23 @@ const handler = (routes: Route[], pattern: string) => (routes.find(route => rout
 
 const BUDGETS = join(__dirname, '../../../mock-api/mock-budgets.js')
 
+type Budgets = {
+  budgetAlertsOf: (ledger: unknown) => Array<{ type: string; message: string }>
+  budgetList: (people: unknown[], ledgerOf: (id: string) => unknown, today: string, approaching: number) => { noBudget: Array<Record<string, unknown>> }
+  agreementCheckOf: (ledger: unknown, planType: string, lines: unknown[], from: string, to: string, today: string) => Record<string, unknown>
+}
+
+// The mock is next to the frontend in the repository but is not copied into the frontend's Docker build context,
+// so skipIf skips this suite in the image. skipIf skips the tests but still collects the describe body, so the load
+// lives in here and the tests call it: a require in the body threw while the image was collecting the suite, and
+// that failed the build gate on "Cannot find module '/mock-api/mock-budgets.js'" instead of skipping.
+function budgets(): Budgets {
+  if (!existsSync(BUDGETS)) throw new Error(`the mock's budgets are not there: ${BUDGETS}`)
+  return createRequire(import.meta.url)(BUDGETS) as Budgets
+}
+
 // A plan recorded for later (fix round 2): the mock's ledger carries the soonest start as nextPlanStart, as the server's ParticipantLedger.NextPlanStart does, and the list and the check say it.
 describe.skipIf(!existsSync(BUDGETS))('the mock says when a plan recorded for later starts', () => {
-  const { budgetList, agreementCheckOf, budgetAlertsOf } = createRequire(import.meta.url)(BUDGETS) as {
-    budgetAlertsOf: (ledger: unknown) => Array<{ type: string; message: string }>
-    budgetList: (people: unknown[], ledgerOf: (id: string) => unknown, today: string, approaching: number) => { noBudget: Array<Record<string, unknown>> }
-    agreementCheckOf: (ledger: unknown, planType: string, lines: unknown[], from: string, to: string, today: string) => Record<string, unknown>
-  }
   const person = { id: 'p-x', firstName: 'Una', lastName: 'Upcoming', preferredName: null, planType: 'PlanManaged', isActive: true }
   const upcomingOnly = { planIsCurrent: false, nextPlanStart: '2026-11-01', pools: [] }
   const endedThenUpcoming = { planId: 'plan-1', planIsCurrent: false, planStart: '2025-07-01', planEnd: '2026-06-30', nextPlanStart: '2026-11-01', pools: [] }
@@ -59,6 +69,7 @@ describe.skipIf(!existsSync(BUDGETS))('the mock says when a plan recorded for la
   it.each([
     ['V17', ' in the plan'], ['V18', ' in the plan'], ['V27', ' in the funding period'], ['V28', ' in the funding period'], ['E104', ''],
   ])('words the NDIA alert for %s with its scope', (code, scope) => {
+    const { budgetAlertsOf } = budgets()
     const pool = { id: 'pool-core', name: 'Core (flexible)', kind: 'CoreFlexible', managementType: 'PlanManaged', ndiaRejection: { date: '2026-10-08', code },
       periods: [{ isCurrent: true, status: 'OnTrack', periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 1000, used: 0 }] }
 
@@ -68,6 +79,7 @@ describe.skipIf(!existsSync(BUDGETS))('the mock says when a plan recorded for la
   })
 
   it('puts a participant with only a later plan in the list tail as NotStarted, with the day, and keeps the other two reasons as they were', () => {
+    const { budgetList } = budgets()
     const tail = (ledger: unknown) => budgetList([person], () => ledger, '2026-10-08', 80).noBudget[0]
 
     expect(tail(upcomingOnly)).toEqual({ participantId: 'p-x', participantName: 'Una Upcoming', reason: 'NotStarted', planStart: '2026-11-01' })
@@ -77,6 +89,7 @@ describe.skipIf(!existsSync(BUDGETS))('the mock says when a plan recorded for la
   })
 
   it('says it in the agreement check too, as the server does, and prices nothing', () => {
+    const { agreementCheckOf } = budgets()
     const check = (ledger: unknown) => agreementCheckOf(ledger, 'PlanManaged', [], '2026-10-12', '2027-01-31', '2026-10-08')
 
     expect(check(upcomingOnly)).toMatchObject({ hasBudget: false, noBudgetReason: 'NotStarted', planStart: '2026-11-01', pools: [], agreementCost: 0 })
