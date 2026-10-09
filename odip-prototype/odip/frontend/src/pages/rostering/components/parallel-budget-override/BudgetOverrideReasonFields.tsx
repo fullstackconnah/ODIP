@@ -125,7 +125,7 @@ export function BudgetOverrideReasonFields({
             />
           </FormField>
           <div>
-            <Button variant="ghost" size="sm" disabled={readOnly} onClick={() => onChoiceChange('none')}>
+            <Button variant="ghost" size="sm" disabled={readOnly} aria-label="Back: this is not an emergency" onClick={() => onChoiceChange('none')}>
               Back
             </Button>
           </div>

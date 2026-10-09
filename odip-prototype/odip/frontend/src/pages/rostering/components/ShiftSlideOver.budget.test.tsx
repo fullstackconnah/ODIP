@@ -201,7 +201,7 @@ describe('a Coordinator the budget refused', () => {
     await user.click(emergencyAction())
     await user.type(description(), DESCRIPTION)
 
-    await user.click(screen.getByRole('button', { name: /^Back$/ }))
+    await user.click(screen.getByRole('button', { name: /^Back: this is not an emergency$/ }))
 
     expect(saveButton()).toBeDisabled()
     await user.click(emergencyAction())
@@ -574,7 +574,7 @@ describe('what a screen reader is told (M7)', () => {
     await user.click(emergencyAction())
     await user.type(description(), DESCRIPTION)
 
-    await user.click(screen.getByRole('button', { name: /^Back$/ }))
+    await user.click(screen.getByRole('button', { name: /^Back: this is not an emergency$/ }))
 
     expect(emergencyAction()).toHaveFocus()
   })

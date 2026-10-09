@@ -320,3 +320,30 @@ describe('who reviewed it, from the completion record (design review M10)', () =
     expect(valueOf('Reviewed by')).toBe('Ada Admin')
   })
 })
+
+describe('the pill uses the board chip’s glyphs (design review round 1, N3)', () => {
+  const pillGlyph = () => screen.getByText(/^Over budget: /).querySelector('svg')!.getAttribute('class') ?? ''
+
+  it('draws a siren for an emergency waiting on its review, as the chip’s disc does', () => {
+    render(<BudgetEmergencyReviewMarker details={pendingEmergency} />)
+    expect(pillGlyph()).toContain('lucide-siren')
+  })
+
+  it('draws a tick once the emergency has been reviewed', () => {
+    render(<BudgetEmergencyReviewMarker details={reviewedEmergency} />)
+    expect(pillGlyph()).toContain('lucide-check')
+  })
+
+  it('draws a key for an Admin override', () => {
+    render(<BudgetEmergencyReviewMarker details={adminOverrideShift} />)
+    expect(pillGlyph()).toContain('lucide-key-round')
+  })
+
+  it('draws no shield: the generic override mark is a shield and these are not it', () => {
+    for (const details of [pendingEmergency, reviewedEmergency, adminOverrideShift]) {
+      const { unmount } = render(<BudgetEmergencyReviewMarker details={details} />)
+      expect(pillGlyph()).not.toContain('shield')
+      unmount()
+    }
+  })
+})
