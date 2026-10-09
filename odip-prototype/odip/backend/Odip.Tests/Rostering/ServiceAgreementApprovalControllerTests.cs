@@ -107,7 +107,7 @@ public class ServiceAgreementApprovalControllerTests
 
         Assert.IsType<NotFoundObjectResult>((await other.Approve(f.ParticipantId, draft.Id, new ApproveDraftDto(), CancellationToken.None)).Result);
         Assert.IsType<NotFoundObjectResult>((await other.ApprovalPreview(f.ParticipantId, draft.Id, CancellationToken.None)).Result);
-        Assert.IsType<NotFoundObjectResult>((await Controller(f).Approve(f.ParticipantId, Guid.NewGuid(), new ApproveDraftDto(), CancellationToken.None)).Result);
+        Assert.IsType<ConflictObjectResult>((await Controller(f).Approve(f.ParticipantId, Guid.NewGuid(), new ApproveDraftDto(), CancellationToken.None)).Result);        // my participant has revisions: one that is not there may have been replaced by a save, which is a 409 draft-superseded (ServiceAgreementApprovalReplacedTests)
         Assert.Empty(await f.Db.ServiceAgreementDraftApprovals.ToListAsync());
     }
 
