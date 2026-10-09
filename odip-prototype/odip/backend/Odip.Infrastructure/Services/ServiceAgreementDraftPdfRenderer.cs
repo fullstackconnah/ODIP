@@ -9,7 +9,10 @@ namespace Odip.Infrastructure.Services;
 /// <summary>Renders an informational draft only. It intentionally contains no legal terms, signature, or billing status.</summary>
 public static class ServiceAgreementDraftPdfRenderer
 {
-    public static byte[] Render(ServiceAgreementDraft draft)
+    public static byte[] Render(ServiceAgreementDraft draft) => Compose(draft).GeneratePdf();
+
+    /// <summary>The document before it is written out, so a test can draw its pages as images and look at them.</summary>
+    public static Document Compose(ServiceAgreementDraft draft)
     {
         QuestPDF.Settings.License = LicenseType.Community;
         return Document.Create(document => document.Page(page =>
@@ -35,6 +38,7 @@ public static class ServiceAgreementDraftPdfRenderer
                 Field(column, "Plan dates", $"{draft.PlanStartDate:dd MMM yyyy} — {draft.PlanEndDate:dd MMM yyyy}");
                 Field(column, "Draft agreement dates", $"{draft.AgreementStartDate:dd MMM yyyy} — {draft.AgreementEndDate:dd MMM yyyy}");
                 Field(column, "Service types", draft.ServiceTypesJson);
+                Schedule(column, draft);
                 column.Item().PaddingTop(16).Text("Catalogue-priced draft lines").Bold().FontSize(12);
                 column.Item().PaddingTop(6).Table(table =>
                 {
@@ -71,7 +75,44 @@ public static class ServiceAgreementDraftPdfRenderer
                 column.Item().PaddingTop(18).AlignCenter().Text("UNAPPROVED / NOT FOR SIGNING OR LIVE USE / NOT ACTIVE / NO ROSTER, INVOICE OR CLAIM AUTHORITY").Bold().FontColor(Colors.Red.Darken2);
             });
             page.Footer().AlignCenter().Text(text => { text.Span("UNAPPROVED — NOT FOR SIGNING OR LIVE USE — Page "); text.CurrentPageNumber(); });
-        })).GeneratePdf();
+        }));
+    }
+
+    /// <summary>
+    /// The weekly schedule of supports: what is delivered, on which days and at what times, at what ratio, and what each support comes to over the agreement. Read from the revision's stored blocks and
+    /// pricing (<see cref="AgreementSchedule"/>). The catalogue lines that follow it are the cost detail behind the figures.
+    /// </summary>
+    private static void Schedule(ColumnDescriptor column, ServiceAgreementDraft draft)
+    {
+        var schedule = AgreementSchedule.Of(draft);
+        column.Item().PaddingTop(16).Text("Schedule of supports").Bold().FontSize(12);
+        if (schedule.Rows.Count == 0 && schedule.Unreadable == 0)
+        {
+            column.Item().PaddingTop(4).Text("No weekly schedule was recorded for this agreement.");
+            return;
+        }
+
+        column.Item().PaddingTop(4).Text(AgreementSchedule.Repeats(draft));
+        if (schedule.Rows.Count > 0)
+            column.Item().PaddingTop(6).Table(table =>
+            {
+                // The time column is wide enough for "22:00 to 06:00 (ends the next day)" on one line, and the figures are narrow: the days and the support share what is left.
+                table.ColumnsDefinition(columns =>
+                {
+                    columns.RelativeColumn(2f); columns.ConstantColumn(158); columns.RelativeColumn(3f); columns.ConstantColumn(34);
+                    columns.ConstantColumn(34); columns.ConstantColumn(44); columns.ConstantColumn(66);
+                });
+                table.Header(header =>
+                {
+                    foreach (var heading in new[] { "Days", "Time", "Support", "Ratio", "State", "Hours a week", "Cost for the agreement" })
+                        header.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text(heading).Bold().FontSize(9);
+                });
+                foreach (var row in schedule.Rows)
+                    foreach (var value in new[] { row.Days, row.Time, row.Support, row.Ratio, row.State, row.HoursAWeek, row.Cost })
+                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten1).Padding(4).Text(value).FontSize(9);
+            });
+        if (schedule.Unreadable > 0)
+            column.Item().PaddingTop(4).Text("Some supports in this agreement could not be read, so they are not listed here. Check the agreement before relying on this schedule.").FontColor(Colors.Orange.Darken3);
     }
 
     private static void Section(ColumnDescriptor column, string heading, string body) =>

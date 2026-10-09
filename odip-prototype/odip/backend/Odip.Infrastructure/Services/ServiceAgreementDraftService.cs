@@ -321,7 +321,8 @@ public sealed class ServiceAgreementDraftService
 
     public async Task<(byte[]? Pdf, string? Error)> RenderPdfAsync(Guid tenantId, Guid participantId, Guid draftId, CancellationToken ct)
     {
-        var draft = await _db.ServiceAgreementDrafts.Include(x => x.Lines)
+        // The blocks too: the PDF prints the weekly schedule from them. Two collections, so two queries and not their cross product.
+        var draft = await _db.ServiceAgreementDrafts.Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery()
             .SingleOrDefaultAsync(x => x.Id == draftId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (draft == null) return (null, "Draft not found.");
         return (ServiceAgreementDraftPdfRenderer.Render(draft), null);

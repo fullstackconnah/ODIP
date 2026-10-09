@@ -233,9 +233,9 @@ public class DraftSigningAndPdfTests
     /// The words on every page of a PDF, in reading order, reduced to what survives text extraction. The font draws "fi", "ft" and "ti" as ligature glyphs, which come back as a ligature character
     /// or a NUL ("shi\0s"), so what is compared is the text with every character that is not a letter or a digit, and the letters that can be part of a ligature (f, t, i), taken out of both sides.
     /// </summary>
-    private static string Skeleton(string text) => Regex.Replace(text, @"[^a-z0-9]|[fti]", string.Empty, RegexOptions.IgnoreCase);
+    internal static string Skeleton(string text) => Regex.Replace(text, @"[^a-z0-9]|[fti]", string.Empty, RegexOptions.IgnoreCase);
 
-    private static string TextOf(byte[] pdf)
+    internal static string TextOf(byte[] pdf)
     {
         using var document = PdfDocument.Open(pdf);
         return Skeleton(string.Join(" ", document.GetPages().SelectMany(page => page.GetWords()).Select(word => word.Text)));
