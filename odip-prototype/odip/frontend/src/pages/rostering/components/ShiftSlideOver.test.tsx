@@ -178,7 +178,9 @@ describe('ShiftSlideOver override gate', () => {
       />,
     )
 
-    const saveButton = screen.getByRole('button', { name: /save with override/i })
+    // M1: nothing is overridden by a warning that asks for nothing, so the button does not say so.
+    expect(screen.queryByRole('button', { name: /save with override/i })).not.toBeInTheDocument()
+    const saveButton = screen.getByRole('button', { name: /^save anyway$/i })
     expect(saveButton).not.toBeDisabled()
 
     await user.click(saveButton)
@@ -190,7 +192,7 @@ describe('ShiftSlideOver override gate', () => {
     expect(screen.queryByText(/a reason is required to save over the warnings marked/i)).not.toBeInTheDocument()
   })
 
-  it('renders the override-reason field as optional when the only Warning present does not require a reason', () => {
+  it('renders no override-reason field when the only Warning present does not require a reason: the server discards a reason no finding asks for', () => {
     const shift = makeShift({
       findings: [makeFinding({ code: 'STAFF_LEAVE_PENDING', severity: 'Warning', requiresReason: false })],
       overrideReason: null,
@@ -205,11 +207,9 @@ describe('ShiftSlideOver override gate', () => {
       />,
     )
 
-    // The roster board invites a voluntary override note on ANY warning (showOnAnyWarning) —
-    // deliberate, and distinct from the trip-side surfaces which only show the field when a
-    // finding actually requires a reason. See RosterGateFieldsProps.showOnAnyWarning.
-    const field = screen.getByLabelText(/reason for override/i)
-    expect(field).not.toHaveAttribute('aria-required', 'true')
+    // The roster board used to invite a voluntary note on ANY warning, but RosterGate.ComputeOverride throws away a reason that no finding requires (spec section 3), so the note was
+    // typed, saved and gone. The box now follows the trip-side surfaces: it is there when a finding asks for a reason, or when a stored reason is being read.
+    expect(screen.queryByLabelText(/reason for override/i)).not.toBeInTheDocument()
   })
 })
 

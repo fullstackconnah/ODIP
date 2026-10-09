@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { FormField } from '@/components/FormField'
-import { FindingsList } from './FindingsList'
+import { FindingsList, type FindingsAnswered } from './FindingsList'
 import { getRosterGate } from '../lib/rosterGate'
 import type { RosterFindingDto } from '@/api/types'
 import { plural } from '@/lib/format'
@@ -17,18 +17,6 @@ export interface RosterGateFieldsProps {
    * made. Defaults to false, which preserves today's behaviour at the 3 existing call sites.
    */
   forceVisible?: boolean
-  /**
-   * Show the override-reason field (optional — `required` stays keyed to reasonRequiredFindings
-   * only) whenever ANY Warning-severity finding is present, not just a reason-required one — a
-   * Blocking-only findings set does NOT trigger this (Blocking already refuses the save outright,
-   * so there's nothing to leave a voluntary note about). The roster board (ShiftSlideOver) sets
-   * this: it has always invited a voluntary override note on any warning, and in an NDIS context
-   * that note is audit evidence, so this behaviour is deliberate there. The trip-side call sites
-   * (StaffAssignModal, StaffTab) do NOT set this — trip-side assignment only asks for a reason
-   * when a finding actually demands one. The two surfaces differ on purpose; this prop states
-   * that decision instead of leaving it as silent drift between them. Defaults to false.
-   */
-  showOnAnyWarning?: boolean
   /** Disables the override-reason textarea — mirrors the write-permission check every other field
    * in these forms gets from its caller. Defaults to false (enabled). */
   disabled?: boolean
@@ -38,6 +26,16 @@ export interface RosterGateFieldsProps {
    * Defaults to false: today's behaviour at every other call site.
    */
   blockingAnswered?: boolean
+  /** The reason field's own words, for a caller that knows what the reason is being asked for (the shift panel, for a budget override). Each part falls back to the generic wording. */
+  reasonCopy?: { hint?: string; placeholder?: string; error?: string }
+  /** The standing sentence for an open Blocking finding, in the caller's words (the shift panel says "The hard limit is on…" for a budget refusal). Defaults to the generic sentence. */
+  blockingMessage?: string
+  /** The id of that sentence, so the caller can point a disabled control at it (aria-describedby). */
+  blockingMessageId?: string
+  /** One more sentence for the polite live summary, so a screen reader hears the caller's state with the check's result and the panel keeps ONE live region (the budget refusal, the "Budget not checked" line). */
+  liveNote?: string
+  /** Blocking findings another control on the form has answered, drawn as answered in the list. */
+  answered?: FindingsAnswered
 }
 
 /**
@@ -51,15 +49,16 @@ export interface RosterGateFieldsProps {
  *
  * The override-reason field shows whenever a live finding actually requires a reason
  * (reasonRequiredFindings.length > 0, in which case it's required) — a soft Warning finding
- * alone must never FORCE it on its own — or when forceVisible is set, for a record that already
- * carries a persisted reason a coordinator should be able to read and amend even once the
- * finding that originally required it is gone — or, when the caller opts in via
- * showOnAnyWarning, whenever any Warning finding is present at all (still optional in that case).
+ * alone never shows it, because the server throws away a reason that no finding requires
+ * (RosterGate.ComputeOverride), so a box for one would take a note and keep nothing — or when
+ * forceVisible is set, for a record that already carries a persisted reason a coordinator should
+ * be able to read and amend even once the finding that originally required it is gone.
  */
-export function RosterGateFields({ findings, overrideReason, onOverrideReasonChange, reasonRequired, forceVisible, showOnAnyWarning, disabled, blockingAnswered }: RosterGateFieldsProps) {
+export function RosterGateFields({
+  findings, overrideReason, onOverrideReasonChange, reasonRequired, forceVisible, disabled, blockingAnswered, reasonCopy, blockingMessage, blockingMessageId, liveNote, answered,
+}: RosterGateFieldsProps) {
   const { reasonRequiredFindings, blockingFindings } = getRosterGate(findings)
-  const hasWarningFinding = findings.some(f => f.severity === 'Warning')
-  const showReasonField = reasonRequiredFindings.length > 0 || !!forceVisible || (!!showOnAnyWarning && hasWarningFinding)
+  const showReasonField = reasonRequiredFindings.length > 0 || !!forceVisible
 
   const reasonTextareaRef = useRef<HTMLTextAreaElement>(null)
   const wasReasonRequiredRef = useRef(reasonRequired)
@@ -87,16 +86,17 @@ export function RosterGateFields({ findings, overrideReason, onOverrideReasonCha
           ShiftSlideOver's staff-compatibility notice) already use role="status" for their own
           single non-blocking notice and assert on there being exactly one/zero status elements. */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {findings.length === 0
+        {(findings.length === 0
           ? 'Roster check complete: no conflicts found.'
           : `Roster check complete: ${plural(findings.length, 'finding')}` +
-            (blockingFindings.length > 0 ? `, ${blockingFindings.length} blocking` : '') + '.'}
+            (blockingFindings.length > 0 ? `, ${blockingFindings.length} blocking` : '') + '.') +
+          (liveNote ? ` ${liveNote}` : '')}
       </div>
 
       {findings.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">Findings</p>
-          <FindingsList findings={findings} />
+          <FindingsList findings={findings} answered={answered} />
         </div>
       )}
 
@@ -104,7 +104,8 @@ export function RosterGateFields({ findings, overrideReason, onOverrideReasonCha
         <FormField
           label="Reason for override"
           required={reasonRequiredFindings.length > 0}
-          error={reasonRequired ? 'A reason is required to save over the warnings marked “Reason required”.' : undefined}
+          hint={reasonCopy?.hint}
+          error={reasonRequired ? reasonCopy?.error ?? 'A reason is required to save over the warnings marked “Reason required”.' : undefined}
         >
           <textarea
             ref={reasonTextareaRef}
@@ -112,14 +113,14 @@ export function RosterGateFields({ findings, overrideReason, onOverrideReasonCha
             value={overrideReason}
             disabled={disabled}
             onChange={e => onOverrideReasonChange(e.target.value)}
-            placeholder="Why this assignment should proceed despite the warnings above"
+            placeholder={reasonCopy?.placeholder ?? 'Why this assignment should proceed despite the warnings above'}
           />
         </FormField>
       )}
 
       {blockingFindings.length > 0 && !blockingAnswered && (
-        <p role="alert" className="text-sm font-medium text-destructive">
-          This assignment can't be saved while a blocking finding is open.
+        <p id={blockingMessageId} role="alert" className="text-sm font-medium text-destructive">
+          {blockingMessage ?? "This assignment can't be saved while a blocking finding is open."}
         </p>
       )}
     </>

@@ -7,9 +7,11 @@ export { BudgetEmergencyReviewMarker, type BudgetEmergencyReviewMarkerProps } fr
 
 export {
   BUDGET_FINDING_CODES,
+  MAX_EMERGENCY_LENGTH,
   MIN_REASON_LENGTH,
   OVER_BUDGET_MARKER,
   canSubmit,
+  charactersStillNeeded,
   emergencyOffered,
   figuresOf,
   isBudgetFinding,

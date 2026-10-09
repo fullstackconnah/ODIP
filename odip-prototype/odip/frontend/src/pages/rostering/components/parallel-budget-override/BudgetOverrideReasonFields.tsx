@@ -3,7 +3,9 @@ import { Loader2, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { FormField } from '@/components/FormField'
 import {
+  MAX_EMERGENCY_LENGTH,
   MIN_REASON_LENGTH,
+  charactersStillNeeded,
   emergencyOffered,
   reasonError,
   type BudgetFindingView,
@@ -58,14 +60,18 @@ export function BudgetOverrideReasonFields({
 }: BudgetOverrideReasonFieldsProps) {
   const descriptionId = useId()
   const reasonRef = useRef<HTMLTextAreaElement>(null)
+  const choiceRef = useRef<HTMLDivElement>(null)
   const wasEmergency = useRef(choice === 'emergency')
   const isEmergency = choice === 'emergency'
   const readOnly = disabled || pending
   const message = reasonError(choice, reason, submitted)
+  const stillNeeded = charactersStillNeeded(reason)
 
   // Choosing the path moves focus to the description, so a keyboard or screen-reader user lands on the one thing left to do. Only on the change: a re-render (or an initial render already in the path) never steals it.
+  // Stepping back removes the button that was just pressed, which would drop focus to the page: it goes to the "Emergency or safety" button that takes its place (nothing to focus when the whole card has gone).
   useEffect(() => {
     if (isEmergency && !wasEmergency.current) reasonRef.current?.focus()
+    else if (!isEmergency && wasEmergency.current) choiceRef.current?.querySelector('button')?.focus()
     wasEmergency.current = isEmergency
   }, [isEmergency])
 
@@ -91,20 +97,19 @@ export function BudgetOverrideReasonFields({
             <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
             Emergency or safety
           </p>
-          <p className="text-[13px] text-[var(--color-on-warning-container)]">
-            The shift saves at once and an Admin reviews it afterwards. This option is always available and cannot be switched off.
-          </p>
+          <p className="text-[13px] text-[var(--color-on-warning-container)]">It saves at once. An Admin reviews it afterwards.</p>
           <FormField
             label="What made this an emergency or safety need"
             required
             // The error is the field's own: FormField puts it under the control with role="alert" and folds its id into aria-describedby, so a keyboard user focused on the textarea hears it.
             error={message ?? undefined}
-            hint={`At least ${MIN_REASON_LENGTH} characters. This is stored with the shift, and an Admin reviews it afterwards.`}
+            hint={`At least ${MIN_REASON_LENGTH} characters${stillNeeded > 0 ? `, ${stillNeeded} more needed` : ''}. Kept with the shift.`}
           >
             <textarea
               ref={reasonRef}
               id={descriptionId}
               rows={3}
+              maxLength={MAX_EMERGENCY_LENGTH}
               value={reason}
               disabled={readOnly}
               onChange={e => onReasonChange(e.target.value)}
@@ -113,16 +118,16 @@ export function BudgetOverrideReasonFields({
           </FormField>
           <div>
             <Button variant="ghost" size="sm" disabled={readOnly} onClick={() => onChoiceChange('none')}>
-              This is not an emergency
+              Back
             </Button>
           </div>
         </>
       ) : (
         <>
           <p className="text-[13px] text-[var(--color-foreground)]">
-            A hard limit refuses a one-off shift that takes a participant past their budget. An Admin can save it with a written reason. If it is an emergency or a safety need, book it now and an Admin reviews it afterwards.
+            You can change the shift so it costs less, ask an Admin to save it with a reason, or, if it is an emergency or a safety need, book it now. An Admin reviews it afterwards.
           </p>
-          <div>
+          <div ref={choiceRef}>
             <Button variant="secondary" disabled={readOnly} onClick={() => onChoiceChange('emergency')}>
               <ShieldAlert className="h-4 w-4" aria-hidden="true" />
               Emergency or safety
@@ -139,10 +144,6 @@ export function BudgetOverrideReasonFields({
           Saving — the description above is kept so you can try again if it does not save.
         </p>
       )}
-
-      <p className="text-xs text-[var(--color-muted-foreground)]">
-        The server checks the budget on every save. What this panel shows is what the server last told us, not a decision made in the browser.
-      </p>
     </section>
   )
 }

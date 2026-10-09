@@ -3,9 +3,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   BUDGET_FINDING_CODES,
+  MAX_EMERGENCY_LENGTH,
   MIN_REASON_LENGTH,
   OVER_BUDGET_MARKER,
   canSubmit,
+  charactersStillNeeded,
   emergencyOffered,
   emergencyReviewBadge,
   figuresOf,
@@ -109,6 +111,30 @@ describe('isMeaningfulReason', () => {
 
   it('trims before deciding, so padding around a real reason does not matter', () => {
     expect(isMeaningfulReason('  Unsafe today  ')).toBe(true)
+  })
+})
+
+describe('charactersStillNeeded', () => {
+  it('counts what is left to the minimum on the trimmed text', () => {
+    expect(charactersStillNeeded('Unsafe')).toBe(4)
+    expect(charactersStillNeeded('  Unsafe  ')).toBe(4)
+    expect(charactersStillNeeded('x'.repeat(MIN_REASON_LENGTH - 1))).toBe(1)
+  })
+
+  it('is zero at the minimum and above it', () => {
+    expect(charactersStillNeeded('x'.repeat(MIN_REASON_LENGTH))).toBe(0)
+    expect(charactersStillNeeded('x'.repeat(MIN_REASON_LENGTH + 40))).toBe(0)
+  })
+
+  it('is zero before anything is typed: the hint does not nag at an empty box', () => {
+    expect(charactersStillNeeded('')).toBe(0)
+    expect(charactersStillNeeded('   ')).toBe(0)
+  })
+})
+
+describe('MAX_EMERGENCY_LENGTH', () => {
+  it('is the 1,900 characters the server accepts for the description, which leaves room for the prefix it stores in front', () => {
+    expect(MAX_EMERGENCY_LENGTH).toBe(1900)
   })
 })
 

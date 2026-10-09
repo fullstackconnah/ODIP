@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ShiftSlideOver } from './ShiftSlideOver'
@@ -77,6 +77,9 @@ describe('a budget warning (Warn mode)', () => {
 
     expect(await screen.findByText('Takes Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct–31 Dec 2026. This shift: about $292.32.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Emergency or safety/i })).not.toBeInTheDocument()   // nothing is refused, so there is nothing to get through
+    // M1: nothing is overridden in Warn mode, so the button does not say so, and there is no box for a reason the server would throw away.
+    expect(saveButton()).toHaveTextContent('Save anyway')
+    expect(screen.queryByLabelText(/reason for override/i)).not.toBeInTheDocument()
     await user.click(saveButton())
 
     expect(mockCreateMutateAsync).toHaveBeenCalledWith({
@@ -104,12 +107,21 @@ describe('an Admin’s override (a warning that asks for a reason)', () => {
     answerCheckWith({ findings: [{ ...forecastOverWarningForAdmin, message: forecastOverWithCost.message }] })
     renderCreate()
     await screen.findByText(/Reason required/)
+    expect(saveButton()).toHaveTextContent('Save with override')   // a reason IS being asked for here
+    // M5: the field says why it is asked for and that it is kept, in the budget's own words.
+    expect(screen.getByLabelText(/reason for override/i)).toHaveAccessibleDescription('The hard limit is on. This reason is recorded in the audit log.')
+    expect(screen.getByPlaceholderText('Why this shift should go ahead past the budget')).toBeInTheDocument()
 
     await user.click(saveButton())
     expect(mockCreateMutateAsync).not.toHaveBeenCalled()
-    expect(screen.getByText(/A reason is required to save over the warnings/)).toBeInTheDocument()
+    expect(screen.getByText('Add a reason to save this shift past the budget.')).toBeInTheDocument()
+    expect(screen.queryByText(/A reason is required to save over the warnings/)).not.toBeInTheDocument()
 
-    await user.type(screen.getByLabelText(/reason for override/i), 'Client’s carer is in hospital')
+    // M6: the error goes the moment there is a real answer under it, not only on the next save.
+    await user.type(screen.getByLabelText(/reason for override/i), 'C')
+    expect(screen.queryByText('Add a reason to save this shift past the budget.')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/reason for override/i)).not.toBeInvalid()
+    await user.type(screen.getByLabelText(/reason for override/i), 'lient’s carer is in hospital')
     await user.click(saveButton())
 
     expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ overrideReason: 'Client’s carer is in hospital', acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'] }))
@@ -144,7 +156,7 @@ describe('a Coordinator the budget refused', () => {
     await user.type(description(), '!')
     expect(saveButton()).toBeEnabled()
     expect(saveButton()).toHaveTextContent('Save as emergency')
-    expect(screen.queryByText(/can.t be saved while a blocking finding is open/)).not.toBeInTheDocument()   // the refusal is answered
+    expect(screen.queryByText(/can.t be saved as it is/)).not.toBeInTheDocument()   // the refusal is answered
   })
 
   it('saves as an emergency: the description in the reason, the flag set, and nothing else changed', async () => {
@@ -189,7 +201,7 @@ describe('a Coordinator the budget refused', () => {
     await user.click(emergencyAction())
     await user.type(description(), DESCRIPTION)
 
-    await user.click(screen.getByRole('button', { name: /This is not an emergency/i }))
+    await user.click(screen.getByRole('button', { name: /^Back$/ }))
 
     expect(saveButton()).toBeDisabled()
     await user.click(emergencyAction())
@@ -244,6 +256,16 @@ describe('the figures', () => {
     expect(within(region).getByText('$292.32')).toBeInTheDocument()
     expect(within(region).getByText('$640.00')).toBeInTheDocument()
     expect(within(region).queryByText(/^Takes Core/)).not.toBeInTheDocument()
+  })
+
+  it('has a summary row that reaches the 44 px touch floor, with a chevron of its own (M8)', async () => {
+    answerCheckWith({ findings: [forecastOverWithCost] })
+    renderCreate()
+    await screen.findByText(/Takes Core/)
+
+    const summary = screen.getByText('Budget figures', { selector: 'summary' })
+    expect(summary.className).toContain('min-h-[var(--tap-min)]')
+    expect(summary.querySelector('svg')).not.toBeNull()
   })
 })
 
@@ -347,5 +369,240 @@ describe('a viewer who cannot write', () => {
     expect(screen.getByRole('region', { name: 'Emergency or safety' })).toBeInTheDocument()   // the refusal is still visible, as a read-only form
     expect(emergencyAction()).toBeDisabled()
     expect(mockCheckMutate).not.toHaveBeenCalled()
+  })
+})
+
+// ── Phase 3 design review, round 1 ───────────────────────────────────────────────────────────────────────────────────────
+
+const REFUSAL = "The hard limit is on, so this shift can't be saved as it is."
+const follows = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+
+describe('the reason box keeps the generic words when the budget is not the only thing asking (M5)', () => {
+  it('asks in the roster’s words when another finding wants a reason too', async () => {
+    answerCheckWith({
+      findings: [{ ...forecastOverWarningForAdmin, message: forecastOverWithCost.message }, makeFinding({ code: 'STAFF_ON_LEAVE', severity: 'Warning', message: 'Staff is on approved leave.', requiresReason: true })],
+    })
+    renderCreate()
+    await screen.findAllByText(/Reason required/)
+
+    expect(screen.getByPlaceholderText('Why this assignment should proceed despite the warnings above')).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Why this shift should go ahead past the budget')).not.toBeInTheDocument()
+  })
+})
+
+describe('the refusal, read in the order a coordinator needs it (H2, H3)', () => {
+  it('says the hard limit in one line of the budget’s own words, not the roster’s', async () => {
+    answerCheckWith({ findings: [forecastOverWithCost] })
+    renderCreate()
+
+    expect(await screen.findByText(REFUSAL)).toBeInTheDocument()
+    expect(screen.queryByText(/blocking finding is open/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/assignment/i)).not.toBeInTheDocument()
+  })
+
+  it('points the disabled Save at that line, so a screen reader that lands on it hears why', async () => {
+    answerCheckWith({ findings: [forecastOverWithCost] })
+    renderCreate()
+    await screen.findByText(REFUSAL)
+
+    expect(saveButton()).toBeDisabled()
+    expect(saveButton()).toHaveAccessibleDescription(REFUSAL)
+  })
+
+  it('keeps the roster’s own sentence when something other than the budget blocks too', async () => {
+    answerCheckWith({ findings: [forecastOverWithCost, makeFinding({ code: 'WSC_EXPIRED', severity: 'Blocking', message: 'Screening has expired' })] })
+    renderCreate()
+
+    expect(await screen.findByText(/blocking finding is open/)).toBeInTheDocument()
+    expect(screen.queryByText(REFUSAL)).not.toBeInTheDocument()
+  })
+
+  it('orders the block: the finding, the one-line refusal, the way through, and the figures last', async () => {
+    answerCheckWith({ findings: [forecastOverWithCost] })
+    renderCreate()
+    const refusal = await screen.findByText(REFUSAL)
+
+    const finding = screen.getByText(/Takes Core/)
+    const card = screen.getByRole('region', { name: 'Emergency or safety' })
+    const figures = screen.getByText('Budget figures', { selector: 'summary' })
+    expect(follows(finding, refusal)).toBe(true)
+    expect(follows(refusal, card)).toBe(true)
+    expect(follows(card, figures)).toBe(true)
+  })
+
+  it('names the three ways out in the card: change the shift, ask an Admin, or book it as an emergency', async () => {
+    answerCheckWith({ findings: [forecastOverWithCost] })
+    renderCreate()
+
+    expect(await screen.findByText('You can change the shift so it costs less, ask an Admin to save it with a reason, or, if it is an emergency or a safety need, book it now. An Admin reviews it afterwards.')).toBeInTheDocument()
+  })
+
+  it('says nothing about "the server": the coordinator sees a refusal and a way through, not a system', async () => {
+    answerCheckWith({ findings: [forecastOverWithCost] })
+    renderCreate()
+    await screen.findByText(REFUSAL)
+
+    expect(screen.getByRole('region', { name: 'Emergency or safety' }).textContent).not.toMatch(/\bserver\b/i)
+  })
+})
+
+describe('the refusal comes into view (H2)', () => {
+  const scrollIntoView = vi.fn()
+  const realMatchMedia = window.matchMedia
+
+  beforeEach(() => {
+    scrollIntoView.mockReset()
+    Element.prototype.scrollIntoView = scrollIntoView
+  })
+
+  afterEach(() => {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
+    window.matchMedia = realMatchMedia
+  })
+
+  const motion = (reduce: boolean) => {
+    window.matchMedia = ((query: string) => ({ matches: reduce && query.includes('reduce'), media: query, onchange: null, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia
+  }
+
+  it('scrolls the finding, the refusal and the way through into view when the refusal first appears', async () => {
+    motion(false)
+    answerCheckWith({ findings: [forecastOverWithCost] })
+    renderCreate()
+    const refusal = await screen.findByText(REFUSAL)
+
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1))
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' })
+    expect(scrollIntoView.mock.contexts[0]).toContainElement(refusal)
+    expect(scrollIntoView.mock.contexts[0]).toContainElement(screen.getByRole('region', { name: 'Emergency or safety' }))
+  })
+
+  it('is instant under reduced motion', async () => {
+    motion(true)
+    answerCheckWith({ findings: [forecastOverWithCost] })
+    renderCreate()
+    await screen.findByText(REFUSAL)
+
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', behavior: 'auto' }))
+  })
+
+  it('does nothing for a warning, which blocks nothing and needs no way through', async () => {
+    answerCheckWith({ findings: [{ ...forecastOverWithCost, severity: 'Warning' }] })
+    renderCreate()
+    await screen.findByText(/Takes Core/)
+
+    expect(scrollIntoView).not.toHaveBeenCalled()
+  })
+
+  it('does not pull the panel back down on every re-check while the coordinator adjusts the times above', async () => {
+    const user = userEvent.setup()
+    let cost = 292.32
+    mockCheckMutate.mockImplementation((_c: unknown, opts?: { onSuccess?: (r: ShiftCheckResult) => void }) =>
+      opts?.onSuccess?.({ findings: [{ ...forecastOverWithCost, budget: { ...forecastOverWithFigures.budget!, shiftCost: cost } }] }))
+    renderCreate()
+    await screen.findByText(REFUSAL)
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1))
+
+    cost = 180
+    await user.clear(screen.getByLabelText(/^End time/))
+    await user.type(screen.getByLabelText(/^End time/), '10:00')
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenCalledTimes(2))
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+  })
+
+  it('brings it into view again when the refusal has gone and comes back', async () => {
+    const user = userEvent.setup()
+    let refuse = true
+    mockCheckMutate.mockImplementation((_c: unknown, opts?: { onSuccess?: (r: ShiftCheckResult) => void }) => opts?.onSuccess?.({ findings: refuse ? [forecastOverWithCost] : [] }))
+    renderCreate()
+    await screen.findByText(REFUSAL)
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1))
+
+    refuse = false
+    await user.clear(screen.getByLabelText(/^End time/))
+    await user.type(screen.getByLabelText(/^End time/), '10:00')
+    await waitFor(() => expect(screen.queryByText(REFUSAL)).not.toBeInTheDocument())
+
+    refuse = true
+    await user.clear(screen.getByLabelText(/^End time/))
+    await user.type(screen.getByLabelText(/^End time/), '15:00')
+    await screen.findByText(REFUSAL)
+
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('what a screen reader is told (M7)', () => {
+  const liveText = () => document.querySelector('[aria-live="polite"]')!.textContent
+
+  it('says in the one polite summary that the shift is over budget, Save is off, and the way through is below', async () => {
+    answerCheckWith({ findings: [forecastOverWithCost] })
+    renderCreate()
+    await screen.findByText(REFUSAL)
+
+    expect(document.querySelectorAll('[aria-live]')).toHaveLength(1)
+    expect(liveText()).toBe('Roster check complete: 1 finding, 1 blocking. Over budget. Save is off. Emergency or safety is available below.')
+  })
+
+  it('says what is left to do once the emergency path is open, and when Save is on', async () => {
+    const user = userEvent.setup()
+    answerCheckWith({ findings: [forecastOverWithCost] })
+    renderCreate()
+    await screen.findByText(REFUSAL)
+
+    await user.click(emergencyAction())
+    expect(liveText()).toContain('Over budget. Describe the emergency to turn Save on.')
+
+    await user.type(description(), DESCRIPTION)
+    expect(liveText()).toContain('Over budget. Save as emergency is on.')
+  })
+
+  it('carries the "Budget not checked" line, which is in no live region of its own', async () => {
+    answerCheckWith({ findings: [], budgetNote: 'Budget not checked: sleepover shifts are not priced yet.' })
+    renderCreate()
+    await screen.findByText('Budget not checked: sleepover shifts are not priced yet.')
+
+    expect(liveText()).toBe('Roster check complete: no conflicts found. Budget not checked: sleepover shifts are not priced yet.')
+  })
+
+  it('puts focus on "Emergency or safety" again when the coordinator steps back, so it is not lost to the page', async () => {
+    const user = userEvent.setup()
+    answerCheckWith({ findings: [forecastOverWithCost] })
+    renderCreate()
+    await screen.findByText(REFUSAL)
+    await user.click(emergencyAction())
+    await user.type(description(), DESCRIPTION)
+
+    await user.click(screen.getByRole('button', { name: /^Back$/ }))
+
+    expect(emergencyAction()).toHaveFocus()
+  })
+})
+
+describe('the description (C10, L5)', () => {
+  it('stops at the 1,900 characters the server accepts, so a long paste is cut rather than refused', async () => {
+    const user = userEvent.setup()
+    answerCheckWith({ findings: [forecastOverWithCost] })
+    renderCreate()
+    await screen.findByText(REFUSAL)
+    await user.click(emergencyAction())
+
+    expect(description()).toHaveAttribute('maxlength', '1900')
+  })
+
+  it('keeps the refusal box from contradicting a Save that now works: it reads as booked as an emergency', async () => {
+    const user = userEvent.setup()
+    answerCheckWith({ findings: [forecastOverWithCost] })
+    renderCreate()
+    await screen.findByText(REFUSAL)
+    const refusedRow = () => screen.getByText(/Takes Core/).closest('li')!
+    expect(refusedRow().className).toMatch(/error-container/)
+
+    await user.click(emergencyAction())
+    await user.type(description(), DESCRIPTION)
+
+    expect(saveButton()).toBeEnabled()
+    expect(refusedRow().className).not.toMatch(/error-container/)
+    expect(refusedRow()).toHaveTextContent('Booking as an emergency')
   })
 })

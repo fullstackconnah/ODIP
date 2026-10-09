@@ -106,29 +106,57 @@ describe('choosing the path', () => {
     await user.click(screen.getByRole('button', { name: /Emergency or safety/i }))
     await user.type(description(), 'Unsafe tonight')
 
-    await user.click(screen.getByRole('button', { name: /This is not an emergency/i }))
+    await user.click(screen.getByRole('button', { name: /^Back$/ }))
 
     expect(screen.getByTestId('state')).toHaveTextContent('none|Unsafe tonight')
     expect(screen.getByRole('button', { name: /Emergency or safety/i })).toBeInTheDocument()
   })
 
-  it('says the shift saves at once, an Admin reviews it afterwards, and that it cannot be switched off', async () => {
+  it('puts focus on the "Emergency or safety" button when the user steps back, so it is not dropped to the page (M7)', async () => {
     const user = userEvent.setup()
     render(<Host />)
     await user.click(screen.getByRole('button', { name: /Emergency or safety/i }))
 
-    expect(screen.getByText(/saves at once and an Admin reviews it afterwards/i)).toBeInTheDocument()
-    expect(screen.getByText(/always available and cannot be switched off/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Back$/ }))
+
+    expect(screen.getByRole('button', { name: /Emergency or safety/i })).toHaveFocus()
+  })
+
+  it('says once that the shift saves at once and an Admin reviews it afterwards, and leaves the policy for Settings (L5)', async () => {
+    const user = userEvent.setup()
+    render(<Host />)
+    await user.click(screen.getByRole('button', { name: /Emergency or safety/i }))
+
+    expect(screen.getAllByText(/An Admin reviews it afterwards/i)).toHaveLength(1)
+    expect(screen.getByText('It saves at once. An Admin reviews it afterwards.')).toBeInTheDocument()
+    expect(screen.queryByText(/cannot be switched off/i)).not.toBeInTheDocument()
   })
 })
 
 describe('the description', () => {
-  it('is required, labelled apart from an ordinary override reason, and hints the minimum and the review', () => {
+  it('is required, labelled apart from an ordinary override reason, and hints the minimum and where it is kept', () => {
     render(<Static choice="emergency" />)
 
     expect(description()).toBeRequired()
-    expect(screen.getByText(/At least 10 characters/)).toBeInTheDocument()
+    expect(description()).toHaveAccessibleDescription('At least 10 characters. Kept with the shift.')
     expect(screen.queryByLabelText(/Reason for the override/i)).not.toBeInTheDocument()
+  })
+
+  it('says how many more characters it needs while it is under the minimum, and stops saying so at it (L5)', () => {
+    const { rerender } = render(<Static choice="emergency" reason="Unsafe" />)
+    expect(description()).toHaveAccessibleDescription('At least 10 characters, 4 more needed. Kept with the shift.')
+
+    rerender(<Static choice="emergency" reason="  Unsafe  " />)   // padding does not count
+    expect(description()).toHaveAccessibleDescription('At least 10 characters, 4 more needed. Kept with the shift.')
+
+    rerender(<Static choice="emergency" reason="Unsafe now" />)
+    expect(description()).toHaveAccessibleDescription('At least 10 characters. Kept with the shift.')
+  })
+
+  it('stops at the 1,900 characters the server accepts (C10)', () => {
+    render(<Static choice="emergency" />)
+
+    expect(description()).toHaveAttribute('maxlength', '1900')
   })
 
   it('keeps what was typed, exactly, and shows the value it is given', async () => {
@@ -178,7 +206,7 @@ describe('pending, disabled and failed states', () => {
     render(<Static choice="emergency" reason={GOOD_EMERGENCY_REASON} pending />)
 
     expect(description()).toBeDisabled()
-    expect(screen.getByRole('button', { name: /This is not an emergency/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Back$/ })).toBeDisabled()
   })
 
   it('says it is saving and that the description is kept, without adding a live region of its own', () => {
@@ -203,10 +231,12 @@ describe('pending, disabled and failed states', () => {
 })
 
 describe('the copy makes no promise the browser cannot keep', () => {
-  it('says the server checks the budget, so hiding a path is not described as security', () => {
-    render(<Static />)
+  it('does not talk about the server at all: the coordinator is told what is true of this shift, not how the system works (H3)', () => {
+    const { rerender } = render(<Static />)
+    expect(document.body.textContent).not.toMatch(/\bserver\b/i)
 
-    expect(screen.getByText(/The server checks the budget on every save/)).toBeInTheDocument()
+    rerender(<Static choice="emergency" />)
+    expect(document.body.textContent).not.toMatch(/\bserver\b/i)
   })
 
   it('offers no control that could switch the emergency path off', () => {
@@ -222,10 +252,10 @@ describe('the copy makes no promise the browser cannot keep', () => {
     expect(document.body.textContent).not.toMatch(/cannot be saved|can't be saved|cannot be claimed|can't be claimed/i)
   })
 
-  it('names Admin as the other way through, by a written reason', () => {
+  it('names the three ways out: change the shift, ask an Admin to save it with a reason, or book it as an emergency (H3)', () => {
     render(<Static />)
 
-    expect(screen.getByText(/An Admin can save it with a written reason/)).toBeInTheDocument()
+    expect(screen.getByText('You can change the shift so it costs less, ask an Admin to save it with a reason, or, if it is an emergency or a safety need, book it now. An Admin reviews it afterwards.')).toBeInTheDocument()
   })
 })
 

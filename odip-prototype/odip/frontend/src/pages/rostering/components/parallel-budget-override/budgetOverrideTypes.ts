@@ -90,6 +90,15 @@ export type BudgetOverrideChoice = 'none' | 'emergency'
 /** The shortest reason this lane accepts, in trimmed characters (DECISIONS: "a required description (min 10 characters)"). */
 export const MIN_REASON_LENGTH = 10
 
+/** The longest emergency description the server stores (BudgetFindingCodes.MaxEmergencyDescriptionLength). It adds its own prefix to the stored reason, so the field stops here and a long paste is cut rather than refused. */
+export const MAX_EMERGENCY_LENGTH = 1900
+
+/** How many more trimmed characters the description needs to reach the minimum. Zero once it has them, and zero before anything is typed, so the hint does not nag at an empty box. */
+export function charactersStillNeeded(reason: string): number {
+  const length = reason.trim().length
+  return length === 0 ? 0 : Math.max(0, MIN_REASON_LENGTH - length)
+}
+
 /**
  * A reason counts only when it has something in it. Whitespace-only is not a reason, and neither
  * is a bare newline or tab run: this trims every whitespace class, not just spaces.

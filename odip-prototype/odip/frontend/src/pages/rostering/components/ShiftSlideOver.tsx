@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Trash2, AlertTriangle } from 'lucide-react'
+import { Trash2, AlertTriangle, ChevronRight } from 'lucide-react'
 import type { ShiftDto, CreateShiftDto, RosterFindingDto, SupportRatio, SleepoverType, ShiftStatus } from '@/api/types'
 import { SUPPORT_RATIOS, SLEEPOVER_TYPES, COORDINATOR_SETTABLE_SHIFT_STATUSES } from '@/api/types'
 import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
@@ -24,6 +24,7 @@ import {
 } from './parallel-budget-override'
 import { Button } from '@/components/Button'
 import { SlideOver } from '@/components/SlideOver'
+import { TAP_FLOOR } from '@/components/tapArea'
 import { modalGrid } from '@/lib/formGrid'
 import { getRosterGate } from '../lib/rosterGate'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange } from '../lib/roster'
@@ -61,11 +62,22 @@ function toTimeInputValue(time: string | undefined): string {
   return (time ?? '09:00').slice(0, 5)
 }
 
+/** What the panel says when the budget refuses the shift (the hard limit, for a Coordinator): one line, in the budget's words and not the roster conflict gate's. */
+const BUDGET_REFUSAL_SENTENCE = "The hard limit is on, so this shift can't be saved as it is."
+
+/** What the reason field says when the budget is the only thing asking for a reason (an Admin under the hard limit). */
+const BUDGET_REASON_COPY = {
+  hint: 'The hard limit is on. This reason is recorded in the audit log.',
+  placeholder: 'Why this shift should go ahead past the budget',
+  error: 'Add a reason to save this shift past the budget.',
+} as const
+
 /** Sort-boost order for the Staff dropdown: Preferred first, then Allowed/no row, Excluded last. */
 const COMPATIBILITY_RANK = { Preferred: 0, Allowed: 1, Excluded: 2 } as const
 
 export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, groupBy = 'participant', participantReadiness }: ShiftSlideOverProps) {
   const staffCompatibilityNoticeId = useId()
+  const refusalId = useId()
   const open = target !== null
 
   // Overrides SlideOver's default "focus the first focusable element" behaviour when the caller wants focus on a specific
@@ -201,6 +213,19 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canWrite, participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, status])
 
+  // A refusal that arrives below the fold is brought into view: the finding, the one-line refusal and the way through are at the bottom of a long form, and a disabled Save cannot be tapped to ask why.
+  // It happens when the refusal APPEARS (or a different pool or period is the one refused), not on every re-check: pulling the panel down while the coordinator is still adjusting the times above would
+  // fight them. Instant under reduced motion, and where the browser cannot say.
+  const gateBlockRef = useRef<HTMLDivElement>(null)
+  const refusal = findings.find(f => f.code === BUDGET_FINDING_CODES.forecastOver && f.severity === 'Blocking')
+  const refusalKey = refusal ? `${refusal.budget?.poolName ?? ''}|${refusal.budget?.periodStart ?? ''}` : null
+  useEffect(() => {
+    const block = gateBlockRef.current
+    if (refusalKey === null || !canWrite || !block || typeof block.scrollIntoView !== 'function') return
+    const reduced = typeof window.matchMedia !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    block.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' })
+  }, [refusalKey, canWrite])
+
   if (!open) return null
 
   // PP-8 follow-up: RosteringController.UpdateShift's fromAllowed/toAllowed gate only ever
@@ -230,13 +255,32 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const emergencyReady = emergencyActive && canSubmit(budgetChoice, emergencyDescription)
   const stillBlocking = emergencyActive ? blockingFindings.filter(f => f.code !== BUDGET_FINDING_CODES.forecastOver) : blockingFindings
   const saveWithheld = stillBlocking.length > 0 || (refusedOnBudget && !emergencyReady)
-  const forecastOver = findings.find(f => f.code === BUDGET_FINDING_CODES.forecastOver && f.budget)
+  // The standing sentence under a Blocking finding is said in the budget's own words when the budget is the ONLY thing blocking; any other blocking finding keeps the roster's generic sentence.
+  const blockingAnswered = emergencyActive && stillBlocking.length === 0
+  const blockingSentence = blockingFindings.length > 0 && blockingFindings.every(f => f.code === BUDGET_FINDING_CODES.forecastOver) ? BUDGET_REFUSAL_SENTENCE : undefined
+  const refusalShown = blockingFindings.length > 0 && !blockingAnswered
+  // A reason that only the budget asks for is asked for in the budget's words; when another finding asks too, the generic words cover both.
+  const budgetAsksForReason = reasonRequiredFindings.length > 0 && reasonRequiredFindings.every(f => f.code === BUDGET_FINDING_CODES.forecastOver)
+  // Said once, in the panel's one polite live summary: where the budget leaves the form, and the "Budget not checked" line, which is in no live region of its own.
+  const budgetLive = refusedOnBudget
+    ? emergencyReady ? 'Over budget. Save as emergency is on.'
+      : emergencyActive ? 'Over budget. Describe the emergency to turn Save on.'
+      : 'Over budget. Save is off. Emergency or safety is available below.'
+    : null
+  const liveNote = [budgetLive, budgetNote].filter(Boolean).join(' ')
+  const forecastOver =findings.find(f => f.code === BUDGET_FINDING_CODES.forecastOver && f.budget)
   const figures = forecastOver ? figuresOf(forecastOver) : null
   const isBusy = createShift.isPending || updateShift.isPending
   // Informational only: never read by the save gate above or by the Save button, so it can never block a save.
   const readinessIssues = participantReadiness?.[participantId] ?? existing?.readinessIssues
   // A save's own failure wins; otherwise the dry-run's refusal of exactly what is on screen now (one box, so the same text never shows twice).
   const shownError = error ?? (previewRefusal?.key === candidateKey ? previewRefusal.message : null)
+
+  // Typing a real answer under "a reason is required" ends the complaint at once, not only on the next save.
+  function handleOverrideReasonChange(value: string) {
+    setOverrideReason(value)
+    if (value.trim()) setReasonRequired(false)
+  }
 
   async function handleSave() {
     setError(null)
@@ -317,8 +361,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               <Button variant="ghost" onClick={onClose}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={isBusy || saveWithheld}>
-                {isBusy ? 'Saving…' : emergencyActive ? 'Save as emergency' : warningFindings.length > 0 ? 'Save with override' : 'Save'}
+              <Button onClick={handleSave} disabled={isBusy || saveWithheld} aria-describedby={saveWithheld && refusalShown ? refusalId : undefined}>
+                {isBusy ? 'Saving…' : emergencyActive ? 'Save as emergency' : reasonRequiredFindings.length > 0 ? 'Save with override' : warningFindings.length > 0 ? 'Save anyway' : 'Save'}
               </Button>
             </div>
           </>
@@ -525,34 +569,45 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
           </div>
         )}
 
-        <RosterGateFields
-          findings={findings}
-          overrideReason={overrideReason}
-          onOverrideReasonChange={setOverrideReason}
-          reasonRequired={reasonRequired}
-          forceVisible={!!existing?.overrideReason && !budgetMarker}
-          showOnAnyWarning
-          disabled={!canWrite}
-          blockingAnswered={emergencyActive && stillBlocking.length === 0}
-        />
+        {/* The finding, the one-line refusal and the way through are one block, in that order, so it can be brought into view together; the figures behind them come last. */}
+        <div ref={gateBlockRef} className="flex flex-col gap-[var(--field-gap-y)]">
+          <RosterGateFields
+            findings={findings}
+            overrideReason={overrideReason}
+            onOverrideReasonChange={handleOverrideReasonChange}
+            reasonRequired={reasonRequired}
+            forceVisible={!!existing?.overrideReason && !budgetMarker}
+            disabled={!canWrite}
+            blockingAnswered={blockingAnswered}
+            blockingMessage={blockingSentence}
+            blockingMessageId={refusalId}
+            reasonCopy={budgetAsksForReason ? BUDGET_REASON_COPY : undefined}
+            liveNote={liveNote}
+            answered={emergencyReady ? { codes: [BUDGET_FINDING_CODES.forecastOver], label: 'Booking as an emergency' } : undefined}
+          />
+
+          <BudgetOverrideReasonFields
+            findings={findings}
+            choice={budgetChoice}
+            reason={emergencyDescription}
+            submitted={emergencySubmitted}
+            pending={isBusy}
+            disabled={!canWrite}
+            onChoiceChange={setBudgetChoice}
+            onReasonChange={setEmergencyDescription}
+          />
+        </div>
 
         {figures && (
-          <details className="text-sm">
-            <summary className="cursor-pointer text-[13px] font-medium text-[var(--color-muted-foreground)]">Budget figures</summary>
+          <details className="group text-sm">
+            {/* A tap-sized row on touch, with its own chevron: the native marker goes when the summary becomes a flex box. */}
+            <summary className={`flex ${TAP_FLOOR} cursor-pointer list-none items-center gap-1.5 text-[13px] font-medium text-[var(--color-muted-foreground)] [&::-webkit-details-marker]:hidden`}>
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
+              Budget figures
+            </summary>
             <BudgetFindingDetails figures={figures} sentence={false} className="mt-2" />
           </details>
         )}
-
-        <BudgetOverrideReasonFields
-          findings={findings}
-          choice={budgetChoice}
-          reason={emergencyDescription}
-          submitted={emergencySubmitted}
-          pending={isBusy}
-          disabled={!canWrite}
-          onChoiceChange={setBudgetChoice}
-          onReasonChange={setEmergencyDescription}
-        />
 
         {/* Not a finding and never a block: a shift the estimator cannot price has nothing to check, and a quiet line says so rather than letting no warning read as an all clear. */}
         {budgetNote && <p className="text-[13px] text-[var(--color-muted-foreground)]">{budgetNote}</p>}
