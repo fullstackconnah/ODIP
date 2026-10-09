@@ -26,6 +26,50 @@ public record RosterFindingDto
     public string Message { get; init; } = string.Empty;
     /// <summary>True when this finding demands a non-empty override reason before the write can save — see RosteringController.EvaluateFindings.</summary>
     public bool RequiresReason { get; init; }
+    /// <summary>The figures a budget finding (BUDGET_*) was worked out from, so a screen prints them and does no sum of its own. Omitted on every other finding.</summary>
+    public BudgetFindingFiguresDto? Budget { get; init; }
+}
+
+/// <summary>The figures behind a budget finding: one pool in one funding period with the shift counted. Dollars, as the ledger says them; dates are calendar dates.</summary>
+public record BudgetFindingFiguresDto
+{
+    public string PoolName { get; init; } = string.Empty;
+    public DateOnly PeriodStart { get; init; }
+    public DateOnly PeriodEnd { get; init; }
+    public decimal Available { get; init; }
+    public decimal Used { get; init; }
+    /// <summary>What the period has left after what is used; negative once it is over.</summary>
+    public decimal Remaining { get; init; }
+    /// <summary>Used plus booked ahead, with this shift counted.</summary>
+    public decimal Forecast { get; init; }
+    /// <summary>What the period had booked ahead BEFORE this shift, so used + booked ahead + this shift is the forecast and a screen needs no sum of its own.</summary>
+    public decimal BookedAhead { get; init; }
+    /// <summary>The estimate of the shift itself, priced the way ODIP will claim it.</summary>
+    public decimal ShiftCost { get; init; }
+    /// <summary>How many of the period's shifts could not be priced (a sleepover, a group shift, no rate): they are $0 in every figure above, so the figures are not the whole period.</summary>
+    public int UnpricedShiftCount { get; init; }
+    /// <summary>How far the forecast is past what is available; zero when it is not.</summary>
+    public decimal OverBy { get; init; }
+}
+
+/// <summary>Where the Admin's review of an emergency or safety booking over budget stands. There is no "approved": an emergency saves at once and is reviewed afterwards.</summary>
+public enum BudgetReviewState
+{
+    Pending = 0,
+    Reviewed = 1,
+}
+
+/// <summary>The Admin review task of a shift saved as an emergency or safety booking past its budget (omitted for every other shift).</summary>
+public record BudgetReviewDto
+{
+    public BudgetReviewState State { get; init; }
+    /// <summary>When the server recorded the emergency booking: the moment its review task was raised.</summary>
+    public DateTime? RecordedAt { get; init; }
+    public string? ReviewTaskTitle { get; init; }
+    /// <summary>The provider's calendar date the task was completed on; omitted while it is pending.</summary>
+    public DateOnly? ReviewedOn { get; init; }
+    /// <summary>The Admin who completed the review (the task's owner, stamped when an Admin completes it); omitted while it is pending or when nobody is recorded.</summary>
+    public string? ReviewedBy { get; init; }
 }
 
 public record ShiftDto
@@ -52,6 +96,13 @@ public record ShiftDto
     /// <summary>The version of the agreement revision that pattern came from; omitted for a shift that did not come from one.</summary>
     public int? SourceDraftVersion { get; init; }
     public string? OverrideReason { get; init; }
+    /// <summary>
+    /// The finding codes the server stored when it saved this shift, for the over-budget marker on the board chip and in the panel: BUDGET_EMERGENCY for a shift accepted as an emergency or safety booking,
+    /// BUDGET_FORECAST_OVER for one an Admin pushed over budget with a written reason. The server never stores either for a mere warning, so a marker read from here is never forged. Omitted when none.
+    /// </summary>
+    public List<string>? AcknowledgedFindingCodes { get; init; }
+    /// <summary>The Admin review of an emergency or safety booking over budget; omitted for every other shift.</summary>
+    public BudgetReviewDto? BudgetReview { get; init; }
     public List<RosterFindingDto> Findings { get; init; } = new();
     /// <summary>
     /// True when this shift has an assigned staff member (<see cref="StaffId"/> non-null) and
@@ -241,12 +292,18 @@ public record CreateShiftDto
     public bool EndsNextDay { get; init; }
     public SupportRatio Ratio { get; init; }
     public SleepoverType NightType { get; init; }
+    /// <summary>Ignored: the server never takes a pattern link from a request. It sets the link itself when it generates a shift from a pattern, and the budget's one-off rule reads only that saved link, so naming a pattern cannot dodge a hard limit.</summary>
     public Guid? ShiftPatternId { get; init; }
     public string? Notes { get; init; }
     /// <summary>Required when the shift carries Warning findings; ignored (never enough) for Blocking findings.</summary>
     public string? OverrideReason { get; init; }
     /// <summary>Finding codes the coordinator is acknowledging. Defaults to every current finding's code when omitted.</summary>
     public List<string>? AcknowledgedFindingCodes { get; init; }
+    /// <summary>
+    /// "Emergency or safety" (budget phase 3): the shift goes ahead over budget without an Admin first, and an Admin reviews it afterwards. The description is <see cref="OverrideReason"/>
+    /// (at least 10 characters once trimmed). It only means something when the check found the shift over budget; the path is open in every mode and cannot be switched off.
+    /// </summary>
+    public bool Emergency { get; init; }
 }
 
 public record UpdateShiftDto : CreateShiftDto
@@ -275,6 +332,8 @@ public record CheckShiftDto
     public bool EndsNextDay { get; init; }
     public SupportRatio Ratio { get; init; }
     public SleepoverType NightType { get; init; }
+    /// <summary>The status the shift would be saved with (budget phase 3): a shift about to be cancelled costs nothing and has no budget finding. Omitted means the shift's own status, or a new Draft.</summary>
+    public ShiftStatus? Status { get; init; }
 }
 
 // ── Shift pattern DTOs ───────────────────────────────────────────
@@ -330,6 +389,11 @@ public record GeneratePatternResultDto
 {
     public int Created { get; init; }
     public int Skipped { get; init; }
+    /// <summary>
+    /// Where the shifts just made take a pool past its funding for a period (budget phase 3), one entry for each pool and period. Never a reason to refuse: the shifts are made. Omitted when
+    /// nothing is past its funding, or the participant has no budget recorded.
+    /// </summary>
+    public List<BudgetWarningDto>? BudgetWarnings { get; init; }
 }
 
 // ── Compatibility matrix DTOs ────────────────────────────────────

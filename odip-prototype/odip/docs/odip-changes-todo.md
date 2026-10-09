@@ -143,7 +143,7 @@ owner decision (collected under Open Flags at the end).
   "Plan budget" card on Intake and the Profile wizard, "Funding recorded" in the
   activation checklist for NDIS-funded participants (warn or enforce, as the existing
   readiness setting says), and a Settings → Budgets tab (warn or hard limit, and the
-  "approaching" percentage: stored, not yet used). It records what the plan says and
+  "approaching" percentage: stored in phase 1, read by the roster's checks since phase 3). It records what the plan says and
   shows no spending or forecast. FUND-01's profile plan dates stay as they are; the tab
   offers, and never forces, copying a plan's dates onto them. Spec:
   `docs/specs/2026-10-04-participant-budgets.md`.
@@ -152,10 +152,59 @@ owner decision (collected under Open Flags at the end).
   tab's figures, claim figures, the approaching, forecast-over and over alerts, a
   dashboard tile and a Budgets list, the plan builder's budget bar on the new model, and
   the rejected-claim code. Depends on FUND-03.
-- [ ] **FUND-05 — Budget phase 3: moments and hard limits.** Roster findings, the
-  hard-limit mode for one-off shifts with the Admin override and the emergency path (an
-  Admin reviews it afterwards), and the pattern-generate and trip-booking warnings.
-  Depends on FUND-04.
+- [ ] **FUND-05 — Budget phase 3: moments and hard limits.** Built on
+  `feat/budget-limits`, not yet merged or checked on the deployed stack, so not ticked.
+  Roster findings (approaching, over, forecast over) in the shift panel's check, create and
+  update; the hard-limit mode for one-off shifts, which refuses a Coordinator and asks an
+  Admin for a written reason; the always-on "Emergency or safety" path (a Coordinator
+  describes it, the shift saves at once, an Admin reviews it from Tasks); "Over budget"
+  markers on the board and in the panel; and budget warnings (never blocks) on Generate,
+  the approval preview, the daily top-up's log and a confirmed trip booking. A shift the
+  estimator cannot price gets no finding, only "Budget not checked: {reason}". Spec:
+  `docs/specs/2026-10-04-participant-budgets.md` (Phase 3). Depends on FUND-04.
+  Follow-ups left by the two review rounds, none blocking, each with the reviewers' view
+  (`P3-REVIEW.md`, `P3-DESIGN-REVIEW.md`):
+  - [ ] **Two saves at the same moment (C8).** The roster check reads the ledger and the
+    save commits afterwards, so two one-off shifts saved in the same instant can both pass
+    and leave the forecast one shift over, with no marker and no review. Take the
+    per-participant advisory lock that generation and approval already take
+    (`RosterGenerationLock`) around the check and the save under a hard limit, with a
+    Postgres concurrency test. Accepted limit in the spec until then. The same race can
+    meet the review task's unique key (`budget-emergency:{id}:2`) for one of two
+    simultaneous emergencies on a closed review.
+  - [ ] **Cancel the review when its shift goes (C11a).** Cancelling or deleting an
+    emergency shift leaves its review open in the Admin's list for a shift that costs
+    nothing. It should CANCEL (not complete, which reads Reviewed) the shift's open
+    BudgetEmergencyReview: `IObligationTaskService` has no cancel-by-shift, so it needs an
+    interface method, an implementation and tests.
+  - [ ] **Keep the siren while a review is open (C11b, design view).** An Admin override
+    saved over an emergency shift drops `BUDGET_EMERGENCY`, so the board shows the key and
+    the pending review disappears from it. While a review is open the board keeps the
+    siren, not the key. The gate owns the marker's audit truth, so this is a product call.
+  - [ ] **A notice after an emergency save (L6).** The panel closes silently. Use
+    `useNotices` and `NoticesRegion` (polite, dismissible, stays where the person acted):
+    one region directly under the week toolbar, above the grid, at every width (at 390 it
+    pushes the grid down by one callout, which is the point). Title: the participant's
+    name. Message: "Saved as an emergency. An Admin will review it." (an Admin override:
+    "Saved over budget with your reason."). Subject: the shift id. The panel's `onSaved`
+    passes the kind and the participant.
+  - [ ] **The unpriced sentence on its own line (design N6).** In Settings, Budgets, "Shifts
+    the system cannot price yet ..." is the last sentence of a 13 px muted paragraph headed
+    "In both modes", though it is only about the hard limit. Give it its own line under the
+    hard-limit description, where the choice is made. It goes when the claim engine prices
+    those shifts.
+  - [ ] **Bring a warning into view once on a phone (design N7).** At 390 a Warn-mode
+    warning sits below the fold and "Save anyway" is the only cue. Bring a budget warning
+    into view once, on first appearance, at a coarse pointer only, with `bringIntoView`
+    (block nearest does nothing where it is already in view).
+  - [ ] **One pool label (decision).** The pool reads "Core (flexible)" in the shift
+    panel's findings and "Core" in phase 2's alerts and Budgets list (the plan's own pool
+    name against phase 2's `PoolLabel`). Pick one label across the sentences; it is a
+    product call, and the server's sentences would take `PoolLabel`. The same goes for
+    money: the findings print "$8,000.00" (`ShiftBudgetAssessor.Money`, in Domain) where phase
+    2b's alerts print "$8,000" (`BudgetText.Money`, in Infrastructure). With phase 2b merged
+    the over and approaching findings already say what the alerts say ("{pool} is $X over
+    this period's $Y (to {end})"); only the label and the money format still differ.
   - Follow-ups left by the phase 2b work (small; none blocks the merge):
     - **B6, a tenancy gap in two claim writes.** `ClaimsController.UpdateClaim` (`PUT /claims/{id}`)
       and `UpdateLineItem` (the line-item `PATCH`) read a claim by id with no tenant scope:
@@ -356,8 +405,9 @@ owner decision (collected under Open Flags at the end).
 - [ ] **PLAN-D2 — match what a block asks of a worker.** The requirements travel onto patterns and shifts
   and show as chips; nothing checks them yet. "Female worker" cannot be checked until staff have a gender
   field. Reuse `COMPETENCY_MISSING` for the skills and the driver flag.
-- [ ] **PLAN-D3 — warn when a plan is over its budget.** Approval deliberately ignores budgets; the budget
-  feature will say it separately.
+- [ ] **PLAN-D3 — warn when a plan is over its budget.** Approval deliberately ignores budgets and the plan
+  builder's checks stay as they are; the approval preview now carries the budget feature's own warnings
+  (`budgetWarnings`, FUND-05 on `feat/budget-limits`, not yet merged): shown, never blocking.
 - [ ] **PLAN-D4 — a participant who becomes active later gets their shifts the next provider day.** The
   top-up runs once for each organisation's provider day, so activation at noon waits until tomorrow;
   generating on activation would close the gap.

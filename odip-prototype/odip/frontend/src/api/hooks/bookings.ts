@@ -4,6 +4,7 @@ import { refreshBudgetFigures } from './funding-ledger'
 import { fetchPagedList } from './pagedList'
 import type {
   BookingListDto,
+  BookingDetailDto,
   CreateBookingDto,
   UpdateBookingDto,
   PatchBookingDto,
@@ -33,7 +34,7 @@ export function useTripBookings(tripId: string | undefined) {
 export function useCreateBooking() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: CreateBookingDto) => apiPostRaw<BookingListDto>('/bookings', data),
+    mutationFn: (data: CreateBookingDto) => apiPostRaw<BookingDetailDto>('/bookings', data),
     onSuccess: (_, data) => {
       refreshBudgetFigures(qc, [data.participantId])   // a confirmed booking is booked ahead in its participant's budget
       qc.invalidateQueries({ queryKey: ['bookings'] })
@@ -48,7 +49,7 @@ export function useUpdateBooking() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateBookingDto }) =>
-      apiPutRaw<BookingListDto>(`/bookings/${id}`, data),
+      apiPutRaw<BookingDetailDto>(`/bookings/${id}`, data),
     onSuccess: () => {
       refreshBudgetFigures(qc)   // its status (confirmed or not) decides whether it is in the budget at all
       qc.invalidateQueries({ queryKey: ['bookings'] })
@@ -64,7 +65,7 @@ export function usePatchBooking() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: PatchBookingDto }) =>
-      apiPatchRaw<BookingListDto>(`/bookings/${id}`, data),
+      apiPatchRaw<BookingDetailDto>(`/bookings/${id}`, data),
     onSuccess: () => {
       refreshBudgetFigures(qc)   // a patch can confirm or cancel the booking
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })

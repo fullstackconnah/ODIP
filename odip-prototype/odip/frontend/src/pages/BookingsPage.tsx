@@ -3,6 +3,7 @@ import type { TruncatableList } from '@/api/hooks/pagedList'
 import { Link } from 'react-router-dom'
 import { DataTable } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
+import { BudgetWarnings } from '@/components/BudgetWarnings'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -12,6 +13,7 @@ import { useState } from 'react'
 import type { BookingStatus } from '@/api/types/enums'
 import type { BookingListDto } from '@/api/types/bookings'
 import { plural } from '@/lib/format'
+import { bookingBudgetNote, bookingBudgetNotice, type BookingBudgetNotice } from '@/lib/bookingBudget'
 
 // Statuses that end a participant's involvement in a trip — confirmed before applying, same
 // pattern as AccommodationPage's/VehiclesPage's archive confirms.
@@ -31,16 +33,19 @@ export default function BookingsPage() {
   const { totalCount = bookings.length } = bookings as Partial<TruncatableList<BookingListDto>>
   const patchBooking = usePatchBooking()
   const [confirmTarget, setConfirmTarget] = useState<{ booking: BookingListDto; status: BookingStatus } | null>(null)
+  // Budget phase 3: what confirming a booking does to the participant's budget, as the server says it. A warning only; the status change has already gone through.
+  const [budgetNotice, setBudgetNotice] = useState<BookingBudgetNotice | null>(null)
 
   if (isError) return (
     <div className="p-[var(--card-pad)] text-center text-[var(--color-destructive)]">Failed to load bookings. Please refresh the page.</div>
   )
 
   function handleStatusChange(booking: BookingListDto, status: BookingStatus) {
+    setBudgetNotice(null)
     if (CONFIRM_STATUSES.includes(status)) {
       setConfirmTarget({ booking, status })
     } else {
-      patchBooking.mutate({ id: booking.id, data: { bookingStatus: status } })
+      patchBooking.mutate({ id: booking.id, data: { bookingStatus: status } }, { onSuccess: response => setBudgetNotice(bookingBudgetNotice(response)) })
     }
   }
 
@@ -50,6 +55,8 @@ export default function BookingsPage() {
         title="Bookings"
         subtitle={plural(totalCount, 'booking')}
       />
+
+      {budgetNotice && <BudgetWarnings warnings={budgetNotice.warnings} note={bookingBudgetNote(budgetNotice)} onDismiss={() => setBudgetNotice(null)} />}
 
       {isLoading ? <div className="text-center py-12 text-[var(--color-muted-foreground)]">Loading...</div> : bookings.length === 0 ? (
         <EmptyState

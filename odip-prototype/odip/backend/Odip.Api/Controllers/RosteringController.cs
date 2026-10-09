@@ -4,12 +4,15 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Api.Rostering;
+using Odip.Domain.Funding;
+using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
@@ -50,16 +53,26 @@ public class RosteringController : ControllerBase
     private readonly ShiftPackageService _package;
     // The request's clock: a test fixes it. Every calendar rule uses the PROVIDER's date from it (ProviderTimeZoneResolver.TodayAsync), never the UTC date.
     private readonly TimeProvider _clock;
+    // Budget phase 3: the budget check of a one-off shift, which needs to know whose money it may show (the caller's organisation). Without a tenant on the request there is no budget check.
+    private readonly ICurrentTenant? _tenant;
+    private readonly ShiftBudgetCheck? _budget;
+    private readonly ShiftBudgetEffect? _budgetEffect;
+    private readonly ILogger<RosteringController>? _logger;
 
     public RosteringController(
         OdipDbContext db, StaffCompatibilityLinkService compatLink, IStaffUnavailabilityQuery unavailabilityQuery,
         IConfiguration? config = null, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
         Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null,
-        ShiftPackageService? package = null, TimeProvider? clock = null, RosterShiftGenerator? generator = null)
+        ShiftPackageService? package = null, TimeProvider? clock = null, RosterShiftGenerator? generator = null,
+        ICurrentTenant? tenant = null, ShiftBudgetCheck? budget = null, ShiftBudgetEffect? budgetEffect = null, ILogger<RosteringController>? logger = null)
     {
+        _logger = logger;
         _db = db;
         _generator = generator ?? new RosterShiftGenerator();
         _clock = clock ?? TimeProvider.System;
+        _tenant = tenant;
+        _budget = budget ?? (tenant is null ? null : new ShiftBudgetCheck(db, new BudgetLedgerService(db, _clock)));
+        _budgetEffect = budgetEffect ?? (tenant is null ? null : new ShiftBudgetEffect(db, new BudgetLedgerService(db, _clock)));
         _compatLink = compatLink;
         _unavailabilityQuery = unavailabilityQuery;
         _config = config;
@@ -224,6 +237,8 @@ public class RosteringController : ControllerBase
 
         // Which agreement (if any) each shift's pattern came from: two small queries for the whole week, not one per shift.
         var shiftSources = await ShiftSourcesAsync(weekShifts.Select(s => s.ShiftPatternId), ct);
+        // Budget phase 3: where the Admin's review of each emergency or safety booking stands (one query, and only when the week holds one).
+        var budgetReviews = await BudgetReviewsAsync(weekShifts, ct);
 
         ShiftDto ToShiftDto(Shift shift, List<RosterFinding> findings)
         {
@@ -238,6 +253,7 @@ public class RosteringController : ControllerBase
                 ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
                 DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
                 ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
+                AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = budgetReviews.GetValueOrDefault(shift.Id),
                 FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
                 Findings = findings.Select(ToFindingDto).ToList(),
                 AssigneeOnApprovedLeave = IsAssigneeOnApprovedLeave(shift),
@@ -483,6 +499,8 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<RosterFindingDto>>>> CheckShift(
         [FromBody] CheckShiftDto dto, CancellationToken ct)
     {
+        if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<List<RosterFindingDto>>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
+
         var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
         if (refError != null) return BadRequest(ApiResponse<List<RosterFindingDto>>.Fail(refError));
 
@@ -494,7 +512,12 @@ public class RosteringController : ControllerBase
         };
 
         var findings = await CheckAsync(candidate, dto.Id, ct);
-        return Ok(ApiResponse<List<RosterFindingDto>>.Ok(findings.Select(ToFindingDto).ToList()));
+
+        // Budget phase 3: after the domain check and OUTSIDE its early return for an unfilled shift (a budget is about the participant, not the worker). The envelope's message carries the one
+        // informational line a shift the estimator cannot price gets; it is not a finding and never blocks.
+        var budget = await CheckBudgetAsync(candidate, dto.Id, dto.Status, ct);
+        findings.AddRange(budget.Findings);
+        return Ok(ApiResponse<List<RosterFindingDto>>.Ok(findings.Select(ToFindingDto).ToList(), budget.Note));
     }
 
     /// <summary>Create a shift. Runs the roster check before saving — see <see cref="EvaluateFindings"/>.</summary>
@@ -502,6 +525,8 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftDto>>> CreateShift(
         [FromBody] CreateShiftDto dto, CancellationToken ct)
     {
+        if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
+
         var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
         if (refError != null) return BadRequest(ApiResponse<ShiftDto>.Fail(refError));
 
@@ -509,15 +534,21 @@ public class RosteringController : ControllerBase
         {
             Id = Guid.NewGuid(), ParticipantId = dto.ParticipantId, UserId = dto.StaffId,
             ServiceDate = dto.ServiceDate, StartTime = dto.StartTime, EndTime = dto.EndTime, EndsNextDay = dto.EndsNextDay,
-            Ratio = dto.Ratio, NightType = dto.NightType, ShiftPatternId = dto.ShiftPatternId, Notes = dto.Notes,
+            // No ShiftPatternId: a pattern link is the server's (the generator sets it). One a request names is dropped, or a hand-made shift could call itself routine and walk round the hard limit (C3).
+            Ratio = dto.Ratio, NightType = dto.NightType, Notes = dto.Notes,
             Status = ShiftStatus.Draft
         };
 
         var findings = await CheckAsync(shift, null, ct);
-        var rejection = EvaluateFindings(findings, dto.OverrideReason);
+        findings.AddRange((await CheckBudgetAsync(shift, null, ShiftStatus.Draft, ct)).Findings);
+
+        var budgetGate = ShiftBudgetGate.Resolve(findings, dto.Emergency, dto.OverrideReason);
+        if (budgetGate.Error != null) return BadRequest(ApiResponse<ShiftDto>.Fail(budgetGate.Error));
+        var rejection = EvaluateFindings(budgetGate.GateFindings, dto.OverrideReason);
         if (rejection != null) return UnprocessableEntity(rejection);
 
-        ApplyOverride(shift, findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
+        ApplyOverride(shift, findings, budgetGate, dto.OverrideReason, dto.AcknowledgedFindingCodes);
+        if (budgetGate.EmergencyAccepted) await RaiseEmergencyReviewAsync(shift, ct);
 
         _db.Shifts.Add(shift);
         await _db.SaveChangesAsync(ct);
@@ -535,6 +566,14 @@ public class RosteringController : ControllerBase
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+
+        // A shift has to end after it starts. The rule is for times somebody is setting now: an edit that leaves the shift's times alone, or cancels it, never trips it, because rows saved before this rule
+        // may already be wrong and the panel must still be able to annotate, assign and cancel them (a started shift's times are locked and could not be mended at all).
+        // Reopening a cancelled shift is somebody setting it live again: the same times must not bring a shift with no length back to life (phase 3 review, N1).
+        var timesChanged = dto.StartTime != shift.StartTime || dto.EndTime != shift.EndTime || dto.EndsNextDay != shift.EndsNextDay;
+        var reopening = shift.Status == ShiftStatus.Cancelled && dto.Status != ShiftStatus.Cancelled;
+        if ((timesChanged || reopening) && dto.Status != ShiftStatus.Cancelled && Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m)
+            return BadRequest(ApiResponse<ShiftDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
 
         // An existing legacy shift can still be status-managed after readiness is lost. Moving
         // it to another participant or assigning/reassigning staff is a new placement and must
@@ -577,16 +616,25 @@ public class RosteringController : ControllerBase
         };
 
         var findings = await CheckAsync(candidate, shift.Id, ct);
-        var rejection = EvaluateFindings(findings, dto.OverrideReason);
+        findings.AddRange((await CheckBudgetAsync(candidate, shift.Id, dto.Status, ct)).Findings);
+
+        var budgetGate = ShiftBudgetGate.Resolve(findings, dto.Emergency, dto.OverrideReason);
+        if (budgetGate.Error != null) return BadRequest(ApiResponse<ShiftDto>.Fail(budgetGate.Error));
+        var rejection = EvaluateFindings(budgetGate.GateFindings, dto.OverrideReason);
         if (rejection != null) return UnprocessableEntity(rejection);
 
         var previousUserId = shift.UserId;
+        // What the shift holds now, for the budget rules: a save that does not decide the budget again keeps the over-budget acknowledgement it already has.
+        var previousReason = shift.OverrideReason;
+        var previousCodes = shift.AcknowledgedFindingCodes;
         shift.ParticipantId = dto.ParticipantId; shift.UserId = dto.StaffId;
         shift.ServiceDate = dto.ServiceDate; shift.StartTime = dto.StartTime; shift.EndTime = dto.EndTime;
         shift.EndsNextDay = dto.EndsNextDay; shift.Ratio = dto.Ratio; shift.NightType = dto.NightType;
-        shift.ShiftPatternId = dto.ShiftPatternId; shift.Notes = dto.Notes; shift.Status = dto.Status;
+        // The saved pattern link stays as the server set it: an edit never cuts a pattern shift loose from its pattern, and a link a request names is never stored (C3).
+        shift.Notes = dto.Notes; shift.Status = dto.Status;
         shift.UpdatedAt = DateTime.UtcNow;
-        ApplyOverride(shift, findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
+        ApplyOverride(shift, findings, budgetGate, dto.OverrideReason, dto.AcknowledgedFindingCodes, previousReason, previousCodes);
+        if (budgetGate.EmergencyAccepted) await RaiseEmergencyReviewAsync(shift, ct);
 
         // Item 9 of the connection map: reassigning the shift away from the on-leave staff
         // member (or clearing it) — or cancelling it outright — closes the LeaveCoverage
@@ -653,9 +701,12 @@ public class RosteringController : ControllerBase
         if (rejection != null) return UnprocessableEntity(rejection);
 
         var previousUserId = shift.UserId;
+        var previousReason = shift.OverrideReason;
+        var previousCodes = shift.AcknowledgedFindingCodes;
         shift.UserId = dto.StaffId;
         shift.UpdatedAt = DateTime.UtcNow;
-        ApplyOverride(shift, findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
+        // Assigning a worker is not a budget moment: the shift keeps the over-budget acknowledgement it already has.
+        ApplyOverride(shift, findings, ShiftBudgetGate.Decision.NoEmergency(findings), dto.OverrideReason, dto.AcknowledgedFindingCodes, previousReason, previousCodes);
 
         // Item 9 of the connection map: reassigning away from (or clearing) the on-leave staff
         // member closes the LeaveCoverage obligation raised against this shift.
@@ -1126,6 +1177,8 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftPatternDto>>> CreatePattern(
         [FromBody] CreateShiftPatternDto dto, CancellationToken ct)
     {
+        // A pattern makes shifts, so it needs a length like one (phase 3 review, N2): a pattern with none would make shifts the budget cannot price.
+        if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
         if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
         if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
@@ -1152,6 +1205,10 @@ public class RosteringController : ControllerBase
     {
         var pattern = await _db.ShiftPatterns.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<ShiftPatternDto>.Fail("Pattern not found."));
+
+        // The rule is for times somebody is setting now, as for a shift: an edit that leaves the times alone (deactivating a pattern saved before the rule) is never refused.
+        var timesChanged = dto.StartTime != pattern.StartTime || dto.EndTime != pattern.EndTime || dto.EndsNextDay != pattern.EndsNextDay;
+        if (timesChanged && Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
 
         if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
@@ -1213,7 +1270,8 @@ public class RosteringController : ControllerBase
             // so the daily top-up can still fill a gap before it.
             var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
             var generated = await _generator.GenerateAsync(_db, pattern.ParticipantId, new[] { pattern.Id }, from, to, ct, onlyWhenContiguous: true, providerToday: today);
-            return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = generated.Created, Skipped = generated.Skipped }));
+            var warnings = await BudgetWarningsAsync(pattern.ParticipantId, generated.MadeShifts, ct);
+            return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = generated.Created, Skipped = generated.Skipped, BudgetWarnings = warnings }));
         }
         catch (RosterBusyException busy)
         {
@@ -1478,10 +1536,39 @@ public class RosteringController : ControllerBase
             ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
             DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
             ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
+            AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = (await BudgetReviewsAsync(new[] { shift }, ct)).GetValueOrDefault(shift.Id),
             FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
             Findings = findings.Select(ToFindingDto).ToList(),
             ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssues, shift.ParticipantId)
         };
+    }
+
+    /// <summary>The finding codes stored with the shift, for the over-budget marker; null (omitted from the JSON) when it holds none.</summary>
+    private static List<string>? AcknowledgedCodesOf(Shift shift) => ShiftBudgetGate.SplitCodes(shift.AcknowledgedFindingCodes) is { Count: > 0 } codes ? codes : null;
+
+    /// <summary>
+    /// Where the Admin's review of each emergency or safety booking stands, for the shifts that carry the emergency code: the review task raised with the booking (pending until it is completed). One query, and none when
+    /// no shift holds the code. There is no "approved": a booking saves at once and is reviewed afterwards.
+    /// </summary>
+    private async Task<Dictionary<Guid, BudgetReviewDto>> BudgetReviewsAsync(IEnumerable<Shift> shifts, CancellationToken ct)
+    {
+        var ids = shifts.Where(s => ShiftBudgetGate.SplitCodes(s.AcknowledgedFindingCodes).Contains(BudgetFindingCodes.Emergency)).Select(s => s.Id).ToList();
+        if (ids.Count == 0) return new Dictionary<Guid, BudgetReviewDto>();
+
+        var tasks = await _db.BookingTasks.AsNoTracking()
+            .Where(t => t.TaskType == TaskType.BudgetEmergencyReview && t.ShiftId != null && ids.Contains(t.ShiftId.Value))
+            .Select(t => new { ShiftId = t.ShiftId!.Value, t.Title, t.Status, t.SourceKey, t.CreatedAt, t.CompletedDate, OwnerName = t.Owner != null ? t.Owner.FirstName + " " + t.Owner.LastName : null })
+            .ToListAsync(ct);
+        return tasks.GroupBy(t => t.ShiftId).ToDictionary(g => g.Key, g =>
+        {
+            var task = g.OrderByDescending(t => t.SourceKey!.Length).ThenByDescending(t => t.SourceKey).First();   // the newest review of the shift: :2 and :3 follow the first
+            var reviewed = task.Status == TaskItemStatus.Completed;
+            return new BudgetReviewDto
+            {
+                State = reviewed ? BudgetReviewState.Reviewed : BudgetReviewState.Pending, RecordedAt = task.CreatedAt, ReviewTaskTitle = task.Title, ReviewedOn = reviewed ? task.CompletedDate : null,
+                ReviewedBy = reviewed ? task.OwnerName : null,
+            };
+        });
     }
 
     /// <summary>
@@ -1586,12 +1673,85 @@ public class RosteringController : ControllerBase
     private ApiResponse<List<RosterFindingDto>>? EvaluateFindings(List<RosterFinding> findings, string? overrideReason) =>
         RosterGate.EvaluateFindings(findings, overrideReason);
 
-    /// <summary>Persists (or clears) the override fields to match the outcome <see cref="EvaluateFindings"/> already approved.</summary>
-    private static void ApplyOverride(Shift shift, List<RosterFinding> findings, string? overrideReason, List<string>? acknowledgedCodes)
+    /// <summary>
+    /// Persists (or clears) the override fields to match the outcome <see cref="EvaluateFindings"/> already approved, with the budget rules of <see cref="ShiftBudgetGate"/> on top: the over-budget
+    /// acknowledgements are the server's alone, and a save that does not decide the budget again keeps the one the shift already has (<paramref name="previousReason"/>, <paramref name="previousCodes"/>).
+    /// </summary>
+    private static void ApplyOverride(
+        Shift shift, List<RosterFinding> findings, ShiftBudgetGate.Decision budgetGate, string? overrideReason, List<string>? acknowledgedCodes, string? previousReason = null, string? previousCodes = null)
     {
-        var (reason, codes) = RosterGate.ComputeOverride(findings, overrideReason, acknowledgedCodes);
+        var (reason, codes) = ShiftBudgetGate.ToStore(findings, budgetGate, overrideReason, acknowledgedCodes, previousReason, previousCodes);
         shift.OverrideReason = reason;
         shift.AcknowledgedFindingCodes = codes;
+    }
+
+    /// <summary>
+    /// Where the shifts just made take a pool past its funding for a period (budget phase 3), as warnings; null when there are none to say. A warning only, in every mode: the shifts exist, and a budget that could
+    /// not be worked out must never turn a successful Generate into a failure, so a failure here is logged and the result goes out without warnings.
+    /// </summary>
+    private async Task<List<BudgetWarningDto>?> BudgetWarningsAsync(Guid participantId, IReadOnlyList<Shift> made, CancellationToken ct)
+    {
+        if (_budgetEffect is null || _tenant?.TenantId is not { } tenantId || made.Count == 0) return null;
+        try
+        {
+            var warnings = await _budgetEffect.ForShiftsAsync(tenantId, participantId, made.Select(PlannedShift.Of).ToList(), ct);
+            return warnings.Count > 0 ? warnings : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger?.LogWarning(ex, "The budget warnings for the shifts just generated for participant {ParticipantId} could not be worked out; the result is returned without them", participantId);
+            return null;
+        }
+    }
+
+    private bool CallerIsAdmin => User?.IsInRole("Admin") == true || User?.IsInRole("SuperAdmin") == true;
+
+    /// <summary>What a shift whose end is not after its start is refused with: an overnight shift is one that "ends the next day" (the phase 3 review, C1: without it the shift had a negative length and a negative price).</summary>
+    private const string ShiftEndsBeforeItStartsMessage = "The shift must end after it starts. Tick 'Ends the next day' for an overnight shift.";
+
+    /// <summary>The machine-readable code of that refusal (the dry run, a create and an update of a shift, a pattern's create and update). The screens answer it under End time and recognise it by this code, with the sentence only as their fallback, so the wording can change without breaking them.</summary>
+    private const string ShiftNoLengthCode = "shift-no-length";
+
+    /// <summary>
+    /// The budget check of the candidate shift (budget phase 3), quiet when the request has no organisation to show money for. <paramref name="existingId"/> is the saved shift an edit replaces, <paramref name="status"/>
+    /// the status it would be saved with. Whether the shift is routine is read from the saved shift's own pattern link, never from the request (C3).
+    /// </summary>
+    private async Task<ShiftBudgetOutcome> CheckBudgetAsync(Shift candidate, Guid? existingId, ShiftStatus? status, CancellationToken ct)
+    {
+        if (_budget is null || _tenant?.TenantId is not { } tenantId) return ShiftBudgetOutcome.Quiet;
+        return await _budget.CheckAsync(new ShiftBudgetRequest(
+            tenantId, candidate.ParticipantId, existingId == Guid.Empty ? null : existingId, candidate.ServiceDate, candidate.StartTime, candidate.EndTime, candidate.EndsNextDay,
+            candidate.Ratio, candidate.NightType, status, CallerIsAdmin), ct);
+    }
+
+    /// <summary>
+    /// Raises the Admin's review of a shift just accepted as an emergency or safety booking over budget: one open task for the shift at a time (idempotent on its source key, so a retry or a second save of
+    /// the same shift never doubles it), due the provider's tomorrow, owned by the shift's organisation, and committed with the shift in the caller's own save. The first review is
+    /// <c>budget-emergency:{shiftId}</c>. A review an Admin has closed is never reopened, so a further emergency on the same shift (a bigger overrun nobody has looked at) gets its own,
+    /// <c>budget-emergency:{shiftId}:2</c>, then <c>:3</c>, so the shift's marker never reads "Reviewed" over an overrun that was never reviewed (the phase 3 review, C4).
+    /// </summary>
+    private async Task RaiseEmergencyReviewAsync(Shift shift, CancellationToken ct)
+    {
+        var participant = await _db.Participants.AsNoTracking().FirstAsync(p => p.Id == shift.ParticipantId, ct);
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, participant.TenantId, _clock, ct);
+        var date = shift.ServiceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var earlier = await _db.BookingTasks.AsNoTracking()
+            .Where(t => t.ShiftId == shift.Id && t.TaskType == TaskType.BudgetEmergencyReview)
+            .OrderBy(t => t.SourceKey!.Length).ThenBy(t => t.SourceKey)   // the keys run :2, :3 after the first, so the last is the newest
+            .Select(t => new { t.SourceKey, t.Status })
+            .ToListAsync(ct);
+        var newest = earlier.LastOrDefault();
+        var sourceKey = newest == null ? $"budget-emergency:{shift.Id}"
+            : newest.Status is TaskItemStatus.Completed or TaskItemStatus.Cancelled ? $"budget-emergency:{shift.Id}:{earlier.Count + 1}"
+            : newest.SourceKey!;
+        await _obligationTasks.EnsureAsync(new Odip.Application.Interfaces.ObligationTaskSpec(
+            SourceKey: sourceKey,
+            Type: TaskType.BudgetEmergencyReview,
+            Title: string.Create(CultureInfo.InvariantCulture, $"Review emergency shift over budget: {participant.FullName} on {shift.ServiceDate:d MMM yyyy}"),
+            DueDate: today.AddDays(1),
+            LinkTo: $"/rostering?date={date}&participant={participant.Id}",
+            ShiftId: shift.Id,
+            TenantId: participant.TenantId), ct);
     }
 
     /// <summary>Staff-level compliance for the board row, evaluated once at the week's Monday — independent of any specific shift's findings.</summary>

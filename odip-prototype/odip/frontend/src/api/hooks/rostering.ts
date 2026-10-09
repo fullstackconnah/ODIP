@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost, apiPut, apiDelete } from '../client'
+import { apiGet, apiPost, apiPostRaw, apiPut, apiDelete } from '../client'
 import { refreshBudgetFigures } from './funding-ledger'
 import { awaitsData } from '@/lib/queryPhase'
 import type {
@@ -9,6 +9,7 @@ import type {
   UpdateShiftDto,
   AssignShiftDto,
   CheckShiftDto,
+  ShiftCheckResult,
   RosterFindingDto,
   ShiftPatternDto,
   CreateShiftPatternDto,
@@ -46,7 +47,11 @@ export function useRosterBoard(weekStart: string | undefined, groupBy: 'particip
  */
 export function useCheckShift() {
   return useMutation({
-    mutationFn: (data: CheckShiftDto) => apiPost<RosterFindingDto[]>('/rostering/shifts/check', data),
+    // The envelope's message carries the one informational line a shift the budget could not check gets ("Budget not checked: ..."): not a finding, so it does not travel in the list.
+    mutationFn: async (data: CheckShiftDto): Promise<ShiftCheckResult> => {
+      const response = await apiPostRaw<RosterFindingDto[]>('/rostering/shifts/check', data)
+      return { findings: response.data ?? [], budgetNote: response.message ?? undefined }
+    },
   })
 }
 
@@ -56,6 +61,7 @@ export function useCreateShift() {
     mutationFn: (data: CreateShiftDto) => apiPost<ShiftDto>('/rostering/shifts', data),
     onSuccess: (_, data) => {
       refreshBudgetFigures(qc, [data.participantId])   // a new shift is booked ahead in its participant's budget
+      qc.invalidateQueries({ queryKey: ['tasks'] })   // an emergency save raises the Admin's review task in the same write: the Tasks list must not be served stale
       return qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
   })
@@ -68,6 +74,7 @@ export function useUpdateShift() {
       apiPut<ShiftDto>(`/rostering/shifts/${id}`, data),
     onSuccess: () => {
       refreshBudgetFigures(qc)   // its times, status or day changed what it costs, and where; the update names no participant, so every ledger held is refreshed
+      qc.invalidateQueries({ queryKey: ['tasks'] })   // an emergency save raises the Admin's review task in the same write
       return qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
   })

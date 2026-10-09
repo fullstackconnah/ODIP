@@ -198,6 +198,11 @@ public record DraftApprovalPreviewDto
     public DateOnly? HorizonEnd { get; init; }
     /// <summary>Whether the daily top-up is on (<c>RosterTopUp:Enabled</c>): the confirm screen says shifts are added each day after the horizon only while it is.</summary>
     public bool TopUpEnabled { get; init; } = true;
+    /// <summary>
+    /// Where the shifts approval would make take a pool past its funding for a period (budget phase 3), one entry for each pool and period. A warning only, in every mode: approving is never refused for a
+    /// budget. Omitted when nothing is past its funding, no shifts would be made, or the participant has no budget recorded.
+    /// </summary>
+    public List<BudgetWarningDto>? BudgetWarnings { get; init; }
 }
 
 public record ServiceAgreementDraftLineDto

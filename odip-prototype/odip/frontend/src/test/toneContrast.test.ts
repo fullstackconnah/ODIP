@@ -132,7 +132,6 @@ const KNOWN_WARNING_COLOURED_TEXT: Record<string, number> = {
   'pages/SettingsPage.tsx': 1,
   'pages/participant-detail/SupportProfileTab.tsx': 1,
   'pages/rostering/components/ExceptionsDrawer.tsx': 1,
-  'pages/rostering/components/FindingsList.tsx': 1,
   'pages/trip-detail/BookingsTab.tsx': 2,
   'pages/trip-detail/StaffTab.tsx': 2,
 }

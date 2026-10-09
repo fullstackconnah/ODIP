@@ -178,7 +178,9 @@ describe('ShiftSlideOver override gate', () => {
       />,
     )
 
-    const saveButton = screen.getByRole('button', { name: /save with override/i })
+    // M1: nothing is overridden by a warning that asks for nothing, so the button does not say so.
+    expect(screen.queryByRole('button', { name: /save with override/i })).not.toBeInTheDocument()
+    const saveButton = screen.getByRole('button', { name: /^save anyway$/i })
     expect(saveButton).not.toBeDisabled()
 
     await user.click(saveButton)
@@ -190,7 +192,7 @@ describe('ShiftSlideOver override gate', () => {
     expect(screen.queryByText(/a reason is required to save over the warnings marked/i)).not.toBeInTheDocument()
   })
 
-  it('renders the override-reason field as optional when the only Warning present does not require a reason', () => {
+  it('renders no override-reason field when the only Warning present does not require a reason: the server discards a reason no finding asks for', () => {
     const shift = makeShift({
       findings: [makeFinding({ code: 'STAFF_LEAVE_PENDING', severity: 'Warning', requiresReason: false })],
       overrideReason: null,
@@ -205,11 +207,9 @@ describe('ShiftSlideOver override gate', () => {
       />,
     )
 
-    // The roster board invites a voluntary override note on ANY warning (showOnAnyWarning) —
-    // deliberate, and distinct from the trip-side surfaces which only show the field when a
-    // finding actually requires a reason. See RosterGateFieldsProps.showOnAnyWarning.
-    const field = screen.getByLabelText(/reason for override/i)
-    expect(field).not.toHaveAttribute('aria-required', 'true')
+    // The roster board used to invite a voluntary note on ANY warning, but RosterGate.ComputeOverride throws away a reason that no finding requires (spec section 3), so the note was
+    // typed, saved and gone. The box now follows the trip-side surfaces: it is there when a finding asks for a reason, or when a stored reason is being read.
+    expect(screen.queryByLabelText(/reason for override/i)).not.toBeInTheDocument()
   })
 })
 
@@ -841,7 +841,7 @@ describe('ShiftSlideOver — the server\'s refusal reaches the user', () => {
       staffId: null,
       serviceDate: '2026-08-17',
       startTime: '09:00',
-      endTime: '09:00',
+      endTime: '10:00',
       endsNextDay: true,
       ratio: 'OneToOne',
       nightType: 'None',
@@ -1003,7 +1003,7 @@ describe('ShiftSlideOver — readiness note (WARN mode)', () => {
       staffId: null,
       serviceDate: '2026-08-17',
       startTime: '09:00',
-      endTime: '09:00',
+      endTime: '10:00',
       endsNextDay: false,
       ratio: 'OneToOne',
       nightType: 'None',
@@ -1162,7 +1162,7 @@ describe('ShiftSlideOver — the live dry-run\'s refusal', () => {
     { value: 'participant-1', label: 'Mia Chen' },
     { value: 'participant-2', label: 'Noah Reid' },
   ]
-  type PreviewCallbacks = { onSuccess?: (findings: unknown[]) => void; onError?: (err: unknown) => void }
+  type PreviewCallbacks = { onSuccess?: (result: { findings: unknown[]; budgetNote?: string }) => void; onError?: (err: unknown) => void }
 
   afterEach(() => {
     mockCheckMutate.mockReset()
@@ -1188,7 +1188,7 @@ describe('ShiftSlideOver — the live dry-run\'s refusal', () => {
     expect(message.closest('[role="alert"]')).not.toBeNull()
     expect(mockCreateMutateAsync).not.toHaveBeenCalled()
     expect(mockCheckMutate).toHaveBeenCalledWith(
-      { id: undefined, participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '09:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None' },
+      { id: undefined, participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '10:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None' },
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
     )
     expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
@@ -1198,7 +1198,7 @@ describe('ShiftSlideOver — the live dry-run\'s refusal', () => {
     const user = userEvent.setup()
     mockCheckMutate.mockImplementation((candidate: { participantId: string }, opts?: PreviewCallbacks) => {
       if (candidate.participantId === 'participant-1') opts?.onError?.(badRequest(NOT_READY_MESSAGE))
-      else opts?.onSuccess?.([])
+      else opts?.onSuccess?.({ findings: [] })
     })
     renderCreate()
     expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
@@ -1255,7 +1255,7 @@ describe('ShiftSlideOver — the live dry-run\'s refusal', () => {
       staffId: null,
       serviceDate: '2026-08-17',
       startTime: '09:00',
-      endTime: '09:00',
+      endTime: '10:00',
       endsNextDay: false,
       ratio: 'OneToOne',
       nightType: 'None',
@@ -1437,5 +1437,176 @@ describe('ShiftSlideOver — which agreement a shift came from', () => {
 
     open({ shiftPatternId: null })                                                           // a one-off shift with no pattern at all
     expect(screen.queryByText(/From agreement|From an agreement/)).not.toBeInTheDocument()
+  })
+})
+
+// ── The length of a shift (phase 3 review N5, design review N2 and D6) ───────────────────────────────────────────────
+// A new shift opens with an end an hour after the start, so it opens valid and quiet. A pair of times with no length is a rule of the End time field, said under it, and the live check is not asked about it.
+describe('ShiftSlideOver — the length of a shift', () => {
+  const NO_LENGTH = "The shift must end after it starts. Tick 'Ends the next day' for an overnight shift."
+  const endTimeField = () => screen.getByLabelText(/^End time/)
+
+  afterEach(() => {
+    mockCheckMutate.mockReset()
+  })
+
+  function openNew() {
+    return render(
+      <ShiftSlideOver target={{ mode: 'create', participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17' }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />,
+    )
+  }
+
+  it('opens a new shift with an end an hour after the start, and no alert of any kind', async () => {
+    openNew()
+
+    expect(screen.getByLabelText(/^Start time/)).toHaveValue('09:00')
+    expect(endTimeField()).toHaveValue('10:00')
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenCalledTimes(1))
+    expect(mockCheckMutate.mock.calls[0][0]).toMatchObject({ startTime: '09:00', endTime: '10:00', endsNextDay: false })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(endTimeField()).not.toBeInvalid()
+  })
+
+  it('says it under End time, as the field’s own error, when the end is set at or before the start', async () => {
+    const user = userEvent.setup()
+    openNew()
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenCalledTimes(1))
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '09:00')
+
+    expect(await screen.findByText(NO_LENGTH)).toBeInTheDocument()
+    expect(endTimeField()).toBeInvalid()
+    expect(endTimeField()).toHaveAccessibleDescription(NO_LENGTH)
+    expect(screen.getAllByRole('alert')).toHaveLength(1)   // the field's own, not a second box at the foot
+  })
+
+  it('does not ask the live check about a pair of times with no length', async () => {
+    const user = userEvent.setup()
+    openNew()
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenCalledTimes(1))
+    mockCheckMutate.mockClear()
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '08:30')
+    await screen.findByText(NO_LENGTH)
+    await new Promise(resolve => setTimeout(resolve, 650))   // past the 400 ms debounce
+
+    expect(mockCheckMutate).not.toHaveBeenCalled()
+  })
+
+  it('hides what the last check said while the pair has no length, and shows the check’s answer for the new times once it has one', async () => {
+    const user = userEvent.setup()
+    type PreviewCallbacks = { onSuccess?: (result: { findings: unknown[] }) => void }
+    mockCheckMutate.mockImplementation((candidate: { endTime: string }, opts?: PreviewCallbacks) =>
+      opts?.onSuccess?.({ findings: [makeFinding({ severity: 'Warning', message: `Takes Core to the end of ${candidate.endTime}` })] }))
+    openNew()
+    expect(await screen.findByText('Takes Core to the end of 10:00')).toBeInTheDocument()
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '09:00')
+    await screen.findByText(NO_LENGTH)
+    expect(screen.queryByText('Takes Core to the end of 10:00')).not.toBeInTheDocument()   // about a different shift
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '11:00')
+    expect(await screen.findByText('Takes Core to the end of 11:00')).toBeInTheDocument()
+  })
+
+  it('takes the message away, and asks the check, once "Ends the next day" is ticked', async () => {
+    const user = userEvent.setup()
+    openNew()
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '09:00')
+    await screen.findByText(NO_LENGTH)
+
+    await user.click(screen.getByLabelText('Ends the next day'))
+
+    expect(screen.queryByText(NO_LENGTH)).not.toBeInTheDocument()
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenLastCalledWith(expect.objectContaining({ startTime: '09:00', endTime: '09:00', endsNextDay: true }), expect.anything()))
+  })
+
+  it('shows the server’s 400 for no length under End time too, not in the alert at the foot, and clears it when the time is fixed', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(badRequest(NO_LENGTH))
+    openNew()
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(await screen.findByText(NO_LENGTH)).toBeInTheDocument()
+    expect(endTimeField()).toBeInvalid()
+    expect(endTimeField()).toHaveAccessibleDescription(NO_LENGTH)
+    expect(screen.getAllByText(NO_LENGTH)).toHaveLength(1)
+    expect(screen.getAllByRole('alert').every(alert => alert.tagName === 'P')).toBe(true)   // the field's, never the foot box (a div)
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '11:00')
+
+    expect(screen.queryByText(NO_LENGTH)).not.toBeInTheDocument()
+  })
+
+  it('shows the live check’s 400 for no length under End time as well', async () => {
+    type PreviewCallbacks = { onError?: (err: unknown) => void }
+    mockCheckMutate.mockImplementation((_candidate: unknown, opts?: PreviewCallbacks) => opts?.onError?.(badRequest(NO_LENGTH)))
+    openNew()
+
+    expect(await screen.findByText(NO_LENGTH)).toBeInTheDocument()
+    expect(endTimeField()).toHaveAccessibleDescription(NO_LENGTH)
+    expect(screen.getAllByRole('alert').every(alert => alert.tagName === 'P')).toBe(true)
+  })
+
+  // The server's 400 carries a code; the panel recognises the refusal by it, so a sentence it has never seen is still said under End time and never in the alert at the foot.
+  const REWORDED = 'Pick an end time that is after the start time.'
+  const noLengthByCode = () => ({ response: { status: 400, data: { success: false, errors: [REWORDED], code: 'shift-no-length' } } })
+
+  it('recognises a save’s 400 for no length by its code, whatever the words, and says the server’s words under End time', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(noLengthByCode())
+    openNew()
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(await screen.findByText(REWORDED)).toBeInTheDocument()
+    expect(endTimeField()).toBeInvalid()
+    expect(endTimeField()).toHaveAccessibleDescription(REWORDED)
+    expect(screen.getAllByRole('alert').every(alert => alert.tagName === 'P')).toBe(true)   // the field's, never the foot box (a div)
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '11:00')
+
+    expect(screen.queryByText(REWORDED)).not.toBeInTheDocument()
+  })
+
+  it('recognises the live check’s 400 for no length by its code too', async () => {
+    type PreviewCallbacks = { onError?: (err: unknown) => void }
+    mockCheckMutate.mockImplementation((_candidate: unknown, opts?: PreviewCallbacks) => opts?.onError?.(noLengthByCode()))
+    openNew()
+
+    expect(await screen.findByText(REWORDED)).toBeInTheDocument()
+    expect(endTimeField()).toHaveAccessibleDescription(REWORDED)
+    expect(screen.getAllByRole('alert').every(alert => alert.tagName === 'P')).toBe(true)
+  })
+
+  it('still shows any other 400 at the foot, with its words', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(badRequest('Participant is not ready for booking or rostering.'))
+    openNew()
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    const foot = await screen.findByRole('alert')
+    expect(foot).toHaveTextContent('Participant is not ready for booking or rostering.')
+    expect(foot.tagName).toBe('DIV')
+    expect(endTimeField()).not.toBeInvalid()
+  })
+
+  it('tells an existing shift that has no length the same way, but not one that is being cancelled', () => {
+    const legacy = { startTime: '09:00:00', endTime: '09:00:00' }
+    const { unmount } = render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ ...legacy, status: 'Published' }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+    expect(screen.getByText(NO_LENGTH)).toBeInTheDocument()
+    unmount()
+
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ ...legacy, status: 'Cancelled' }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+    expect(screen.queryByText(NO_LENGTH)).not.toBeInTheDocument()
   })
 })

@@ -97,6 +97,12 @@ public static class ShiftPriceEstimator
     /// <summary>The same reason in a few words, for a figure that counts the shifts left out and lists why (<see cref="ShiftPriceOutcome.NotPricedKinds"/>).</summary>
     public const string NoCatalogueRateKind = "no catalogue rate for the date";
 
+    /// <summary>Why a shift has no price when it ends at or before it starts (an overnight shift saved without "Ends the next day").</summary>
+    public const string NoLengthBecause = "it has no length (it ends at or before its start)";
+
+    /// <summary>The same reason in a few words (<see cref="ShiftPriceOutcome.NotPricedKinds"/>).</summary>
+    public const string NoLengthKind = "no length";
+
     /// <summary>What is said about a priced overnight shift: the engine prices it as hours at one day rate.</summary>
     public const string ActiveNightCaveat = "Evening and night rates are not applied yet.";
 
@@ -136,6 +142,10 @@ public static class ShiftPriceEstimator
         IReadOnlyList<SupportCatalogueItem> communityAccessItems, DateOnly serviceDate, decimal durationHours, SupportRatio ratio, SleepoverType nightType, bool isIntensive, string state,
         IReadOnlySet<DateOnly> publicHolidays)
     {
+        // A shift with no length has no price. Priced as hours x rate it was a zero or NEGATIVE item that the budget ledger summed with the real ones (the phase 3 review, C1): the data is what is wrong,
+        // so this is said before the shift's kind.
+        if (durationHours <= 0m) return new ShiftPriceOutcome(null, NoLengthBecause, null) { NotPricedKinds = new[] { NoLengthKind } };
+
         // The kind of shift comes first: a shift that would be wrong to price is not priced however good its rate, and its own kind is the useful thing to say.
         var unpriced = new[] { UnpricedRatio(ratio), UnpricedNightType(nightType) }.OfType<string>().ToList();
         if (unpriced.Count > 0)

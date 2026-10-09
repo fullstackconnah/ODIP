@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom'
 import { useDraggable } from '@dnd-kit/core'
-import { AlertOctagon, AlertTriangle, CalendarOff, GripVertical, MoreVertical, ShieldCheck } from 'lucide-react'
+import { AlertOctagon, AlertTriangle, CalendarOff, Check, GripVertical, KeyRound, MoreVertical, ShieldCheck, Siren } from 'lucide-react'
 import type { RosterFindingDto, ShiftDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { formatShiftTimeRange, RATIO_LABELS } from '../lib/roster'
 import { plural } from '@/lib/format'
+import { TONE } from '@/lib/tone'
+import { OVER_BUDGET_MARKER, markerForAcknowledgedCodes } from './parallel-budget-override'
 
 /**
  * Accessible name for the severity marker — states the severity(s) present and their counts, so
@@ -75,6 +77,23 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
   const onApprovedLeave = isFilled && shift.assigneeOnApprovedLeave
   const onLeaveTitle = `${shift.staffName} has approved leave covering this shift — this slot needs a new assignee.`
 
+  // Budget phase 3: a shift saved past its budget on purpose carries a marker, read from the codes the SERVER stored (never from the reason's words). It stands in for the generic override mark: one shield, not two.
+  const budgetMarker = markerForAcknowledgedCodes(shift.acknowledgedFindingCodes)
+  const budgetReviewWords = budgetMarker === 'emergency' ? (shift.budgetReview?.state === 'Reviewed' ? 'Reviewed' : 'Admin review pending') : null
+  const budgetMarkerName = budgetMarker ? [OVER_BUDGET_MARKER[budgetMarker], budgetReviewWords].filter(Boolean).join(', ') : null
+  const budgetMarkerTitle = budgetMarkerName ? `${budgetMarkerName}${shift.overrideReason ? ` — ${shift.overrideReason}` : ''}` : null
+  // What the marker looks like (design review H1): each state has its own silhouette and glyph as well as its tone, so they read apart without colour, and none is the generic override shield. A round alarm for an
+  // emergency waiting on its review, a round tick once it is reviewed, a rounded-square key for an Admin override (the Admin's own act, with no review to wait for).
+  const budgetDisc = budgetMarker === 'adminOverride'
+    ? { Icon: KeyRound, shape: 'rounded-[6px]', fill: TONE.info.solid, ink: TONE.info.ink }
+    : shift.budgetReview?.state === 'Reviewed'
+      ? { Icon: Check, shape: 'rounded-full', fill: TONE.success.solid, ink: TONE.success.ink }
+      : { Icon: Siren, shape: 'rounded-full', fill: TONE.warning.solid, ink: TONE.warning.ink }
+
+  // The words of every marker that applies, on the chip itself, one to a line: on leave, the over-budget marker, the severity marker. The disc and the severity icon are pointer-events-none (they must never take a click),
+  // so hit testing skips them and their own titles can never show; the pointer lands on the chip, and this is what it shows. Their aria-labels, and the control's accessible name, are unchanged.
+  const chipTitle = [onApprovedLeave ? onLeaveTitle : null, budgetMarkerTitle, hasFindings ? findingsSeverityLabel(shift.findings) : null].filter(Boolean).join('\n') || undefined
+
   const menuItems = [
     { value: 'edit', label: 'Edit' },
     { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : 'Reassign to…' },
@@ -111,7 +130,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
     `${timeRange}${shift.endsNextDay ? ' (ends the next day)' : ''}`,
     labelText,
     showRatio ? `${RATIO_LABELS[shift.ratio] ?? shift.ratio} ratio` : null,
-    shift.overrideReason ? `Assigned with an override: ${shift.overrideReason}` : null,
+    budgetMarkerName ?? (shift.overrideReason ? `Assigned with an override: ${shift.overrideReason}` : null),
     onApprovedLeave ? 'On leave' : null,
   ].filter(Boolean).join(', ')
 
@@ -148,10 +167,10 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
       style={transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 30 } : undefined}
       // On-leave gets the explanation on the whole chip too: on a narrow day column the inline marker
       // below is the first thing to clip, so the hover text must not depend on it being visible.
-      title={onApprovedLeave ? onLeaveTitle : undefined}
+      title={chipTitle}
       className={`group @container relative flex min-h-[calc(var(--row-h)_-_6px)] items-stretch rounded-sm border bg-surface-container-low text-[13px] transition-opacity duration-150 ${
         dashed || onApprovedLeave ? 'border-dashed border-border' : 'border-border'
-      } ${isDragging ? 'opacity-50' : ''}`}
+      } ${isDragging ? 'opacity-50' : ''} ${budgetMarker ? (hasFindings ? 'mb-2' : 'mt-2') : ''}`}
     >
       {/* Drag activation lives on its own handle, separate from the open button below. Both used
           to share one element with dnd-kit's listeners spread onto the same button that opens the
@@ -249,7 +268,12 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
               operationally) an under-covered ratio surfaces as a RATIO_SHORTFALL finding, which the severity
               marker already makes visible.
             */}
-            {shift.overrideReason && (
+            {budgetMarker && budgetMarkerTitle ? (
+              // The words are a bonus on a chip wide enough for them (container query on the chip); below that they are display:none, never a clipped word. The marker itself is the disc on the chip's corner, below.
+              <span className={`ml-1 hidden shrink-0 text-xs font-semibold @[18rem]:inline ${budgetDisc.ink}`} aria-hidden="true">
+                {OVER_BUDGET_MARKER[budgetMarker]}
+              </span>
+            ) : shift.overrideReason && (
               <span
                 className="ml-1 shrink-0 text-muted-foreground"
                 role="img"
@@ -273,6 +297,22 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
           </span>
         </span>
       </div>
+
+      {/* The over-budget marker (design review H1): a 20 px disc on the chip's corner, not a 12 px shield in the name row. It is out of the flow, so the label never gives way to it, and it is
+          pointer-events-none like the severity marker, so it never takes a click from the chip or the menu. It takes the top corner; a chip that already carries a severity marker at the top
+          takes the bottom one, so the two never sit on each other. The part of the disc that hangs off the chip needs room to hang in: the chip leaves 8 px of margin on that side, because the first row sits
+          right under the board's sticky day header (z-20), which cut the top of the disc when it hung over nothing. It keeps its role="img", its words in the accessible name and the hover title, and its data attribute. */}
+      {budgetMarker && budgetMarkerTitle && (
+        <span
+          className={`pointer-events-none absolute z-10 flex h-5 w-5 items-center justify-center ring-2 ring-[var(--color-card)] ${hasFindings ? '-bottom-2' : '-top-2'} -right-1 ${budgetDisc.shape} ${budgetDisc.fill}`}
+          role="img"
+          aria-label={budgetMarkerName ?? undefined}
+          title={budgetMarkerTitle}
+          data-budget-marker={budgetMarker}
+        >
+          <budgetDisc.Icon className="h-4 w-4" aria-hidden="true" />
+        </span>
+      )}
 
       {canWrite && (
         // The "Actions for …" trigger is Dropdown's icon variant, which hard-codes `p-1.5 rounded-lg` (a 26px

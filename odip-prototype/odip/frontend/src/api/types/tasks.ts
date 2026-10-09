@@ -1,7 +1,7 @@
 import type { TaskType, TaskPriority, TaskItemStatus } from './enums'
 
-/** Item 9 (tasks as the obligation engine): the label map for every TaskType, including the four
- * new obligation-engine types that have no trip to hang off (LeaveCoverage, IncidentQscReport,
+/** Item 9 (tasks as the obligation engine): the label map for every TaskType, including the
+ * obligation-engine types that have no trip to hang off (LeaveCoverage, IncidentQscReport,
  * MedicationWitness, FlaggedNoteFollowUp). Existing types keep rendering their raw enum text
  * elsewhere (TasksPage falls back to the raw value for any key not listed here), so only the new
  * types are given a friendly label — this isn't a full relabel of the column. */
@@ -10,6 +10,7 @@ export const TASK_TYPE_LABELS: Partial<Record<TaskType, string>> = {
   IncidentQscReport: 'QSC incident report',
   MedicationWitness: 'Medication witness',
   FlaggedNoteFollowUp: 'Flagged note follow-up',
+  BudgetEmergencyReview: 'Budget emergency review',
 }
 
 export interface TaskDto {

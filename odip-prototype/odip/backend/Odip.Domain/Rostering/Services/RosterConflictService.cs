@@ -9,9 +9,9 @@ namespace Odip.Domain.Rostering.Services;
 /// <see cref="RequiresReason"/> — new this feature — is true for a finding the Blocking/Warning
 /// gate demands a non-empty override reason for; false means the finding still gets recorded in
 /// AcknowledgedFindingCodes when the write saves, but no reason is required (e.g. a merely
-/// pending leave request is a softer signal than an already-approved one).
+/// pending leave request is a softer signal than an already-approved one). <see cref="Budget"/> is set only on the budget findings (budget phase 3): the figures the message was worked out from.
 /// </summary>
-public sealed record RosterFinding(string Code, RosterFindingSeverity Severity, string Message, bool RequiresReason = false);
+public sealed record RosterFinding(string Code, RosterFindingSeverity Severity, string Message, bool RequiresReason = false, Odip.Domain.Funding.BudgetFindingFigures? Budget = null);
 
 /// <summary>One public holiday relevant to the context's date range, used by
 /// <see cref="RosterConflictService.Check"/> to fire <see cref="RosterConflictService.PublicHoliday"/>

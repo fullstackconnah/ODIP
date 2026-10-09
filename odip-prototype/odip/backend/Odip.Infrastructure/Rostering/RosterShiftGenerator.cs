@@ -7,9 +7,12 @@ using Odip.Infrastructure.Services;
 namespace Odip.Infrastructure.Rostering;
 
 /// <summary>What a generation did: shifts made, days that already had one, and days a plan skipped for a public holiday.</summary>
-public sealed record ShiftGeneration(int Created, int AlreadyThere, int HolidaysSkipped, DateOnly? FirstDate, DateOnly? LastDate)
+public sealed record ShiftGeneration(int Created, int AlreadyThere, int HolidaysSkipped, DateOnly? FirstDate, DateOnly? LastDate, IReadOnlyList<Shift>? Made = null)
 {
     public static readonly ShiftGeneration None = new(0, 0, 0, null, null);
+
+    /// <summary>The shifts this generation made (the same objects it added to the context), for a caller that wants to say what they do to a budget. Empty when none were made.</summary>
+    public IReadOnlyList<Shift> MadeShifts => Made ?? Array.Empty<Shift>();
 
     /// <summary>The days that got no shift because there was no need for one: it was already there, or a plan skipped the day.</summary>
     public int Skipped => AlreadyThere + HolidaysSkipped;
@@ -77,6 +80,7 @@ public sealed class RosterShiftGenerator
 
         int created = 0, alreadyThere = 0, holidays = 0;
         DateOnly? first = null, last = null;
+        var made = new List<Shift>();
         foreach (var (pattern, dates) in occurrences)
         {
             foreach (var date in dates)
@@ -84,20 +88,22 @@ public sealed class RosterShiftGenerator
                 if (existing.Contains((pattern.Id, date))) { alreadyThere++; continue; }
                 if (pattern.SourceDraftId is { } draftId && pattern.SourceBlockKey is { } blockKey && skippedDays.TryGetValue(draftId, out var skipped) && skipped.Contains((blockKey, date))) { holidays++; continue; }
 
-                db.Shifts.Add(new Shift
+                var shift = new Shift
                 {
                     Id = Guid.NewGuid(), TenantId = pattern.TenantId, ParticipantId = pattern.ParticipantId, UserId = pattern.DefaultUserId,
                     ServiceDate = date, StartTime = pattern.StartTime, EndTime = pattern.EndTime, EndsNextDay = pattern.EndsNextDay,
                     Ratio = pattern.Ratio, NightType = pattern.NightType, Status = ShiftStatus.Draft, ShiftPatternId = pattern.Id,
                     RequirementsJson = pattern.RequirementsJson,
-                });
+                };
+                db.Shifts.Add(shift);
+                made.Add(shift);
                 created++;
                 if (first is null || date < first) first = date;
                 if (last is null || date > last) last = date;
             }
         }
 
-        return new ShiftGeneration(created, alreadyThere, holidays, first, last);
+        return new ShiftGeneration(created, alreadyThere, holidays, first, last, made);
     }
 
     /// <summary>

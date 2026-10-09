@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, type RenderResult } from '@testing-library/react'
+import { render, screen, cleanup, type RenderResult } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { ShiftChip } from './ShiftChip'
 import { formatShiftTimeRange } from '../lib/roster'
 import { makeShift, makeFinding } from '../test-fixtures'
+import type { ShiftDto } from '@/api/types'
 
 function noop() {}
 
@@ -375,5 +376,197 @@ describe('ShiftChip sub-text is announced, never clipped', () => {
       '[&_button]:p-0',
       '[&_button]:rounded-[var(--radius-sm)]',
     ]) expect(wrapper).toHaveClass(cls)
+  })
+})
+
+describe('ShiftChip over-budget marker (budget phase 3)', () => {
+  const emergency = () => makeShift({
+    overrideReason: 'Emergency or safety: Participant unsafe at home tonight',
+    acknowledgedFindingCodes: ['BUDGET_EMERGENCY'],
+    budgetReview: { state: 'Pending' },
+  })
+
+  it('marks an emergency shift with the words "Over budget: emergency", and says the review is pending', () => {
+    renderChip(<ShiftChip shift={emergency()} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const marker = screen.getByRole('img', { name: /Over budget: emergency/ })
+    expect(marker).toHaveAttribute('title', expect.stringContaining('Over budget: emergency'))
+    expect(marker).toHaveAttribute('title', expect.stringContaining('Admin review pending'))
+    expect(marker).toHaveAttribute('data-budget-marker', 'emergency')
+  })
+
+  it('marks an Admin override with its own words, and no review to wait for', () => {
+    const shift = makeShift({ overrideReason: 'Client carer is in hospital', acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'] })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const marker = screen.getByRole('img', { name: /Over budget: Admin override/ })
+    expect(marker).toHaveAttribute('data-budget-marker', 'adminOverride')
+    expect(marker.getAttribute('title')).not.toMatch(/review/i)
+  })
+
+  it('says it in the open control\'s accessible name too, in place of the generic override line, so one mark is not announced twice', () => {
+    const shift = emergency()
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    const name = getOpenButton(shift).getAttribute('aria-label')!
+    expect(name).toContain('Over budget: emergency, Admin review pending')
+    expect(name).not.toContain('Assigned with an override')
+    expect(screen.queryByRole('img', { name: /Assigned with an override/ })).not.toBeInTheDocument()
+  })
+
+  it('draws no budget marker for a plain override, a warning-only shift, or codes the server did not acknowledge', () => {
+    renderChip(<ShiftChip shift={makeShift({ overrideReason: 'Only cover available' })} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    expect(screen.queryByRole('img', { name: /Over budget/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /Assigned with an override/ })).toBeInTheDocument()   // the generic mark is unchanged
+  })
+
+  it('does not take a marker from the reason\'s words', () => {
+    renderChip(<ShiftChip shift={makeShift({ overrideReason: 'Emergency or safety: typed by hand', acknowledgedFindingCodes: ['BUDGET_APPROACHING'] })} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(screen.queryByRole('img', { name: /Over budget/ })).not.toBeInTheDocument()
+  })
+
+  it('reads a reviewed emergency as reviewed', () => {
+    const shift = makeShift({ ...emergency(), budgetReview: { state: 'Reviewed', reviewedOn: '2026-10-05' } })
+    renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    expect(screen.getByRole('img', { name: /Over budget: emergency/ })).toHaveAttribute('title', expect.stringContaining('Reviewed'))
+  })
+
+  // The phase 3 design review, H1: a 12 px shield in the name row was unreadable at the board's 125 px chips, squeezed the label, and the Admin override looked like the generic override shield.
+  describe('the disc on the chip’s corner (design review H1)', () => {
+    const reviewed = () => makeShift({ ...emergency(), budgetReview: { state: 'Reviewed', reviewedOn: '2026-10-05' } })
+    const adminOverride = () => makeShift({ overrideReason: 'Client carer is in hospital', acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'] })
+    const markerOf = (shift: ShiftDto) => {
+      renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+      return screen.getByRole('img', { name: /Over budget/ })
+    }
+    const glyph = (marker: HTMLElement) => marker.querySelector('svg')!.getAttribute('class') ?? ''
+
+    it('sits on the corner, out of the name row and out of the way of clicks, so the label never gives way to it', () => {
+      const marker = markerOf(makeShift({ ...emergency(), participantName: 'Grace Palmer' }))
+
+      const nameRow = screen.getByRole('link', { name: 'Grace Palmer' }).parentElement as HTMLElement
+      expect(nameRow).not.toContainElement(marker)
+      expect(marker).toHaveClass('absolute', 'pointer-events-none')
+    })
+
+    it('is a 20 px disc around a 16 px glyph: big enough to read at the board’s chip widths', () => {
+      const marker = markerOf(emergency())
+
+      expect(marker).toHaveClass('h-5', 'w-5')
+      expect(marker.querySelector('svg')).toHaveClass('h-4', 'w-4')
+    })
+
+    it('draws a pending emergency as a round alarm in the warning pair', () => {
+      const marker = markerOf(emergency())
+
+      expect(marker).toHaveClass('rounded-full')
+      expect(marker.className).toContain('--color-warning-container')
+      expect(glyph(marker)).toContain('lucide-siren')
+    })
+
+    it('draws a reviewed emergency as a round tick in the success pair: a different glyph, not just a different colour', () => {
+      const marker = markerOf(reviewed())
+
+      expect(marker).toHaveClass('rounded-full')
+      expect(marker.className).toContain('--color-primary-fixed')
+      expect(glyph(marker)).toContain('lucide-check')
+    })
+
+    it('draws an Admin override as a rounded square key in the info pair: its own silhouette, and not the generic override shield', () => {
+      const marker = markerOf(adminOverride())
+
+      expect(marker).not.toHaveClass('rounded-full')
+      expect(marker.className).toContain('--color-secondary-container')
+      expect(glyph(marker)).toContain('lucide-key-round')
+      expect(glyph(marker)).not.toContain('shield')
+    })
+
+    it('leaves the generic override mark as it was: a shield in the name row', () => {
+      renderChip(<ShiftChip shift={makeShift({ overrideReason: 'Only cover available' })} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+      expect(screen.getByRole('img', { name: /Assigned with an override/ }).querySelector('svg')!.getAttribute('class')).toContain('shield')
+    })
+
+    it('takes the top corner, and the bottom one when the chip already carries a severity marker at the top', () => {
+      const plain = markerOf(emergency())
+      expect(plain.className).toContain('-top-')
+      cleanup()
+
+      const withFindings = markerOf(makeShift({ ...emergency(), findings: [makeFinding({ severity: 'Warning' })] }))
+      expect(withFindings.className).toContain('-bottom-')
+      expect(withFindings.className).not.toContain('-top-')
+    })
+
+    it('makes room for the part of the disc that hangs off the chip, so the board’s sticky day header never cuts it (the first row sits right under it)', () => {
+      const top = markerOf(emergency())
+      expect(top.parentElement).toHaveClass('mt-2')
+      expect(top.parentElement).not.toHaveClass('mb-2')
+      cleanup()
+
+      const bottom = markerOf(makeShift({ ...emergency(), findings: [makeFinding({ severity: 'Warning' })] }))
+      expect(bottom.parentElement).toHaveClass('mb-2')
+      expect(bottom.parentElement).not.toHaveClass('mt-2')
+    })
+
+    // Design review round 1 N1, code review N4: the disc is pointer-events-none (it must never take a click), so hit testing skips it and its own title never shows. The words are on the chip root, which is
+    // what the pointer lands on, joined with the words of the other markers that apply.
+    describe('the hover words (the disc cannot show its own title)', () => {
+      const chipRoot = (marker: HTMLElement) => marker.parentElement as HTMLElement
+
+      it('puts the budget marker’s words on the chip itself, with the reason, so hovering the disc shows them', () => {
+        const marker = markerOf(emergency())
+
+        expect(chipRoot(marker)).toHaveAttribute('title', 'Over budget: emergency, Admin review pending — Emergency or safety: Participant unsafe at home tonight')
+      })
+
+      it('keeps the disc’s own aria-label and title: the words stay in the accessible name', () => {
+        const marker = markerOf(emergency())
+
+        expect(marker).toHaveAttribute('aria-label', 'Over budget: emergency, Admin review pending')
+        expect(marker).toHaveAttribute('title', expect.stringContaining('Over budget: emergency'))
+      })
+
+      it('says every marker that applies, one to a line: on leave, the budget marker, and the severity marker', () => {
+        const shift = makeShift({ ...adminOverride(), staffId: 'staff-9', staffName: 'Alex Rivera', assigneeOnApprovedLeave: true, findings: [makeFinding({ severity: 'Blocking' })] })
+        const marker = markerOf(shift)
+
+        const lines = chipRoot(marker).getAttribute('title')!.split('\n')
+        expect(lines).toHaveLength(3)
+        expect(lines[0]).toContain('has approved leave covering this shift')
+        expect(lines[1]).toBe('Over budget: Admin override — Client carer is in hospital')
+        expect(lines[2]).toBe('1 blocking issue')
+      })
+
+      it('says the severity marker’s words on the chip too, since that marker is pointer-events-none as well', () => {
+        renderChip(<ShiftChip shift={makeShift({ findings: [makeFinding({ severity: 'Warning' })] })} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+        expect(screen.getByText('9am–5pm').closest('[class*="@container"]')).toHaveAttribute('title', '1 warning')
+      })
+
+      it('puts no title on a chip with no marker at all', () => {
+        renderChip(<ShiftChip shift={makeShift()} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+        expect(screen.getByText('9am–5pm').closest('[class*="@container"]')).not.toHaveAttribute('title')
+      })
+    })
+
+    it('adds no room to a chip with no marker', () => {
+      renderChip(<ShiftChip shift={makeShift()} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+      const chip = screen.getByRole('button', { name: /^Drag to move/ }).parentElement as HTMLElement
+      expect(chip).not.toHaveClass('mt-2')
+      expect(chip).not.toHaveClass('mb-2')
+    })
+
+    it('keeps the words as a bonus on a wide chip: in the name row, and display:none below 18rem, never clipped', () => {
+      renderChip(<ShiftChip shift={makeShift({ ...emergency(), participantName: 'Grace Palmer' })} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+      const words = screen.getByText('Over budget: emergency', { selector: 'span' })
+      expect(words).toHaveClass('hidden', '@[18rem]:inline')
+      expect(words).toHaveAttribute('aria-hidden', 'true')
+      expect(screen.getByRole('link', { name: 'Grace Palmer' }).parentElement).toContainElement(words)
+    })
   })
 })

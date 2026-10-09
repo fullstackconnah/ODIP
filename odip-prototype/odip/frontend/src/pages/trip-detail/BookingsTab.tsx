@@ -6,6 +6,8 @@ import { SearchableSelect } from '@/components/SearchableSelect'
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ReadinessNote } from '@/components/ReadinessNote'
+import { BudgetWarnings } from '@/components/BudgetWarnings'
+import { bookingBudgetNote, bookingBudgetNotice, mergeBookingBudgetNotices, type BookingBudgetNotice } from '@/lib/bookingBudget'
 import { TAP_ICON_SQUARE } from '@/components/tapArea'
 import { getStatusColor, extractErrorMessage } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
@@ -92,6 +94,8 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
   const [deletingBooking, setDeletingBooking] = useState<BookingListDto | null>(null)
   const [selectedBookingIds, setSelectedBookingIds] = useState<Set<string>>(new Set())
   const [bookingBulkLoading, setBookingBulkLoading] = useState(false)
+  // Budget phase 3: what confirming a booking does to the participant's budget, as the server says it. A warning only; the booking is already confirmed.
+  const [budgetNotice, setBudgetNotice] = useState<BookingBudgetNotice | null>(null)
 
   const createBooking = useCreateBooking()
   const updateBooking = useUpdateBooking()
@@ -137,18 +141,20 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
     patch: Partial<{ bookingStatus: BookingStatus; insuranceStatus: InsuranceStatus; paymentStatus: PaymentStatus }>
   ) {
     setBookingBulkLoading(true)
+    setBudgetNotice(null)
     try {
-      await Promise.all(
+      const notices = await Promise.all(
         ids.map(
           id =>
-            new Promise<void>((resolve, reject) => {
+            new Promise<BookingBudgetNotice | null>((resolve, reject) => {
               patchBooking.mutate(
                 { id, data: patch },
-                { onSuccess: () => resolve(), onError: err => reject(err) }
+                { onSuccess: response => resolve(bookingBudgetNotice(response)), onError: err => reject(err) }
               )
             })
         )
       )
+      setBudgetNotice(mergeBookingBudgetNotices(notices))
       setSelectedBookingIds(new Set())
     } catch {
       // individual mutation errors surface through TanStack Query
@@ -191,9 +197,10 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
       ...(insuranceCoverageStart ? { insuranceCoverageStart } : {}),
       ...(insuranceCoverageEnd ? { insuranceCoverageEnd } : {}),
     }, {
-      onSuccess: () => {
+      onSuccess: response => {
         setShowAddBooking(false)
         resetForm()
+        setBudgetNotice(bookingBudgetNotice(response))
       },
     })
   }
@@ -235,7 +242,10 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
       insuranceCoverageStart: editForm.insuranceCoverageStart || undefined,
       insuranceCoverageEnd: editForm.insuranceCoverageEnd || undefined,
     }}, {
-      onSuccess: () => setEditingBooking(null),
+      onSuccess: response => {
+        setEditingBooking(null)
+        setBudgetNotice(bookingBudgetNotice(response))
+      },
     })
   }
 
@@ -252,6 +262,8 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
           </button>
         )}
       </div>
+
+      {budgetNotice && <BudgetWarnings warnings={budgetNotice.warnings} note={bookingBudgetNote(budgetNotice)} onDismiss={() => setBudgetNotice(null)} />}
 
       {/* Add Booking Modal */}
       {showAddBooking && (
@@ -451,7 +463,10 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
               <Dropdown
                 variant="pill"
                 value={b.bookingStatus}
-                onChange={val => patchBooking.mutate({ id: b.id, data: { bookingStatus: val as BookingStatus } })}
+                onChange={val => {
+                  setBudgetNotice(null)
+                  patchBooking.mutate({ id: b.id, data: { bookingStatus: val as BookingStatus } }, { onSuccess: response => setBudgetNotice(bookingBudgetNotice(response)) })
+                }}
                 colorClass={getStatusColor(b.bookingStatus)}
                 items={[
                   { value: 'Enquiry', label: 'Enquiry' },

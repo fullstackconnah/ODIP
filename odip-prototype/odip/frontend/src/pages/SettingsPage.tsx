@@ -148,7 +148,7 @@ export default function SettingsPage() {
     { key: 'provider' as const, label: 'Provider Settings' },
     // The pricing engine's own answers (registration groups, crossing policy, travel rates): the provider's to set, so Admins and SuperAdmins only.
     { key: 'pricing' as const, label: 'Plan Pricing', hidden: !(isAdmin || isSuperAdmin) },
-    // What a budget check does about a one-off shift that would go over a participant's budget, and when a participant counts as approaching it (budget phase 1 stores the choice): Admins and SuperAdmins only.
+    // What a budget check does about a one-off shift that would put a participant over budget, and when a participant counts as approaching it (budget phase 1 stores the choice): Admins and SuperAdmins only.
     { key: 'budgets' as const, label: 'Budgets', hidden: !(isAdmin || isSuperAdmin) },
     { key: 'catalogue' as const, label: 'Support Catalogue', superAdminOnly: true },
     // Everyone reads the calendar (it prices their plans and claims); only a SuperAdmin changes it, so the tab is read-only for the rest.

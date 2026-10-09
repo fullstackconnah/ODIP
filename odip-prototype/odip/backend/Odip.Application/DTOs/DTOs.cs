@@ -1047,6 +1047,11 @@ public record BookingDetailDto : BookingListDto
     /// made (Warn mode lets the booking proceed). Null (omitted from the JSON) when nothing was.
     /// </summary>
     public List<string>? ReadinessIssues { get; init; }
+    /// <summary>
+    /// Set on the response of a write that left the booking Confirmed (budget phase 3): where the trip takes a pool past the participant's funding for a period. A warning only, in every mode: the
+    /// booking is confirmed whatever it says. Omitted when there is nothing to say, the booking is not confirmed, or the participant has no budget recorded.
+    /// </summary>
+    public List<BudgetWarningDto>? BudgetWarnings { get; init; }
 }
 
 public record CreateBookingDto

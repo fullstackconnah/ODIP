@@ -1,4 +1,5 @@
 import type { DraftBlock, PlanQuote, PlannedLineFlags } from './plan-pricing'
+import type { BudgetWarningDto } from './rostering'
 
 export type AgreementState = 'ACT' | 'NSW' | 'NT' | 'QLD' | 'SA' | 'TAS' | 'VIC' | 'WA'
 
@@ -113,6 +114,8 @@ export interface DraftApprovalPreviewDto {
   horizonEnd?: string
   /** Whether the daily top-up is on: the dialog says shifts are added each day after the horizon only while it is. Absent from an older server: read as on. */
   topUpEnabled?: boolean
+  /** Where the shifts approval would make take a pool past its funding for a period (budget phase 3), one entry for each pool and period. A warning only: approving is never refused for a budget. Omitted when there is nothing to say. */
+  budgetWarnings?: BudgetWarningDto[]
 }
 
 /** The body of `POST .../approve`. */

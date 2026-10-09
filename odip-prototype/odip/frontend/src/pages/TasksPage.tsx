@@ -23,8 +23,14 @@ const TASK_STATUS_ITEMS = [
   { value: 'Cancelled', label: 'Cancelled' },
 ]
 
+/** The Admin's review of an emergency booking over budget. Only an Admin or SuperAdmin closes it: the server forbids everyone else, so this page does not offer what it would refuse. */
+const isBudgetReview = (task: { taskType?: string }) => task.taskType === 'BudgetEmergencyReview'
+
 export default function TasksPage() {
-  const { canWrite } = usePermissions()
+  const { canWrite, isAdmin, isSuperAdmin } = usePermissions()
+  const mayCloseBudgetReview = !!isAdmin || !!isSuperAdmin
+  // The one place the rule lives: a row the user may not change gets no tick, a held status and no edit or archive.
+  const mayChange = (task: { taskType?: string }) => canWrite && (!isBudgetReview(task) || mayCloseBudgetReview)
   // The dashboard's Overdue tile links to /tasks?status=Overdue: open on that filter (the server answers it with the dashboard's own rule).
   const [searchParams] = useSearchParams()
   const [statusFilter, setStatusFilter] = useState(() => {
@@ -62,7 +68,7 @@ export default function TasksPage() {
       key: 'checkbox',
       header: '',
       hidden: showArchived,
-      render: (t) => t.status !== 'Completed' && t.status !== 'Cancelled' ? (
+      render: (t) => t.status !== 'Completed' && t.status !== 'Cancelled' && (!isBudgetReview(t) || mayCloseBudgetReview) ? (
         <Button variant="ghost" size="sm" iconOnly onClick={(e) => markComplete(e, t)} title="Mark complete">
           <CheckCircle className="w-4 h-4" />
         </Button>
@@ -71,7 +77,26 @@ export default function TasksPage() {
     // Column budget (density §4): at 1280 the box is ~1006px and the fixed columns (tick, due, priority, status, Open, actions)
     // take ~500 of it, so the text columns are capped (an ellipsis, full text in the tooltip). Every column stays (Trip and Type were
     // deleted below 1536 and 1792, L3-04): what does not fit scrolls in the box with the task and the actions pinned.
-    { key: 'title', header: 'Task', sortable: true, className: 'font-medium', maxWidth: '16rem' },
+    {
+      key: 'title',
+      header: 'Task',
+      sortable: true,
+      className: 'font-medium',
+      maxWidth: '16rem',
+      // The title is the way in when the task has one (this column is pinned, so it is always reachable; "Open" stays for the habit). The review of an emergency names the participant and the day LAST, which is
+      // exactly what a one-line cap cuts, so its title wraps instead and the row says which emergency it is. Every other title is cut on the link itself (a wrapper would clip its focus ring).
+      render: (t) => t.linkTo ? (
+        <Link
+          to={t.linkTo}
+          title={t.title}
+          className={`text-[var(--color-primary)] hover:underline ${isBudgetReview(t) ? 'whitespace-normal md:max-w-[16rem]' : 'block md:truncate md:max-w-[16rem]'}`}
+        >
+          {t.title}
+        </Link>
+      ) : isBudgetReview(t) ? (
+        <span className="block whitespace-normal md:max-w-[16rem]" title={t.title}>{t.title}</span>
+      ) : t.title,
+    },
     {
       key: 'tripName',
       header: 'Trip',
@@ -85,7 +110,8 @@ export default function TasksPage() {
       ) : (t.tripName ?? '—'),
     },
     { key: 'taskType', header: 'Type', sortable: true, maxWidth: '10rem', render: (t) => TASK_TYPE_LABELS[t.taskType as keyof typeof TASK_TYPE_LABELS] ?? t.taskType },
-    { key: 'ownerName', header: 'Owner', sortable: true, maxWidth: '8rem' },
+    // Nobody owns the review of an emergency until an Admin takes it, and it is the Admins' to take: say so rather than a dash that reads as "nobody's job".
+    { key: 'ownerName', header: 'Owner', sortable: true, maxWidth: '8rem', render: (t) => t.ownerName ?? (isBudgetReview(t) ? 'Admins' : '—') },
     { key: 'dueDate', header: 'Due', type: 'date', sortable: true },
     {
       key: 'priority',
@@ -119,7 +145,7 @@ export default function TasksPage() {
             }}
             colorClass={getStatusColor(t.status)}
             items={TASK_STATUS_ITEMS}
-            disabled={!canWrite}
+            disabled={!mayChange(t)}
           />
           {failedRowId === t.id && (
             <p role="alert" className="mt-1 text-xs text-[var(--color-destructive)]">
@@ -138,7 +164,7 @@ export default function TasksPage() {
         </Link>
       ) : null,
     },
-    { key: 'actions', header: '', render: (t) => canWrite ? actionButtons(t) : null },
+    { key: 'actions', header: '', render: (t) => mayChange(t) ? actionButtons(t) : null },
   ]
 
   return (

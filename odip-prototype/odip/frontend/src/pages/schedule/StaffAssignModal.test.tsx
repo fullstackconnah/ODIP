@@ -94,8 +94,8 @@ describe('StaffAssignModal — live conflict check (trip-side parity)', () => {
   })
 })
 
-describe('RosterGateFields — trip-side call sites (no showOnAnyWarning)', () => {
-  it('renders no reason field for a soft-Warning-only finding set, unlike the roster board which opts into showOnAnyWarning', () => {
+describe('RosterGateFields — trip-side call sites', () => {
+  it('renders no reason field for a soft-Warning-only finding set, as the roster board no longer does either', () => {
     render(
       <RosterGateFields
         findings={[makeFinding({ code: 'STAFF_LEAVE_PENDING', severity: 'Warning', requiresReason: false })]}

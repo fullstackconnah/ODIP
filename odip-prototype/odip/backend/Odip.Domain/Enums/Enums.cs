@@ -216,7 +216,10 @@ public enum TaskType
     LeaveCoverage,
     IncidentQscReport,
     MedicationWitness,
-    FlaggedNoteFollowUp
+    FlaggedNoteFollowUp,
+    // An Admin's review of a shift a Coordinator booked as an emergency or safety need past a participant's budget
+    // (budget phase 3). Persisted as an integer (19): append-only, never renumber.
+    BudgetEmergencyReview
 }
 
 public enum TaskPriority

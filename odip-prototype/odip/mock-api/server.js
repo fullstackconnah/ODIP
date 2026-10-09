@@ -11,6 +11,7 @@ const http = require('http')
 const planPricing = require('./planPricing')
 const planApproval = require('./planApproval')
 const fundingModule = require('./funding')
+const rosterBudgetModule = require('./rosterBudget')
 
 const PORT = Number(process.env.MOCK_PORT) || 5062
 const BASE = '/api/v1'
@@ -2325,6 +2326,8 @@ const funding = fundingModule.create({
   respond, fundingSources, people: participants,
   priceLines: (blocks, periodFrom, periodTo) => planPricing.quote({ blocks, periodFrom, periodTo, includeLines: false }, planPricingSettings)._lines,
 })
+// Budget phase 3: the roster's budget check, the shifts that carry the over-budget markers and the Admin's review task. See rosterBudget.js for the switches.
+const rosterBudget = rosterBudgetModule.create({ funding, respond, failEnvelope, rosterShifts, tasks, participants, today: () => new Date().toISOString().slice(0, 10) })
 
 const routes = [
   ...funding.get,
@@ -2339,7 +2342,9 @@ const routes = [
   // What approving would do, nothing done (phase D): the reasons, the counts, the old version's shifts that stay, the hand-made patterns that overlap.
   ['participants/:id/service-agreement-drafts/:id/approval-preview', (participantId, draftId) => {
     const result = planApproval.preview(approvalStore, participantId, draftId)
-    return result.status ? respond(result.status, failEnvelope(null, result.errors)) : result.preview
+    if (result.status) return respond(result.status, failEnvelope(null, result.errors))
+    const budgetWarnings = result.preview.canApprove ? rosterBudget.sampleWarnings('shift', result.preview.shiftsToCreate || 0) : null
+    return budgetWarnings ? { ...result.preview, budgetWarnings } : result.preview
   }],
   ['billing/funding-sources', (searchParams) => paged(fundingSources.filter((f) => !searchParams.get('participantId') || f.participantId === searchParams.get('participantId')))],
 
@@ -2608,7 +2613,10 @@ const postRoutes = [
   ['participants/:id/service-agreement-drafts', (id, body) => saveDraft(id, body)],
   // Mark approved (phase D): makes the patterns and the open shifts, ends the old revision's patterns, and answers with the revision, its approval and the old shifts that remain.
   // The Generate button on the Patterns page: it makes nothing here (the board already holds what an approval made); it only answers in the real shape so the result dialog can be seen. Skipped holds the plan's skipped public holidays too.
-  ['rostering/patterns/:id/generate', () => ({ created: 0, skipped: 3 })],
+  ['rostering/patterns/:id/generate', () => {
+    const budgetWarnings = rosterBudget.sampleWarnings('shift', 8)
+    return budgetWarnings ? { created: 8, skipped: 0, budgetWarnings } : { created: 0, skipped: 3 }
+  }],
   ['participants/:id/service-agreement-drafts/:id/approve', (participantId, draftId, body) => {
     const result = planApproval.approve(approvalStore, participantId, draftId, body, { name: 'Demo Coordinator' })
     if (result.status === 409) return respond(409, failEnvelope({ currentVersion: result.currentVersion }, result.errors, 'draft-superseded'))
@@ -2617,8 +2625,10 @@ const postRoutes = [
   }],
   ...packageRoutesPost,
   ['staff-assignments/check', () => []],
-  // The shift panel's live dry-run (a pure preview): no findings. Without it the panel, open for a moment, set its findings to whatever the fallback answered and crashed.
-  ['rostering/shifts/check', () => []],
+  // The shift panel's live dry-run (a pure preview), and shift create (rosterBudget.js): the budget findings, the emergency path, the markers. Without a check route the panel, open for a moment, set its findings to whatever the generic answer was and crashed.
+  ...rosterBudget.post,
+  // A pattern made on the Patterns page: refused with no length, as the server refuses it (the code and sentence of the shift's own 400); otherwise the same echo with an id the generic fallback gives any write.
+  ['rostering/patterns', (body) => rosterBudget.refusePatternNoLength(null, body || {}) || { id: (body && body.id) || `mock-${Date.now()}`, ...body }],
 
   ['leave/:id/approve', (id) => ({
     leave: withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Approved', null),
@@ -2777,6 +2787,9 @@ const putRoutes = [
       && rosterPatterns.some((p) => p.id !== pattern.id && p.sourceDraftId === pattern.sourceDraftId && p.sourceBlockKey === pattern.sourceBlockKey && p.workerSlot === pattern.workerSlot && p.dayOfWeek === body.dayOfWeek)) {
       return respond(409, failEnvelope(null, ['This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.']))
     }
+    // No length is refused only when the edit changes the times, as on the server, so a pattern saved before the rule can still be switched off.
+    const noLength = rosterBudget.refusePatternNoLength(pattern, body || {})
+    if (noLength) return noLength
     for (const key of ['dayOfWeek', 'startTime', 'endTime', 'endsNextDay', 'ratio', 'nightType', 'effectiveFrom', 'effectiveTo', 'isActive', 'notes', 'defaultStaffId']) if (body && key in body) pattern[key] = body[key]
     return pattern
   }],
@@ -3011,6 +3024,16 @@ const server = http.createServer((req, res) => {
           sendResult(res, handler(...params, body))
           return
         }
+      }
+    }
+
+    // Budget phase 3: the write that CONFIRMS a booking answers with the booking, and a budget warning under MOCK_BUDGET_WARNINGS=over (rosterBudget.js). Every other PATCH is the generic echo below.
+    if (req.method === 'PATCH') {
+      const matched = matchRoute('bookings/:id', segments)
+      if (matched && body.bookingStatus === 'Confirmed') {
+        const budgetWarnings = rosterBudget.sampleWarnings('booking', 1)
+        sendResult(res, { ...bookingDetail(bookings.find((x) => x.id === matched[0]) || bookings[0]), ...body, ...(budgetWarnings ? { budgetWarnings } : {}) })
+        return
       }
     }
 

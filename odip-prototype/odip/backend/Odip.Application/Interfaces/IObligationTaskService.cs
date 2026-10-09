@@ -5,7 +5,9 @@ namespace Odip.Application.Interfaces;
 /// <summary>
 /// One rule's worth of obligation-task creation input for
 /// <see cref="IObligationTaskService.EnsureAsync"/> — see that method's remarks for the
-/// idempotency/update contract.
+/// idempotency/update contract. <paramref name="TenantId"/> names the organisation the task belongs to when it is not the
+/// caller's own (a task about a record of an organisation a SuperAdmin is working in, with no organisation chosen); left out, the
+/// task takes the request's tenant when the context saves, as every tenant row does.
 /// </summary>
 public record ObligationTaskSpec(
     string SourceKey,
@@ -19,7 +21,8 @@ public record ObligationTaskSpec(
     Guid? ShiftNoteId = null,
     Guid? LeaveRequestId = null,
     Guid? TripInstanceId = null,
-    TaskPriority Priority = TaskPriority.Medium);
+    TaskPriority Priority = TaskPriority.Medium,
+    Guid? TenantId = null);
 
 /// <summary>
 /// Generic obligation-task engine (item 9 of the connection map): raises a <c>BookingTask</c>
