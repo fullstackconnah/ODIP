@@ -15,7 +15,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const FUNDING = join(__dirname, '../../../mock-api/funding.js')
 
 type Route = [string, (...args: unknown[]) => unknown]
-type Created = { get: Route[]; post: Route[] }
+type Created = { get: Route[]; post: Route[]; delete: Route[] }
 
 const people = [
   { id: 'p-0001', firstName: 'Liam', lastName: 'Okafor', preferredName: null, planType: 'PlanManaged', isActive: true },
@@ -193,6 +193,39 @@ describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (
     // Nothing was already over in a pool that is not: Sienna's pools say 0, and a pool over only by the agreement does too.
     const sienna = handler(mock.post, 'participants/:id/funding/agreement-check')('p-0002', { blocks: [{ id: 'b1' }], periodFrom: '2026-10-12', periodTo: '2027-01-31' }) as { pools: Array<{ alreadyOverBy: number }> }
     expect(sienna.pools.map(pool => pool.alreadyOverBy)).toEqual([0, 0])
+  })
+
+  // The mock's ledger carries the soonest plan recorded for later as nextPlanStart (ParticipantLedger.NextPlanStart on the server), so a plan recorded through the mock's own plan route reaches
+  // NotStarted in the list and in the check, instead of the old words. The plans are module state, so the test takes its plans out again.
+  describe('a plan recorded for later through the plan route', () => {
+    const later = { planStart: '2026-11-01', planEnd: '2027-10-31', evidence: 'Plan document', pools: [{ kind: 'CoreFlexible', paceCategory: 1, managementType: 'PlanManaged', periods: [{ periodStart: '2026-11-01', periodEnd: '2027-10-31', planAmount: 6000 }] }] }
+    const record = (id: string) => (handler(mock.post, 'participants/:id/funding/plans')(id, later) as { status: number; body: { data: { id: string } } })
+    const remove = (id: string, planId: string) => handler(mock.delete, 'participants/:id/funding/plans/:id')(id, planId)
+    const check = (id: string) => handler(mock.post, 'participants/:id/funding/agreement-check')(id, { blocks: [{ id: 'b1' }], periodFrom: '2026-10-12', periodTo: '2027-01-31' }) as Record<string, unknown>
+
+    it('says Plan starts to a participant who had no plan, in the list and in the check', () => {
+      const created = record('p-0001')
+      try {
+        expect(created.status).toBe(201)
+        expect(list().noBudget.find(entry => entry.participantId === 'p-0001')).toEqual({ participantId: 'p-0001', participantName: 'Liam Okafor', reason: 'NotStarted', planStart: '2026-11-01' })
+        expect(check('p-0001')).toMatchObject({ hasBudget: false, noBudgetReason: 'NotStarted', planStart: '2026-11-01', pools: [] })
+      } finally {
+        remove('p-0001', created.body.data.id)
+      }
+      expect(list().noBudget.find(entry => entry.participantId === 'p-0001')).toMatchObject({ reason: 'NotRecorded' })   // taken out again: the demo is as it was
+    })
+
+    it('says Plan starts, not Plan ended, to a participant whose plan ended and whose next plan is recorded', () => {
+      const created = record('p-0003')
+      try {
+        expect(list().noBudget.find(entry => entry.participantId === 'p-0003')).toEqual({ participantId: 'p-0003', participantName: 'Marcus Tran', reason: 'NotStarted', planStart: '2026-11-01' })
+        expect(check('p-0003')).toMatchObject({ noBudgetReason: 'NotStarted', planStart: '2026-11-01' })
+        expect(check('p-0003')).not.toHaveProperty('planEnd')
+      } finally {
+        remove('p-0003', created.body.data.id)
+      }
+      expect(list().noBudget.find(entry => entry.participantId === 'p-0003')).toMatchObject({ reason: 'PlanEnded', planEnd: '2026-06-30' })
+    })
   })
 
   it('says there is no budget when no plan is running, and prices nothing', () => {
