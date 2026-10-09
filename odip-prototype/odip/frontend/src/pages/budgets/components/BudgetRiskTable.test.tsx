@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { BudgetRiskTable } from './BudgetRiskTable'
 import { hiddenRow, noBudgetEntry, noBudgetRow, readyTable, riskRow } from './fixtures'
 import type { BudgetRiskRow } from './viewModel'
-import { NO_FIGURE, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, unavailableFigure } from './wording'
+import { NO_FIGURE, ROLLED_OVER_LEGEND, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, unavailableFigure } from './wording'
 
 // The Budgets list body. What these tests hold:
 //   - the six states that must never be confused: loading, failed, empty, a row with no budget recorded, a pool configured at zero, and a
@@ -190,21 +190,38 @@ describe('BudgetRiskTable: a real row', () => {
     expect(cellOf('Bilal Nasser', 'Status')).not.toHaveTextContent(/left|over\b/)
   })
 
-  it('says what part of Available was rolled over from earlier periods, and that it is not confirmed, and nothing when none was', () => {
+  // Available includes money rolled over from earlier periods, which the Funding tab labels "not confirmed" (somebody else may have used it). The list says so with a mark beside the figure, named in
+  // words for a screen reader and a pointer, and one line under the table says what the mark is. (It was a note of its own under every such figure, which made those rows two to three lines taller.)
+  it('marks Available with what part of it was rolled over, named in words, and has no mark when none was', () => {
     renderTable(readyTable([
       riskRow({ id: 'a', participantLabel: 'Rolled Person', available: 3473.32, carried: 448.66, remaining: 1541.32 }),
       riskRow({ id: 'b', participantLabel: 'Plain Person', available: 2000, carried: 0 }),
     ]))
 
-    expect(cellOf('Rolled Person', 'Available')).toHaveTextContent('$3,473.32incl. $448.66 rolled over, not confirmed')
-    expect(cellOf('Plain Person', 'Available')).not.toHaveTextContent(/rolled over/)
+    const available = cellOf('Rolled Person', 'Available')
+    expect(available).toHaveTextContent('$3,473.32')
+    expect(available).not.toHaveTextContent('incl.')   // no note of its own under the figure
+    const mark = within(available).getByRole('img', { name: 'Includes $448.66 rolled over, not confirmed' })
+    expect(mark).toHaveAttribute('title', 'Includes $448.66 rolled over, not confirmed')
+    expect(within(cellOf('Plain Person', 'Available')).queryByRole('img')).not.toBeInTheDocument()
   })
 
-  it('withholds what is left and what rolled over from a viewer who may not see money, like every other amount', () => {
+  it('says what the mark is once, under the table, when any row has it, and not otherwise', () => {
+    const { unmount } = renderTable(readyTable([riskRow({ carried: 100 }), riskRow({ id: 'b', participantLabel: 'Bilal Nasser', carried: 5 })]))
+
+    expect(screen.getAllByText(ROLLED_OVER_LEGEND)).toHaveLength(1)
+    unmount()
+    renderTable(readyTable([riskRow({ carried: 0 })]))
+    expect(screen.queryByText(ROLLED_OVER_LEGEND)).not.toBeInTheDocument()
+  })
+
+  it('withholds what is left and what rolled over from a viewer who may not see money, like every other amount: no mark, no legend', () => {
     renderTable(readyTable([hiddenRow({ carried: 448.66, remaining: 1541.32 })]))
 
     expect(figuresIn(rowFor('Amara Okonkwo-Bell'))).toEqual([])
     expect(rowFor('Amara Okonkwo-Bell')).not.toHaveTextContent(/rolled over|left/)
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(screen.queryByText(ROLLED_OVER_LEGEND)).not.toBeInTheDocument()
   })
 
   // ODIP's arithmetic can say On track while the NDIA has just refused a claim for want of funds, and the list is where the dashboard sends people: the row says the NDIA's word in a pill of its own.

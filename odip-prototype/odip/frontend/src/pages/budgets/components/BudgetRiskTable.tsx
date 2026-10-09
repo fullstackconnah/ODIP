@@ -1,15 +1,16 @@
 import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, CornerDownRight } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { CellText, DataTable, type Column } from '@/components/DataTable'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TONE } from '@/lib/tone'
 import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
+import { formatCurrency } from '@/lib/utils'
 import { BUDGET_RISK_STATUS, budgetRiskRank, type BudgetAttentionAction, type BudgetRiskRow, type BudgetRiskTableState, type NoBudgetEntry } from './viewModel'
 import { BudgetFigure } from './BudgetFigure'
-import { NDIA_FUNDS_RAN_OUT, NOTHING_TRACKED, NO_FIGURE, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, noBudgetNote, unavailableFigure, unpricedForecastLabel } from './wording'
+import { NDIA_FUNDS_RAN_OUT, NOTHING_TRACKED, NO_FIGURE, ROLLED_OVER_LEGEND, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, noBudgetNote, rolledOverLabel, unavailableFigure, unpricedForecastLabel } from './wording'
 
 // The Budgets list's body: one row per participant and pool for the current funding period, in the DataTable idiom, with the server's own status and figures and nothing of its own invented.
 //
@@ -105,6 +106,20 @@ function UnpricedMark({ count }: { count: number }) {
   )
 }
 
+/**
+ * The mark beside Available when part of it was rolled over from earlier periods (the server's figure), which the Funding tab labels "not confirmed": somebody else may have used it. An icon named in
+ * words for a screen reader and a pointer, with the amount in the name; the line under the table says what it is for everybody else. It replaced a note under every such figure, which made those
+ * rows two to three lines taller than the row token. Only ever drawn for a viewer who may see the figure, so it can say the amount.
+ */
+function RolledOverMark({ amount }: { amount: number }) {
+  const words = rolledOverLabel(formatCurrency(amount))
+  return (
+    <span role="img" aria-label={words} title={words} className="ml-1 inline-flex align-middle text-[var(--color-muted-foreground)]">
+      <CornerDownRight className="h-3.5 w-3.5" aria-hidden="true" />
+    </span>
+  )
+}
+
 // The columns' narrowest widths are chosen so the table fits the page's content box at 1366px and 1440px (1092 and 1166px, with the sidebar open), so Forecast is on screen at rest, measured in a
 // browser. A table wider than its box (1280px) still scrolls sideways with the first column pinned (DataTable's column rule), which is why these are not the DataTable's usual 8rem.
 function columnsFor(): Column<BudgetRiskRow>[] {
@@ -160,10 +175,8 @@ function columnsFor(): Column<BudgetRiskRow>[] {
             // A configured zero is a real answer and says so, so nobody reads it as a missing figure.
             srNote={row.available === 0 && row.figures.visible ? configuredZero : undefined}
           />
-          {/* Available includes money rolled over from earlier periods, which the Funding tab labels "not confirmed" (somebody else may have used it): a row that is on track by it says so. */}
-          {row.figures.visible && row.carried !== null && row.carried > 0 && (
-            <span className="block max-w-[9rem] whitespace-normal text-xs text-[var(--color-muted-foreground)] md:ml-auto md:text-right">incl. <BudgetFigure figures={row.figures} amount={row.carried} /> rolled over, not confirmed</span>
-          )}
+          {/* Available includes money rolled over from earlier periods, which the Funding tab labels "not confirmed" (somebody else may have used it): a row that is on track by it says so, by a mark. */}
+          {row.figures.visible && row.carried !== null && row.carried > 0 && <RolledOverMark amount={row.carried} />}
         </span>
       ),
     },
@@ -293,6 +306,12 @@ export function BudgetRiskTable({ state, caption }: { state: BudgetRiskTableStat
         <p className="flex items-start gap-1 text-[13px] text-[var(--color-muted-foreground)]">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>{UNPRICED_LEGEND}</span>
+        </p>
+      )}
+      {state.rows.some(row => row.figures.visible && row.carried !== null && row.carried > 0) && (
+        <p className="flex items-start gap-1 text-[13px] text-[var(--color-muted-foreground)]">
+          <CornerDownRight className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>{ROLLED_OVER_LEGEND}</span>
         </p>
       )}
       <NoBudgetTail entries={state.noBudget ?? []} />

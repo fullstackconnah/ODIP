@@ -46,6 +46,16 @@ export function unpricedForecastLabel(count: number): string {
 /** Under the table, once, when any row has the mark: what it is, and where the shifts are named. */
 export const UNPRICED_LEGEND = 'A triangle beside a forecast means it leaves out shifts that are not priced yet (a sleepover, a passive night or a group shift). The participant’s Funding tab names them.'
 
+// ── Money rolled over from an earlier period ───────────────────────────────────────────────────────────────────────────
+
+/** What the mark beside Available says: the figure includes money rolled over from earlier periods, which is not confirmed (somebody else may have used it, as the Funding tab says). `amount` is already written. */
+export function rolledOverLabel(amount: string): string {
+  return `Includes ${amount} rolled over, not confirmed`
+}
+
+/** Under the table, once, when any row has the mark: what it is. */
+export const ROLLED_OVER_LEGEND = 'A bent arrow beside Available means it includes money rolled over from an earlier period, which is not confirmed: somebody else may have used it.'
+
 // ── The agreement budget bar ────────────────────────────────────────────────────────────────────────────────────────────
 
 /** What the bar says when the participant has no budget recorded (it links to the Funding tab where one is recorded). */
