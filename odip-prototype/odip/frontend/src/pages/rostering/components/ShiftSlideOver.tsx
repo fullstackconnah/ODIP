@@ -67,6 +67,9 @@ function toTimeInputValue(time: string | undefined): string {
 /** What the panel says when the budget refuses the shift (the hard limit, for a Coordinator): one line, in the budget's words and not the roster conflict gate's. */
 const BUDGET_REFUSAL_SENTENCE = "The hard limit is on, so this shift can't be saved as it is."
 
+/** No findings, one stable array (a new `[]` each render would look like a change). */
+const NO_FINDINGS: RosterFindingDto[] = []
+
 /** What the reason field says when the budget is the only thing asking for a reason (an Admin under the hard limit). */
 const BUDGET_REASON_COPY = {
   hint: 'The hard limit is on. This reason is recorded in the audit log.',
@@ -117,12 +120,17 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // the ordinary reason field below, where a later save would send the server's own sentence back as if somebody had just written it.
   const budgetMarker = markerForAcknowledgedCodes(existing?.acknowledgedFindingCodes)
   const [overrideReason, setOverrideReason] = useState(budgetMarker ? '' : existing?.overrideReason ?? '')
-  const [findings, setFindings] = useState<RosterFindingDto[]>(existing?.findings ?? [])
+  const [checkedFindings, setFindings] = useState<RosterFindingDto[]>(existing?.findings ?? [])
   // Budget phase 3: "Emergency or safety", the one way through a one-off shift a hard limit refused for a Coordinator, and the one line a shift the budget could not check gets.
   const [budgetChoice, setBudgetChoice] = useState<BudgetOverrideChoice>('none')
   const [emergencyDescription, setEmergencyDescription] = useState('')
   const [emergencySubmitted, setEmergencySubmitted] = useState(false)
-  const [budgetNote, setBudgetNote] = useState<string | null>(null)
+  const [checkedBudgetNote, setBudgetNote] = useState<string | null>(null)
+  // A pair of times with no length (the end at or before the start, and not ending the next day): a rule of the End time field, and no question for the live check. What the last check said was about a different
+  // shift, so while the pair has no length none of it is shown. Derived here, not set from an effect: the check's answer is kept and comes back the moment the pair has a length again.
+  const noLength = hasNoLength(startTime, endTime, endsNextDay)
+  const findings = noLength ? NO_FINDINGS : checkedFindings
+  const budgetNote = noLength ? null : checkedBudgetNote
   const [reasonRequired, setReasonRequired] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // The live dry-run below runs the same readiness gate as the save, so in Enforce mode (or for an inactive participant, in either
@@ -186,21 +194,12 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
     ? getRelevantRoutines(participantRoutines, { serviceDate, startTime, endTime, endsNextDay })
     : []
 
-  // A pair of times with no length (the end at or before the start, and not ending the next day): a rule of the End time field, and no question for the live check.
-  const noLength = hasNoLength(startTime, endTime, endsNextDay)
-
   // Live dry-run: re-checks findings whenever the candidate shape changes, debounced so we
   // don't fire a request per keystroke. Never writes — POST /shifts/check is a pure preview.
   useEffect(() => {
     if (!canWrite || !participantId || !serviceDate || !startTime || !endTime) return
-    if (noLength) {
-      // Nothing to ask: the answer is known, and the End time field says it. Whatever the last answer said was about a different shift.
-      setFindings(previous => (previous.length > 0 ? [] : previous))
-      setBudgetNote(null)
-      setPreviewRefusal(null)
-      setBudgetChoice('none')
-      return
-    }
+    // Nothing to ask while the pair has no length: the answer is known, and the End time field says it (what the last check said is hidden meanwhile, below).
+    if (noLength) return
     const handle = setTimeout(() => {
       checkShift.mutate(
         // The status the shift would be saved with, for an existing shift: a cancel costs nothing and gets no budget finding.

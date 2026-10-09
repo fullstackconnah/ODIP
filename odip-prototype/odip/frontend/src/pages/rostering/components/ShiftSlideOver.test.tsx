@@ -1495,6 +1495,24 @@ describe('ShiftSlideOver — the length of a shift', () => {
     expect(mockCheckMutate).not.toHaveBeenCalled()
   })
 
+  it('hides what the last check said while the pair has no length, and shows the check’s answer for the new times once it has one', async () => {
+    const user = userEvent.setup()
+    type PreviewCallbacks = { onSuccess?: (result: { findings: unknown[] }) => void }
+    mockCheckMutate.mockImplementation((candidate: { endTime: string }, opts?: PreviewCallbacks) =>
+      opts?.onSuccess?.({ findings: [makeFinding({ severity: 'Warning', message: `Takes Core to the end of ${candidate.endTime}` })] }))
+    openNew()
+    expect(await screen.findByText('Takes Core to the end of 10:00')).toBeInTheDocument()
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '09:00')
+    await screen.findByText(NO_LENGTH)
+    expect(screen.queryByText('Takes Core to the end of 10:00')).not.toBeInTheDocument()   // about a different shift
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '11:00')
+    expect(await screen.findByText('Takes Core to the end of 11:00')).toBeInTheDocument()
+  })
+
   it('takes the message away, and asks the check, once "Ends the next day" is ticked', async () => {
     const user = userEvent.setup()
     openNew()
