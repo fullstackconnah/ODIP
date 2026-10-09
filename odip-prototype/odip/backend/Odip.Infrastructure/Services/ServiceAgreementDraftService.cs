@@ -30,11 +30,13 @@ public sealed class ServiceAgreementDraftService
 
     private readonly OdipDbContext _db;
     private readonly PlanPricingService _pricing;
+    private readonly TimeProvider _clock;
 
-    public ServiceAgreementDraftService(OdipDbContext db, PlanPricingService? pricing = null)
+    public ServiceAgreementDraftService(OdipDbContext db, PlanPricingService? pricing = null, TimeProvider? clock = null)
     {
         _db = db;
         _pricing = pricing ?? new PlanPricingService(db);
+        _clock = clock ?? TimeProvider.System;
     }
 
     /// <summary>The legacy entry point: the first reason a save was refused, or the draft. Prefer <see cref="SaveAsync"/>, which says every reason.</summary>
@@ -47,7 +49,8 @@ public sealed class ServiceAgreementDraftService
     /// <summary>
     /// Saves a new revision of the participant's draft: from <see cref="CreateServiceAgreementDraftDto.Blocks"/> (priced here, by the engine, with the tenant's settings,
     /// the catalogue valid on each service date and the delivery state's holidays) or from the older hand-typed lines. A revision is never edited: this is always version
-    /// N+1, and the earlier ones keep the blocks, lines and answer they were saved with.
+    /// N+1, and a revision that did something (approved, rostered or signed) keeps the blocks, lines and answer it was saved with. One that did nothing is replaced: the same
+    /// save deletes the participant's older such revisions, so the version is a counter that goes up and may skip numbers.
     /// </summary>
     public async Task<DraftSaveResult> SaveAsync(Guid tenantId, Guid participantId, CreateServiceAgreementDraftDto request, string actor, CancellationToken ct)
     {
@@ -78,20 +81,54 @@ public sealed class ServiceAgreementDraftService
         if (draft.Draft is null) return draft;
         if (request.BaseVersion is int started && draft.Draft.Version - 1 != started) return DraftSaveResult.Conflicted(draft.Draft.Version - 1);
 
+        // The new revision and the removal of the ones it replaces are one SaveChanges, so one transaction: a save that fails, or loses a race for its version number, takes nothing with it.
         _db.ServiceAgreementDrafts.Add(draft.Draft);
-        try
+        for (var attempt = 1; ; attempt++)
         {
-            await _db.SaveChangesAsync(ct);
+            _db.ServiceAgreementDrafts.RemoveRange(await ReplacedRevisionsAsync(tenantId, participantId, draft.Draft.Version, ct));
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+                return draft;
+            }
+            catch (DbUpdateException ex) when (IsVersionRace(ex))
+            {
+                // Another save took this version number between the reading of the newest and this insert: the unique index on tenant, participant and version refused ours (it was a 500).
+                // Nothing of ours is kept; the caller is told which version is newest now.
+                _db.ChangeTracker.Clear();
+                return DraftSaveResult.Conflicted(await NewestVersionAsync(participantId, ct));
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // A revision this save meant to replace is gone: another save for the participant landed first and replaced it too, so a delete found no row. Theirs is the newest now, and nothing of ours is kept.
+                _db.ChangeTracker.Clear();
+                return DraftSaveResult.Conflicted(await NewestVersionAsync(participantId, ct));
+            }
+            catch (DbUpdateException ex) when (attempt == 1 && IsForeignKeyViolation(ex))
+            {
+                // A revision this save meant to replace was approved, or given roster patterns, after it was read and before it was deleted: the restricting key refused the delete and the whole
+                // save was rolled back. Put back what was to be deleted and go round once more: the revision has a use now, so it is no longer one of the ones to replace.
+                foreach (var entry in _db.ChangeTracker.Entries().Where(e => e.State == EntityState.Deleted).ToList()) entry.State = EntityState.Unchanged;
+            }
         }
-        catch (DbUpdateException ex) when (IsVersionRace(ex))
-        {
-            // Another save took this version number between the reading of the newest and this insert: the unique index on tenant, participant and version refused ours (it was a 500).
-            // Nothing of ours is kept; the caller is told which version is newest now.
-            _db.ChangeTracker.Clear();
-            return DraftSaveResult.Conflicted(await NewestVersionAsync(participantId, ct));
-        }
-        return draft;
     }
+
+    /// <summary>
+    /// The participant's revisions older than <paramref name="version"/> that never did anything: no approval, no roster pattern made from them, no signing snapshot of them. A save replaces
+    /// these. Their blocks and lines are loaded with them, so they are deleted with the revision whichever provider is under it (PostgreSQL cascades, EF InMemory does not). Scoped to the
+    /// tenant and the participant here, because the query filter lets a SuperAdmin see every tenant.
+    /// </summary>
+    private Task<List<ServiceAgreementDraft>> ReplacedRevisionsAsync(Guid tenantId, Guid participantId, int version, CancellationToken ct) =>
+        _db.ServiceAgreementDrafts.Include(x => x.Blocks).Include(x => x.Lines).AsSplitQuery()
+            .Where(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.Version < version
+                && !_db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == x.Id)
+                && !_db.ShiftPatterns.Any(p => p.SourceDraftId == x.Id)
+                && !_db.ElectronicSigningSnapshots.Any(s => s.DraftId == x.Id && s.DraftVersion == x.Version))
+            .ToListAsync(ct);
+
+    /// <summary>A foreign key refused the write: the delete of a revision that something now points at.</summary>
+    private static bool IsForeignKeyViolation(DbUpdateException ex) =>
+        ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.ForeignKeyViolation };
 
     /// <summary>A control character (a NUL, a line break, a tab) in free text. Refused in words, and never repeated in the message that says so (review F6, N13, L4).</summary>
     private static bool HasControlCharacter(string? text) => text is not null && text.Any(char.IsControl);
@@ -267,11 +304,13 @@ public sealed class ServiceAgreementDraftService
 
     // ── Shared ────────────────────────────────────────────────────────────────────
 
-    private static ServiceAgreementDraft NewDraft(Guid tenantId, Participant participant, CreateServiceAgreementDraftDto request, string actor) => new()
+    /// <summary>Every save is a new row with its own <c>CreatedAt</c>: onboarding's "service needs" confirmation goes stale when a revision is created after it (ParticipantInquiriesController).</summary>
+    private ServiceAgreementDraft NewDraft(Guid tenantId, Participant participant, CreateServiceAgreementDraftDto request, string actor) => new()
     {
         Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, PlanStartDate = request.PlanStartDate, PlanEndDate = request.PlanEndDate,
         AgreementStartDate = request.AgreementStartDate, AgreementEndDate = request.AgreementEndDate, State = request.State, Representative = request.Representative?.Trim(),
         ParticipantNameSnapshot = participant.FullName, NdisNumberSnapshot = participant.NdisNumber, DateOfBirthSnapshot = participant.DateOfBirth, CreatedBy = actor,
+        CreatedAt = _clock.GetUtcNow().UtcDateTime,
     };
 
     private async Task<ServiceAgreementDraft> WithNextVersionAsync(ServiceAgreementDraft draft, CancellationToken ct)
@@ -280,12 +319,18 @@ public sealed class ServiceAgreementDraftService
         return draft;
     }
 
-    public async Task<(byte[]? Pdf, string? Error)> RenderPdfAsync(Guid tenantId, Guid participantId, Guid draftId, CancellationToken ct)
+    /// <summary>The agreement PDF of a revision and the name it is downloaded as.</summary>
+    public sealed record AgreementPdf(byte[] Content, string FileName);
+
+    public async Task<(AgreementPdf? Pdf, string? Error)> RenderPdfAsync(Guid tenantId, Guid participantId, Guid draftId, CancellationToken ct)
     {
-        var draft = await _db.ServiceAgreementDrafts.Include(x => x.Lines)
+        // The blocks too: the PDF prints the weekly schedule from them. Two collections, so two queries and not their cross product.
+        var draft = await _db.ServiceAgreementDrafts.Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery()
             .SingleOrDefaultAsync(x => x.Id == draftId && x.ParticipantId == participantId && x.TenantId == tenantId, ct);
         if (draft == null) return (null, "Draft not found.");
-        return (ServiceAgreementDraftPdfRenderer.Render(draft), null);
+        // Who it is from: the organisation's own settings, named by tenant (a SuperAdmin's context has no query filter, so it could hand back another organisation's).
+        var provider = AgreementProvider.From(await _db.ProviderSettings.AsNoTracking().FirstOrDefaultAsync(x => x.TenantId == tenantId, ct));
+        return (new AgreementPdf(ServiceAgreementDraftPdfRenderer.Render(draft, provider), ServiceAgreementDraftPdfRenderer.FileName(draft)), null);
     }
 
     private static decimal PriceForState(SupportCatalogueItem item, string state) => state switch

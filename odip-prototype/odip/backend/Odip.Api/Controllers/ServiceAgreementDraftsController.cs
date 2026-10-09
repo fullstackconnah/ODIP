@@ -169,7 +169,7 @@ public class ServiceAgreementDraftsController : ControllerBase
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<object>.Fail("A tenant context is required."));
         var (pdf, error) = await _service.RenderPdfAsync(tenantId, participantId, id, ct);
         if (error != null) return NotFound(ApiResponse<object>.Fail(error));
-        return File(pdf!, "application/pdf", $"service-agreement-draft-v{id}.pdf");
+        return File(pdf!.Content, "application/pdf", pdf.FileName);
     }
 
     [HttpPost("signing-snapshots")]

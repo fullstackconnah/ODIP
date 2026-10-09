@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
@@ -11,7 +11,8 @@ vi.mock('../client', async () => {
   return { ...actual, apiGet, apiPost }
 })
 
-import { APPROVE_TIMEOUT_MS, useApprovalPreview, useApproveServiceAgreementDraft } from './service-agreement-drafts'
+import { apiClient } from '../client'
+import { APPROVE_TIMEOUT_MS, fileNameFromDisposition, useApprovalPreview, useApproveServiceAgreementDraft, useDownloadServiceAgreementDraftPdf } from './service-agreement-drafts'
 
 const wrapper = (client: QueryClient) => function Wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -97,5 +98,72 @@ describe('useApproveServiceAgreementDraft', () => {
     expect(keys).toEqual(expect.arrayContaining([['service-agreement-drafts', 'p1'], ['service-agreement-draft-approval-preview', 'p1', 'd1']]))
     expect(keys).not.toContainEqual(['roster-board'])
     expect(keys).not.toContainEqual(['roster-patterns'])
+  })
+})
+
+// What the server sends for "Service agreement - José Núñez - 2026-10-12.pdf": an ASCII filename for clients that cannot read more, and the RFC 5987 filename* with the letters.
+const JOSE = "attachment; filename=\"Service agreement - Jos_ N__ez - 2026-10-12.pdf\"; filename*=UTF-8''Service%20agreement%20-%20Jos%C3%A9%20N%C3%BA%C3%B1ez%20-%202026-10-12.pdf"
+
+describe('fileNameFromDisposition', () => {
+  it('prefers the RFC 5987 filename* so the letters of the name arrive (José Núñez, Nguyễn Thị Hoa, Zoë OBrien)', () => {
+    expect(fileNameFromDisposition(JOSE)).toBe('Service agreement - José Núñez - 2026-10-12.pdf')
+    expect(fileNameFromDisposition("attachment; filename=\"Service agreement - Nguy_n Th_ Hoa - 2026-10-12.pdf\"; filename*=UTF-8''Service%20agreement%20-%20Nguy%E1%BB%85n%20Th%E1%BB%8B%20Hoa%20-%202026-10-12.pdf"))
+      .toBe('Service agreement - Nguyễn Thị Hoa - 2026-10-12.pdf')
+    expect(fileNameFromDisposition("attachment; filename=\"Service agreement - Zo_ OBrien - 2026-10-12.pdf\"; filename*=UTF-8''Service%20agreement%20-%20Zo%C3%AB%20OBrien%20-%202026-10-12.pdf"))
+      .toBe('Service agreement - Zoë OBrien - 2026-10-12.pdf')
+  })
+
+  it('does not mind the order of the two, the case of the words or a language tag', () => {
+    expect(fileNameFromDisposition("attachment; FILENAME*=utf-8'en'Jos%C3%A9.pdf; filename=\"Jos_.pdf\"")).toBe('José.pdf')
+    expect(fileNameFromDisposition("attachment; filename*=UTF-8''Jos%C3%A9.pdf")).toBe('José.pdf')
+  })
+
+  it('reads the plain filename, quoted or not, when there is no filename*', () => {
+    expect(fileNameFromDisposition('attachment; filename="Service agreement - Ann Lee - 2026-10-12.pdf"')).toBe('Service agreement - Ann Lee - 2026-10-12.pdf')
+    expect(fileNameFromDisposition('attachment; filename=agreement.pdf')).toBe('agreement.pdf')
+  })
+
+  it('leaves a percent sign in a plain filename alone and falls back to it when filename* cannot be decoded', () => {
+    expect(fileNameFromDisposition('attachment; filename="100% sure.pdf"')).toBe('100% sure.pdf')
+    expect(fileNameFromDisposition("attachment; filename=\"Jos_.pdf\"; filename*=UTF-8''Jos%C3%.pdf")).toBe('Jos_.pdf')
+    expect(fileNameFromDisposition("attachment; filename*=UTF-8''Jos%C3%.pdf")).toBeNull()
+  })
+
+  it('has no name for a header without one', () => {
+    expect(fileNameFromDisposition(undefined)).toBeNull()
+    expect(fileNameFromDisposition('')).toBeNull()
+    expect(fileNameFromDisposition('attachment')).toBeNull()
+  })
+})
+
+describe('useDownloadServiceAgreementDraftPdf', () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  const saved = (header: string | undefined) => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue({ data: new Blob(['%PDF-']), headers: header === undefined ? {} : { 'content-disposition': header } })
+    window.URL.createObjectURL = vi.fn(() => 'blob:agreement')
+    window.URL.revokeObjectURL = vi.fn()
+    const names: string[] = []
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { names.push(this.download) })
+    return names
+  }
+
+  it('saves the file under the name with its letters, from filename*', async () => {
+    const names = saved(JOSE)
+    const { result } = renderHook(() => useDownloadServiceAgreementDraftPdf(), { wrapper: wrapper(new QueryClient()) })
+
+    await act(async () => { await result.current.mutateAsync({ participantId: 'p1', id: 'd1' }) })
+
+    expect(apiClient.get).toHaveBeenCalledWith('/participants/p1/service-agreement-drafts/d1/pdf', { responseType: 'blob' })
+    expect(names).toEqual(['Service agreement - José Núñez - 2026-10-12.pdf'])
+  })
+
+  it('saves it as service-agreement-draft-v{id}.pdf when the server named nothing', async () => {
+    const names = saved(undefined)
+    const { result } = renderHook(() => useDownloadServiceAgreementDraftPdf(), { wrapper: wrapper(new QueryClient()) })
+
+    await act(async () => { await result.current.mutateAsync({ participantId: 'p1', id: 'd1' }) })
+
+    expect(names).toEqual(['service-agreement-draft-vd1.pdf'])
   })
 })
