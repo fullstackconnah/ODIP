@@ -499,7 +499,7 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<RosterFindingDto>>>> CheckShift(
         [FromBody] CheckShiftDto dto, CancellationToken ct)
     {
-        if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<List<RosterFindingDto>>.Fail(ShiftEndsBeforeItStartsMessage));
+        if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<List<RosterFindingDto>>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
 
         var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
         if (refError != null) return BadRequest(ApiResponse<List<RosterFindingDto>>.Fail(refError));
@@ -525,7 +525,7 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftDto>>> CreateShift(
         [FromBody] CreateShiftDto dto, CancellationToken ct)
     {
-        if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftDto>.Fail(ShiftEndsBeforeItStartsMessage));
+        if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
 
         var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
         if (refError != null) return BadRequest(ApiResponse<ShiftDto>.Fail(refError));
@@ -573,7 +573,7 @@ public class RosteringController : ControllerBase
         var timesChanged = dto.StartTime != shift.StartTime || dto.EndTime != shift.EndTime || dto.EndsNextDay != shift.EndsNextDay;
         var reopening = shift.Status == ShiftStatus.Cancelled && dto.Status != ShiftStatus.Cancelled;
         if ((timesChanged || reopening) && dto.Status != ShiftStatus.Cancelled && Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m)
-            return BadRequest(ApiResponse<ShiftDto>.Fail(ShiftEndsBeforeItStartsMessage));
+            return BadRequest(ApiResponse<ShiftDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
 
         // An existing legacy shift can still be status-managed after readiness is lost. Moving
         // it to another participant or assigning/reassigning staff is a new placement and must
@@ -1178,7 +1178,7 @@ public class RosteringController : ControllerBase
         [FromBody] CreateShiftPatternDto dto, CancellationToken ct)
     {
         // A pattern makes shifts, so it needs a length like one (phase 3 review, N2): a pattern with none would make shifts the budget cannot price.
-        if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ShiftEndsBeforeItStartsMessage));
+        if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
         if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
         if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
@@ -1208,7 +1208,7 @@ public class RosteringController : ControllerBase
 
         // The rule is for times somebody is setting now, as for a shift: an edit that leaves the times alone (deactivating a pattern saved before the rule) is never refused.
         var timesChanged = dto.StartTime != pattern.StartTime || dto.EndTime != pattern.EndTime || dto.EndsNextDay != pattern.EndsNextDay;
-        if (timesChanged && Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ShiftEndsBeforeItStartsMessage));
+        if (timesChanged && Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
 
         if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
@@ -1708,6 +1708,9 @@ public class RosteringController : ControllerBase
 
     /// <summary>What a shift whose end is not after its start is refused with: an overnight shift is one that "ends the next day" (the phase 3 review, C1: without it the shift had a negative length and a negative price).</summary>
     private const string ShiftEndsBeforeItStartsMessage = "The shift must end after it starts. Tick 'Ends the next day' for an overnight shift.";
+
+    /// <summary>The machine-readable code of that refusal (the dry run, a create and an update of a shift, a pattern's create and update). The screens answer it under End time and recognise it by this code, with the sentence only as their fallback, so the wording can change without breaking them.</summary>
+    private const string ShiftNoLengthCode = "shift-no-length";
 
     /// <summary>
     /// The budget check of the candidate shift (budget phase 3), quiet when the request has no organisation to show money for. <paramref name="existingId"/> is the saved shift an edit replaces, <paramref name="status"/>

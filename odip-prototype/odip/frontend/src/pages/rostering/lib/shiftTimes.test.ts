@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NO_LENGTH_MESSAGE, hasNoLength, oneHourAfter } from './shiftTimes'
+import { NO_LENGTH_CODE, NO_LENGTH_MESSAGE, hasNoLength, isNoLengthRefusal, oneHourAfter } from './shiftTimes'
 
 // The phase 3 review (N5) and the design review (D6): a new shift must open with a length, and a pair of times with no length is a rule of the End time field, said where the person is looking.
 
@@ -44,7 +44,28 @@ describe('oneHourAfter', () => {
 })
 
 describe('NO_LENGTH_MESSAGE', () => {
-  it('is the server’s own sentence, so a 400 for it can be told from any other refusal', () => {
+  it('is the server’s own sentence, kept as the fallback for telling a 400 for it from any other refusal', () => {
     expect(NO_LENGTH_MESSAGE).toBe("The shift must end after it starts. Tick 'Ends the next day' for an overnight shift.")
+  })
+})
+
+// The server's 400 for no length carries a code (RosteringController, ShiftNoLengthCode); the panels recognise it by that, so the wording is free to change.
+describe('isNoLengthRefusal', () => {
+  const failed = (data: { errors?: string[]; code?: string }, status = 400) => ({ response: { status, data: { success: false, ...data } } })
+
+  it('is the server’s code', () => {
+    expect(NO_LENGTH_CODE).toBe('shift-no-length')
+    expect(isNoLengthRefusal(failed({ code: 'shift-no-length', errors: ['Pick an end that is after the start.'] }))).toBe(true)   // whatever the words are
+  })
+
+  it('falls back to the sentence when the answer carries no code (an older server, a mock)', () => {
+    expect(isNoLengthRefusal(failed({ errors: [NO_LENGTH_MESSAGE] }))).toBe(true)
+  })
+
+  it('is not any other refusal, nor a failure with no answer', () => {
+    expect(isNoLengthRefusal(failed({ code: 'draft-version-conflict', errors: ['A newer revision exists.'] }, 409))).toBe(false)
+    expect(isNoLengthRefusal(failed({ errors: ['Participant is not ready for booking or rostering.'] }))).toBe(false)
+    expect(isNoLengthRefusal(new Error('Network Error'))).toBe(false)
+    expect(isNoLengthRefusal(null)).toBe(false)
   })
 })

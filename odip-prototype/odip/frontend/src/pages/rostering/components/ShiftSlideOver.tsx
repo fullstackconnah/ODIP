@@ -14,7 +14,6 @@ import { requirementLabels } from '@/lib/workerRequirements'
 import {
   useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, useCompatibility, useRosterShiftNotes, getRosterFindings,
 } from '@/api/hooks'
-import { extractErrorMessage } from '@/lib/utils'
 import { formatNoteTimestamp } from '@/lib/format'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { RosterGateFields } from './RosterGateFields'
@@ -29,7 +28,7 @@ import { bringIntoView } from '@/lib/bringIntoView'
 import { modalGrid } from '@/lib/formGrid'
 import { getRosterGate } from '../lib/rosterGate'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange } from '../lib/roster'
-import { NO_LENGTH_MESSAGE, hasNoLength, oneHourAfter } from '../lib/shiftTimes'
+import { NO_LENGTH_MESSAGE, hasNoLength, oneHourAfter, refusalOf, type PanelRefusal } from '../lib/shiftTimes'
 import { getRelevantRoutines } from '../lib/routines'
 
 export type ShiftSlideOverTarget =
@@ -132,12 +131,12 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const findings = noLength ? NO_FINDINGS : checkedFindings
   const budgetNote = noLength ? null : checkedBudgetNote
   const [reasonRequired, setReasonRequired] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<PanelRefusal | null>(null)
   // The live dry-run below runs the same readiness gate as the save, so in Enforce mode (or for an inactive participant, in either
   // mode) the server refuses it with the same 400 message. That is shown as soon as the preview says so, not only at Save. It is tied
   // to the exact candidate it was computed for: it hides itself the moment any field of the candidate changes, and a late reply for an
   // older candidate can never show. It never gates Save; a preview that fails without a server message (a network blip) says nothing.
-  const [previewRefusal, setPreviewRefusal] = useState<{ key: string; message: string } | null>(null)
+  const [previewRefusal, setPreviewRefusal] = useState<(PanelRefusal & { key: string }) | null>(null)
   const candidateKey = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, status])
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -216,8 +215,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             if (!emergencyOffered(f)) setBudgetChoice('none')
           },
           onError: err => {
-            const message = extractErrorMessage(err, '')
-            setPreviewRefusal(message ? { key: candidateKey, message } : null)
+            const refused = refusalOf(err, '')
+            setPreviewRefusal(refused.message ? { key: candidateKey, ...refused } : null)
           },
         },
       )
@@ -284,13 +283,13 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // Informational only: never read by the save gate above or by the Save button, so it can never block a save.
   const readinessIssues = participantReadiness?.[participantId] ?? existing?.readinessIssues
   // A save's own failure wins; otherwise the dry-run's refusal of exactly what is on screen now (one box, so the same text never shows twice).
-  const shownError = error ?? (previewRefusal?.key === candidateKey ? previewRefusal.message : null)
-  // The length is said under End time, where the person is looking: by the form's own rule, and by the server's 400 for it (the backstop) from the live check or from a save. Never as the alert at the foot, and a cancel needs no length.
-  const serverSaidNoLength = shownError === NO_LENGTH_MESSAGE
-  const lengthError = (noLength && status !== 'Cancelled') || serverSaidNoLength ? NO_LENGTH_MESSAGE : undefined
-  const footError = serverSaidNoLength ? null : shownError
+  const shownError = error ?? (previewRefusal?.key === candidateKey ? previewRefusal : null)
+  // The length is said under End time, where the person is looking: by the form's own rule, and by the server's 400 for it (the backstop) from the live check or from a save, recognised by its code (with the
+  // sentence as the fallback) and said in the server's own words. Never as the alert at the foot, and a cancel needs no length.
+  const lengthError = noLength && status !== 'Cancelled' ? NO_LENGTH_MESSAGE : shownError?.noLength ? shownError.message : undefined
+  const footError = shownError && !shownError.noLength ? shownError.message : null
   // A save's refusal for the length is about the times it was for: changing one ends it.
-  const clearLengthRefusal = () => setError(previous => (previous === NO_LENGTH_MESSAGE ? null : previous))
+  const clearLengthRefusal = () => setError(previous => (previous?.noLength ? null : previous))
 
   // Typing a real answer under "a reason is required" ends the complaint at once, not only on the next save.
   function handleOverrideReasonChange(value: string) {
@@ -344,7 +343,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       } else {
         // The server's own words when it sent any (e.g. Enforce mode's "Participant is not ready for booking or rostering."),
         // the generic line only when it did not. The form stays as the user left it.
-        setError(extractErrorMessage(err, 'Something went wrong saving this shift. Please try again.'))
+        setError(refusalOf(err, 'Something went wrong saving this shift. Please try again.'))
       }
     }
   }

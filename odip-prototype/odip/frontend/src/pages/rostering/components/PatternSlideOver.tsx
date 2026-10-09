@@ -12,10 +12,9 @@ import { Callout } from '@/components/Callout'
 import { RequirementChips } from '@/components/RequirementChips'
 import { SlideOver } from '@/components/SlideOver'
 import { requirementLabels } from '@/lib/workerRequirements'
-import { extractErrorMessage } from '@/lib/utils'
 import { modalGrid } from '@/lib/formGrid'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS } from '../lib/roster'
-import { NO_LENGTH_MESSAGE, hasNoLength, oneHourAfter } from '../lib/shiftTimes'
+import { NO_LENGTH_MESSAGE, hasNoLength, oneHourAfter, refusalOf, type PanelRefusal } from '../lib/shiftTimes'
 
 export type PatternSlideOverTarget =
   | { mode: 'create' }
@@ -62,7 +61,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
   const [effectiveFrom, setEffectiveFrom] = useState(existing?.effectiveFrom ?? '')
   const [effectiveTo, setEffectiveTo] = useState(existing?.effectiveTo ?? '')
   const [notes, setNotes] = useState(existing?.notes ?? '')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<PanelRefusal | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   // Unsaved edits: the form as it is now against the form as it first rendered. The page keys this component on the target,
@@ -96,10 +95,11 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
   const source = existing?.sourceDraftVersion !== undefined ? `agreement v${existing.sourceDraftVersion}` : 'an agreement'
   const isBusy = createPattern.isPending || updatePattern.isPending
   const canSave = !!participantId && !!effectiveFrom && !!startTime && !!endTime
-  // The length is said under End time, where the person is looking: by the form's own rule, and by the server's 400 for it (the backstop). Never as the alert at the foot.
-  const lengthError = hasNoLength(startTime, endTime, endsNextDay) || error === NO_LENGTH_MESSAGE ? NO_LENGTH_MESSAGE : undefined
+  // The length is said under End time, where the person is looking: by the form's own rule, and by the server's 400 for it (the backstop), recognised by its code (with the sentence as the fallback) and said
+  // in the server's own words. Never as the alert at the foot.
+  const lengthError = hasNoLength(startTime, endTime, endsNextDay) ? NO_LENGTH_MESSAGE : error?.noLength ? error.message : undefined
   // A save's refusal for the length is about the times it was for: changing one ends it.
-  const clearLengthRefusal = () => setError(previous => (previous === NO_LENGTH_MESSAGE ? null : previous))
+  const clearLengthRefusal = () => setError(previous => (previous?.noLength ? null : previous))
 
   async function handleSave() {
     setError(null)
@@ -130,7 +130,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
     } catch (err: unknown) {
       // The server's own words when it sent any (e.g. Enforce mode's "Participant is not ready for booking or rostering."),
       // the generic line only when it did not. The form stays as the user left it.
-      setError(extractErrorMessage(err, 'Something went wrong saving this pattern. Please try again.'))
+      setError(refusalOf(err, 'Something went wrong saving this pattern. Please try again.'))
     }
   }
 
@@ -250,9 +250,9 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
           <textarea rows={3} value={notes} disabled={!canWrite} onChange={e => setNotes(e.target.value)} placeholder="Optional notes for this pattern" />
         </FormField>
 
-        {error && error !== NO_LENGTH_MESSAGE && (
+        {error && !error.noLength && (
           <div ref={errorRef} role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
-            {error}
+            {error.message}
           </div>
         )}
       </SlideOver>

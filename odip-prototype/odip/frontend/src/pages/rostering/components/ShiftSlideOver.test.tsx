@@ -1555,6 +1555,51 @@ describe('ShiftSlideOver — the length of a shift', () => {
     expect(screen.getAllByRole('alert').every(alert => alert.tagName === 'P')).toBe(true)
   })
 
+  // The server's 400 carries a code; the panel recognises the refusal by it, so a sentence it has never seen is still said under End time and never in the alert at the foot.
+  const REWORDED = 'Pick an end time that is after the start time.'
+  const noLengthByCode = () => ({ response: { status: 400, data: { success: false, errors: [REWORDED], code: 'shift-no-length' } } })
+
+  it('recognises a save’s 400 for no length by its code, whatever the words, and says the server’s words under End time', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(noLengthByCode())
+    openNew()
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(await screen.findByText(REWORDED)).toBeInTheDocument()
+    expect(endTimeField()).toBeInvalid()
+    expect(endTimeField()).toHaveAccessibleDescription(REWORDED)
+    expect(screen.getAllByRole('alert').every(alert => alert.tagName === 'P')).toBe(true)   // the field's, never the foot box (a div)
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '11:00')
+
+    expect(screen.queryByText(REWORDED)).not.toBeInTheDocument()
+  })
+
+  it('recognises the live check’s 400 for no length by its code too', async () => {
+    type PreviewCallbacks = { onError?: (err: unknown) => void }
+    mockCheckMutate.mockImplementation((_candidate: unknown, opts?: PreviewCallbacks) => opts?.onError?.(noLengthByCode()))
+    openNew()
+
+    expect(await screen.findByText(REWORDED)).toBeInTheDocument()
+    expect(endTimeField()).toHaveAccessibleDescription(REWORDED)
+    expect(screen.getAllByRole('alert').every(alert => alert.tagName === 'P')).toBe(true)
+  })
+
+  it('still shows any other 400 at the foot, with its words', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(badRequest('Participant is not ready for booking or rostering.'))
+    openNew()
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    const foot = await screen.findByRole('alert')
+    expect(foot).toHaveTextContent('Participant is not ready for booking or rostering.')
+    expect(foot.tagName).toBe('DIV')
+    expect(endTimeField()).not.toBeInvalid()
+  })
+
   it('tells an existing shift that has no length the same way, but not one that is being cancelled', () => {
     const legacy = { startTime: '09:00:00', endTime: '09:00:00' }
     const { unmount } = render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ ...legacy, status: 'Published' }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)

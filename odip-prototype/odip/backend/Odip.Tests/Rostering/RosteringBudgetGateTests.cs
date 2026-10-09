@@ -106,6 +106,8 @@ public class RosteringBudgetGateTests : IDisposable
 
     private static string Said<T>(ActionResult<ApiResponse<T>> result) => Assert.Single(((ApiResponse<T>)Assert.IsType<BadRequestObjectResult>(result.Result).Value!).Errors!);
 
+    private static string? CodeOf<T>(ActionResult<ApiResponse<T>> result) => ((ApiResponse<T>)Assert.IsType<BadRequestObjectResult>(result.Result).Value!).Code;
+
     private static RosterFindingDto? Budget(IEnumerable<RosterFindingDto> findings, string code = BudgetFindingCodes.ForecastOver) => findings.SingleOrDefault(f => f.Code == code);
 
     private int ShiftCount() => _kit.Db.Shifts.IgnoreQueryFilters().Count();
@@ -172,6 +174,22 @@ public class RosteringBudgetGateTests : IDisposable
         var result = await controller.CheckShift(Check(Wed14Oct) with { StartTime = new TimeOnly(22, 0), EndTime = new TimeOnly(6, 0), EndsNextDay = false }, default);
 
         Assert.Equal(EndsBeforeItStarts, Said(result));
+    }
+
+    [Fact]
+    public async Task EveryRefusalForNoLength_CarriesTheCodeShiftNoLength_SoAScreenNeverHasToMatchItsSentence()
+    {
+        // The screens answer this 400 under End time, and they recognise it by this code (the sentence is only their fallback): the dry run, a create and an update (a pattern's own two are pinned in RosteringPatternLengthTests).
+        var controller = Rig();
+        var shift = _kit.Db.Shifts.First(s => s.ServiceDate == Mon12Oct);
+
+        var dryRun = await controller.CheckShift(Check(Wed14Oct) with { StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(9, 0) }, default);
+        var create = await controller.CreateShift(Create(Wed14Oct) with { StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(9, 0) }, default);
+        var update = await controller.UpdateShift(shift.Id, Update(shift, endHour: 8), default);
+
+        Assert.Equal("shift-no-length", CodeOf(dryRun));
+        Assert.Equal("shift-no-length", CodeOf(create));
+        Assert.Equal("shift-no-length", CodeOf(update));
     }
 
     [Theory]

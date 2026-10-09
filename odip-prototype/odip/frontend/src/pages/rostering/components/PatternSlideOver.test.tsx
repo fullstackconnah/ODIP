@@ -586,4 +586,26 @@ describe('PatternSlideOver — the length of the shift it makes', () => {
 
     expect(screen.queryByText(NO_LENGTH)).not.toBeInTheDocument()
   })
+
+  it('recognises the server’s 400 for no length by its code, whatever the words, and says the server’s words under End time', async () => {
+    const REWORDED = 'Pick an end time that is after the start time.'
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce({ response: { status: 400, data: { success: false, errors: [REWORDED], code: 'shift-no-length' } } })
+    openNew()
+    await user.click(screen.getByLabelText(/^participant/i))
+    await user.click(screen.getByRole('option', { name: 'Mia Chen' }))
+    await user.type(screen.getByLabelText(/effective from/i), '2026-10-05')
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText(REWORDED)).toBeInTheDocument()
+    expect(endTimeField()).toBeInvalid()
+    expect(endTimeField()).toHaveAccessibleDescription(REWORDED)
+    expect(screen.getAllByRole('alert').every(alert => alert.tagName === 'P')).toBe(true)
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '11:00')
+
+    expect(screen.queryByText(REWORDED)).not.toBeInTheDocument()
+  })
 })

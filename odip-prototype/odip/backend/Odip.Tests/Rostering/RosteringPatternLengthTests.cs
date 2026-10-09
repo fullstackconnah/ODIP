@@ -39,6 +39,8 @@ public class RosteringPatternLengthTests
 
     private static string Said<T>(ActionResult<ApiResponse<T>> result) => Assert.Single(Assert.IsType<ApiResponse<T>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value).Errors!);
 
+    private static string? CodeOf<T>(ActionResult<ApiResponse<T>> result) => Assert.IsType<ApiResponse<T>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value).Code;
+
     [Theory]
     [InlineData(22, 6)]   // an overnight pattern, the box not ticked: a length of minus sixteen hours
     [InlineData(9, 9)]    // nothing at all
@@ -58,6 +60,25 @@ public class RosteringPatternLengthTests
 
         Assert.Equal(EndsBeforeItStarts, Said(result));
         Assert.Equal(before, await db.ShiftPatterns.CountAsync());
+    }
+
+    [Fact]
+    public async Task ThePatternRefusalsForNoLength_CarryTheCodeShiftNoLength_TheOneTheShiftsOwnRefusalsCarry()
+    {
+        var (f, monday) = await ApprovedAsync();
+        await using var _ = f;
+        await using var db = NewDb(f.DbName);
+        var create = new CreateShiftPatternDto
+        {
+            ParticipantId = monday.ParticipantId, DayOfWeek = DayOfWeek.Saturday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(9, 0), Ratio = monday.Ratio, NightType = monday.NightType,
+            EffectiveFrom = monday.EffectiveFrom,
+        };
+
+        var created = await Controller(db).CreatePattern(create, CancellationToken.None);
+        var updated = await Controller(db).UpdatePattern(monday.Id, Edit(monday) with { EndTime = monday.StartTime }, CancellationToken.None);
+
+        Assert.Equal("shift-no-length", CodeOf(created));
+        Assert.Equal("shift-no-length", CodeOf(updated));
     }
 
     [Fact]
