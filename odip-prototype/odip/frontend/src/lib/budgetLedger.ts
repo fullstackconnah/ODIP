@@ -53,7 +53,9 @@ export function poolSentence(pool: LedgerPool, period: LedgerPeriod): string {
       ? ` Booked shifts would finish ${money(-period.forecastRemaining)} over.`
       : ` Booked shifts would finish with ${money(period.forecastRemaining)} to spare.`
   const gap = period.unpricedTripDayCount > 0 ? ` ${unpricedTripDaySentence(period.unpricedTripDayCount)}` : ''
-  return `${first}${forecast}${gap}`
+  // When the NDIA has refused a claim of this pool for want of funds, ODIP's arithmetic may still say fine: say whose figures these are, beside the NDIA's word.
+  const lead = pool.ndiaRejection ? "By ODIP's figures, " : ''
+  return `${lead}${first}${forecast}${gap}`
 }
 
 /**

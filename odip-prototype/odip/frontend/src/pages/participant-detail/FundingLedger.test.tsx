@@ -401,6 +401,47 @@ describe('the NDIA rejecting a claim for want of funds', () => {
     expect(screen.getAllByText(/NDIA rejected a claim on/)).toHaveLength(1)
   })
 
+  // ODIP's arithmetic says fine and the NDIA has just refused a claim for want of funds: the one case this feature exists to catch. The note used to be the last and smallest thing in the card, under
+  // an On track chip three times over.
+  it('puts the note directly under the pool title, above the figures, so it is the first thing said about the pool', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ ndiaRejection: rejection })] }))
+
+    const note = screen.getByText(/NDIA rejected a claim on/).closest('p')!
+    expect(note.compareDocumentPosition(screen.getByText('Available')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(note.compareDocumentPosition(screen.getByText(content => content.includes(' this period (to '))) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('wears a danger pill in the title row beside the status chip, in the label the alert has', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ ndiaRejection: rejection })] }))
+
+    const pill = screen.getByText('NDIA says the funds ran out')
+    const row = pill.parentElement!
+    expect(pill).toHaveClass('bg-[var(--color-error-container)]')
+    expect(within(row).getByText('Forecast over')).toBeInTheDocument()   // ODIP's own word stays (the fixture's pool is forecast to go over): it is ODIP's arithmetic, and the NDIA's is beside it
+  })
+
+  it('says whose figures they are when the NDIA has spoken: ODIP\'s own', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ ndiaRejection: rejection })] }))
+
+    expect(screen.getByText(/^By ODIP's figures, Core: /)).toBeInTheDocument()
+  })
+
+  it('has neither the pill nor that lead-in on a pool the NDIA has said nothing about', () => {
+    renderLedger(participantLedger())
+
+    expect(screen.queryByText('NDIA says the funds ran out')).not.toBeInTheDocument()
+    expect(screen.queryByText(/By ODIP's figures/)).not.toBeInTheDocument()
+  })
+
+  it('prints the status word once in the glance strip: the chip was beside the same word', () => {
+    renderLedger(participantLedger())
+
+    // The glance strip's label (the ledger table below has a Status column header of its own); the label sits in a div under the cell.
+    const label = screen.getAllByText('Status').find(element => element.closest('div')?.className.includes('order-2'))!
+    const cell = label.closest('div')!.parentElement!
+    expect(cell.textContent?.match(/Forecast over/g)).toHaveLength(1)
+  })
+
   it('says nothing of the NDIA when the server sent no rejection for the pool', () => {
     renderLedger(participantLedger())
 
