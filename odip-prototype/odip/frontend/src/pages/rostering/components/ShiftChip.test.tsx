@@ -510,6 +510,48 @@ describe('ShiftChip over-budget marker (budget phase 3)', () => {
       expect(bottom.parentElement).not.toHaveClass('mt-2')
     })
 
+    // Design review round 1 N1, code review N4: the disc is pointer-events-none (it must never take a click), so hit testing skips it and its own title never shows. The words are on the chip root, which is
+    // what the pointer lands on, joined with the words of the other markers that apply.
+    describe('the hover words (the disc cannot show its own title)', () => {
+      const chipRoot = (marker: HTMLElement) => marker.parentElement as HTMLElement
+
+      it('puts the budget marker’s words on the chip itself, with the reason, so hovering the disc shows them', () => {
+        const marker = markerOf(emergency())
+
+        expect(chipRoot(marker)).toHaveAttribute('title', 'Over budget: emergency, Admin review pending — Emergency or safety: Participant unsafe at home tonight')
+      })
+
+      it('keeps the disc’s own aria-label and title: the words stay in the accessible name', () => {
+        const marker = markerOf(emergency())
+
+        expect(marker).toHaveAttribute('aria-label', 'Over budget: emergency, Admin review pending')
+        expect(marker).toHaveAttribute('title', expect.stringContaining('Over budget: emergency'))
+      })
+
+      it('says every marker that applies, one to a line: on leave, the budget marker, and the severity marker', () => {
+        const shift = makeShift({ ...adminOverride(), staffId: 'staff-9', staffName: 'Alex Rivera', assigneeOnApprovedLeave: true, findings: [makeFinding({ severity: 'Blocking' })] })
+        const marker = markerOf(shift)
+
+        const lines = chipRoot(marker).getAttribute('title')!.split('\n')
+        expect(lines).toHaveLength(3)
+        expect(lines[0]).toContain('has approved leave covering this shift')
+        expect(lines[1]).toBe('Over budget: Admin override — Client carer is in hospital')
+        expect(lines[2]).toBe('1 blocking issue')
+      })
+
+      it('says the severity marker’s words on the chip too, since that marker is pointer-events-none as well', () => {
+        renderChip(<ShiftChip shift={makeShift({ findings: [makeFinding({ severity: 'Warning' })] })} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+        expect(screen.getByText('9am–5pm').closest('[class*="@container"]')).toHaveAttribute('title', '1 warning')
+      })
+
+      it('puts no title on a chip with no marker at all', () => {
+        renderChip(<ShiftChip shift={makeShift()} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+        expect(screen.getByText('9am–5pm').closest('[class*="@container"]')).not.toHaveAttribute('title')
+      })
+    })
+
     it('adds no room to a chip with no marker', () => {
       renderChip(<ShiftChip shift={makeShift()} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 

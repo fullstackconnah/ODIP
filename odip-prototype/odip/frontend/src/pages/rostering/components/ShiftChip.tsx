@@ -90,6 +90,10 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
       ? { Icon: Check, shape: 'rounded-full', fill: TONE.success.solid, ink: TONE.success.ink }
       : { Icon: Siren, shape: 'rounded-full', fill: TONE.warning.solid, ink: TONE.warning.ink }
 
+  // The words of every marker that applies, on the chip itself, one to a line: on leave, the over-budget marker, the severity marker. The disc and the severity icon are pointer-events-none (they must never take a click),
+  // so hit testing skips them and their own titles can never show; the pointer lands on the chip, and this is what it shows. Their aria-labels, and the control's accessible name, are unchanged.
+  const chipTitle = [onApprovedLeave ? onLeaveTitle : null, budgetMarkerTitle, hasFindings ? findingsSeverityLabel(shift.findings) : null].filter(Boolean).join('\n') || undefined
+
   const menuItems = [
     { value: 'edit', label: 'Edit' },
     { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : 'Reassign to…' },
@@ -163,7 +167,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
       style={transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 30 } : undefined}
       // On-leave gets the explanation on the whole chip too: on a narrow day column the inline marker
       // below is the first thing to clip, so the hover text must not depend on it being visible.
-      title={onApprovedLeave ? onLeaveTitle : undefined}
+      title={chipTitle}
       className={`group @container relative flex min-h-[calc(var(--row-h)_-_6px)] items-stretch rounded-sm border bg-surface-container-low text-[13px] transition-opacity duration-150 ${
         dashed || onApprovedLeave ? 'border-dashed border-border' : 'border-border'
       } ${isDragging ? 'opacity-50' : ''} ${budgetMarker ? (hasFindings ? 'mb-2' : 'mt-2') : ''}`}
