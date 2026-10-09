@@ -98,7 +98,7 @@ public class BudgetAlertRulesTests
 
         Assert.Equal("budget-forecast-over", alert.Type);
         Assert.Equal(AlertSeverity.Warning, alert.Severity);
-        Assert.Equal("Booked shifts would take Core $640 over by 31 Dec 2026", alert.Message);
+        Assert.Equal("Booked shifts would take Core $640 over this period's $8,000 by 31 Dec 2026", alert.Message);
         Assert.Equal("funding", alert.DeepLinkTab);
     }
 
@@ -108,7 +108,7 @@ public class BudgetAlertRulesTests
         var alert = Assert.Single(AlertsOf(LedgerOf(CorePlan(), Cost(LedgerGroup.BookedAhead, 8100.5m))));
 
         Assert.Equal("budget-forecast-over", alert.Type);
-        Assert.Equal("Booked shifts would take Core $100.50 over by 31 Dec 2026", alert.Message);
+        Assert.Equal("Booked shifts would take Core $100.50 over this period's $8,000 by 31 Dec 2026", alert.Message);
     }
 
     // ── Over ────────────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ public class BudgetAlertRulesTests
 
         Assert.Equal("budget-over", alert.Type);
         Assert.Equal(AlertSeverity.Critical, alert.Severity);
-        Assert.Equal("Core is $200 over this period's $8,000", alert.Message);
+        Assert.Equal("Core is $200 over this period's $8,000 (to 31 Dec 2026)", alert.Message);
         Assert.Equal("funding", alert.DeepLinkTab);
     }
 
@@ -131,7 +131,7 @@ public class BudgetAlertRulesTests
         var plan = PlanOf(new DateOnly(2026, 7, 1), JuneEnd, LedgerKit.Core(PlanType.PlanManaged, Year(8000m)));
         var alert = Assert.Single(AlertsOf(LedgerOf(plan, Cost(LedgerGroup.Claimed, 16500m))));
 
-        Assert.Equal("Core is $500 over this period's $16,000", alert.Message);
+        Assert.Equal("Core is $500 over this period's $16,000 (to 31 Dec 2026)", alert.Message);
     }
 
     // ── Only the worst, once for each pool ──────────────────────────────────
@@ -162,7 +162,7 @@ public class BudgetAlertRulesTests
         var alerts = AlertsOf(ledger);
 
         Assert.Equal(2, alerts.Count);
-        Assert.Contains(alerts, a => a.Type == "budget-over" && a.Message == "Core is $200 over this period's $8,000");
+        Assert.Contains(alerts, a => a.Type == "budget-over" && a.Message == "Core is $200 over this period's $8,000 (to 31 Dec 2026)");
         Assert.Contains(alerts, a => a.Type == "budget-approaching" && a.Message == "Improved Daily Living Skills is at 85% of this period's $1,000 (to 31 Dec 2026)");
     }
 
@@ -175,7 +175,7 @@ public class BudgetAlertRulesTests
 
         var alert = Assert.Single(AlertsOf(ledger));
 
-        Assert.Equal("Core (plan managed) is $200 over this period's $8,000", alert.Message);
+        Assert.Equal("Core (plan managed) is $200 over this period's $8,000 (to 31 Dec 2026)", alert.Message);
     }
 
     // ── Nothing to say ──────────────────────────────────────────────────────
@@ -273,13 +273,13 @@ public class BudgetAlertRulesTests
         var alert = Assert.Single(AlertsOf(LedgerOf(CorePlan(), Cost(LedgerGroup.Claimed, 5000m), Cost(LedgerGroup.BookedAhead, 3640m), Unpriced())));
 
         Assert.Equal("budget-forecast-over", alert.Type);
-        Assert.Equal("Booked shifts would take Core $640 over by 31 Dec 2026. 1 shift in this period is not priced yet, so this leaves it out", alert.Message);
+        Assert.Equal("Booked shifts would take Core $640 over this period's $8,000 by 31 Dec 2026. 1 shift in this period is not priced yet, so this leaves it out", alert.Message);
     }
 
     [Theory]
     [InlineData(6560, 0, "budget-approaching", "Core is at 82% of this period's $8,000 (to 31 Dec 2026)")]
-    [InlineData(5000, 3640, "budget-forecast-over", "Booked shifts would take Core $640 over by 31 Dec 2026")]
-    [InlineData(8200, 0, "budget-over", "Core is $200 over this period's $8,000")]
+    [InlineData(5000, 3640, "budget-forecast-over", "Booked shifts would take Core $640 over this period's $8,000 by 31 Dec 2026")]
+    [InlineData(8200, 0, "budget-over", "Core is $200 over this period's $8,000 (to 31 Dec 2026)")]
     public void EveryStatusAlert_SaysTheFiguresLeaveShiftsOut_InThePlural(int claimed, int booked, string type, string plain)
     {
         var items = new List<LedgerItem> { Cost(LedgerGroup.Claimed, claimed), Unpriced(), Unpriced(new DateOnly(2026, 11, 3), "a 1:3 group shift") };
@@ -303,7 +303,7 @@ public class BudgetAlertRulesTests
     {
         var alert = Assert.Single(AlertsOf(LedgerOf(CorePlan(), Cost(LedgerGroup.Claimed, 8200m), Unpriced(new DateOnly(2027, 1, 12)))));
 
-        Assert.Equal("Core is $200 over this period's $8,000", alert.Message);
+        Assert.Equal("Core is $200 over this period's $8,000 (to 31 Dec 2026)", alert.Message);
     }
 
     [Fact]
@@ -328,7 +328,7 @@ public class BudgetAlertRulesTests
             System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
             var alert = Assert.Single(AlertsOf(LedgerOf(CorePlan(12345.5m), Cost(LedgerGroup.Claimed, 12546m))));
 
-            Assert.Equal("Core is $200.50 over this period's $12,345.50", alert.Message);
+            Assert.Equal("Core is $200.50 over this period's $12,345.50 (to 31 Dec 2026)", alert.Message);
         }
         finally { System.Globalization.CultureInfo.CurrentCulture = previous; }
     }

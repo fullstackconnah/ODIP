@@ -108,11 +108,11 @@ describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (
   })
 
   it('has one pool over, one forecast over, one approaching, and the NDIA\'s word on a pool that is on track, each as an alert that opens the Funding tab, in the server\'s words', () => {
-    expect(alertsOf('p-0005')).toEqual([{ type: 'budget-over', severity: 'Critical', message: 'Core is $1,563.21 over this period\'s $403.29', deepLinkTab: 'funding' }])
+    expect(alertsOf('p-0005')).toEqual([{ type: 'budget-over', severity: 'Critical', message: 'Core is $1,563.21 over this period\'s $403.29 (to 31 Dec 2026)', deepLinkTab: 'funding' }])
     // Worse first: the banner shows three and "+N more" behind them, so the milder warning must not crowd out the worse one.
     expect(alertsOf('p-0002').map(alert => [alert.type, alert.severity])).toEqual([['budget-forecast-over', 'Warning'], ['budget-approaching', 'Warning']])
     // Sienna's Core has a sleepover in the quarter, which the shift claim cannot price yet: the alert says the figures leave it out.
-    expect(alertsOf('p-0002')[0].message).toBe('Booked shifts would take Core $1,354.68 over by 31 Dec 2026. 1 shift in this period is not priced yet, so this leaves it out')
+    expect(alertsOf('p-0002')[0].message).toBe('Booked shifts would take Core $1,354.68 over this period\'s $3,473.32 by 31 Dec 2026. 1 shift in this period is not priced yet, so this leaves it out')
     expect(alertsOf('p-0002')[1].message).toBe('Improved Daily Living Skills is at 94% of this period\'s $2,074.72 (to 31 Dec 2026)')
     expect(alertsOf('p-0004')).toEqual([{ type: 'budget-ndia-exhausted', severity: 'Critical', message: 'Core: NDIA rejected a claim on 8 Oct 2026: not enough funds (V27)', deepLinkTab: 'funding' }])
   })

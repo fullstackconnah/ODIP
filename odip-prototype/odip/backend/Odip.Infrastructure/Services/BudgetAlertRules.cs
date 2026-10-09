@@ -61,9 +61,10 @@ public static class BudgetAlertRules
         switch (period.Status)
         {
             case BudgetStatus.Over:
-                return Alert(OverType, AlertSeverity.Critical, WithTheGap($"{label} is {BudgetText.Money(period.Used - period.Available)} over this period's {BudgetText.Money(period.Available)}", period));
+                // Every status alert names the period's figure and its last day, because "this period" may be a month, a quarter or the whole plan and the alert is read away from the Funding tab.
+                return Alert(OverType, AlertSeverity.Critical, WithTheGap($"{label} is {BudgetText.Money(period.Used - period.Available)} over this period's {BudgetText.Money(period.Available)} (to {end})", period));
             case BudgetStatus.ForecastOver:
-                return Alert(ForecastOverType, AlertSeverity.Warning, WithTheGap($"Booked shifts would take {label} {BudgetText.Money(period.Forecast - period.Available)} over by {end}", period));
+                return Alert(ForecastOverType, AlertSeverity.Warning, WithTheGap($"Booked shifts would take {label} {BudgetText.Money(period.Forecast - period.Available)} over this period's {BudgetText.Money(period.Available)} by {end}", period));
             case BudgetStatus.Approaching:
                 // Rounded DOWN, so a period that is at 79.6% is never reported as the 80% that makes it "approaching" (only a period at or past the percentage gets here at all, and then it is at least that).
                 var percent = (int)Math.Floor(period.Used * 100m / period.Available);

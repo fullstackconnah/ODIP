@@ -54,8 +54,8 @@ function budgetAlertsOf(ledger) {
     if (!period) continue
     const label = poolLabel(pool, ledger.pools)
     const end = say(period.periodEnd)
-    if (period.status === 'Over') alerts.push(alert('budget-over', 'Critical', withTheGap(`${label} is ${money(period.used - period.available)} over this period's ${money(period.available)}`, period)))
-    else if (period.status === 'ForecastOver') alerts.push(alert('budget-forecast-over', 'Warning', withTheGap(`Booked shifts would take ${label} ${money(period.forecast - period.available)} over by ${end}`, period)))
+    if (period.status === 'Over') alerts.push(alert('budget-over', 'Critical', withTheGap(`${label} is ${money(period.used - period.available)} over this period's ${money(period.available)} (to ${end})`, period)))
+    else if (period.status === 'ForecastOver') alerts.push(alert('budget-forecast-over', 'Warning', withTheGap(`Booked shifts would take ${label} ${money(period.forecast - period.available)} over this period's ${money(period.available)} by ${end}`, period)))
     else if (period.status === 'Approaching') alerts.push(alert('budget-approaching', 'Warning', withTheGap(`${label} is at ${Math.floor((period.used * 100) / period.available)}% of this period's ${money(period.available)} (to ${end})`, period)))
     if (pool.ndiaRejection) alerts.push(alert('budget-ndia-exhausted', 'Critical', `${label}: NDIA rejected a claim on ${say(pool.ndiaRejection.date)}: not enough funds (${pool.ndiaRejection.code})`))
   }

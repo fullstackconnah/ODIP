@@ -84,7 +84,7 @@ public class ParticipantBudgetAlertsTests
 
         var alert = Assert.Single(all.Single(p => p.ParticipantId == over.Id).Alerts);
         Assert.Equal(("budget-over", AlertSeverity.Critical, "funding"), (alert.Type, alert.Severity, alert.DeepLinkTab));
-        Assert.Equal("Core is $1,000 over this period's $8,000", alert.Message);
+        Assert.Equal("Core is $1,000 over this period's $8,000 (to 31 Dec 2026)", alert.Message);
         Assert.Empty(all.Single(p => p.ParticipantId == fine.Id).Alerts);
         Assert.Equal(1, all.Single(p => p.ParticipantId == over.Id).CriticalCount);
     }
@@ -100,7 +100,7 @@ public class ParticipantBudgetAlertsTests
         var alert = Assert.Single(await s.BudgetAlertsAsync(participant.Id));
 
         Assert.Equal(("budget-forecast-over", AlertSeverity.Warning), (alert.Type, alert.Severity));
-        Assert.Equal("Booked shifts would take Core $440 over by 31 Dec 2026", alert.Message);
+        Assert.Equal("Booked shifts would take Core $440 over this period's $1,000 by 31 Dec 2026", alert.Message);
     }
 
     // The fix round's ledger counts the shifts the shift claim cannot price (a group shift, a sleepover) in the period, and every figure leaves them out; the alert says so, from a real ledger.
@@ -118,7 +118,7 @@ public class ParticipantBudgetAlertsTests
         var alert = Assert.Single(await s.BudgetAlertsAsync(participant.Id));
 
         Assert.Equal("budget-forecast-over", alert.Type);
-        Assert.Equal("Booked shifts would take Core $440 over by 31 Dec 2026. 1 shift in this period is not priced yet, so this leaves it out", alert.Message);
+        Assert.Equal("Booked shifts would take Core $440 over this period's $1,000 by 31 Dec 2026. 1 shift in this period is not priced yet, so this leaves it out", alert.Message);
     }
 
     [Fact]

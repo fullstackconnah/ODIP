@@ -498,9 +498,9 @@ const FULL_ORDER = [
 const threeAlertsOnTwoParticipantsAndThreeBudgetsAtRisk = {
   data: [
     ...threeAlertsOnTwoParticipants.data,
-    { participantId: 'p3', participantName: 'Olive Over', isActive: true, criticalCount: 1, warningCount: 0, infoCount: 0, alerts: [{ type: 'budget-over', severity: 'Critical', message: 'Core is $1,000 over this period\'s $8,000', deepLinkTab: 'funding' }] },
-    { participantId: 'p4', participantName: 'Olga Over', isActive: true, criticalCount: 1, warningCount: 0, infoCount: 0, alerts: [{ type: 'budget-over', severity: 'Critical', message: 'Core is $20 over this period\'s $800', deepLinkTab: 'funding' }] },
-    { participantId: 'p5', participantName: 'Ford Cast', isActive: true, criticalCount: 0, warningCount: 1, infoCount: 0, alerts: [{ type: 'budget-forecast-over', severity: 'Warning', message: 'Booked shifts would take Core $640 over by 31 Dec 2026', deepLinkTab: 'funding' }] },
+    { participantId: 'p3', participantName: 'Olive Over', isActive: true, criticalCount: 1, warningCount: 0, infoCount: 0, alerts: [{ type: 'budget-over', severity: 'Critical', message: 'Core is $1,000 over this period\'s $8,000 (to 31 Dec 2026)', deepLinkTab: 'funding' }] },
+    { participantId: 'p4', participantName: 'Olga Over', isActive: true, criticalCount: 1, warningCount: 0, infoCount: 0, alerts: [{ type: 'budget-over', severity: 'Critical', message: 'Core is $20 over this period\'s $800 (to 31 Dec 2026)', deepLinkTab: 'funding' }] },
+    { participantId: 'p5', participantName: 'Ford Cast', isActive: true, criticalCount: 0, warningCount: 1, infoCount: 0, alerts: [{ type: 'budget-forecast-over', severity: 'Warning', message: 'Booked shifts would take Core $640 over this period\'s $8,000 by 31 Dec 2026', deepLinkTab: 'funding' }] },
   ],
   isLoading: false,
 }
@@ -1875,12 +1875,12 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   describe('and the Critical alerts beside it', () => {
     it('does not count an over-budget alert a second time: the tile is where "over" reaches the dashboard', () => {
       asRole('Coordinator')
-      withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over', { alerts: [{ type: 'budget-over', severity: 'Critical', message: 'Core is $1,000 over this period\'s $8,000', deepLinkTab: 'funding' }] }))
+      withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over', { alerts: [{ type: 'budget-over', severity: 'Critical', message: 'Core is $1,000 over this period\'s $8,000 (to 31 Dec 2026)', deepLinkTab: 'funding' }] }))
       renderPage()
 
       expect(budgetTile()).toHaveAccessibleName('Budgets at risk 1')
       expect(tileLabels()).not.toContain('Critical Participant Alerts')   // its only Critical alert is the one the budget tile counts
-      expect(screen.queryByText('Core is $1,000 over this period\'s $8,000')).not.toBeInTheDocument()   // nor is it listed with the Critical alerts below the band
+      expect(screen.queryByText('Core is $1,000 over this period\'s $8,000 (to 31 Dec 2026)')).not.toBeInTheDocument()   // nor is it listed with the Critical alerts below the band
     })
 
     it('still counts and lists the NDIA’s "the funds ran out" alert, a different fact, as a Critical alert', () => {
