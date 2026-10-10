@@ -159,7 +159,14 @@ describe('AddVehicleModal — Add New Vehicle: a retry after the assignment fail
     expect(mockCreateVehicleMutateAsync).toHaveBeenCalledTimes(1)
     expect(mockCreateAssignmentMutateAsync).toHaveBeenCalledTimes(1)
 
-    await user.click(screen.getByRole('button', { name: /create vehicle & assign/i }))
+    // The vehicle exists now, so the form says so: its fields are locked (a change would be dropped without a word) and the button says what it will do.
+    expect(screen.getByText('Vehicle created. Assigning it to the trip failed: try again.')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('e.g. Toyota HiAce')).toBeDisabled()
+    expect(screen.getAllByRole('spinbutton')[0]).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^van/i })).toBeDisabled() // the type picker, now showing the chosen type
+    expect(screen.queryByRole('button', { name: /create vehicle & assign/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^assign vehicle$/i }))
 
     expect(mockCreateVehicleMutateAsync).toHaveBeenCalledTimes(1)
     expect(mockCreateAssignmentMutateAsync).toHaveBeenCalledTimes(2)
