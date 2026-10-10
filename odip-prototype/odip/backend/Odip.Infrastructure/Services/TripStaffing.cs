@@ -36,13 +36,13 @@ public static class TripStaffing
         trip.UpdatedAt = DateTime.UtcNow;
     }
 
-    /// <summary>After a participant's ratio changes: recalculates the trips they are actively booked on. Completed and cancelled trips are history.</summary>
+    /// <summary>After a participant's ratio changes: recalculates the trips they are actively booked on. Completed, cancelled and archived trips are history.</summary>
     public static async Task RecalculateForParticipantAsync(OdipDbContext db, Guid participantId, CancellationToken ct)
     {
         var tripIds = await db.ParticipantBookings
             .Where(b => b.ParticipantId == participantId
                 && b.BookingStatus != BookingStatus.Cancelled && b.BookingStatus != BookingStatus.NoLongerAttending
-                && b.TripInstance.Status != TripStatus.Completed && b.TripInstance.Status != TripStatus.Cancelled)
+                && b.TripInstance.Status != TripStatus.Completed && b.TripInstance.Status != TripStatus.Cancelled && b.TripInstance.Status != TripStatus.Archived)
             .Select(b => b.TripInstanceId).Distinct().ToListAsync(ct);
         foreach (var tripId in tripIds) await RecalculateAsync(db, tripId, ct);
     }

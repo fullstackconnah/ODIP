@@ -97,6 +97,7 @@ public class TripStaffRatioChangeTests
 
     [Theory]
     [InlineData(TripStatus.Completed)]
+    [InlineData(TripStatus.Archived)]
     [InlineData(TripStatus.Cancelled)]
     public async Task Patch_ARatioChange_LeavesAFinishedTripAlone(TripStatus status)
     {
