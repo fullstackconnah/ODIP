@@ -2,7 +2,6 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Odip.Domain.Billing;
-using Odip.Domain.Dictionary;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
@@ -103,11 +102,6 @@ public class OdipDbContext : DbContext
 
     // Billing
     public DbSet<FundingSource> FundingSources => Set<FundingSource>();
-
-    // Dictionary / forms engine
-    public DbSet<FieldDefinition> FieldDefinitions => Set<FieldDefinition>();
-    public DbSet<FieldValue> FieldValues => Set<FieldValue>();
-    public DbSet<FormTemplate> FormTemplates => Set<FormTemplate>();
 
     // Rostering (M4)
     public DbSet<Shift> Shifts => Set<Shift>();
@@ -1076,80 +1070,6 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.IsActive);
         });
 
-        // ── FieldDefinition ──────────────────────────────────────
-        modelBuilder.Entity<FieldDefinition>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.FieldId).HasMaxLength(20).IsRequired();
-            entity.Property(e => e.Name).HasMaxLength(300).IsRequired();
-            entity.Property(e => e.Domain).HasMaxLength(100).IsRequired();
-            entity.Property(e => e.PicklistOptionsRaw).HasMaxLength(2000);
-            entity.Property(e => e.Comments).HasMaxLength(2000);
-            entity.Property(e => e.Notes).HasMaxLength(2000);
-            // Natively mapped to a Postgres array, same idiom as
-            // Participant.MobilitySupportOptions.
-            entity.Property(e => e.AppearsInForms).HasColumnType("text[]");
-            entity.Ignore(e => e.PicklistOptions);
-
-            // FieldId is unique per tenant (per the domain type's own doc comment).
-            entity.HasIndex(e => new { e.TenantId, e.FieldId }).IsUnique();
-            entity.HasIndex(e => e.Domain);
-            entity.HasIndex(e => e.IsActive);
-        });
-
-        // ── FieldValue ───────────────────────────────────────────
-        modelBuilder.Entity<FieldValue>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.UpdatedBy).HasMaxLength(200);
-            // Value is intentionally left unbounded (EAV values vary widely by
-            // FieldDefinition.DataType, e.g. multi-select lists serialised as text).
-
-            // Restrict: a field definition still referenced by recorded values must
-            // not be deleted out from under them (data-integrity guard on the registry).
-            entity.HasOne<FieldDefinition>()
-                .WithMany()
-                .HasForeignKey(e => e.FieldDefinitionId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // Cascade: form-driven field values are participant-owned data with no
-            // independent existence once the participant is gone — same idiom as
-            // SupportProfile → Participant.
-            entity.HasOne<Participant>()
-                .WithMany()
-                .HasForeignKey(e => e.ParticipantId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            // One recorded value per participant/field pair.
-            entity.HasIndex(e => new { e.TenantId, e.ParticipantId, e.FieldDefinitionId }).IsUnique();
-            entity.HasIndex(e => e.FieldDefinitionId);
-        });
-
-        // ── FormTemplate ─────────────────────────────────────────
-        // Sections is a list of plain (non-entity) FormSection value objects — mapped
-        // as a JSON column via a value converter (Npgsql has no native array support
-        // for complex types, unlike the string[]/text[] mapping used above).
-        var formSectionsComparer = new ValueComparer<List<FormSection>>(
-            (a, b) => JsonSerializer.Serialize(a, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(b, (JsonSerializerOptions?)null),
-            v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null).GetHashCode(),
-            v => JsonSerializer.Deserialize<List<FormSection>>(JsonSerializer.Serialize(v, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null) ?? new List<FormSection>());
-
-        modelBuilder.Entity<FormTemplate>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
-            entity.Property(e => e.Description).HasMaxLength(2000);
-
-            var sectionsProperty = entity.Property(e => e.Sections)
-                .HasConversion(
-                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => JsonSerializer.Deserialize<List<FormSection>>(v, (JsonSerializerOptions?)null) ?? new List<FormSection>())
-                .HasColumnType("jsonb");
-            sectionsProperty.Metadata.SetValueComparer(formSectionsComparer);
-
-            entity.HasIndex(e => e.Name);
-        });
-
         // ── Shift ────────────────────────────────────────────────
         modelBuilder.Entity<Shift>(entity =>
         {
@@ -1930,25 +1850,10 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<Tenant>()
             .HasIndex(t => t.EmailDomain).IsUnique();
 
-        // ── Billing / Dictionary tenant query filters ─────────────────────────────
+        // ── Billing tenant query filters ─────────────────────────────
         modelBuilder.Entity<FundingSource>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<FundingSource>()
-            .HasIndex(e => e.TenantId);
-
-        modelBuilder.Entity<FieldDefinition>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
-        modelBuilder.Entity<FieldDefinition>()
-            .HasIndex(e => e.TenantId);
-
-        modelBuilder.Entity<FieldValue>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
-        modelBuilder.Entity<FieldValue>()
-            .HasIndex(e => e.TenantId);
-
-        modelBuilder.Entity<FormTemplate>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
-        modelBuilder.Entity<FormTemplate>()
             .HasIndex(e => e.TenantId);
 
         // ── Rostering tenant query filters ────────────────────────────────────────

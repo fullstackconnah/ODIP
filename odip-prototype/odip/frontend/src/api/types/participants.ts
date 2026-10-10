@@ -44,7 +44,7 @@ export type MobilitySupportOption = typeof MOBILITY_SUPPORT_OPTIONS[number]
 
 /**
  * DIAG-01: curated diagnoses picklist, mirroring the backend's Odip.Domain.Enums.Diagnoses.All
- * (SeedData/DataDictionarySeed.json, fieldId MED-016) — the spreadsheet is the source of truth.
+ * (ODIP Master Data Dictionary.xlsx at the repo root, fieldId MED-016) — the spreadsheet is the source of truth.
  * Unlike MOBILITY_SUPPORT_OPTIONS (a closed picklist), diagnoses fields are open text — this list
  * drives the curated dropdown/checkbox UI only; DIAGNOSIS_OTHER_SENTINEL is the "Other — specify"
  * escape hatch offered alongside it (never itself a stored value — see the primary-diagnosis

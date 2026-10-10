@@ -20,7 +20,7 @@
  * particularly §2 (INTAKE vs PROFILE split / shared set), §4 (the full ODIP mapping
  * table), and §6 (ambiguous/illegible items — deliberately NOT guessed at here either).
  * `dictionaryId` cites the Master Data Dictionary field id where the spec names one
- * (`Odip.Domain/SeedData/DataDictionarySeed.json` is the source of truth for the id
+ * (`ODIP Master Data Dictionary.xlsx` at the repo root is the source of truth for the id
  * catalogue itself — this module only cites ids, it doesn't re-validate them).
  *
  * Coverage: every field the wizard captures as of sub-wave A, including fields from

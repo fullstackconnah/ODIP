@@ -696,7 +696,7 @@ public class RosteringControllerTests
     public void RosteringController_AuthorizeAttribute_RestrictsToCoordinatorAndAbove()
     {
         // No authorization-test-host idiom exists elsewhere in Odip.Tests (checked:
-        // Billing/AdminUsers/FieldRegistry controller tests carry no such pattern), so this
+        // Billing/AdminUsers controller tests carry no such pattern), so this
         // asserts the attribute's declared Roles directly via reflection rather than
         // inventing a new test-host/authentication-driven idiom for just this one check.
         var authorizeAttribute = typeof(RosteringController)

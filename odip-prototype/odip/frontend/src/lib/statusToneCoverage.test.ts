@@ -154,7 +154,7 @@ const HAS_BACKEND = existsSync(join(BACKEND, 'Odip.sln'))
 
 function csFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (['bin', 'obj', 'Migrations', 'node_modules', 'Odip.Tests', 'Odip.ProtoTests'].includes(entry.name)) continue
+    if (['bin', 'obj', 'Migrations', 'node_modules', 'Odip.Tests'].includes(entry.name)) continue
     const full = join(dir, entry.name)
     if (entry.isDirectory()) csFiles(full, out)
     else if (entry.name.endsWith('.cs')) out.push(full)

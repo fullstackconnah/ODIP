@@ -72,25 +72,4 @@ public class DbSeederDiagnosesTests
         Assert.Empty(noah.OtherDiagnoses);
         Assert.Equal(HidpaSupportCategory.None, noah.HidpaSupportCategories);
     }
-
-    [Fact]
-    public async Task SeedDataDictionaryAsync_LoadsDiagnosesAndHidpaFieldDefinitions()
-    {
-        using var db = CreateDb(Guid.NewGuid().ToString());
-
-        await DbSeeder.SeedAsync(db, CancellationToken.None);
-        await DbSeeder.SeedDataDictionaryAsync(db, CancellationToken.None);
-
-        // Seeded once per tenant (two tenants exist after SeedAsync — Odip and Demo) — assert on
-        // the first row per fieldId rather than SingleOrDefaultAsync, which would see both.
-        var diagnosesField = await db.FieldDefinitions.FirstOrDefaultAsync(f => f.FieldId == "MED-016");
-        var hidpaField = await db.FieldDefinitions.FirstOrDefaultAsync(f => f.FieldId == "MED-017");
-
-        Assert.NotNull(diagnosesField);
-        Assert.Equal("Health & Medical", diagnosesField!.Domain);
-        Assert.Contains("Epilepsy", diagnosesField.PicklistOptionsRaw);
-
-        Assert.NotNull(hidpaField);
-        Assert.Equal("Health & Medical", hidpaField!.Domain);
-    }
 }

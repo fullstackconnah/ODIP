@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Odip.Domain.Dictionary;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
@@ -2289,68 +2288,6 @@ public static class DbSeeder
 
         context.RestrictivePractices.AddRange(practices);
         await context.SaveChangesAsync(ct);
-    }
-
-    /// <summary>
-    /// Seeds the ODIP Master Data Dictionary (field registry) for every tenant that
-    /// doesn't already have one. Runs on every startup — idempotent per tenant via a
-    /// single existence check (not per-field), so a restart never duplicates the
-    /// ~280 field definitions and re-checking N tenants stays cheap.
-    /// </summary>
-    public static async Task SeedDataDictionaryAsync(OdipDbContext context, CancellationToken ct = default)
-    {
-        var tenantIds = await context.Tenants.Select(t => t.Id).ToListAsync(ct);
-        if (tenantIds.Count == 0)
-            return;
-
-        string? seedJson = null;
-        var anyAdded = false;
-
-        foreach (var tenantId in tenantIds)
-        {
-            // Single existence check per tenant — never a per-row (per-field) check.
-            var alreadySeeded = await context.FieldDefinitions
-                .IgnoreQueryFilters()
-                .AnyAsync(f => f.TenantId == tenantId, ct);
-            if (alreadySeeded)
-                continue;
-
-            seedJson ??= File.ReadAllText(ResolveDataDictionarySeedPath());
-            var definitions = DataDictionarySeeder.LoadFromJson(seedJson, tenantId);
-            context.FieldDefinitions.AddRange(definitions);
-            anyAdded = true;
-        }
-
-        if (anyAdded)
-            await context.SaveChangesAsync(ct);
-    }
-
-    /// <summary>
-    /// Resolves DataDictionarySeed.json against the running process's base directory
-    /// first (the path it lands at once Odip.Domain's CopyToOutputDirectory content
-    /// item flows through the Domain → Infrastructure → Api project-reference chain,
-    /// which is how it resolves in both a dev bin folder and a published container
-    /// image). Falls back to walking up from the base directory to find it under
-    /// Odip.Domain/SeedData for dev-only scenarios where that copy hasn't happened
-    /// (mirrors Odip.ProtoTests/Program.cs and BillingPrototypeTests's resolution).
-    /// </summary>
-    private static string ResolveDataDictionarySeedPath()
-    {
-        var primary = Path.Combine(AppContext.BaseDirectory, "SeedData", "DataDictionarySeed.json");
-        if (File.Exists(primary))
-            return primary;
-
-        var dir = AppContext.BaseDirectory;
-        for (var i = 0; i < 8; i++)
-        {
-            var candidate = Path.Combine(dir, "Odip.Domain", "SeedData", "DataDictionarySeed.json");
-            if (File.Exists(candidate))
-                return candidate;
-            dir = Path.GetFullPath(Path.Combine(dir, ".."));
-        }
-
-        throw new FileNotFoundException(
-            "Could not locate DataDictionarySeed.json via the publish-layout path or the dev source-tree fallback.");
     }
 
     /// <summary>

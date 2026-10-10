@@ -34,7 +34,7 @@ public class ParticipantRoutinesControllerTests
         return new OdipDbContext(options, tenant.Object);
     }
 
-    /// <summary>Tenant-scoped (non-SuperAdmin) context — mirrors StaffControllerTests/FieldRegistryControllerTests.</summary>
+    /// <summary>Tenant-scoped (non-SuperAdmin) context — mirrors StaffControllerTests.</summary>
     private static OdipDbContext CreateTenantScopedDb(string dbName, Guid tenantId)
     {
         var tenant = new Mock<ICurrentTenant>();
