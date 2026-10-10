@@ -824,6 +824,7 @@ public class ParticipantsController : ControllerBase
 
         // ── Write ──
         var identityBefore = IntakeIdentity(p);
+        var previousSupportRatio = p.SupportRatio;
         ApplyIntakeScope(p, dto);
         p.UpdatedAt = DateTime.UtcNow;
 
@@ -857,6 +858,7 @@ public class ParticipantsController : ControllerBase
 
         // PD-5: the safety-critical auto-notes read behavioursOfConcern, the risks summary and the risk entries, all in this scope.
         await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
+        if (p.SupportRatio != previousSupportRatio) await TripStaffing.RecalculateForParticipantAsync(_db, p.Id, ct);
 
         if (dto.CompleteIntake)
         {

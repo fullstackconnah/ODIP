@@ -79,10 +79,26 @@ public class TripStaffRatioChangeTests
         Assert.Equal(2m, await Calculated(db, trip.Id));
     }
 
+    [Fact]
+    public async Task SaveIntake_ARatioChange_RecalculatesAnUpcomingTrip()
+    {
+        using var db = TestDb.Create(Guid.NewGuid().ToString());
+        var p = Seed(db, TripStatus.Confirmed, null, out var trip);
+
+        var result = await Controller(db).SaveIntake(p.Id, new CreateParticipantDto
+        {
+            FirstName = "Sophie", LastName = "Brown", PlanType = PlanType.SelfManaged,
+            OvernightSupport = OvernightSupportType.None, OvernightRatio = SupportRatio.OneToOne, SupportRatio = SupportRatio.TwoToOne,
+        }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(2m, await Calculated(db, trip.Id));
+    }
+
     [Theory]
     [InlineData(TripStatus.Completed)]
     [InlineData(TripStatus.Cancelled)]
-    public async Task Patch_ARatioChange_LeavesACompletedOrCancelledTripAlone(TripStatus status)
+    public async Task Patch_ARatioChange_LeavesAFinishedTripAlone(TripStatus status)
     {
         using var db = TestDb.Create(Guid.NewGuid().ToString());
         var p = Seed(db, status, null, out var trip);
