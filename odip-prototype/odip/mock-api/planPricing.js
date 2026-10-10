@@ -205,7 +205,8 @@ function quote(request, settings) {
       }
       occurrences += 1
       const crossing = parts.length > 1
-      const sleeper = block.workerMaySleep && durationOf(block) >= 480 && block.supportType !== 'CommunityAccess' && block.supportType !== 'GroupActivity'
+      // The engine's rule (OccurrencePricer.PlanSleepover): the window starts before midnight, ends after it, and is 8 hours or more; any other window the worker may sleep in is priced hourly.
+      const sleeper = block.workerMaySleep && minutesOf(block.start) + durationOf(block) > 1440 && durationOf(block) >= 480 && block.supportType !== 'CommunityAccess' && block.supportType !== 'GroupActivity'
       const occurrenceLines = []
       if (iso < CATALOGUE_FROM || iso > CATALOGUE_TO) {
         addIssue(block.id, 'CatalogueNotFound', `No catalogue row for ${FAMILY_WORDS[block.supportType] || block.supportType} is valid for part of the period. Import the catalogue for that period.`, iso)
