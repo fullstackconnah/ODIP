@@ -215,8 +215,8 @@ function useParticipantsScreen() {
       ),
     },
     { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
-    { key: 'planType', header: 'Plan Type', priority: 'lowest', maxWidth: '10rem' },
-    { key: 'region', header: 'Region', sortable: true, priority: 'medium', maxWidth: '11rem' },
+    { key: 'planType', header: 'Plan Type', maxWidth: '10rem' },
+    { key: 'region', header: 'Region', sortable: true, maxWidth: '11rem' },
     {
       key: 'serviceStreams',
       header: 'Streams',
@@ -241,8 +241,8 @@ function useParticipantsScreen() {
       align: 'center',
     },
     { key: 'isHighSupport', header: 'High', type: 'boolean', align: 'center' },
-    { key: 'supportRatio', header: 'Support Ratio', priority: 'low', maxWidth: '10rem' },
-    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center', priority: 'low' },
+    { key: 'supportRatio', header: 'Support Ratio', maxWidth: '10rem' },
+    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center' },
     {
       key: 'status',
       header: 'Status',

@@ -11,13 +11,6 @@ import { plural } from '@/lib/format'
 
 export type ColumnType = 'text' | 'date' | 'currency' | 'boolean' | 'badge' | 'custom'
 
-/**
- * @deprecated Retired, and ignored: no column is ever removed at any width (the column rule, below). It used to drop a column below
- * xl / 2xl / 1792px, which deleted the Overnight and Manual flags, a task's Trip and Type, a reservation's Ref and Nights from the page
- * (L3-04). Kept only so a call site written before the rule still compiles; delete it from a column when you next touch the file.
- */
-export type ColumnPriority = 'high' | 'medium' | 'low' | 'lowest'
-
 /** Which edge of the scroll box a pinned column holds to (see `pin`). */
 export type ColumnPin = 'start' | 'end'
 
@@ -42,8 +35,6 @@ type ColumnBase<T> = {
    * itself, see `CellText`.
    */
   maxWidth?: number | string
-  /** @deprecated Ignored, see `ColumnPriority`. Every column stays on the page at every width. */
-  priority?: ColumnPriority
   /**
    * The column rule (L3-04): no column is removed at md+; a table wider than its box scrolls sideways inside the box, and two columns stay
    * on screen while it does, so a row is never anonymous and its actions are never out of reach. By default the FIRST column (the one that
@@ -125,11 +116,6 @@ export type DataTableProps<T> = {
   selectable?: boolean
   selectedRows?: Set<string>
   onSelectionChange?: (ids: Set<string>) => void
-  /** Adds a vertical border between every column (header + body cells), for tables dense enough
-   * that scanning across a row benefits from a rule to track against. When omitted, falls back
-   * to the user's `tableVerticalDividers` preference (GEN-2, see `useUiPreferences`) — pass an
-   * explicit `true`/`false` here to override that preference for this table specifically. */
-  verticalDividers?: boolean
   /**
    * Signals that `data` is one server-paged slice of `totalCount`, not the full result set.
    * Its presence is the sole switch: when provided, `DataTable` renders "Showing X-Y of Z" +
@@ -291,11 +277,9 @@ export function DataTable<T>({
   selectable = false,
   selectedRows,
   onSelectionChange,
-  verticalDividers,
   pagination,
 }: DataTableProps<T>) {
   const { prefs } = useUiPreferences()
-  const showVerticalDividers = verticalDividers ?? prefs.tableVerticalDividers
   const [internalSort, setInternalSort] = useState<SortState | null>(defaultSort ?? null)
   const isControlled = controlledSort !== undefined
   const activeSort = isControlled ? controlledSort ?? null : internalSort
@@ -417,7 +401,7 @@ export function DataTable<T>({
     col.minWidth != null ? ({ '--col-min': cssLength(col.minWidth) } as CSSProperties) : undefined
   const bodyRowHeight = compact ? 'md:h-[calc(var(--row-h)-4px)]' : 'md:h-[var(--row-h)]'
   const headerRowHeight = 'h-[var(--table-head-h)]'
-  const dividerClass = showVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
+  const dividerClass = prefs.tableVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
 
   return (
     <div ref={scrollRef} className={className ?? 'relative bg-[var(--color-card)] rounded-md border border-[var(--color-border)] overflow-x-auto'}>
