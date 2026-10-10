@@ -23,61 +23,6 @@ namespace Odip.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Odip.Domain.Billing.FundingSource", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal?>("Budget")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("BudgetCategory")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("NdisPlanNumber")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<Guid>("ParticipantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("PayerEmail")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("PayerName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateOnly?>("PlanEndDate")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly?>("PlanStartDate")
-                        .HasColumnType("date");
-
-                    b.Property<int>("RouteType")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("ParticipantId");
-
-                    b.HasIndex("TenantId");
-
-                    b.ToTable("FundingSources");
-                });
-
             modelBuilder.Entity("Odip.Domain.Entities.AccommodationProperty", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5362,17 +5307,6 @@ namespace Odip.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("StaffParticipantCompatibilities");
-                });
-
-            modelBuilder.Entity("Odip.Domain.Billing.FundingSource", b =>
-                {
-                    b.HasOne("Odip.Domain.Entities.Participant", "Participant")
-                        .WithMany()
-                        .HasForeignKey("ParticipantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Participant");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.AccommodationProperty", b =>

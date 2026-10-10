@@ -7,11 +7,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Odip.Infrastructure.Migrations
 {
     /// <summary>
-    /// Drops the tables of the retired billing pipeline (BillableEvents, ClaimBatches, ServiceBookings, ServiceBookingLines) and of the
-    /// retired field registry (FieldDefinitions, FieldValues, FormTemplates). Live row counts when this was written (2026-10-10):
-    /// BillableEvents 0, ClaimBatches 0, ServiceBookings 0, FieldValues 0, FormTemplates 0, and 861 FieldDefinitions that were only the
-    /// data-dictionary seed rows, so no user data is lost. FundingSources stays (the plan editor's billing hint reads it). Down() recreates
-    /// the empty tables.
+    /// Drops the tables of the retired billing pipeline (FundingSources, BillableEvents, ClaimBatches, ServiceBookings, ServiceBookingLines) and of
+    /// the retired field registry (FieldDefinitions, FieldValues, FormTemplates). Live row counts when this was written (2026-10-10): FundingSources 0,
+    /// BillableEvents 0, ClaimBatches 0, ServiceBookings 0, FieldValues 0, FormTemplates 0, and 861 FieldDefinitions that were only the data-dictionary
+    /// seed rows, so no user data is lost. Down() recreates the empty tables.
     /// </summary>
     /// <inheritdoc />
     public partial class DropRetiredBillingAndFieldRegistryTables : Migration
@@ -39,6 +38,9 @@ namespace Odip.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "ServiceBookings");
+
+            migrationBuilder.DropTable(
+                name: "FundingSources");
         }
 
         /// <inheritdoc />
@@ -97,24 +99,29 @@ namespace Odip.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "ServiceBookings",
+                name: "FundingSources",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    FundingSourceId = table.Column<Guid>(type: "uuid", nullable: false),
-                    ClaimWindowDays = table.Column<int>(type: "integer", nullable: false),
-                    EndDate = table.Column<DateOnly>(type: "date", nullable: false),
-                    ProdaBookingReference = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
-                    StartDate = table.Column<DateOnly>(type: "date", nullable: false),
+                    ParticipantId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Budget = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: true),
+                    BudgetCategory = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    NdisPlanNumber = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
+                    PayerEmail = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    PayerName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    PlanEndDate = table.Column<DateOnly>(type: "date", nullable: true),
+                    PlanStartDate = table.Column<DateOnly>(type: "date", nullable: true),
+                    RouteType = table.Column<int>(type: "integer", nullable: false),
                     TenantId = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_ServiceBookings", x => x.Id);
+                    table.PrimaryKey("PK_FundingSources", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_ServiceBookings_FundingSources_FundingSourceId",
-                        column: x => x.FundingSourceId,
-                        principalTable: "FundingSources",
+                        name: "FK_FundingSources_Participants_ParticipantId",
+                        column: x => x.ParticipantId,
+                        principalTable: "Participants",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                 });
@@ -146,6 +153,29 @@ namespace Odip.Infrastructure.Migrations
                         principalTable: "Participants",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ServiceBookings",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    FundingSourceId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ClaimWindowDays = table.Column<int>(type: "integer", nullable: false),
+                    EndDate = table.Column<DateOnly>(type: "date", nullable: false),
+                    ProdaBookingReference = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    StartDate = table.Column<DateOnly>(type: "date", nullable: false),
+                    TenantId = table.Column<Guid>(type: "uuid", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ServiceBookings", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ServiceBookings_FundingSources_FundingSourceId",
+                        column: x => x.FundingSourceId,
+                        principalTable: "FundingSources",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -333,6 +363,21 @@ namespace Odip.Infrastructure.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_FormTemplates_TenantId",
                 table: "FormTemplates",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FundingSources_IsActive",
+                table: "FundingSources",
+                column: "IsActive");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FundingSources_ParticipantId",
+                table: "FundingSources",
+                column: "ParticipantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FundingSources_TenantId",
+                table: "FundingSources",
                 column: "TenantId");
 
             migrationBuilder.CreateIndex(
