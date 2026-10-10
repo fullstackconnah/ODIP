@@ -8,6 +8,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
@@ -25,6 +26,9 @@ public class ClaimsController : ControllerBase
     private readonly BudgetLedgerService _ledger;
     private readonly ICurrentTenant _tenant;
     private readonly TimeProvider _clock;
+
+    /// <summary>A claim generation waited for another one for the same trip or participant (see the generators' advisory lock) and gave up.</summary>
+    private const string ClaimBusy = "Another claim is still being generated for this trip or participant. Wait a moment, then try again.";
 
     public ClaimsController(OdipDbContext db, ClaimGenerationService generator,
         ShiftClaimGenerationService shiftGenerator, BprCsvService bprService, InvoiceService invoiceService,
@@ -83,6 +87,10 @@ public class ClaimsController : ControllerBase
                 Status = claim.Status, ClaimReference = claim.ClaimReference,
                 TotalAmount = claim.TotalAmount, CreatedAt = claim.CreatedAt, SubmittedDate = claim.SubmittedDate
             }));
+        }
+        catch (RosterBusyException)   // before InvalidOperationException, which it is
+        {
+            return Conflict(ApiResponse<TripClaimListDto>.Fail(ClaimBusy));
         }
         catch (InvalidOperationException ex)
         {
@@ -186,6 +194,10 @@ public class ClaimsController : ControllerBase
                 LeftOut = generated.LeftOut.ToList(),
                 Flagged = generated.Flagged.ToList(),
             }));
+        }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<ShiftClaimGeneratedDto>.Fail(ClaimBusy));
         }
         catch (InvalidOperationException ex)
         {

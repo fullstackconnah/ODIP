@@ -73,7 +73,12 @@ public class TripsController : ControllerBase
         var query = _db.TripInstances.Include(t => t.LeadCoordinator).Include(t => t.Bookings).AsQueryable();
         if (status.HasValue) query = query.Where(t => t.Status == status.Value);
         if (!string.IsNullOrWhiteSpace(region)) query = query.Where(t => t.Region == region);
-        if (!string.IsNullOrWhiteSpace(search)) query = query.Where(t => t.TripName.Contains(search) || (t.Destination != null && t.Destination.Contains(search)));
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            // Lower-cased both sides: Contains alone is a case-sensitive LIKE on Npgsql (as ParticipantQueries.SearchByName).
+            var term = search.Trim().ToLower();
+            query = query.Where(t => t.TripName.ToLower().Contains(term) || (t.Destination != null && t.Destination.ToLower().Contains(term)));
+        }
         if (startFrom.HasValue) query = query.Where(t => t.StartDate >= startFrom.Value);
         if (startTo.HasValue) query = query.Where(t => t.StartDate <= startTo.Value);
 
