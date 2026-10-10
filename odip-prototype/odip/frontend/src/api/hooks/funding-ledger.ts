@@ -28,7 +28,7 @@ export function cachedLedgerParticipants(queryClient: QueryClient): string[] {
 }
 
 /**
- * Refresh participants' ledgers, and their "show more" row pages, which hang off the same key. Given the participants a write names it is narrowed to them; given none (a write that does not
+ * Refresh participants' ledgers. Given the participants a write names it is narrowed to them; given none (a write that does not
  * say whose money it moves, or one that moves everybody's) it falls back to whichever ledgers this client actually holds, so the refresh reaches the open ledgers and nothing else. It is
  * narrower than the whole ['participant-funding'] namespace on purpose: that prefix also holds the plan record, which none of these writes touch.
  */

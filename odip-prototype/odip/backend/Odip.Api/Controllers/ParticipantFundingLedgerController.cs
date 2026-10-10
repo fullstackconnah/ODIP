@@ -60,18 +60,4 @@ public class ParticipantFundingLedgerController : ControllerBase
 
         return Ok(ApiResponse<ParticipantLedgerDto>.Ok(ledger));
     }
-
-    /// <summary>One more page of the rows of one period of one pool, for "show more" once the first <see cref="BudgetLedgerService.RowsPerPeriod"/> are on screen.</summary>
-    [EnableRateLimiting("api")]
-    [HttpGet("ledger/rows")]
-    public async Task<ActionResult<ApiResponse<LedgerRowsPageDto>>> Rows(
-        Guid participantId, [FromQuery] Guid poolId, [FromQuery] Guid periodId, CancellationToken ct, [FromQuery] int skip = 0, [FromQuery] int take = BudgetLedgerService.RowsPerPeriod)
-    {
-        if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<LedgerRowsPageDto>.Fail(ParticipantFundingController.ChooseOrganisation));
-
-        var page = await _ledger.GetRowsAsync(tenantId, participantId, poolId, periodId, skip, take, ct);
-        return page is null
-            ? NotFound(ApiResponse<LedgerRowsPageDto>.Fail("That period was not found in the participant's current plan."))
-            : Ok(ApiResponse<LedgerRowsPageDto>.Ok(page));
-    }
 }

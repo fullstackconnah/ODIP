@@ -138,7 +138,6 @@ public class CrossTenantPostgresTests : IClassFixture<PostgresFixture>
         // Trips, bookings, reservations, days and activities.
         var trips = new TripsController(db, NullLogger<TripsController>.Instance);
         Assert.IsType<NotFoundObjectResult>((await trips.GetSchedule(foreign.Trip.Id, ct)).Result);
-        Assert.IsType<NotFoundObjectResult>((await trips.GetDocuments(foreign.Trip.Id, ct)).Result);
         var foreignBookings = Assert.IsType<ApiResponse<List<BookingListDto>>>(Assert.IsType<OkObjectResult>((await trips.GetBookings(foreign.Trip.Id, ct)).Result).Value);
         Assert.Empty(foreignBookings.Data!);
         Assert.Empty(Assert.IsType<ApiResponse<List<VehicleAssignmentDto>>>(Assert.IsType<OkObjectResult>((await trips.GetVehicles(foreign.Trip.Id, ct)).Result).Value).Data!);

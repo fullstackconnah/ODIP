@@ -228,15 +228,4 @@ function ledgerFor(plansOf, participantId, today, approachingPercent) {
   return { ...computeLedger(plan, today, approachingPercent, demoItems[plan.id] || [], demoRejections[plan.id] || []), ...next }
 }
 
-/** One more page of one period's rows, for "show more" once the first 200 are on screen. */
-function rowsPage(ledger, poolId, periodId, skip, take) {
-  const pool = ledger.pools.find((p) => p.id === poolId)
-  if (!pool) return null
-  const period = pool.periods.find((p) => p.id === periodId)
-  if (!period) return null
-  const from = Math.max(0, skip || 0)
-  const count = Math.min(Math.max(1, take || 200), 500)
-  return { total: period.rowCount, skip: from, rows: period.rows.slice(from, from + count) }
-}
-
-module.exports = { ledgerFor, rowsPage, computeLedger, statusOf, figures, currentPlanOf, poolFor }
+module.exports = { ledgerFor, computeLedger, statusOf, figures, currentPlanOf, poolFor }

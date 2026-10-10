@@ -757,7 +757,6 @@ public class BudgetLedgerServiceTests
         Assert.Equal(new[] { mine.Id }, asked.Keys);                        // theirs is not in the answer
         Assert.Equal(480m, Q2Of(asked[mine.Id].Ledger!).Used);              // and none of their 9,999 is in mine
         Assert.Null(await a.Ledger.GetLedgerAsync(TenantA, theirs.Id, Ct));
-        Assert.Null(await a.Ledger.GetRowsAsync(TenantA, theirs.Id, Guid.NewGuid(), Guid.NewGuid(), 0, 10, Ct));
         var theirClaim = b.Db.TripClaims.Single();
         Assert.Null(await a.Ledger.ForClaimAsync(TenantA, theirClaim.Id, Ct));   // reached by its id alone, the claim shows no budget of another organisation
         var theirs2 = await b.Ledger.ComputeAsync(TenantB, new[] { theirs.Id, mine.Id }, Ct);
@@ -838,21 +837,16 @@ public class BudgetLedgerServiceTests
     }
 
     [Fact]
-    public async Task APeriodHandsOutItsFirstTwoHundredRows_AndTheRestOnRequest_InTheSameOrder()
+    public async Task APeriodHandsOutItsFirstTwoHundredRows_AndCountsTheRest()
     {
         var (kit, person, _) = Arrange(CoreQuarters(each: 999999m));
         for (var i = 0; i < 205; i++) kit.SeedShift(person, new DateOnly(2026, 10, 1).AddDays(i % 80), ShiftStatus.Completed);
 
         var dto = (await kit.Ledger.GetLedgerAsync(kit.TenantId, person.Id, Ct))!;
         var q2 = dto.Pools[0].Periods[1];
-        var page = (await kit.Ledger.GetRowsAsync(kit.TenantId, person.Id, dto.Pools[0].Id, q2.Id, 200, 200, Ct))!;
 
         Assert.Equal(205, q2.RowCount);
         Assert.Equal(200, q2.Rows.Count);
-        Assert.Equal(205, page.Total);
-        Assert.Equal(5, page.Rows.Count);
-        Assert.True(q2.Rows.Last().Date <= page.Rows.First().Date);      // dated order runs on across the page break
-        Assert.Null(await kit.Ledger.GetRowsAsync(kit.TenantId, person.Id, dto.Pools[0].Id, Guid.NewGuid(), 0, 10, Ct));
     }
 
     // ── What a claim does to a budget ───────────────────────────────────────
