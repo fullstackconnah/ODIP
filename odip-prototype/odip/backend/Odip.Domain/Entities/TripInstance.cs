@@ -32,8 +32,8 @@ public class TripInstance : ITenantEntity
     public int? RequiredBedrooms { get; set; }
     public int? MinStaffRequired { get; set; }
     public decimal CalculatedStaffRequired { get; set; }
-    /// <summary>Whole staff the trip needs: the bookings' worked figure rounded up, else the trip's own minimum while no booking has set one (null if neither). The one rule for the trip detail and the schedule screen.</summary>
-    public int? StaffRequired => CalculatedStaffRequired > 0 ? (int)Math.Ceiling(CalculatedStaffRequired) : MinStaffRequired;
+    /// <summary>Whole staff the trip needs: the bookings' worked figure rounded up, or the trip's own minimum if that is higher (the minimum is a floor, set only when the trip is created or edited); null if there is neither. The one rule for the trip detail and the schedule screen.</summary>
+    public int? StaffRequired => CalculatedStaffRequired > 0 ? Math.Max((int)Math.Ceiling(CalculatedStaffRequired), MinStaffRequired ?? 0) : MinStaffRequired;
     public string? Notes { get; set; }
     public Guid? DefaultActivityGroupId { get; set; }
     public SupportActivityGroup? DefaultActivityGroup { get; set; }

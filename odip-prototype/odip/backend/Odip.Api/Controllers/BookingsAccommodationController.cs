@@ -141,7 +141,6 @@ public class BookingsController : ControllerBase
         });
 
         trip.CalculatedStaffRequired = rawTotal;
-        trip.MinStaffRequired = (int)Math.Ceiling(rawTotal);
         trip.UpdatedAt = DateTime.UtcNow;
     }
 

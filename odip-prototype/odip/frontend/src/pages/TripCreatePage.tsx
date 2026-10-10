@@ -206,7 +206,7 @@ export default function TripCreatePage() {
             <FormField label="Required Bedrooms" hint="Total bedrooms needed, e.g. for privacy or support needs." className={span.short}>
               <input type="number" min={0} {...register('requiredBedrooms')} />
             </FormField>
-            <FormField label="Min Staff Required" hint="Minimum staff that must be assigned before the trip can proceed." className={span.short}>
+            <FormField label="Min Staff Required" hint="The trip needs at least this many staff, even if its bookings need fewer." className={span.short}>
               <input type="number" min={0} {...register('minStaffRequired')} />
             </FormField>
           </div>
