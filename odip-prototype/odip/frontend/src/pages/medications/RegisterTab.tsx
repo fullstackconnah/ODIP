@@ -66,11 +66,10 @@ export default function RegisterTab() {
   // stay, and the table scrolls in its box with the first column and the actions pinned (DataTable's column rule). The compliance flags
   // wrap in their own cell, so they never widen the table.
   const columns: Column<MedicationListDto>[] = useMemo(() => [
-    { key: 'participantName', header: 'Participant', sortable: true, className: 'font-medium', maxWidth: '9rem' },
+    { key: 'participantName', header: 'Participant', className: 'font-medium', maxWidth: '9rem' },
     {
       key: 'name',
       header: 'Medication',
-      sortable: true,
       render: m => (
         <CellText className="md:max-w-[12rem]" title={m.strength ? `${m.name} ${m.strength}` : m.name}>
           {m.name}
@@ -111,14 +110,13 @@ export default function RegisterTab() {
     {
       key: 'nextReviewDue',
       header: 'Next review',
-      sortable: true,
       render: m => (
         <span className={isReviewOverdue(m.nextReviewDue) ? 'text-[var(--color-destructive)] font-medium' : ''}>
           {formatDateAu(m.nextReviewDue)}
         </span>
       ),
     },
-    { key: 'status', header: 'Status', sortable: true, render: m => <StatusBadge status={m.status} /> },
+    { key: 'status', header: 'Status', render: m => <StatusBadge status={m.status} /> },
   ], [])
 
   return (
@@ -155,7 +153,6 @@ export default function RegisterTab() {
           data={medications}
           columns={columns}
           keyField="id"
-          sortable
           loading={isLoading}
           onRowClick={m => navigate(`/medications/${m.id}/edit`)}
           emptyMessage="No medications found"

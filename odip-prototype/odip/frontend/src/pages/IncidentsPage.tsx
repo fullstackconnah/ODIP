@@ -248,15 +248,13 @@ export default function IncidentsPage() {
     {
       key: 'title',
       header: 'Title',
-      sortable: true,
       className: 'font-medium',
       render: (i) => <CellText className="md:max-w-[15rem] 2xl:max-w-[18rem]">{i.title ?? '—'}</CellText>,
     },
-    { key: 'incidentType', header: 'Type', sortable: true, maxWidth: '9rem' },
+    { key: 'incidentType', header: 'Type', maxWidth: '9rem' },
     {
       key: 'tripName',
       header: 'Trip',
-      sortable: true,
       render: (i) => i.tripInstanceId && i.tripName ? (
         <Link
           to={`/trips/${i.tripInstanceId}`}
@@ -280,10 +278,10 @@ export default function IncidentsPage() {
         </Link>
       ) : (i.involvedParticipantName ?? '—'),
     },
-    { key: 'severity', header: 'Severity', sortable: true, render: (i) => <StatusBadge status={i.severity} /> },
-    { key: 'status', header: 'Status', sortable: true, render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
+    { key: 'severity', header: 'Severity', render: (i) => <StatusBadge status={i.severity} /> },
+    { key: 'status', header: 'Status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
     { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem' },
-    { key: 'incidentDateTime', header: 'Date', type: 'date', sortable: true },
+    { key: 'incidentDateTime', header: 'Date', type: 'date' },
     {
       key: 'qscReportingStatus',
       header: 'QSC',
@@ -433,7 +431,6 @@ export default function IncidentsPage() {
           data={incidents}
           columns={incidentColumns}
           keyField="id"
-          sortable
           loading={isLoading}
           emptyMessage="No incidents found"
           pagination={{
