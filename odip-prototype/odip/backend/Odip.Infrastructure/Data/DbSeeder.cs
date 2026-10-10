@@ -738,6 +738,7 @@ public static class DbSeeder
         context.StaffAvailabilities.AddRange(staffAvailability);
 
         // ── Activities (25) ──────────────────────────────────────
+        var starter = StarterActivities.For(demoTenantId, keepSeedIds: true);   // the generic activities, shared with tenant set-up (see StarterActivities)
         var activities = new List<Activity>
         {
             new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, EventTemplateId = templates[0].Id, ActivityName = "Beach Morning — Surfers Paradise", Category = ActivityCategory.Leisure, Location = "Surfers Paradise Beach", AccessibilityNotes = "Beach wheelchair available", SuitabilityNotes = "All abilities" },
@@ -753,20 +754,20 @@ public static class DbSeeder
             new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000011"), TenantId = demoTenantId, EventTemplateId = templates[2].Id, ActivityName = "Melbourne Museum", Category = ActivityCategory.Cultural, Location = "Carlton", AccessibilityNotes = "Fully accessible. Sensory guides available." },
             new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000012"), TenantId = demoTenantId, EventTemplateId = templates[2].Id, ActivityName = "Lygon Street Lunch", Category = ActivityCategory.Dining, Location = "Carlton", AccessibilityNotes = "Most restaurants have step-free access" },
             new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000013"), TenantId = demoTenantId, EventTemplateId = templates[2].Id, ActivityName = "Queen Victoria Market", Category = ActivityCategory.Sightseeing, Location = "Melbourne CBD", AccessibilityNotes = "Outdoor areas accessible. Some indoor sheds have narrow aisles." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000014"), TenantId = demoTenantId, ActivityName = "Group Dinner Out", Category = ActivityCategory.Dining, Location = "Various", SuitabilityNotes = "Check dietary requirements and sensory environment" },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000015"), TenantId = demoTenantId, ActivityName = "Movie Night In", Category = ActivityCategory.Leisure, Location = "Accommodation", SuitabilityNotes = "All abilities. Good wind-down activity." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000016"), TenantId = demoTenantId, ActivityName = "Arrival & Settling In", Category = ActivityCategory.Transport, SuitabilityNotes = "Allow extra time for transitions" },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000017"), TenantId = demoTenantId, ActivityName = "Departure & Travel Home", Category = ActivityCategory.Transport },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000018"), TenantId = demoTenantId, ActivityName = "Free Time / Rest", Category = ActivityCategory.Leisure, SuitabilityNotes = "All abilities. Build into every day." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000019"), TenantId = demoTenantId, ActivityName = "Bowling", Category = ActivityCategory.Sport, AccessibilityNotes = "Most bowling alleys have ramps and lightweight balls", SuitabilityNotes = "All abilities with support" },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000020"), TenantId = demoTenantId, ActivityName = "Local Café Visit", Category = ActivityCategory.Dining, Location = "Various", AccessibilityNotes = "Check accessibility per venue" },
+            starter[0],
+            starter[1],
+            starter[2],
+            starter[3],
+            starter[4],
+            starter[5],
+            starter[6],
             // New activities for Cairns
             new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000021"), TenantId = demoTenantId, EventTemplateId = templates[3].Id, ActivityName = "Cairns Esplanade Lagoon", Category = ActivityCategory.Leisure, Location = "Cairns Esplanade", AccessibilityNotes = "Free public pool. Accessible entry ramps. Changing facilities accessible.", SuitabilityNotes = "All abilities. Lifeguards on duty." },
             new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000022"), TenantId = demoTenantId, EventTemplateId = templates[3].Id, ActivityName = "Great Barrier Reef Pontoon Tour", Category = ActivityCategory.Adventure, Location = "Outer Great Barrier Reef", AccessibilityNotes = "Accessible boarding ramp on pontoon. Semi-submersible suitable for non-swimmers. Call ahead for wheelchair boarding.", SuitabilityNotes = "Confirm medical suitability. Not suitable for participants with severe epilepsy unless cleared." },
             new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000023"), TenantId = demoTenantId, EventTemplateId = templates[3].Id, ActivityName = "Kuranda Scenic Railway & Village", Category = ActivityCategory.Sightseeing, Location = "Kuranda, QLD", AccessibilityNotes = "Train carriages accessible. Kuranda village mostly accessible.", SuitabilityNotes = "All abilities. Long journey — bring snacks." },
             new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000024"), TenantId = demoTenantId, EventTemplateId = templates[3].Id, ActivityName = "Cairns Night Markets", Category = ActivityCategory.Dining, Location = "Cairns CBD", AccessibilityNotes = "Accessible paths. Some vendor stalls may have narrow access.", SuitabilityNotes = "Evening sensory environment — assess individually." },
             // Generic
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000025"), TenantId = demoTenantId, ActivityName = "Sensory Art Session", Category = ActivityCategory.Cultural, Location = "Accommodation / Community Hall", AccessibilityNotes = "All abilities. Low sensory environment.", SuitabilityNotes = "Particularly good for participants with ABI or sensory sensitivities." },
+            starter[7],
         };
         context.Activities.AddRange(activities);
 
