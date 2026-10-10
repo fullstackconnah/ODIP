@@ -1,14 +1,33 @@
 {
-  "input": {
-    "planAmount": 1280.15,
-    "claimed": 1024.12,
-    "approachingPercent": 80,
-    "today": "2026-10-04"
-  },
-  "expected": {
-    "available": 1280.15,
-    "used": 1024.12,
-    "forecast": 1024.12,
-    "status": "Approaching"
-  }
+  "states": [
+    {
+      "input": {
+        "planAmount": 1280.15,
+        "claimed": 1024.12,
+        "approachingPercent": 80,
+        "today": "2026-10-04"
+      },
+      "expected": {
+        "available": 1280.15,
+        "used": 1024.12,
+        "forecast": 1024.12,
+        "status": "Approaching",
+        "rosterApproachingPercent": 80
+      }
+    },
+    {
+      "input": {
+        "planAmount": 1280.15,
+        "claimed": 1024.11,
+        "approachingPercent": 80,
+        "today": "2026-10-04"
+      },
+      "expected": {
+        "available": 1280.15,
+        "used": 1024.11,
+        "forecast": 1024.11,
+        "status": "OnTrack"
+      }
+    }
+  ]
 }

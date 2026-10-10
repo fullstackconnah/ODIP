@@ -30,12 +30,14 @@ const priced = (quote: Quote) => quote.lines
 
 describe.skipIf(!existsSync(MOCK_DIR))('the mock API\u2019s money is the engine\u2019s on a fixed input', () => {
   let planPricing: { quote: (request: unknown, settings: unknown) => Quote; defaultSettings: () => unknown }
+  let money: { approachingAt: (used: number, available: number, percent: number) => number | null }
   let ledger: { computeLedger: (plan: unknown, today: string, percent: number, items: unknown[]) => { pools: Array<{ periods: Array<Record<string, unknown>> }> } }
 
   beforeEach(() => {
     const require = createRequire(import.meta.url)
     planPricing = require(join(MOCK_DIR, 'planPricing.js'))
     ledger = require(join(MOCK_DIR, 'mock-ledger.js'))
+    money = require(join(MOCK_DIR, 'mock-money.js'))
   })
 
   it('prices the week with a sleepover, an eight-hour day, a high intensity block and a holiday as the engine does', () => {
@@ -47,8 +49,9 @@ describe.skipIf(!existsSync(MOCK_DIR))('the mock API\u2019s money is the engine\
     expect(mock.totals.amount).toBe(quote.totals.amount)
   })
 
-  it('calls a pool used to exactly 80% Approaching, as the engine does', () => {
-    const { input, expected } = fixture<{ input: { planAmount: number; claimed: number; approachingPercent: number; today: string }; expected: Record<string, unknown> }>('budget-ledger-mock-parity.json')
+  it.each([0, 1])('calls a pool at 80% Approaching and one cent under it On track, as the engine does (state %i)', (n) => {
+    const { states } = fixture<{ states: Array<{ input: { planAmount: number; claimed: number; approachingPercent: number; today: string }; expected: Record<string, unknown> & { rosterApproachingPercent?: number } }> }>('budget-ledger-mock-parity.json')
+    const { input, expected } = states[n]
     const plan = {
       id: 'plan', planStart: '2026-07-01', planEnd: '2027-06-30',
       pools: [{ id: 'core', name: 'Core (flexible)', kind: 'CoreFlexible', paceCategory: 0, managementType: 'PlanManaged', position: 0, periods: [{ id: 'q', periodStart: '2026-07-01', periodEnd: '2027-06-30', planAmount: input.planAmount }] }],
@@ -57,6 +60,9 @@ describe.skipIf(!existsSync(MOCK_DIR))('the mock API\u2019s money is the engine\
 
     const period = ledger.computeLedger(plan, input.today, input.approachingPercent, [item]).pools[0].periods[0]
 
-    expect({ available: period.available, used: period.used, forecast: period.forecast, status: period.status }).toEqual(expected)
+    const { rosterApproachingPercent, ...figures } = expected
+    expect({ available: period.available, used: period.used, forecast: period.forecast, status: period.status }).toEqual(figures)
+    // The roster check's Approaching finding (rosterBudget.js) says the same percentage, or nothing.
+    expect(money.approachingAt(period.used as number, period.available as number, input.approachingPercent)).toBe(rosterApproachingPercent ?? null)
   })
 })
