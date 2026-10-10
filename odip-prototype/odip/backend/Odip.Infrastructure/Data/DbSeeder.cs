@@ -251,11 +251,15 @@ public static class DbSeeder
             await context.SaveChangesAsync(ct);
         }
 
-        // The 25 seeded activities (06000000-...-0001 to -0025) follow their templates and trips; the library is per organisation, so they must not stay behind.
+        // The 25 seeded activities (06000000-...-0001 to -0025) follow their templates and trips; the library is per organisation, so they must not stay behind. Not one a trip of another
+        // organisation uses: the migration gave it to that organisation, and taking it back would leave that trip pointing at an activity its organisation cannot see.
         var demoActivityIds = Enumerable.Range(1, 25).Select(i => Guid.Parse($"06000000-0000-0000-0000-{i:D12}")).ToArray();
         var misplacedActivities = await context.Activities
             .IgnoreQueryFilters()
-            .Where(a => demoActivityIds.Contains(a.Id) && a.TenantId != demoTenantId)
+            .Where(a => demoActivityIds.Contains(a.Id) && a.TenantId != demoTenantId
+                && !context.ScheduledActivities.Any(s => s.ActivityId == a.Id
+                    && context.TripDays.Any(d => d.Id == s.TripDayId
+                        && context.TripInstances.Any(t => t.Id == d.TripInstanceId && t.TenantId != demoTenantId))))
             .ToListAsync(ct);
         if (misplacedActivities.Count > 0)
         {

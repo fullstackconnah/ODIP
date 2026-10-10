@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Moq;
+using Odip.Domain.Entities;
+using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Tests.Support;
 using Xunit;
@@ -48,5 +51,36 @@ public class DbSeederActivitiesTests
         var activities = await db.Activities.IgnoreQueryFilters().ToListAsync();
         Assert.Equal(25, activities.Count);
         Assert.All(activities, a => Assert.Equal(DemoTenantId, a.TenantId));
+    }
+
+    [Fact]
+    public async Task AnActivityAnotherOrganisationOwnsAndUses_IsNotTakenBackByTheFixUp()
+    {
+        var name = Guid.NewGuid().ToString();
+        var other = Guid.NewGuid();
+        var movieNight = Guid.Parse("06000000-0000-0000-0000-000000000015");
+        using (var first = TestDb.Create(name))
+        {
+            await DbSeeder.SeedAsync(first, CancellationToken.None);
+            // The migration gives a generic activity to the one organisation whose trips use it: here, an organisation other than Demo whose trip is the only user.
+            first.Tenants.Add(new Tenant { Id = other, Name = "Other", EmailDomain = "other.example.com", IsActive = true, CreatedAt = DateTime.UtcNow });
+            first.ScheduledActivities.RemoveRange(first.ScheduledActivities.Where(s => s.ActivityId == movieNight));
+            var trip = new TripInstance { Id = Guid.NewGuid(), TenantId = other, TripName = "Their trip", StartDate = new DateOnly(2026, 11, 1), DurationDays = 2 };
+            var day = new TripDay { Id = Guid.NewGuid(), TripInstanceId = trip.Id, DayNumber = 1, Date = trip.StartDate };
+            first.AddRange(trip, day, new ScheduledActivity { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = movieNight, Title = "Movie night" });
+            (await first.Activities.IgnoreQueryFilters().SingleAsync(a => a.Id == movieNight)).TenantId = other;
+            await first.SaveChangesAsync();
+        }
+
+        // Start-up seeds from a scope with no HTTP context: no tenant and not a SuperAdmin, so every tenant filter is on unless the query ignores it.
+        var startUp = new Mock<ICurrentTenant>();
+        startUp.Setup(t => t.TenantId).Returns((Guid?)null);
+        startUp.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(name).Options, startUp.Object);
+        await DbSeeder.SeedAsync(db, CancellationToken.None);
+
+        var activities = await db.Activities.IgnoreQueryFilters().AsNoTracking().ToListAsync();
+        Assert.Equal(other, activities.Single(a => a.Id == movieNight).TenantId);
+        Assert.All(activities.Where(a => a.Id != movieNight), a => Assert.Equal(DemoTenantId, a.TenantId));
     }
 }
