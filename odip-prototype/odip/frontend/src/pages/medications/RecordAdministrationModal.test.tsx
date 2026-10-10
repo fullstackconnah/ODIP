@@ -210,6 +210,72 @@ describe('RecordAdministrationModal witness picker', () => {
   })
 })
 
+// Amending: a dose witnessed by a staff member keeps that witness (the staff-witness approval
+// workflow is separate); the legacy typed name is only asked for when no staff witness is recorded.
+describe('RecordAdministrationModal amending a high-risk dose', () => {
+  const staffWitnessed = (overrides: Partial<AdministrationDto> = {}) =>
+    makeAdministration({ witnessName: 'Rachel Thompson', witnessStaffId: 'staff-1', witnessStatus: 'Pending', ...overrides })
+
+  it('shows the recorded staff witness instead of asking for a typed witness name', () => {
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={staffWitnessed()} />)
+
+    expect(screen.queryByRole('textbox', { name: /witness name/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Rachel Thompson')).toBeInTheDocument()
+  })
+
+  it('saves a Notes-only amendment of a staff-witnessed dose with no typed witness name', async () => {
+    const user = userEvent.setup()
+    mockAmendMutateAsync.mockResolvedValue({ success: true, data: {} })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={staffWitnessed({ witnessName: null })} />)
+
+    await user.type(screen.getByLabelText(/^notes/i), 'Typo fixed')
+    await user.click(screen.getByRole('button', { name: /save amendment/i }))
+
+    expect(screen.queryByText(/second worker must witness/i)).not.toBeInTheDocument()
+    expect(mockAmendMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'admin-1',
+      data: expect.objectContaining({ notes: 'Typo fixed', witnessName: '' }),
+    }))
+  })
+
+  it('sends the stored witness name back unchanged', async () => {
+    const user = userEvent.setup()
+    mockAmendMutateAsync.mockResolvedValue({ success: true, data: {} })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={staffWitnessed()} />)
+
+    await user.click(screen.getByRole('button', { name: /save amendment/i }))
+
+    expect(mockAmendMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ witnessName: 'Rachel Thompson' }),
+    }))
+  })
+
+  it('sends the typed witness name back when the amendment turns the dose into a refusal', async () => {
+    const user = userEvent.setup()
+    mockAmendMutateAsync.mockResolvedValue({ success: true, data: {} })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={makeAdministration({ witnessName: 'Old Typed Name' })} />)
+
+    await user.click(screen.getByRole('radio', { name: /^refused$/i }))
+    await user.type(screen.getByLabelText(/^reason/i), 'Participant declined')
+    await user.click(screen.getByRole('button', { name: /save amendment/i }))
+
+    expect(mockAmendMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'Refused', witnessName: 'Old Typed Name' }),
+    }))
+  })
+
+  it('still asks for the typed witness name when the dose has no staff witness', async () => {
+    const user = userEvent.setup()
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={makeAdministration({ witnessName: null })} />)
+
+    expect(screen.getByRole('textbox', { name: /witness name/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /save amendment/i }))
+
+    expect(screen.getByText(/second worker must witness/i)).toBeInTheDocument()
+    expect(mockAmendMutateAsync).not.toHaveBeenCalled()
+  })
+})
+
 describe('RecordAdministrationModal AnimatedField tab order', () => {
   // AnimatedField keeps a collapsed field's DOM around for the grid-template-rows collapse
   // animation, but marks its wrapper `inert` while collapsed so keyboard users can't Tab into a

@@ -213,9 +213,11 @@ public class MedicationsController : ControllerBase
         if (status.HasValue) query = query.Where(m => m.Status == status.Value);
         if (!string.IsNullOrWhiteSpace(search))
         {
-            query = query.Where(m => m.Name.Contains(search)
-                || (m.Participant!.FirstName + " " + m.Participant.LastName).Contains(search)
-                || (m.Participant!.PreferredName != null && m.Participant.PreferredName.Contains(search)));
+            // Lower-cased both sides: Contains alone is a case-sensitive LIKE on Npgsql (as ParticipantQueries.SearchByName).
+            var term = search.Trim().ToLower();
+            query = query.Where(m => m.Name.ToLower().Contains(term)
+                || (m.Participant!.FirstName + " " + m.Participant.LastName).ToLower().Contains(term)
+                || (m.Participant!.PreferredName != null && m.Participant.PreferredName.ToLower().Contains(term)));
         }
 
         // Correctness fix: (Participant.LastName, Name) ties trivially — two different
@@ -385,7 +387,8 @@ public class MedicationsController : ControllerBase
         // buildAmendFields) shouldn't wipe out how that original instant should be displayed.
         admin.AdministeredAtTimeZone = dto.AdministeredAtTimeZone ?? admin.AdministeredAtTimeZone;
         admin.DoseGiven = dto.DoseGiven;
-        admin.WitnessName = dto.WitnessName;
+        // WitnessName mirrors the staff witness's name; only the legacy free-text witness is editable here, and a request that sends none leaves it alone.
+        if (admin.WitnessUserId is null && !string.IsNullOrWhiteSpace(dto.WitnessName)) admin.WitnessName = dto.WitnessName;
         admin.Reason = dto.Reason;
         admin.PrnReason = dto.PrnReason;
         admin.PrnOutcome = dto.PrnOutcome;
