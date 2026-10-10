@@ -30,6 +30,15 @@ public class TripsController : ControllerBase
     }
 
     /// <summary>
+    /// Null is always fine, otherwise the id must resolve to an event template of the caller's organisation (EventTemplates is tenant-filtered). Not required to be active: editing an
+    /// old trip re-sends the id of a template that has since been deactivated.
+    /// </summary>
+    private Task<bool> IsValidEventTemplateRefAsync(Guid? templateId, CancellationToken ct) =>
+        templateId.HasValue
+            ? _db.EventTemplates.AnyAsync(e => e.Id == templateId.Value, ct)
+            : Task.FromResult(true);
+
+    /// <summary>
     /// §4.4 same-tenant validation for the lead-coordinator picker: null is always fine,
     /// otherwise the id must resolve to an active User — same-tenant scoping comes for free from
     /// _db.Users' ambient OdipDbContext query filter.
@@ -133,6 +142,8 @@ public class TripsController : ControllerBase
     {
         if (!await IsValidLeadCoordinatorRefAsync(dto.LeadCoordinatorId, ct))
             return BadRequest(ApiResponse<TripDetailDto>.Fail("Lead coordinator not found."));
+        if (!await IsValidEventTemplateRefAsync(dto.EventTemplateId, ct))
+            return BadRequest(ApiResponse<TripDetailDto>.Fail("Event template not found."));
 
         var trip = new TripInstance
         {
@@ -191,6 +202,8 @@ public class TripsController : ControllerBase
 
         if (!await IsValidLeadCoordinatorRefAsync(dto.LeadCoordinatorId, ct))
             return BadRequest(ApiResponse<TripDetailDto>.Fail("Lead coordinator not found."));
+        if (!await IsValidEventTemplateRefAsync(dto.EventTemplateId, ct))
+            return BadRequest(ApiResponse<TripDetailDto>.Fail("Event template not found."));
 
         t.TripName = dto.TripName; t.TripCode = dto.TripCode; t.EventTemplateId = dto.EventTemplateId;
         t.Destination = dto.Destination; t.Region = dto.Region; t.StartDate = dto.StartDate;
@@ -407,6 +420,9 @@ public class TripsController : ControllerBase
     [HttpGet("{id:guid}/schedule")]
     public async Task<ActionResult<ApiResponse<List<TripDayDto>>>> GetSchedule(Guid id, CancellationToken ct)
     {
+        // TripDay has no organisation column or query filter: a trip's days are the caller's only if the trip is.
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == id, ct)) return NotFound(ApiResponse<List<TripDayDto>>.Fail("Trip not found"));
+
         var days = await _db.TripDays.Include(d => d.ScheduledActivities).ThenInclude(sa => sa.Activity)
             .Where(d => d.TripInstanceId == id).OrderBy(d => d.DayNumber)
             .Select(d => new TripDayDto
@@ -434,6 +450,9 @@ public class TripsController : ControllerBase
     [HttpGet("{id:guid}/documents")]
     public async Task<ActionResult<ApiResponse<List<TripDocumentDto>>>> GetDocuments(Guid id, CancellationToken ct)
     {
+        // TripDocument has no organisation column or query filter: a trip's documents are the caller's only if the trip is.
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == id, ct)) return NotFound(ApiResponse<List<TripDocumentDto>>.Fail("Trip not found"));
+
         var items = await _db.TripDocuments.Where(d => d.TripInstanceId == id)
             .Select(d => new TripDocumentDto
             {

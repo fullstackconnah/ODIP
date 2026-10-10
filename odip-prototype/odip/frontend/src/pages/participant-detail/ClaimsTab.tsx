@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { FileText } from 'lucide-react'
 import { useParticipantClaims, usePreviewShiftClaim, useGenerateShiftClaim } from '@/api/hooks'
 import { Callout } from '@/components/Callout'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import { Card } from '@/components/Card'
 import { DataTable } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
@@ -50,7 +52,10 @@ const primaryButtonClass = `${buttonClass} bg-[var(--color-primary)] text-white 
 const secondaryButtonClass = `${buttonClass} border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]`
 
 export default function ClaimsTab({ participantId, canWrite }: { participantId: string; canWrite: boolean }) {
-  const { data: claims = [], isLoading } = useParticipantClaims(participantId)
+  const claimsQuery = useParticipantClaims(participantId)
+  const claims = claimsQuery.data ?? []
+  // A failed or paused request is not an empty list: "No claims yet" is only for one that succeeded and came back empty.
+  const phase = queryPhase(claimsQuery)
   const [showGenerateModal, setShowGenerateModal] = useState(false)
 
   return (
@@ -64,8 +69,10 @@ export default function ClaimsTab({ participantId, canWrite }: { participantId: 
         ) : undefined
       }
     >
-      {isLoading ? (
-        <p className="text-sm text-[var(--color-muted-foreground)]">Loading…</p>
+      {phase === 'loading' ? (
+        <PageState kind="loading" noun="claim list" />
+      ) : phase === 'error' ? (
+        <PageState kind="error" noun="claim list" onRetry={() => claimsQuery.refetch()} />
       ) : claims.length === 0 ? (
         <EmptyState
           icon={FileText}

@@ -37,6 +37,24 @@ public class TasksController : ControllerBase
             ? _db.Users.AnyAsync(u => u.Id == ownerId.Value && u.IsActive, ct)
             : Task.FromResult(true);
 
+    /// <summary>
+    /// The ids a new task links to must be the caller's: the trip is read through the tenant-filtered TripInstances, and the booking, reservation, vehicle assignment and staff assignment (which
+    /// have no query filter of their own) through their trip. Returns the message for the first one that is not, or null. Update never writes these links, so only Create needs it.
+    /// </summary>
+    private async Task<string?> LinkedRowErrorAsync(CreateTaskDto dto, CancellationToken ct)
+    {
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == dto.TripInstanceId, ct)) return "Trip not found.";
+        if (dto.ParticipantBookingId is { } bookingId
+            && !await _db.ParticipantBookings.AnyAsync(b => b.Id == bookingId && _db.TripInstances.Any(t => t.Id == b.TripInstanceId), ct)) return "Booking not found.";
+        if (dto.AccommodationReservationId is { } reservationId
+            && !await _db.AccommodationReservations.AnyAsync(r => r.Id == reservationId && _db.TripInstances.Any(t => t.Id == r.TripInstanceId), ct)) return "Reservation not found.";
+        if (dto.VehicleAssignmentId is { } vehicleAssignmentId
+            && !await _db.VehicleAssignments.AnyAsync(a => a.Id == vehicleAssignmentId && _db.TripInstances.Any(t => t.Id == a.TripInstanceId), ct)) return "Vehicle assignment not found.";
+        if (dto.StaffAssignmentId is { } staffAssignmentId
+            && !await _db.StaffAssignments.AnyAsync(a => a.Id == staffAssignmentId && _db.TripInstances.Any(t => t.Id == a.TripInstanceId), ct)) return "Staff assignment not found.";
+        return null;
+    }
+
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<TaskDto>>>> GetAll(
         [FromQuery] Guid? tripId, [FromQuery] TaskItemStatus? status,
@@ -113,6 +131,8 @@ public class TasksController : ControllerBase
 
         if (!await IsValidOwnerRefAsync(dto.OwnerId, ct))
             return BadRequest(ApiResponse<TaskDto>.Fail("Task owner not found."));
+        if (await LinkedRowErrorAsync(dto, ct) is { } linkedRowError)
+            return BadRequest(ApiResponse<TaskDto>.Fail(linkedRowError));
 
         var task = new BookingTask
         {
@@ -215,8 +235,9 @@ public class ActivitiesController : ControllerBase
         return Ok(ApiResponse<List<ActivityDto>>.Ok(items));
     }
 
+    // One library for every organisation (Activity has no organisation column), so writing it changes every organisation's activity picker: SuperAdmin only until it becomes per organisation.
     [HttpPost]
-    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ActivityDto>>> Create([FromBody] CreateActivityDto dto, CancellationToken ct)
     {
         var a = new Activity
@@ -231,7 +252,7 @@ public class ActivitiesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ActivityDto>>> Update(Guid id, [FromBody] UpdateActivityDto dto, CancellationToken ct)
     {
         var a = await _db.Activities.FirstOrDefaultAsync(x => x.Id == id, ct);
@@ -333,11 +354,15 @@ public class TripDayScheduleController : ControllerBase
     private readonly OdipDbContext _db;
     public TripDayScheduleController(OdipDbContext db) => _db = db;
 
+    /// <summary>TripDay and ScheduledActivity have no organisation column or query filter: an activity is the caller's only if its day's trip is (TripInstances is tenant-filtered).</summary>
+    private IQueryable<ScheduledActivity> TenantActivities() =>
+        _db.ScheduledActivities.Where(s => _db.TripDays.Any(d => d.Id == s.TripDayId && _db.TripInstances.Any(t => t.Id == d.TripInstanceId)));
+
     [HttpPut("trip-days/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<TripDayDto>>> UpdateTripDay(Guid id, [FromBody] UpdateTripDayDto dto, CancellationToken ct)
     {
-        var d = await _db.TripDays.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var d = await _db.TripDays.FirstOrDefaultAsync(x => x.Id == id && _db.TripInstances.Any(t => t.Id == x.TripInstanceId), ct);
         if (d == null) return NotFound(ApiResponse<TripDayDto>.Fail("Trip day not found"));
         d.DayTitle = dto.DayTitle; d.DayNotes = dto.DayNotes; d.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
@@ -348,6 +373,9 @@ public class TripDayScheduleController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ScheduledActivityDto>>> AddActivity(Guid id, [FromBody] CreateScheduledActivityDto dto, CancellationToken ct)
     {
+        if (!await _db.TripDays.AnyAsync(d => d.Id == id && _db.TripInstances.Any(t => t.Id == d.TripInstanceId), ct))
+            return NotFound(ApiResponse<ScheduledActivityDto>.Fail("Trip day not found"));
+
         var a = new ScheduledActivity
         {
             Id = Guid.NewGuid(), TripDayId = id, ActivityId = dto.ActivityId,
@@ -379,7 +407,7 @@ public class TripDayScheduleController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ScheduledActivityDto>>> UpdateActivity(Guid id, [FromBody] UpdateScheduledActivityDto dto, CancellationToken ct)
     {
-        var a = await _db.ScheduledActivities.Include(s => s.Activity).FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantActivities().Include(s => s.Activity).FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<ScheduledActivityDto>.Fail("Activity not found"));
 
         a.ActivityId = dto.ActivityId; a.Title = dto.Title; a.StartTime = dto.StartTime;
@@ -409,7 +437,7 @@ public class TripDayScheduleController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteActivity(Guid id, CancellationToken ct)
     {
-        var a = await _db.ScheduledActivities.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantActivities().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<bool>.Fail("Activity not found"));
         _db.ScheduledActivities.Remove(a);
         await _db.SaveChangesAsync(ct);
@@ -484,14 +512,16 @@ public class DashboardController : ControllerBase
             .Where(s => upcomingTripIds.Contains(s.TripInstanceId) && s.Status != AssignmentStatus.Cancelled)
             .Select(s => s.TripInstanceId).Distinct().ToListAsync(ct);
 
-        var conflictCount = await _db.AccommodationReservations.CountAsync(r => r.HasOverlapConflict, ct)
-            + await _db.VehicleAssignments.CountAsync(v => v.HasOverlapConflict, ct)
-            + await _db.StaffAssignments.CountAsync(s => s.HasConflict, ct);
+        // Reservations, assignments and incidents have no organisation column or query filter, so each count joins the caller's own trips (or users, for incidents): TripInstances and Users are tenant-filtered.
+        var conflictCount = await _db.AccommodationReservations.CountAsync(r => r.HasOverlapConflict && _db.TripInstances.Any(t => t.Id == r.TripInstanceId), ct)
+            + await _db.VehicleAssignments.CountAsync(v => v.HasOverlapConflict && _db.TripInstances.Any(t => t.Id == v.TripInstanceId), ct)
+            + await _db.StaffAssignments.CountAsync(s => s.HasConflict && _db.TripInstances.Any(t => t.Id == s.TripInstanceId), ct);
 
-        var openIncidentCount = await _db.IncidentReports.CountAsync(
+        var ownIncidents = _db.IncidentReports.Where(i => _db.Users.Any(u => u.Id == i.ReportedByUserId));
+        var openIncidentCount = await ownIncidents.CountAsync(
             i => i.IsActive && i.Status != IncidentStatus.Closed && i.Status != IncidentStatus.Resolved, ct);
 
-        var qscOverdueCount = await _db.IncidentReports.CountAsync(QscReporting.IsOverdueExpr(_clock.GetUtcNow().UtcDateTime), ct);
+        var qscOverdueCount = await ownIncidents.CountAsync(QscReporting.IsOverdueExpr(_clock.GetUtcNow().UtcDateTime), ct);
 
         return Ok(ApiResponse<DashboardSummaryDto>.Ok(new DashboardSummaryDto
         {

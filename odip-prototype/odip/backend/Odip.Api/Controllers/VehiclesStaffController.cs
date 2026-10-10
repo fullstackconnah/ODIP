@@ -138,6 +138,10 @@ public class VehicleAssignmentsController : ControllerBase
         _clock = clock ?? TimeProvider.System;
     }
 
+    /// <summary>VehicleAssignment has no organisation column or query filter: an assignment is the caller's only if its trip is (TripInstances is tenant-filtered).</summary>
+    private IQueryable<VehicleAssignment> TenantAssignments() =>
+        _db.VehicleAssignments.Where(a => _db.TripInstances.Any(t => t.Id == a.TripInstanceId));
+
     /// <summary>
     /// §4.4 same-tenant validation for the driver picker: null is always fine (no driver
     /// assigned yet), otherwise the id must resolve to an active User — same-tenant scoping comes
@@ -189,6 +193,9 @@ public class VehicleAssignmentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<List<RosterFindingDto>>>> Check([FromBody] CheckVehicleAssignmentDto dto, CancellationToken ct)
     {
+        if (!await _db.Vehicles.AnyAsync(v => v.Id == dto.VehicleId, ct))
+            return BadRequest(ApiResponse<List<RosterFindingDto>>.Fail("Vehicle not found."));
+
         var findings = await CheckAsync(dto.VehicleId, dto.TripInstanceId, dto.ExcludeAssignmentId ?? Guid.Empty, ct);
         return Ok(ApiResponse<List<RosterFindingDto>>.Ok(findings.Select(RosterGate.ToFindingDto).ToList()));
     }
@@ -200,6 +207,8 @@ public class VehicleAssignmentsController : ControllerBase
         var trip = await _db.TripInstances.FirstOrDefaultAsync(t => t.Id == dto.TripInstanceId, ct);
         if (trip == null) return NotFound(ApiResponse<VehicleAssignmentDto>.Fail("Trip not found"));
 
+        if (!await _db.Vehicles.AnyAsync(v => v.Id == dto.VehicleId, ct))
+            return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Vehicle not found."));
         if (!await IsValidDriverRefAsync(dto.DriverStaffId, ct))
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Driver not found."));
 
@@ -247,9 +256,11 @@ public class VehicleAssignmentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<VehicleAssignmentDto>>> Update(Guid id, [FromBody] UpdateVehicleAssignmentDto dto, CancellationToken ct)
     {
-        var a = await _db.VehicleAssignments.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantAssignments().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<VehicleAssignmentDto>.Fail("Assignment not found"));
 
+        if (!await _db.Vehicles.AnyAsync(v => v.Id == dto.VehicleId, ct))
+            return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Vehicle not found."));
         if (!await IsValidDriverRefAsync(dto.DriverStaffId, ct))
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Driver not found."));
 
@@ -298,7 +309,7 @@ public class VehicleAssignmentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
-        var a = await _db.VehicleAssignments.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantAssignments().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<bool>.Fail("Assignment not found"));
         a.Status = VehicleAssignmentStatus.Cancelled; a.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
@@ -866,6 +877,8 @@ public class StaffController : ControllerBase
     [HttpGet("{id:guid}/availability")]
     public async Task<ActionResult<ApiResponse<List<StaffAvailabilityDto>>>> GetAvailability(Guid id, CancellationToken ct)
     {
+        if (!await _db.Users.AnyAsync(u => u.Id == id, ct)) return NotFound(ApiResponse<List<StaffAvailabilityDto>>.Fail("Staff not found"));
+
         var items = await _db.StaffAvailabilities.Where(a => a.UserId == id)
             .OrderBy(a => a.StartDateTime)
             .Select(a => new StaffAvailabilityDto
@@ -880,6 +893,8 @@ public class StaffController : ControllerBase
     [HttpGet("{id:guid}/assignments")]
     public async Task<ActionResult<ApiResponse<List<StaffAssignmentDto>>>> GetAssignments(Guid id, CancellationToken ct)
     {
+        if (!await _db.Users.AnyAsync(u => u.Id == id, ct)) return NotFound(ApiResponse<List<StaffAssignmentDto>>.Fail("Staff not found"));
+
         var items = await _db.StaffAssignments.Include(a => a.TripInstance)
             .Where(a => a.UserId == id)
             .Select(a => new StaffAssignmentDto
@@ -929,6 +944,10 @@ public class StaffAvailabilityController : ControllerBase
 {
     private readonly OdipDbContext _db;
     public StaffAvailabilityController(OdipDbContext db) => _db = db;
+
+    /// <summary>StaffAvailability has no organisation column or query filter: a row is the caller's only if its user is (Users is tenant-filtered).</summary>
+    private IQueryable<StaffAvailability> TenantAvailabilities() =>
+        _db.StaffAvailabilities.Where(a => _db.Users.Any(u => u.Id == a.UserId));
 
     /// <summary>
     /// §4.4 same-tenant validation for the availability record's staff/user ref (required, not
@@ -992,7 +1011,7 @@ public class StaffAvailabilityController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffAvailabilityDto>>> Update(Guid id, [FromBody] UpdateStaffAvailabilityDto dto, CancellationToken ct)
     {
-        var a = await _db.StaffAvailabilities.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantAvailabilities().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<StaffAvailabilityDto>.Fail("Availability not found"));
 
         if (!await IsValidStaffRefAsync(dto.StaffId, ct))
@@ -1015,7 +1034,7 @@ public class StaffAvailabilityController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
-        var a = await _db.StaffAvailabilities.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantAvailabilities().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<bool>.Fail("Availability not found"));
         _db.StaffAvailabilities.Remove(a);
         await _db.SaveChangesAsync(ct);
@@ -1037,6 +1056,10 @@ public class StaffAssignmentsController : ControllerBase
         _db = db;
         _unavailabilityQuery = unavailabilityQuery;
     }
+
+    /// <summary>StaffAssignment has no organisation column or query filter: an assignment is the caller's only if its trip is (TripInstances is tenant-filtered).</summary>
+    private IQueryable<StaffAssignment> TenantAssignments() =>
+        _db.StaffAssignments.Where(a => _db.TripInstances.Any(t => t.Id == a.TripInstanceId));
 
     /// <summary>
     /// §4.4 same-tenant validation for the trip staffing assignment's staff/user ref (required,
@@ -1102,6 +1125,8 @@ public class StaffAssignmentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffAssignmentDto>>> Create([FromBody] CreateStaffAssignmentDto dto, CancellationToken ct)
     {
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == dto.TripInstanceId, ct))
+            return NotFound(ApiResponse<StaffAssignmentDto>.Fail("Trip not found"));
         if (!await IsValidStaffRefAsync(dto.StaffId, ct))
             return BadRequest(ApiResponse<StaffAssignmentDto>.Fail("Staff member not found."));
 
@@ -1142,7 +1167,7 @@ public class StaffAssignmentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffAssignmentDto>>> Update(Guid id, [FromBody] UpdateStaffAssignmentDto dto, CancellationToken ct)
     {
-        var a = await _db.StaffAssignments.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantAssignments().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<StaffAssignmentDto>.Fail("Assignment not found"));
 
         if (!await IsValidStaffRefAsync(dto.StaffId, ct))
@@ -1189,7 +1214,7 @@ public class StaffAssignmentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
-        var a = await _db.StaffAssignments.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantAssignments().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<bool>.Fail("Assignment not found"));
         a.Status = AssignmentStatus.Cancelled;
         a.UpdatedAt = DateTime.UtcNow;

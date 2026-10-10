@@ -10,6 +10,7 @@ export { default as ContactsTab } from './ContactsTab'
 export { default as SupportProfileTab } from './SupportProfileTab'
 export { default as ClaimsTab } from './ClaimsTab'
 export { default as RosteringTab } from './RosteringTab'
+export { default as BookingsTab } from './BookingsTab'
 export { default as FundingTab } from './FundingTab'
 export { SectionEditPanel } from './SectionEditPanel'
 

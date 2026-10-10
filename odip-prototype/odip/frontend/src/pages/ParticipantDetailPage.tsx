@@ -1,11 +1,9 @@
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
-  useParticipant, useParticipantBookings, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf,
+  useParticipant, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf,
   useGenerateCaregiverLink, useRevokeCaregiverLink, useCaregiverSubmissions,
 } from '@/api/hooks'
-import type { BookingListDto } from '@/api/types/bookings'
 import { PLAN_TYPE_LABELS, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
-import { DataTable } from '@/components/DataTable'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Tabs } from '@/components/Tabs'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -27,7 +25,7 @@ import { copyText } from '@/lib/clipboard'
 import {
   MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection,
   ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab, SupportProfileTab, ClaimsTab,
-  RosteringTab, FundingTab,
+  RosteringTab, FundingTab, BookingsTab,
   ParticipantIdentitySection, ParticipantAddressLivingSection, ParticipantNdisFundingSection, ParticipantKeyIdentifiersSection,
   ParticipantCulturalBackgroundSection, ParticipantMedicalSection, ParticipantBehaviourCommunicationSection,
   ParticipantCommunityAccessSection, ParticipantMealsDietSection, ParticipantAboutMeSection, ParticipantRisksHazardsSummarySection,
@@ -59,10 +57,6 @@ function getMdUp(): boolean {
 function useIsMdUp(): boolean {
   return useSyncExternalStore(subscribeMdUp, getMdUp, () => true)
 }
-
-/** A table-cell link is the row's tap target: no height change on a mouse (--tap-min is 0 there), a
- * 44px floor under a coarse pointer (fits the 48px coarse row). */
-const ROW_LINK = 'inline-flex min-h-[var(--tap-min)] items-center font-medium hover:text-[var(--color-primary)]'
 
 /**
  * A zero-row (or still-loading) DataTable's only body row is one `td[colspan]` message cell — a table
@@ -96,7 +90,6 @@ export default function ParticipantDetailPage() {
   )
   const [tab, setTab] = useTabParam(tabKeys, 'details')
   const { data: p, isLoading, isError, error, refetch } = useParticipant(id)
-  const { data: bookings = [] } = useParticipantBookings(id)
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
   // DOC-01 — Documents header buttons. Hooks called unconditionally, ahead of the isLoading/!p
   // early returns below, per the rules of hooks.
@@ -347,24 +340,7 @@ export default function ParticipantDetailPage() {
       )}
 
       {tab === 'bookings' && (
-        <DataTable
-          data={bookings}
-          keyField="id"
-          columns={[
-            {
-              key: 'tripName',
-              header: 'Trip',
-              render: (b: BookingListDto) => (
-                <Link to={`/trips/${b.tripInstanceId}`} className={ROW_LINK}>
-                  {b.tripName || 'Trip'}
-                </Link>
-              ),
-            },
-            { key: 'bookingStatus', header: 'Status', type: 'badge' },
-            { key: 'bookingDate', header: 'Date', type: 'date' },
-          ]}
-          emptyMessage="No bookings"
-        />
+        <BookingsTab participantId={id} />
       )}
 
       {tab === 'support' && (
