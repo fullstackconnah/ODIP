@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Search } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
 import { useAdminTenantsSummary } from '@/api/hooks/admin'
 import { DataTable } from '@/components/DataTable'
 import type { TenantSummaryDto } from '@/api/types'
@@ -62,7 +62,7 @@ export default function TenantsTab({
         </div>
 
         <Button onClick={onAddTenant}>
-          + Add Tenant
+          <Plus className="w-4 h-4" /> Add Tenant
         </Button>
       </div>
 

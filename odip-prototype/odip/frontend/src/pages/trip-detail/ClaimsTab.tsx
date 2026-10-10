@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useDeleteClaim, useUpdateClaim } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
@@ -103,7 +104,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
         <h2 className="font-semibold text-[var(--color-foreground)]">NDIS Claims</h2>
         {canWrite && (
           <Button onClick={() => setShowGenerateModal(true)}>
-            + Generate Claim
+            <Plus className="w-4 h-4" /> Generate Claim
           </Button>
         )}
       </div>
