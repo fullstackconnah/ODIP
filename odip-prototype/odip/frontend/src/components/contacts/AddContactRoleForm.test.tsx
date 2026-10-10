@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AddContactRoleForm from './AddContactRoleForm'
-import type { ParticipantContactRoleDto, PersonDto } from '@/api/types/contacts'
+import { CONTACT_ROLE_TYPE_LABELS, type ParticipantContactRoleDto, type PersonDto } from '@/api/types/contacts'
+import type { ContactRoleType } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 
 const {
@@ -240,6 +241,9 @@ describe('AddContactRoleForm', () => {
       expect(mockCreateMutateAsync).toHaveBeenCalledTimes(2)
       expect(onSaved).not.toHaveBeenCalled()
       const refusedRole = mockCreateMutateAsync.mock.calls[1][0].data.roleType
+      // The person is told what was saved, or they would add it again.
+      const savedRole = mockCreateMutateAsync.mock.calls[0][0].data.roleType as ContactRoleType
+      expect(screen.getByRole('alert')).toHaveTextContent(`${CONTACT_ROLE_TYPE_LABELS[savedRole]} saved.`)
 
       await user.click(screen.getByRole('button', { name: 'Save contact' }))
 

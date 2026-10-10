@@ -492,6 +492,7 @@ export default function AddContactRoleForm({ participantId, mode, role, onSaved,
     if (gateErrors.length > 0) return
     if (!participantId) return
     setFormError(null)
+    const saved: string[] = []
     try {
       if (mode === 'edit' && role) {
         const roleType = form.roleTypes[0] ?? role.roleType
@@ -504,6 +505,7 @@ export default function AddContactRoleForm({ participantId, mode, role, onSaved,
           const payload = buildCreatePayloadForRole(form, roleType, personId)
           const res = await createRole.mutateAsync({ participantId, data: payload })
           personId = personId ?? res?.data?.personId
+          saved.push(CONTACT_ROLE_TYPE_LABELS[roleType])
           // Saved: if a later role is refused, the retry must not post this role or make the person again.
           const savedPersonId = personId
           setForm(f => ({
@@ -517,7 +519,9 @@ export default function AddContactRoleForm({ participantId, mode, role, onSaved,
       }
       onSaved()
     } catch (err) {
-      setFormError(extractErrorMessage(err, 'Failed to save contact.'))
+      const message = extractErrorMessage(err, 'Failed to save contact.')
+      // Say what did go through, or the person will add it again.
+      setFormError(saved.length > 0 ? `${saved.join(', ')} saved. ${message}` : message)
     }
   }
 
