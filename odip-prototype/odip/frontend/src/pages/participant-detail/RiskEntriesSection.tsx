@@ -13,6 +13,7 @@ import { AT_RISK_PARTY_LABELS } from '@/api/types/risk-entries'
 import type { ParticipantRiskEntryDto } from '@/api/types/risk-entries'
 import type { AtRiskParty } from '@/api/types/enums'
 import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
 
 // One empty array for every render while there is no data, so the memos below do not see a new dependency each time.
 const NO_ENTRIES: ParticipantRiskEntryDto[] = []
@@ -176,13 +177,9 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
           <AlertTriangle className="w-4 h-4" /> Risks
         </h3>
         {canWriteRisks && participantId && (
-          <button
-            type="button"
-            onClick={openCreate}
-            className="flex items-center gap-1.5 min-h-[44px] px-3 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-          >
+          <Button onClick={openCreate}>
             <Plus className="w-4 h-4" /> Add risk
-          </button>
+          </Button>
         )}
       </div>
 
@@ -251,21 +248,12 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
         size="md"
         footer={
           <>
-            <button
-              type="button"
-              onClick={closeModal}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+            <Button variant="secondary" onClick={closeModal}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-            >
+            </Button>
+            <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? 'Saving...' : 'Save risk entry'}
-            </button>
+            </Button>
           </>
         }
       >

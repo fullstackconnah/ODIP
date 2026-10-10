@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { TripDayDto, ScheduledActivityDto } from '@/api/types/activities'
 import { statusClass } from '@/lib/tone'
+import { Button } from '@/components/Button'
 
 interface ActivitiesTabProps {
   tripId: string
@@ -51,10 +52,9 @@ export default function ActivitiesTab({ tripId, trip, schedule, canWrite, isRead
           ) : generateSchedule.isError ? (
             <div className="space-y-2">
               <p className="text-[var(--color-destructive)]">Failed to generate schedule. The server may need a database update.</p>
-              <button onClick={() => { hasTriedGenerate.current = false; generateSchedule.mutate(tripId) }}
-                className="px-3 py-1.5 text-sm bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90">
+              <Button onClick={() => { hasTriedGenerate.current = false; generateSchedule.mutate(tripId) }}>
                 Retry
-              </button>
+              </Button>
             </div>
           ) : (
             <p>No schedule available. Check that the trip has dates configured.</p>
@@ -73,10 +73,9 @@ export default function ActivitiesTab({ tripId, trip, schedule, canWrite, isRead
               </div>
             </div>
             {!isReadOnly && canWrite && (
-              <button onClick={() => { setAddActivityDayId(day.id); setShowAddActivity(true) }}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90">
+              <Button onClick={() => { setAddActivityDayId(day.id); setShowAddActivity(true) }}>
                 <Plus className="w-3.5 h-3.5" /> Add Activity
-              </button>
+              </Button>
             )}
           </div>
 

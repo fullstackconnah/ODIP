@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, AlertTriangle, ShieldCheck, CalendarOff } from 'lucide-react'
 import { useMyShifts, usePendingWitnessRequests } from '@/api/hooks'
+import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -127,13 +128,9 @@ export default function PortalShiftsPage() {
           <p className="max-w-sm text-sm text-[var(--color-muted-foreground)] opacity-80">
             Check your connection and try again.
           </p>
-          <button
-            type="button"
-            onClick={() => refetch()}
-            className="mt-2 inline-flex items-center justify-center h-11 px-4 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-colors"
-          >
+          <Button className="mt-2" onClick={() => refetch()}>
             Try again
-          </button>
+          </Button>
         </div>
       ) : shifts.length === 0 && tripAssignments.length === 0 ? (
         <EmptyState

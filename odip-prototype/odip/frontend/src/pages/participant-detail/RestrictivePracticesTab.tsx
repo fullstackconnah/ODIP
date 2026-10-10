@@ -21,6 +21,7 @@ import {
 import type { RestrictivePracticeDto, RestrictivePracticeType, BulkCreateRestrictivePracticeDto } from '@/api/types/restrictive-practices'
 import { plural } from '@/lib/format'
 import { isPastDue } from '@/lib/deadline'
+import { Button } from '@/components/Button'
 
 /** One row of the "Add entries" bulk table — client-side draft state before it becomes its own register entry. */
 type BulkRowState = {
@@ -511,13 +512,9 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         <h2 className="font-semibold text-[var(--color-foreground)]">Restrictive Practices Register</h2>
         {canWriteRestrictivePractices && participantId && (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={openBulk}
-              className="flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all shadow-md shadow-[var(--color-primary)]/20"
-            >
+            <Button onClick={openBulk}>
               <Plus className="w-4 h-4" /> Add entries
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -582,21 +579,12 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         size="md"
         footer={
           <>
-            <button
-              type="button"
-              onClick={closeModal}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+            <Button variant="secondary" onClick={closeModal}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-            >
+            </Button>
+            <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? 'Saving...' : 'Save entry'}
-            </button>
+            </Button>
           </>
         }
       >
@@ -687,20 +675,12 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         size="sm"
         footer={
           <>
-            <button
-              type="button"
-              onClick={closeBulk}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+            <Button variant="secondary" onClick={closeBulk}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={continueToBulkRows}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-            >
+            </Button>
+            <Button onClick={continueToBulkRows}>
               Continue
-            </button>
+            </Button>
           </>
         }
       >
@@ -736,21 +716,12 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         size="xl"
         footer={
           <>
-            <button
-              type="button"
-              onClick={backToBulkSetup}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+            <Button variant="secondary" onClick={backToBulkSetup}>
               Back
-            </button>
-            <button
-              type="button"
-              onClick={saveBulk}
-              disabled={bulkCreatePractices.isPending}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-            >
+            </Button>
+            <Button onClick={saveBulk} disabled={bulkCreatePractices.isPending}>
               {bulkCreatePractices.isPending ? 'Saving...' : `Save ${plural(bulkRows.length, 'entry', 'entries')}`}
-            </button>
+            </Button>
           </>
         }
       >

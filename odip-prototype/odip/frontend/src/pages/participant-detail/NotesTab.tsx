@@ -11,6 +11,7 @@ import { queryPhase } from '@/lib/queryPhase'
 import { parseApiDate, extractErrorMessage } from '@/lib/utils'
 import { formatRelative } from '@/lib/format'
 import type { ParticipantNoteDto } from '@/api/types/notes'
+import { Button } from '@/components/Button'
 
 type NoteFormState = { title: string; description: string; isPinned: boolean }
 const EMPTY_FORM: NoteFormState = { title: '', description: '', isPinned: false }
@@ -244,13 +245,9 @@ export default function NotesTab({ participantId }: { participantId: string | un
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-[var(--color-foreground)]">Notes</h2>
         {canWriteNotes && participantId && (
-          <button
-            type="button"
-            onClick={openCreate}
-            className="flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all shadow-md shadow-[var(--color-primary)]/20"
-          >
+          <Button onClick={openCreate}>
             <Plus className="w-4 h-4" /> New note
-          </button>
+          </Button>
         )}
       </div>
 
@@ -314,21 +311,12 @@ export default function NotesTab({ participantId }: { participantId: string | un
         size="md"
         footer={
           <>
-            <button
-              type="button"
-              onClick={closeModal}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+            <Button variant="secondary" onClick={closeModal}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-            >
+            </Button>
+            <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? 'Saving...' : 'Save note'}
-            </button>
+            </Button>
           </>
         }
       >

@@ -12,6 +12,7 @@ import type { PortalWitnessRequestDto } from '@/api/types'
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS } from '@/api/types/enums'
 import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { formatWallClock } from '@/lib/wallClock'
+import { Button } from '@/components/Button'
 
 /** An INSTANT (a dose given), in the zone it was recorded in. */
 function formatDateTime(value: string | null, timeZone: string | null) {
@@ -207,22 +208,12 @@ export default function PortalWitnessApprovalsPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleDeclineClick(request)}
-                    disabled={isBusy}
-                    className="min-h-[44px] inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2"
-                  >
+                  <Button variant="secondary" onClick={() => handleDeclineClick(request)} disabled={isBusy}>
                     <X className="w-4 h-4" /> Decline
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleApproveClick(request)}
-                    disabled={isBusy}
-                    className="min-h-[44px] inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2"
-                  >
+                  </Button>
+                  <Button onClick={() => handleApproveClick(request)} disabled={isBusy}>
                     <Check className="w-4 h-4" /> {approve.isPending && approve.variables === request.id ? 'Approving…' : 'Approve'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>

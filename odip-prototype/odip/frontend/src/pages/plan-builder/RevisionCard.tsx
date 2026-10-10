@@ -39,7 +39,7 @@ function DraftSimulationPanel({ participantId, draftId }: { participantId: strin
     <div className="px-4 pb-4 space-y-3">
       <h3 className="font-semibold">SIMULATED — NOT A LEGAL AGREEMENT / NO CLAIM</h3>
       <p className="text-sm">Demo-only, dev-auth walkthrough: simulated signing → activation → booking. It creates no signature evidence, participant activation, booking, billable event, invoice, or claim.</p>
-      <button type="button" onClick={() => simulation.mutate({ participantId, draftId })} disabled={simulation.isPending} className="min-h-[44px] rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-[var(--control-h)] text-sm font-medium disabled:opacity-50">{simulation.isPending ? 'Running simulation…' : 'Run Demo-only simulation'}</button>
+      <Button variant="secondary" onClick={() => simulation.mutate({ participantId, draftId })} disabled={simulation.isPending}>{simulation.isPending ? 'Running simulation…' : 'Run Demo-only simulation'}</Button>
       {simulation.data && <div role="status" className="rounded border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-sm space-y-1"><strong>{simulation.data.banner}</strong><p>{simulation.data.signing}</p><p>{simulation.data.activation}</p><p>{simulation.data.booking}</p><p className="font-medium">{simulation.data.rateLabel}</p></div>}
       {simulation.isError && <Callout tone="error" className="max-w-prose">{extractErrorMessage(simulation.error, 'The server could not price this draft. Check the state, effective dates and configured catalogue code.')}</Callout>}
     </div>

@@ -525,15 +525,13 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-2">
-                <button onClick={() => setShowAddAccommodation(false)}
-                  className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
+                <Button variant="secondary" onClick={() => setShowAddAccommodation(false)}>
                   Cancel
-                </button>
-                <button onClick={handleCreateReservation}
-                  disabled={creatingNewProperty ? !newPropertyForm.propertyName || createAccommodation.isPending || createReservation.isPending : !accommForm.accommodationPropertyId || createReservation.isPending}
-                  className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+                </Button>
+                <Button onClick={handleCreateReservation}
+                  disabled={creatingNewProperty ? !newPropertyForm.propertyName || createAccommodation.isPending || createReservation.isPending : !accommForm.accommodationPropertyId || createReservation.isPending}>
                   {createAccommodation.isPending || createReservation.isPending ? 'Adding...' : 'Add Reservation'}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -655,14 +653,12 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-2">
-                <button onClick={() => setEditingReservation(null)}
-                  className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
+                <Button variant="secondary" onClick={() => setEditingReservation(null)}>
                   Cancel
-                </button>
-                <button onClick={handleUpdateReservation} disabled={updateReservation.isPending}
-                  className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+                </Button>
+                <Button onClick={handleUpdateReservation} disabled={updateReservation.isPending}>
                   {updateReservation.isPending ? 'Saving...' : 'Save Changes'}
-                </button>
+                </Button>
               </div>
             </div>
           </div>

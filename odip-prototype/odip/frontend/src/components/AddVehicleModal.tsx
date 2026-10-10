@@ -11,6 +11,7 @@ import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
 import type { VehicleType, RosterFindingDto } from '@/api/types'
 import { Dropdown } from './Dropdown'
 import { plural } from '@/lib/format'
+import { Button } from '@/components/Button'
 
 interface AddVehicleModalProps {
   tripInstanceId: string
@@ -157,29 +158,21 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
       footer={
         activeTab === 'existing' ? (
           <>
-            <button onClick={onClose} className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors">
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              onClick={handleAssignExisting}
-              disabled={!tab1CanSubmit}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
+            </Button>
+            <Button onClick={handleAssignExisting} disabled={!tab1CanSubmit}>
               {createAssignment.isPending ? 'Assigning...' : gate.needsReason ? 'Assign with override' : 'Assign Vehicle'}
-            </button>
+            </Button>
           </>
         ) : (
           <>
-            <button onClick={onClose} className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors">
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              onClick={handleCreateAndAssign}
-              disabled={!tab2CanSubmit}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
+            </Button>
+            <Button onClick={handleCreateAndAssign} disabled={!tab2CanSubmit}>
               {createVehicle.isPending || createAssignment.isPending ? 'Saving...' : newVehicleId ? 'Assign Vehicle' : 'Create Vehicle & Assign'}
-            </button>
+            </Button>
           </>
         )
       }

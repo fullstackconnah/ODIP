@@ -15,6 +15,7 @@ import type { CompletionQueueItemDto, ShiftStatus, ShiftCompletionDto, ApproveBa
 import { formatDateAu, formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { formatVarianceMinutes } from './lib/roster'
 import { plural } from '@/lib/format'
+import { Button } from '@/components/Button'
 
 const PAGE_SIZE = 50
 
@@ -198,12 +199,12 @@ export default function CompletionReviewPage() {
       key: 'actions', header: '', align: 'right' as const, render: (row: CompletionQueueItemDto) => (
         row.status === 'PendingReview' ? (
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setReturnTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+            <Button variant="secondary" onClick={() => setReturnTarget(row)}>
               Return
-            </button>
-            <button type="button" onClick={() => setApproveTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90">
+            </Button>
+            <Button onClick={() => setApproveTarget(row)}>
               Approve
-            </button>
+            </Button>
           </div>
         ) : null
       ),
@@ -214,13 +215,9 @@ export default function CompletionReviewPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader title="Completion review" subtitle="Review submitted shift completions against their rostered times before they're billed.">
         {canReviewCompletions && selectedRows.size > 0 && (
-          <button
-            type="button"
-            onClick={() => setBatchConfirmOpen(true)}
-            className="min-h-[44px] px-4 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90"
-          >
+          <Button onClick={() => setBatchConfirmOpen(true)}>
             Approve selected ({selectedRows.size})
-          </button>
+          </Button>
         )}
       </PageHeader>
 

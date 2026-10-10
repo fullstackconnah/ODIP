@@ -3,6 +3,7 @@ import { Search } from 'lucide-react'
 import { useAdminTenantsSummary } from '@/api/hooks/admin'
 import { DataTable } from '@/components/DataTable'
 import type { TenantSummaryDto } from '@/api/types'
+import { Button } from '@/components/Button'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -60,13 +61,9 @@ export default function TenantsTab({
           />
         </div>
 
-        <button
-          type="button"
-          onClick={onAddTenant}
-          className="px-5 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 transition-all"
-        >
+        <Button onClick={onAddTenant}>
           + Add Tenant
-        </button>
+        </Button>
       </div>
 
       {/* Table */}

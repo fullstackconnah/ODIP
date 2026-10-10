@@ -30,6 +30,7 @@ import { extractErrorMessage, formatDateAu, parseApiDate } from '@/lib/utils'
 import { localIsoDate } from '@/lib/dateOnly'
 import type { Tone } from '@/lib/tone'
 import { plural } from '@/lib/format'
+import { Button } from '@/components/Button'
 
 type LegacyRecord = StaffAvailabilityDto & { userFullName: string }
 
@@ -110,14 +111,15 @@ function OverlapShiftsList({ shifts, unassigningShiftId, unassignedShiftIds, una
               {done ? (
                 <span className="shrink-0 text-xs font-medium text-[var(--color-primary)]">Unassigned</span>
               ) : (
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="shrink-0"
                   onClick={() => onUnassign(shift.shiftId)}
                   disabled={busy}
-                  className="shrink-0 min-h-[36px] px-3 text-xs rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] disabled:opacity-50"
                 >
                   {busy ? 'Unassigning…' : 'Unassign and mark open'}
-                </button>
+                </Button>
               )}
             </div>
             {error && <p role="alert" className="mt-1 text-xs text-[var(--color-destructive)]">{error}</p>}
@@ -492,9 +494,9 @@ export default function LeaveApprovalsPage() {
         if (row.rowKind === 'legacy') {
           return (
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => openEdit(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+              <Button variant="secondary" onClick={() => openEdit(row)}>
                 Edit
-              </button>
+              </Button>
               <button type="button" onClick={() => setDeleteLegacyTarget(row)} className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline">
                 Delete
               </button>
@@ -504,24 +506,24 @@ export default function LeaveApprovalsPage() {
         if (row.data.status === 'Pending') {
           return (
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => openEdit(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+              <Button variant="secondary" onClick={() => openEdit(row)}>
                 Edit
-              </button>
-              <button type="button" onClick={() => setDeclineTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+              </Button>
+              <Button variant="secondary" onClick={() => setDeclineTarget(row)}>
                 Decline
-              </button>
-              <button type="button" onClick={() => setApproveTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90">
+              </Button>
+              <Button onClick={() => setApproveTarget(row)}>
                 Approve
-              </button>
+              </Button>
             </div>
           )
         }
         if (row.data.status === 'Approved') {
           return (
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => openEdit(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+              <Button variant="secondary" onClick={() => openEdit(row)}>
                 Edit
-              </button>
+              </Button>
               <button type="button" onClick={() => setCancelTarget(row)} className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline">
                 {row.rowKind === 'leave' ? 'Cancel leave' : 'Cancel rule'}
               </button>

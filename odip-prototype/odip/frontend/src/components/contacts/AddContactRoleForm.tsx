@@ -13,6 +13,7 @@ import {
 import type { ParticipantContactRoleDto, CreateParticipantContactRoleDto, UpdateParticipantContactRoleDto, PersonDto } from '@/api/types/contacts'
 import { extractErrorMessage } from '@/lib/utils'
 import { plural } from '@/lib/format'
+import { Button } from '@/components/Button'
 
 /** Splits a typed "First Last" (or "First Middle Last") query into first/last name parts for the
  * "create new" fallback's pre-fill — PF-6's "pre-filled from whatever was typed". */
@@ -736,21 +737,12 @@ export default function AddContactRoleForm({ participantId, mode, role, onSaved,
       )}
 
       <div className="flex justify-end gap-3 mt-6">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="min-h-[44px] px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-        >
+        <Button variant="secondary" onClick={onCancel}>
           Cancel
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={isSaving}
-          className="min-h-[44px] px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-        >
+        </Button>
+        <Button onClick={handleSave} disabled={isSaving}>
           {isSaving ? 'Saving...' : 'Save contact'}
-        </button>
+        </Button>
       </div>
     </div>
   )

@@ -417,15 +417,14 @@ export default function MedicationFormPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)} className="px-3 h-[var(--control-h)] rounded-[var(--radius-md)] bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" />
-                      <button
-                        type="button"
+                      <Button
+                        variant="secondary"
                         onClick={() => {
                           if (newTime && !times.includes(newTime)) field.onChange([...times, newTime].sort())
                         }}
-                        className="inline-flex items-center gap-1.5 px-3 h-[var(--control-h)] rounded-[var(--radius-md)] border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors"
                       >
                         <Plus className="w-4 h-4" /> Add
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )

@@ -382,21 +382,12 @@ export default function CompatibilityPage() {
         )}
         footer={
           <>
-            <button
-              type="button"
-              onClick={() => setExcludeDraft(null)}
-              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-accent"
-            >
+            <Button variant="secondary" onClick={() => setExcludeDraft(null)}>
               Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!excludeDraft?.reason.trim()}
-              onClick={handleConfirmExclude}
-              className="px-4 py-2 text-sm rounded-lg bg-destructive text-destructive-foreground hover:opacity-90 disabled:opacity-50"
-            >
+            </Button>
+            <Button variant="danger" disabled={!excludeDraft?.reason.trim()} onClick={handleConfirmExclude}>
               Exclude
-            </button>
+            </Button>
           </>
         }
       />

@@ -6,6 +6,7 @@ import { TONE } from '@/lib/tone'
 import { formatRatio } from '@/lib/format'
 import type { VehicleAssignmentDto } from '@/api/types/vehicles'
 import type { StaffAssignmentDto } from '@/api/types/staff'
+import { Button } from '@/components/Button'
 
 interface VehiclesTabProps {
   tripId: string
@@ -58,12 +59,9 @@ export default function VehiclesTab({ tripId, vehicles, staff, canWrite }: Vehic
           </div>
         )}
         {canWrite && (
-          <button
-            onClick={() => setShowAddVehicle(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
-          >
+          <Button onClick={() => setShowAddVehicle(true)}>
             <Plus className="w-4 h-4" /> Add Vehicle
-          </button>
+          </Button>
         )}
       </div>
 

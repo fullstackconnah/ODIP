@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Modal } from './Modal'
+import { Button } from '@/components/Button'
 
 export type ConfirmDialogProps = {
   open: boolean
@@ -37,26 +38,17 @@ export function ConfirmDialog({
       footer={
         footer ?? (
           <>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-accent)]"
-            >
+            <Button variant="secondary" onClick={onCancel}>
               {cancelLabel}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant={variant === 'danger' ? 'danger' : 'primary'}
               onClick={onConfirm}
               disabled={loading}
               aria-label={confirmAriaLabel ?? confirmLabel}
-              className={`inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] text-white disabled:opacity-50 ${
-                variant === 'danger'
-                  ? 'bg-[var(--color-destructive)] hover:opacity-90'
-                  : 'bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90'
-              }`}
             >
               {loading ? 'Processing...' : confirmLabel}
-            </button>
+            </Button>
           </>
         )
       }

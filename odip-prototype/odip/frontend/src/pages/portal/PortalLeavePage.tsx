@@ -14,6 +14,7 @@ import { LEAVE_TYPE_LABELS, LEAVE_STATUS_COLORS } from '@/api/types'
 import type { LeaveRequestDto, RecurringUnavailabilityDto, CreateLeaveRequestDto, CreateRecurringUnavailabilityDto } from '@/api/types'
 import { formatEffectiveRange } from '@/pages/rostering/lib/roster'
 import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
 
 type WithdrawTarget = { kind: 'leave' | 'unavailability'; id: string }
 
@@ -126,13 +127,9 @@ export default function PortalLeavePage() {
     <div className="space-y-6 animate-fade-in">
       <PageHeader title="My leave" subtitle="Request leave or a regular weekly unavailability, and track what's been decided.">
         {canRequestLeave && (
-          <button
-            type="button"
-            onClick={openForm}
-            className="flex items-center gap-2 rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-foreground)] shadow-md hover:opacity-90"
-          >
+          <Button onClick={openForm}>
             <Plus className="w-4 h-4" /> {tab === 'leave' ? 'Request leave' : 'Add unavailability'}
-          </button>
+          </Button>
         )}
       </PageHeader>
 

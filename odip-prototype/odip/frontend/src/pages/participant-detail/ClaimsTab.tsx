@@ -16,6 +16,7 @@ import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
 import type { TripClaimListDto, ShiftClaimFlaggedDto, ShiftClaimGeneratedDto, ShiftClaimLeftOutDto, ShiftClaimPreviewLineItemDto, ShiftClaimPreviewResponseDto } from '@/api/types'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import type { Tone } from '@/lib/tone'
+import { Button } from '@/components/Button'
 
 // Distinct from trip-detail/ClaimsTab.tsx (same name, different directory — see the
 // shift-completion design spec §4 "Claims entry point"). This tab lists BOTH kinds of claim a
@@ -47,9 +48,6 @@ function lastFullFortnight(today = new Date()): { from: string; to: string } {
   return { from: toIsoDate(from), to: toIsoDate(to) }
 }
 
-const buttonClass = 'px-4 py-2 text-sm rounded-full font-medium transition-all disabled:opacity-50'
-const primaryButtonClass = `${buttonClass} bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary)]/90`
-const secondaryButtonClass = `${buttonClass} border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]`
 
 export default function ClaimsTab({ participantId, canWrite }: { participantId: string; canWrite: boolean }) {
   const claimsQuery = useParticipantClaims(participantId)
@@ -63,9 +61,9 @@ export default function ClaimsTab({ participantId, canWrite }: { participantId: 
       title="NDIS Claims"
       action={
         canWrite ? (
-          <button type="button" onClick={() => setShowGenerateModal(true)} className={primaryButtonClass}>
+          <Button onClick={() => setShowGenerateModal(true)}>
             Generate from shifts
-          </button>
+          </Button>
         ) : undefined
       }
     >
@@ -205,38 +203,34 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
       footer={
         step === 'done' && generated ? (
           <div className="flex w-full justify-end gap-3">
-            <button type="button" onClick={onClose} className={secondaryButtonClass}>
+            <Button variant="secondary" onClick={onClose}>
               Close
-            </button>
-            <button type="button" onClick={() => navigate(`/claims/${generated.id}`)} className={primaryButtonClass}>
+            </Button>
+            <Button onClick={() => navigate(`/claims/${generated.id}`)}>
               View claim
-            </button>
+            </Button>
           </div>
         ) : step === 'input' ? (
           <>
-            <button type="button" onClick={onClose} className={secondaryButtonClass}>
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button type="button" onClick={handlePreview} disabled={previewShiftClaim.isPending} className={primaryButtonClass}>
+            </Button>
+            <Button onClick={handlePreview} disabled={previewShiftClaim.isPending}>
               {previewShiftClaim.isPending ? 'Loading…' : 'Preview →'}
-            </button>
+            </Button>
           </>
         ) : (
           <div className="flex w-full justify-between">
-            <button
-              type="button"
-              onClick={() => { setStep('input'); setError(null) }}
-              className={secondaryButtonClass}
-            >
+            <Button variant="secondary" onClick={() => { setStep('input'); setError(null) }}>
               &larr; Back
-            </button>
+            </Button>
             <div className="flex gap-3">
-              <button type="button" onClick={onClose} className={secondaryButtonClass}>
+              <Button variant="secondary" onClick={onClose}>
                 Cancel
-              </button>
-              <button type="button" onClick={handleGenerate} disabled={generateShiftClaim.isPending} className={primaryButtonClass}>
+              </Button>
+              <Button onClick={handleGenerate} disabled={generateShiftClaim.isPending}>
                 {generateShiftClaim.isPending ? 'Generating…' : 'Confirm & Generate'}
-              </button>
+              </Button>
             </div>
           </div>
         )

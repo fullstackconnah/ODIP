@@ -4,6 +4,7 @@ import { Modal } from '@/components/Modal'
 import { useUpdateClaimLineItem } from '@/api/hooks'
 import type { ClaimLineItemDto } from '@/api/types'
 import type { DropdownItem } from './Dropdown'
+import { Button } from '@/components/Button'
 
 const CANCELLATION_REASONS: DropdownItem[] = [
   { value: 'NSDH', label: 'No show – health reason' },
@@ -52,19 +53,12 @@ export function NoShowModal({ claimId, lineItem, onClose, onSuccess }: NoShowMod
       size="sm"
       footer={
         <>
-          <button
-            onClick={onClose}
-            className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)] transition-all"
-          >
+          <Button variant="ghost" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={handleConfirm}
-            disabled={updateLineItem.isPending}
-            className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-all disabled:opacity-50"
-          >
+          </Button>
+          <Button onClick={handleConfirm} disabled={updateLineItem.isPending}>
             {updateLineItem.isPending ? 'Saving…' : 'Confirm'}
-          </button>
+          </Button>
         </>
       }
     >

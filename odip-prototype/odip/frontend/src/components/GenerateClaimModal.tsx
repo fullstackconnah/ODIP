@@ -6,6 +6,7 @@ import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import type { TripDetailDto, ClaimPreviewResponseDto, ClaimPreviewLineItemDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
 
 interface GenerateClaimModalProps {
   tripId: string
@@ -80,42 +81,25 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
       footer={
         step === 'input' ? (
           <>
-            <button
-              onClick={onClose}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
-            >
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              onClick={handlePreview}
-              disabled={previewClaim.isPending}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white font-medium hover:opacity-90 transition-all disabled:opacity-50"
-            >
+            </Button>
+            <Button onClick={handlePreview} disabled={previewClaim.isPending}>
               {previewClaim.isPending ? 'Loading...' : 'Preview Claim \u2192'}
-            </button>
+            </Button>
           </>
         ) : (
           <div className="flex justify-between w-full">
-            <button
-              onClick={() => { setStep('input'); setError(null) }}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
-            >
+            <Button variant="secondary" onClick={() => { setStep('input'); setError(null) }}>
               &larr; Back
-            </button>
+            </Button>
             <div className="flex gap-3">
-              <button
-                onClick={onClose}
-                className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
-              >
+              <Button variant="secondary" onClick={onClose}>
                 Cancel
-              </button>
-              <button
-                onClick={handleGenerate}
-                disabled={generateClaim.isPending}
-                className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white font-medium hover:opacity-90 transition-all disabled:opacity-50"
-              >
+              </Button>
+              <Button onClick={handleGenerate} disabled={generateClaim.isPending}>
                 {generateClaim.isPending ? 'Generating...' : 'Confirm & Generate'}
-              </button>
+              </Button>
             </div>
           </div>
         )

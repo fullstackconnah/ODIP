@@ -10,6 +10,7 @@ import type { TripClaimStatus } from '@/api/types/enums'
 import type { TripClaimListDto, UpdateClaimDto } from '@/api/types/claims'
 import type { TripDetailDto } from '@/api/types/trips'
 import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
 
 const CLAIM_STATUS_ITEMS = [
   { value: 'Draft', label: 'Draft' },
@@ -100,12 +101,9 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-[var(--color-foreground)]">NDIS Claims</h2>
         {canWrite && (
-          <button
-            onClick={() => setShowGenerateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[#294800] transition-all"
-          >
+          <Button onClick={() => setShowGenerateModal(true)}>
             + Generate Claim
-          </button>
+          </Button>
         )}
       </div>
 

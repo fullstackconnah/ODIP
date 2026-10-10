@@ -12,6 +12,7 @@ import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { CONSENT_TYPES } from '@/api/types/enums'
 import { CONSENT_TYPE_LABELS } from '@/api/types/consents'
 import type { ParticipantConsentDto } from '@/api/types/consents'
+import { Button } from '@/components/Button'
 
 type ConsentFormState = {
   granted: 'true' | 'false' | ''
@@ -149,21 +150,12 @@ export default function ParticipantConsentsSection({ participantId }: { particip
         size="md"
         footer={
           <>
-            <button
-              type="button"
-              onClick={closeModal}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+            <Button variant="secondary" onClick={closeModal}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={upsertConsent.isPending}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-            >
+            </Button>
+            <Button onClick={handleSave} disabled={upsertConsent.isPending}>
               {upsertConsent.isPending ? 'Saving...' : 'Save consent'}
-            </button>
+            </Button>
           </>
         }
       >
