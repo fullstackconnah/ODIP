@@ -251,6 +251,18 @@ public static class DbSeeder
             await context.SaveChangesAsync(ct);
         }
 
+        // The 25 seeded activities (06000000-...-0001 to -0025) follow their templates and trips; the library is per organisation, so they must not stay behind.
+        var demoActivityIds = Enumerable.Range(1, 25).Select(i => Guid.Parse($"06000000-0000-0000-0000-{i:D12}")).ToArray();
+        var misplacedActivities = await context.Activities
+            .IgnoreQueryFilters()
+            .Where(a => demoActivityIds.Contains(a.Id) && a.TenantId != demoTenantId)
+            .ToListAsync(ct);
+        if (misplacedActivities.Count > 0)
+        {
+            foreach (var a in misplacedActivities) a.TenantId = demoTenantId;
+            await context.SaveChangesAsync(ct);
+        }
+
         if (hasExistingSeedData)
         {
             Console.WriteLine("[Seed] Skipping demo data seed: existing rows found in one or more " +
