@@ -218,11 +218,13 @@ owner decision (collected under Open Flags at the end).
       both writes through the tenant-filtered shifts or bookings of the claim's lines (as
       `BudgetLedgerService.ForClaimAsync` and `NdiaRejectionReader` already do) and answers 404
       otherwise, with cross-tenant tests.
-      Done: every by-id claim route (the two writes, `GetClaim`, `DeleteClaim`, the trip's claim list,
-      the BPR CSV and the invoice) starts from `ClaimsController.TenantClaims()`, the claims whose trip
-      (Trip kind) or participant (Shift kind) the caller can see, and answers 404 for another
-      organisation's claim. `Odip.Tests/Claims/ClaimsTenantScopeTests.cs` holds a cross-tenant test per
-      route and an own-claim control for each write.
+      Done: every by-id claim route (the two writes, `GetClaim`, `DeleteClaim`, the BPR CSV and the
+      invoice) starts from `ClaimsController.TenantClaims()`, the claims whose trip (Trip kind) or
+      participant (Shift kind) the caller can see, and answers 404 for another organisation's claim;
+      the trip's claim list starts from a check that the trip is the caller's (404), and `UpdateClaim`
+      refuses an `AuthorisedByStaffId` that is not a user of the organisation (400).
+      `Odip.Tests/Claims/ClaimsTenantScopeTests.cs` holds a cross-tenant test per route and an
+      own-claim control for each write.
     - **B10, the alerts route depends on the whole-organisation budget ledger.**
       `GET participants/alerts` feeds the dashboard's Critical tile and the Participants table,
       which also carry the medication, restrictive-practice, incident and QSC alerts. It now calls
