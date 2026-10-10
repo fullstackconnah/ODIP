@@ -428,8 +428,7 @@ export interface ParticipantDetailDto extends ParticipantListDto {
 
   // ── INTAKE-03 — Community Access Behaviour & Support Detail (CommunityAccessDailyLiving
   // stream, research spec §3). CA-gated in the wizard (not on the wire — the backend accepts
-  // these unconditionally; the wizard's conditional-visibility engine is what hides/unregisters
-  // them when the stream isn't selected — see the retired single-step wizard's CONDITIONAL_FIELDS).
+  // these unconditionally; the wizard hides them when the stream isn't selected).
   signsHappyAndSettled: string | null
   whatHelpsMeCalmDown: string | null
   bocTriggers: string | null

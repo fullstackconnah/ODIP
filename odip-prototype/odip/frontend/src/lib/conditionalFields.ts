@@ -107,9 +107,7 @@ export function useDeriveFieldValues<V extends Record<string, unknown>>(
     prevResetKeyRef.current = resetKey
     // Deliberately runs on every render where `values` has a new identity (useWatch — watching
     // the whole form — already returns a new object on every relevant keystroke, so this is the
-    // correct "check every value change" granularity, same spirit as the hiddenFieldsKey-keyed
-    // effects above but without a synthesised key since we need every value, not just a hidden-set
-    // membership check). `defs`/`setValue` are stable-enough call-site values (defs is normally a
+    // correct "check every value change" granularity). `defs`/`setValue` are stable-enough call-site values (defs is normally a
     // module-level const array; setValue is a stable react-hook-form function identity) and are
     // intentionally excluded to avoid re-running on identity churn that isn't a real value change.
     // eslint-disable-next-line react-hooks/exhaustive-deps

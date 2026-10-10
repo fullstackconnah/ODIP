@@ -26,7 +26,7 @@ namespace Odip.Tests.Rostering;
 /// Controller-level coverage for the Rostering API slice (RosteringController), on top of the
 /// domain-level RosterConflictService/ShiftPatternExpander coverage elsewhere in
 /// Odip.Tests/Rostering. Uses the same EF InMemory + Moq&lt;ICurrentTenant&gt; pattern as
-/// BillingControllerTests/AdminUsersControllerTests.
+/// AdminUsersControllerTests.
 /// </summary>
 public class RosteringControllerTests
 {

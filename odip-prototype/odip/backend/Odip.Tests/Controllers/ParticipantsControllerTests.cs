@@ -2109,8 +2109,8 @@ public class ParticipantsControllerTests
     {
         // Server-side defence in depth: even if a client sends FundingOrganisation text alongside
         // FundingSource = Ndis (e.g. a stale value left over from switching Other -> Ndis
-        // client-side before the INTAKE-07 engine's payload exclusion kicks in), the server never
-        // persists it — Ndis ignores the field entirely, mirroring the frontend's exclusion rule.
+        // client-side before the wizard clears it), the server never persists it —
+        // Ndis ignores the field entirely.
         using var db = CreateDb(Guid.NewGuid().ToString());
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
 

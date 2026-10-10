@@ -163,7 +163,7 @@ export const CONTACT_ROLE_STATUS_LABELS: Record<ContactRoleStatus, string> = {
   Superseded: 'Superseded',
 }
 
-// ── CONTACT-02 gating (form-local convenience — INTAKE-07 style) ──────────
+// ── CONTACT-02 gating (form-local convenience) ──────────
 
 /** Mirrors Odip.Domain.Enums.ContactRoleRules.CalculateAge — whole years as of today, or null
  * when dateOfBirth is unset. */

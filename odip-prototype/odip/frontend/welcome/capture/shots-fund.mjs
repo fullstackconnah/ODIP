@@ -1,5 +1,5 @@
 /**
- * Stage 5: FUND AND CLAIM shots (per-traveller funding split, claim preview, claim batch). Same shape as shots.mjs.
+ * Stage 5: FUND AND CLAIM shots (per-traveller funding split, claim preview). Same shape as shots.mjs.
  */
 export const shots = []
 

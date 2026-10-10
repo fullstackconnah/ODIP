@@ -8,7 +8,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
  *   caller renders panels itself outside the tablist (the legacy `TabNav` usage, now used
  *   everywhere else). The two modes share every accessibility and keyboard guarantee; the
  *   only difference is who owns the panel markup.
- * - `icon` is rendered before the label at the same size as billing's pill icon (`w-4 h-4`).
+ * - `icon` is rendered before the label at `w-4 h-4`.
  * - `badge` renders an inline count next to the label (matches the legacy trip-detail pill).
  * - `disabled` marks a tab inert and skips it during keyboard navigation.
  */
@@ -56,8 +56,8 @@ export type TabsProps = {
 }
 
 /**
- * Consolidated accessible tab primitive. Visual style matches the billing screen
- * (underline + optional lucide icon, no fill on active, no rounded-t-lg card). Behaviour
+ * Consolidated accessible tab primitive. Visual style: an underline with an optional lucide icon,
+ * no fill on active, no rounded-t-lg card. Behaviour
  * follows the WAI-ARIA APG tabs-with-automatic-activation pattern:
  *
  * - Container is a real `role="tablist"`.
@@ -198,7 +198,7 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, cla
         aria-label={ariaLabel}
         // Below md: one row (`flex-nowrap`) that scrolls sideways (`overflow-x-auto`) with its scrollbar
         // hidden, like a native tab bar; each tab keeps its full 44px `--tap-min` height under a coarse
-        // pointer. From md up: `md:flex-wrap` keeps short strips on one line (billing's 3-tab look) and
+        // pointer. From md up: `md:flex-wrap` keeps short strips on one line and
         // lets 11-tab participant detail roll onto a second row instead of overflowing; `overflow-x-auto`
         // stays as the safety net there too. The scrollbar is hidden only below md, where the strip is
         // the scrolling surface (Tailwind has no scrollbar-width utility, hence the arbitrary property

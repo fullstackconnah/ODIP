@@ -899,7 +899,7 @@ The trip detail page opts in with a status-led meta row, and the dashboard opts 
 |---|---|---|
 | `button` | secondary `Button`, an arrow and "Back", `--control-h` tall | a detail page's action cluster (trip, staff, accommodation, incident, onboarding) |
 | `icon` | ghost icon-only `Button`, 24px on a mouse and a 44px square under a coarse pointer; its tooltip carries the name | a form or wizard header with the title beside it (participant, the intake and profile wizards, enquiry, medication, agreement draft, caregiver review) |
-| `link` | primary-coloured text link with an arrow, a `--tap-min` floor, a keyboard-only focus ring | a page with no action cluster (the portal, claim batch detail) |
+| `link` | primary-coloured text link with an arrow, a `--tap-min` floor, a keyboard-only focus ring | a page with no action cluster (the portal) |
 
 **Accessibility**: always a real `<a href>` (open in a new tab and copy-link work); it is never a `<button>` that navigates. The visible text is "Back" and the accessible name is "Back to {label}" (it contains
 the visible text). 44px under a coarse pointer in every variant, visible focus ring, first in the tab order of its header.

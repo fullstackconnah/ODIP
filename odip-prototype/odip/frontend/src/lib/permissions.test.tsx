@@ -299,7 +299,7 @@ describe('usePermissions.canAccessPage — ReadOnly', () => {
     'qualifications', 'medications',
   ]
 
-  it('refuses ReadOnly the pages its API refuses (rostering, leave, billing, claims, caregiver forms, settings, agreement drafts, the Budgets list)', () => {
+  it('refuses ReadOnly the pages its API refuses (rostering, leave, claims, caregiver forms, settings, agreement drafts, the Budgets list)', () => {
     setUserRole('ReadOnly')
     render(<PermissionsProbe pages={REFUSED} />)
     for (const page of REFUSED) expect(screen.getByTestId(`page-${page}`), page).toHaveTextContent('false')

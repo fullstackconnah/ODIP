@@ -506,12 +506,12 @@ the room ("Grace Palmer-Hughes" reads whole at 1920).
 ### Navigation
 
 - **Menu:** one config (`components/layout/navConfig.ts`) feeds the sidebar, the drawer and the bottom bar, so a page is added, moved or
-  renamed in one place. Eight top-level entries, four of them collapsible groups: Dashboard, My Shifts, **Trips** (All Trips, Schedule,
+  renamed in one place. Eight top-level entries, three of them collapsible groups: Dashboard, My Shifts, **Trips** (All Trips, Schedule,
   Bookings, Accommodation, Vehicles, Tasks), **Participants** (Participants, Medications, Caregiver forms), **Staff & roster** (Board,
-  Patterns, Compatibility, Leave, Completions, Staff, Qualifications), **Finance** (Budgets), Incidents, Settings.
+  Patterns, Compatibility, Leave, Completions, Staff, Qualifications), Budgets, Incidents, Settings.
   Incidents stays flat on purpose: it is time-critical and one click. The menu is per role. A SupportWorker starts from My Shifts (`/`
   sends them there) and sees only that, Trips (All Trips, Schedule, Tasks), Participants (Participants, Medications) and Incidents.
-  ReadOnly is not offered what its API refuses: the five Rostering pages, Finance, Caregiver forms and Settings. A group left with one
+  ReadOnly is not offered what its API refuses: the five Rostering pages, Budgets, Caregiver forms and Settings. A group left with one
   visible page is drawn as that page, and one with none is not drawn.
 - **Sidebar:** 232px, Sidebar Grey (`#f5f3ef`) surface, 12px padding, 48px brand block, and the nav
   straight under it: there is no call-to-action slot, and no create shortcut anywhere in the shell (a trip

@@ -5,13 +5,13 @@ using Odip.Domain.Enums;
 namespace Odip.Api.Controllers;
 
 /// <summary>
-/// INTAKE-03/04 — the answer rules for a participant's structured Community Access checklist grid
+/// INTAKE-03/04 — helpers for a participant's structured Community Access checklist grid
 /// (<see cref="ParticipantChecklistItem"/>): a FIXED enumerated set, one row per
-/// <see cref="ChecklistItemType"/> (21 values). The wizard's submissions go through
-/// <see cref="ParticipantsController.UpsertChecklistItemsAsync"/> via <see cref="ApplyAnswer"/>, and the
-/// participant detail reads all twenty-one through <see cref="MaterializeAll"/>. The class no longer has routes
-/// (the nested GET/PUT checklist-items endpoints had no caller); these helpers stay until the ApplyAnswer rules
-/// are merged into one place.
+/// <see cref="ChecklistItemType"/> (21 values). The participant detail reads all twenty-one through
+/// <see cref="MaterializeAll"/>. The class no longer has routes (the nested GET/PUT checklist-items endpoints had
+/// no caller). The wizard's save writes these rows through ParticipantPatchApplier.UpsertChecklistItemsAsync, which
+/// holds its own copy of the notes rule, so <see cref="ApplyAnswer"/> has no caller in the API now; it stays until
+/// the ApplyAnswer copies are merged into one place.
 /// </summary>
 public static class ParticipantChecklistItemsController
 {
