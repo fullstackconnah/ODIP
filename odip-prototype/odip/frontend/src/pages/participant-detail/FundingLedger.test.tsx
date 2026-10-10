@@ -12,7 +12,6 @@ import { budgetRow, claimBudget, ledgerBucket, ledgerPeriod, ledgerPool, ledgerR
 
 vi.mock('@/api/hooks', () => ({
   useFundingLedger: vi.fn(),
-  useFundingLedgerRows: vi.fn(() => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })),
 }))
 
 const renderLedger = (data: ReturnType<typeof participantLedger>) => render(<MemoryRouter><LedgerBody data={data} /></MemoryRouter>)

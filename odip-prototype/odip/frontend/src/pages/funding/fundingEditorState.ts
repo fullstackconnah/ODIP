@@ -285,8 +285,6 @@ export function withPeriodEdit(state: EditorState, key: string, index: number, p
 
 // ── Pools ───────────────────────────────────────────────────────────────
 
-export const poolIdentity = (pool: Pick<EditorPool, 'paceCategory' | 'managementType'>): string => `${pool.paceCategory}|${pool.managementType}`
-
 /** Whether the plan already holds this category under this management type (a plan holds each once). */
 export function hasPool(state: EditorState, paceCategory: number, managementType: PlanType): boolean {
   return state.pools.some(pool => pool.paceCategory === paceCategory && pool.managementType === managementType)
