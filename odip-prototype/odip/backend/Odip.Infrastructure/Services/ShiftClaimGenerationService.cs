@@ -97,15 +97,16 @@ public class ShiftClaimGenerationService
 
         var gstCode = settings.GSTRegistered ? GSTCode.P1 : GSTCode.P2;
 
+        var claimId = Guid.NewGuid();
         var claim = new TripClaim
         {
-            Id = Guid.NewGuid(),
+            Id = claimId,
             Kind = ClaimKind.Shift,
             ParticipantId = participantId,
             PeriodFrom = from,
             PeriodTo = to,
             Status = TripClaimStatus.Draft,
-            ClaimReference = BuildClaimReference(participant),
+            ClaimReference = BuildClaimReference(participant, claimId),
             CreatedAt = DateTime.UtcNow
         };
         _db.TripClaims.Add(claim);
@@ -251,15 +252,8 @@ public class ShiftClaimGenerationService
 
     // ─── Helpers ─
 
-    private static string BuildClaimReference(Participant participant)
-    {
-        var code = !string.IsNullOrWhiteSpace(participant.NdisNumber)
-            ? participant.NdisNumber
-            : participant.Id.ToString("N")[..8].ToUpper();
-        var date = DateTime.UtcNow.ToString("yyyyMMdd");
-        var raw = $"TC-{code}-{date}";
-        return raw.Length > 50 ? raw[..50] : raw;
-    }
+    private static string BuildClaimReference(Participant participant, Guid claimId) =>
+        TripClaim.ReferenceFor(!string.IsNullOrWhiteSpace(participant.NdisNumber) ? participant.NdisNumber : participant.Id.ToString("N")[..8].ToUpper(), claimId);
 
     private class ShiftLineCalc
     {
