@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import IncidentCreatePage from './IncidentCreatePage'
+import { refetchable } from '@/test/refetchable'
 import type { MarIncidentPrefillState, ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import {
   buildIncidentTitleSkeleton, buildIncidentDescriptionSkeleton, buildIncidentDateTime, suggestedIncidentSeverity,
@@ -1244,5 +1245,34 @@ describe('IncidentCreatePage — Back link touch target', () => {
     expect(back).toHaveAttribute('href', '/incidents')
     expect(back).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'hover:text-[var(--color-foreground)]', 'transition-colors')
     expect(back.className).not.toMatch(/44px/)
+  })
+})
+
+// The page builds the form's starting values from the incident once, when it mounts (it waits for the incident to load). A second effect used to reset the form from
+// every later copy of the incident, so a background refetch (window refocus, the 30 s stale time) replaced what the person had typed with the server's values.
+describe('IncidentCreatePage — editing', () => {
+  const incident = {
+    id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'Other', otherTypeSpecify: 'Spilled drink', severity: 'Low', status: 'Draft',
+    title: 'Existing incident', incidentDateTime: '2026-08-01T09:00', location: null, reportedByStaffId: 'staff-1', description: 'Existing description',
+    participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, immediateActionsTaken: null, wereEmergencyServicesCalled: false,
+    emergencyServicesDetails: null, injuries: [], witnesses: [], qscReportingStatus: 'NotRequired', qscReportedAt: null, qscReferenceNumber: null,
+    reviewedByStaffId: null, reviewNotes: null, correctiveActions: null, familyNotified: false, familyNotifiedAt: null,
+    supportCoordinatorNotified: false, supportCoordinatorNotifiedAt: null,
+  }
+
+  it('keeps what was typed when the incident is fetched again', async () => {
+    const user = userEvent.setup()
+    const query = refetchable(incident)
+    mockUseIncident.mockImplementation(() => ({ data: query.useValue() }))
+    renderCreatePage('/incidents/incident-1/edit')
+
+    const title = screen.getByPlaceholderText('Brief incident summary')
+    expect(title).toHaveValue('Existing incident')
+    await user.clear(title)
+    await user.type(title, 'My own title')
+
+    act(() => query.refetchWith({ ...incident, title: 'Changed on the server' }))
+
+    expect(title).toHaveValue('My own title')
   })
 })

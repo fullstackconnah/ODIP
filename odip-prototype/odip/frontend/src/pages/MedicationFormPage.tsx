@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
 import type { AxiosError } from 'axios'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { useCreateMedication, useUpdateMedication, useMedication, useParticipant } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
@@ -21,6 +21,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
 import { plural } from '@/lib/format'
+import { useFillOnce } from '@/hooks/useFillOnce'
 
 // Which medication forms make clinical sense for a given administration route. Used only to
 // surface a soft warning when the two fields disagree — the currently selected form is never
@@ -179,49 +180,47 @@ export default function MedicationFormPage() {
   const formMismatch = !!routeValue && !!formValue && !compatibleForms.includes(formValue as MedicationForm)
   const formOptions = formMismatch ? [...compatibleForms, formValue as MedicationForm] : compatibleForms
 
-  useEffect(() => {
-    if (existing) {
-      reset({
-        name: existing.name ?? '',
-        strength: existing.strength ?? '',
-        form: existing.form ?? 'Tablet',
-        route: existing.route ?? 'Oral',
-        packaging: existing.packaging ?? 'OriginalPackaging',
-        doseDescription: existing.doseDescription ?? '',
-        directions: existing.directions ?? '',
-        type: existing.type ?? 'Regular',
-        timesOfDayList: existing.timesOfDay ? existing.timesOfDay.split(',').filter(Boolean) : [],
-        frequency: existing.frequency ?? 'Daily',
-        daysOfWeek: existing.daysOfWeek ?? [],
-        intervalDays: existing.intervalDays != null ? String(existing.intervalDays) : '',
-        anchorDate: existing.anchorDate ?? '',
-        prnIndication: existing.prnIndication ?? '',
-        prnMaxDosesPer24h: existing.prnMaxDosesPer24h != null ? String(existing.prnMaxDosesPer24h) : '',
-        prnMinIntervalMinutes: existing.prnMinIntervalMinutes != null ? String(existing.prnMinIntervalMinutes) : '',
-        purpose: existing.purpose ?? '',
-        isHighRisk: existing.isHighRisk ?? false,
-        isPsychotropic: existing.isPsychotropic ?? false,
-        isChemicalRestraint: existing.isChemicalRestraint ?? false,
-        bspInPlace: existing.bspInPlace ?? false,
-        restrictivePracticeAuthorisationRef: existing.restrictivePracticeAuthorisationRef ?? '',
-        isHighIntensitySupport: existing.isHighIntensitySupport ?? false,
-        drugSchedule: existing.drugSchedule ?? 'Unscheduled',
-        supportLevel: existing.supportLevel ?? 'SelfAdministered',
-        prescriberName: existing.prescriberName ?? '',
-        pharmacyName: existing.pharmacyName ?? '',
-        pharmacyPhone: existing.pharmacyPhone ?? '',
-        consentObtained: existing.consentObtained ?? false,
-        consentGivenBy: existing.consentGivenBy ?? '',
-        consentDate: existing.consentDate ? existing.consentDate.split('T')[0] : '',
-        storageRequirements: existing.storageRequirements ?? '',
-        startDate: existing.startDate ? existing.startDate.split('T')[0] : '',
-        endDate: existing.endDate ? existing.endDate.split('T')[0] : '',
-        nextReviewDue: existing.nextReviewDue ? existing.nextReviewDue.split('T')[0] : '',
-        notes: existing.notes ?? '',
-        status: existing.status ?? 'Active',
-      })
-    }
-  }, [existing, reset])
+  useFillOnce(existing, record => {
+    reset({
+      name: record.name ?? '',
+      strength: record.strength ?? '',
+      form: record.form ?? 'Tablet',
+      route: record.route ?? 'Oral',
+      packaging: record.packaging ?? 'OriginalPackaging',
+      doseDescription: record.doseDescription ?? '',
+      directions: record.directions ?? '',
+      type: record.type ?? 'Regular',
+      timesOfDayList: record.timesOfDay ? record.timesOfDay.split(',').filter(Boolean) : [],
+      frequency: record.frequency ?? 'Daily',
+      daysOfWeek: record.daysOfWeek ?? [],
+      intervalDays: record.intervalDays != null ? String(record.intervalDays) : '',
+      anchorDate: record.anchorDate ?? '',
+      prnIndication: record.prnIndication ?? '',
+      prnMaxDosesPer24h: record.prnMaxDosesPer24h != null ? String(record.prnMaxDosesPer24h) : '',
+      prnMinIntervalMinutes: record.prnMinIntervalMinutes != null ? String(record.prnMinIntervalMinutes) : '',
+      purpose: record.purpose ?? '',
+      isHighRisk: record.isHighRisk ?? false,
+      isPsychotropic: record.isPsychotropic ?? false,
+      isChemicalRestraint: record.isChemicalRestraint ?? false,
+      bspInPlace: record.bspInPlace ?? false,
+      restrictivePracticeAuthorisationRef: record.restrictivePracticeAuthorisationRef ?? '',
+      isHighIntensitySupport: record.isHighIntensitySupport ?? false,
+      drugSchedule: record.drugSchedule ?? 'Unscheduled',
+      supportLevel: record.supportLevel ?? 'SelfAdministered',
+      prescriberName: record.prescriberName ?? '',
+      pharmacyName: record.pharmacyName ?? '',
+      pharmacyPhone: record.pharmacyPhone ?? '',
+      consentObtained: record.consentObtained ?? false,
+      consentGivenBy: record.consentGivenBy ?? '',
+      consentDate: record.consentDate ? record.consentDate.split('T')[0] : '',
+      storageRequirements: record.storageRequirements ?? '',
+      startDate: record.startDate ? record.startDate.split('T')[0] : '',
+      endDate: record.endDate ? record.endDate.split('T')[0] : '',
+      nextReviewDue: record.nextReviewDue ? record.nextReviewDue.split('T')[0] : '',
+      notes: record.notes ?? '',
+      status: record.status ?? 'Active',
+    })
+  })
 
   const onSubmit = async (data: MedicationFormData) => {
     const payload: CreateMedicationDto = {
