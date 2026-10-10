@@ -156,6 +156,8 @@ public class BookingsController : ControllerBase
         var readiness = await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct);
         if (!readiness.Allowed)
             return BadRequest(ApiResponse<BookingDetailDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == dto.TripInstanceId, ct))
+            return NotFound(ApiResponse<BookingDetailDto>.Fail("Trip not found"));
 
         // The provider's calendar date, not the UTC date (which is yesterday for the first 10-11 hours of a Sydney day).
         var providerToday = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
@@ -328,7 +330,8 @@ public class BookingsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
-        var b = await _db.ParticipantBookings.FirstOrDefaultAsync(x => x.Id == id, ct);
+        // ParticipantBooking has no organisation column or query filter: a booking is the caller's only if its trip is.
+        var b = await _db.ParticipantBookings.FirstOrDefaultAsync(x => x.Id == id && _db.TripInstances.Any(t => t.Id == x.TripInstanceId), ct);
         if (b == null) return NotFound(ApiResponse<bool>.Fail("Booking not found"));
         var tripId = b.TripInstanceId;
         _db.ParticipantBookings.Remove(b);
@@ -492,6 +495,10 @@ public class ReservationsController : ControllerBase
     private readonly OdipDbContext _db;
     public ReservationsController(OdipDbContext db) => _db = db;
 
+    /// <summary>AccommodationReservation has no organisation column or query filter: a reservation is the caller's only if its trip is (TripInstances is tenant-filtered).</summary>
+    private IQueryable<AccommodationReservation> TenantReservations() =>
+        _db.AccommodationReservations.Where(r => _db.TripInstances.Any(t => t.Id == r.TripInstanceId));
+
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<ReservationDto>>>> GetAll(CancellationToken ct)
     {
@@ -514,6 +521,9 @@ public class ReservationsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ReservationDto>>> Create([FromBody] CreateReservationDto dto, CancellationToken ct)
     {
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == dto.TripInstanceId, ct)) return NotFound(ApiResponse<ReservationDto>.Fail("Trip not found"));
+        if (!await _db.AccommodationProperties.AnyAsync(p => p.Id == dto.AccommodationPropertyId, ct)) return BadRequest(ApiResponse<ReservationDto>.Fail("Accommodation not found."));
+
         var reservation = new AccommodationReservation
         {
             Id = Guid.NewGuid(), TripInstanceId = dto.TripInstanceId,
@@ -551,8 +561,9 @@ public class ReservationsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ReservationDto>>> Update(Guid id, [FromBody] UpdateReservationDto dto, CancellationToken ct)
     {
-        var r = await _db.AccommodationReservations.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var r = await TenantReservations().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (r == null) return NotFound(ApiResponse<ReservationDto>.Fail("Reservation not found"));
+        if (!await _db.AccommodationProperties.AnyAsync(p => p.Id == dto.AccommodationPropertyId, ct)) return BadRequest(ApiResponse<ReservationDto>.Fail("Accommodation not found."));
 
         r.AccommodationPropertyId = dto.AccommodationPropertyId; r.RequestSentDate = dto.RequestSentDate;
         r.CheckInDate = dto.CheckInDate; r.CheckOutDate = dto.CheckOutDate;
@@ -588,7 +599,7 @@ public class ReservationsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
-        var r = await _db.AccommodationReservations.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var r = await TenantReservations().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (r == null) return NotFound(ApiResponse<bool>.Fail("Reservation not found"));
         _db.AccommodationReservations.Remove(r);
         await _db.SaveChangesAsync(ct);

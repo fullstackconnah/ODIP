@@ -44,16 +44,22 @@ public class ClaimsController : ControllerBase
         _invoiceService = invoiceService;
     }
 
+    /// <summary>
+    /// The caller's own claims. TripClaim has no organisation column and no query filter, so a claim is theirs only if the trip (a Trip claim) or the participant (a Shift claim) it belongs to
+    /// is: both sets are tenant-filtered. Every read or write of a claim by id starts here, so another organisation's claim is "not found".
+    /// </summary>
+    private IQueryable<TripClaim> TenantClaims() =>
+        _db.TripClaims.Where(c => _db.TripInstances.Any(t => t.Id == c.TripInstanceId) || _db.Participants.Any(p => p.Id == c.ParticipantId));
+
     // POST /api/v1/trips/{tripId}/claims/preview
     [HttpPost("trips/{tripId:guid}/claims/preview")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ClaimPreviewResponseDto>>> PreviewClaim(
         Guid tripId, [FromBody] ClaimPreviewRequestDto dto, CancellationToken ct)
     {
-        // No tenant guard here on purpose. The preview's own lines and total have always been returned to any caller the class-level
-        // [Authorize] admits, and narrowing that is a wider product change than the budget finding asks for. The budget block it now
-        // carries is scoped inside the generator, under the CALLER's tenant (budget security audit F-1), so a SuperAdmin with no
-        // organisation chosen gets a preview with no budget rather than another organisation's.
+        // No separate guard here: the generator reads the trip through the tenant-filtered TripInstances, so another organisation's trip is "Trip not found" (400),
+        // as it is for GenerateClaim; only a SuperAdmin with no organisation chosen previews any trip, by design. The budget block it carries is scoped inside
+        // the generator, under the CALLER's tenant (budget security audit F-1), so that SuperAdmin gets a preview with no budget rather than another organisation's.
         try
         {
             var preview = await _generator.PreviewClaimAsync(tripId, dto, ct);
@@ -96,6 +102,9 @@ public class ClaimsController : ControllerBase
     [HttpGet("trips/{tripId:guid}/claims")]
     public async Task<ActionResult<ApiResponse<List<TripClaimListDto>>>> GetClaimsForTrip(Guid tripId, CancellationToken ct)
     {
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == tripId, ct))
+            return NotFound(ApiResponse<List<TripClaimListDto>>.Fail("Trip not found"));
+
         var items = await _db.TripClaims
             .Include(c => c.TripInstance)
             .Where(c => c.TripInstanceId == tripId)
@@ -200,7 +209,7 @@ public class ClaimsController : ControllerBase
     [HttpGet("claims/{claimId:guid}")]
     public async Task<ActionResult<ApiResponse<TripClaimDetailDto>>> GetClaim(Guid claimId, CancellationToken ct)
     {
-        var c = await _db.TripClaims
+        var c = await TenantClaims()
             .Include(x => x.TripInstance)
             .Include(x => x.AuthorisedByUser)
             .Include(x => x.LineItems)
@@ -259,8 +268,12 @@ public class ClaimsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> UpdateClaim(Guid claimId, [FromBody] UpdateClaimDto dto, CancellationToken ct)
     {
-        var c = await _db.TripClaims.FirstOrDefaultAsync(x => x.Id == claimId, ct);
+        var c = await TenantClaims().FirstOrDefaultAsync(x => x.Id == claimId, ct);
         if (c == null) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
+
+        // The authoriser is a user of the caller's organisation (Users is tenant-filtered); checked before anything is changed, so a refusal writes nothing.
+        if (dto.AuthorisedByStaffId is { } authoriserId && !await _db.Users.AnyAsync(u => u.Id == authoriserId, ct))
+            return BadRequest(ApiResponse<bool>.Fail("Authorising staff member not found."));
 
         // The NDIA's code for a rejection (budget phase 2b) is checked before anything is changed, so a refusal writes nothing: no control characters (Postgres refuses a NUL in text), at most ten
         // characters, and only with a claim that is, or is being made, Rejected.
@@ -317,6 +330,8 @@ public class ClaimsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> UpdateLineItem(Guid claimId, Guid id, [FromBody] UpdateClaimLineItemDto dto, CancellationToken ct)
     {
+        if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
+
         var item = await _db.ClaimLineItems
             .Include(l => l.TripClaim)
             .FirstOrDefaultAsync(x => x.Id == id && x.TripClaimId == claimId, ct);
@@ -366,7 +381,7 @@ public class ClaimsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteClaim(Guid claimId, CancellationToken ct)
     {
-        var claim = await _db.TripClaims
+        var claim = await TenantClaims()
             .Include(c => c.LineItems)
             .FirstOrDefaultAsync(x => x.Id == claimId, ct);
 
@@ -401,6 +416,8 @@ public class ClaimsController : ControllerBase
     [HttpGet("claims/{claimId:guid}/bpr-csv")]
     public async Task<IActionResult> DownloadBprCsv(Guid claimId, CancellationToken ct)
     {
+        if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
+
         try
         {
             var (bytes, fileName) = await _bprService.GenerateBprCsvAsync(claimId, ct);
@@ -416,6 +433,8 @@ public class ClaimsController : ControllerBase
     [HttpGet("claims/{claimId:guid}/invoices/{bookingId:guid}")]
     public async Task<IActionResult> DownloadInvoice(Guid claimId, Guid bookingId, CancellationToken ct)
     {
+        if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
+
         try
         {
             var (bytes, fileName) = await _invoiceService.GenerateInvoiceAsync(claimId, bookingId, ct);

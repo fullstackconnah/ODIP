@@ -7,6 +7,8 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable, type Column } from '@/components/DataTable'
 import { usePermissions } from '@/lib/permissions'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import { HEALTH_CONDITION_TYPES } from '@/api/types/enums'
 import { HEALTH_CONDITION_TYPE_LABELS } from '@/api/types/health-conditions'
 import type { ParticipantHealthConditionDto } from '@/api/types/health-conditions'
@@ -44,7 +46,10 @@ function hasStatus(has: boolean | null): { status: string; label: string } {
  */
 export default function ParticipantHealthConditionsSection({ participantId }: { participantId: string | undefined }) {
   const { canWriteHealthConditions } = usePermissions()
-  const { data: conditions = [], isLoading } = useParticipantHealthConditions(participantId)
+  const conditionsQuery = useParticipantHealthConditions(participantId)
+  const conditions = conditionsQuery.data ?? []
+  // A failed or paused request is not an empty list: "No health conditions recorded" is only for one that succeeded and came back empty.
+  const phase = queryPhase(conditionsQuery)
   const upsertCondition = useUpsertHealthCondition()
 
   const [editing, setEditing] = useState<ParticipantHealthConditionDto | null>(null)
@@ -127,14 +132,19 @@ export default function ParticipantHealthConditionsSection({ participantId }: { 
         <HeartPulse className="w-4 h-4" /> Health Conditions
       </h3>
 
-      <DataTable
-        data={ordered}
-        columns={columns}
-        keyField="conditionType"
-        loading={isLoading}
-        emptyMessage="No health conditions recorded."
-        compact
-      />
+      {phase === 'loading' ? (
+        <PageState kind="loading" noun="health condition list" />
+      ) : phase === 'error' ? (
+        <PageState kind="error" noun="health condition list" onRetry={() => conditionsQuery.refetch()} />
+      ) : (
+        <DataTable
+          data={ordered}
+          columns={columns}
+          keyField="conditionType"
+          emptyMessage="No health conditions recorded."
+          compact
+        />
+      )}
 
       <Modal
         open={!!editing}

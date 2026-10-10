@@ -1141,6 +1141,8 @@ public class ParticipantsController : ControllerBase
     [HttpGet("{id:guid}/bookings")]
     public async Task<ActionResult<ApiResponse<List<BookingListDto>>>> GetBookings(Guid id, CancellationToken ct)
     {
+        if (!await _db.Participants.AnyAsync(p => p.Id == id, ct)) return NotFound(ApiResponse<List<BookingListDto>>.Fail("Participant not found"));
+
         var bookings = await _db.ParticipantBookings.Include(b => b.TripInstance)
             .Where(b => b.ParticipantId == id)
             .Select(b => new BookingListDto
@@ -1158,6 +1160,9 @@ public class ParticipantsController : ControllerBase
     [HttpGet("{id:guid}/support-profile")]
     public async Task<ActionResult<ApiResponse<SupportProfileDto>>> GetSupportProfile(Guid id, CancellationToken ct)
     {
+        // SupportProfile has no organisation column or query filter: it is the caller's only if its participant is.
+        if (!await _db.Participants.AnyAsync(p => p.Id == id, ct)) return NotFound(ApiResponse<SupportProfileDto>.Fail("Participant not found"));
+
         var sp = await _db.SupportProfiles.FirstOrDefaultAsync(s => s.ParticipantId == id, ct);
         if (sp == null) return NotFound(ApiResponse<SupportProfileDto>.Fail("Support profile not found"));
 
@@ -1176,6 +1181,8 @@ public class ParticipantsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<SupportProfileDto>>> UpdateSupportProfile(Guid id, [FromBody] UpdateSupportProfileDto dto, CancellationToken ct)
     {
+        if (!await _db.Participants.AnyAsync(p => p.Id == id, ct)) return NotFound(ApiResponse<SupportProfileDto>.Fail("Participant not found"));
+
         var sp = await _db.SupportProfiles.FirstOrDefaultAsync(s => s.ParticipantId == id, ct);
         if (sp == null)
         {
