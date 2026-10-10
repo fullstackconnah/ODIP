@@ -6,6 +6,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 
 namespace Odip.Infrastructure.Services;
 
@@ -81,6 +82,9 @@ public class ClaimGenerationService
     public async Task<TripClaim> GenerateDraftClaimAsync(
         Guid tripInstanceId, GenerateClaimRequestDto? overrides = null, CancellationToken ct = default)
     {
+        // Two requests at the same moment would both pass the "no active claim" check below and save two drafts, so the second waits here, then reads what the first saved and is refused.
+        await using var held = await RosterGenerationLock.AcquireAsync(_db, tripInstanceId, ct, scope: "claim-generate");
+
         // Convert to preview request for shared calculation
         var previewOverrides = overrides == null ? null : new ClaimPreviewRequestDto
         {
@@ -164,6 +168,7 @@ public class ClaimGenerationService
         claim.TotalAmount = claimLineItems.Sum(l => l.TotalAmount);
 
         await _db.SaveChangesAsync(ct);
+        await held.CommitAsync(ct);
         return claim;
     }
 
