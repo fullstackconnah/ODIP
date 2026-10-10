@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, RouterProvider, createMemoryRouter } from 'react-router-dom'
-import OnboardingPage, { OnboardingTable } from './OnboardingPage'
+import { OnboardingTable } from './OnboardingPage'
 import { intakeCompleteState } from './intake/intakeComplete'
 
 const { mockUseQuery } = vi.hoisted(() => ({ mockUseQuery: vi.fn() }))
@@ -16,7 +16,7 @@ describe('OnboardingPage', () => {
   it('shows tenant-derived stage, progress, and one dominant next action that preserves the participant route', async () => {
     mockUseQuery.mockReturnValue({ data: [{ participantId: 'p-1', fullName: 'Jamie Rivers', stage: 'Onboarding incomplete', completedSteps: 2, totalSteps: 5, nextAction: 'Confirm service needs' }], isLoading: false })
     const user = userEvent.setup()
-    render(<MemoryRouter initialEntries={['/onboarding']}><Routes><Route path="/onboarding" element={<OnboardingPage />} /><Route path="/onboarding/:id" element={<div>Checklist route</div>} /></Routes></MemoryRouter>)
+    render(<MemoryRouter initialEntries={['/onboarding']}><Routes><Route path="/onboarding" element={<OnboardingTable />} /><Route path="/onboarding/:id" element={<div>Checklist route</div>} /></Routes></MemoryRouter>)
 
     expect(screen.getByText('Jamie Rivers')).toBeInTheDocument()
     expect(screen.getByText('Onboarding incomplete')).toBeInTheDocument()
@@ -30,7 +30,7 @@ describe('OnboardingPage', () => {
   it('keeps the readable worklist but does not promise a lifecycle mutation to ReadOnly', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
     mockUseQuery.mockReturnValue({ data: [{ participantId: 'p-2', fullName: 'Avery Lee', stage: 'Intake incomplete', completedSteps: 0, totalSteps: 5, nextAction: 'Complete intake' }], isLoading: false })
-    render(<MemoryRouter><OnboardingPage /></MemoryRouter>)
+    render(<MemoryRouter><OnboardingTable /></MemoryRouter>)
 
     expect(screen.getByText('Avery Lee')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'View checklist' })).toBeInTheDocument()
@@ -39,7 +39,7 @@ describe('OnboardingPage', () => {
 
   it('shows an empty state with a link back to Enquiries when there is no onboarding work', () => {
     mockUseQuery.mockReturnValue({ data: [], isLoading: false })
-    render(<MemoryRouter><OnboardingPage /></MemoryRouter>)
+    render(<MemoryRouter><OnboardingTable /></MemoryRouter>)
 
     expect(screen.getByText('No participants in onboarding')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'View enquiries' })).toHaveAttribute('href', '/participants?tab=enquiries')
@@ -49,7 +49,7 @@ describe('OnboardingPage', () => {
     const refetch = vi.fn()
     mockUseQuery.mockReturnValue({ data: [], isLoading: false, isError: true, refetch })
     const user = userEvent.setup()
-    render(<MemoryRouter><OnboardingPage /></MemoryRouter>)
+    render(<MemoryRouter><OnboardingTable /></MemoryRouter>)
 
     expect(screen.getByRole('alert')).toHaveTextContent(/could not load the onboarding worklist/i)
     expect(screen.queryByText('No participants in onboarding')).not.toBeInTheDocument()
@@ -59,7 +59,7 @@ describe('OnboardingPage', () => {
 
   it('renders gate progress as an accessible progressbar, not just a text fraction', () => {
     mockUseQuery.mockReturnValue({ data: [{ participantId: 'p-3', fullName: 'Rowan Vale', stage: 'Onboarding incomplete', completedSteps: 2, totalSteps: 5, nextAction: 'Confirm service needs' }], isLoading: false })
-    render(<MemoryRouter><OnboardingPage /></MemoryRouter>)
+    render(<MemoryRouter><OnboardingTable /></MemoryRouter>)
 
     const bar = screen.getByRole('progressbar', { name: '2 of 5 gates' })
     expect(bar).toHaveAttribute('aria-valuenow', '2')
@@ -74,7 +74,7 @@ describe('OnboardingPage', () => {
         nextAction: 'Validate profile essentials', reasons: ['Ndis number missing', 'Consent not signed'] }],
       isLoading: false,
     })
-    render(<MemoryRouter><OnboardingPage /></MemoryRouter>)
+    render(<MemoryRouter><OnboardingTable /></MemoryRouter>)
 
     // first reason is the badge label; the rest are listed under the next action
     expect(screen.getByText('Ndis number missing')).toBeInTheDocument()
@@ -87,7 +87,7 @@ describe('OnboardingPage', () => {
       { participantId: 'p-2', fullName: 'Avery Lee', stage: 'Intake incomplete', completedSteps: 0, totalSteps: 5, nextAction: 'Complete intake', reasons: [] },
     ], isLoading: false })
     const user = userEvent.setup()
-    render(<MemoryRouter><OnboardingPage /></MemoryRouter>)
+    render(<MemoryRouter><OnboardingTable /></MemoryRouter>)
 
     expect(screen.getByText('Jamie Rivers')).toBeInTheDocument()
     expect(screen.getByText('Avery Lee')).toBeInTheDocument()
@@ -158,7 +158,7 @@ describe('OnboardingTable: column budget (the table must fit, not scroll sideway
         nextAction: LONG_NEXT, reasons: [LONG_REASON, 'Current immutable agreement evidence is pending; the UnapprovedDraft source is not complete or eligible.'] }],
       isLoading: false,
     })
-    render(<MemoryRouter><OnboardingPage /></MemoryRouter>)
+    render(<MemoryRouter><OnboardingTable /></MemoryRouter>)
   }
 
   it('wraps the stage chip inside a cap instead of letting a long reason set the column width', () => {

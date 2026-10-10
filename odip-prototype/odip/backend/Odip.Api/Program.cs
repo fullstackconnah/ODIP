@@ -571,8 +571,8 @@ app.UseAuthorization();
 app.UseMiddleware<Odip.Api.Middleware.ReadOnlyMiddleware>();
 
 // ── Health endpoints ─────────────────────────────────────────
-// The "/api/" prefix is mandatory: nginx (nginx/default.conf) proxies only `location /api/`
-// and `location /swagger` to the API — anything else falls through to the SPA's
+// The "/api/" prefix is mandatory: nginx (nginx/default.conf) proxies only `location /api/` to the API
+// — anything else falls through to the SPA's
 // `try_files … /index.html`, so a probe at bare "/health" would get index.html with a 200.
 // No .RequireRateLimiting(...): probes fire on a fixed interval and would eat the
 // "api" 100/min budget. The default plain-text writer is kept deliberately — these are

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import InquiriesPage from './InquiriesPage'
+import { InquiriesTable } from './InquiriesPage'
 
 // The Enquiries tab shows the pipeline's first stage only: open enquiries. An enquiry with no participant is "New", one whose intake has started and
 // is not complete is "Draft intake". Once the intake is complete the participant is on the Onboarding tab, and once they are finalised they are on the
@@ -35,7 +35,7 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/inquiries']}>
       <Routes>
-        <Route path="/inquiries" element={<InquiriesPage />} />
+        <Route path="/inquiries" element={<InquiriesTable />} />
         <Route path="/participants/:id/intake" element={<p>Intake wizard destination</p>} />
         <Route path="/participants/new-inquiry" element={<p>Enquiry form destination</p>} />
       </Routes>
