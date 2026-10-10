@@ -10,19 +10,10 @@ namespace Odip.Api.Controllers;
 /// <see cref="ChecklistItemType"/> (21 values). The participant detail reads all twenty-one through
 /// <see cref="MaterializeAll"/>. The class no longer has routes (the nested GET/PUT checklist-items endpoints had
 /// no caller). The wizard's save writes these rows through ParticipantPatchApplier.UpsertChecklistItemsAsync, which
-/// holds its own copy of the notes rule, so <see cref="ApplyAnswer"/> has no caller in the API now; it stays until
-/// the ApplyAnswer copies are merged into one place.
+/// applies each answer with <see cref="Odip.Infrastructure.Services.ParticipantGridRules"/>.
 /// </summary>
 public static class ParticipantChecklistItemsController
 {
-    /// <summary>Sets a checklist row's answer — same "no separate audit timestamp" shape as ParticipantAdlAssessment.ApplyAnswer.</summary>
-    internal static void ApplyAnswer(ParticipantChecklistItem row, ChecklistItemValue? value, string? notes)
-    {
-        row.Value = value;
-        row.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
-        row.UpdatedAt = DateTime.UtcNow;
-    }
-
     /// <summary>Every <see cref="ChecklistItemType"/>, in declaration order (Community Mobility &amp;
     /// Transport Risk first, then Community Behaviours of Concern — see <see cref="ChecklistItemTypeGroups"/>),
     /// backed by <paramref name="existingRows"/> where a row exists and a synthesized (Id = null,

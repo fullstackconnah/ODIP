@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -29,6 +30,10 @@ public class IncidentsController : ControllerBase
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
     }
+
+    /// <summary>The saved incident as the list shows it — Create and Update return this, so it can never differ from <see cref="GetAll"/>'s item.</summary>
+    private Task<IncidentListDto> ListItemAsync(Guid id, CancellationToken ct) =>
+        _db.IncidentReports.Where(x => x.Id == id).Select(IncidentProjections.ToListDto(DateTime.UtcNow)).SingleAsync(ct);
 
     /// <summary>Item 9 of the connection map: raises (Required + not yet reported) or completes (reported, or status left Required) the IncidentQscReport obligation task for this incident. Called from both Create and Update, right before the caller's own SaveChangesAsync.</summary>
     private async Task RaiseOrCompleteQscTaskAsync(IncidentReport incident, CancellationToken ct)
@@ -233,11 +238,7 @@ public class IncidentsController : ControllerBase
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
-        var query = _db.IncidentReports
-            .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByUser)
-            .Include(i => i.InvolvedParticipant)
-            .AsQueryable();
+        var query = _db.IncidentReports.AsQueryable();
 
         // Default: only active records unless explicitly filtered
         if (isActive != false)
@@ -248,8 +249,10 @@ public class IncidentsController : ControllerBase
         // PP-2 follow-up: archiving sets Status = Closed without touching IsActive (see Delete
         // below), so the IsActive filter above no longer keeps archived incidents out of the
         // default list. Exclude Closed by default unless the caller explicitly filters by
-        // status — e.g. the Archived tab's explicit ?status=Closed keeps working unchanged.
-        if (!status.HasValue)
+        // status — e.g. the Archived tab's explicit ?status=Closed keeps working unchanged. Not in
+        // overdue mode: a closed incident still owes its Commission report, and the banner and the
+        // dashboard count it, so the overdue list must show it.
+        if (!status.HasValue && isOverdueQsc != true)
             query = query.Where(i => i.Status != IncidentStatus.Closed);
 
         if (tripId.HasValue) query = query.Where(i => i.TripInstanceId == tripId.Value);
@@ -263,13 +266,10 @@ public class IncidentsController : ControllerBase
         // which used to run over the full (unpaged) result set. Once GetAll only sends one page,
         // filtering client-side would silently apply to that page's ~50 rows instead of every
         // matching incident — for compliance data, under-reporting overdue incidents is the worst
-        // possible failure. This is the EXACT same predicate as the IsOverdue24h projection below
-        // (and the identical expression used by Create/Update/GetByTrip's IsOverdue24h), applied
-        // as a Where instead of a Select so it participates in TotalCount/paging correctly.
+        // possible failure. This is the same rule IncidentProjections puts in IsOverdue24h,
+        // applied as a Where instead of a Select so it participates in TotalCount/paging correctly.
         if (isOverdueQsc == true)
-            query = query.Where(i => i.QscReportingStatus == QscReportingStatus.Required
-                && i.QscReportedAt == null
-                && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24);
+            query = query.Where(QscReporting.IsOverdueExpr(DateTime.UtcNow));
 
         // Correctness fix: IncidentDateTime is user-entered (picked in the report form) and
         // trivially collision-prone — two incidents can share the exact same value. With no
@@ -279,32 +279,7 @@ public class IncidentsController : ControllerBase
         // .Id is a unique Guid primary key, so ThenBy(i => i.Id) makes the total order
         // deterministic and safe to paginate.
         var projectedQuery = query.OrderByDescending(i => i.IncidentDateTime).ThenBy(i => i.Id)
-            .Select(i => new IncidentListDto
-            {
-                Id = i.Id,
-                ServiceType = i.ServiceType,
-                TripInstanceId = i.TripInstanceId,
-                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
-                IncidentType = i.IncidentType,
-                OtherTypeSpecify = i.OtherTypeSpecify,
-                Severity = i.Severity,
-                Status = i.Status,
-                Title = i.Title,
-                IncidentDateTime = i.IncidentDateTime,
-                Location = i.Location,
-                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
-                InvolvedParticipantId = i.InvolvedParticipantId,
-                InvolvedParticipantName = i.InvolvedParticipant != null
-                    ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
-                QscReportingStatus = i.QscReportingStatus,
-                IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
-                    && i.QscReportedAt == null
-                    && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-                CreatedAt = i.CreatedAt,
-                MedicationAdministrationId = i.MedicationAdministrationId,
-                ShiftId = i.ShiftId,
-                ShiftNoteId = i.ShiftNoteId
-            });
+            .Select(IncidentProjections.ToListDto(DateTime.UtcNow));
 
         var result = await PagedResult<IncidentListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
         return Ok(ApiResponse<PagedResult<IncidentListDto>>.Ok(result));
@@ -345,9 +320,7 @@ public class IncidentsController : ControllerBase
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,
-                IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
-                    && i.QscReportedAt == null
-                    && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
+                IsOverdue24h = QscReporting.IsOverdue(i.IsActive, i.QscReportingStatus, i.QscReportedAt, i.CreatedAt, DateTime.UtcNow),
                 CreatedAt = i.CreatedAt,
                 MedicationAdministrationId = i.MedicationAdministrationId,
                 ShiftId = i.ShiftId,
@@ -583,36 +556,7 @@ public class IncidentsController : ControllerBase
 
         await _db.SaveChangesAsync(ct);
 
-        await _db.Entry(incident).Reference(i => i.TripInstance).LoadAsync(ct);
-        await _db.Entry(incident).Reference(i => i.ReportedByUser).LoadAsync(ct);
-        if (incident.InvolvedParticipantId.HasValue) await _db.Entry(incident).Reference(i => i.InvolvedParticipant).LoadAsync(ct);
-
-        return Ok(ApiResponse<IncidentListDto>.Ok(new IncidentListDto
-        {
-            Id = incident.Id,
-            ServiceType = incident.ServiceType,
-            TripInstanceId = incident.TripInstanceId,
-            TripName = incident.TripInstance?.TripName,
-            IncidentType = incident.IncidentType,
-            OtherTypeSpecify = incident.OtherTypeSpecify,
-            Severity = incident.Severity,
-            Status = incident.Status,
-            Title = incident.Title,
-            IncidentDateTime = incident.IncidentDateTime,
-            Location = incident.Location,
-            ReportedByName = incident.ReportedByUser != null ? incident.ReportedByUser.FirstName + " " + incident.ReportedByUser.LastName : null,
-            InvolvedParticipantId = incident.InvolvedParticipantId,
-            InvolvedParticipantName = incident.InvolvedParticipant != null
-                ? incident.InvolvedParticipant.FirstName + " " + incident.InvolvedParticipant.LastName : null,
-            QscReportingStatus = incident.QscReportingStatus,
-            IsOverdue24h = incident.QscReportingStatus == QscReportingStatus.Required
-                && incident.QscReportedAt == null
-                && (DateTime.UtcNow - incident.CreatedAt).TotalHours > 24,
-            CreatedAt = incident.CreatedAt,
-            MedicationAdministrationId = incident.MedicationAdministrationId,
-            ShiftId = incident.ShiftId,
-            ShiftNoteId = incident.ShiftNoteId
-        }));
+        return Ok(ApiResponse<IncidentListDto>.Ok(await ListItemAsync(incident.Id, ct)));
     }
 
     [HttpPut("{id:guid}")]
@@ -766,36 +710,7 @@ public class IncidentsController : ControllerBase
 
         await _db.SaveChangesAsync(ct);
 
-        await _db.Entry(i).Reference(x => x.TripInstance).LoadAsync(ct);
-        await _db.Entry(i).Reference(x => x.ReportedByUser).LoadAsync(ct);
-        if (i.InvolvedParticipantId.HasValue) await _db.Entry(i).Reference(x => x.InvolvedParticipant).LoadAsync(ct);
-
-        return Ok(ApiResponse<IncidentListDto>.Ok(new IncidentListDto
-        {
-            Id = i.Id,
-            ServiceType = i.ServiceType,
-            TripInstanceId = i.TripInstanceId,
-            TripName = i.TripInstance?.TripName,
-            IncidentType = i.IncidentType,
-            OtherTypeSpecify = i.OtherTypeSpecify,
-            Severity = i.Severity,
-            Status = i.Status,
-            Title = i.Title,
-            IncidentDateTime = i.IncidentDateTime,
-            Location = i.Location,
-            ReportedByName = i.ReportedByUser != null ? i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName : null,
-            InvolvedParticipantId = i.InvolvedParticipantId,
-            InvolvedParticipantName = i.InvolvedParticipant != null
-                ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
-            QscReportingStatus = i.QscReportingStatus,
-            IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
-                && i.QscReportedAt == null
-                && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-            CreatedAt = i.CreatedAt,
-            MedicationAdministrationId = i.MedicationAdministrationId,
-            ShiftId = i.ShiftId,
-            ShiftNoteId = i.ShiftNoteId
-        }));
+        return Ok(ApiResponse<IncidentListDto>.Ok(await ListItemAsync(i.Id, ct)));
     }
 
     [HttpDelete("{id:guid}")]
@@ -818,37 +733,9 @@ public class IncidentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetByTrip(Guid tripId, CancellationToken ct)
     {
         var items = await _db.IncidentReports
-            .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByUser)
-            .Include(i => i.InvolvedParticipant)
             .Where(i => i.TripInstanceId == tripId && i.IsActive)
             .OrderByDescending(i => i.IncidentDateTime)
-            .Select(i => new IncidentListDto
-            {
-                Id = i.Id,
-                ServiceType = i.ServiceType,
-                TripInstanceId = i.TripInstanceId,
-                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
-                IncidentType = i.IncidentType,
-                OtherTypeSpecify = i.OtherTypeSpecify,
-                Severity = i.Severity,
-                Status = i.Status,
-                Title = i.Title,
-                IncidentDateTime = i.IncidentDateTime,
-                Location = i.Location,
-                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
-                InvolvedParticipantId = i.InvolvedParticipantId,
-                InvolvedParticipantName = i.InvolvedParticipant != null
-                    ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
-                QscReportingStatus = i.QscReportingStatus,
-                IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
-                    && i.QscReportedAt == null
-                    && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-                CreatedAt = i.CreatedAt,
-                MedicationAdministrationId = i.MedicationAdministrationId,
-                ShiftId = i.ShiftId,
-                ShiftNoteId = i.ShiftNoteId
-            }).ToListAsync(ct);
+            .Select(IncidentProjections.ToListDto(DateTime.UtcNow)).ToListAsync(ct);
 
         return Ok(ApiResponse<List<IncidentListDto>>.Ok(items));
     }
@@ -857,37 +744,9 @@ public class IncidentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetByShift(Guid shiftId, CancellationToken ct)
     {
         var items = await _db.IncidentReports
-            .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByUser)
-            .Include(i => i.InvolvedParticipant)
             .Where(i => i.ShiftId == shiftId && i.IsActive)
             .OrderByDescending(i => i.IncidentDateTime)
-            .Select(i => new IncidentListDto
-            {
-                Id = i.Id,
-                ServiceType = i.ServiceType,
-                TripInstanceId = i.TripInstanceId,
-                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
-                IncidentType = i.IncidentType,
-                OtherTypeSpecify = i.OtherTypeSpecify,
-                Severity = i.Severity,
-                Status = i.Status,
-                Title = i.Title,
-                IncidentDateTime = i.IncidentDateTime,
-                Location = i.Location,
-                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
-                InvolvedParticipantId = i.InvolvedParticipantId,
-                InvolvedParticipantName = i.InvolvedParticipant != null
-                    ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
-                QscReportingStatus = i.QscReportingStatus,
-                IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
-                    && i.QscReportedAt == null
-                    && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-                CreatedAt = i.CreatedAt,
-                MedicationAdministrationId = i.MedicationAdministrationId,
-                ShiftId = i.ShiftId,
-                ShiftNoteId = i.ShiftNoteId
-            }).ToListAsync(ct);
+            .Select(IncidentProjections.ToListDto(DateTime.UtcNow)).ToListAsync(ct);
 
         return Ok(ApiResponse<List<IncidentListDto>>.Ok(items));
     }
@@ -896,35 +755,9 @@ public class IncidentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetOverdueQsc(CancellationToken ct)
     {
         var items = await _db.IncidentReports
-            .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByUser)
-            .Include(i => i.InvolvedParticipant)
             .Where(QscReporting.IsOverdueExpr(DateTime.UtcNow))
             .OrderByDescending(i => i.CreatedAt)
-            .Select(i => new IncidentListDto
-            {
-                Id = i.Id,
-                ServiceType = i.ServiceType,
-                TripInstanceId = i.TripInstanceId,
-                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
-                IncidentType = i.IncidentType,
-                OtherTypeSpecify = i.OtherTypeSpecify,
-                Severity = i.Severity,
-                Status = i.Status,
-                Title = i.Title,
-                IncidentDateTime = i.IncidentDateTime,
-                Location = i.Location,
-                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
-                InvolvedParticipantId = i.InvolvedParticipantId,
-                InvolvedParticipantName = i.InvolvedParticipant != null
-                    ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
-                QscReportingStatus = i.QscReportingStatus,
-                IsOverdue24h = true,
-                CreatedAt = i.CreatedAt,
-                MedicationAdministrationId = i.MedicationAdministrationId,
-                ShiftId = i.ShiftId,
-                ShiftNoteId = i.ShiftNoteId
-            }).ToListAsync(ct);
+            .Select(IncidentProjections.ToListDto(DateTime.UtcNow)).ToListAsync(ct);
 
         return Ok(ApiResponse<List<IncidentListDto>>.Ok(items));
     }

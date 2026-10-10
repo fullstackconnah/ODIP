@@ -85,7 +85,7 @@ public class ParticipantsControllerCommunityAccessTests
         Assert.All(untouched, c => Assert.Null(c.Id));
     }
 
-    /// <summary>Notes are trimmed and spaces-only notes are stored as null: the rule in ParticipantChecklistItemsController.ApplyAnswer, which the wizard's
+    /// <summary>Notes are trimmed and spaces-only notes are stored as null: the rule in ParticipantGridRules.ApplyAnswer, which the wizard's
     /// save (UpsertChecklistItemsAsync) goes through. It lost its only test when the nested checklist-items route was deleted.</summary>
     [Fact]
     public async Task Create_ChecklistItemNotes_SpacesOnlyAreStoredAsNull_AndPaddedNotesAreTrimmed()

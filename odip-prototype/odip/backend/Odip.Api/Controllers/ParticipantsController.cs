@@ -77,13 +77,13 @@ public class ParticipantsController : ControllerBase
                 // Load-bearing skip — same reasoning as UpsertChecklistItemsAsync's: only skip
                 // when there is both no existing row for this type AND the incoming dto carries no
                 // answer whatsoever; a dto that clears an EXISTING row to null still falls through
-                // to ApplyAnswer below and keeps the row.
+                // to ParticipantGridRules.ApplyAnswer below and keeps the row.
                 if (dto.Rating is null && string.IsNullOrWhiteSpace(dto.StrategyNotes)) continue;
                 row = new ParticipantCommunityAccessRiskItem { Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = dto.ItemType };
                 _db.ParticipantCommunityAccessRiskItems.Add(row);
                 byType[dto.ItemType] = row;
             }
-            ParticipantCommunityAccessRiskItemsController.ApplyAnswer(row, dto.Rating, dto.StrategyNotes);
+            ParticipantGridRules.ApplyAnswer(row, dto.Rating, dto.StrategyNotes);
         }
     }
 

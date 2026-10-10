@@ -21,11 +21,8 @@ namespace Odip.Infrastructure.Services;
 /// documented convention for cross-project members, see ParticipantDocumentService's doc comment).
 /// ParticipantsController.Create/Update now call these as ParticipantPatchApplier.XyzAsync(...).
 ///
-/// The four per-item ApplyAnswer assignment blocks (Consent/HealthCondition/Adl/ChecklistItem) are
-/// inlined into the Upsert*Async methods below rather than moved, for the same cross-assembly
-/// reason: their originals stay on ParticipantConsentsController etc. (still called from those
-/// controllers' own single-item PUT endpoints), and moving would touch four more controllers and
-/// their test suites for no behavioural benefit. Both copies are intentionally byte-identical.
+/// The per-row answer rules (Consent/HealthCondition/Adl/ChecklistItem) live in
+/// <see cref="ParticipantGridRules"/>, shared with the single-row PUT controllers.
 /// </summary>
 public static class ParticipantPatchApplier
 {
@@ -333,10 +330,8 @@ public static class ParticipantPatchApplier
     /// <summary>
     /// INTAKE sub-wave B — upserts every consent row submitted with a create/update payload, keyed
     /// by <see cref="Domain.Enums.ConsentType"/>. Moved verbatim from ParticipantsController; see
-    /// that type's history for the full upsert-by-key rationale. The per-row assignment below is
-    /// intentionally identical to ParticipantConsentsController.ApplyAnswer (kept there too, for
-    /// that controller's own single-item PUT — see this class's type doc for why it's duplicated
-    /// rather than shared across the Api/Infrastructure assembly boundary).
+    /// that type's history for the full upsert-by-key rationale. The per-row assignment is
+    /// <see cref="ParticipantGridRules"/>, shared with ParticipantConsentsController.
     /// </summary>
     public static async Task UpsertConsentsAsync(OdipDbContext db, Guid participantId, List<CreateParticipantConsentDto> consents, CancellationToken ct)
     {
@@ -351,20 +346,14 @@ public static class ParticipantPatchApplier
                 db.ParticipantConsents.Add(row);
                 byType[dto.ConsentType] = row;
             }
-            if (row.Granted != dto.Granted)
-                row.RecordedAt = dto.Granted.HasValue ? DateTime.UtcNow : null;
-            row.Granted = dto.Granted;
-            row.SignedByName = string.IsNullOrWhiteSpace(dto.SignedByName) ? null : dto.SignedByName.Trim();
-            row.SignedDate = dto.SignedDate;
-            row.UpdatedAt = DateTime.UtcNow;
+            ParticipantGridRules.ApplyAnswer(row, dto.Granted, dto.SignedByName, dto.SignedDate);
         }
     }
 
     /// <summary>
     /// INTAKE sub-wave C1 — upserts every health-condition row, keyed by
     /// <see cref="Domain.Enums.HealthConditionType"/>. Moved verbatim from ParticipantsController;
-    /// see this class's type doc for why the per-row assignment (identical to
-    /// ParticipantHealthConditionsController.ApplyAnswer) is duplicated rather than shared.
+    /// the per-row assignment is <see cref="ParticipantGridRules"/>.
     /// </summary>
     public static async Task UpsertHealthConditionsAsync(OdipDbContext db, Guid participantId, List<CreateParticipantHealthConditionDto> conditions, CancellationToken ct)
     {
@@ -379,12 +368,7 @@ public static class ParticipantPatchApplier
                 db.ParticipantHealthConditions.Add(row);
                 byType[dto.ConditionType] = row;
             }
-            row.Has = dto.Has;
-            row.Severity = string.IsNullOrWhiteSpace(dto.Severity) ? null : dto.Severity.Trim();
-            row.PlanProvided = dto.PlanProvided;
-            row.TrainingRequired = dto.TrainingRequired;
-            row.Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim();
-            row.UpdatedAt = DateTime.UtcNow;
+            ParticipantGridRules.ApplyAnswer(row, dto.Has, dto.Severity, dto.PlanProvided, dto.TrainingRequired, dto.Notes);
         }
     }
 
@@ -392,7 +376,7 @@ public static class ParticipantPatchApplier
     /// INTAKE sub-wave C2 — upserts every ADL-assessment row, keyed by
     /// <see cref="Domain.Enums.AdlType"/>. Moved verbatim from ParticipantsController; sparse on
     /// creation exactly as the original (see the guard inside the loop). Per-row assignment is
-    /// identical to ParticipantAdlAssessmentsController.ApplyAnswer (duplicated — see type doc).
+    /// <see cref="ParticipantGridRules"/>.
     /// </summary>
     public static async Task UpsertAdlAssessmentsAsync(OdipDbContext db, Guid participantId, List<CreateParticipantAdlAssessmentDto> assessments, CancellationToken ct)
     {
@@ -408,18 +392,15 @@ public static class ParticipantPatchApplier
                 db.ParticipantAdlAssessments.Add(row);
                 byType[dto.AdlType] = row;
             }
-            row.Level = dto.Level;
-            row.Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim();
-            row.HowToHelpNotes = string.IsNullOrWhiteSpace(dto.HowToHelpNotes) ? null : dto.HowToHelpNotes.Trim();
-            row.UpdatedAt = DateTime.UtcNow;
+            ParticipantGridRules.ApplyAnswer(row, dto.Level, dto.Notes, dto.HowToHelpNotes);
         }
     }
 
     /// <summary>
     /// INTAKE-03/04, CommunityAccessDailyLiving stream — upserts every checklist-item row, keyed by
     /// <see cref="Domain.Enums.ChecklistItemType"/>. Moved verbatim from ParticipantsController;
-    /// sparse on creation exactly as the original. Per-row assignment is identical to
-    /// ParticipantChecklistItemsController.ApplyAnswer (duplicated — see type doc).
+    /// sparse on creation exactly as the original. Per-row assignment is
+    /// <see cref="ParticipantGridRules"/>.
     /// </summary>
     public static async Task UpsertChecklistItemsAsync(OdipDbContext db, Guid participantId, List<CreateParticipantChecklistItemDto> items, CancellationToken ct)
     {
@@ -435,9 +416,7 @@ public static class ParticipantPatchApplier
                 db.ParticipantChecklistItems.Add(row);
                 byType[dto.ItemType] = row;
             }
-            row.Value = dto.Value;
-            row.Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim();
-            row.UpdatedAt = DateTime.UtcNow;
+            ParticipantGridRules.ApplyAnswer(row, dto.Value, dto.Notes);
         }
     }
 
