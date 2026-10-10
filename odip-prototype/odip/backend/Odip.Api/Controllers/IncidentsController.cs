@@ -72,6 +72,25 @@ public class IncidentsController : ControllerBase
             : Task.FromResult(true);
 
     /// <summary>
+    /// IncidentReport has no organisation column or query filter, so the reads that join its reporting user are scoped by that join and a write that loads the row by its id alone
+    /// must be too: an incident is the caller's only if the user who reported it is (Users is tenant-filtered).
+    /// </summary>
+    private IQueryable<IncidentReport> TenantIncidents() =>
+        _db.IncidentReports.Where(i => _db.Users.Any(u => u.Id == i.ReportedByUserId));
+
+    /// <summary>Null is always fine, otherwise the id must resolve to a Participant of the caller's organisation (Participants is tenant-filtered).</summary>
+    private Task<bool> IsValidParticipantRefAsync(Guid? participantId, CancellationToken ct) =>
+        participantId.HasValue
+            ? _db.Participants.AnyAsync(p => p.Id == participantId.Value, ct)
+            : Task.FromResult(true);
+
+    /// <summary>Null is always fine, otherwise the id must resolve to a booking on one of the caller's trips (ParticipantBooking has no query filter of its own).</summary>
+    private Task<bool> IsValidBookingRefAsync(Guid? bookingId, CancellationToken ct) =>
+        bookingId.HasValue
+            ? _db.ParticipantBookings.AnyAsync(b => b.Id == bookingId.Value && _db.TripInstances.Any(t => t.Id == b.TripInstanceId), ct)
+            : Task.FromResult(true);
+
+    /// <summary>
     /// INC-01 validation: null is always fine, otherwise the id must resolve to a TripInstance —
     /// same-tenant scoping comes for free from _db.TripInstances' ambient OdipDbContext query
     /// filter, same pattern as <see cref="IsValidUserRefAsync"/>.
@@ -399,6 +418,10 @@ public class IncidentsController : ControllerBase
             return BadRequest(ApiResponse<IncidentListDto>.Fail(crossFieldError));
         if (!await IsValidTripRefAsync(dto.TripInstanceId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Trip not found."));
+        if (!await IsValidParticipantRefAsync(dto.InvolvedParticipantId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved participant not found."));
+        if (!await IsValidBookingRefAsync(dto.ParticipantBookingId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Booking not found."));
         if (!await IsValidUserRefAsync(dto.InvolvedStaffId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved staff member not found."));
         if (!await IsValidUserRefAsync(dto.ReportedByStaffId, ct))
@@ -540,7 +563,7 @@ public class IncidentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<IncidentListDto>>> Update(Guid id, [FromBody] UpdateIncidentDto dto, CancellationToken ct)
     {
-        var i = await _db.IncidentReports.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var i = await TenantIncidents().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (i == null) return NotFound(ApiResponse<IncidentListDto>.Fail("Incident not found"));
 
         var crossFieldError = ValidateServiceTypeAndIncidentType(dto);
@@ -548,6 +571,10 @@ public class IncidentsController : ControllerBase
             return BadRequest(ApiResponse<IncidentListDto>.Fail(crossFieldError));
         if (!await IsValidTripRefAsync(dto.TripInstanceId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Trip not found."));
+        if (!await IsValidParticipantRefAsync(dto.InvolvedParticipantId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved participant not found."));
+        if (!await IsValidBookingRefAsync(dto.ParticipantBookingId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Booking not found."));
         if (!await IsValidUserRefAsync(dto.InvolvedStaffId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved staff member not found."));
         if (!await IsValidUserRefAsync(dto.ReportedByStaffId, ct))
@@ -690,7 +717,7 @@ public class IncidentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
-        var i = await _db.IncidentReports.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var i = await TenantIncidents().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (i == null) return NotFound(ApiResponse<bool>.Fail("Incident not found"));
         // PP-2: status-only lifecycle, matching TasksDashboardController's archive pattern —
         // IsActive is left untouched so GetAll's default `isActive == true` filter doesn't hide

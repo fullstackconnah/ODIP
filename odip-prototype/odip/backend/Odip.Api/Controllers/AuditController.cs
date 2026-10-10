@@ -58,6 +58,24 @@ public class AuditController : ControllerBase
         if (!allowedTypes.TryGetValue(entityType, out var canonicalEntityType))
             return BadRequest(new { error = "Invalid entity type." });
 
+        // AuditLog has no organisation column or query filter, so history is shown only for an entity the caller can see: found through its own tenant-filtered table, or, for the
+        // tables without a filter, through the trip, user or vehicle it hangs off.
+        var visible = canonicalEntityType switch
+        {
+            "TripInstance" => await _db.TripInstances.AnyAsync(e => e.Id == entityId, ct),
+            "Participant" => await _db.Participants.AnyAsync(e => e.Id == entityId, ct),
+            "ParticipantBooking" => await _db.ParticipantBookings.AnyAsync(e => e.Id == entityId && _db.TripInstances.Any(t => t.Id == e.TripInstanceId), ct),
+            "IncidentReport" => await _db.IncidentReports.AnyAsync(e => e.Id == entityId && _db.Users.Any(u => u.Id == e.ReportedByUserId), ct),
+            "Staff" => await _db.Users.AnyAsync(e => e.Id == entityId, ct),
+            "StaffAssignment" => await _db.StaffAssignments.AnyAsync(e => e.Id == entityId && _db.TripInstances.Any(t => t.Id == e.TripInstanceId), ct),
+            "VehicleAssignment" => await _db.VehicleAssignments.AnyAsync(e => e.Id == entityId && _db.TripInstances.Any(t => t.Id == e.TripInstanceId), ct),
+            "ParticipantMedication" => await _db.ParticipantMedications.AnyAsync(e => e.Id == entityId, ct),
+            "MedicationAdministration" => await _db.MedicationAdministrations.AnyAsync(e => e.Id == entityId, ct),
+            "ParticipantNote" => await _db.ParticipantNotes.AnyAsync(e => e.Id == entityId, ct),
+            _ => false,
+        };
+        if (!visible) return NotFound(new { error = "Entity not found." });
+
         // Deliberately a lower ceiling (100, not the house 200) — audit history pages are
         // rarely browsed deep, and this predates the shared 50/200 convention. Do not "tidy"
         // this to match every other controller.

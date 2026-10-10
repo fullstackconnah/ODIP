@@ -63,7 +63,10 @@ public class NdiaRejectionCodeTests
 
         public TripClaim SeedClaim(TripClaimStatus status = TripClaimStatus.Submitted)
         {
-            var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, Status = status, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 400m };
+            // A claim belongs to its organisation through its participant, which is what the claim endpoints now check.
+            var participant = new Participant { Id = Guid.NewGuid(), TenantId = TenantA, FirstName = "Ada", LastName = "Claim" };
+            var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = status, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 400m };
+            Db.Participants.Add(participant);
             Db.TripClaims.Add(claim);
             Db.SaveChanges();
             ClearAudit();

@@ -7,6 +7,8 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable, type Column } from '@/components/DataTable'
 import { usePermissions } from '@/lib/permissions'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import { ADL_TYPES, adlCategoryOf } from '@/api/types/enums'
 import { ADL_TYPE_LABELS, ADL_LEVEL_LABELS } from '@/api/types/adl-assessments'
 import type { ParticipantAdlAssessmentDto } from '@/api/types/adl-assessments'
@@ -49,7 +51,10 @@ function levelStatus(level: AdlLevel | null): { status: string; label: string } 
  */
 export default function ParticipantAdlAssessmentsSection({ participantId }: { participantId: string | undefined }) {
   const { canWriteAdlAssessments } = usePermissions()
-  const { data: assessments = [], isLoading } = useParticipantAdlAssessments(participantId)
+  const assessmentsQuery = useParticipantAdlAssessments(participantId)
+  const assessments = assessmentsQuery.data ?? []
+  // A failed or paused request is not an empty list: "No personal ADLs recorded" is only for one that succeeded and came back empty.
+  const phase = queryPhase(assessmentsQuery)
   const upsertAssessment = useUpsertAdlAssessment()
 
   const [editing, setEditing] = useState<ParticipantAdlAssessmentDto | null>(null)
@@ -132,6 +137,9 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
     ]
   }
 
+  if (phase === 'loading') return <PageState kind="loading" noun="ADL assessment list" />
+  if (phase === 'error') return <PageState kind="error" noun="ADL assessment list" onRetry={() => assessmentsQuery.refetch()} />
+
   return (
     <div className="space-y-6">
       <div className="space-y-4">
@@ -142,7 +150,6 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
           data={orderedFor('Personal')}
           columns={columns()}
           keyField="adlType"
-          loading={isLoading}
           emptyMessage="No personal ADLs recorded."
           compact
         />
@@ -156,7 +163,6 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
           data={orderedFor('CommunityDomestic')}
           columns={columns()}
           keyField="adlType"
-          loading={isLoading}
           emptyMessage="No community/domestic ADLs recorded."
           compact
         />

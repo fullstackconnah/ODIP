@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
 import { CalendarRange, ArrowUpRight } from 'lucide-react'
 import { useParticipantRostering } from '@/api/hooks'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import { Card } from '@/components/Card'
 import { DataTable } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -24,11 +26,12 @@ const COMPATIBILITY_BADGE_STATUS: Record<string, string> = {
  * roster board. Read-only — "Open roster" is the escalation path for anything that needs editing.
  */
 export default function RosteringTab({ participantId }: { participantId: string }) {
-  const { data, isLoading } = useParticipantRostering(participantId)
-
-  if (isLoading) {
-    return <div className="text-center py-12 text-[var(--color-muted-foreground)]">Loading...</div>
-  }
+  const rostering = useParticipantRostering(participantId)
+  const { data } = rostering
+  // A failed or paused request is not an empty roster: "No staff assigned" is only for one that succeeded and came back empty.
+  const phase = queryPhase(rostering)
+  if (phase === 'loading') return <PageState kind="loading" noun="rostering details" />
+  if (phase === 'error') return <PageState kind="error" noun="rostering details" onRetry={() => rostering.refetch()} />
 
   const assignedStaff = data?.assignedStaff ?? []
   const upcomingShifts = data?.upcomingShifts ?? []
