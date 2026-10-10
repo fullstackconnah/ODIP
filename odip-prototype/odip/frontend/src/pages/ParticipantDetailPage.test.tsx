@@ -32,7 +32,7 @@ const {
   // above so its own tests never run the real axios mutationFn body.
   mockUseGenerateCaregiverLink: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false, isError: false })),
   mockUseRevokeCaregiverLink: vi.fn(() => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, isError: false })),
-  mockUseCaregiverSubmissions: vi.fn<(status?: string) => { data: Record<string, unknown>[] }>(() => ({ data: [] })),
+  mockUseCaregiverSubmissions: vi.fn<(status?: string, options?: { participantId?: string; enabled?: boolean }) => { data: Record<string, unknown>[] }>(() => ({ data: [] })),
 }))
 
 // Only the API layer is mocked. The nested-CRUD sections (Contacts/Risks/Consents/Health
@@ -646,6 +646,23 @@ describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
 
     expect(screen.queryByRole('button', { name: /generate caregiver link/i })).not.toBeInTheDocument()
     expect(screen.queryByTestId('caregiver-link-control')).not.toBeInTheDocument()
+  })
+
+  it('asks for no caregiver submissions at all for a role the list route refuses (SupportWorker)', () => {
+    mockUseCaregiverSubmissions.mockClear()
+    setUserRole('SupportWorker')
+    setup()
+
+    expect(mockUseCaregiverSubmissions).toHaveBeenCalled()
+    for (const [, options] of mockUseCaregiverSubmissions.mock.calls as unknown as [string, { enabled?: boolean }][]) expect(options.enabled).toBe(false)
+  })
+
+  it('asks only for this participant\x27s caregiver submissions (Coordinator)', () => {
+    setUserRole('Coordinator')
+    setup()
+
+    expect(mockUseCaregiverSubmissions).toHaveBeenCalledWith('Draft', { participantId: 'participant-1', enabled: true })
+    expect(mockUseCaregiverSubmissions).toHaveBeenCalledWith('Submitted', { participantId: 'participant-1', enabled: true })
   })
 
   it('shows Generate link for a role with canWriteParticipantDetails (Coordinator)', () => {

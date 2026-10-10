@@ -101,12 +101,12 @@ public class CaregiverSubmissionsController : ControllerBase
     // ── Submissions ────────────────────────────────────────
 
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<List<CaregiverSubmissionListItemDto>>>> List([FromQuery] CaregiverSubmissionStatus? status, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<List<CaregiverSubmissionListItemDto>>>> List([FromQuery] CaregiverSubmissionStatus? status, CancellationToken ct, [FromQuery] Guid? participantId = null)
     {
         var effective = status ?? CaregiverSubmissionStatus.Submitted;
         var rows = await _db.CaregiverProfileSubmissions
             .Include(s => s.Participant)
-            .Where(s => s.Status == effective)
+            .Where(s => s.Status == effective && (participantId == null || s.ParticipantId == participantId))
             .OrderByDescending(s => s.SubmittedAt ?? s.CreatedAt)
             .Select(s => new CaregiverSubmissionListItemDto
             {
