@@ -12,13 +12,23 @@ export const apiClient = axios.create({
 // Singleton refresh promise — prevents concurrent 401s from each calling /auth/exchange
 let refreshPromise: Promise<string | null> | null = null
 
-// Guards against logout() re-running (e.g. if a stale/rejected token keeps triggering
+// Guards against endSession() re-running (e.g. if a stale/rejected token keeps triggering
 // 401s while the redirect to /login is still in flight)
 let loggingOut = false
 
-function logout() {
+/**
+ * Ends the session everywhere and goes to /login: the server drops the 7-day cookie (it outlives the stored token, and the API accepts it when no token is
+ * sent), Firebase forgets the user, and the browser keys go. A step that fails does not stop the others, so a sign-out never gets stuck on a bad connection.
+ */
+export async function endSession() {
   if (loggingOut) return
   loggingOut = true
+  // The token is still stored here, so the request is authorised; the timeout keeps an unreachable server from holding the person on the page.
+  try { await apiClient.post('/auth/logout', undefined, { timeout: 5000 }) } catch { /* ignore */ }
+  try {
+    const { auth } = await import('../lib/firebase')
+    if (auth) await (await import('firebase/auth')).signOut(auth)
+  } catch { /* ignore */ }
   localStorage.removeItem('odip_token')
   localStorage.removeItem('odip_user')
   localStorage.removeItem('odip_viewing_tenant')
@@ -90,8 +100,7 @@ apiClient.interceptors.response.use(
       } catch {
         // Firebase refresh failed — fall through to logout
       }
-      try { await apiClient.post('/auth/logout') } catch { /* ignore */ }
-      logout()
+      await endSession()
     }
     return Promise.reject(error)
   }

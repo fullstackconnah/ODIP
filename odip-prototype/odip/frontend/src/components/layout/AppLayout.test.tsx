@@ -13,7 +13,8 @@ import { TAP_AREA } from '@/components/tapArea'
 // still imported transitively) so this suite doesn't need a QueryClientProvider or a real
 // network call, matching how the other hook-backed page tests in this codebase mock
 // '@/api/hooks' rather than provide a live client.
-const { mockUsePendingLeaveCount, mockUsePendingWitnessRequests, mockUsePendingCompletionCount } = vi.hoisted(() => ({
+const { mockUsePendingLeaveCount, mockUsePendingWitnessRequests, mockUsePendingCompletionCount, mockEndSession } = vi.hoisted(() => ({
+  mockEndSession: vi.fn(),
   mockUsePendingLeaveCount: vi.fn(() => 0),
   mockUsePendingWitnessRequests: vi.fn(() => ({ data: [] as unknown[], isLoading: false })),
   mockUsePendingCompletionCount: vi.fn(() => 0),
@@ -31,6 +32,9 @@ vi.mock('@/api/hooks', async (importOriginal) => {
     usePendingCompletionCount: mockUsePendingCompletionCount,
   }
 })
+
+// Signing out is endSession's job (the server cookie, the Firebase user, the browser keys, the redirect); this suite only checks that the button calls it.
+vi.mock('@/api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/api/client')>()), endSession: mockEndSession }))
 
 // A SuperAdmin's header also renders the tenant switcher, whose own TanStack Query hook needs a QueryClientProvider this
 // suite does not set up. It is header chrome, not navigation, so stub it: the role-by-role nav tests below cover SuperAdmin.
@@ -1132,5 +1136,21 @@ describe('AppLayout — a page that throws, or is still loading, leaves the shel
     fireEvent.click(within(mainNav()).getByRole('link', { name: 'Dashboard' }))
     expect(screen.getByText('A working page')).toBeInTheDocument()
     expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument()
+  })
+})
+
+describe('AppLayout — Sign Out', () => {
+  afterEach(() => {
+    localStorage.clear()
+    mockEndSession.mockReset()
+  })
+
+  it('ends the whole session (cookie, Firebase user and keys), not just the browser keys', () => {
+    localStorage.setItem('odip_token', 'a-session')
+    renderAt('/trips')
+
+    fireEvent.click(screen.getByRole('button', { name: /Sign Out$/ }))
+
+    expect(mockEndSession).toHaveBeenCalledTimes(1)
   })
 })
