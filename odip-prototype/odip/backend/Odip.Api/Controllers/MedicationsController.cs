@@ -213,9 +213,11 @@ public class MedicationsController : ControllerBase
         if (status.HasValue) query = query.Where(m => m.Status == status.Value);
         if (!string.IsNullOrWhiteSpace(search))
         {
-            query = query.Where(m => m.Name.Contains(search)
-                || (m.Participant!.FirstName + " " + m.Participant.LastName).Contains(search)
-                || (m.Participant!.PreferredName != null && m.Participant.PreferredName.Contains(search)));
+            // Lower-cased both sides: Contains alone is a case-sensitive LIKE on Npgsql (as ParticipantQueries.SearchByName).
+            var term = search.Trim().ToLower();
+            query = query.Where(m => m.Name.ToLower().Contains(term)
+                || (m.Participant!.FirstName + " " + m.Participant.LastName).ToLower().Contains(term)
+                || (m.Participant!.PreferredName != null && m.Participant.PreferredName.ToLower().Contains(term)));
         }
 
         // Correctness fix: (Participant.LastName, Name) ties trivially — two different
