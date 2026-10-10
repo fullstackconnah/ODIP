@@ -514,7 +514,7 @@ describe('DataTable — pagination prop (pagination rollout wave 1)', () => {
     expect(onPageChange).toHaveBeenCalledWith(1)
   })
 
-  it('suppresses client-side sorting when pagination is present, trusting the server order', async () => {
+  it('offers no sorting on a server-paged table that cannot ask the server to sort: no arrow state, no click effect, rows in server order', async () => {
     const user = userEvent.setup()
     render(
       <DataTable
@@ -526,14 +526,38 @@ describe('DataTable — pagination prop (pagination rollout wave 1)', () => {
       />
     )
 
-    // Clicking the sortable header still toggles aria-sort (the affordance stays live)...
+    // A page is only a slice of the result, so the table cannot sort it; a header that claimed to would misstate the order of the whole list.
     const nameHeader = screen.getByRole('columnheader', { name: /name/i })
+    expect(nameHeader).not.toHaveAttribute('aria-sort')
+    expect(nameHeader).not.toHaveAttribute('tabindex')
     await user.click(nameHeader)
-    expect(nameHeader).toHaveAttribute('aria-sort', 'ascending')
+    expect(nameHeader).not.toHaveAttribute('aria-sort')
 
-    // ...but row order is untouched — still server/data order (Bianca, Alex), not re-sorted to Alex-first.
     const cells = screen.getAllByRole('cell')
     expect(cells[0]).toHaveTextContent('Bianca')
+  })
+
+  it('offers sorting on a server-paged table once the caller handles onSortChange, leaving the row order to the server', async () => {
+    const user = userEvent.setup()
+    const onSortChange = vi.fn()
+    render(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyField="id"
+        sortable
+        onSortChange={onSortChange}
+        pagination={{ page: 1, pageSize: 2, totalCount: 2, onPageChange: vi.fn() }}
+      />
+    )
+
+    const nameHeader = screen.getByRole('columnheader', { name: /name/i })
+    expect(nameHeader).toHaveAttribute('aria-sort', 'none')
+    await user.click(nameHeader)
+    expect(onSortChange).toHaveBeenCalledWith({ key: 'name', direction: 'asc' })
+
+    // The table does not reorder the page itself: still Bianca first until the server answers.
+    expect(screen.getAllByRole('cell')[0]).toHaveTextContent('Bianca')
   })
 
   it('does not render pagination controls when totalCount is 0', () => {

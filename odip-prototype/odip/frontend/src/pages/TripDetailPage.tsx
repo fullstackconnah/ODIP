@@ -182,7 +182,7 @@ export default function TripDetailPage() {
         )}
 
         {activeTab === 'staff' && (
-          <StaffTab tripId={id} trip={trip} staff={staff} bookings={bookings} canWrite={canWrite} />
+          <StaffTab tripId={id} trip={trip} staff={staff} canWrite={canWrite} />
         )}
 
         {activeTab === 'tasks' && (

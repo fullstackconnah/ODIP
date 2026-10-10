@@ -36,6 +36,7 @@ export function useUpdateContactRole() {
     onSuccess: (res) => {
       if (res.data?.participantId) {
         qc.invalidateQueries({ queryKey: ['participant-contact-roles', res.data.participantId] })
+        qc.invalidateQueries({ queryKey: ['participant', res.data.participantId] })   // the planTypeComplianceWarning depends on the role set
       }
     },
   })
@@ -48,6 +49,7 @@ export function useDeleteContactRole() {
     onSuccess: (_res, variables) => {
       qc.invalidateQueries({ queryKey: ['participant-contact-roles', variables.participantId] })
       qc.invalidateQueries({ queryKey: ['persons'] })
+      qc.invalidateQueries({ queryKey: ['participant', variables.participantId] })   // the planTypeComplianceWarning depends on the role set
     },
   })
 }

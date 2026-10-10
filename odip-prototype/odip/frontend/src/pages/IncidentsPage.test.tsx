@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import IncidentsPage from './IncidentsPage'
 
-const { mockUseIncidents, mockUseOverdueQscIncidents, mockUseFlaggedShiftNotes, mockNavigate } = vi.hoisted(() => ({
+const { mockUseIncidents, mockUseOverdueQscIncidents, mockUseFlaggedShiftNotes, mockNavigate, mockRestoreMutate } = vi.hoisted(() => ({
+  mockRestoreMutate: vi.fn(),
   mockUseIncidents: vi.fn(),
   mockUseOverdueQscIncidents: vi.fn(),
   mockUseFlaggedShiftNotes: vi.fn(),
@@ -17,7 +18,7 @@ const { mockUseIncidents, mockUseOverdueQscIncidents, mockUseFlaggedShiftNotes, 
 vi.mock('@/api/hooks', () => ({
   useIncidents: mockUseIncidents,
   useOverdueQscIncidents: mockUseOverdueQscIncidents,
-  useUpdateIncident: () => ({ mutate: vi.fn(), isPending: false }),
+  useRestoreIncident: () => ({ mutate: mockRestoreMutate, isPending: false }),
   useDeleteIncident: () => ({ mutate: vi.fn(), isPending: false }),
   useFlaggedShiftNotes: mockUseFlaggedShiftNotes,
 }))
@@ -686,5 +687,23 @@ describe('IncidentsPage — status labels', () => {
 
     expect(screen.getByText('Under Review')).toBeInTheDocument()
     expect(screen.queryByText('UnderReview')).not.toBeInTheDocument()
+  })
+})
+
+// Restoring an archived incident is a full-replace update, and the list row has no description, injuries or witnesses. The page asks only for the status change;
+// the hook builds the rest of the body from the stored incident (useRestoreIncident, tested with the real hook).
+describe('IncidentsPage — restoring an archived incident', () => {
+  it('asks to restore the incident to Draft and sends nothing taken from the list row', async () => {
+    const user = userEvent.setup()
+    mockUseIncidents.mockReturnValue({ data: [baseIncident({ id: 'inc-9', status: 'Closed' })], isLoading: false })
+    renderPage()
+
+    await user.click(screen.getByRole('radio', { name: 'Archived' }))
+    await user.click(screen.getByRole('button', { name: 'Restore' }))
+    // The row's Restore opens a confirmation whose own button is also named Restore (the last in the DOM).
+    await user.click(screen.getAllByRole('button', { name: 'Restore' }).at(-1)!)
+
+    expect(mockRestoreMutate).toHaveBeenCalledTimes(1)
+    expect(mockRestoreMutate.mock.calls[0][0]).toEqual({ id: 'inc-9', data: { status: 'Draft' } })
   })
 })

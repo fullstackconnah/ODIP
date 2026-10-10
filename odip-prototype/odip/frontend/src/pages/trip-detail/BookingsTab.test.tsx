@@ -34,7 +34,7 @@ vi.mock('@/api/hooks', () => ({
   PAYMENT_STATUS_COLORS: { NotInvoiced: 'bg-neutral-100 text-neutral-600', Invoiced: 'bg-blue-100 text-blue-700' },
 }))
 
-const trip = { id: 'trip-1', maxParticipants: 10, staffAssignedCount: 0 } as unknown as TripDetailDto
+const trip = { id: 'trip-1', maxParticipants: 10, staffAssignedCount: 0, staffRequired: null, calculatedStaffRequired: 0 } as unknown as TripDetailDto
 
 function makeBooking(overrides: Partial<BookingListDto> = {}): BookingListDto {
   return {
@@ -298,5 +298,35 @@ describe('BookingsTab — Add Booking: the server\'s refusal reaches the user', 
 
     expect(await screen.findByText(GENERIC_BOOKING_ERROR)).toBeInTheDocument()
     expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
+  })
+})
+
+// The Staff Required card shows the server's figure for the trip, not a second sum of the bookings' override ratios (a booking with no override, or at `Other`,
+// counted 0 here but 1 on the server).
+describe('BookingsTab — the staffing summary shows what the server says the trip needs', () => {
+  it('shows the figure the server sends and the exact figure beside it, and how many more staff are needed', () => {
+    const needing = { ...trip, calculatedStaffRequired: 2.5, staffRequired: 4, staffAssignedCount: 1 } as unknown as TripDetailDto
+    const bookings = [makeBooking({ id: 'b1' }), makeBooking({ id: 'b2', supportRatioOverride: 'Other' }), makeBooking({ id: 'b3', supportRatioOverride: 'OneToTwo' })]
+    render(
+      <MemoryRouter>
+        <BookingsTab tripId="trip-1" trip={needing} bookings={bookings} participants={[]} canWrite isReadOnly={false} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Staff Required').parentElement).toHaveTextContent('4 (2.50)')
+    expect(screen.getByText('Staff Assigned').parentElement).toHaveTextContent('1 / 4')
+    expect(screen.getByText('Need 3 more')).toBeInTheDocument()
+  })
+
+  it('shows ? for the figure the server has not set (all bookings cancelled and no minimum), not a 0', () => {
+    const unknown = { ...trip, calculatedStaffRequired: 0, staffRequired: null, staffAssignedCount: 0 } as unknown as TripDetailDto
+    render(
+      <MemoryRouter>
+        <BookingsTab tripId="trip-1" trip={unknown} bookings={[makeBooking({ id: 'b1' })]} participants={[]} canWrite isReadOnly={false} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Staff Required').parentElement).toHaveTextContent('? (0.00)')
+    expect(screen.getByText('Staff Assigned').parentElement).toHaveTextContent('0 / ?')
   })
 })

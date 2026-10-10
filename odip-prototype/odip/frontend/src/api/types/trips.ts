@@ -28,6 +28,8 @@ export interface TripDetailDto extends TripListDto {
   requiredBedrooms: number | null
   minStaffRequired: number | null
   calculatedStaffRequired: number
+  /** Whole staff the trip needs, worked out once on the server (the schedule screen shows the same figure); null while nothing has set it. */
+  staffRequired: number | null
   notes: string | null
   highSupportCount: number
   wheelchairCount: number

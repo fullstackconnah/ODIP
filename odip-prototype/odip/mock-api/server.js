@@ -276,6 +276,7 @@ function tripDetail(t) {
     createdAt: '2026-05-02T10:00:00Z',
     updatedAt: '2026-07-30T11:20:00Z',
     ...(tripDetailExtras[t.id] || {}),
+    staffRequired: (tripDetailExtras[t.id] || {}).calculatedStaffRequired ?? null,
   }
 }
 

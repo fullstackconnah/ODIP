@@ -69,12 +69,10 @@ export default function BookingsPage() {
         <DataTable
           data={bookings}
           keyField="id"
-          sortable
           columns={[
             {
               key: 'participantName',
               header: 'Participant',
-              sortable: true,
               render: (b: any) => (
                 <Link to={`/participants/${b.participantId}`} className="font-medium hover:text-[var(--color-primary)]">
                   {b.participantName || '\u2014'}
@@ -84,7 +82,6 @@ export default function BookingsPage() {
             {
               key: 'tripName',
               header: 'Trip',
-              sortable: true,
               render: (b: any) => (
                 <Link to={`/trips/${b.tripInstanceId}`} className="hover:text-[var(--color-primary)]">
                   {b.tripName || '\u2014'}
@@ -94,7 +91,6 @@ export default function BookingsPage() {
             {
               key: 'bookingStatus',
               header: 'Status',
-              sortable: true,
               render: (b) => (
                 <Dropdown
                   variant="pill"
@@ -113,7 +109,7 @@ export default function BookingsPage() {
                 />
               ),
             },
-            { key: 'bookingDate', header: 'Booking Date', type: 'date', sortable: true },
+            { key: 'bookingDate', header: 'Booking Date', type: 'date' },
             {
               key: 'wheelchairRequired',
               header: 'WC',

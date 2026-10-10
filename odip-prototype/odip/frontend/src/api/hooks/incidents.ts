@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiPutRaw, apiDeleteRaw } from '../client'
 import { fetchPagedList } from './pagedList'
+import { toUpdateIncidentDto } from '../types'
 import type {
   IncidentListDto,
   IncidentDetailDto,
@@ -70,6 +71,25 @@ export function useUpdateIncident() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateIncidentDto }) =>
       apiPutRaw<IncidentDetailDto>(`/incidents/${id}`, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['incidents'] })
+      qc.invalidateQueries({ queryKey: ['incident', vars.id] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+/**
+ * Restores an archived incident. UpdateIncident replaces the whole record and a list row lacks most of it (the description is required), so the stored incident is
+ * read and put back with `data` applied on top (the status change).
+ */
+export function useRestoreIncident() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<UpdateIncidentDto> }) => {
+      const stored = await apiGet<IncidentDetailDto>(`/incidents/${id}`)
+      return apiPutRaw<IncidentDetailDto>(`/incidents/${id}`, toUpdateIncidentDto(stored, data))
+    },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['incidents'] })
       qc.invalidateQueries({ queryKey: ['incident', vars.id] })

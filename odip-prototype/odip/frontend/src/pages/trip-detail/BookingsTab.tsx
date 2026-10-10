@@ -603,11 +603,12 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
 
       {/* Staffing Summary */}
       {bookings.length > 0 && (() => {
+        // How many staff the trip needs is the server's figure (trip.calculatedStaffRequired); this table only sizes the Capacity hint.
         const ratioToStaff: Record<string, number> = { OneToOne: 1, OneToTwo: 0.5, OneToThree: 1/3, OneToFour: 0.25, OneToFive: 0.2, TwoToOne: 2, SharedSupport: 0.25 }
         const ratioLabels: Record<string, string> = { OneToOne: '1:1', OneToTwo: '1:2', OneToThree: '1:3', OneToFour: '1:4', OneToFive: '1:5', TwoToOne: '2:1', SharedSupport: 'Shared' }
         const activeBookings = bookings.filter((b: BookingListDto) => !['Cancelled', 'NoLongerAttending'].includes(b.bookingStatus))
-        const rawTotal = activeBookings.reduce((sum: number, b: BookingListDto) => sum + (ratioToStaff[b.supportRatioOverride ?? ''] ?? 0), 0)
-        const rounded = Math.ceil(rawTotal)
+        const rawTotal = trip.calculatedStaffRequired
+        const rounded = trip.staffRequired ?? 0
         const noRatioCount = activeBookings.filter((b: BookingListDto) => !b.supportRatioOverride || !(b.supportRatioOverride in ratioToStaff)).length
         const assigned = trip.staffAssignedCount ?? 0
         const isStaffed = assigned >= rounded
@@ -626,13 +627,13 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-3">
               <p className="text-xs text-[var(--color-muted-foreground)]">Staff Required</p>
-              <p className="text-xl font-bold mt-1">{rounded} <span className="text-sm font-normal text-[var(--color-muted-foreground)]">({rawTotal.toFixed(2)})</span></p>
+              <p className="text-xl font-bold mt-1">{trip.staffRequired ?? '?'} <span className="text-sm font-normal text-[var(--color-muted-foreground)]">({rawTotal.toFixed(2)})</span></p>
               {noRatioCount > 0 && <p className="text-xs text-[var(--color-warning)] mt-1">{plural(noRatioCount, 'participant')} without ratio</p>}
             </div>
             <div className={`rounded-[var(--radius-md)] p-3 ${isStaffed ? 'bg-[var(--color-primary-fixed)]/30' : 'bg-[var(--color-error-container)]/60'}`}>
               <p className="text-xs text-[var(--color-muted-foreground)]">Staff Assigned</p>
               <p className={`text-xl font-bold mt-1 ${isStaffed ? 'text-[var(--color-success)]' : 'text-[var(--color-destructive)]'}`}>
-                {formatRatio(assigned, rounded)}
+                {formatRatio(assigned, trip.staffRequired ?? '?')}
               </p>
               <p className={`text-xs mt-1 ${isStaffed ? 'text-[var(--color-success)]' : 'text-[var(--color-destructive)]'}`}>
                 {isStaffed ? 'Fully staffed' : `Need ${rounded - assigned} more`}

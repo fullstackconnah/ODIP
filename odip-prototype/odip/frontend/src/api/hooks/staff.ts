@@ -77,6 +77,7 @@ export function useUpdateStaff() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['staff'] })
       qc.invalidateQueries({ queryKey: ['staff-detail', vars.id] })
+      qc.invalidateQueries({ queryKey: ['staff-overview', vars.id] })
     },
   })
 }
@@ -85,7 +86,10 @@ export function useDeleteStaff() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/staff/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['staff'] }),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ['staff'] })
+      qc.invalidateQueries({ queryKey: ['staff-overview', id] })
+    },
   })
 }
 

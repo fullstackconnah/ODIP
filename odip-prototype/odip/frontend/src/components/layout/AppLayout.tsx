@@ -17,6 +17,7 @@ import {
 import { readStoredOpenGroups, storeGroupOpen } from '@/components/layout/navOpenGroups'
 import { usePermissions } from '@/lib/permissions'
 import { usePendingWitnessRequests, usePendingLeaveCount, usePendingCompletionCount } from '@/api/hooks'
+import { endSession } from '@/api/client'
 
 /**
  * Mobile bottom-nav cell: icon over label, 42px tall. The cells share the row in equal widths (`flex-1`), so however many pages the
@@ -242,15 +243,6 @@ export default function AppLayout() {
   const viewingTenantId = localStorage.getItem('odip_viewing_tenant')
   const savedAdminUser = JSON.parse(localStorage.getItem('odip_superadmin_user') || '{}')
 
-  const handleLogout = () => {
-    localStorage.removeItem('odip_token')
-    localStorage.removeItem('odip_user')
-    localStorage.removeItem('odip_viewing_tenant')
-    localStorage.removeItem('odip_viewing_user')
-    localStorage.removeItem('odip_superadmin_user')
-    window.location.href = '/login'
-  }
-
   const initial = (user.fullName || 'A').charAt(0).toUpperCase()
 
   return (
@@ -326,7 +318,7 @@ export default function AppLayout() {
 
         {/* Bottom */}
         <div className="pt-2 shrink-0">
-          <button onClick={handleLogout}
+          <button onClick={endSession}
             className="flex items-center gap-3 px-3 py-1.5 h-8 min-h-[var(--tap-min)] rounded-md text-sm text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)] w-full transition-colors">
             <LogOut className="w-4 h-4" />
             Sign Out

@@ -120,7 +120,7 @@ public class TripsController : ControllerBase
             LeadCoordinatorName = t.LeadCoordinator != null ? t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName : null,
             RequiredWheelchairCapacity = t.RequiredWheelchairCapacity, RequiredBeds = t.RequiredBeds,
             RequiredBedrooms = t.RequiredBedrooms, MinStaffRequired = t.MinStaffRequired,
-            CalculatedStaffRequired = t.CalculatedStaffRequired, Notes = t.Notes,
+            CalculatedStaffRequired = t.CalculatedStaffRequired, StaffRequired = t.StaffRequired, Notes = t.Notes,
             ActiveHoursPerDay = t.ActiveHoursPerDay, DepartureTime = t.DepartureTime, ReturnTime = t.ReturnTime,
             CurrentParticipantCount = t.Bookings.Count(b => b.BookingStatus == BookingStatus.Confirmed),
             WaitlistCount = t.Bookings.Count(b => b.BookingStatus == BookingStatus.Waitlist),
@@ -177,7 +177,7 @@ public class TripsController : ControllerBase
                 LeadCoordinatorName = created.LeadCoordinator != null ? created.LeadCoordinator.FirstName + " " + created.LeadCoordinator.LastName : null,
                 RequiredWheelchairCapacity = created.RequiredWheelchairCapacity, RequiredBeds = created.RequiredBeds,
                 RequiredBedrooms = created.RequiredBedrooms, MinStaffRequired = created.MinStaffRequired,
-                CalculatedStaffRequired = created.CalculatedStaffRequired, Notes = created.Notes,
+                CalculatedStaffRequired = created.CalculatedStaffRequired, StaffRequired = created.StaffRequired, Notes = created.Notes,
                 ActiveHoursPerDay = created.ActiveHoursPerDay, DepartureTime = created.DepartureTime, ReturnTime = created.ReturnTime,
                 CurrentParticipantCount = created.Bookings.Count(b => b.BookingStatus == BookingStatus.Confirmed),
                 WaitlistCount = created.Bookings.Count(b => b.BookingStatus == BookingStatus.Waitlist),
@@ -235,7 +235,7 @@ public class TripsController : ControllerBase
             LeadCoordinatorName = updated.LeadCoordinator != null ? updated.LeadCoordinator.FirstName + " " + updated.LeadCoordinator.LastName : null,
             RequiredWheelchairCapacity = updated.RequiredWheelchairCapacity, RequiredBeds = updated.RequiredBeds,
             RequiredBedrooms = updated.RequiredBedrooms, MinStaffRequired = updated.MinStaffRequired,
-            CalculatedStaffRequired = updated.CalculatedStaffRequired, Notes = updated.Notes,
+            CalculatedStaffRequired = updated.CalculatedStaffRequired, StaffRequired = updated.StaffRequired, Notes = updated.Notes,
             ActiveHoursPerDay = updated.ActiveHoursPerDay, DepartureTime = updated.DepartureTime, ReturnTime = updated.ReturnTime,
             CurrentParticipantCount = updated.Bookings.Count(b => b.BookingStatus == BookingStatus.Confirmed),
             WaitlistCount = updated.Bookings.Count(b => b.BookingStatus == BookingStatus.Waitlist),
@@ -355,7 +355,7 @@ public class TripsController : ControllerBase
                 ConfirmationReference = r.ConfirmationReference, BedroomsReserved = r.BedroomsReserved,
                 BedsReserved = r.BedsReserved, Cost = r.Cost, HasOverlapConflict = r.HasOverlapConflict,
                 Comments = r.Comments, RequestSentDate = r.RequestSentDate, DateBooked = r.DateBooked,
-                DateConfirmed = r.DateConfirmed
+                DateConfirmed = r.DateConfirmed, CancellationReason = r.CancellationReason
             }).ToListAsync(ct);
         return Ok(ApiResponse<List<ReservationDto>>.Ok(items));
     }
