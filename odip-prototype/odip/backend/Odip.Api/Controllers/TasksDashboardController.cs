@@ -333,11 +333,15 @@ public class TripDayScheduleController : ControllerBase
     private readonly OdipDbContext _db;
     public TripDayScheduleController(OdipDbContext db) => _db = db;
 
+    /// <summary>TripDay and ScheduledActivity have no organisation column or query filter: an activity is the caller's only if its day's trip is (TripInstances is tenant-filtered).</summary>
+    private IQueryable<ScheduledActivity> TenantActivities() =>
+        _db.ScheduledActivities.Where(s => _db.TripDays.Any(d => d.Id == s.TripDayId && _db.TripInstances.Any(t => t.Id == d.TripInstanceId)));
+
     [HttpPut("trip-days/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<TripDayDto>>> UpdateTripDay(Guid id, [FromBody] UpdateTripDayDto dto, CancellationToken ct)
     {
-        var d = await _db.TripDays.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var d = await _db.TripDays.FirstOrDefaultAsync(x => x.Id == id && _db.TripInstances.Any(t => t.Id == x.TripInstanceId), ct);
         if (d == null) return NotFound(ApiResponse<TripDayDto>.Fail("Trip day not found"));
         d.DayTitle = dto.DayTitle; d.DayNotes = dto.DayNotes; d.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
@@ -348,6 +352,9 @@ public class TripDayScheduleController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ScheduledActivityDto>>> AddActivity(Guid id, [FromBody] CreateScheduledActivityDto dto, CancellationToken ct)
     {
+        if (!await _db.TripDays.AnyAsync(d => d.Id == id && _db.TripInstances.Any(t => t.Id == d.TripInstanceId), ct))
+            return NotFound(ApiResponse<ScheduledActivityDto>.Fail("Trip day not found"));
+
         var a = new ScheduledActivity
         {
             Id = Guid.NewGuid(), TripDayId = id, ActivityId = dto.ActivityId,
@@ -379,7 +386,7 @@ public class TripDayScheduleController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ScheduledActivityDto>>> UpdateActivity(Guid id, [FromBody] UpdateScheduledActivityDto dto, CancellationToken ct)
     {
-        var a = await _db.ScheduledActivities.Include(s => s.Activity).FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantActivities().Include(s => s.Activity).FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<ScheduledActivityDto>.Fail("Activity not found"));
 
         a.ActivityId = dto.ActivityId; a.Title = dto.Title; a.StartTime = dto.StartTime;
@@ -409,7 +416,7 @@ public class TripDayScheduleController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteActivity(Guid id, CancellationToken ct)
     {
-        var a = await _db.ScheduledActivities.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantActivities().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<bool>.Fail("Activity not found"));
         _db.ScheduledActivities.Remove(a);
         await _db.SaveChangesAsync(ct);
@@ -529,7 +536,9 @@ public class ConflictsController : ControllerBase
         int updated = 0;
 
         // Accommodation conflicts
+        // Only the caller's own rows: reservations and staff assignments have no query filter, so each is limited to the caller's trips (TripInstances is tenant-filtered).
         var reservations = await _db.AccommodationReservations
+            .Where(r => _db.TripInstances.Any(t => t.Id == r.TripInstanceId))
             .Where(r => r.ReservationStatus != ReservationStatus.Cancelled && r.ReservationStatus != ReservationStatus.Unavailable)
             .ToListAsync(ct);
 
@@ -559,6 +568,7 @@ public class ConflictsController : ControllerBase
 
         // Staff conflicts
         var staffAssignments = await _db.StaffAssignments
+            .Where(a => _db.TripInstances.Any(t => t.Id == a.TripInstanceId))
             .Where(a => a.Status != AssignmentStatus.Cancelled)
             .ToListAsync(ct);
 

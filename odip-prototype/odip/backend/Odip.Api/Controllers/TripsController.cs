@@ -402,6 +402,9 @@ public class TripsController : ControllerBase
     [HttpGet("{id:guid}/schedule")]
     public async Task<ActionResult<ApiResponse<List<TripDayDto>>>> GetSchedule(Guid id, CancellationToken ct)
     {
+        // TripDay has no organisation column or query filter: a trip's days are the caller's only if the trip is.
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == id, ct)) return NotFound(ApiResponse<List<TripDayDto>>.Fail("Trip not found"));
+
         var days = await _db.TripDays.Include(d => d.ScheduledActivities).ThenInclude(sa => sa.Activity)
             .Where(d => d.TripInstanceId == id).OrderBy(d => d.DayNumber)
             .Select(d => new TripDayDto
@@ -429,6 +432,9 @@ public class TripsController : ControllerBase
     [HttpGet("{id:guid}/documents")]
     public async Task<ActionResult<ApiResponse<List<TripDocumentDto>>>> GetDocuments(Guid id, CancellationToken ct)
     {
+        // TripDocument has no organisation column or query filter: a trip's documents are the caller's only if the trip is.
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == id, ct)) return NotFound(ApiResponse<List<TripDocumentDto>>.Fail("Trip not found"));
+
         var items = await _db.TripDocuments.Where(d => d.TripInstanceId == id)
             .Select(d => new TripDocumentDto
             {
