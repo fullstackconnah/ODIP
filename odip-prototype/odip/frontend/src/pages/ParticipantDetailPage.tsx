@@ -497,8 +497,9 @@ function CaregiverLinkControl({ participantId }: { participantId: string }) {
   const revoke = useRevokeCaregiverLink()
   const [issued, setIssued] = useState<{ url: string; expiresAt: string } | null>(null)
   const [confirmingRevoke, setConfirmingRevoke] = useState(false)
-  const drafts = useCaregiverSubmissions('Draft')
-  const submitted = useCaregiverSubmissions('Submitted')
+  // The list route is Admin/Coordinator/SuperAdmin only: other roles would get a 403 for each call.
+  const drafts = useCaregiverSubmissions('Draft', { participantId, enabled: canWriteParticipantDetails })
+  const submitted = useCaregiverSubmissions('Submitted', { participantId, enabled: canWriteParticipantDetails })
 
   if (!canWriteParticipantDetails) return null
 

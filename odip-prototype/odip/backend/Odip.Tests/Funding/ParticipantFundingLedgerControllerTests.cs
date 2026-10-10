@@ -95,23 +95,8 @@ public class ParticipantFundingLedgerControllerTests
         var mine = a.SeedParticipant();
 
         Assert.IsType<NotFoundObjectResult>((await ControllerFor(a, TenantA).Ledger(theirs.Id, Ct)).Result);
-        Assert.IsType<NotFoundObjectResult>((await ControllerFor(a, TenantA).Rows(theirs.Id, Guid.NewGuid(), Guid.NewGuid(), Ct)).Result);
         var needsOrganisation = Assert.IsType<BadRequestObjectResult>((await ControllerFor(a, null).Ledger(mine.Id, Ct)).Result);
         Assert.Equal(ParticipantFundingController.ChooseOrganisation, Assert.Single(Assert.IsType<ApiResponse<ParticipantLedgerDto>>(needsOrganisation.Value).Errors!));
-    }
-
-    [Fact]
-    public async Task RowsServeAnotherPageOfAPeriod_AndANotFoundForAPeriodThatIsNotInThePlan()
-    {
-        using var kit = Arrange(out var person);
-        var dto = Ok(await ControllerFor(kit, kit.TenantId).Ledger(person.Id, Ct));
-        var pool = dto.Pools.Single();
-
-        var page = Ok(await ControllerFor(kit, kit.TenantId).Rows(person.Id, pool.Id, pool.Periods[1].Id, Ct, skip: 0, take: 10));
-
-        Assert.Equal(1, page.Total);
-        Assert.Equal(LedgerRowKind.CompletedShift, Assert.Single(page.Rows).Kind);
-        Assert.IsType<NotFoundObjectResult>((await ControllerFor(kit, kit.TenantId).Rows(person.Id, pool.Id, Guid.NewGuid(), Ct)).Result);
     }
 
     // ── The claim detail's budget block ─────────────────────────────────────
@@ -191,7 +176,7 @@ public class ParticipantFundingLedgerControllerTests
     public void TheControllerHasExactlyTheDocumentedActions_AllReads_SoANewOneFailsHereUntilSomebodyDecidesWhoMayCallIt()
     {
         Assert.Equal(
-            new[] { nameof(ParticipantFundingLedgerController.Ledger), nameof(ParticipantFundingLedgerController.Rows) },
+            new[] { nameof(ParticipantFundingLedgerController.Ledger) },
             Actions().Select(m => m.Name).OrderBy(n => n, StringComparer.Ordinal));
         Assert.All(Actions(), action => Assert.NotEmpty(action.GetCustomAttributes<HttpGetAttribute>()));
     }
@@ -210,15 +195,15 @@ public class ParticipantFundingLedgerControllerTests
     }
 
     /// <summary>
-    /// Both GETs are rate limited on the shared "api" policy, the one every other endpoint that carries a figure uses: an attribute is only a declaration, so it is
+    /// The GET is rate limited on the shared "api" policy, the one every other endpoint that carries a figure uses: an attribute is only a declaration, so it is
     /// read off the compiled action and compared with the policy name itself, so a renamed or missing policy fails here rather than silently limiting nothing.
     /// </summary>
     [Fact]
-    public void BothLedgerActionsAreRateLimitedOnTheSharedApiPolicy_SoAManyFigureEndpointCannotBeHammered()
+    public void TheLedgerActionIsRateLimitedOnTheSharedApiPolicy_SoAManyFigureEndpointCannotBeHammered()
     {
         var actions = Actions().ToList();
 
-        Assert.Equal(2, actions.Count);
+        Assert.Single(actions);
         foreach (var action in actions)
         {
             var policy = Assert.Single(action.GetCustomAttributes<EnableRateLimitingAttribute>());
@@ -233,6 +218,5 @@ public class ParticipantFundingLedgerControllerTests
 
         Assert.Equal("api/v1/participants/{participantId:guid}/funding", prefix);
         Assert.Equal("ledger", typeof(ParticipantFundingLedgerController).GetMethod(nameof(ParticipantFundingLedgerController.Ledger))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
-        Assert.Equal("ledger/rows", typeof(ParticipantFundingLedgerController).GetMethod(nameof(ParticipantFundingLedgerController.Rows))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
     }
 }

@@ -446,23 +446,6 @@ public class TripsController : ControllerBase
         return Ok(ApiResponse<List<TripDayDto>>.Ok(days));
     }
 
-    /// <summary>Get documents for a trip.</summary>
-    [HttpGet("{id:guid}/documents")]
-    public async Task<ActionResult<ApiResponse<List<TripDocumentDto>>>> GetDocuments(Guid id, CancellationToken ct)
-    {
-        // TripDocument has no organisation column or query filter: a trip's documents are the caller's only if the trip is.
-        if (!await _db.TripInstances.AnyAsync(t => t.Id == id, ct)) return NotFound(ApiResponse<List<TripDocumentDto>>.Fail("Trip not found"));
-
-        var items = await _db.TripDocuments.Where(d => d.TripInstanceId == id)
-            .Select(d => new TripDocumentDto
-            {
-                Id = d.Id, TripInstanceId = d.TripInstanceId, ParticipantBookingId = d.ParticipantBookingId,
-                DocumentType = d.DocumentType, FileName = d.FileName, FilePath = d.FilePath,
-                FileSize = d.FileSize, DocumentDate = d.DocumentDate, Notes = d.Notes, UploadedAt = d.UploadedAt
-            }).ToListAsync(ct);
-        return Ok(ApiResponse<List<TripDocumentDto>>.Ok(items));
-    }
-
     /// <summary>Ensure TripDay records exist for a trip, reconciling with DurationDays.</summary>
     [HttpPost("{id:guid}/schedule/generate")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]

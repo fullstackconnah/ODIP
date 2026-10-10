@@ -60,10 +60,15 @@ export function useRevokeCaregiverLink() {
   })
 }
 
-export function useCaregiverSubmissions(status: CaregiverSubmissionStatus = 'Submitted') {
+export function useCaregiverSubmissions(
+  status: CaregiverSubmissionStatus = 'Submitted',
+  { participantId, enabled = true }: { participantId?: string; enabled?: boolean } = {},
+) {
   return useQuery({
-    queryKey: ['caregiver-submissions', status],
-    queryFn: () => apiGetWithDefault<CaregiverSubmissionListItemDto[]>(`/caregiver-submissions?status=${status}`, []),
+    queryKey: ['caregiver-submissions', status, participantId],
+    queryFn: () => apiGetWithDefault<CaregiverSubmissionListItemDto[]>(
+      `/caregiver-submissions?status=${status}${participantId ? `&participantId=${participantId}` : ''}`, []),
+    enabled,
   })
 }
 

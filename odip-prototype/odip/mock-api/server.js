@@ -2431,7 +2431,6 @@ const routes = [
   ['trips/:id/staff', (id) => tripStaffAssignments[id] || []],
   ['trips/:id/vehicles', (id) => tripVehicleAssignments[id] || []],
   ['trips/:id/accommodation', () => []],
-  ['trips/:id/documents', () => []],
   ['trips/:id/schedule', () => []],
   ['trips/:id/claims', () => []],
   ['claims/:id', (id) => claimDetail(claims.find((c) => c.id === id) || claims[0])],
