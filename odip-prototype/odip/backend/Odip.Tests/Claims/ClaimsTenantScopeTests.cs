@@ -109,6 +109,34 @@ public class ClaimsTenantScopeTests
         Assert.Null(stored.Notes);
     }
 
+    [Fact]
+    public async Task UpdateClaim_AuthorisedByStaffOfAnotherTenant_ReturnsBadRequest_AndStoresNothing()
+    {
+        var (db, controller) = Create(TenantA);
+        var a = Seed(db, TenantA);
+        var foreignStaff = Odip.Tests.Security.CrossTenant.User(db, TenantB);
+
+        var result = await controller.UpdateClaim(a.TripClaim.Id, new UpdateClaimDto { AuthorisedByStaffId = foreignStaff.Id, Notes = "checked" }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        var stored = await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == a.TripClaim.Id);
+        Assert.Null(stored.AuthorisedByUserId);
+        Assert.Null(stored.Notes);
+    }
+
+    [Fact]
+    public async Task UpdateClaim_AuthorisedByStaffOfTheSameOrganisation_IsStored()
+    {
+        var (db, controller) = Create(TenantA);
+        var a = Seed(db, TenantA);
+        var ownStaff = Odip.Tests.Security.CrossTenant.User(db, TenantA);
+
+        var result = await controller.UpdateClaim(a.TripClaim.Id, new UpdateClaimDto { AuthorisedByStaffId = ownStaff.Id }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(ownStaff.Id, (await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == a.TripClaim.Id)).AuthorisedByUserId);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

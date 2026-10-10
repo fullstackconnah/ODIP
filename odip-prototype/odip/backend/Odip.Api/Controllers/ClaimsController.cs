@@ -260,6 +260,10 @@ public class ClaimsController : ControllerBase
         var c = await TenantClaims().FirstOrDefaultAsync(x => x.Id == claimId, ct);
         if (c == null) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
 
+        // The authoriser is a user of the caller's organisation (Users is tenant-filtered); checked before anything is changed, so a refusal writes nothing.
+        if (dto.AuthorisedByStaffId is { } authoriserId && !await _db.Users.AnyAsync(u => u.Id == authoriserId, ct))
+            return BadRequest(ApiResponse<bool>.Fail("Authorising staff member not found."));
+
         // The NDIA's code for a rejection (budget phase 2b) is checked before anything is changed, so a refusal writes nothing: no control characters (Postgres refuses a NUL in text), at most ten
         // characters, and only with a claim that is, or is being made, Rejected.
         var code = NdiaRejectionCodes.Normalise(dto.RejectionCode);

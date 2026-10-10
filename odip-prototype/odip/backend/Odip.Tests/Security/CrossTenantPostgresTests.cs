@@ -106,6 +106,8 @@ public class CrossTenantPostgresTests : IClassFixture<PostgresFixture>
         Assert.IsType<NotFoundObjectResult>(await claims.DownloadBprCsv(foreign.Claim.Id, ct));
         Assert.IsType<OkObjectResult>((await claims.GetClaim(own.Claim.Id, ct)).Result);
         Assert.IsType<OkObjectResult>((await claims.UpdateLineItem(own.Claim.Id, own.Line.Id, new UpdateClaimLineItemDto { Hours = 2m }, ct)).Result);
+        Assert.IsType<BadRequestObjectResult>((await claims.UpdateClaim(own.Claim.Id, new UpdateClaimDto { AuthorisedByStaffId = foreign.User.Id }, ct)).Result);
+        Assert.IsType<OkObjectResult>((await claims.UpdateClaim(own.Claim.Id, new UpdateClaimDto { AuthorisedByStaffId = own.User.Id }, ct)).Result);
 
         // Vehicle and staff assignments, availability.
         var vehicleAssignments = new VehicleAssignmentsController(db);
