@@ -1,0 +1,350 @@
+{
+  "request": {
+    "blocks": [
+      {
+        "id": "holiday",
+        "supportType": "CommunityAccess",
+        "intensity": "Standard",
+        "days": [
+          "Monday"
+        ],
+        "start": "09:00:00",
+        "end": "13:00:00",
+        "workers": 1,
+        "participantsPresent": 1,
+        "headcountChanges": [],
+        "setting": "Community",
+        "location": {
+          "state": "NSW",
+          "zone": "National"
+        },
+        "workerMaySleep": false,
+        "sleepoverActiveHours": 0,
+        "onPublicHoliday": "Review",
+        "maxLinesPerOccurrence": 3,
+        "endsNextDay": false,
+        "durationMinutes": 240
+      },
+      {
+        "id": "sleepover",
+        "supportType": "PersonalCare",
+        "intensity": "Standard",
+        "days": [
+          "Wednesday"
+        ],
+        "start": "22:00:00",
+        "end": "07:00:00",
+        "workers": 1,
+        "participantsPresent": 1,
+        "headcountChanges": [],
+        "setting": "Community",
+        "location": {
+          "state": "NSW",
+          "zone": "National"
+        },
+        "workerMaySleep": true,
+        "sleepoverActiveHours": 0,
+        "onPublicHoliday": "Review",
+        "maxLinesPerOccurrence": 7,
+        "endsNextDay": true,
+        "durationMinutes": 540
+      },
+      {
+        "id": "eight-by-day",
+        "supportType": "PersonalCare",
+        "intensity": "Standard",
+        "days": [
+          "Tuesday"
+        ],
+        "start": "09:00:00",
+        "end": "17:00:00",
+        "workers": 1,
+        "participantsPresent": 1,
+        "headcountChanges": [],
+        "setting": "Community",
+        "location": {
+          "state": "NSW",
+          "zone": "National"
+        },
+        "workerMaySleep": true,
+        "sleepoverActiveHours": 0,
+        "onPublicHoliday": "Review",
+        "maxLinesPerOccurrence": 5,
+        "endsNextDay": false,
+        "durationMinutes": 480
+      },
+      {
+        "id": "high",
+        "supportType": "PersonalCare",
+        "intensity": "HighIntensity",
+        "days": [
+          "Thursday"
+        ],
+        "start": "09:00:00",
+        "end": "12:00:00",
+        "workers": 1,
+        "participantsPresent": 1,
+        "headcountChanges": [],
+        "setting": "Community",
+        "location": {
+          "state": "NSW",
+          "zone": "National"
+        },
+        "workerMaySleep": false,
+        "sleepoverActiveHours": 0,
+        "onPublicHoliday": "Review",
+        "maxLinesPerOccurrence": 3,
+        "endsNextDay": false,
+        "durationMinutes": 180
+      }
+    ],
+    "periodFrom": "2026-10-05",
+    "periodTo": "2026-10-11"
+  },
+  "quote": {
+    "periodFrom": "2026-10-05",
+    "periodTo": "2026-10-11",
+    "lines": [
+      {
+        "blockId": "holiday",
+        "kind": "Support",
+        "itemCode": "04_102_0125_6_1",
+        "unit": "H",
+        "qty": 4,
+        "unitPrice": 163.46,
+        "total": 653.84,
+        "serviceDate": "2026-10-05",
+        "startTime": "09:00:00",
+        "endDate": "2026-10-05",
+        "endTime": "13:00:00",
+        "band": "Public Holiday",
+        "dayType": "PublicHoliday",
+        "paceCategory": 4,
+        "flags": "Review, HolidayExposure",
+        "shortNoticeCancellationAllowed": true,
+        "trace": {
+          "rules": [
+            "bands:public-holiday",
+            "price:catalogue-by-service-date",
+            "holiday:state-calendar"
+          ],
+          "why": "Public Holiday (public holiday: Labour Day) on Mon 5 Oct 2026, 09:00 to 13:00; one worker for one participant; catalogue 2026-27, price from 1 Jul 2026 (04_102_0125_6_1, $163.46 a unit maximum).",
+          "catalogueVersion": "2026-27",
+          "priceBasisFrom": "2026-07-01",
+          "sourceDocument": "support-catalogue-2026-27.xlsx",
+          "zone": "National",
+          "maximumUnitPrice": 163.46,
+          "workers": 1,
+          "participantsPresent": 1,
+          "holidayName": "Labour Day",
+          "openQuestions": []
+        },
+        "isPriced": true,
+        "review": true,
+        "holidayExposure": true,
+        "provisional": false
+      },
+      {
+        "blockId": "sleepover",
+        "kind": "Sleepover",
+        "itemCode": "01_010_0107_1_1",
+        "unit": "E",
+        "qty": 1,
+        "unitPrice": 311.79,
+        "total": 311.79,
+        "serviceDate": "2026-10-07",
+        "startTime": "22:00:00",
+        "endDate": "2026-10-08",
+        "endTime": "07:00:00",
+        "band": "Sleepover",
+        "paceCategory": 1,
+        "flags": "None",
+        "shortNoticeCancellationAllowed": true,
+        "trace": {
+          "rules": [
+            "sleepover:each-item",
+            "price:catalogue-by-service-date"
+          ],
+          "why": "Sleepover, 9 h from 22:00 to 07:00 on Wed 7 Oct 2026: the worker may sleep, so one Each item covers the night, including up to 2 hours of active support; one worker for one participant; catalogue 2026-27, price from 1 Jul 2026 (01_010_0107_1_1, $311.79 a unit maximum).",
+          "catalogueVersion": "2026-27",
+          "priceBasisFrom": "2026-07-01",
+          "sourceDocument": "support-catalogue-2026-27.xlsx",
+          "zone": "National",
+          "maximumUnitPrice": 311.79,
+          "workers": 1,
+          "participantsPresent": 1,
+          "openQuestions": []
+        },
+        "isPriced": true,
+        "review": false,
+        "holidayExposure": false,
+        "provisional": false
+      },
+      {
+        "blockId": "eight-by-day",
+        "kind": "Support",
+        "itemCode": "01_011_0107_1_1",
+        "unit": "H",
+        "qty": 8,
+        "unitPrice": 73.58,
+        "total": 588.64,
+        "serviceDate": "2026-10-06",
+        "startTime": "09:00:00",
+        "endDate": "2026-10-06",
+        "endTime": "17:00:00",
+        "band": "Weekday Daytime",
+        "dayType": "Weekday",
+        "paceCategory": 1,
+        "flags": "Review",
+        "shortNoticeCancellationAllowed": true,
+        "trace": {
+          "rules": [
+            "bands:weekday-daytime",
+            "price:catalogue-by-service-date"
+          ],
+          "why": "Weekday Daytime (Mon-Fri 06:00-20:00) on Tue 6 Oct 2026, 09:00 to 17:00; one worker for one participant; catalogue 2026-27, price from 1 Jul 2026 (01_011_0107_1_1, $73.58 a unit maximum).",
+          "catalogueVersion": "2026-27",
+          "priceBasisFrom": "2026-07-01",
+          "sourceDocument": "support-catalogue-2026-27.xlsx",
+          "zone": "National",
+          "maximumUnitPrice": 73.58,
+          "workers": 1,
+          "participantsPresent": 1,
+          "openQuestions": []
+        },
+        "isPriced": true,
+        "review": true,
+        "holidayExposure": false,
+        "provisional": false
+      },
+      {
+        "blockId": "high",
+        "kind": "Support",
+        "itemCode": "01_400_0104_1_1",
+        "unit": "H",
+        "qty": 3,
+        "unitPrice": 79.6,
+        "total": 238.8,
+        "serviceDate": "2026-10-08",
+        "startTime": "09:00:00",
+        "endDate": "2026-10-08",
+        "endTime": "12:00:00",
+        "band": "Weekday Daytime",
+        "dayType": "Weekday",
+        "paceCategory": 1,
+        "flags": "None",
+        "shortNoticeCancellationAllowed": true,
+        "trace": {
+          "rules": [
+            "bands:weekday-daytime",
+            "price:catalogue-by-service-date"
+          ],
+          "why": "Weekday Daytime (Mon-Fri 06:00-20:00) on Thu 8 Oct 2026, 09:00 to 12:00; one worker for one participant; catalogue 2026-27, price from 1 Jul 2026 (01_400_0104_1_1, $79.60 a unit maximum).",
+          "catalogueVersion": "2026-27",
+          "priceBasisFrom": "2026-07-01",
+          "sourceDocument": "support-catalogue-2026-27.xlsx",
+          "zone": "National",
+          "maximumUnitPrice": 79.6,
+          "workers": 1,
+          "participantsPresent": 1,
+          "openQuestions": []
+        },
+        "isPriced": true,
+        "review": false,
+        "holidayExposure": false,
+        "provisional": false
+      }
+    ],
+    "issues": [
+      {
+        "blockId": "eight-by-day",
+        "reason": "SleepoverNotQualifying",
+        "message": "Block \u0027eight-by-day\u0027: the worker may sleep, but the window is not 8 hours or more across midnight, so it is priced hourly.",
+        "count": 1,
+        "firstDate": "2026-10-06"
+      }
+    ],
+    "notices": [
+      {
+        "code": "registration-groups-not-confirmed",
+        "message": "The registration groups the provider holds have not been confirmed: the builder assumes all six (0107, 0104, 0125, 0136, 0115, 0108). Confirm them in the provider settings.",
+        "openQuestion": 1
+      }
+    ],
+    "holidayOccurrences": [
+      {
+        "blockId": "holiday",
+        "date": "2026-10-05",
+        "holidayName": "Labour Day",
+        "state": "NSW",
+        "decision": "Review",
+        "skipped": false,
+        "atHolidayRates": 653.84,
+        "atOrdinaryRates": 294.32,
+        "uplift": 359.52
+      }
+    ],
+    "openQuestions": [
+      {
+        "number": 1,
+        "text": "Which registration groups does the provider hold (0107, 0104, 0125, 0136, 0115, 0108)? The builder assumes all six until somebody confirms."
+      }
+    ],
+    "totals": {
+      "amount": 1793.07,
+      "supportHours": 15,
+      "lineCount": 4,
+      "unpricedLines": 0,
+      "reviewLines": 2,
+      "provisionalLines": 0,
+      "holidayOccurrences": 1,
+      "holidayUplift": 359.52,
+      "byCategory": [
+        {
+          "paceCategory": 1,
+          "name": "Assistance with Daily Life",
+          "amount": 1139.23,
+          "hours": 11
+        },
+        {
+          "paceCategory": 4,
+          "name": "Assistance with Social, Economic and Community Participation",
+          "amount": 653.84,
+          "hours": 4
+        }
+      ],
+      "byBlock": [
+        {
+          "blockId": "holiday",
+          "amount": 653.84,
+          "supportHours": 4,
+          "occurrences": 1,
+          "skippedOccurrences": 0
+        },
+        {
+          "blockId": "sleepover",
+          "amount": 311.79,
+          "supportHours": 0,
+          "occurrences": 1,
+          "skippedOccurrences": 0
+        },
+        {
+          "blockId": "eight-by-day",
+          "amount": 588.64,
+          "supportHours": 8,
+          "occurrences": 1,
+          "skippedOccurrences": 0
+        },
+        {
+          "blockId": "high",
+          "amount": 238.8,
+          "supportHours": 3,
+          "occurrences": 1,
+          "skippedOccurrences": 0
+        }
+      ]
+    },
+    "timeBasis": "tz-database",
+    "needsReview": true
+  }
+}

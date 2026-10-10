@@ -2,6 +2,7 @@ using System.Text.Json;
 using Odip.Api.Serialization;
 using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Enums;
+using Odip.Domain.Funding;
 using Xunit;
 using static Odip.Tests.PlanPricing.PlanPricingTestSupport;
 
@@ -42,12 +43,13 @@ public class PlanQuoteFrontendFixtureTests
         return JsonSerializer.Serialize(quote, options).Replace("\r\n", "\n") + "\n";
     }
 
-    private static void MatchesFile(string fileName, PlanQuote quote)
+    private static void MatchesFile(string fileName, PlanQuote quote) => MatchesText(fileName, AsTheApiSendsIt(quote));
+
+    private static void MatchesText(string fileName, string actual)
     {
         var directory = FixtureDirectory();
         Skip.If(directory is null, "There is no frontend beside the backend here (the backend image): nothing to compare the quote with.");
         var path = Path.Combine(directory!, fileName);
-        var actual = AsTheApiSendsIt(quote);
 
         if (Environment.GetEnvironmentVariable(RegenerateVariable) == "1")
         {
@@ -111,5 +113,59 @@ public class PlanQuoteFrontendFixtureTests
         var quote = Quote(new[] { block }, new DateOnly(2026, 10, 5), new DateOnly(2026, 10, 16));
 
         MatchesFile("plan-quote-two-issues-same-shifts.json", quote);
+    }
+
+    private static string Written(object value)
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true };
+        ApiJsonOptions.Configure(options);
+        return JsonSerializer.Serialize(value, options).Replace("\r\n", "\n") + "\n";
+    }
+
+    /// <summary>
+    /// The one week the mock API's plan pricing is held to (mockMoneyParity.test.ts): a daytime community access block on Labour Day, a personal care sleepover across midnight, a personal care
+    /// block of 8 hours by day whose worker may sleep (not a sleepover, priced hourly) and a high intensity block (the 0104 items). The file holds the request as well as the quote, so the mock is run on
+    /// exactly what the engine was given. To refresh: ODIP_REGENERATE_GOLDEN=1 dotnet test --filter PlanQuoteFrontendFixtureTests.
+    /// </summary>
+    [SkippableFact]
+    public void A_week_with_a_sleepover_a_daytime_eight_hours_high_intensity_and_a_holiday_is_the_quote_the_mock_is_held_to()
+    {
+        var blocks = new[]
+        {
+            Block("holiday", PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(9), T(13)),
+            Block("sleepover", PlanSupportType.PersonalCare, DayOfWeek.Wednesday, T(22), T(7), b => b with { WorkerMaySleep = true }),
+            Block("eight-by-day", PlanSupportType.PersonalCare, DayOfWeek.Tuesday, T(9), T(17), b => b with { WorkerMaySleep = true }),
+            Block("high", PlanSupportType.PersonalCare, DayOfWeek.Thursday, T(9), T(12), b => b with { Intensity = SupportIntensity.HighIntensity }),
+        };
+        var (from, to) = (Mon5Oct, new DateOnly(2026, 10, 11));
+
+        var quote = Quote(blocks, from, to, holidays: new[] { NswLabourDay });
+
+        MatchesText("plan-quote-mock-parity.json", Written(new { request = new { blocks, periodFrom = from, periodTo = to }, quote }));
+    }
+
+    /// <summary>
+    /// The ledger state on the 80% line (mockMoneyParity.test.ts): 1,024.12 used of 1,280.15 available is exactly 80% (80 x 1,280.15 = 102,412 = 100 x 1,024.12), so it is Approaching. A double says
+    /// 102411.99999999999 and On track.
+    /// </summary>
+    [SkippableFact]
+    public void A_pool_used_to_exactly_eighty_percent_is_the_ledger_the_mock_is_held_to()
+    {
+        var period = new FundingPeriod { Id = Guid.NewGuid(), Position = 0, PeriodStart = new DateOnly(2026, 7, 1), PeriodEnd = new DateOnly(2027, 6, 30), PlanAmount = 1280.15m };
+        var pool = new FundingPool { Id = Guid.NewGuid(), Position = 0, Kind = FundingPoolKind.CoreFlexible, PaceCategory = 0, ManagementType = PlanType.PlanManaged, Name = "Core (flexible)", Periods = new List<FundingPeriod> { period } };
+        var plan = new FundingPlan { Id = Guid.NewGuid(), PlanStart = new DateOnly(2026, 7, 1), PlanEnd = new DateOnly(2027, 6, 30), Pools = new List<FundingPool> { pool } };
+        var item = new LedgerItem
+        {
+            Kind = LedgerRowKind.ClaimLine, Group = LedgerGroup.Claimed, Date = new DateOnly(2026, 8, 3), Amount = 1024.12m, PaceCategory = 4, PlanType = PlanType.PlanManaged, Id = Guid.NewGuid(), Description = "claimed",
+        };
+        var today = new DateOnly(2026, 10, 4);
+
+        var current = BudgetLedgerCalculator.Compute(plan, today, 80, new[] { item }).Pools[0].Periods.Single();
+
+        MatchesText("budget-ledger-mock-parity.json", Written(new
+        {
+            input = new { planAmount = period.PlanAmount, claimed = item.Amount, approachingPercent = 80, today },
+            expected = new { available = current.Available, used = current.Used, forecast = current.Forecast, status = current.Status },
+        }));
     }
 }
