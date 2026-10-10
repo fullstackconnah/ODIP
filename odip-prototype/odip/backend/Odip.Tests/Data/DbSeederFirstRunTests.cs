@@ -26,9 +26,13 @@ public class DbSeederFirstRunTests
 
         Assert.NotEmpty(await db.Participants.IgnoreQueryFilters().ToListAsync());
         Assert.All(await db.Participants.IgnoreQueryFilters().ToListAsync(), p => Assert.Equal(DemoTenantId, p.TenantId));
+        Assert.Equal(4, await db.EventTemplates.IgnoreQueryFilters().CountAsync(x => x.TenantId == DemoTenantId));
         Assert.All(await db.EventTemplates.IgnoreQueryFilters().ToListAsync(), t => Assert.Equal(DemoTenantId, t.TenantId));
+        Assert.Equal(6, await db.AccommodationProperties.IgnoreQueryFilters().CountAsync(x => x.TenantId == DemoTenantId));
         Assert.All(await db.AccommodationProperties.IgnoreQueryFilters().ToListAsync(), p => Assert.Equal(DemoTenantId, p.TenantId));
+        Assert.Equal(4, await db.Vehicles.IgnoreQueryFilters().CountAsync(x => x.TenantId == DemoTenantId));
         Assert.All(await db.Vehicles.IgnoreQueryFilters().ToListAsync(), v => Assert.Equal(DemoTenantId, v.TenantId));
+        Assert.Equal(10, await db.TripInstances.IgnoreQueryFilters().CountAsync(x => x.TenantId == DemoTenantId));
         Assert.All(await db.TripInstances.IgnoreQueryFilters().ToListAsync(), t => Assert.Equal(DemoTenantId, t.TenantId));
         Assert.All(await db.Activities.IgnoreQueryFilters().ToListAsync(), a => Assert.Equal(DemoTenantId, a.TenantId));
         Assert.DoesNotContain(await db.Users.IgnoreQueryFilters().ToListAsync(), u => u.TenantId == Guid.Empty);
