@@ -43,7 +43,7 @@ namespace Odip.Infrastructure.Migrations
                 """);
 
             // 3. What is still unowned is used by no trip: every organisation gets its own copy, then the original goes. The delete spares an activity a trip still points at (deleting it would
-            // silently null that link), so one used by trips of several organisations stops the migration at the NOT NULL below instead of losing the link.
+            // silently null that link), so one used by trips of several organisations is still unowned at the check below, which stops the migration instead of losing the link.
             migrationBuilder.Sql("""
                 INSERT INTO "Activities" ("Id", "TenantId", "EventTemplateId", "ActivityName", "Category", "Location", "AccessibilityNotes", "SuitabilityNotes", "Notes", "IsActive", "CreatedAt", "UpdatedAt")
                 SELECT gen_random_uuid(), t."Id", NULL, a."ActivityName", a."Category", a."Location", a."AccessibilityNotes", a."SuitabilityNotes", a."Notes", a."IsActive", a."CreatedAt", a."UpdatedAt"
@@ -55,6 +55,27 @@ namespace Odip.Infrastructure.Migrations
                 DELETE FROM "Activities" a
                 WHERE a."TenantId" IS NULL
                   AND NOT EXISTS (SELECT 1 FROM "ScheduledActivities" sa WHERE sa."ActivityId" = a."Id");
+                """);
+
+            // Stop, naming the activities, rather than leave one without an organisation, or one on a trip of an organisation other than its own (that trip's coordinator could not save it:
+            // the activity would be hidden from them). The migration is one transaction, so a stop changes nothing.
+            migrationBuilder.Sql("""
+                DO $$
+                DECLARE conflicts text;
+                BEGIN
+                    SELECT string_agg(a."Id"::text, ', ') INTO conflicts
+                    FROM "Activities" a
+                    WHERE a."TenantId" IS NULL
+                       OR EXISTS (
+                            SELECT 1
+                            FROM "ScheduledActivities" sa
+                            JOIN "TripDays" d ON d."Id" = sa."TripDayId"
+                            JOIN "TripInstances" ti ON ti."Id" = d."TripInstanceId"
+                            WHERE sa."ActivityId" = a."Id" AND ti."TenantId" <> a."TenantId");
+                    IF conflicts IS NOT NULL THEN
+                        RAISE EXCEPTION 'ActivityPerOrganisation: no single organisation for activities (none found, or used by a trip of another organisation): %', conflicts;
+                    END IF;
+                END $$;
                 """);
 
             migrationBuilder.AlterColumn<Guid>(

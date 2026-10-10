@@ -40,10 +40,12 @@ public class ActivityPerOrganisationMigrationTests : IClassFixture<PostgresFixtu
         return rows;
     }
 
+    private enum Conflict { None, SharedByTwoOrganisations, TemplateOfAnotherOrganisation }
+
     private sealed record Library(Guid TenantX, Guid TenantY, Guid FromTemplate, Guid FromTrips, Guid Unused);
 
     /// <summary>A database migrated to just before this migration, holding the three kinds of activity the shared library had.</summary>
-    private async Task<(string ConnectionString, IMigrator Migrator, OdipDbContext Db, Library Rows)> BeforeTheMigrationAsync(bool sharedByTwoOrganisations)
+    private async Task<(string ConnectionString, IMigrator Migrator, OdipDbContext Db, Library Rows)> BeforeTheMigrationAsync(Conflict conflict)
     {
         var connectionString = await _pg.CreateDatabaseAsync();
         var db = PostgresFixture.NewContext(connectionString);
@@ -76,7 +78,8 @@ public class ActivityPerOrganisationMigrationTests : IClassFixture<PostgresFixtu
                 "VALUES (@id,@template,@name,2,'Surfers Paradise','Step-free',true,now(),now())", ("id", id), ("template", templateId), ("name", name));
 
         var scheduled = new List<(Guid Day, Guid Activity)> { (dayX, rows.FromTemplate), (dayY, rows.FromTrips), (dayY, rows.FromTrips) };
-        if (sharedByTwoOrganisations) scheduled.Add((dayX, rows.FromTrips));
+        if (conflict == Conflict.SharedByTwoOrganisations) scheduled.Add((dayX, rows.FromTrips));
+        if (conflict == Conflict.TemplateOfAnotherOrganisation) scheduled.Add((dayY, rows.FromTemplate));
         foreach (var (day, activity) in scheduled)
             await ExecAsync(conn,
                 "INSERT INTO \"ScheduledActivities\" (\"Id\",\"TripDayId\",\"ActivityId\",\"Title\",\"SortOrder\",\"Status\",\"CreatedAt\",\"UpdatedAt\") VALUES (@id,@day,@activity,'Picnic',0,0,now(),now())",
@@ -89,7 +92,7 @@ public class ActivityPerOrganisationMigrationTests : IClassFixture<PostgresFixtu
     public async Task TheMigration_GivesEachActivityItsOrganisation_AndKeepsEveryTripLink()
     {
         Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
-        var (cs, migrator, db, rows) = await BeforeTheMigrationAsync(sharedByTwoOrganisations: false);
+        var (cs, migrator, db, rows) = await BeforeTheMigrationAsync(Conflict.None);
         await using (db)
         {
             await migrator.MigrateAsync();
@@ -115,21 +118,41 @@ public class ActivityPerOrganisationMigrationTests : IClassFixture<PostgresFixtu
         }
     }
 
+    private static async Task<PostgresException> MigrationFailureAsync(IMigrator migrator)
+    {
+        var failure = await Assert.ThrowsAnyAsync<Exception>(() => migrator.MigrateAsync());
+        return Assert.IsType<PostgresException>(failure as PostgresException ?? failure.InnerException);
+    }
+
     [SkippableFact]
     public async Task TheMigration_StopsRatherThanLoseTheLink_WhenAnActivityIsUsedByTwoOrganisations()
     {
         Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
-        var (cs, migrator, db, rows) = await BeforeTheMigrationAsync(sharedByTwoOrganisations: true);
+        var (cs, migrator, db, rows) = await BeforeTheMigrationAsync(Conflict.SharedByTwoOrganisations);
         await using (db)
         {
-            var failure = await Assert.ThrowsAnyAsync<Exception>(() => migrator.MigrateAsync());
-            Assert.Equal("23502", (failure as PostgresException ?? failure.InnerException as PostgresException)?.SqlState);   // not_null_violation on Activities.TenantId
+            var failure = await MigrationFailureAsync(migrator);
+            Assert.Equal("P0001", failure.SqlState);   // raised by the migration's own check, which names the activity
+            Assert.Contains(rows.FromTrips.ToString(), failure.MessageText);
 
             // The migration rolled back whole: no column, and the shared activity and its three links are as they were.
             await using var conn = new NpgsqlConnection(cs);
             await conn.OpenAsync();
             Assert.Empty(await QueryAsync(conn, "SELECT 1 FROM information_schema.columns WHERE table_name = 'Activities' AND column_name = 'TenantId'"));
             Assert.Equal(3L, (await QueryAsync(conn, "SELECT COUNT(*) FROM \"ScheduledActivities\" WHERE \"ActivityId\" = '" + rows.FromTrips + "'"))[0][0]);
+        }
+    }
+
+    [SkippableFact]
+    public async Task TheMigration_StopsRatherThanHideAScheduledActivity_WhoseTripBelongsToAnotherOrganisationThanItsTemplate()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (_, migrator, db, rows) = await BeforeTheMigrationAsync(Conflict.TemplateOfAnotherOrganisation);
+        await using (db)
+        {
+            var failure = await MigrationFailureAsync(migrator);
+            Assert.Equal("P0001", failure.SqlState);
+            Assert.Contains(rows.FromTemplate.ToString(), failure.MessageText);
         }
     }
 }
