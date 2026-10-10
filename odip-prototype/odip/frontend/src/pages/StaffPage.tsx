@@ -42,6 +42,7 @@ export default function StaffPage() {
   const { showArchived, params, toggleButtons, confirmDialog, actionButtons } = useArchiveRestore<any>({
     deleteMutation: deleteStaff,
     restoreMutation: updateStaff,
+    restoreData: (s: StaffListDto) => toUpdateStaffDto(s, { isActive: true }),
     entityName: (s) => s.fullName,
     entityId: (s) => s.id,
     editPath: (s) => `/staff/${s.id}/edit`,
