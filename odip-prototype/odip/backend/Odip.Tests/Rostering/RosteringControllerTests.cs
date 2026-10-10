@@ -18,6 +18,7 @@ using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
 using Odip.Tests.Medications;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Rostering;
 
@@ -25,7 +26,7 @@ namespace Odip.Tests.Rostering;
 /// Controller-level coverage for the Rostering API slice (RosteringController), on top of the
 /// domain-level RosterConflictService/ShiftPatternExpander coverage elsewhere in
 /// Odip.Tests/Rostering. Uses the same EF InMemory + Moq&lt;ICurrentTenant&gt; pattern as
-/// BillingControllerTests/AdminUsersControllerTests.
+/// AdminUsersControllerTests.
 /// </summary>
 public class RosteringControllerTests
 {
@@ -46,18 +47,7 @@ public class RosteringControllerTests
         Converters = { new JsonStringEnumConverter() }
     };
 
-    private static OdipDbContext CreateDb(string dbName)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb(string dbName) => TestDb.Create(dbName);
 
     // expiredScreeningDate distinguishes the two non-valid cases WSC_EXPIRED/WSC_MISSING test for:
     // null (the default when workerScreeningValid is false) means no screening recorded at all
@@ -696,7 +686,7 @@ public class RosteringControllerTests
     public void RosteringController_AuthorizeAttribute_RestrictsToCoordinatorAndAbove()
     {
         // No authorization-test-host idiom exists elsewhere in Odip.Tests (checked:
-        // Billing/AdminUsers/FieldRegistry controller tests carry no such pattern), so this
+        // Billing/AdminUsers controller tests carry no such pattern), so this
         // asserts the attribute's declared Roles directly via reflection rather than
         // inventing a new test-host/authentication-driven idiom for just this one check.
         var authorizeAttribute = typeof(RosteringController)

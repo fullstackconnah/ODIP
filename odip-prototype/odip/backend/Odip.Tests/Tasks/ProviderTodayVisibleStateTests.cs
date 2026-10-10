@@ -6,7 +6,6 @@ using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
-using Odip.Domain.Billing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
@@ -16,47 +15,22 @@ using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Medications;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Tasks;
 
 /// <summary>
-/// Review follow-up to <see cref="ProviderTodayRemainingSitesTests"/>: four more provider-date sites that decide what a user SEES (which service
-/// bookings are active, which trips the schedule shows, which shifts the portal lists, whether a contact can be added), each pinned where the UTC date and the provider's differ.
+/// Review follow-up to <see cref="ProviderTodayRemainingSitesTests"/>: three more provider-date sites that decide what a user SEES (which trips the schedule shows,
+/// which shifts the portal lists, whether a contact can be added), each pinned where the UTC date and the provider's differ.
 /// Clock: 2026-10-02 22:00Z = Sat 3 Oct 08:00 AEST, no ProviderSettings row (Sydney, the production default).
 /// </summary>
 public class ProviderTodayVisibleStateTests
 {
     private static readonly DateOnly Oct2 = new(2026, 10, 2);
 
-    private static OdipDbContext CreateDb()
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb() => TestDb.Create();
 
     private static FakeClock Clock => FakeClock.AtUtc(2026, 10, 2, 22, 0);
-
-    [Fact]
-    public async Task ActiveOnlyServiceBookings_DropsABookingWhoseClaimWindowClosedOnTheUtcDateButNotYetBeforeSydneyToday()
-    {
-        using var db = CreateDb();
-        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true };
-        var source = new FundingSource { Id = Guid.NewGuid(), ParticipantId = participant.Id, RouteType = FundingRouteType.AgencyManaged, IsActive = true };
-        db.Participants.Add(participant);
-        db.FundingSources.Add(source);
-        var closedYesterdayInSydney = new ServiceBooking { Id = Guid.NewGuid(), FundingSourceId = source.Id, ProdaBookingReference = "B-OLD", StartDate = new DateOnly(2026, 1, 1), EndDate = Oct2, ClaimWindowDays = 0 };
-        var closesToday = new ServiceBooking { Id = Guid.NewGuid(), FundingSourceId = source.Id, ProdaBookingReference = "B-TODAY", StartDate = new DateOnly(2026, 1, 1), EndDate = new DateOnly(2026, 10, 3), ClaimWindowDays = 0 };
-        db.ServiceBookings.AddRange(closedYesterdayInSydney, closesToday);
-        db.SaveChanges();
-
-        var result = await new BillingController(db, Clock).GetServiceBookings(null, activeOnly: true, ct: CancellationToken.None);
-
-        var body = Assert.IsType<ApiResponse<PagedResult<ServiceBookingListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
-        Assert.Equal([closesToday.Id], body.Data!.Items.Select(b => b.Id));
-    }
 
     [Fact]
     public async Task TheScheduleDefaultWindow_StartsThreeMonthsBeforeTheProviderDate()

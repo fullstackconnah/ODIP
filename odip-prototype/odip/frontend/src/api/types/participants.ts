@@ -44,7 +44,7 @@ export type MobilitySupportOption = typeof MOBILITY_SUPPORT_OPTIONS[number]
 
 /**
  * DIAG-01: curated diagnoses picklist, mirroring the backend's Odip.Domain.Enums.Diagnoses.All
- * (SeedData/DataDictionarySeed.json, fieldId MED-016) — the spreadsheet is the source of truth.
+ * (ODIP Master Data Dictionary.xlsx at the repo root, fieldId MED-016) — the spreadsheet is the source of truth.
  * Unlike MOBILITY_SUPPORT_OPTIONS (a closed picklist), diagnoses fields are open text — this list
  * drives the curated dropdown/checkbox UI only; DIAGNOSIS_OTHER_SENTINEL is the "Other — specify"
  * escape hatch offered alongside it (never itself a stored value — see the primary-diagnosis
@@ -400,7 +400,7 @@ export interface ParticipantDetailDto extends ParticipantListDto {
 
   // ── INTAKE-03/04, CommunityAccessDailyLiving stream — the structured Community Mobility &
   // Transport Risk / Community Behaviours of Concern checklist grid.
-  /** Always all twenty-one ChecklistItemType entries — see ParticipantChecklistItemsController.GetForParticipant. */
+  /** Always all twenty-one ChecklistItemType entries — see ParticipantChecklistItemsController.MaterializeAll. */
   checklistItems: ParticipantChecklistItemDto[]
 
   // ── INTAKE sub-wave C2 — Meals & Diet (Daily Living step, Master Data Dictionary MEAL-001..012
@@ -428,8 +428,7 @@ export interface ParticipantDetailDto extends ParticipantListDto {
 
   // ── INTAKE-03 — Community Access Behaviour & Support Detail (CommunityAccessDailyLiving
   // stream, research spec §3). CA-gated in the wizard (not on the wire — the backend accepts
-  // these unconditionally; the wizard's conditional-visibility engine is what hides/unregisters
-  // them when the stream isn't selected — see the retired single-step wizard's CONDITIONAL_FIELDS).
+  // these unconditionally; the wizard hides them when the stream isn't selected).
   signsHappyAndSettled: string | null
   whatHelpsMeCalmDown: string | null
   bocTriggers: string | null

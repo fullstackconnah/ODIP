@@ -84,19 +84,6 @@ describe('navConfig — active state', () => {
     for (const path of ['/participants', '/participants/p-1', '/participants/p-1/profile', '/onboarding/p-1']) expect(isLeafActive(hub, path), path).toBe(true)
     for (const path of ['/participantsx', '/medications', '/onboarding']) expect(isLeafActive(hub, path), path).toBe(false)
   })
-
-  it('keeps /billing exact-only now that Claim batches is nested under it, and lights Claim batches on the batch pages and on a claim', () => {
-    expect(isExactMatchOnly('/billing')).toBe(true)
-    const billing = leaf('/billing')
-    const batches = leaf('/billing/claim-batches')
-    expect(isLeafActive(billing, '/billing')).toBe(true)
-    for (const path of ['/billing/claim-batches', '/billing/claim-batches/new', '/billing/claim-batches/cb-1', '/claims/claim-1']) {
-      expect(isLeafActive(billing, path), `Billing on ${path}`).toBe(false)
-      expect(isLeafActive(batches, path), `Claim batches on ${path}`).toBe(true)
-    }
-    expect(isLeafActive(batches, '/billing')).toBe(false)
-    expect(isLeafActive(batches, '/claimsx/1')).toBe(false)
-  })
 })
 
 describe('navConfig — who sees what', () => {
@@ -113,7 +100,7 @@ describe('navConfig — who sees what', () => {
     ])
   })
 
-  it('gives ReadOnly what its API lets it read: no Rostering pages but Staff and Qualifications, no Finance, no Caregiver forms, no Settings', () => {
+  it('gives ReadOnly what its API lets it read: no Rostering pages but Staff and Qualifications, no Budgets, no Caregiver forms, no Settings', () => {
     expect(shape(resolveNav(navItems, accessFor('ReadOnly')))).toEqual([
       'Dashboard',
       'My Shifts',
@@ -139,7 +126,7 @@ describe('navConfig — who sees what', () => {
       'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
       'Participants: Participants | Medications | Caregiver forms',
       'Staff & roster: Board | Patterns | Compatibility | Leave | Completions | Staff | Qualifications',
-      'Finance: Billing | Claim batches | Budgets',
+      'Budgets',
       'Incidents',
       'Settings',
     ])

@@ -22,12 +22,9 @@ const offendersOf = (test: (text: string) => boolean, allowed: string[] = []) =>
   FILES.filter(f => test(f.text) && !allowed.includes(f.path)).map(f => f.path)
 const textOf = (path: string) => FILES.find(f => f.path === path)?.text ?? ''
 
-/** The nine side panels that used to hand-roll `fixed right-0 top-0 ... z-50` over a `bg-black/40` scrim. */
+/** The six side panels that used to hand-roll `fixed right-0 top-0 ... z-50` over a `bg-black/40` scrim. */
 const PANELS = [
   'components/TemplateFormPanel.tsx',
-  'pages/billing/BillableEventFormPanel.tsx',
-  'pages/billing/FundingSourceFormPanel.tsx',
-  'pages/billing/ServiceBookingFormPanel.tsx',
   'pages/rostering/components/ExceptionsDrawer.tsx',
   'pages/rostering/components/PatternSlideOver.tsx',
   'pages/rostering/components/ShiftSlideOver.tsx',
@@ -36,7 +33,7 @@ const PANELS = [
 ]
 
 describe('SlideOver', () => {
-  it('is how every side panel is built: each of the nine renders a SlideOver and draws no scrim or fixed panel of its own', () => {
+  it('is how every side panel is built: each of the six renders a SlideOver and draws no scrim or fixed panel of its own', () => {
     for (const path of PANELS) {
       const text = textOf(path)
       expect(text, `${path} should render <SlideOver`).toMatch(/<SlideOver\b/)

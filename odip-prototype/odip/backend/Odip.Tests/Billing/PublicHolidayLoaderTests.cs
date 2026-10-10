@@ -6,6 +6,7 @@ using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Billing;
 
@@ -17,13 +18,7 @@ public class PublicHolidayLoaderTests
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
 
-    private static OdipDbContext CreateDb()
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-        return new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb() => TestDb.Create();
 
     private static void Feed(OdipDbContext db, DateOnly date, string? state, string name) =>
         db.PublicHolidays.Add(new PublicHoliday { Id = Guid.NewGuid(), Date = date, State = state, Name = name });

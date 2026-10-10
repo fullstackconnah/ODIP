@@ -35,7 +35,6 @@ public class TenantFilterCoverageTests
         ["ClaimLineItem"] = "through its claim",
         ["ServiceAgreementDraftBlock"] = "through its draft (ServiceAgreementDraft is filtered)",
         ["ServiceAgreementDraftLine"] = "through its draft (ServiceAgreementDraft is filtered)",
-        ["ServiceBookingLine"] = "through its service booking (ServiceBooking is filtered)",
         ["AuditLog"] = "read only through AuditController, which checks the audited entity first",
         // Shared on purpose.
         ["Activity"] = "shared library, SuperAdmin-written until it becomes per organisation (audit B1-2)",

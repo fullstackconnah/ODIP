@@ -54,31 +54,6 @@ public class CrossTenantStaffVehicleTests
         return availability;
     }
 
-    // ── vehicles/{id}/assignments ──────────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task VehicleAssignments_ListOfAVehicleOfAnotherTenant_ReturnsNotFound()
-    {
-        using var db = Db();
-        PlantVehicleAssignment(db, B, out var vehicle, out _);
-
-        var result = await new VehiclesController(db).GetAssignments(vehicle.Id, CancellationToken.None);
-
-        Assert.IsType<NotFoundObjectResult>(result.Result);
-    }
-
-    [Fact]
-    public async Task VehicleAssignments_ListOfOwnVehicle_ReturnsItsAssignments()
-    {
-        using var db = Db();
-        var own = PlantVehicleAssignment(db, A, out var vehicle, out _);
-
-        var result = await new VehiclesController(db).GetAssignments(vehicle.Id, CancellationToken.None);
-
-        var body = Assert.IsType<Odip.Application.Common.ApiResponse<List<VehicleAssignmentDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
-        Assert.Equal(own.Id, Assert.Single(body.Data!).Id);
-    }
-
     // ── vehicle-assignments ────────────────────────────────────────────────────────────────────
 
     [Fact]

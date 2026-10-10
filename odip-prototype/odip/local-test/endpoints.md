@@ -105,9 +105,6 @@ for role **RO** globally regardless of what's listed below.
 ## DashboardController — `api/v1/dashboard` — class: `[Authorize]`
 - GET `/summary` — Authenticated — dashboard summary (today's date-based counts etc.)
 
-## ConflictsController — `api/v1/conflicts` — class: `[Authorize]`
-- POST `/recheck` — A, C, SA — re-run scheduling-conflict detection
-
 ## ProviderSettingsController — `api/v1/provider-settings` — class: `[Authorize(Roles = "SuperAdmin,Admin,Coordinator")]`
 - GET `` — SA, A, C (class-level) — get provider settings
 - PUT `` — SA, A — upsert provider settings (Coordinator excluded here specifically)
@@ -150,7 +147,6 @@ Budget phase 1: a participant's NDIS plan budget (plans, pools, release periods)
 - PUT `/plans/{planId:guid}` — SA, A, C — replace the plan's fields, pools and periods (merged into the stored rows, so ids survive); the body carries the `revision` it was made from, and a mismatch is a 409 `code: "funding-revision-conflict"` with `data.currentRevision`; revision goes up by one on every save
 - DELETE `/plans/{planId:guid}` — SA, A (Coordinator excluded) — delete a plan with its pools and periods (audited)
 - POST `/plans/{planId:guid}/apply-dates-to-profile` — SA, A, C — set the participant's plan start and end to the plan's (explicit, never automatic, audited as a change to the participant); answers `{ start, end, changed }`
-- GET `/billing-sources-hint` — SA, A, C — read-only: the participant's active Billing funding sources on an NDIS route (agency, plan or self managed) with a budget above zero, summed, with their dates, the management type holding most of the money and the rows behind it; empty `rows` when there is nothing to start from. Never changes a Billing row
 
 ## ParticipantFundingLedgerController — `api/v1/participants/{participantId:guid}/funding` — class: `[Authorize(Roles = "SuperAdmin,Admin,Coordinator")]`
 Budget phase 2a: a participant's budget ledger — what the current plan has been spent on, is waiting to be spent on and is booked to be spent on, per pool and per funding period. A sibling of `ParticipantFundingController` with the same route prefix and the same rule: money is on these endpoints and nowhere else, so every request is admitted to SuperAdmin, Admin and Coordinator, reads included, and SupportWorker and ReadOnly never see a dollar figure. A SuperAdmin must have chosen an organisation to view as; with none chosen both endpoints are 400 `Choose an organisation to view as before recording a plan budget: budgets belong to one organisation.` The participant is read inside the tenant, so another organisation's participant is a 404 and none of its claims, shifts or bookings can reach the answer.
@@ -200,17 +196,12 @@ Alerts are computed at read, never stored. Budget phase 2b adds four kinds to th
 - GET `` — A, C, SA — get app settings
 - PUT `` — A, C, SA — update app settings
 
-## DevController — `api/v1/dev` — class: `[Authorize(Roles = "Admin,SuperAdmin")]` (dev/non-production only; each action also 403s via `Forbid()` if `IWebHostEnvironment.IsProduction()`)
-- POST `/reseed` — A, SA (+ non-Production) — wipes and re-seeds all data from scratch
-- POST `/seed` — A, SA (+ non-Production) — seeds only if data absent (idempotent)
-
 ## VehiclesController — `api/v1/vehicles` — class: `[Authorize]`
 - GET `` (`?isActive`) — Authenticated — list vehicles
 - GET `/{id:guid}` — Authenticated — vehicle detail
 - POST `` — A, C, SA — create a vehicle
 - PUT `/{id:guid}` — A, C, SA — update a vehicle
 - DELETE `/{id:guid}` — A, C, SA — delete a vehicle
-- GET `/{id:guid}/assignments` — Authenticated — assignments for a vehicle
 
 ## VehicleAssignmentsController — `api/v1/vehicle-assignments` — class: `[Authorize]`
 - POST `` — A, C, SA — create a vehicle assignment

@@ -115,7 +115,6 @@ public class CrossTenantPostgresTests : IClassFixture<PostgresFixture>
 
         // Vehicle and staff assignments, availability.
         var vehicleAssignments = new VehicleAssignmentsController(db);
-        Assert.IsType<NotFoundObjectResult>((await new VehiclesController(db).GetAssignments(foreign.Vehicle.Id, ct)).Result);
         Assert.IsType<NotFoundObjectResult>((await vehicleAssignments.Delete(foreign.VehicleAssignment.Id, ct)).Result);
         Assert.IsType<NotFoundObjectResult>((await new StaffAssignmentsController(db, new StaffUnavailabilityQuery(db)).Delete(foreign.StaffAssignment.Id, ct)).Result);
         Assert.IsType<NotFoundObjectResult>((await new StaffController(db).GetAvailability(foreign.User.Id, ct)).Result);
@@ -153,14 +152,13 @@ public class CrossTenantPostgresTests : IClassFixture<PostgresFixture>
         Assert.IsType<NotFoundObjectResult>((await days.UpdateTripDay(foreign.Day.Id, new UpdateTripDayDto { DayTitle = "x" }, ct)).Result);
         Assert.IsType<NotFoundObjectResult>((await days.DeleteActivity(foreign.Activity.Id, ct)).Result);
         Assert.IsType<OkObjectResult>((await days.DeleteActivity(own.Activity.Id, ct)).Result);
-        Assert.IsType<OkObjectResult>((await new ConflictsController(db).Recheck(ct)).Result);
 
         // Nothing of organisation B changed.
         await using var check = PostgresFixture.NewContext(cs);
         Assert.True(await check.TripClaims.AnyAsync(c => c.Id == foreign.Claim.Id));
         Assert.Equal(480m, (await check.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == foreign.Line.Id)).TotalAmount);
         var foreignVehicle = await check.VehicleAssignments.AsNoTracking().SingleAsync(v => v.Id == foreign.VehicleAssignment.Id);
-        Assert.Equal((VehicleAssignmentStatus.Requested, true), (foreignVehicle.Status, foreignVehicle.HasOverlapConflict));   // not cancelled by A, and the flag survives A's recheck
+        Assert.Equal(VehicleAssignmentStatus.Requested, foreignVehicle.Status);   // not cancelled by A
         Assert.True(await check.ScheduledActivities.AnyAsync(s => s.Id == foreign.Activity.Id));
         Assert.True(await check.ParticipantBookings.AnyAsync(x => x.Id == foreign.Booking.Id));
         Assert.Equal(IncidentStatus.Draft, (await check.IncidentReports.AsNoTracking().SingleAsync(i => i.Id == foreign.Incident.Id)).Status);

@@ -11,6 +11,7 @@ using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Incidents;
 
@@ -21,32 +22,10 @@ namespace Odip.Tests.Incidents;
 /// </summary>
 public class IncidentsControllerTests
 {
-    private static OdipDbContext CreateDb(string dbName)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb(string dbName) => TestDb.Create(dbName);
 
     /// <summary>Tenant-scoped (non-SuperAdmin) context — mirrors RestrictivePracticesControllerTests.</summary>
-    private static OdipDbContext CreateTenantScopedDb(string dbName, Guid tenantId)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns(tenantId);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateTenantScopedDb(string dbName, Guid tenantId) => TestDb.ForTenant(dbName, tenantId);
 
     private static User SeedUser(OdipDbContext db, Guid? tenantId = null, string firstName = "Alex", string lastName = "Rivera")
     {

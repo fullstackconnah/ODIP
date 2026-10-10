@@ -1,5 +1,5 @@
 /**
- * Stage 5: FUND AND CLAIM shots (per-traveller funding split, claim preview, claim batch). Same shape as shots.mjs.
+ * Stage 5: FUND AND CLAIM shots (per-traveller funding split, claim preview). Same shape as shots.mjs.
  */
 export const shots = []
 
@@ -100,73 +100,5 @@ shots.push({
     await page.addStyleTag({ content: '.bg-black\\/50 { background: var(--color-background) !important; }' })
     await settle()
     return { locator: dialog, pad: -1 }
-  },
-})
-
-// ---- Build Claim Batch with "Validate selection" results ---------------------------------------------------------
-// GET billing/billable-events (paged) + POST billing/claim-batches/validate. The mock has no billing routes at all.
-// Five unclaimed (Draft) events for two agency-managed participants. Validation results use the real codes and
-// message templates of the backend BillingValidator (BOOKING_BALANCE, DUPLICATE_REF, PAST_DEADLINE, DEADLINE_NEAR are
-// the four that matter here); the UI shows the message in each chip and the code only as a tooltip. PRODA booking
-// references, balances and deadlines are made-up sample values; "today" is the pinned 2026-08-04.
-const ev = (n, participantId, participantName, stream, item, dayType, from, to, hours, unitPrice, ref) => ({
-  id: `be-020${n}`, participantId, participantName, fundingSourceId: 'fs-0001', serviceBookingId: `sb-020${n}`, stream,
-  sourceEntityType: null, sourceEntityId: null, supportItemNumber: item, supportsDeliveredFrom: from, supportsDeliveredTo: to,
-  dayType, quantity: null, hours, unitPrice, totalAmount: hours * unitPrice, gstCode: 'GST', claimType: 'Standard',
-  cancellationReasonCode: null, participantApproved: true, claimReference: ref, status: 'Draft', rejectionReason: null,
-  createdAt: '2026-07-13T09:00:00+10:00',
-})
-const billableEvents = [
-  ev(1, 'p-0002', 'Sienna Whitfield', 'Holidays', '01_003_0117_1_1', 'Weekend', '2026-07-11', '2026-07-12', 24, 64, 'BBW-0713-S01'),
-  ev(2, 'p-0002', 'Sienna Whitfield', 'Holidays', '01_002_0117_1_1', 'Weekday', '2026-07-10', '2026-07-10', 12, 48, 'BBW-0713-S02'),
-  ev(3, 'p-0005', 'Dylan Marchetti', 'CommunityAccess', '01_002_0117_1_1', 'Weekday', '2026-07-28', '2026-07-28', 6, 48, 'CA-20260729-0008'),
-  ev(4, 'p-0005', 'Dylan Marchetti', 'CommunityAccess', '01_003_0117_1_1', 'Saturday', '2026-05-09', '2026-05-09', 8, 64, 'CA-20260511-0003'),
-  ev(5, 'p-0005', 'Dylan Marchetti', 'CommunityAccess', '01_004_0117_1_1', 'Sunday', '2026-07-26', '2026-07-26', 6, 72, 'CA-20260727-0010'),
-]
-const validationResults = [
-  { eventId: 'be-0202', severity: 'Error', code: 'DUPLICATE_REF', message: "Claim reference 'BBW-0713-S02' has already been claimed or paid." },
-  { eventId: 'be-0203', severity: 'Error', code: 'BOOKING_BALANCE', message: "Sum of claimed amounts $288.00 for support item '01_002_0117_1_1' exceeds remaining service booking balance $240.00 on booking 'PB-300552'." },
-  { eventId: 'be-0204', severity: 'Error', code: 'PAST_DEADLINE', message: "Claim window for booking 'PB-300431' closed on 2026-07-09; today is 2026-08-04." },
-  { eventId: 'be-0205', severity: 'Warning', code: 'DEADLINE_NEAR', message: "Claim window for booking 'PB-300552' closes on 2026-08-12, within 14 days of today (2026-08-04)." },
-]
-
-shots.push({
-  name: 'fund-claim-batch',
-  stage: 'fund-and-claim',
-  priority: 'P2',
-  route: '/billing/claim-batches/new',
-  cropTarget: 'Build Claim Batch after Validate selection: the selection summary with disabled Create claim batch, the error/warning banner and the unclaimed events table with a Findings column of Error and Warning chips',
-  fixture: true,
-  now: '2026-08-04T10:00:00+10:00',
-  viewport: { width: 1360, height: 900 },
-  alt: 'Build Claim Batch page after validating five selected events: a red banner says 3 errors and 1 warning were found and nothing was created, Create claim batch is disabled with a note to resolve 3 errors, and the events table, scrolled to its right-hand columns, shows amount, reference and a Clean row and Findings chips for an already-claimed reference, an insufficient service booking balance, a claim window that has closed and one closing soon.',
-  notes: 'Fixture: the mock has no billing routes, so GET billing/billable-events and POST billing/claim-batches/validate are both fed. Validation messages use the backend BillingValidator templates; booking references, balances and dates are sample values. The UI shows each finding message in its chip (the code like BOOKING_BALANCE appears only as a hover tooltip), so codes are not visible text in the image. The Findings column never wraps, so the table is scrolled right to the Amount column (as a user would) to show the chips in full; Participant, Support Item, Dates and Hours are scrolled out of view. 1360px viewport.',
-  async setup(page) {
-    await page.route(/\/api\/v1\/billing\/billable-events(\?.*)?$/, (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: envelope({ items: billableEvents, totalCount: billableEvents.length, page: 1, pageSize: 200, totalPages: 1, hasNext: false, hasPrevious: false }),
-      }))
-    await page.route(/\/api\/v1\/billing\/claim-batches\/validate(\?.*)?$/, (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: envelope(validationResults) }))
-  },
-  async run({ page, goto, settle }) {
-    await goto('/billing/claim-batches/new')
-    await page.getByText('Dylan Marchetti').first().waitFor()
-    await page.getByRole('checkbox', { name: 'Select all rows' }).check()
-    await page.getByRole('button', { name: 'Validate selection' }).click()
-    await page.getByText('Fix the flagged events').waitFor()
-    await settle()
-    const summary = page.getByText(/events? selected/).first().locator('xpath=ancestor::div[contains(@class,"rounded")][1]')
-    const table = page.locator('main table').first().locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]')
-    // The Findings column does not wrap (the app keeps each message on one line), so the table is wider than the page:
-    // scroll it right, as a user would, until the Amount column meets the left edge. The chips then show in full.
-    await table.evaluate((frame) => {
-      const th = [...frame.querySelectorAll('th')].find((h) => h.textContent.trim().startsWith('Amount'))
-      frame.scrollLeft += th.getBoundingClientRect().left - frame.getBoundingClientRect().left - 1
-    })
-    await page.waitForTimeout(200)
-    return { locator: [summary, table], pad: 8 }
   },
 })

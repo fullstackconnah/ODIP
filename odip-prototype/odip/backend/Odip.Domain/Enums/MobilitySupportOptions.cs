@@ -2,7 +2,7 @@ namespace Odip.Domain.Enums;
 
 /// <summary>
 /// Allowed values for <see cref="Entities.Participant.MobilitySupportOptions"/>, sourced from the
-/// Master Data Dictionary mobility picklist (SeedData/DataDictionarySeed.json) — the spreadsheet
+/// Master Data Dictionary mobility picklist (ODIP Master Data Dictionary.xlsx at the repo root) — the spreadsheet
 /// is the source of truth for this set.
 /// </summary>
 public static class MobilitySupportOptions

@@ -295,23 +295,6 @@
     "notes": "Fixture: the mock has no claim preview, so POST trips/t-0004/claims/preview is fed the same line items as fund-claim-funding-split. The modal is the real Generate NDIS Claim flow (Generate Claim, then Preview Claim). The preview table has no unit price column in the app (Participant, Day Type, Dates, Hours, Amount). The dark page scrim is painted in the page background colour for the crop, so the rounded corners are clean."
   },
   {
-    "name": "fund-claim-batch",
-    "stage": "fund-and-claim",
-    "file1x": "fund-claim-batch.webp",
-    "file2x": "fund-claim-batch@2x.webp",
-    "width1x": 1104,
-    "height1x": 386,
-    "width2x": 2208,
-    "height2x": 772,
-    "kb1x": 35.3,
-    "kb2x": 93.1,
-    "route": "/billing/claim-batches/new",
-    "cropTarget": "Build Claim Batch after Validate selection: the selection summary with disabled Create claim batch, the error/warning banner and the unclaimed events table with a Findings column of Error and Warning chips",
-    "fixture": true,
-    "alt": "Build Claim Batch page after validating five selected events: a red banner says 3 errors and 1 warning were found and nothing was created, Create claim batch is disabled with a note to resolve 3 errors, and the events table, scrolled to its right-hand columns, shows amount, reference and a Clean row and Findings chips for an already-claimed reference, an insufficient service booking balance, a claim window that has closed and one closing soon.",
-    "notes": "Fixture: the mock has no billing routes, so GET billing/billable-events and POST billing/claim-batches/validate are both fed. Validation messages use the backend BillingValidator templates; booking references, balances and dates are sample values. The UI shows each finding message in its chip (the code like BOOKING_BALANCE appears only as a hover tooltip), so codes are not visible text in the image. The Findings column never wraps, so the table is scrolled right to the Amount column (as a user would) to show the chips in full; Participant, Support Item, Dates and Hours are scrolled out of view. 1360px viewport."
-  },
-  {
     "name": "fund-claim-funding-split-m",
     "stage": "fund-and-claim",
     "file1x": "fund-claim-funding-split-m.webp",
@@ -328,24 +311,6 @@
     "alt": "Line Items card of a draft trip claim on a narrow screen: three stacked line cards for Liam Okafor (Plan Managed), Sienna Whitfield (NDIA Managed) and Marcus Tran (Self Managed), each with support item, Weekend day type, dates, 24 hours, unit price, total and Draft status, an Invoice link on the plan-managed and self-managed cards only, and a total of $4,224.00 at the foot.",
     "notes": "fixture uses NdiaManaged; real API value AgencyManaged is rendered raw by the current app, recapture from real data after the app fix. Narrow variant of fund-claim-funding-split: the same claim reduced to its three Weekend lines (one per funding type) so the stacked cards stay short; the total is the app's own sum of those three lines. 580px app viewport (the app's card layout sizes the cards to their content, so a slightly narrower panel fills better).",
     "variantOf": "fund-claim-funding-split"
-  },
-  {
-    "name": "fund-claim-batch-m",
-    "stage": "fund-and-claim",
-    "file1x": "fund-claim-batch-m.webp",
-    "file2x": "fund-claim-batch-m@2x.webp",
-    "width1x": 616,
-    "height1x": 974,
-    "width2x": 1232,
-    "height2x": 1948,
-    "kb1x": 63.2,
-    "kb2x": 166.2,
-    "route": "/billing/claim-batches/new",
-    "cropTarget": "Build Claim Batch after Validate selection at a small-screen width: selection summary, the error/warning banner and the validated events as stacked cards with their Findings chips",
-    "fixture": true,
-    "alt": "Build Claim Batch on a narrow screen after validating five events: a red banner reading 3 errors and 1 warning found, fix the flagged events, nothing was created, then five event cards each with a ticked checkbox, participant, stream, support item, day type, dates, hours, amount and reference, and a Findings field showing Clean, an already-claimed reference, an insufficient service booking balance, a closed claim window and a claim window closing soon, each message in full.",
-    "notes": "Narrow variant of fund-claim-batch (same fixture and clock). 640px app viewport: the table becomes stacked cards, which also lets the Findings chips wrap so every message is whole (the wide image has to scroll its table). The selection summary card with the disabled Create claim batch button is not in the crop, which starts at the banner. Each card was ticked with a real click (the card layout has no select-all). The code (BOOKING_BALANCE etc.) is only a hover tooltip in the app, so it is not visible text.",
-    "variantOf": "fund-claim-batch"
   },
   {
     "name": "report-overdue",

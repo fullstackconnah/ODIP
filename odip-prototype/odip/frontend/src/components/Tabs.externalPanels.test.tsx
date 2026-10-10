@@ -20,7 +20,7 @@ const externalTabs: TabItem[] = [
   { id: 'events', label: 'Billable Events', icon: FileText },
 ]
 
-// The parent owns panel rendering — same call shape as BillingPage after migration.
+// The parent owns panel rendering — same call shape as the pages that own their panels.
 function ExternalHarness({
   tabs = externalTabs,
   initial = 'funding',
@@ -39,7 +39,7 @@ function ExternalHarness({
         onChange={setActive}
         ariaLabel="Billing sections"
       />
-      {/* Parent owns panel content; mirrors BillingPage's parent-conditional pattern. */}
+      {/* Parent owns panel content; the parent-conditional pattern the migrated pages use. */}
       <div data-testid="panels">
         {tabs.map(t => (
           <div

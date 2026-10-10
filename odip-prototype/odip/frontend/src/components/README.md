@@ -592,8 +592,8 @@ useDialogBehavior({ open: drawerOpen, onClose: () => setSidebarOpen(false), cont
 ## SlideOver
 
 `components/SlideOver.tsx` is the panel docked to the right edge, for creating or editing a record without leaving the list.
-It replaced nine hand-rolled copies (`TemplateFormPanel`, `BillableEventFormPanel`, `FundingSourceFormPanel`,
-`ServiceBookingFormPanel`, `ExceptionsDrawer`, `PatternSlideOver`, `ShiftSlideOver`, `TenantFormPanel`, `UserFormPanel`), six
+It replaced nine hand-rolled copies (`TemplateFormPanel`, `ExceptionsDrawer`, `PatternSlideOver`, `ShiftSlideOver`,
+`TenantFormPanel`, `UserFormPanel`, and three Billing panels since retired), six
 of which had no Escape, no focus handling and no dialog role.
 
 ```tsx
@@ -633,11 +633,10 @@ scrim, close button), which go through `beforeClose` and then `dirty`. A success
 a footer Cancel is an explicit discard that calls `onClose` directly: neither asks. To make a footer Cancel ask too, it has to
 call the panel's own request, which is not exposed; keep Cancel as the explicit way out.
 
-**Dirty.** The panels compute `dirty` from what they already have: react-hook-form's `formState.isDirty` (Template, Billable
-event, Funding source, Service booking), or the current values against the values the panel opened with (Shift and Pattern
+**Dirty.** The panels compute `dirty` from what they already have: react-hook-form's `formState.isDirty` (Template), or the current values against the values the panel opened with (Shift and Pattern
 compare to their first render, because their page keys them on the target; Tenant and User compare to what the open effect
 set). A panel that shows a success notice before it auto-closes (Template, Tenant) is not dirty once it has saved. A read-only
-panel (`canWrite` false, a claimed billable event) cannot be dirty.
+panel (`canWrite` false) cannot be dirty.
 
 **A dialog over the panel** (the Delete flow) is a `ConfirmDialog` rendered after the `SlideOver`: it is the topmost layer, so
 Escape closes only it, focus returns to the Delete button, and the page stays scroll-locked until the panel closes too. See
@@ -900,7 +899,7 @@ The trip detail page opts in with a status-led meta row, and the dashboard opts 
 |---|---|---|
 | `button` | secondary `Button`, an arrow and "Back", `--control-h` tall | a detail page's action cluster (trip, staff, accommodation, incident, onboarding) |
 | `icon` | ghost icon-only `Button`, 24px on a mouse and a 44px square under a coarse pointer; its tooltip carries the name | a form or wizard header with the title beside it (participant, the intake and profile wizards, enquiry, medication, agreement draft, caregiver review) |
-| `link` | primary-coloured text link with an arrow, a `--tap-min` floor, a keyboard-only focus ring | a page with no action cluster (the portal, claim batch detail) |
+| `link` | primary-coloured text link with an arrow, a `--tap-min` floor, a keyboard-only focus ring | a page with no action cluster (the portal) |
 
 **Accessibility**: always a real `<a href>` (open in a new tab and copy-link work); it is never a `<button>` that navigates. The visible text is "Back" and the accessible name is "Back to {label}" (it contains
 the visible text). 44px under a coarse pointer in every variant, visible focus ring, first in the tab order of its header.
@@ -964,7 +963,7 @@ detail page opts in today; the other detail pages adopt it next.
 ## Tabs
 
 `Tabs.tsx` — the single tab primitive. It absorbed the former `TabNav.tsx` (deleted) so
-every tab surface in the app shares one look and one behaviour set; the billing screen's
+every tab surface in the app shares one look and one behaviour set; the (since retired) billing screen's
 underlined, icon-optional, text-only strip is the reference styling.
 
 Two usage modes:

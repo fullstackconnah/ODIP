@@ -1,17 +1,16 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
-using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Rostering;
 
@@ -23,18 +22,7 @@ namespace Odip.Tests.Rostering;
 /// </summary>
 public class StaffAssignmentGateTests
 {
-    private static OdipDbContext CreateDb(string dbName)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb(string dbName) => TestDb.Create(dbName);
 
     private static User SeedStaff(OdipDbContext db)
     {
@@ -377,36 +365,6 @@ public class StaffAssignmentGateTests
 
         Assert.IsType<UnprocessableEntityObjectResult>(result.Result);
         Assert.Empty(await db.StaffAssignments.ToListAsync());
-    }
-
-    [Fact]
-    public async Task Recheck_DerivesHasConflictFromOverrideReason_NotFromOtherAssignmentsOrAvailability()
-    {
-        using var db = CreateDb(Guid.NewGuid().ToString());
-        var staff = SeedStaff(db);
-        var trip = SeedTrip(db, new DateOnly(2026, 9, 10));
-
-        var overriddenButFlaggedFalse = new StaffAssignment
-        {
-            Id = Guid.NewGuid(), TripInstanceId = trip.Id, UserId = staff.Id,
-            AssignmentStart = new DateOnly(2026, 9, 10), AssignmentEnd = new DateOnly(2026, 9, 12),
-            Status = AssignmentStatus.Confirmed, OverrideReason = "x", HasConflict = false,
-        };
-        var notOverriddenButFlaggedTrue = new StaffAssignment
-        {
-            Id = Guid.NewGuid(), TripInstanceId = trip.Id, UserId = staff.Id,
-            AssignmentStart = new DateOnly(2026, 9, 20), AssignmentEnd = new DateOnly(2026, 9, 22),
-            Status = AssignmentStatus.Confirmed, OverrideReason = null, HasConflict = true,
-        };
-        db.StaffAssignments.AddRange(overriddenButFlaggedFalse, notOverriddenButFlaggedTrue);
-        db.SaveChanges();
-
-        var controller = new ConflictsController(db);
-        await controller.Recheck(CancellationToken.None);
-
-        var refreshed = await db.StaffAssignments.ToDictionaryAsync(a => a.Id, a => a.HasConflict);
-        Assert.True(refreshed[overriddenButFlaggedFalse.Id]);
-        Assert.False(refreshed[notOverriddenButFlaggedTrue.Id]);
     }
 
     [Fact]
