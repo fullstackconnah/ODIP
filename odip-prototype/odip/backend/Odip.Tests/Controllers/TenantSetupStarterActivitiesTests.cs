@@ -44,13 +44,19 @@ public class TenantSetupStarterActivitiesTests
         using var db = SuperAdminDb();
 
         var tenantId = await SetUpAsync(db);
+        var secondTenantId = await SetUpAsync(db, "seaside.example.com");
 
-        var activities = await db.Activities.IgnoreQueryFilters().AsNoTracking().ToListAsync();
+        var all = await db.Activities.IgnoreQueryFilters().AsNoTracking().ToListAsync();
+        var activities = all.Where(a => a.TenantId == tenantId).ToList();
         Assert.Equal(8, activities.Count);
         Assert.All(activities, a => Assert.Equal((tenantId, (Guid?)null), (a.TenantId, a.EventTemplateId)));
-        Assert.Equal(8, activities.Select(a => a.Id).Distinct().Count());
         Assert.Contains(activities, a => a.ActivityName == "Group Dinner Out");
         Assert.Contains(activities, a => a.ActivityName == "Sensory Art Session");
+
+        // Each organisation's copies have ids of their own: none repeats, and none is a seed id (the demo organisation owns those, and a repeat would be a duplicate primary key).
+        Assert.Equal(8, all.Count(a => a.TenantId == secondTenantId));
+        Assert.Equal(16, all.Select(a => a.Id).Distinct().Count());
+        Assert.Empty(all.Select(a => a.Id).Intersect(StarterActivities.For(Guid.Empty, keepSeedIds: true).Select(a => a.Id)));
     }
 
     [Fact]
