@@ -53,10 +53,9 @@ public class ClaimsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ClaimPreviewResponseDto>>> PreviewClaim(
         Guid tripId, [FromBody] ClaimPreviewRequestDto dto, CancellationToken ct)
     {
-        // No tenant guard here on purpose. The preview's own lines and total have always been returned to any caller the class-level
-        // [Authorize] admits, and narrowing that is a wider product change than the budget finding asks for. The budget block it now
-        // carries is scoped inside the generator, under the CALLER's tenant (budget security audit F-1), so a SuperAdmin with no
-        // organisation chosen gets a preview with no budget rather than another organisation's.
+        // No separate guard here: the generator reads the trip through the tenant-filtered TripInstances, so another organisation's trip is "Trip not found" (400),
+        // as it is for GenerateClaim; only a SuperAdmin with no organisation chosen previews any trip, by design. The budget block it carries is scoped inside
+        // the generator, under the CALLER's tenant (budget security audit F-1), so that SuperAdmin gets a preview with no budget rather than another organisation's.
         try
         {
             var preview = await _generator.PreviewClaimAsync(tripId, dto, ct);

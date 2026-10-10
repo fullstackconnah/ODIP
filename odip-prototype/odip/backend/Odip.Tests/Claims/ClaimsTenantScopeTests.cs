@@ -177,6 +177,26 @@ public class ClaimsTenantScopeTests
         db.SaveChanges();
     }
 
+    // PreviewClaim and GenerateClaim have no guard of their own: the generator reads the trip through the filtered TripInstances. Pinned so that stays true.
+    [Fact]
+    public async Task PreviewAndGenerateClaim_TripOfAnotherTenant_Return400TripNotFound_AndCreateNothing()
+    {
+        var (db, controller) = Create(TenantA);
+        var b = Seed(db, TenantB);
+        db.TripClaims.Remove(db.TripClaims.Single(c => c.Id == b.TripClaim.Id));   // a trip with no claim yet, so only the trip lookup can refuse
+        db.ClaimLineItems.Remove(db.ClaimLineItems.Single(l => l.Id == b.TripLine.Id));
+        db.SaveChanges();
+
+        var preview = await controller.PreviewClaim(b.Trip.Id, new ClaimPreviewRequestDto(), CancellationToken.None);
+        var generate = await controller.GenerateClaim(b.Trip.Id, new GenerateClaimRequestDto(), CancellationToken.None);
+
+        var previewBody = Assert.IsType<ApiResponse<ClaimPreviewResponseDto>>(Assert.IsType<BadRequestObjectResult>(preview.Result).Value);
+        var generateBody = Assert.IsType<ApiResponse<TripClaimListDto>>(Assert.IsType<BadRequestObjectResult>(generate.Result).Value);
+        Assert.Equal("Trip not found.", Assert.Single(previewBody.Errors!));
+        Assert.Equal("Trip not found.", Assert.Single(generateBody.Errors!));
+        Assert.Single(await db.TripClaims.ToListAsync());   // only the shift claim seeded alongside
+    }
+
     [Fact]
     public async Task DownloadBprCsv_ClaimOfAnotherTenant_ReturnsNotFound()
     {
