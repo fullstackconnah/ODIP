@@ -237,10 +237,7 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
       }
     >
       {error && (
-        <div role="alert" className="mb-4 flex items-start gap-2 rounded-[var(--radius-md)] border border-[var(--color-error-container)] bg-[var(--color-error-container)]/40 px-4 py-3 text-sm text-[var(--color-on-error-container)]">
-          <span className="mt-0.5">⚠</span>
-          <span>{error}</span>
-        </div>
+        <Callout tone="error" className="mb-4">{error}</Callout>
       )}
 
       {step === 'input' && (

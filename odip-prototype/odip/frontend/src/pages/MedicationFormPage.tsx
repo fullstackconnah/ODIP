@@ -21,6 +21,7 @@ import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
 import { plural } from '@/lib/format'
 import { useFillOnce } from '@/hooks/useFillOnce'
+import { Callout } from '@/components/Callout'
 
 // Which medication forms make clinical sense for a given administration route. Used only to
 // surface a soft warning when the two fields disagree — the currently selected form is never
@@ -294,9 +295,7 @@ export default function MedicationFormPage() {
       </div>
 
       {mutation.isError && (
-        <div role="alert" className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          {extractMedicationErrorMessage(mutation.error, isEdit)}
-        </div>
+        <Callout tone="error">{extractMedicationErrorMessage(mutation.error, isEdit)}</Callout>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">

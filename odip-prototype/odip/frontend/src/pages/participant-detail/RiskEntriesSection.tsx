@@ -14,6 +14,7 @@ import type { ParticipantRiskEntryDto } from '@/api/types/risk-entries'
 import type { AtRiskParty } from '@/api/types/enums'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 // One empty array for every render while there is no data, so the memos below do not see a new dependency each time.
 const NO_ENTRIES: ParticipantRiskEntryDto[] = []
@@ -184,16 +185,10 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
       </div>
 
       {listError && (
-        <div className="flex items-start justify-between gap-3 p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          <span>{listError}</span>
-          <button
-            type="button"
-            onClick={() => setListError(null)}
-            className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
-          >
-            Dismiss
-          </button>
-        </div>
+        <Callout tone="error"
+          actions={<button type="button" onClick={() => setListError(null)} className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded" > Dismiss </button>}>
+          {listError}
+        </Callout>
       )}
 
       {phase === 'loading' ? (
@@ -259,9 +254,7 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
       >
         <div className="space-y-4">
           {modalError && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {modalError}
-            </div>
+            <Callout tone="error">{modalError}</Callout>
           )}
           <FormField label="At Risk">
             <Dropdown

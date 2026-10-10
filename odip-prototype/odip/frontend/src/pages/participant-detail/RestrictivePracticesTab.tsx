@@ -22,6 +22,7 @@ import type { RestrictivePracticeDto, RestrictivePracticeType, BulkCreateRestric
 import { plural } from '@/lib/format'
 import { isPastDue } from '@/lib/deadline'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 /** One row of the "Add entries" bulk table — client-side draft state before it becomes its own register entry. */
 type BulkRowState = {
@@ -520,16 +521,10 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       </div>
 
       {listError && (
-        <div className="flex items-start justify-between gap-3 p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          <span>{listError}</span>
-          <button
-            type="button"
-            onClick={() => setListError(null)}
-            className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
-          >
-            Dismiss
-          </button>
-        </div>
+        <Callout tone="error"
+          actions={<button type="button" onClick={() => setListError(null)} className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded" > Dismiss </button>}>
+          {listError}
+        </Callout>
       )}
 
       {phase === 'loading' ? (
@@ -590,9 +585,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       >
         <div className="space-y-4">
           {modalError && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {modalError}
-            </div>
+            <Callout tone="error">{modalError}</Callout>
           )}
           <FormField label="Type">
             <Dropdown
@@ -727,9 +720,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       >
         <div className="space-y-4">
           {bulkGeneralError && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {bulkGeneralError}
-            </div>
+            <Callout tone="error">{bulkGeneralError}</Callout>
           )}
           {bulkType === 'ChemicalRestraint' && medications.length === 0 && (
             <p className="text-xs text-[var(--color-muted-foreground)]">

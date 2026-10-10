@@ -15,6 +15,7 @@ import type { ParticipantAdlAssessmentDto } from '@/api/types/adl-assessments'
 import type { AdlCategory, AdlLevel } from '@/api/types/enums'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 const LEVEL_OPTIONS = [
   { key: 'Independent', label: 'I' },
@@ -187,9 +188,7 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
       >
         <div className="space-y-4">
           {modalError && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {modalError}
-            </div>
+            <Callout tone="error">{modalError}</Callout>
           )}
           <FormField label="Level" hint="I = Independent, S = Supervision, A = Assistance, F = Full Support.">
             <ToggleGroup

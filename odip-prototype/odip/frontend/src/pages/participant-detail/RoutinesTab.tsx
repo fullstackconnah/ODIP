@@ -15,6 +15,7 @@ import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import type { ParticipantRoutineDto } from '@/api/types/routines'
 import type { RoutineCategory } from '@/api/types/enums'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 /** Monday-first for display, independent of the .NET DayOfWeek (Sunday=0) wire ordering. */
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const
@@ -291,16 +292,10 @@ export default function RoutinesTab({ participantId }: { participantId: string |
       </div>
 
       {listError && (
-        <div className="flex items-start justify-between gap-3 p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          <span>{listError}</span>
-          <button
-            type="button"
-            onClick={() => setListError(null)}
-            className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
-          >
-            Dismiss
-          </button>
-        </div>
+        <Callout tone="error"
+          actions={<button type="button" onClick={() => setListError(null)} className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded" > Dismiss </button>}>
+          {listError}
+        </Callout>
       )}
 
       {phase === 'loading' ? (
@@ -375,9 +370,7 @@ export default function RoutinesTab({ participantId }: { participantId: string |
       >
         <div className="space-y-4">
           {modalError && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {modalError}
-            </div>
+            <Callout tone="error">{modalError}</Callout>
           )}
           <FormField label="Title" required error={errors.title}>
             <input

@@ -15,6 +15,7 @@ import { SearchableSelect } from '@/components/SearchableSelect'
 import { SlideOver } from '@/components/SlideOver'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 // ---------------------------------------------------------------------------
 // Schema & types
@@ -424,9 +425,7 @@ export default function TemplateFormPanel({
 
         {/* Error message */}
         {error && (
-          <div className="sm:col-span-2 bg-[var(--color-error-container)] border border-[var(--color-error-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)]">
-            {error}
-          </div>
+          <Callout tone="error" className="sm:col-span-2">{error}</Callout>
         )}
       </form>
     </SlideOver>

@@ -15,6 +15,7 @@ import type { LeaveRequestDto, RecurringUnavailabilityDto, CreateLeaveRequestDto
 import { formatEffectiveRange } from '@/pages/rostering/lib/roster'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 type WithdrawTarget = { kind: 'leave' | 'unavailability'; id: string }
 
@@ -134,9 +135,7 @@ export default function PortalLeavePage() {
       </PageHeader>
 
       {actionError && (
-        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          {actionError}
-        </div>
+        <Callout tone="error">{actionError}</Callout>
       )}
 
       <Tabs

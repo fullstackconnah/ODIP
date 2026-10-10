@@ -5,6 +5,7 @@ import type { ElectronicSigningSnapshotDto, ServiceAgreementDraftDto } from '@/a
 import { Button } from '@/components/Button'
 import { FormField } from '@/components/FormField'
 import { extractErrorMessage } from '@/lib/utils'
+import { Callout } from '@/components/Callout'
 
 type Props = { participantId: string; draft: ServiceAgreementDraftDto }
 
@@ -104,7 +105,7 @@ export default function ElectronicSigningEvidencePanel({ participantId, draft }:
         {submitEvidence.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Record PendingVerification evidence
       </Button>
     </>}
-    {error && <p role="alert" className="p-2 rounded-[var(--radius-md)] bg-[var(--color-destructive)]/10 text-sm text-[var(--color-destructive)]">{error}</p>}
+    {error && <Callout tone="error">{error}</Callout>}
     {success && <p role="status" className="text-sm">{success}</p>}
   </section>
 }

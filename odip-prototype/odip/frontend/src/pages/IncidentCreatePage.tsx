@@ -46,6 +46,7 @@ import { IncidentDetailsStep } from './incidents/steps/IncidentDetailsStep'
 import { WitnessesStep } from './incidents/steps/WitnessesStep'
 import { ComplianceStep } from './incidents/steps/ComplianceStep'
 import type { z } from 'zod'
+import { Callout } from '@/components/Callout'
 
 // INC-01: the service-type dropdown offers the business streams plus "None" (untagged) —
 // selecting "Trip" is what reveals the trip-select dropdown below.
@@ -550,9 +551,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       )}
 
       {mutation.isError && (
-        <div role="alert" className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          {extractIncidentErrorMessage(mutation.error, isEdit)}
-        </div>
+        <Callout tone="error">{extractIncidentErrorMessage(mutation.error, isEdit)}</Callout>
       )}
 
       <WizardStepRail

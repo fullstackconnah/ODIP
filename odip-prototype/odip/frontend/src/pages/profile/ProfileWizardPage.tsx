@@ -67,6 +67,7 @@ import { Card } from '@/components/Card'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { queryPhase } from '@/lib/queryPhase'
+import { Callout } from '@/components/Callout'
 
 const CA_SECTION = PROFILE_CONDITIONAL_SECTIONS.find((s) => s.key === 'communityAccess')!
 const STA_SECTION = PROFILE_CONDITIONAL_SECTIONS.find((s) => s.key === 'holidaySta')!
@@ -477,9 +478,7 @@ export default function ProfileWizardPage() {
       </div>
 
       {saveError && (
-        <div role="alert" className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm">
-          {saveError}
-        </div>
+        <Callout tone="error">{saveError}</Callout>
       )}
 
       <WizardShell

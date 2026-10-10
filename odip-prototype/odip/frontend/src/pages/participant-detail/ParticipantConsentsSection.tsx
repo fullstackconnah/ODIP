@@ -13,6 +13,7 @@ import { CONSENT_TYPES } from '@/api/types/enums'
 import { CONSENT_TYPE_LABELS } from '@/api/types/consents'
 import type { ParticipantConsentDto } from '@/api/types/consents'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 type ConsentFormState = {
   granted: 'true' | 'false' | ''
@@ -161,9 +162,7 @@ export default function ParticipantConsentsSection({ participantId }: { particip
       >
         <div className="space-y-4">
           {modalError && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {modalError}
-            </div>
+            <Callout tone="error">{modalError}</Callout>
           )}
           <FormField label="Granted">
             {/* Three options, not two: this is a bool? control (Granted is a tri-state), so it

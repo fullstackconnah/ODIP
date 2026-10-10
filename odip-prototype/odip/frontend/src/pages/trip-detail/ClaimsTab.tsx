@@ -11,6 +11,7 @@ import type { TripClaimListDto, UpdateClaimDto } from '@/api/types/claims'
 import type { TripDetailDto } from '@/api/types/trips'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 const CLAIM_STATUS_ITEMS = [
   { value: 'Draft', label: 'Draft' },
@@ -108,10 +109,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-100 rounded-[var(--radius-md)] px-4 py-3 text-sm text-red-700 flex items-start gap-2">
-          <span className="mt-0.5">⚠</span>
-          <span>{error}</span>
-        </div>
+        <Callout tone="error">{error}</Callout>
       )}
 
       {claims.length === 0 ? (

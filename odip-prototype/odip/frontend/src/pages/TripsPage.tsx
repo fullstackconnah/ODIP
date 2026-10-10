@@ -5,10 +5,11 @@ import { formatDateAu } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
 import { TONE, statusClass } from '@/lib/tone'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Pencil, MapPin, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, MapPin } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { Dropdown } from '@/components/Dropdown'
 import { CellText, DataTable, RowActions, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
@@ -325,12 +326,9 @@ export default function TripsPage() {
       </div>
 
       {statusChangeError && (
-        <div role="alert" className="flex items-start gap-3 rounded-[var(--radius-md)] bg-[var(--color-error-container)] p-[var(--card-pad)] text-[var(--color-destructive)]">
-          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" aria-hidden="true" />
-          <p className="text-sm">
-            <strong>Couldn't update {statusChangeError.tripName}.</strong> {statusChangeError.message}
-          </p>
-        </div>
+        <Callout tone="error">
+          <strong>Couldn't update {statusChangeError.tripName}.</strong> {statusChangeError.message}
+        </Callout>
       )}
 
       {/* Trips list */}

@@ -502,9 +502,7 @@ export default function UserFormPanel({
 
       {/* Error message */}
       {error && (
-        <div className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)]">
-          {error}
-        </div>
+        <Callout tone="error">{error}</Callout>
       )}
 
       <ConfirmDialog

@@ -14,6 +14,7 @@ import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { formGrid, span } from '@/lib/formGrid'
+import { Callout } from '@/components/Callout'
 
 const TASK_TYPE_ITEMS: DropdownItem[] = [
   { value: 'AccommodationRequest', label: 'Accommodation Request' },
@@ -141,9 +142,9 @@ export default function TaskCreatePage() {
           <Link to="/tasks" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Tasks</Link>
         </div>
         <PageHeader title="Edit Task" />
-        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <Callout tone="error">
           Couldn't find this task. It may have been deleted, or something went wrong loading it.
-        </div>
+        </Callout>
       </div>
     )
   }
@@ -157,9 +158,9 @@ export default function TaskCreatePage() {
       <PageHeader title={isEdit ? 'Edit Task' : 'New Task'} />
 
       {mutation.isError && (
-        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <Callout tone="error">
           Failed to {isEdit ? 'update' : 'create'} task. Please check your input and try again.
-        </div>
+        </Callout>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">

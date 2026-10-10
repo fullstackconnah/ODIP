@@ -7,6 +7,7 @@ import type { TripDetailDto, ClaimPreviewResponseDto, ClaimPreviewLineItemDto } 
 import { plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 interface GenerateClaimModalProps {
   tripId: string
@@ -106,10 +107,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
       }
     >
         {error && (
-          <div className="bg-[var(--color-error-container)] border border-[var(--color-error-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)] flex items-start gap-2 mb-4">
-            <span className="mt-0.5">&#9888;</span>
-            <span>{error}</span>
-          </div>
+          <Callout tone="error" className="mb-4">{error}</Callout>
         )}
 
         {step === 'input' && (

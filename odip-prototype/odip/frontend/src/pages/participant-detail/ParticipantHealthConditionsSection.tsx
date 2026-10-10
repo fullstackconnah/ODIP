@@ -14,6 +14,7 @@ import { HEALTH_CONDITION_TYPE_LABELS } from '@/api/types/health-conditions'
 import type { ParticipantHealthConditionDto } from '@/api/types/health-conditions'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 type ConditionFormState = {
   has: 'true' | 'false' | ''
@@ -165,9 +166,7 @@ export default function ParticipantHealthConditionsSection({ participantId }: { 
       >
         <div className="space-y-4">
           {modalError && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {modalError}
-            </div>
+            <Callout tone="error">{modalError}</Callout>
           )}
           <FormField label="Has this condition / support need">
             {/* Same tri-state affordance as ParticipantConsentsSection's Granted toggle — this is

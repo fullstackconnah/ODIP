@@ -13,6 +13,7 @@ import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS } from '@/api/types/enum
 import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { formatWallClock } from '@/lib/wallClock'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 /** An INSTANT (a dose given), in the zone it was recorded in. */
 function formatDateTime(value: string | null, timeZone: string | null) {
@@ -149,9 +150,7 @@ export default function PortalWitnessApprovalsPage() {
       </PageHeader>
 
       {error && (
-        <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          {error}
-        </div>
+        <Callout tone="error">{error}</Callout>
       )}
 
       {isLoading ? (

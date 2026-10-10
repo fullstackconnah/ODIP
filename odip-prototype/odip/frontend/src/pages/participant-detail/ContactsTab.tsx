@@ -16,6 +16,7 @@ import {
 import type { ParticipantContactRoleDto } from '@/api/types/contacts'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 /** The most relevant secondary line for a role row — different role types surface a different
  * "what matters most" field (research §3.1-3.14) rather than one fixed column always showing the
@@ -154,16 +155,10 @@ export default function ContactsTab({ participantId }: { participantId: string |
       </div>
 
       {listError && (
-        <div className="flex items-start justify-between gap-3 p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          <span>{listError}</span>
-          <button
-            type="button"
-            onClick={() => setListError(null)}
-            className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
-          >
-            Dismiss
-          </button>
-        </div>
+        <Callout tone="error"
+          actions={<button type="button" onClick={() => setListError(null)} className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded" > Dismiss </button>}>
+          {listError}
+        </Callout>
       )}
 
       {phase === 'loading' ? (

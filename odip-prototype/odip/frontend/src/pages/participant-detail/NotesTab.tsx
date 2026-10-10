@@ -12,6 +12,7 @@ import { parseApiDate, extractErrorMessage } from '@/lib/utils'
 import { formatRelative } from '@/lib/format'
 import type { ParticipantNoteDto } from '@/api/types/notes'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 type NoteFormState = { title: string; description: string; isPinned: boolean }
 const EMPTY_FORM: NoteFormState = { title: '', description: '', isPinned: false }
@@ -252,16 +253,10 @@ export default function NotesTab({ participantId }: { participantId: string | un
       </div>
 
       {listError && (
-        <div className="flex items-start justify-between gap-3 p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          <span>{listError}</span>
-          <button
-            type="button"
-            onClick={() => setListError(null)}
-            className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
-          >
-            Dismiss
-          </button>
-        </div>
+        <Callout tone="error"
+          actions={<button type="button" onClick={() => setListError(null)} className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded" > Dismiss </button>}>
+          {listError}
+        </Callout>
       )}
 
       {phase === 'loading' ? (
@@ -322,9 +317,7 @@ export default function NotesTab({ participantId }: { participantId: string | un
       >
         <div className="space-y-4">
           {modalError && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {modalError}
-            </div>
+            <Callout tone="error">{modalError}</Callout>
           )}
           <FormField label="Title" required error={errors.title}>
             <input

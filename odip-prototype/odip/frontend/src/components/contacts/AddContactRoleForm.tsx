@@ -14,6 +14,7 @@ import type { ParticipantContactRoleDto, CreateParticipantContactRoleDto, Update
 import { extractErrorMessage } from '@/lib/utils'
 import { plural } from '@/lib/format'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 /** Splits a typed "First Last" (or "First Middle Last") query into first/last name parts for the
  * "create new" fallback's pre-fill — PF-6's "pre-filled from whatever was typed". */
@@ -533,9 +534,7 @@ export default function AddContactRoleForm({ participantId, mode, role, onSaved,
   return (
     <div className="space-y-4">
       {formError && (
-        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          {formError}
-        </div>
+        <Callout tone="error">{formError}</Callout>
       )}
 
       {mode === 'create' && (
@@ -684,9 +683,9 @@ export default function AddContactRoleForm({ participantId, mode, role, onSaved,
       )}
 
       {gateErrors.map(({ rt, msg }) => (
-        <div key={rt} role="alert" className="p-3 rounded-lg bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm">
+        <Callout key={rt} tone="warning">
           {form.roleTypes.length > 1 ? `${CONTACT_ROLE_TYPE_LABELS[rt]}: ${msg}` : msg}
-        </div>
+        </Callout>
       ))}
 
       <div className="grid grid-cols-2 gap-3">

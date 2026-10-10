@@ -7,6 +7,7 @@ import { useCheckStaffAssignment, getRosterFindings } from '@/api/hooks'
 import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
 import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
 import type { ScheduleStaffDto, ScheduleTripDto, CreateStaffAssignmentDto, RosterFindingDto, SleepoverType } from '@/api/types'
+import { Callout } from '@/components/Callout'
 
 interface StaffAssignModalProps {
   staff: ScheduleStaffDto
@@ -160,9 +161,7 @@ export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoa
           />
 
           {error && (
-            <div role="alert" className="rounded-[var(--radius-md)] bg-[var(--color-error-container)]/50 px-3 py-2 text-sm text-[var(--color-destructive)]">
-              {error}
-            </div>
+            <Callout tone="error">{error}</Callout>
           )}
 
           <div className="flex gap-3 pt-1">

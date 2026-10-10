@@ -15,6 +15,7 @@ import { MissedMedicationGuidance } from './MissedMedicationGuidance'
 import type { MedicationAdministrationStatus, PackagingType } from '@/api/types/enums'
 import type { AdministrationDto, CreateAdministrationDto, UpdateAdministrationDto } from '@/api/types/medications'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 export type RecordAdministrationModalProps = {
   open: boolean
@@ -378,9 +379,7 @@ export function RecordAdministrationModal({
         ) : (
         <form id="record-administration-form" onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {error}
-            </div>
+            <Callout tone="error">{error}</Callout>
           )}
 
           <FormField label="Status" required>
