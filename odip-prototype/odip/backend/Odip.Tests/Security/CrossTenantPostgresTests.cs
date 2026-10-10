@@ -54,7 +54,7 @@ public class CrossTenantPostgresTests : IClassFixture<PostgresFixture>
             Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = booking.Id, SupportItemCode = "01_002_0117_1_1", DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = new DateOnly(2026, 2, 1), SupportsDeliveredTo = new DateOnly(2026, 2, 1), Hours = 8m, UnitPrice = 60m, TotalAmount = 480m,
         };
-        var vehicleAssignment = new VehicleAssignment { Id = Guid.NewGuid(), TripInstanceId = trip.Id, VehicleId = vehicle.Id };
+        var vehicleAssignment = new VehicleAssignment { Id = Guid.NewGuid(), TripInstanceId = trip.Id, VehicleId = vehicle.Id, HasOverlapConflict = true };
         var staffAssignment = new StaffAssignment { Id = Guid.NewGuid(), TripInstanceId = trip.Id, UserId = user.Id, AssignmentStart = new DateOnly(2026, 2, 1), AssignmentEnd = new DateOnly(2026, 2, 3) };
         var availability = new StaffAvailability { Id = Guid.NewGuid(), UserId = user.Id, StartDateTime = new DateTime(2026, 9, 1), EndDateTime = new DateTime(2026, 9, 2), AvailabilityType = AvailabilityType.Unavailable };
         var day = new TripDay { Id = Guid.NewGuid(), TripInstanceId = trip.Id, DayNumber = 1, Date = trip.StartDate, DayTitle = "Original" };
@@ -109,6 +109,10 @@ public class CrossTenantPostgresTests : IClassFixture<PostgresFixture>
         Assert.IsType<BadRequestObjectResult>((await claims.UpdateClaim(own.Claim.Id, new UpdateClaimDto { AuthorisedByStaffId = foreign.User.Id }, ct)).Result);
         Assert.IsType<OkObjectResult>((await claims.UpdateClaim(own.Claim.Id, new UpdateClaimDto { AuthorisedByStaffId = own.User.Id }, ct)).Result);
 
+        // The dashboard counts only the caller's own conflict (one flagged vehicle assignment) and open incident (one draft incident), not organisation B's.
+        var summary = Assert.IsType<ApiResponse<DashboardSummaryDto>>(Assert.IsType<OkObjectResult>((await new DashboardController(db).GetSummary(ct)).Result).Value).Data!;
+        Assert.Equal((1, 1), (summary.ConflictCount, summary.OpenIncidentCount));
+
         // Vehicle and staff assignments, availability.
         var vehicleAssignments = new VehicleAssignmentsController(db);
         Assert.IsType<NotFoundObjectResult>((await new VehiclesController(db).GetAssignments(foreign.Vehicle.Id, ct)).Result);
@@ -124,6 +128,8 @@ public class CrossTenantPostgresTests : IClassFixture<PostgresFixture>
         Assert.IsType<NotFoundObjectResult>((await participants.GetBookings(foreign.Participant.Id, ct)).Result);
         Assert.IsType<OkObjectResult>((await participants.GetSupportProfile(own.Participant.Id, ct)).Result);
         var incidents = new IncidentsController(db);
+        var listed = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>((await incidents.GetAll(null, null, null, null, null, null, null, null, 1, 50, ct)).Result).Value);
+        Assert.Equal(own.Incident.Id, Assert.Single(listed.Data!.Items).Id);
         Assert.IsType<NotFoundObjectResult>((await incidents.Delete(foreign.Incident.Id, ct)).Result);
         Assert.IsType<NotFoundObjectResult>((await incidents.GetById(foreign.Incident.Id, ct)).Result);
         var audit = new AuditController(db, NullLogger<AuditController>.Instance);
@@ -136,6 +142,10 @@ public class CrossTenantPostgresTests : IClassFixture<PostgresFixture>
         Assert.IsType<NotFoundObjectResult>((await trips.GetDocuments(foreign.Trip.Id, ct)).Result);
         var foreignBookings = Assert.IsType<ApiResponse<List<BookingListDto>>>(Assert.IsType<OkObjectResult>((await trips.GetBookings(foreign.Trip.Id, ct)).Result).Value);
         Assert.Empty(foreignBookings.Data!);
+        Assert.Empty(Assert.IsType<ApiResponse<List<VehicleAssignmentDto>>>(Assert.IsType<OkObjectResult>((await trips.GetVehicles(foreign.Trip.Id, ct)).Result).Value).Data!);
+        Assert.Empty(Assert.IsType<ApiResponse<List<StaffAssignmentDto>>>(Assert.IsType<OkObjectResult>((await trips.GetStaff(foreign.Trip.Id, ct)).Result).Value).Data!);
+        Assert.Empty(Assert.IsType<ApiResponse<List<ReservationDto>>>(Assert.IsType<OkObjectResult>((await trips.GetAccommodation(foreign.Trip.Id, ct)).Result).Value).Data!);
+        Assert.IsType<NotFoundObjectResult>((await new BookingsController(db).Patch(foreign.Booking.Id, new PatchBookingDto { BookingStatus = BookingStatus.Cancelled }, ct)).Result);
         Assert.IsType<NotFoundObjectResult>((await new BookingsController(db).Delete(foreign.Booking.Id, ct)).Result);
         Assert.IsType<NotFoundObjectResult>((await new BookingsController(db).GetById(foreign.Booking.Id, ct)).Result);
         Assert.IsType<NotFoundObjectResult>((await new ReservationsController(db).Delete(foreign.Reservation.Id, ct)).Result);
@@ -149,7 +159,8 @@ public class CrossTenantPostgresTests : IClassFixture<PostgresFixture>
         await using var check = PostgresFixture.NewContext(cs);
         Assert.True(await check.TripClaims.AnyAsync(c => c.Id == foreign.Claim.Id));
         Assert.Equal(480m, (await check.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == foreign.Line.Id)).TotalAmount);
-        Assert.Equal(VehicleAssignmentStatus.Requested, (await check.VehicleAssignments.AsNoTracking().SingleAsync(v => v.Id == foreign.VehicleAssignment.Id)).Status);
+        var foreignVehicle = await check.VehicleAssignments.AsNoTracking().SingleAsync(v => v.Id == foreign.VehicleAssignment.Id);
+        Assert.Equal((VehicleAssignmentStatus.Requested, true), (foreignVehicle.Status, foreignVehicle.HasOverlapConflict));   // not cancelled by A, and the flag survives A's recheck
         Assert.True(await check.ScheduledActivities.AnyAsync(s => s.Id == foreign.Activity.Id));
         Assert.True(await check.ParticipantBookings.AnyAsync(x => x.Id == foreign.Booking.Id));
         Assert.Equal(IncidentStatus.Draft, (await check.IncidentReports.AsNoTracking().SingleAsync(i => i.Id == foreign.Incident.Id)).Status);
