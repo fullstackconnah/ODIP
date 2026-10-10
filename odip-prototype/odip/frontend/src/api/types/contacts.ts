@@ -39,23 +39,6 @@ export interface PersonDto {
   activeRoleCount: number
 }
 
-export interface CreatePersonDto {
-  firstName: string
-  lastName: string
-  phone?: string | null
-  mobile?: string | null
-  email?: string | null
-  addressLine?: string | null
-  suburb?: string | null
-  state?: string | null
-  postcode?: string | null
-  organisation?: string | null
-  dateOfBirth?: string | null
-  notes?: string | null
-}
-
-export type UpdatePersonDto = CreatePersonDto
-
 // ══════════════════════════════════════════════════════════════
 // ParticipantContactRole (CONTACT-01/02/03)
 // ══════════════════════════════════════════════════════════════

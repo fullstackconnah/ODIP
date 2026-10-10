@@ -275,13 +275,6 @@ export interface ParticipantLedgerDto {
   outsideThePlanDates: LedgerBucket
 }
 
-/** One more page of one period's rows ("show more"). */
-export interface LedgerRowsPage {
-  total: number
-  skip: number
-  rows: LedgerRow[]
-}
-
 // ── The Budgets list (phase 2b) ─────────────────────────────────────────────
 // GET api/v1/funding/budgets: every active participant's pools for the funding period running now, from the ledger's own figures, sorted by risk (Over, Forecast over, Approaching, On track).
 // SuperAdmin, Admin and Coordinator only (money). No screen adds anything up.
