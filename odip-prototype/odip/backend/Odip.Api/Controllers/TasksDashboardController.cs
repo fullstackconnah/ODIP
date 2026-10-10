@@ -492,14 +492,16 @@ public class DashboardController : ControllerBase
             .Where(s => upcomingTripIds.Contains(s.TripInstanceId) && s.Status != AssignmentStatus.Cancelled)
             .Select(s => s.TripInstanceId).Distinct().ToListAsync(ct);
 
-        var conflictCount = await _db.AccommodationReservations.CountAsync(r => r.HasOverlapConflict, ct)
-            + await _db.VehicleAssignments.CountAsync(v => v.HasOverlapConflict, ct)
-            + await _db.StaffAssignments.CountAsync(s => s.HasConflict, ct);
+        // Reservations, assignments and incidents have no organisation column or query filter, so each count joins the caller's own trips (or users, for incidents): TripInstances and Users are tenant-filtered.
+        var conflictCount = await _db.AccommodationReservations.CountAsync(r => r.HasOverlapConflict && _db.TripInstances.Any(t => t.Id == r.TripInstanceId), ct)
+            + await _db.VehicleAssignments.CountAsync(v => v.HasOverlapConflict && _db.TripInstances.Any(t => t.Id == v.TripInstanceId), ct)
+            + await _db.StaffAssignments.CountAsync(s => s.HasConflict && _db.TripInstances.Any(t => t.Id == s.TripInstanceId), ct);
 
-        var openIncidentCount = await _db.IncidentReports.CountAsync(
+        var ownIncidents = _db.IncidentReports.Where(i => _db.Users.Any(u => u.Id == i.ReportedByUserId));
+        var openIncidentCount = await ownIncidents.CountAsync(
             i => i.IsActive && i.Status != IncidentStatus.Closed && i.Status != IncidentStatus.Resolved, ct);
 
-        var qscOverdueCount = await _db.IncidentReports.CountAsync(QscReporting.IsOverdueExpr(_clock.GetUtcNow().UtcDateTime), ct);
+        var qscOverdueCount = await ownIncidents.CountAsync(QscReporting.IsOverdueExpr(_clock.GetUtcNow().UtcDateTime), ct);
 
         return Ok(ApiResponse<DashboardSummaryDto>.Ok(new DashboardSummaryDto
         {
