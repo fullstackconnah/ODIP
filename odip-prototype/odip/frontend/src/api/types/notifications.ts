@@ -60,15 +60,10 @@ export const NOTIFICATION_EVENT_TYPE_GROUPS: { label: string; eventTypes: Notifi
   { label: 'Integrations', eventTypes: ['IntegrationDegraded'] },
 ]
 
-export const NOTIFICATION_CHANNELS = ['Email', 'Sms'] as const
-export type NotificationChannel = typeof NOTIFICATION_CHANNELS[number]
-
 /** SMS renders disabled with "Not available yet" everywhere in the UI — ruling 1: no SMS
  * provider is implemented in v1, SmsChannel always resolves NotSupported/Skipped. */
-export const NOTIFICATION_CHANNEL_LABELS: Record<NotificationChannel, string> = {
-  Email: 'Email',
-  Sms: 'SMS',
-}
+export const NOTIFICATION_CHANNELS = ['Email', 'Sms'] as const
+export type NotificationChannel = typeof NOTIFICATION_CHANNELS[number]
 
 export const NOTIFICATION_OUTBOX_STATUSES = ['Pending', 'Sent', 'Failed', 'Skipped'] as const
 export type NotificationOutboxStatus = typeof NOTIFICATION_OUTBOX_STATUSES[number]

@@ -220,7 +220,7 @@ describe("trip-generate ledger refresh, against the server's real response shape
   })
 
   it('useGenerateClaim does not widen the refresh to the whole funding namespace', async () => {
-    // The funding namespace also holds the plan record and a billing hint. A claim
+    // The funding namespace also holds the plan record. A claim
     // write moves no plan figure, so the refresh must not be a bare-prefix
     // ['participant-funding'] invalidation that drags those along.
     const qc = makeClient()

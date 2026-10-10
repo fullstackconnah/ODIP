@@ -4,6 +4,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Data;
 
@@ -14,18 +15,7 @@ namespace Odip.Tests.Data;
 /// </summary>
 public class DbSeederAdlAssessmentsTests
 {
-    private static OdipDbContext CreateDb(string dbName)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb(string dbName) => TestDb.Create(dbName);
 
     [Fact]
     public async Task SeedParticipantAdlAssessmentsAsync_SeedsRowsAcrossAMajorityOfParticipants()

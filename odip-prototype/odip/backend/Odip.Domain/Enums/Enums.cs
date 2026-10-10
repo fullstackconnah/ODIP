@@ -13,16 +13,12 @@ public enum PlanType
 /// NDIS plan fields (number, plan type, dates) are the relevant funding detail; <see cref="Other"/>
 /// means the (reused) <see cref="Odip.Domain.Entities.Participant.FundingOrganisation"/> column
 /// holds a required free-text "who funds this" answer instead, and the NDIS plan fields are
-/// irrelevant. The wizard's INTAKE-07 conditional-visibility engine gates both directions off
-/// this field — see frontend `src/lib/conditionalFields.ts`. Backfill (see the
+/// irrelevant. The wizard shows the NDIS plan fields or the funding-organisation box off this
+/// field. Backfill (see the
 /// AddParticipantFundingSource migration): rows with a non-empty pre-existing
 /// FundingOrganisation become Other, empty/null rows become Ndis.
 /// Named <c>ParticipantFundingSource</c> rather than the plain <c>FundingSource</c> the backlog
-/// text uses because that name is already taken by the unrelated billing
-/// <see cref="Odip.Domain.Billing.FundingSource"/> entity (a claims-routing funding-source
-/// table) — same namespace tree, so a bare `FundingSource` here would be ambiguous everywhere
-/// both `Odip.Domain.Enums` and `Odip.Domain.Billing` are in scope (e.g. DTOs.cs already `using`s
-/// both).
+/// text uses, because that name was taken by the billing funding-source entity (since retired).
 /// </summary>
 public enum ParticipantFundingSource
 {
@@ -48,8 +44,7 @@ public enum Gender
 
 /// <summary>
 /// LIVING-01: the participant's living arrangement type. Nullable on the entity — unset until
-/// intake captures it. Drives which of the LIVING-02/03/04 field groups the wizard's INTAKE-07
-/// conditional-visibility engine reveals (frontend `src/lib/conditionalFields.ts`); see
+/// intake captures it. Drives which of the LIVING-02/03/04 field groups the wizard reveals; see
 /// <see cref="Odip.Domain.Entities.Participant.LivingArrangementNotes"/> for the one field
 /// genuinely shared across all three arrangement types (modelled once, per the backlog's
 /// "some fields shared across arrangement types" principle — mirrors INTAKE-04).

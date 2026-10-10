@@ -2,11 +2,11 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { apiGet, apiPost, apiPut } from '../client'
 import { refreshBudgetFigures, refreshBudgetWarnings } from './funding-ledger'
 import type {
-  ApplyPlanDatesResult, BillingSourcesHintDto, BudgetSettingsDto, FundingPlanDto, FundingPlansDto, PaceCategoryDto, SaveFundingPlanDto, UpdateBudgetSettingsDto,
+  ApplyPlanDatesResult, BudgetSettingsDto, FundingPlanDto, FundingPlansDto, PaceCategoryDto, SaveFundingPlanDto, UpdateBudgetSettingsDto,
 } from '../types'
 
 // A participant's NDIS plan budget (budget feature, phase 1). The plan record is saved through these endpoints and never through the participant's patch groups. Every plan write
-// refreshes ['participant-funding', participantId], which is also the prefix of the Billing hint, so a saved plan updates the tab, the intake card and the hint at once.
+// refreshes ['participant-funding', participantId], so a saved plan updates the tab and the intake card at once.
 
 const SETTINGS_KEY = ['budget-settings'] as const
 export const fundingKey = (participantId: string | undefined) => ['participant-funding', participantId] as const
@@ -36,16 +36,6 @@ export function useFundingPlans(participantId: string | undefined, enabled = tru
     queryKey: [...fundingKey(participantId), 'plans'],
     queryFn: () => apiGet<FundingPlansDto>(`/participants/${participantId}/funding/plans`),
     enabled: !!participantId && enabled,
-  })
-}
-
-/** What the Billing funding sources say, to start a Core (flexible) pool from. Asked for once, when the editor opens. */
-export function useBillingSourcesHint(participantId: string | undefined, enabled = true) {
-  return useQuery({
-    queryKey: [...fundingKey(participantId), 'billing-hint'],
-    queryFn: () => apiGet<BillingSourcesHintDto>(`/participants/${participantId}/funding/billing-sources-hint`),
-    enabled: !!participantId && enabled,
-    staleTime: 60_000,
   })
 }
 

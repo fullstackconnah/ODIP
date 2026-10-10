@@ -2,7 +2,7 @@ namespace Odip.Domain.Enums;
 
 /// <summary>
 /// Curated diagnoses picklist (DIAG-01), sourced from the Master Data Dictionary's new "Diagnoses"
-/// entry (SeedData/DataDictionarySeed.json, fieldId MED-016, domain "Health & Medical" — the same
+/// entry (ODIP Master Data Dictionary.xlsx at the repo root, fieldId MED-016, domain "Health & Medical" — the same
 /// domain as the existing free-text MED-001 "Diagnoses &amp; Medical Conditions" summary field,
 /// which this supplements rather than replaces) — the spreadsheet is the source of truth for this
 /// set, mirroring how <see cref="MobilitySupportOptions"/> is sourced from MOB-004.

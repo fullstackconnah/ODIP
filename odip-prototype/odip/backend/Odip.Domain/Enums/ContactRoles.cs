@@ -97,9 +97,8 @@ public static class ContactRoleRules
     }
 
     /// <summary>
-    /// CONTACT-02 server-side gate, mirrored by the frontend's INTAKE-07 conditional-visibility
-    /// declarations for the wizard's Contacts step (form-local convenience only — this is the
-    /// authority). Returns an error message when <paramref name="roleType"/> is not available for
+    /// CONTACT-02 server-side gate, mirrored by the wizard's Contacts step
+    /// (form-local convenience only — this is the authority). Returns an error message when <paramref name="roleType"/> is not available for
     /// this participant, or null when it's fine to add.
     ///
     /// Research §4's rules implemented:

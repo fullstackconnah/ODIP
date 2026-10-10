@@ -78,18 +78,4 @@ public class FundingSqlTests
         Assert.Matches(@"<= \w+\.""PlanEnd""", sql);
         Assert.DoesNotContain("\"Id\" <>", sql);
     }
-
-    [Fact]
-    public void TheBillingHintQuery_TranslatesToTheActiveNdisRoutesWithABudgetAboveZero()
-    {
-        using var db = NpgsqlDb();
-        var service = new FundingPlanService(db, TimeProvider.System);
-
-        var sql = service.HintSources(Guid.NewGuid(), Guid.NewGuid()).ToQueryString();
-
-        Assert.Contains("\"FundingSources\"", sql);
-        Assert.Contains("\"IsActive\"", sql);
-        Assert.Contains("\"Budget\" > 0.0", sql);
-        Assert.Contains("\"RouteType\"", sql);
-    }
 }

@@ -1,6 +1,6 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { apiGet } from '../client'
-import type { LedgerRowsPage, ParticipantLedgerDto } from '../types'
+import type { ParticipantLedgerDto } from '../types'
 import { AGREEMENT_CHECK_KEY, BUDGET_LIST_KEY } from './funding-warnings'
 
 // The budget ledger (budget feature, phase 2a). The server works every figure out on each read; this only asks for it, under the same ['participant-funding', participantId] prefix the plan
@@ -30,7 +30,7 @@ export function cachedLedgerParticipants(queryClient: QueryClient): string[] {
 /**
  * Refresh participants' ledgers, and their "show more" row pages, which hang off the same key. Given the participants a write names it is narrowed to them; given none (a write that does not
  * say whose money it moves, or one that moves everybody's) it falls back to whichever ledgers this client actually holds, so the refresh reaches the open ledgers and nothing else. It is
- * narrower than the whole ['participant-funding'] namespace on purpose: that prefix also holds the plan record and the Billing hint, which none of these writes touch.
+ * narrower than the whole ['participant-funding'] namespace on purpose: that prefix also holds the plan record, which none of these writes touch.
  */
 export function refreshLedgers(queryClient: QueryClient, participantIds: readonly string[] = []) {
   const ids = participantIds.length > 0 ? [...new Set(participantIds)] : cachedLedgerParticipants(queryClient)
@@ -74,16 +74,5 @@ export function useFundingLedger(participantId: string | undefined, enabled = tr
     queryKey: ledgerKey(participantId),
     queryFn: () => apiGet<ParticipantLedgerDto>(`/participants/${participantId}/funding/ledger`),
     enabled: !!participantId && enabled,
-  })
-}
-
-/** One more page of one period's rows, for "show more". `skip` is how many rows are already on screen. */
-export function useFundingLedgerRows(participantId: string | undefined, poolId: string | undefined, periodId: string | undefined, skip: number) {
-  return useQuery({
-    queryKey: [...ledgerKey(participantId), 'rows', poolId, periodId, skip],
-    queryFn: () => apiGet<LedgerRowsPage>(
-      `/participants/${participantId}/funding/ledger/rows?poolId=${poolId}&periodId=${periodId}&skip=${skip}&take=200`,
-    ),
-    enabled: !!participantId && !!poolId && !!periodId && skip > 0,
   })
 }

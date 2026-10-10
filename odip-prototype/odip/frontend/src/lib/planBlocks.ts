@@ -207,7 +207,6 @@ export function defaultSleepoverWindow(block: Pick<PlanBlock, 'start' | 'end'>):
 
 export type WeekdayBand = 'night' | 'day' | 'evening'
 export const WEEKDAY_BAND_LABEL: Record<WeekdayBand, string> = { night: 'Night', day: 'Daytime', evening: 'Evening' }
-export const WEEKDAY_BAND_RANGE: Record<WeekdayBand, string> = { night: '00:00–06:00', day: '06:00–20:00', evening: '20:00–24:00' }
 
 export interface BandPart {
   band: WeekdayBand

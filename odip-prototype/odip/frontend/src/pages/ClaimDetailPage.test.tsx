@@ -233,7 +233,7 @@ describe('ClaimDetailPage — failed request vs. missing record (PageState)', ()
     expect(screen.getByText('Claim not found')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Back to billing' })).toHaveAttribute('href', '/billing')
+    expect(screen.getByRole('link', { name: 'Back to trips' })).toHaveAttribute('href', '/trips')
   })
 
   it('shows "Claim not found" for an answer with no record, and says "Loading claim…" while it loads', () => {

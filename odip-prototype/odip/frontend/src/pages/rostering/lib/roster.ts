@@ -25,9 +25,6 @@ export const ROSTER_STICKY_COL_WIDTH = 195
  */
 export const ROSTER_DAY_COL_MIN_WIDTH = 127
 
-/** Grid-template-columns for the board's header row: the sticky column plus 7 day columns. */
-export const ROSTER_GRID_TEMPLATE_COLUMNS = `${ROSTER_STICKY_COL_WIDTH}px repeat(7, minmax(${ROSTER_DAY_COL_MIN_WIDTH}px, 1fr))`
-
 /** Grid-template-columns for a row's day-cell strip (no sticky column — that's a separate grid item spanning column 1). */
 export function rosterDayColumnsTemplate(dayCount: number): string {
   return `repeat(${dayCount}, minmax(${ROSTER_DAY_COL_MIN_WIDTH}px, 1fr))`
