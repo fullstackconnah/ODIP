@@ -6,6 +6,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 
 namespace Odip.Infrastructure.Services;
 
@@ -81,6 +82,9 @@ public class ClaimGenerationService
     public async Task<TripClaim> GenerateDraftClaimAsync(
         Guid tripInstanceId, GenerateClaimRequestDto? overrides = null, CancellationToken ct = default)
     {
+        // Two requests at the same moment would both pass the "no active claim" check below and save two drafts, so the second waits here, then reads what the first saved and is refused.
+        await using var held = await RosterGenerationLock.AcquireAsync(_db, tripInstanceId, ct, scope: "claim-generate");
+
         // Convert to preview request for shared calculation
         var previewOverrides = overrides == null ? null : new ClaimPreviewRequestDto
         {
@@ -118,13 +122,13 @@ public class ClaimGenerationService
         var settings = await _db.ProviderSettings.FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("Provider settings are not configured.");
 
-        var claimReference = BuildClaimReference(trip);
+        var claimId = Guid.NewGuid();
         var claim = new TripClaim
         {
-            Id = Guid.NewGuid(),
+            Id = claimId,
             TripInstanceId = tripInstanceId,
             Status = TripClaimStatus.Draft,
-            ClaimReference = claimReference,
+            ClaimReference = TripClaim.ReferenceFor(trip.TripCode ?? trip.Id.ToString("N")[..8].ToUpper(), claimId),
             CreatedAt = DateTime.UtcNow
         };
         _db.TripClaims.Add(claim);
@@ -164,6 +168,7 @@ public class ClaimGenerationService
         claim.TotalAmount = claimLineItems.Sum(l => l.TotalAmount);
 
         await _db.SaveChangesAsync(ct);
+        await held.CommitAsync(ct);
         return claim;
     }
 
@@ -302,14 +307,6 @@ public class ClaimGenerationService
                 $"No catalogue item prices this trip's {string.Join(", ", context.UnpricedDayTypes)} days ({trip.StartDate:dd/MM/yyyy} to {tripEnd:dd/MM/yyyy}), so no claim lines could be built. Import the catalogue for that period first.");
         }
         return "No claim lines could be built for this trip. Check its active hours per day and its departure and return times, then generate the claim again.";
-    }
-
-    private static string BuildClaimReference(TripInstance trip)
-    {
-        var code = trip.TripCode ?? trip.Id.ToString("N")[..8].ToUpper();
-        var date = DateTime.UtcNow.ToString("yyyyMMdd");
-        var raw = $"TC-{code}-{date}";
-        return raw.Length > 50 ? raw[..50] : raw;
     }
 
     // ─── Internal types ────────────────────────────────────────────────

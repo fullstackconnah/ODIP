@@ -1,6 +1,5 @@
 import type { PlanBlock } from './plan-pricing'
 import type { PlanType } from './enums'
-import type { FundingRouteType } from './billing'
 
 // A participant's NDIS plan budget (budget feature, phase 1): the wire shapes of api/v1/participants/{id}/funding and api/v1/funding. Enums travel as their names, dates as
 // "YYYY-MM-DD" (calendar days, inclusive), money as dollars. A null member is left out, so every optional member is genuinely absent when it has no value. Money is on these
@@ -119,25 +118,6 @@ export interface FundingRevisionConflict { currentRevision: number }
 export interface FundingPlanOverlap { conflictingPlanId: string; conflictingPlanStart: string; conflictingPlanEnd: string }
 
 export interface ApplyPlanDatesResult { start: string; end: string; changed: boolean }
-
-export interface BillingSourceHintRow {
-  id: string
-  routeType: FundingRouteType
-  budgetCategory?: string
-  budget: number
-  planStartDate?: string
-  planEndDate?: string
-  payerName?: string
-}
-
-/** What the participant's Billing funding sources already say, as a one-off starting point. Empty `rows` means there is nothing to start from. */
-export interface BillingSourcesHintDto {
-  total: number
-  planStart?: string
-  planEnd?: string
-  managementType?: PlanType
-  rows: BillingSourceHintRow[]
-}
 
 export interface BudgetSettingsDto {
   mode: BudgetLimitMode
@@ -293,13 +273,6 @@ export interface ParticipantLedgerDto {
   pools: LedgerPool[]
   notInARecordedPool: LedgerBucket
   outsideThePlanDates: LedgerBucket
-}
-
-/** One more page of one period's rows ("show more"). */
-export interface LedgerRowsPage {
-  total: number
-  skip: number
-  rows: LedgerRow[]
 }
 
 // ── The Budgets list (phase 2b) ─────────────────────────────────────────────

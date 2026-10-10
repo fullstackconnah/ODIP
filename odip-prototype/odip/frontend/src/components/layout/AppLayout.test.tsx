@@ -536,12 +536,12 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
       '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles', '/tasks',
       '/participants', '/medications', '/caregiver-submissions',
       '/rostering', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/staff', '/qualifications',
-      '/billing', '/billing/claim-batches', '/budgets',
+      '/budgets',
       '/incidents', '/settings',
     ])
   })
 
-  it('still hides the pages a SupportWorker may not open (Bookings, Rostering, Billing, Staff, Qualifications, Settings, Caregiver forms) from the sidebar', () => {
+  it('still hides the pages a SupportWorker may not open (Bookings, Rostering, Staff, Qualifications, Settings, Caregiver forms) from the sidebar', () => {
     signIn('SupportWorker')
     renderAt('/trips')
 
@@ -594,14 +594,14 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
     'Participants: Participants | Medications | Caregiver forms',
     'Staff & roster: Board | Patterns | Compatibility | Leave | Completions | Staff | Qualifications',
-    'Finance: Billing | Claim batches | Budgets',
+    'Budgets',
     'Incidents',
     'Settings',
   ]
   // A SupportWorker starts from My Shifts, so the Dashboard is not in their menu; they never see the pages their allow-list leaves out.
   const SUPPORT_WORKER_MENU = ['My Shifts', 'Trips: All Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents']
-  // ReadOnly reads most of the app but its API refuses Rostering (all five pages), Billing and Claim batches, Caregiver forms and
-  // Settings, so the menu does not offer them: Finance and Settings disappear, Staff & roster is down to Staff and Qualifications.
+  // ReadOnly reads most of the app but its API refuses Rostering (all five pages), Budgets, Caregiver forms and
+  // Settings, so the menu does not offer them: Budgets and Settings disappear, Staff & roster is down to Staff and Qualifications.
   const READ_ONLY_MENU = [
     'Dashboard',
     'My Shifts',
@@ -628,10 +628,9 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     signIn('ReadOnly')
     renderAt('/')
     expect(navShape()).toEqual(READ_ONLY_MENU)
-    for (const name of [/Board$/, /Patterns$/, /Compatibility$/, /Leave$/, /Completions$/, /Billing$/, /Claim batches$/, /Budgets$/, /Caregiver forms$/, /Settings$/]) {
+    for (const name of [/Board$/, /Patterns$/, /Compatibility$/, /Leave$/, /Completions$/, /Budgets$/, /Caregiver forms$/, /Settings$/]) {
       expect(screen.queryByRole('link', { name }), String(name)).not.toBeInTheDocument()
     }
-    expect(screen.queryByRole('button', { name: /Finance$/ })).not.toBeInTheDocument()
   })
 
   it('shows Caregiver forms only to a role whose route would not bounce it (the route needs write access)', () => {
@@ -648,19 +647,6 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     renderAt('/onboarding/p-1')
     // NavLink's own matching would not light it (the path is not under /participants), and its aria-current would have said nothing.
     expect(within(mainNav()).getByRole('link', { name: /Participants$/ })).toHaveAttribute('aria-current', 'page')
-  })
-
-  it('lights Claim batches, not Billing, on the batch pages and on a claim (/claims/:id has no entry of its own); Billing only on /billing', () => {
-    for (const [path, lit] of [
-      ['/claims/claim-1', 'Claim batches'], ['/billing/claim-batches', 'Claim batches'], ['/billing/claim-batches/cb-1', 'Claim batches'], ['/billing', 'Billing'],
-    ] as const) {
-      const { unmount } = renderAt(path)
-      const links = within(mainNav()).getAllByRole('link', { name: /(Billing|Claim batches)$/ })
-      expect(links.filter(link => link.getAttribute('aria-current') === 'page').map(link => link.textContent), path).toEqual([expect.stringContaining(lit)])
-      // Whichever of the two is lit, Finance opens itself for the page.
-      expect(openGroupToggle(/Finance$/), path).toHaveAttribute('aria-expanded', 'true')
-      unmount()
-    }
   })
 
   it('opens the group that holds the page you navigate to, and closes the drawer you navigated from', async () => {
@@ -914,7 +900,7 @@ describe('AppLayout — the bottom bar is generated from the same config (U6)', 
 
   it('lights More on a page the bar does not list, and only then', () => {
     signIn('Coordinator')
-    for (const path of ['/billing', '/incidents', '/settings', '/portal']) {
+    for (const path of ['/budgets', '/incidents', '/settings', '/portal']) {
       const { unmount } = renderAt(path)
       expect(lit(), path).toEqual(['menuMore'])
       expect(moreButton(), path).toHaveAttribute('aria-current', 'true')

@@ -470,26 +470,9 @@ export function diagnosisOtherRefine(data: DiagnosisFields, ctx: z.RefinementCtx
 // specify" typed value collapsed into `primaryDiagnosis` before submit, same convention as
 // the retired single-step wizard) — it has no DOCUMENT_MAPPING entry of its own (neither does its
 // Intake-side counterpart), so it is deliberately excluded from PROFILE_FIELD_NAMES but still
-// picked into profileParticipantSchema and included in the Medical Detail step's own field list.
+// included in the Medical Detail step's own field list.
 // ─────────────────────────────────────────────────────────────────────────────
 export const PROFILE_FIELD_NAMES = fieldsForEntry('profile').map((e) => e.field) as (keyof ParticipantFormData)[]
-
-export const profileParticipantSchema = baseParticipantSchema
-  .pick({ ...pickShape(PROFILE_FIELD_NAMES), primaryDiagnosisOther: true })
-  .superRefine(weightHeightRefine)
-  .superRefine(diagnosisOtherRefine)
-
-/** Same hand-rolled-resolver workaround as intakeParticipantResolver above — used only by the
- * Profile wizard's final Review step (a full-payload PUT, see ProfileWizardPage.tsx). */
-export const profileParticipantResolver: Resolver<ParticipantFormData> = (values) => {
-  const result = profileParticipantSchema.safeParse(values)
-  if (result.success) return { values: result.data, errors: {} }
-  const errors: FieldErrors<ParticipantFormData> = {}
-  for (const issue of result.error.issues) {
-    setPathError(errors as Record<string, unknown>, issue.path, issue.message, issue.code)
-  }
-  return { values: {}, errors }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Profile wizard step field groups. The UNION of these arrays, MINUS the one documented UI-only

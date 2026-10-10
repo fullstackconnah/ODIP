@@ -52,7 +52,7 @@ public class FundingRoleTests
         Assert.Equal(
             new[]
             {
-                nameof(ParticipantFundingController.ApplyDatesToProfile), nameof(ParticipantFundingController.BillingSourcesHint), nameof(ParticipantFundingController.CreatePlan),
+                nameof(ParticipantFundingController.ApplyDatesToProfile), nameof(ParticipantFundingController.CreatePlan),
                 nameof(ParticipantFundingController.DeletePlan), nameof(ParticipantFundingController.Plans), nameof(ParticipantFundingController.UpdatePlan),
             },
             Actions(typeof(ParticipantFundingController)).Select(m => m.Name).OrderBy(n => n, StringComparer.Ordinal));

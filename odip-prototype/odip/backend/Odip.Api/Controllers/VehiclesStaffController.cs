@@ -122,22 +122,6 @@ public class VehiclesController : ControllerBase
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true, "Vehicle archived"));
     }
-
-    [HttpGet("{id:guid}/assignments")]
-    public async Task<ActionResult<ApiResponse<List<VehicleAssignmentDto>>>> GetAssignments(Guid id, CancellationToken ct)
-    {
-        var items = await _db.VehicleAssignments.Include(a => a.TripInstance).Include(a => a.DriverUser)
-            .Where(a => a.VehicleId == id)
-            .Select(a => new VehicleAssignmentDto
-            {
-                Id = a.Id, TripInstanceId = a.TripInstanceId, VehicleId = a.VehicleId,
-                Status = a.Status, DriverStaffId = a.DriverUserId,
-                DriverName = a.DriverUser != null ? a.DriverUser.FirstName + " " + a.DriverUser.LastName : null,
-                HasOverlapConflict = a.HasOverlapConflict, HasConflict = a.HasConflict,
-                OverrideReason = a.OverrideReason, AcknowledgedFindingCodes = a.AcknowledgedFindingCodes
-            }).ToListAsync(ct);
-        return Ok(ApiResponse<List<VehicleAssignmentDto>>.Ok(items));
-    }
 }
 
 [ApiController]

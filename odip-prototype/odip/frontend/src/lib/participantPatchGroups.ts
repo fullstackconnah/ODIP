@@ -106,7 +106,7 @@ export function extractGroupFields(payload: Record<string, unknown>, fields: rea
  * collapsed from the wizard's 'true'|'false'|'' UI shape to boolean|null before any group extract
  * — union of IntakeWizardPage.tsx's CULTURAL_TRI_STATE_FIELDS and the retired single-step wizard's
  * clinicalField list, since a Profile-step PATCH group can carry either kind (the trap above). */
-const TRI_STATE_FIELDS = [
+export const TRI_STATE_FIELDS = [
   'isCald', 'isLgbtqi', 'isFamilyCommunity', 'isAboriginalOrTorresStraitIslander',
   'receivedRightsAndResponsibilitiesInfo', 'receivedPrivacyAndConfidentialityInfo',
   'receivedFeedbackInfo', 'receivedBeingSafeInfo', 'receivedAdvocacyInfo',
@@ -189,7 +189,6 @@ export function buildParticipantWirePayload(data: ParticipantFormData): Record<s
  * entry). PhotoVideo/Privacy/EmergencyMedical are always collectible regardless of serviceStreams.
  */
 export const HOLIDAY_STA_CONSENT_TYPES: readonly ConsentType[] = ['Alcohol', 'OtcMedication', 'TravelInsurance', 'TermsAndConditions']
-export const UNGATED_CONSENT_TYPES: readonly ConsentType[] = ['PhotoVideo', 'Privacy', 'EmergencyMedical']
 
 /**
  * THE TRAP, consents flavour: the `consents` collection group is upsert-by-key — a ConsentType

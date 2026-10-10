@@ -108,7 +108,6 @@ const profileDates = {
 }
 
 let settings = { mode: 'Warn', approachingPercent: 80, isDefault: true }
-let billingSources = []
 
 const fail = (errors, code, data) => {
   const body = { success: false, errors }
@@ -173,8 +172,7 @@ function build(body, participantId, existing) {
 /**
  * Routes in the mock's own shape: [pattern, handler(...pathIds, body|searchParams)]. `respond` and `failEnvelope` come from server.js, so the dispatcher's status handling is reused.
  */
-function create({ respond, fundingSources, people = [], priceLines = () => [] }) {
-  billingSources = fundingSources
+function create({ respond, people = [], priceLines = () => [] }) {
   const answer = (result) => (result.status ? respond(result.status, result.body) : result)
   const todayIso = () => new Date().toISOString().slice(0, 10)
   const ledgerOf = (id) => ledgerFor(plansOf, id, todayIso(), settings.approachingPercent)
@@ -214,19 +212,6 @@ function create({ respond, fundingSources, people = [], priceLines = () => [] })
     // The budget ledger (phase 2a): the current plan's pools, periods, figures, statuses and rows, worked out by
     // mock-ledger.js (the same rules as the server's calculator). Today is the mock's own date, as the screens use.
     ['participants/:id/funding/ledger', (id) => ledgerFor(plansOf, id, new Date().toISOString().slice(0, 10), settings.approachingPercent)],
-    ['participants/:id/funding/billing-sources-hint', (id) => {
-      const rows = billingSources
-        .filter((f) => f.participantId === id && f.isActive && ['AgencyManaged', 'PlanManaged', 'SelfManaged'].includes(f.routeType) && f.budget > 0)
-        .map((f) => ({ id: f.id, routeType: f.routeType, ...(f.budgetCategory ? { budgetCategory: f.budgetCategory } : {}), budget: f.budget, ...(f.planStartDate ? { planStartDate: f.planStartDate } : {}), ...(f.planEndDate ? { planEndDate: f.planEndDate } : {}) }))
-      if (rows.length === 0) return { total: 0, rows: [] }
-      const starts = rows.map((r) => r.planStartDate).filter(Boolean)
-      const ends = rows.map((r) => r.planEndDate).filter(Boolean)
-      const biggest = rows.reduce((best, r) => (r.budget > best.budget ? r : best), rows[0])
-      return {
-        total: rows.reduce((sum, r) => sum + r.budget, 0), ...(starts.length ? { planStart: starts.sort()[0] } : {}), ...(ends.length ? { planEnd: ends.sort().at(-1) } : {}),
-        managementType: biggest.routeType, rows,
-      }
-    }],
   ]
 
   const post = [

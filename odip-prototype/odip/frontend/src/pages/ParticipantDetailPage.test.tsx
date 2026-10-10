@@ -432,8 +432,7 @@ describe('ParticipantDetailPage — header meta row', () => {
 
 // DOC-01 — header Documents buttons (Intake Form PDF / Participant Profile PDF). Both hooks are
 // mocked (see the vi.hoisted block above) so these tests never exercise the real axios/blob
-// mutationFn body — that body is identical to useDownloadProdaFile's, already covered by
-// billing.ts's own test coverage.
+// mutationFn body.
 describe('ParticipantDetailPage — DOC-01 Documents header buttons', () => {
   function setup() {
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })

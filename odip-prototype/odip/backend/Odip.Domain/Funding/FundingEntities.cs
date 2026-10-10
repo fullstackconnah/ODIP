@@ -10,7 +10,7 @@ namespace Odip.Domain.Funding;
 /// <see cref="Pools"/> and their <see cref="FundingPool.Periods"/>. It is a table of its own and never a field of <see cref="Participant"/>: a dollar figure on
 /// the participant would reach SupportWorker and ReadOnly, and a plan history would be lost to the profile's overwritten plan dates.
 ///
-/// Named FundingPlan because <c>FundingSource</c> is the Billing entity (and the participant's NDIS-or-other enum) and <c>PlanBudget</c> is a phase C type.
+/// Named FundingPlan because <c>FundingSource</c> is the participant's NDIS-or-other enum and <c>PlanBudget</c> is a phase C type.
 /// No spending, forecast or alert is stored or computed here: those are later phases, and they compute from these rows and never write to them.
 /// </summary>
 public class FundingPlan : ITenantEntity

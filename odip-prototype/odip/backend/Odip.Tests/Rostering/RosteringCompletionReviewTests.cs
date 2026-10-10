@@ -19,6 +19,7 @@ using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Rostering;
 
@@ -34,18 +35,7 @@ public class RosteringCompletionReviewTests
     private static readonly DateOnly ServiceDate = new(2026, 9, 8);
     private static readonly Guid ReviewerId = Guid.NewGuid();
 
-    private static OdipDbContext CreateDb()
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb() => TestDb.Create();
 
     private static RosteringController MakeController(OdipDbContext db, IConfiguration? config = null)
     {

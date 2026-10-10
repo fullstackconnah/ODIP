@@ -78,7 +78,7 @@ export default function ClaimDetailPage() {
   if (!claim) {
     return isError && !isNotFoundError(error)
       ? <PageState kind="error" noun="claim" onRetry={() => refetch()} />
-      : <PageState kind="not-found" noun="claim" backTo="/billing" backLabel="billing" />
+      : <PageState kind="not-found" noun="claim" backTo="/trips" backLabel="trips" />
   }
 
   const totalAmount = (claim.lineItems ?? []).reduce((sum: number, l: ClaimLineItemDto) => sum + (l.totalAmount ?? 0), 0)

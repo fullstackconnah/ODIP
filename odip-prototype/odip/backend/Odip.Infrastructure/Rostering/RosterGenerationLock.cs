@@ -40,7 +40,9 @@ public sealed class RosterGenerationLock : IAsyncDisposable
     /// <summary>True when the lock was taken (PostgreSQL). Whatever was read before it was taken may have changed, and has to be read again.</summary>
     public bool Held { get; }
 
-    public static async Task<RosterGenerationLock> AcquireAsync(OdipDbContext db, Guid participantId, CancellationToken ct, TimeSpan? wait = null)
+    /// <param name="scope">Names what is being kept from running twice, so the lock for one thing does not wait on another's: the default is roster generation (keyed by the participant); claim generation
+    /// passes its own and keys by the trip or the participant.</param>
+    public static async Task<RosterGenerationLock> AcquireAsync(OdipDbContext db, Guid participantId, CancellationToken ct, TimeSpan? wait = null, string scope = "roster-generate")
     {
         if (!db.Database.IsNpgsql()) return new RosterGenerationLock(null, false);
 
@@ -49,8 +51,8 @@ public sealed class RosterGenerationLock : IAsyncDisposable
         {
             // One round trip: bound the wait, take the lock, then hand the setting back to the server's own value for the rest of the transaction.
             var sql = string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                $"SET LOCAL lock_timeout = {(int)(wait ?? DefaultWait).TotalMilliseconds}; SELECT pg_advisory_xact_lock(hashtext('roster-generate:' || {{0}}::text)); SET LOCAL lock_timeout TO DEFAULT");
-            await db.Database.ExecuteSqlRawAsync(sql, new object[] { participantId }, ct);
+                $"SET LOCAL lock_timeout = {(int)(wait ?? DefaultWait).TotalMilliseconds}; SELECT pg_advisory_xact_lock(hashtext({{1}}::text || ':' || {{0}}::text)); SET LOCAL lock_timeout TO DEFAULT");
+            await db.Database.ExecuteSqlRawAsync(sql, new object[] { participantId, scope }, ct);
             return new RosterGenerationLock(owned, true);
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable)

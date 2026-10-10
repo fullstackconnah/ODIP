@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using Odip.Api.Services;
 using Odip.Application.DTOs;
-using Odip.Domain.Billing;
 using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -249,20 +248,6 @@ public class ServiceAgreementApprovalServiceTests
             Notices = new[] { new PlanNotice("registration-groups-not-confirmed", "The registration groups the provider holds have not been confirmed.", 1) },
             Totals = q.Totals with { ProvisionalLines = 8 },
         });
-
-        var outcome = await ApproveAsync(f, draft);
-
-        Assert.Equal(ApprovalStatus.Approved, outcome.Status);
-    }
-
-    [Fact]
-    public async Task Being_over_the_participants_budget_does_not_stop_approval_the_budget_feature_warns_about_that_separately()
-    {
-        await using var f = await SetUpAsync();
-        f.Db.FundingSources.Add(new FundingSource { Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = f.ParticipantId, RouteType = FundingRouteType.PlanManaged, BudgetCategory = "Core", Budget = 100m, PlanStartDate = new DateOnly(2026, 7, 1), PlanEndDate = new DateOnly(2027, 6, 30) });
-        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
-        await f.Db.SaveChangesAsync();
-        Assert.True(draft.Lines.Sum(l => l.Total ?? 0m) > 100m);
 
         var outcome = await ApproveAsync(f, draft);
 

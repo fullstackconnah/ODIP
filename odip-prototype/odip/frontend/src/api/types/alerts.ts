@@ -40,9 +40,3 @@ export interface ParticipantAlertsDto {
   warningCount: number
   infoCount: number
 }
-
-export const ALERT_SEVERITY_ORDER: Record<AlertSeverity, number> = {
-  Critical: 0,
-  Warning: 1,
-  Info: 2,
-}

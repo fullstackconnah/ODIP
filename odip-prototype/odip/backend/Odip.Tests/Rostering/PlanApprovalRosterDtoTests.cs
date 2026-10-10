@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Moq;
 using Odip.Api.Controllers;
 using Odip.Api.Serialization;
 using Odip.Application.Common;
@@ -9,12 +8,12 @@ using Odip.Application.DTOs;
 using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
-using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Rostering;
 
@@ -28,13 +27,7 @@ public class PlanApprovalRosterDtoTests
     private static readonly DateOnly Monday = new(2026, 10, 5);
     private const string Female = """{"workerGender":"Female","driver":true,"skills":["FirstAid","ManualHandling"]}""";
 
-    private static OdipDbContext NewDb()
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-        return new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
-    }
+    private static OdipDbContext NewDb() => TestDb.Create();
 
     private static RosteringController Controller(OdipDbContext db) => new(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
 
