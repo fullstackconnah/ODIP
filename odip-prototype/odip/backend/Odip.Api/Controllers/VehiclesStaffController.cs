@@ -819,32 +819,7 @@ public class StaffController : ControllerBase
             .Where(i => i.InvolvedUserId == id && i.IsActive)
             .OrderByDescending(i => i.IncidentDateTime)
             .Take(10)
-            .Select(i => new IncidentListDto
-            {
-                Id = i.Id,
-                ServiceType = i.ServiceType,
-                TripInstanceId = i.TripInstanceId,
-                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
-                IncidentType = i.IncidentType,
-                OtherTypeSpecify = i.OtherTypeSpecify,
-                Severity = i.Severity,
-                Status = i.Status,
-                Title = i.Title,
-                IncidentDateTime = i.IncidentDateTime,
-                Location = i.Location,
-                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
-                InvolvedParticipantId = i.InvolvedParticipantId,
-                InvolvedParticipantName = i.InvolvedParticipant != null
-                    ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
-                QscReportingStatus = i.QscReportingStatus,
-                IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
-                    && i.QscReportedAt == null
-                    && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-                CreatedAt = i.CreatedAt,
-                MedicationAdministrationId = i.MedicationAdministrationId,
-                ShiftId = i.ShiftId,
-                ShiftNoteId = i.ShiftNoteId
-            })
+            .Select(IncidentProjections.ToListDto(DateTime.UtcNow))
             .ToListAsync(ct);
 
         // Last 10 completions this staff member SUBMITTED (Shift.UserId at Start/manual-Finish

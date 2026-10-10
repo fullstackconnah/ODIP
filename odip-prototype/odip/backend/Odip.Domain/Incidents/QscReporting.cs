@@ -7,7 +7,8 @@ namespace Odip.Domain.Incidents;
 /// <summary>
 /// The single definition of "QSC report overdue" for an <see cref="IncidentReport"/> — extracted
 /// so <c>TasksDashboardController.GetSummary</c>'s <c>QscOverdueCount</c>,
-/// <c>IncidentsController.GetOverdueQsc</c>, and <c>ParticipantAlertsService</c>'s
+/// <c>IncidentsController.GetOverdueQsc</c> and its <c>isOverdueQsc</c> filter, every incident list's
+/// <c>IsOverdue24h</c> flag (<c>IncidentProjections</c>), and <c>ParticipantAlertsService</c>'s
 /// qsc-report-overdue rule all agree on the same predicate and cannot drift apart. Overdue means:
 /// active, QSC reporting <see cref="QscReportingStatus.Required"/>, not yet reported
 /// (<see cref="IncidentReport.QscReportedAt"/> null), and created more than

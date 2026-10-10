@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Odip.Api.Controllers;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -9,6 +10,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Incidents;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Notifications;
 using Xunit;
 
 namespace Odip.Tests.Incidents;
@@ -161,5 +163,26 @@ public class IncidentOverdueRuleTests
 
         Assert.Equal(Assert.Single(await GetAllItems(controller)), updated);
         Assert.Equal("Broken window, replaced", updated.Title);
+    }
+
+    /// <summary>
+    /// The InMemory provider quietly evaluates in memory what Npgsql cannot translate, so compile the shared
+    /// projection to SQL on the real provider (no server needed): the overdue flag must reach the SQL as the
+    /// rule's four terms, not be fetched and computed afterwards.
+    /// </summary>
+    [Fact]
+    public void ListProjection_TranslatesOnNpgsql_WithTheWholeOverdueRuleInSql()
+    {
+        using var db = new OdipDbContext(
+            new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql("Host=127.0.0.1;Port=1;Database=x;Username=x;Password=x").Options,
+            new ScopedTenantOverride { TenantId = Guid.NewGuid() });
+
+        var sql = db.IncidentReports.Select(IncidentProjections.ToListDto(DateTime.UtcNow)).ToQueryString();
+
+        Assert.True(sql.Contains("\"IsActive\"", StringComparison.Ordinal), sql);
+        Assert.True(sql.Contains("\"QscReportingStatus\"", StringComparison.Ordinal), sql);
+        Assert.True(sql.Contains("\"QscReportedAt\" IS NULL", StringComparison.Ordinal), sql);
+        Assert.True(sql.Contains("\"CreatedAt\" <", StringComparison.Ordinal), sql);
+        Assert.False(sql.Contains("\"Description\"", StringComparison.Ordinal), "the list must select columns, not whole rows: " + sql);
     }
 }
