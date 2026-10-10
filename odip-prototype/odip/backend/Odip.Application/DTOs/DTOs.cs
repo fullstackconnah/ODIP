@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using Odip.Application.Serialization;
-using Odip.Domain.Billing;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 
@@ -2523,45 +2522,3 @@ public record SyncResultDto
     public int HolidaysUpdated { get; init; }
     public string[] Errors { get; init; } = [];
 }
-
-// ══════════════════════════════════════════════════════════════
-// BILLING DTOs
-// ══════════════════════════════════════════════════════════════
-
-public record FundingSourceDto
-{
-    public Guid Id { get; init; }
-    public Guid ParticipantId { get; init; }
-    public string? ParticipantName { get; init; }
-    public FundingRouteType RouteType { get; init; }
-    public string? BudgetCategory { get; init; }
-    public string? NdisPlanNumber { get; init; }
-    public DateOnly? PlanStartDate { get; init; }
-    public DateOnly? PlanEndDate { get; init; }
-    public decimal? Budget { get; init; }
-    public string? PayerName { get; init; }
-    public string? PayerEmail { get; init; }
-    public bool IsActive { get; init; }
-}
-
-public record CreateFundingSourceDto
-{
-    [Required]
-    public Guid ParticipantId { get; init; }
-    public FundingRouteType RouteType { get; init; }
-    [StringLength(200)]
-    public string? BudgetCategory { get; init; }
-    [StringLength(50)]
-    public string? NdisPlanNumber { get; init; }
-    public DateOnly? PlanStartDate { get; init; }
-    public DateOnly? PlanEndDate { get; init; }
-    [Range(0, 99999999.99)]
-    public decimal? Budget { get; init; }
-    [StringLength(200)]
-    public string? PayerName { get; init; }
-    [StringLength(200), EmailAddress]
-    public string? PayerEmail { get; init; }
-    public bool IsActive { get; init; } = true;
-}
-
-public record UpdateFundingSourceDto : CreateFundingSourceDto { }

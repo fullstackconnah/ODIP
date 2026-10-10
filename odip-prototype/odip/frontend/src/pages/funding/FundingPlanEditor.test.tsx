@@ -3,17 +3,14 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { FundingPlanEditor, type FundingPlanEditorProps } from './FundingPlanEditor'
 import { PACE_CATEGORIES, plan, pool, quarters } from '@/test/fixtures/funding'
-import type { BillingSourcesHintDto } from '@/api/types'
 
 // The plan budget editor (budget phase 1): plan fields, pools (Core flexible, stated), periods PROPOSED from the dates and the length with amounts split by days and still editable,
-// the sum message, plain-words validation beside the fields, the request bodies, the server's reasons (400), the stale-revision flow (409: "Load the latest", input kept), the Billing hint
-// prefill, and the "Plan not shared yet" skip that simply closes.
+// the sum message, plain-words validation beside the fields, the request bodies, the server's reasons (400), the stale-revision flow (409: "Load the latest", input kept), and the "Plan not shared yet" skip that simply closes.
 
-const { create, update, categories, hint, plans } = vi.hoisted(() => ({
+const { create, update, categories, plans } = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   categories: vi.fn(),
-  hint: vi.fn(),
   plans: vi.fn(),
 }))
 
@@ -21,11 +18,8 @@ vi.mock('@/api/hooks', () => ({
   useCreateFundingPlan: () => ({ mutate: create, isPending: false }),
   useUpdateFundingPlan: () => ({ mutate: update, isPending: false }),
   usePaceCategories: categories,
-  useBillingSourcesHint: hint,
   useFundingPlans: plans,
 }))
-
-const noHint: { data: BillingSourcesHintDto } = { data: { total: 0, rows: [] } }
 
 function renderEditor(props: Partial<FundingPlanEditorProps> = {}) {
   const onClose = vi.fn()
@@ -47,7 +41,6 @@ const coreCard = () => screen.getByRole('region', { name: /^Core \(flexible\), P
 beforeEach(() => {
   vi.clearAllMocks()
   categories.mockReturnValue({ data: PACE_CATEGORIES })
-  hint.mockReturnValue(noHint)
   plans.mockReturnValue({ data: undefined, refetch: vi.fn() })
 })
 
@@ -402,50 +395,6 @@ describe('editor: changing a recorded plan', () => {
   })
 })
 
-describe('editor: start from Billing funding sources', () => {
-  const rows: BillingSourcesHintDto = {
-    total: 25100.5, planStart: '2026-07-01', planEnd: '2027-06-30', managementType: 'PlanManaged',
-    rows: [{ id: 'f1', routeType: 'PlanManaged', budget: 25100.5, budgetCategory: 'Core - Social & Community Participation', planStartDate: '2026-07-01', planEndDate: '2027-06-30' }],
-  }
-
-  it('shows the offer only when the hint has rows, and prefills one Core pool and the dates for review', async () => {
-    hint.mockReturnValue({ data: rows })
-    const { user } = renderEditor()
-
-    await user.click(screen.getByRole('button', { name: 'Start from Billing funding sources' }))
-
-    expect(screen.getByLabelText(/^Plan start/)).toHaveValue('2026-07-01')
-    expect(screen.getByLabelText(/^Plan end/)).toHaveValue('2027-06-30')
-    const card = coreCard()
-    expect(within(card).getByLabelText('Plan amount for the whole plan')).toHaveValue('25100.50')
-    expect(within(card).getAllByLabelText(/^Plan amount, /)).toHaveLength(4)
-    // Offered once: it is gone once the pool is there.
-    expect(screen.queryByRole('button', { name: 'Start from Billing funding sources' })).not.toBeInTheDocument()
-  })
-
-  it('says nothing when there is nothing to start from', () => {
-    hint.mockReturnValue(noHint)
-    renderEditor()
-
-    expect(screen.queryByRole('button', { name: 'Start from Billing funding sources' })).not.toBeInTheDocument()
-  })
-
-  it('is not offered when editing a recorded plan', () => {
-    hint.mockReturnValue({ data: rows })
-    renderEditor({ plan: plan() })
-
-    expect(screen.queryByRole('button', { name: 'Start from Billing funding sources' })).not.toBeInTheDocument()
-  })
-
-  it('only asks the server for the hint while it can be offered: a new plan, with the editor open', () => {
-    renderEditor()
-    expect(hint).toHaveBeenLastCalledWith('participant-1', true)
-
-    renderEditor({ plan: plan() })
-    expect(hint).toHaveBeenLastCalledWith('participant-1', false)
-  })
-})
-
 // ── What the reviews found (budget fix round 1) ──────────────────────────────
 
 const scrollIntoView = vi.fn()
@@ -531,14 +480,6 @@ describe('editor: the buttons sit under the sentence, not beside it', () => {
 
     const sentence = within(screen.getByRole('alert')).getByText(/^Someone else changed this plan/)
     expect(sentence.nextElementSibling).toContainElement(screen.getByRole('button', { name: 'Load the latest' }))
-  })
-
-  it('puts "Start from Billing funding sources" under its sentence', () => {
-    hint.mockReturnValue({ data: { total: 25100.5, planStart: '2026-07-01', planEnd: '2027-06-30', managementType: 'PlanManaged', rows: [{ id: 'f1', routeType: 'PlanManaged', budget: 25100.5 }] } })
-    renderEditor()
-
-    const sentence = screen.getByText(/^The Billing page records \$25,100\.50 across one funding source/)
-    expect(sentence.nextElementSibling).toContainElement(screen.getByRole('button', { name: 'Start from Billing funding sources' }))
   })
 })
 

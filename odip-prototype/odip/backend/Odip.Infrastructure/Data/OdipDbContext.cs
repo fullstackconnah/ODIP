@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
-using Odip.Domain.Billing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
@@ -99,9 +98,6 @@ public class OdipDbContext : DbContext
 
     /// <summary>Public landing-page early-access requests. NOT tenant-scoped: see <see cref="Entities.EarlyAccessRequest"/>'s type doc.</summary>
     public DbSet<EarlyAccessRequest> EarlyAccessRequests => Set<EarlyAccessRequest>();
-
-    // Billing
-    public DbSet<FundingSource> FundingSources => Set<FundingSource>();
 
     // Rostering (M4)
     public DbSet<Shift> Shifts => Set<Shift>();
@@ -951,8 +947,7 @@ public class OdipDbContext : DbContext
         });
 
         // ── Participant budgets (phase 1): FundingPlan, FundingPool, FundingPeriod, BudgetSettings ────────────
-        // A plan is the root of a participant's budget history, so deleting the participant must not silently cascade it away (Restrict, like the
-        // Billing FundingSource); the pools and periods are parts of the plan and go with it. Money is decimal(18,2) on the period only: a pool's
+        // A plan is the root of a participant's budget history, so deleting the participant must not silently cascade it away (Restrict); the pools and periods are parts of the plan and go with it. Money is decimal(18,2) on the period only: a pool's
         // total is the sum of its periods. Dates are `date` columns (DateOnly), instants are UTC `timestamp` columns like the rest of the model.
         modelBuilder.Entity<FundingPlan>(entity =>
         {
@@ -1050,26 +1045,6 @@ public class OdipDbContext : DbContext
             .HasForeignKey(p => p.PreferredUserId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        // ── FundingSource ────────────────────────────────────────
-        modelBuilder.Entity<FundingSource>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.BudgetCategory).HasMaxLength(200);
-            entity.Property(e => e.NdisPlanNumber).HasMaxLength(50);
-            entity.Property(e => e.Budget).HasPrecision(18, 2);
-            entity.Property(e => e.PayerName).HasMaxLength(200);
-            entity.Property(e => e.PayerEmail).HasMaxLength(200);
-
-            // Restrict: deleting the participant must not silently cascade its funding sources away.
-            entity.HasOne(e => e.Participant)
-                .WithMany()
-                .HasForeignKey(e => e.ParticipantId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.ParticipantId);
-            entity.HasIndex(e => e.IsActive);
-        });
-
         // ── Shift ────────────────────────────────────────────────
         modelBuilder.Entity<Shift>(entity =>
         {
@@ -1084,8 +1059,8 @@ public class OdipDbContext : DbContext
             entity.Ignore(e => e.DurationHours);
 
             // Restrict: a rostered participant or staff member must not be silently
-            // cascade-deleted out from under their shifts (same idiom as FundingSource →
-            // Participant and StaffAssignment → User above).
+            // cascade-deleted out from under their shifts (same idiom as
+            // StaffAssignment → User above).
             entity.HasOne(e => e.Participant)
                 .WithMany()
                 .HasForeignKey(e => e.ParticipantId)
@@ -1373,7 +1348,7 @@ public class OdipDbContext : DbContext
 
             // Restrict: a participant with prescribed medication history must not be
             // silently cascade-deleted out from under that record (same idiom as
-            // FundingSource/Shift → Participant above).
+            // Shift → Participant above).
             entity.HasOne(e => e.Participant)
                 .WithMany()
                 .HasForeignKey(e => e.ParticipantId)
@@ -1849,12 +1824,6 @@ public class OdipDbContext : DbContext
         // Tenants table — unique index on EmailDomain
         modelBuilder.Entity<Tenant>()
             .HasIndex(t => t.EmailDomain).IsUnique();
-
-        // ── Billing tenant query filters ─────────────────────────────
-        modelBuilder.Entity<FundingSource>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
-        modelBuilder.Entity<FundingSource>()
-            .HasIndex(e => e.TenantId);
 
         // ── Rostering tenant query filters ────────────────────────────────────────
         modelBuilder.Entity<Shift>()

@@ -138,11 +138,11 @@ npm run lint
   switching handled via the `X-View-As-Tenant`/`X-View-As-User` request headers — tenant-scoped
   code needs to respect this switching mechanism rather than assuming a single ambient tenant.
 
-- Billing/NDIS logic lives in `Odip.Domain/Billing/`: the funding-source entity in `BillingEntities.cs`,
-  the shared price rules in `Services/ClaimPricing.cs`, the plan pricing engine in `Pricing/`. The claiming
+- Billing/NDIS logic lives in `Odip.Domain/Billing/`: the shared price rules in `Services/ClaimPricing.cs`
+  and the plan pricing engine in `Pricing/`. The claiming
   flow continues in Infrastructure services — `ClaimGenerationService`, `InvoiceService`, `BprCsvService`
   (the NDIA bulk payment file), `CatalogueImportService` — with Excel and PDF output via ClosedXML and
-  QuestPDF respectively. The old billable-event / claim-batch / service-booking pipeline was retired.
+  QuestPDF respectively. The old funding-source / billable-event / claim-batch / service-booking pipeline was retired.
 
 - Startup in `Program.cs` also registers `HolidaySyncBackgroundService` (a hosted service that
   syncs public holidays via the Nager provider, driven by `HolidaySync:*` config), wraps DB

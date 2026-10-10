@@ -18,11 +18,7 @@ public enum PlanType
 /// AddParticipantFundingSource migration): rows with a non-empty pre-existing
 /// FundingOrganisation become Other, empty/null rows become Ndis.
 /// Named <c>ParticipantFundingSource</c> rather than the plain <c>FundingSource</c> the backlog
-/// text uses because that name is already taken by the unrelated billing
-/// <see cref="Odip.Domain.Billing.FundingSource"/> entity (a claims-routing funding-source
-/// table) — same namespace tree, so a bare `FundingSource` here would be ambiguous everywhere
-/// both `Odip.Domain.Enums` and `Odip.Domain.Billing` are in scope (e.g. DTOs.cs already `using`s
-/// both).
+/// text uses, because that name was taken by the billing funding-source entity (since retired).
 /// </summary>
 public enum ParticipantFundingSource
 {

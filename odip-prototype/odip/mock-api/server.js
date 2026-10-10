@@ -2212,10 +2212,6 @@ function scheduleAvailabilityForStaff(id) {
 // Seeded so each state of the builder can be seen: p-0001 has no draft (the empty state), p-0002 a hand-typed one (read-only, rebuild from blocks), p-0003 a
 // plan built from blocks that costs more than its small plan budget, p-0004 the same plan with no budget recorded (the totals stand alone).
 let planPricingSettings = planPricing.defaultSettings()
-const fundingSources = [
-  { id: 'fs-0001', participantId: 'p-0001', participantName: 'Liam Okafor', routeType: 'PlanManaged', budgetCategory: 'Core - Social & Community Participation', ndisPlanNumber: null, planStartDate: '2026-07-01', planEndDate: '2027-06-30', budget: 60000, payerName: null, payerEmail: null, isActive: true },
-  { id: 'fs-0003', participantId: 'p-0003', participantName: 'Marcus Tran', routeType: 'SelfManaged', budgetCategory: 'Core - Social & Community Participation', ndisPlanNumber: null, planStartDate: '2026-07-01', planEndDate: '2027-06-30', budget: 25000, payerName: null, payerEmail: null, isActive: true },
-]
 const serviceAgreementDrafts = {}
 
 // Plan builder phase D: the roster patterns and shifts an approval makes (planApproval.js), kept so the Patterns page and the roster board show them. Two hand-made patterns are seeded: p-0004 has a
@@ -2320,10 +2316,10 @@ function saveDraft(participantId, body) {
   }
 })()
 
-// Participant budgets (phase 1): the plan record, its hint from the Billing funding sources, the support category list and the budget settings. See funding.js.
+// Participant budgets (phase 1): the plan record, the support category list and the budget settings. See funding.js.
 // Phase 2b adds the places a warning shows: it reads the participants (names, how their money is managed) and prices an agreement with the same engine as the plan builder's quote.
 const funding = fundingModule.create({
-  respond, fundingSources, people: participants,
+  respond, people: participants,
   priceLines: (blocks, periodFrom, periodTo) => planPricing.quote({ blocks, periodFrom, periodTo, includeLines: false }, planPricingSettings)._lines,
 })
 // Budget phase 3: the roster's budget check, the shifts that carry the over-budget markers and the Admin's review task. See rosterBudget.js for the switches.
