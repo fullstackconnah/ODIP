@@ -167,7 +167,7 @@ export default function StaffCreatePage() {
       workerScreeningExpiryDate: record.workerScreeningExpiryDate ?? '',
       notes: record.notes ?? '',
     })
-  })
+  }, !isDirty)
 
   const onSubmit = async (data: StaffFormData, addressConfirmed: boolean) => {
     const payload: any = { ...data }

@@ -220,7 +220,7 @@ export default function MedicationFormPage() {
       notes: record.notes ?? '',
       status: record.status ?? 'Active',
     })
-  })
+  }, !isDirty)
 
   const onSubmit = async (data: MedicationFormData) => {
     const payload: CreateMedicationDto = {

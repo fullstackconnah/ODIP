@@ -73,7 +73,7 @@ export default function VehicleCreatePage() {
       registrationDueDate: record.registrationDueDate ?? '',
       notes: record.notes ?? '',
     })
-  })
+  }, !isDirty)
 
   const onSubmit = async (data: VehicleFormData) => {
     const payload: any = { ...data }

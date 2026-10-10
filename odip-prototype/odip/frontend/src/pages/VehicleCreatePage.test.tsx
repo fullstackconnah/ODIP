@@ -97,4 +97,17 @@ describe('VehicleCreatePage — editing', () => {
 
     expect(name).toHaveValue('My rename')
   })
+
+  // Opened from a copy the app cached more than 30 s ago, the form is filled at once and the refetch brings the current record: with nothing typed, the form must show it.
+  it('takes the fresh copy of the vehicle when nothing has been typed', () => {
+    const query = refetchable(vehicle)
+    mockUseVehicleDetail.mockImplementation(() => ({ data: query.useValue(), isLoading: false }))
+    renderEditPage()
+    const name = screen.getByPlaceholderText('e.g. Blue Van 1')
+    expect(name).toHaveValue('Blue Van 1')
+
+    act(() => query.refetchWith({ ...vehicle, vehicleName: 'Renamed on the server' }))
+
+    expect(name).toHaveValue('Renamed on the server')
+  })
 })

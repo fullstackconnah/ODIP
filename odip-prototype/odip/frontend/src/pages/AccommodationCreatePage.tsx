@@ -86,7 +86,7 @@ export default function AccommodationCreatePage() {
       hoistBathroomNotes: record.hoistBathroomNotes ?? '',
       generalNotes: record.generalNotes ?? '',
     })
-  })
+  }, !isDirty)
 
   const onSubmit = async (data: AccommodationFormData) => {
     const payload: any = { ...data }
