@@ -28,6 +28,8 @@ export interface TripDetailDto extends TripListDto {
   requiredBedrooms: number | null
   minStaffRequired: number | null
   calculatedStaffRequired: number
+  /** Whole staff the trip needs, worked out once on the server (the schedule screen shows the same figure); null while nothing has set it. */
+  staffRequired: number | null
   notes: string | null
   highSupportCount: number
   wheelchairCount: number
@@ -41,11 +43,6 @@ export interface TripDetailDto extends TripListDto {
   returnTime: string | null
   createdAt: string
   updatedAt: string
-}
-
-/** Whole staff a trip needs, as the schedule screen counts it: the server's figure from the bookings' ratios (rounded up), else the trip's own minimum while no booking has set one. */
-export function tripStaffRequired(trip: Pick<TripDetailDto, 'calculatedStaffRequired' | 'minStaffRequired'>): number {
-  return trip.calculatedStaffRequired > 0 ? Math.ceil(trip.calculatedStaffRequired) : (trip.minStaffRequired ?? 0)
 }
 
 export interface CreateTripDto {

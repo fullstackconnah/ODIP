@@ -31,7 +31,7 @@ vi.mock('@/api/hooks', () => ({
   useAvailableStaff: mockUseAvailableStaff,
 }))
 
-const trip = { id: 'trip-1', startDate: '2026-09-01T00:00:00Z', endDate: '2026-09-05T00:00:00Z', minStaffRequired: null, calculatedStaffRequired: 0 } as TripDetailDto
+const trip = { id: 'trip-1', startDate: '2026-09-01T00:00:00Z', endDate: '2026-09-05T00:00:00Z', staffRequired: null, calculatedStaffRequired: 0 } as TripDetailDto
 
 beforeEach(() => {
   mockCreateMutate.mockReset()
@@ -391,11 +391,11 @@ describe('StaffTab — touch targets in the row actions', () => {
   })
 })
 
-// The staffing summary shows the figure the server works out (RecalculateStaffRequired, the same one the schedule screen uses). The tab used to sum the
+// The staffing summary shows the figure the server sends as staffRequired (TripInstance.StaffRequired, the one the schedule screen uses). The tab used to sum the
 // bookings' override ratios itself: a booking with no override counted 0 (the server uses the participant's ratio, else 1:1) and ratio Other counted 0 (the
 // server counts 1), so a trip that needed 3 staff read a green "0/0 staff".
 describe('StaffTab — the staffing summary shows what the server says the trip needs', () => {
-  const tripNeeding = (calculatedStaffRequired: number, minStaffRequired: number | null) => ({ ...trip, calculatedStaffRequired, minStaffRequired }) as TripDetailDto
+  const tripNeeding = (calculatedStaffRequired: number, staffRequired: number | null) => ({ ...trip, calculatedStaffRequired, staffRequired }) as TripDetailDto
 
   it('shows 0/3 and "need 3 more" for a trip the server says needs 3, not a green 0/0', () => {
     render(<StaffTab tripId="trip-1" trip={tripNeeding(3, 3)} staff={[]} canWrite />)
@@ -404,14 +404,14 @@ describe('StaffTab — the staffing summary shows what the server says the trip 
     expect(screen.getByText(/need 3 more/i)).toBeInTheDocument()
   })
 
-  it('rounds the server figure up to whole staff and shows the exact figure beside it', () => {
-    render(<StaffTab tripId="trip-1" trip={tripNeeding(2.5, 3)} staff={[]} canWrite />)
+  it('shows the whole-staff figure the server sends, with the exact figure beside it, and does not work the whole figure out again', () => {
+    render(<StaffTab tripId="trip-1" trip={tripNeeding(2.5, 4)} staff={[]} canWrite />)
 
-    expect(screen.getByText('0/3 staff')).toBeInTheDocument()
+    expect(screen.getByText('0/4 staff')).toBeInTheDocument()
     expect(screen.getByText(/2\.50 required from ratios/)).toBeInTheDocument()
   })
 
-  it('uses the minimum on the trip while no booking has set the figure, as the schedule screen does', () => {
+  it('shows the figure the server sends while no booking has set one (the trip\'s own minimum)', () => {
     render(<StaffTab tripId="trip-1" trip={tripNeeding(0, 2)} staff={[]} canWrite />)
 
     expect(screen.getByText('0/2 staff')).toBeInTheDocument()

@@ -18,7 +18,7 @@ import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
 import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
 import { formatDateAu } from '@/lib/utils'
 import { ASSIGNMENT_STATUSES, SLEEPOVER_TYPES, type SleepoverType, type AssignmentStatus } from '@/api/types/enums'
-import { tripStaffRequired, type TripDetailDto } from '@/api/types/trips'
+import type { TripDetailDto } from '@/api/types/trips'
 import type { StaffAssignmentDto, StaffListDto, UpdateStaffAssignmentDto } from '@/api/types/staff'
 import type { RosterFindingDto } from '@/api/types'
 
@@ -245,7 +245,7 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
     <div className="space-y-4">
       {/* Staffing summary */}
       {(() => {
-        const required = tripStaffRequired(trip)
+        const required = trip.staffRequired ?? 0
         const assigned = staff.filter((s: StaffAssignmentDto) => s.status !== 'Cancelled').length
         const isStaffed = assigned >= required
         return (

@@ -59,31 +59,7 @@ public class ScheduleController : ControllerBase
         {
             return Ok(ApiResponse<ScheduleOverviewDto>.Ok(new ScheduleOverviewDto
             {
-                Trips = trips.Select(t => new ScheduleTripDto
-                {
-                    Id = t.Id,
-                    TripName = t.TripName,
-                    TripCode = t.TripCode,
-                    Destination = t.Destination,
-                    Region = t.Region,
-                    StartDate = t.StartDate,
-                    EndDate = t.StartDate.AddDays(t.DurationDays - 1),
-                    DurationDays = t.DurationDays,
-                    Status = t.Status,
-                    MaxParticipants = t.MaxParticipants,
-                    CurrentParticipantCount = t.Bookings.Count(b =>
-                        b.BookingStatus != BookingStatus.Cancelled && b.BookingStatus != BookingStatus.NoLongerAttending),
-                    MinStaffRequired = t.MinStaffRequired,
-                    StaffRequired = t.CalculatedStaffRequired > 0
-                        ? (int)Math.Ceiling(t.CalculatedStaffRequired)
-                        : t.MinStaffRequired,
-                    StaffAssignedCount = t.StaffAssignments.Count(a => a.Status != AssignmentStatus.Cancelled),
-                    VehicleAssignedCount = t.VehicleAssignments.Count(a =>
-                        a.Status != VehicleAssignmentStatus.Cancelled && a.Status != VehicleAssignmentStatus.Unavailable),
-                    LeadCoordinatorName = t.LeadCoordinator != null
-                        ? t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName : null,
-                }).ToList(),
-                Staff = new(), Vehicles = new()
+                Trips = new(), Staff = new(), Vehicles = new()
             }));
         }
 
@@ -128,9 +104,7 @@ public class ScheduleController : ControllerBase
             CurrentParticipantCount = t.Bookings.Count(b =>
                 b.BookingStatus != BookingStatus.Cancelled && b.BookingStatus != BookingStatus.NoLongerAttending),
             MinStaffRequired = t.MinStaffRequired,
-            StaffRequired = t.CalculatedStaffRequired > 0
-                ? (int)Math.Ceiling(t.CalculatedStaffRequired)
-                : t.MinStaffRequired,
+            StaffRequired = t.StaffRequired,
             StaffAssignedCount = t.StaffAssignments.Count(a => a.Status != AssignmentStatus.Cancelled),
             VehicleAssignedCount = t.VehicleAssignments.Count(a =>
                 a.Status != VehicleAssignmentStatus.Cancelled && a.Status != VehicleAssignmentStatus.Unavailable),

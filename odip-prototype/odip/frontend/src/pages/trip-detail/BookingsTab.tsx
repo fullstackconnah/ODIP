@@ -13,7 +13,7 @@ import { getStatusColor, extractErrorMessage } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
 import { INSURANCE_STATUSES, type BookingStatus, type InsuranceStatus, type PaymentStatus, type SupportRatio } from '@/api/types/enums'
 import { Plus, X, AlertTriangle, Pencil, ExternalLink, Trash2, Download, Loader2 } from 'lucide-react'
-import { tripStaffRequired, type TripDetailDto } from '@/api/types/trips'
+import type { TripDetailDto } from '@/api/types/trips'
 import type { BookingListDto } from '@/api/types/bookings'
 import type { ParticipantListDto } from '@/api/types/participants'
 
@@ -608,7 +608,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
         const ratioLabels: Record<string, string> = { OneToOne: '1:1', OneToTwo: '1:2', OneToThree: '1:3', OneToFour: '1:4', OneToFive: '1:5', TwoToOne: '2:1', SharedSupport: 'Shared' }
         const activeBookings = bookings.filter((b: BookingListDto) => !['Cancelled', 'NoLongerAttending'].includes(b.bookingStatus))
         const rawTotal = trip.calculatedStaffRequired
-        const rounded = tripStaffRequired(trip)
+        const rounded = trip.staffRequired ?? 0
         const noRatioCount = activeBookings.filter((b: BookingListDto) => !b.supportRatioOverride || !(b.supportRatioOverride in ratioToStaff)).length
         const assigned = trip.staffAssignedCount ?? 0
         const isStaffed = assigned >= rounded
