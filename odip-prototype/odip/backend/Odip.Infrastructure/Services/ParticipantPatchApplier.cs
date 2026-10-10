@@ -197,8 +197,10 @@ public static class ParticipantPatchApplier
             p.PersonalInterests = cb.PersonalInterests; p.ChoiceControlNotes = cb.ChoiceControlNotes;
         }
 
+        var ratioChanged = false;
         if (dto.SupportNeedsMobility is { } snm)
         {
+            ratioChanged = p.SupportRatio != snm.SupportRatio;
             p.IsHighSupport = snm.IsHighSupport; p.IsIntensiveSupport = snm.IsIntensiveSupport;
             p.SupportRatio = snm.SupportRatio; p.MobilityAidWheelchair = snm.MobilityAidWheelchair;
             p.MobilityAidWalker = snm.MobilityAidWalker; p.MobilitySupportOptions = snm.MobilitySupportOptions;
@@ -302,6 +304,7 @@ public static class ParticipantPatchApplier
         // needless sync pass.
         if (dto.Medical != null || dto.BehaviourCommunication != null || dto.RisksHazardsSummary != null || dto.SupportNeedsMobility != null)
             await safetyNoteSync.SyncFromParticipantAsync(p, ct);
+        if (ratioChanged) await TripStaffing.RecalculateForParticipantAsync(db, p.Id, ct);
 
         await db.SaveChangesAsync(ct);
         return null;

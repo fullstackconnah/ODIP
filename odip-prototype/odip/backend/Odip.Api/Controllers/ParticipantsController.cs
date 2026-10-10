@@ -597,6 +597,7 @@ public class ParticipantsController : ControllerBase
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Preferred staff member not found."));
 
         var previousPreferredStaffId = p.PreferredUserId;
+        var previousSupportRatio = p.SupportRatio;
 
         p.FirstName = dto.FirstName; p.LastName = dto.LastName; p.PreferredName = dto.PreferredName;
         p.MiddleName = dto.MiddleName;
@@ -742,6 +743,7 @@ public class ParticipantsController : ControllerBase
         await UpsertCommunityAccessRiskItemsAsync(p.Id, dto.CommunityAccessRiskItems, ct);
         // PD-5: syncs the safety-critical auto-notes in the same SaveChangesAsync as this update.
         await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
+        if (p.SupportRatio != previousSupportRatio) await TripStaffing.RecalculateForParticipantAsync(_db, p.Id, ct);
         await _db.SaveChangesAsync(ct);
         // PF-2: Update's payload carries no contactRoles (unchanged, per Design's note) — the
         // warning is computed from the participant's live ContactRoles exactly as GetById does.
