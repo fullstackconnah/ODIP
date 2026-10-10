@@ -522,7 +522,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
 
       {listError && (
         <Callout tone="error"
-          actions={<button type="button" onClick={() => setListError(null)} className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded" > Dismiss </button>}>
+          actions={<Button variant="ghost" size="sm" onClick={() => setListError(null)}>Dismiss</Button>}>
           {listError}
         </Callout>
       )}

@@ -78,7 +78,7 @@ describe('BodyDiagram accessibility — the button list is the primary control',
 // Landing-spotted: the selected region pill and the Add injury button used --color-on-primary, which index.css never defines, so their
 // text fell back to the inherited dark ink on the dark green primary. --color-primary-foreground is the defined white.
 describe('BodyDiagram — legible on the primary fill', () => {
-  it('sets the selected region pill and the Add injury button in the defined on-primary colour', async () => {
+  it('sets the selected region pill in the defined white-on-primary colour, never the undefined --color-on-primary', async () => {
     const user = userEvent.setup()
     render(<Harness />)
 
