@@ -268,6 +268,12 @@ const tripDetailExtras = {
   },
 }
 
+// Same rule as TripInstance.StaffRequired: the bookings' figure rounded up, or the trip's own minimum if that is higher; null if there is neither.
+function staffRequiredOf(extras) {
+  const { calculatedStaffRequired: calc = 0, minStaffRequired: min = null } = extras || {}
+  return calc > 0 ? Math.max(Math.ceil(calc), min ?? 0) : min
+}
+
 function tripDetail(t) {
   return {
     ...t,
@@ -276,7 +282,7 @@ function tripDetail(t) {
     createdAt: '2026-05-02T10:00:00Z',
     updatedAt: '2026-07-30T11:20:00Z',
     ...(tripDetailExtras[t.id] || {}),
-    staffRequired: (tripDetailExtras[t.id] || {}).calculatedStaffRequired ?? null,
+    staffRequired: staffRequiredOf(tripDetailExtras[t.id]),
   }
 }
 
@@ -1640,7 +1646,7 @@ const scheduleOverview = {
     durationDays: t.durationDays, status: t.status, maxParticipants: t.maxParticipants,
     currentParticipantCount: t.currentParticipantCount,
     minStaffRequired: (tripDetailExtras[t.id] || {}).minStaffRequired ?? null,
-    staffRequired: (tripDetailExtras[t.id] || {}).calculatedStaffRequired ?? null,
+    staffRequired: staffRequiredOf(tripDetailExtras[t.id]),
     staffAssignedCount: (tripDetailExtras[t.id] || {}).staffAssignedCount ?? 0,
     vehicleAssignedCount: t.id === 't-0001' || t.id === 't-0004' ? 1 : 0,
     leadCoordinatorName: t.leadCoordinatorName,

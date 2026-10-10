@@ -116,35 +116,6 @@ public class BookingsController : ControllerBase
         }));
     }
 
-    private static readonly Dictionary<SupportRatio, decimal> RatioToStaff = new()
-    {
-        { SupportRatio.OneToOne, 1m }, { SupportRatio.OneToTwo, 0.5m }, { SupportRatio.OneToThree, 1m / 3m },
-        { SupportRatio.OneToFour, 0.25m }, { SupportRatio.OneToFive, 0.2m }, { SupportRatio.TwoToOne, 2m },
-        { SupportRatio.SharedSupport, 0.25m }, { SupportRatio.Other, 1m }
-    };
-
-    private async Task RecalculateStaffRequired(Guid tripId, CancellationToken ct)
-    {
-        var trip = await _db.TripInstances
-            .Include(t => t.Bookings)
-            .ThenInclude(b => b.Participant)
-            .FirstOrDefaultAsync(t => t.Id == tripId, ct);
-        if (trip == null) return;
-
-        var activeBookings = trip.Bookings.Where(b =>
-            b.BookingStatus != BookingStatus.Cancelled && b.BookingStatus != BookingStatus.NoLongerAttending);
-
-        var rawTotal = activeBookings.Sum(b =>
-        {
-            var ratio = b.SupportRatioOverride ?? b.Participant?.SupportRatio ?? SupportRatio.OneToOne;
-            return RatioToStaff.TryGetValue(ratio, out var v) ? v : 1m;
-        });
-
-        trip.CalculatedStaffRequired = rawTotal;
-        trip.MinStaffRequired = (int)Math.Ceiling(rawTotal);
-        trip.UpdatedAt = DateTime.UtcNow;
-    }
-
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<BookingDetailDto>>> Create([FromBody] CreateBookingDto dto, CancellationToken ct)
@@ -200,7 +171,7 @@ public class BookingsController : ControllerBase
 
         try
         {
-            await RecalculateStaffRequired(dto.TripInstanceId, ct);
+            await TripStaffing.RecalculateAsync(_db, dto.TripInstanceId, ct);
             await _db.SaveChangesAsync(ct);
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
@@ -268,7 +239,7 @@ public class BookingsController : ControllerBase
             }
         }
 
-        await RecalculateStaffRequired(b.TripInstanceId, ct);
+        await TripStaffing.RecalculateAsync(_db, b.TripInstanceId, ct);
         await _db.SaveChangesAsync(ct);
         // Only the write that CONFIRMS a booking says what it does to the budget: one edited while it stays confirmed has said it already.
         var updatedWarnings = wasConfirmed ? null : await BudgetWarningsAsync(b, ct);
@@ -305,7 +276,7 @@ public class BookingsController : ControllerBase
         if (dto.PaymentStatus.HasValue) b.PaymentStatus = dto.PaymentStatus.Value;
 
         b.UpdatedAt = DateTime.UtcNow;
-        await RecalculateStaffRequired(b.TripInstanceId, ct);
+        await TripStaffing.RecalculateAsync(_db, b.TripInstanceId, ct);
         await _db.SaveChangesAsync(ct);
 
         // The booking as it now stands (the response used to be a bare true, which the page typed as a booking anyway), so the write that confirms it can carry its budget warning.
@@ -336,7 +307,7 @@ public class BookingsController : ControllerBase
         var tripId = b.TripInstanceId;
         _db.ParticipantBookings.Remove(b);
         await _db.SaveChangesAsync(ct);           // save deletion first
-        await RecalculateStaffRequired(tripId, ct); // now recalculate from clean DB
+        await TripStaffing.RecalculateAsync(_db, tripId, ct); // now recalculate from clean DB
         await _db.SaveChangesAsync(ct);           // save updated staff count
         return Ok(ApiResponse<bool>.Ok(true, "Booking deleted"));
     }

@@ -30,12 +30,12 @@ public class TripStaffRequiredTests
         return new OdipDbContext(options, tenant.Object);
     }
 
-    private static TripInstance SeedTrip(OdipDbContext db, int? minStaffRequired = null)
+    private static TripInstance SeedTrip(OdipDbContext db, int? minStaffRequired = null, decimal calculated = 0)
     {
         var trip = new TripInstance
         {
             Id = Guid.NewGuid(), TripName = "Gold Coast Beach Break", StartDate = new DateOnly(2026, 9, 10), DurationDays = 3,
-            Status = TripStatus.Confirmed, MinStaffRequired = minStaffRequired,
+            Status = TripStatus.Confirmed, MinStaffRequired = minStaffRequired, CalculatedStaffRequired = calculated,
         };
         db.TripInstances.Add(trip);
         db.SaveChanges();
@@ -109,5 +109,51 @@ public class TripStaffRequiredTests
 
         Assert.Null((await Detail(db, trip.Id)).StaffRequired);
         Assert.Null((await OnTheSchedule(db, trip.Id)).StaffRequired);
+    }
+
+    [Fact]
+    public async Task TheMinimumIsAFloor_ABookingFigureBelowItDoesNotLowerTheFigure()
+    {
+        using var db = CreateDb();
+        var trip = SeedTrip(db, minStaffRequired: 3, calculated: 1.5m);
+
+        Assert.Equal(3, (await Detail(db, trip.Id)).StaffRequired);
+        Assert.Equal(3, (await OnTheSchedule(db, trip.Id)).StaffRequired);
+    }
+
+    [Fact]
+    public async Task TheBookingFigureRoundedUpWins_WhenItIsAboveTheMinimum()
+    {
+        using var db = CreateDb();
+        var trip = SeedTrip(db, minStaffRequired: 2, calculated: 4.5m);
+
+        Assert.Equal(5, (await Detail(db, trip.Id)).StaffRequired);
+        Assert.Equal(5, (await OnTheSchedule(db, trip.Id)).StaffRequired);
+    }
+
+    [Fact]
+    public async Task ABookingWrite_LeavesTheMinimumAsTyped_AndOnlyMovesTheCalculatedFigure()
+    {
+        using var db = CreateDb();
+        var trip = SeedTrip(db, minStaffRequired: 3);
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "P", LastName = "Test", IsActive = true, SupportRatio = SupportRatio.OneToOne };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+        var bookings = new BookingsController(db);
+
+        var created = await bookings.Create(new CreateBookingDto { TripInstanceId = trip.Id, ParticipantId = participant.Id, BookingStatus = BookingStatus.Confirmed }, CancellationToken.None);
+        var bookingId = Assert.IsType<ApiResponse<BookingDetailDto>>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Data!.Id;
+
+        var afterCreate = await Detail(db, trip.Id);
+        Assert.Equal(3, afterCreate.MinStaffRequired);
+        Assert.Equal(1m, afterCreate.CalculatedStaffRequired);
+        Assert.Equal(3, afterCreate.StaffRequired);
+
+        await bookings.Delete(bookingId, CancellationToken.None);
+
+        var afterDelete = await Detail(db, trip.Id);
+        Assert.Equal(3, afterDelete.MinStaffRequired);
+        Assert.Equal(0m, afterDelete.CalculatedStaffRequired);
+        Assert.Equal(3, afterDelete.StaffRequired);
     }
 }
