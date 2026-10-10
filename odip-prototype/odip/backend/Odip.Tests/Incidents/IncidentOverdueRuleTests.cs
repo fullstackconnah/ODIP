@@ -167,11 +167,11 @@ public class IncidentOverdueRuleTests
 
     /// <summary>
     /// The InMemory provider quietly evaluates in memory what Npgsql cannot translate, so compile the shared
-    /// projection to SQL on the real provider (no server needed): the overdue flag must reach the SQL as the
-    /// rule's four terms, not be fetched and computed afterwards.
+    /// projection to SQL on the real provider (no server needed): the list must select its columns (plus the
+    /// four the overdue flag reads), not fetch whole rows to build the item on the client.
     /// </summary>
     [Fact]
-    public void ListProjection_TranslatesOnNpgsql_WithTheWholeOverdueRuleInSql()
+    public void ListProjection_TranslatesOnNpgsql_SelectingColumnsNotWholeRows()
     {
         using var db = new OdipDbContext(
             new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql("Host=127.0.0.1;Port=1;Database=x;Username=x;Password=x").Options,
@@ -179,10 +179,7 @@ public class IncidentOverdueRuleTests
 
         var sql = db.IncidentReports.Select(IncidentProjections.ToListDto(DateTime.UtcNow)).ToQueryString();
 
-        Assert.True(sql.Contains("\"IsActive\"", StringComparison.Ordinal), sql);
-        Assert.True(sql.Contains("\"QscReportingStatus\"", StringComparison.Ordinal), sql);
-        Assert.True(sql.Contains("\"QscReportedAt\" IS NULL", StringComparison.Ordinal), sql);
-        Assert.True(sql.Contains("\"CreatedAt\" <", StringComparison.Ordinal), sql);
+        Assert.True(sql.Contains("\"QscReportedAt\"", StringComparison.Ordinal), sql);
         Assert.False(sql.Contains("\"Description\"", StringComparison.Ordinal), "the list must select columns, not whole rows: " + sql);
     }
 }

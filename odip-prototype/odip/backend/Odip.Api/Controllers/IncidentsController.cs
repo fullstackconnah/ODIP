@@ -249,7 +249,7 @@ public class IncidentsController : ControllerBase
         // which used to run over the full (unpaged) result set. Once GetAll only sends one page,
         // filtering client-side would silently apply to that page's ~50 rows instead of every
         // matching incident — for compliance data, under-reporting overdue incidents is the worst
-        // possible failure. This is the same predicate IncidentProjections puts in IsOverdue24h,
+        // possible failure. This is the same rule IncidentProjections puts in IsOverdue24h,
         // applied as a Where instead of a Select so it participates in TotalCount/paging correctly.
         if (isOverdueQsc == true)
             query = query.Where(QscReporting.IsOverdueExpr(DateTime.UtcNow));
@@ -285,7 +285,7 @@ public class IncidentsController : ControllerBase
             .Include(i => i.Shift).ThenInclude(s => s!.User)
             .Include(i => i.ShiftNote)
             .Where(i => i.Id == id)
-            .Select(IncidentProjections.WithOverdueRule<IncidentDetailDto>(i => new IncidentDetailDto
+            .Select(i => new IncidentDetailDto
             {
                 Id = i.Id,
                 ServiceType = i.ServiceType,
@@ -303,7 +303,7 @@ public class IncidentsController : ControllerBase
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,
-                IsOverdue24h = IncidentProjections.IsOverdue(i),
+                IsOverdue24h = QscReporting.IsOverdue(i.IsActive, i.QscReportingStatus, i.QscReportedAt, i.CreatedAt, DateTime.UtcNow),
                 CreatedAt = i.CreatedAt,
                 MedicationAdministrationId = i.MedicationAdministrationId,
                 ShiftId = i.ShiftId,
@@ -386,7 +386,7 @@ public class IncidentsController : ControllerBase
                     FlaggedCategories = ShiftNoteKeywordVocabulary.ToCategoryNames(i.ShiftNote.FlaggedCategories),
                     CreatedAt = i.ShiftNote.CreatedAt,
                 } : null
-            }, DateTime.UtcNow)).FirstOrDefaultAsync(ct);
+            }).FirstOrDefaultAsync(ct);
 
         if (item == null) return NotFound(ApiResponse<IncidentDetailDto>.Fail("Incident not found"));
         return Ok(ApiResponse<IncidentDetailDto>.Ok(item));
