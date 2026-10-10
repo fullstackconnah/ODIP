@@ -86,8 +86,8 @@ for role **RO** globally regardless of what's listed below.
 - DELETE `/{id:guid}` — A, C, SA — delete a task (a `BudgetEmergencyReview` task: A and SA only, 403 otherwise)
 
 ## ActivitiesController — `api/v1/activities` — class: `[Authorize]`
-- GET `` — Authenticated — list activities
-- POST `` — A, C, SA — create an activity
+- GET `` — Authenticated — list the caller's organisation's activities (the library is per organisation)
+- POST `` — A, C, SA — create an activity for the caller's organisation
 - PUT `/{id:guid}` — A, C, SA — update an activity
 
 ## EventTemplatesController — `api/v1/event-templates` — class: `[Authorize]`
