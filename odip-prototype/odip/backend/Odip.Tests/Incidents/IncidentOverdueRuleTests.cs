@@ -46,12 +46,12 @@ public class IncidentOverdueRuleTests
 
     private static IncidentReport SeedIncident(
         OdipDbContext db, Guid reporterId, TimeSpan age, QscReportingStatus qsc = QscReportingStatus.Required,
-        DateTime? reportedAt = null, bool isActive = true, Guid? tripId = null, Guid? shiftId = null)
+        DateTime? reportedAt = null, bool isActive = true, Guid? tripId = null, Guid? shiftId = null, IncidentStatus status = IncidentStatus.Draft)
     {
         var incident = new IncidentReport
         {
             Id = Guid.NewGuid(), ReportedByUserId = reporterId, IncidentType = IncidentType.PropertyDamage,
-            Severity = IncidentSeverity.Low, Status = IncidentStatus.Draft, Title = "Incident", Description = "What happened.",
+            Severity = IncidentSeverity.Low, Status = status, Title = "Incident", Description = "What happened.",
             IncidentDateTime = DateTime.UtcNow.AddDays(-3), CreatedAt = DateTime.UtcNow - age,
             QscReportingStatus = qsc, QscReportedAt = reportedAt, IsActive = isActive, TripInstanceId = tripId, ShiftId = shiftId,
         };
@@ -90,6 +90,28 @@ public class IncidentOverdueRuleTests
         var controller = new IncidentsController(db);
 
         Assert.Empty(await GetAllItems(controller, isActive: false, isOverdueQsc: true));
+    }
+
+    /// <summary>
+    /// A closed incident still owes its Commission report. The banner and the dashboard count it, so the
+    /// overdue list (GetAll in overdue mode, which the page sends without a status) must show it too.
+    /// </summary>
+    [Fact]
+    public async Task GetAll_OverdueFilter_ListsExactlyWhatGetOverdueQscCounts_ClosedIncidentsIncluded()
+    {
+        using var db = CreateDb();
+        var reporterId = SeedUser(db).Id;
+        SeedIncident(db, reporterId, TimeSpan.FromHours(25));
+        var closedAndOverdue = SeedIncident(db, reporterId, TimeSpan.FromHours(26), status: IncidentStatus.Closed);
+        SeedIncident(db, reporterId, TimeSpan.FromHours(1), status: IncidentStatus.Closed);
+        var controller = new IncidentsController(db);
+
+        var overdueIds = Assert.IsType<ApiResponse<List<IncidentListDto>>>(Assert.IsType<OkObjectResult>(
+            (await controller.GetOverdueQsc(CancellationToken.None)).Result).Value).Data!.Select(i => i.Id).Order();
+        var listedIds = (await GetAllItems(controller, isOverdueQsc: true)).Select(i => i.Id).Order();
+
+        Assert.Contains(closedAndOverdue.Id, overdueIds);
+        Assert.Equal(overdueIds, listedIds);
     }
 
     [Fact]

@@ -230,8 +230,10 @@ public class IncidentsController : ControllerBase
         // PP-2 follow-up: archiving sets Status = Closed without touching IsActive (see Delete
         // below), so the IsActive filter above no longer keeps archived incidents out of the
         // default list. Exclude Closed by default unless the caller explicitly filters by
-        // status — e.g. the Archived tab's explicit ?status=Closed keeps working unchanged.
-        if (!status.HasValue)
+        // status — e.g. the Archived tab's explicit ?status=Closed keeps working unchanged. Not in
+        // overdue mode: a closed incident still owes its Commission report, and the banner and the
+        // dashboard count it, so the overdue list must show it.
+        if (!status.HasValue && isOverdueQsc != true)
             query = query.Where(i => i.Status != IncidentStatus.Closed);
 
         if (tripId.HasValue) query = query.Where(i => i.TripInstanceId == tripId.Value);
