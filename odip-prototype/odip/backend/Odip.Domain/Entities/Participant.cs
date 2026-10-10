@@ -131,8 +131,7 @@ public class Participant : ITenantEntity
     /// LIVING-01's one genuinely shared field: modelled ONCE and shown for whichever arrangement
     /// is selected (Family, Independent, or Supported Accommodation), rather than duplicated per
     /// arrangement type — mirrors INTAKE-04's de-duplication principle. Also satisfies LIVING-04's
-    /// ruled "notes" field. See conditionalFields.ts's multi-def pitfall warning for why this is a
-    /// single unioned ConditionalFieldDef on the frontend rather than one per arrangement type.
+    /// ruled "notes" field.
     /// </summary>
     public string? LivingArrangementNotes { get; set; }
 
