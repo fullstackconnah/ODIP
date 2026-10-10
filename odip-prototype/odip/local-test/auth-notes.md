@@ -93,9 +93,8 @@ Fixed user IDs (for `mint-jwt.js` "userId" argument):
 - `daniel.williams` → `b2000000-0000-0000-0000-000000000003`
 - `coordinator.read` → `b2000000-0000-0000-0000-000000000004`
 
-`DbSeeder` also unconditionally force-upgrades `admin@odip.com.au` to `SuperAdmin` if
-it was ever seeded with a different role (defensive fixup), and repairs any users
-whose `TenantId` ended up `Guid.Empty` or on the wrong tenant.
+`DbSeeder` no longer repairs existing rows on start-up (it used to move demo rows to the Demo tenant,
+force `admin@odip.com.au` to `SuperAdmin` and fix empty `TenantId`s); it only seeds what is missing.
 
 **Caveat / surprise:** a second SuperAdmin user, `info@connah.com.au`
 (username `superadmin`), is created with `TenantId = 00000000-0000-0000-0000-000000000001`
