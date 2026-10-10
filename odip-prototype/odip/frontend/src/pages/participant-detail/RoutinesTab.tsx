@@ -232,7 +232,8 @@ export default function RoutinesTab({ participantId }: { participantId: string |
     const next: { title?: string; description?: string; time?: string; days?: string } = {}
     if (!form.title.trim()) next.title = 'Title is required'
     if (!form.description.trim()) next.description = 'Description is required'
-    if (form.startTime && form.endTime && form.endTime <= form.startTime) next.time = 'End time must be after start time'
+    // An end before the start is a routine that runs past midnight (the shift screen and the server read it so); only an empty window is wrong.
+    if (form.startTime && form.endTime && form.endTime === form.startTime) next.time = 'End time must differ from the start time'
     if (form.days.length === 0) next.days = 'Select at least one day'
     setErrors(next)
     return Object.keys(next).length === 0
@@ -456,7 +457,7 @@ export default function RoutinesTab({ participantId }: { participantId: string |
             <FormField label="Start time" error={errors.time} hint="Leave blank if this task has no fixed start">
               <input type="time" value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} />
             </FormField>
-            <FormField label="End time" hint="Leave blank if this task has no fixed end">
+            <FormField label="End time" hint="Leave blank if this task has no fixed end. An end before the start runs past midnight.">
               <input type="time" value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} />
             </FormField>
           </div>
