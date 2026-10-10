@@ -1,5 +1,5 @@
 import type { CaregiverFormDto } from '@/api/types/caregiver'
-import { parseHidpaCategories } from '@/api/types/participants'
+import { parseHidpaCategories, parseServiceStreams } from '@/api/types/participants'
 import { TRI_STATE_FIELDS } from '@/lib/participantPatchGroups'
 import { boolToTriState } from '../intake/intakeFormat'
 
@@ -7,15 +7,17 @@ import { boolToTriState } from '../intake/intakeFormat'
 const TRI_STATE = new Set<string>([...TRI_STATE_FIELDS, 'granted', 'has', 'planProvided', 'trainingRequired'])
 
 /**
- * The API sends null for a blank text, true/false for a yes/no answer and one string for the HIDPA categories. The step
- * checks take undefined, the strings 'true'/'false'/'' and a list, and a step patch turns any other yes/no value into
- * null, which Accept would then write over the recorded answer. Same conversions as the Profile wizard's own hydration.
+ * The API sends null for a blank text, true/false for a yes/no answer and one string for the HIDPA categories and the
+ * service streams. The step checks and patches take undefined, the strings 'true'/'false'/'' and a list, and a
+ * step patch turns any other yes/no value into null, which Accept would then write over the recorded answer. Same
+ * conversions as the Profile wizard's own hydration.
  */
 function toFormValues(values: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(values).map(([key, value]) => [
     key,
     TRI_STATE.has(key) ? boolToTriState(value as boolean | null | undefined)
       : key === 'hidpaSupportCategories' ? parseHidpaCategories(value as string | null)   // a flags enum arrives as one comma-separated string
+      : key === 'serviceStreams' ? parseServiceStreams(value as string | null)
       : value === null ? undefined
       : Array.isArray(value) ? value.map((row) => (row && typeof row === 'object' ? toFormValues(row as Record<string, unknown>) : row))
       : value,
