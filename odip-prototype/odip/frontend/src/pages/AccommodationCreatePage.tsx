@@ -13,6 +13,7 @@ import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { formGrid, span } from '@/lib/formGrid'
 import { useFillOnce } from '@/hooks/useFillOnce'
+import { Callout } from '@/components/Callout'
 
 const accommodationSchema = z.object({
   propertyName: z.string().min(1, 'Property name is required'),
@@ -134,9 +135,9 @@ export default function AccommodationCreatePage() {
       <PageHeader title={isEdit ? 'Edit Accommodation' : 'New Accommodation'} />
 
       {mutation.isError && (
-        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <Callout tone="error">
           {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} accommodation. Please check your input and try again.`)}
-        </div>
+        </Callout>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">

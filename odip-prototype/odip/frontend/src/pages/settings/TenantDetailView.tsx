@@ -5,6 +5,7 @@ import { useAdminTenantUsers } from '@/api/hooks/settings'
 import { useAdminTenantProviderSettings } from '@/api/hooks/admin'
 import { DataTable } from '@/components/DataTable'
 import type { TenantSummaryDto, TenantUserDto, ProviderSettingsDto } from '@/api/types'
+import { Button } from '@/components/Button'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -78,20 +79,12 @@ export default function TenantDetailView({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onEditTenant}
-            className="px-4 py-2 rounded-full text-sm font-semibold border border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)] transition-all"
-          >
+          <Button variant="secondary" onClick={onEditTenant}>
             Edit Tenant
-          </button>
-          <button
-            type="button"
-            onClick={() => onAddUser(tenant.id)}
-            className="px-5 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 transition-all"
-          >
+          </Button>
+          <Button onClick={() => onAddUser(tenant.id)}>
             + Add User
-          </button>
+          </Button>
         </div>
       </div>
 

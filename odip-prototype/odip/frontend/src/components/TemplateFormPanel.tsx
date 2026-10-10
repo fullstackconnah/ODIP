@@ -13,6 +13,9 @@ import {
 import type { EventTemplateDto, TripListDto } from '@/api/types'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { SlideOver } from '@/components/SlideOver'
+import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 // ---------------------------------------------------------------------------
 // Schema & types
@@ -162,11 +165,7 @@ export default function TemplateFormPanel({
         onClose()
       }, 1500)
     } catch (err: any) {
-      setError(
-        err?.response?.data?.errors?.[0] ||
-          err?.response?.data?.message ||
-          'Failed to save template.',
-      )
+      setError(extractErrorMessage(err, 'Failed to save template.'))
     }
   }
 
@@ -242,21 +241,12 @@ export default function TemplateFormPanel({
 
           {/* Save / Cancel */}
           <div className="flex items-center gap-3 justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
-            >
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmit(onSubmit)}
-              disabled={isBusy}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-5 bg-[var(--color-primary)] text-white rounded-[var(--radius-md)] text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
-            >
+            </Button>
+            <Button onClick={handleSubmit(onSubmit)} disabled={isBusy}>
               {isBusy ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Template'}
-            </button>
+            </Button>
           </div>
         </>
       }
@@ -435,9 +425,7 @@ export default function TemplateFormPanel({
 
         {/* Error message */}
         {error && (
-          <div className="sm:col-span-2 bg-[var(--color-error-container)] border border-[var(--color-error-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)]">
-            {error}
-          </div>
+          <Callout tone="error" className="sm:col-span-2">{error}</Callout>
         )}
       </form>
     </SlideOver>

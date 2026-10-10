@@ -13,6 +13,7 @@ import {
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 type EmailPrefsState = Partial<Record<NotificationEventType, boolean>>
 
@@ -175,9 +176,7 @@ export default function NotificationPreferencesTab() {
       </div>
 
       {error && (
-        <div role="alert" className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)]">
-          {error}
-        </div>
+        <Callout tone="error">{error}</Callout>
       )}
 
       <Button

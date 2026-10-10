@@ -23,6 +23,7 @@ import { describeEmailOutcome, ensureAndSendSetPasswordEmail, type EmailOutcome 
 import { extractErrorMessage } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
 import { useFillOnce } from '@/hooks/useFillOnce'
+import { Callout } from '@/components/Callout'
 
 const POSITION_ITEMS: DropdownItem[] = [
   { value: 'SupportWorker', label: 'Support Worker' },
@@ -279,9 +280,9 @@ export default function StaffCreatePage() {
       <PageHeader title={isEdit ? 'Edit Staff Member' : 'New Staff Member'} />
 
       {mutation.isError && (
-        <div role="alert" className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <Callout tone="error">
           {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} staff member. Please check your input and try again.`)}
-        </div>
+        </Callout>
       )}
 
       <form onSubmit={submitWith(false)} className="flex flex-col gap-[var(--section-gap)]">

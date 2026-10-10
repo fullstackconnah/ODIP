@@ -14,6 +14,8 @@ import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/inciden
 import { MissedMedicationGuidance } from './MissedMedicationGuidance'
 import type { MedicationAdministrationStatus, PackagingType } from '@/api/types/enums'
 import type { AdministrationDto, CreateAdministrationDto, UpdateAdministrationDto } from '@/api/types/medications'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 export type RecordAdministrationModalProps = {
   open: boolean
@@ -314,47 +316,26 @@ export function RecordAdministrationModal({
           savedTriggerAdministration ? (
             canCreateIncidents ? (
               <>
-                <button
-                  type="button"
-                  onClick={dismissIncidentPrompt}
-                  className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
-                >
+                <Button variant="secondary" onClick={dismissIncidentPrompt}>
                   Not now
-                </button>
-                <button
-                  type="button"
-                  onClick={goToIncident}
-                  className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 transition-all"
-                >
+                </Button>
+                <Button onClick={goToIncident}>
                   Report as incident
-                </button>
+                </Button>
               </>
             ) : (
-              <button
-                type="button"
-                onClick={dismissIncidentPrompt}
-                className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 transition-all"
-              >
+              <Button onClick={dismissIncidentPrompt}>
                 Got it
-              </button>
+              </Button>
             )
           ) : (
             <>
-              <button
-                type="button"
-                onClick={handleClose}
-                className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
-              >
+              <Button variant="secondary" onClick={handleClose}>
                 Cancel
-              </button>
-              <button
-                type="submit"
-                form="record-administration-form"
-                disabled={isPending}
-                className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all"
-              >
+              </Button>
+              <Button type="submit" form="record-administration-form" disabled={isPending}>
                 {isPending ? 'Saving...' : (isAmend ? 'Save amendment' : SUBMIT_LABEL[status])}
-              </button>
+              </Button>
             </>
           )
         }
@@ -398,9 +379,7 @@ export function RecordAdministrationModal({
         ) : (
         <form id="record-administration-form" onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {error}
-            </div>
+            <Callout tone="error">{error}</Callout>
           )}
 
           <FormField label="Status" required>

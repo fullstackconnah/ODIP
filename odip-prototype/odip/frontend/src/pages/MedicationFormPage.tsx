@@ -2,7 +2,6 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
-import type { AxiosError } from 'axios'
 import { useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { useCreateMedication, useUpdateMedication, useMedication, useParticipant } from '@/api/hooks'
@@ -15,13 +14,14 @@ import { MEDICATION_FORMS, MEDICATION_ROUTES, DRUG_SCHEDULES, MEDICATION_SUPPORT
 import type { MedicationForm, MedicationRoute, Weekday } from '@/api/types/enums'
 import { FORM_LABELS, ROUTE_LABELS, DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_STATUS_LABELS, PACKAGING_LABELS, FREQUENCY_LABELS, WEEKDAY_LABELS } from '@/api/types/medications'
 import type { CreateMedicationDto, UpdateMedicationDto } from '@/api/types/medications'
-import { formatDateAu } from '@/lib/utils'
+import { extractErrorMessage, formatDateAu } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
 import { plural } from '@/lib/format'
 import { useFillOnce } from '@/hooks/useFillOnce'
+import { Callout } from '@/components/Callout'
 
 // Which medication forms make clinical sense for a given administration route. Used only to
 // surface a soft warning when the two fields disagree — the currently selected form is never
@@ -121,12 +121,7 @@ const medicationResolver: Resolver<MedicationFormData> = (values) => {
 }
 
 function extractMedicationErrorMessage(err: unknown, isEdit: boolean): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return (
-    axiosErr?.response?.data?.errors?.[0] ||
-    axiosErr?.response?.data?.message ||
-    `Failed to ${isEdit ? 'update' : 'create'} medication. Please check your input and try again.`
-  )
+  return extractErrorMessage(err, `Failed to ${isEdit ? 'update' : 'create'} medication. Please check your input and try again.`)
 }
 
 export default function MedicationFormPage() {
@@ -300,9 +295,7 @@ export default function MedicationFormPage() {
       </div>
 
       {mutation.isError && (
-        <div role="alert" className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          {extractMedicationErrorMessage(mutation.error, isEdit)}
-        </div>
+        <Callout tone="error">{extractMedicationErrorMessage(mutation.error, isEdit)}</Callout>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
@@ -423,15 +416,14 @@ export default function MedicationFormPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)} className="px-3 h-[var(--control-h)] rounded-[var(--radius-md)] bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" />
-                      <button
-                        type="button"
+                      <Button
+                        variant="secondary"
                         onClick={() => {
                           if (newTime && !times.includes(newTime)) field.onChange([...times, newTime].sort())
                         }}
-                        className="inline-flex items-center gap-1.5 px-3 h-[var(--control-h)] rounded-[var(--radius-md)] border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors"
                       >
                         <Plus className="w-4 h-4" /> Add
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )

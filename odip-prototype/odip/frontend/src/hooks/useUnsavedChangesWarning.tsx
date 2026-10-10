@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useBlocker, type BlockerFunction } from 'react-router-dom'
+import { Button } from '@/components/Button'
 import { useDialogBehavior } from './useDialogBehavior'
 
 type UnsavedChangesWarningReturn = {
@@ -104,13 +105,9 @@ export function useUnsavedChangesWarning(when: boolean): UnsavedChangesWarningRe
           >
             Keep editing
           </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            className="rounded-lg bg-[var(--color-destructive)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-          >
+          <Button variant="danger" onClick={handleConfirm}>
             Leave page
-          </button>
+          </Button>
         </div>
       </div>
     </div>

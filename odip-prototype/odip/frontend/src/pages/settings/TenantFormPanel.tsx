@@ -395,21 +395,12 @@ export default function TenantFormPanel({
       footerClassName="px-6 py-4 flex items-center justify-end gap-3"
       footer={
         <>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
-          >
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSubmit()}
-            disabled={!canSubmit}
-            className="px-5 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
-          >
+          </Button>
+          <Button onClick={() => handleSubmit()} disabled={!canSubmit}>
             {isBusy ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Tenant'}
-          </button>
+          </Button>
         </>
       }
     >
@@ -733,9 +724,7 @@ export default function TenantFormPanel({
 
       {/* Error message */}
       {error && (
-        <div className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)]">
-          {error}
-        </div>
+        <Callout tone="error">{error}</Callout>
       )}
 
       <ConfirmDialog

@@ -16,6 +16,7 @@ import { Plus, X, AlertTriangle, Pencil, ExternalLink, Trash2, Download, Loader2
 import type { TripDetailDto } from '@/api/types/trips'
 import type { BookingListDto } from '@/api/types/bookings'
 import type { ParticipantListDto } from '@/api/types/participants'
+import { Button } from '@/components/Button'
 
 // Create-form subset of BOOKING_STATUSES — Cancelled/Completed/NoLongerAttending are reached via
 // dedicated actions elsewhere, not offered when first adding a participant to a trip.
@@ -256,10 +257,9 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
           {bookings.length}{trip.maxParticipants ? `/${trip.maxParticipants}` : ''} spots filled
         </p>
         {canWrite && (
-          <button onClick={() => setShowAddBooking(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium">
+          <Button onClick={() => setShowAddBooking(true)}>
             <Plus className="w-4 h-4" /> Add Participant
-          </button>
+          </Button>
         )}
       </div>
 
@@ -411,14 +411,12 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-2">
-                <button onClick={() => { setShowAddBooking(false); resetForm() }}
-                  className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
+                <Button variant="secondary" onClick={() => { setShowAddBooking(false); resetForm() }}>
                   Cancel
-                </button>
-                <button onClick={handleCreateBooking} disabled={!selectedParticipantId || createBooking.isPending}
-                  className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+                </Button>
+                <Button onClick={handleCreateBooking} disabled={!selectedParticipantId || createBooking.isPending}>
                   {createBooking.isPending ? 'Adding...' : 'Add Booking'}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -797,14 +795,12 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-2">
-                <button onClick={() => setEditingBooking(null)}
-                  className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
+                <Button variant="secondary" onClick={() => setEditingBooking(null)}>
                   Cancel
-                </button>
-                <button onClick={handleUpdateBooking} disabled={updateBooking.isPending}
-                  className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+                </Button>
+                <Button onClick={handleUpdateBooking} disabled={updateBooking.isPending}>
                   {updateBooking.isPending ? 'Saving...' : 'Save Changes'}
-                </button>
+                </Button>
               </div>
             </div>
           </div>

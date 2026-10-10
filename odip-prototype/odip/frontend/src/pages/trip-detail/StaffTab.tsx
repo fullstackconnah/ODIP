@@ -22,6 +22,7 @@ import { ASSIGNMENT_STATUSES, SLEEPOVER_TYPES, type SleepoverType, type Assignme
 import type { TripDetailDto } from '@/api/types/trips'
 import type { StaffAssignmentDto, StaffListDto, UpdateStaffAssignmentDto } from '@/api/types/staff'
 import type { RosterFindingDto } from '@/api/types'
+import { Button } from '@/components/Button'
 
 const ASSIGNMENT_STATUS_ITEMS: DropdownItem[] = ASSIGNMENT_STATUSES.map(s => ({ value: s, label: s }))
 
@@ -259,10 +260,9 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
               {!isStaffed && <span className="text-xs">— need {required - assigned} more</span>}
             </div>
             {canWrite && (
-              <button onClick={() => { resetStaffForm(); setShowAddStaff(true) }}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity">
+              <Button onClick={() => { resetStaffForm(); setShowAddStaff(true) }}>
                 <Plus className="w-4 h-4" /> Add Staff
-              </button>
+              </Button>
             )}
           </div>
         )
@@ -434,14 +434,12 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-2">
-                <button onClick={() => setEditingStaff(null)}
-                  className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
+                <Button variant="secondary" onClick={() => setEditingStaff(null)}>
                   Cancel
-                </button>
-                <button onClick={handleUpdateStaffAssignment} disabled={updateStaffAssignment.isPending || editGate.isBlocked}
-                  className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+                </Button>
+                <Button onClick={handleUpdateStaffAssignment} disabled={updateStaffAssignment.isPending || editGate.isBlocked}>
                   {updateStaffAssignment.isPending ? 'Saving...' : editGate.needsReason ? 'Save with override' : 'Save Changes'}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -551,15 +549,13 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-2">
-                <button onClick={() => setShowAddStaff(false)}
-                  className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
+                <Button variant="secondary" onClick={() => setShowAddStaff(false)}>
                   Cancel
-                </button>
-                <button onClick={handleCreateStaffAssignment}
-                  disabled={!selectedStaffId || createStaffAssignment.isPending || addGate.isBlocked}
-                  className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+                </Button>
+                <Button onClick={handleCreateStaffAssignment}
+                  disabled={!selectedStaffId || createStaffAssignment.isPending || addGate.isBlocked}>
                   {createStaffAssignment.isPending ? 'Adding...' : addGate.needsReason ? 'Add with override' : 'Add Staff'}
-                </button>
+                </Button>
               </div>
             </div>
           </div>

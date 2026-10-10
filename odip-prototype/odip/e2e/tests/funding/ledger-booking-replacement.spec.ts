@@ -226,7 +226,7 @@ async function createTripWithConfirmedBooking(
   return { tripId, bookingId: booking.data.id as string };
 }
 
-/** Step the real modal to its preview: "+ Generate Claim" then "Preview Claim". The preview is the claim
+/** Step the real modal to its preview: "Generate Claim" then "Preview Claim". The preview is the claim
  *  engine's own answer for this trip: what it would build, from the catalogue, today.
  *
  *  DELIBERATELY no page.goto and no navigation of any kind: this helper runs while the Funding tab's ledger
@@ -234,7 +234,7 @@ async function createTripWithConfirmedBooking(
  *  down, which would replace exactly the state R2 is about. The caller has already arrived on the trip's
  *  Claims tab by real in-app navigation and owns that step. */
 async function previewClaim(page: Page): Promise<Locator> {
-  await page.getByRole('button', { name: '+ Generate Claim' }).click();
+  await page.getByRole('button', { name: 'Generate Claim', exact: true }).click();
   const modal = page.getByRole('dialog', { name: 'Generate NDIS Claim' });
   await expect(modal, 'the generate-claim modal opens').toBeVisible();
   await modal.getByRole('button', { name: 'Preview Claim →' }).click();
@@ -439,7 +439,7 @@ async function bookingBecomesPending(
     //    claim was generated, and a closed modal is not an interaction target: clicking its hidden buttons
     //    would prove nothing. Preview has no status checks (ClaimGenerationService.PreviewClaimAsync), so it
     //    succeeds; the refusal happens on the write, which is the mutation under test. ──
-    await page.getByRole('button', { name: '+ Generate Claim' }).click();
+    await page.getByRole('button', { name: 'Generate Claim', exact: true }).click();
     const second = page.getByRole('dialog', { name: 'Generate NDIS Claim' });
     await expect(second, 'the generate-claim modal reopens').toBeVisible();
     await second.getByRole('button', { name: 'Preview Claim →' }).click();

@@ -14,6 +14,7 @@ import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { formGrid, span } from '@/lib/formGrid'
 import { useFillOnce } from '@/hooks/useFillOnce'
+import { Callout } from '@/components/Callout'
 
 const VEHICLE_TYPE_ITEMS: DropdownItem[] = [
   { value: 'Car', label: 'Car' },
@@ -112,9 +113,9 @@ export default function VehicleCreatePage() {
       <PageHeader title={isEdit ? 'Edit Vehicle' : 'New Vehicle'} />
 
       {mutation.isError && (
-        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <Callout tone="error">
           {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} vehicle. Please check your input and try again.`)}
-        </div>
+        </Callout>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">

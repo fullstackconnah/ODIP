@@ -180,12 +180,9 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
           />
         </div>
 
-        <button
-          onClick={() => onAddUser(tenantId || undefined)}
-          className="px-5 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
-        >
+        <Button onClick={() => onAddUser(tenantId || undefined)}>
           + Add User
-        </button>
+        </Button>
       </div>
 
       {/* Notices for the row actions. Always mounted (a live region must exist before its content), and collapsed while empty. */}

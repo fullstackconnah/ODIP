@@ -4,8 +4,10 @@ import { Modal } from '@/components/Modal'
 import { DataTable } from '@/components/DataTable'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import type { TripDetailDto, ClaimPreviewResponseDto, ClaimPreviewLineItemDto } from '@/api/types'
-import type { AxiosError } from 'axios'
 import { plural } from '@/lib/format'
+import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 interface GenerateClaimModalProps {
   tripId: string
@@ -52,10 +54,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
           setPreviewData(data)
           setStep('preview')
         },
-        onError: (err: unknown) => {
-          const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-          setError(axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || 'Failed to generate preview. Check provider settings and confirm the trip has confirmed bookings.')
-        },
+        onError: (err: unknown) => setError(extractErrorMessage(err, 'Failed to generate preview. Check provider settings and confirm the trip has confirmed bookings.')),
       },
     )
   }
@@ -66,10 +65,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
       { tripId, data: { departureTime, returnTime, activeHoursPerDay } },
       {
         onSuccess: () => onSuccess(),
-        onError: (err: unknown) => {
-          const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-          setError(axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || 'Failed to generate claim.')
-        },
+        onError: (err: unknown) => setError(extractErrorMessage(err, 'Failed to generate claim.')),
       },
     )
   }
@@ -86,52 +82,32 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
       footer={
         step === 'input' ? (
           <>
-            <button
-              onClick={onClose}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
-            >
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              onClick={handlePreview}
-              disabled={previewClaim.isPending}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white font-medium hover:opacity-90 transition-all disabled:opacity-50"
-            >
+            </Button>
+            <Button onClick={handlePreview} disabled={previewClaim.isPending}>
               {previewClaim.isPending ? 'Loading...' : 'Preview Claim \u2192'}
-            </button>
+            </Button>
           </>
         ) : (
           <div className="flex justify-between w-full">
-            <button
-              onClick={() => { setStep('input'); setError(null) }}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
-            >
+            <Button variant="secondary" onClick={() => { setStep('input'); setError(null) }}>
               &larr; Back
-            </button>
+            </Button>
             <div className="flex gap-3">
-              <button
-                onClick={onClose}
-                className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
-              >
+              <Button variant="secondary" onClick={onClose}>
                 Cancel
-              </button>
-              <button
-                onClick={handleGenerate}
-                disabled={generateClaim.isPending}
-                className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white font-medium hover:opacity-90 transition-all disabled:opacity-50"
-              >
+              </Button>
+              <Button onClick={handleGenerate} disabled={generateClaim.isPending}>
                 {generateClaim.isPending ? 'Generating...' : 'Confirm & Generate'}
-              </button>
+              </Button>
             </div>
           </div>
         )
       }
     >
         {error && (
-          <div className="bg-[var(--color-error-container)] border border-[var(--color-error-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)] flex items-start gap-2 mb-4">
-            <span className="mt-0.5">&#9888;</span>
-            <span>{error}</span>
-          </div>
+          <Callout tone="error" className="mb-4">{error}</Callout>
         )}
 
         {step === 'input' && (

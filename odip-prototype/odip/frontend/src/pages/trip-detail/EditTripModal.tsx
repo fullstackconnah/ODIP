@@ -8,6 +8,7 @@ import type { TripDetailDto, UpdateTripDto } from '@/api/types/trips'
 import type { TripStatus } from '@/api/types/enums'
 import type { EventTemplateDto } from '@/api/types/events'
 import type { StaffListDto } from '@/api/types/staff'
+import { Button } from '@/components/Button'
 
 interface TripEditFormState {
   tripName: string
@@ -267,17 +268,12 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
 
         {/* Modal footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[rgba(195,201,181,0.2)]">
-          <button onClick={onClose}
-            className="px-5 py-2.5 rounded-full text-sm font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-surface-container-low)] transition-colors">
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!tripEditForm || updateTrip.isPending}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white shadow-lg shadow-[var(--color-primary)]/20 hover:opacity-90 disabled:opacity-50 transition-all"
-          >
+          </Button>
+          <Button onClick={handleSave} disabled={!tripEditForm || updateTrip.isPending}>
             {updateTrip.isPending ? 'Saving…' : 'Save Changes'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

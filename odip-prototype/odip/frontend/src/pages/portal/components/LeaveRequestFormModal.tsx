@@ -9,6 +9,7 @@ import { SearchableSelect } from '@/components/SearchableSelect'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { LEAVE_TYPES, LEAVE_TYPE_LABELS } from '@/api/types'
 import type { CreateLeaveRequestDto, LeaveType } from '@/api/types'
+import { Button } from '@/components/Button'
 
 export type LeaveFormValues = {
   userId: string
@@ -103,17 +104,12 @@ export function LeaveRequestFormModal({ open, onClose, onSubmit, submitting, err
         closeOnBackdrop={false}
         footer={
           <>
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={submit}
-              disabled={submitting}
-              className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 disabled:opacity-50"
-            >
+            </Button>
+            <Button onClick={submit} disabled={submitting}>
               {submitting ? 'Saving…' : isEdit ? 'Save changes' : requireStaff ? 'Save' : 'Submit request'}
-            </button>
+            </Button>
           </>
         }
       >

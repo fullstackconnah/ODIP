@@ -7,6 +7,7 @@ import { useCheckVehicleAssignment, getRosterFindings } from '@/api/hooks'
 import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
 import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
 import type { ScheduleVehicleDto, ScheduleTripDto, ScheduleStaffDto, CreateVehicleAssignmentDto, RosterFindingDto } from '@/api/types'
+import { Callout } from '@/components/Callout'
 
 interface VehicleAssignModalProps {
   vehicle: ScheduleVehicleDto
@@ -132,9 +133,7 @@ export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAs
           />
 
           {error && (
-            <div role="alert" className="rounded-[var(--radius-md)] bg-[var(--color-error-container)]/50 px-3 py-2 text-sm text-[var(--color-destructive)]">
-              {error}
-            </div>
+            <Callout tone="error">{error}</Callout>
           )}
 
           <div className="flex gap-3 pt-1">
