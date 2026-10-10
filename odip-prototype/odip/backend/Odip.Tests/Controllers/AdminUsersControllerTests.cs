@@ -11,6 +11,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Controllers;
 
@@ -23,18 +24,7 @@ namespace Odip.Tests.Controllers;
 /// </summary>
 public class AdminUsersControllerTests
 {
-    private static OdipDbContext CreateDb(string dbName)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb(string dbName) => TestDb.Create(dbName);
 
     // EF Core's InMemory provider is a plain dictionary keyed on primary key, with no SQL engine
     // underneath it — it does NOT enforce HasIndex(...).IsUnique() constraints at all, not even

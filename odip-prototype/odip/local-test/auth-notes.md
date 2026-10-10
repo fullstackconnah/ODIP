@@ -132,7 +132,7 @@ tenant. Not reproduced here since it's not needed for auth testing; re-read
 
 Note: the `Admin` enum value exists and appears in many `[Authorize(Roles=...)]` lists
 (e.g. `AuditController`, `SupportCatalogueController` import endpoints,
-`PlanPricingController` PUT settings, `DevController`; the `PublicHolidaysController` write endpoints were SuperAdmin-only from plan builder phase B), but **`DbSeeder` never
+`PlanPricingController` PUT settings; the `PublicHolidaysController` write endpoints were SuperAdmin-only from plan builder phase B), but **`DbSeeder` never
 seeds any user with `Role = Admin`** — only `SuperAdmin`, `Coordinator`,
 `SupportWorker`, `ReadOnly` exist in seed data. To test `Admin`-gated endpoints,
 mint a JWT with `role=Admin` directly (mint-jwt.js supports any role string; the

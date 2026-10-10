@@ -1,13 +1,5 @@
 // ── Payment Status Constants ────────────────────────────────
 
-export const PAYMENT_STATUS_LABELS: Record<string, string> = {
-  NotInvoiced: 'Not Invoiced',
-  InvoiceSent: 'Invoice Sent',
-  Partial:     'Partial',
-  Paid:        'Paid',
-  Overdue:     'Overdue',
-}
-
 export const PAYMENT_STATUS_COLORS: Record<string, string> = {
   NotInvoiced: 'bg-neutral-100 text-neutral-600',
   InvoiceSent: 'bg-blue-100 text-blue-700',

@@ -506,7 +506,6 @@ for (var attempt = 1; attempt <= maxRetries; attempt++)
 
         await DbSeeder.SeedAsync(db);
         await DbSeeder.SeedNdisDataAsync(db);
-        await DbSeeder.SeedDataDictionaryAsync(db);
         await DbSeeder.SeedMedicationsAsync(db);
         await DbSeeder.SeedParticipantNotesAsync(db);
         await DbSeeder.SeedParticipantRoutinesAsync(db);

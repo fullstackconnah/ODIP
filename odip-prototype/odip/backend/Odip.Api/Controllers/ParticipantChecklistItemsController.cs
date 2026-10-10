@@ -1,69 +1,19 @@
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
-using Odip.Infrastructure.Data;
-using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
 /// <summary>
-/// INTAKE-03/04 — nested CRUD for a participant's structured Community Access checklist grid
-/// (<see cref="ParticipantChecklistItem"/>). Mirrors <see cref="ParticipantAdlAssessmentsController"/>
-/// exactly: a FIXED enumerated set — one row per <see cref="ChecklistItemType"/> (21 values) — so
-/// there is no Create/Delete here, only Get (always all twenty-one, synthesizing an unanswered
-/// placeholder for any type with no row yet) and an upsert-by-type endpoint. This is the write path
-/// for ongoing edits from the participant detail page; the wizard's initial/draft submissions
-/// instead go through <see cref="ParticipantsController.UpsertChecklistItemsAsync"/>, sharing the
-/// same upsert semantics via <see cref="ParticipantGridRules"/>.
+/// INTAKE-03/04 — helpers for a participant's structured Community Access checklist grid
+/// (<see cref="ParticipantChecklistItem"/>): a FIXED enumerated set, one row per
+/// <see cref="ChecklistItemType"/> (21 values). The participant detail reads all twenty-one through
+/// <see cref="MaterializeAll"/>. The class no longer has routes (the nested GET/PUT checklist-items endpoints had
+/// no caller). The wizard's save writes these rows through ParticipantPatchApplier.UpsertChecklistItemsAsync, which
+/// applies each answer with <see cref="Odip.Infrastructure.Services.ParticipantGridRules"/>.
 /// </summary>
-[ApiController]
-[Authorize]
-[Route("api/v1")]
-public class ParticipantChecklistItemsController : ControllerBase
+public static class ParticipantChecklistItemsController
 {
-    private readonly OdipDbContext _db;
-    public ParticipantChecklistItemsController(OdipDbContext db) => _db = db;
-
-    [HttpGet("participants/{participantId:guid}/checklist-items")]
-    public async Task<ActionResult<ApiResponse<List<ParticipantChecklistItemDto>>>> GetForParticipant(Guid participantId, CancellationToken ct)
-    {
-        var participantExists = await _db.Participants.AnyAsync(p => p.Id == participantId, ct);
-        if (!participantExists) return NotFound(ApiResponse<List<ParticipantChecklistItemDto>>.Fail("Participant not found"));
-
-        var existing = await _db.ParticipantChecklistItems.Where(a => a.ParticipantId == participantId).ToListAsync(ct);
-        return Ok(ApiResponse<List<ParticipantChecklistItemDto>>.Ok(MaterializeAll(participantId, existing)));
-    }
-
-    [HttpPut("participants/{participantId:guid}/checklist-items/{itemType}")]
-    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
-    public async Task<ActionResult<ApiResponse<ParticipantChecklistItemDto>>> Upsert(
-        Guid participantId, string itemType, [FromBody] UpsertParticipantChecklistItemDto dto, CancellationToken ct)
-    {
-        if (!Enum.TryParse<ChecklistItemType>(itemType, ignoreCase: true, out var type))
-            return BadRequest(ApiResponse<ParticipantChecklistItemDto>.Fail("Unrecognised checklist item type."));
-
-        var participant = await _db.Participants.AnyAsync(p => p.Id == participantId, ct);
-        if (!participant) return NotFound(ApiResponse<ParticipantChecklistItemDto>.Fail("Participant not found"));
-
-        var row = await _db.ParticipantChecklistItems.FirstOrDefaultAsync(a => a.ParticipantId == participantId && a.ItemType == type, ct);
-        if (row == null)
-        {
-            row = new ParticipantChecklistItem { Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = type };
-            _db.ParticipantChecklistItems.Add(row);
-        }
-
-        ParticipantGridRules.ApplyAnswer(row, dto.Value, dto.Notes);
-        await _db.SaveChangesAsync(ct);
-
-        return Ok(ApiResponse<ParticipantChecklistItemDto>.Ok(ToDto(row)));
-    }
-
-    // ── Helpers ────────────────────────────────────────────────────
-
     /// <summary>Every <see cref="ChecklistItemType"/>, in declaration order (Community Mobility &amp;
     /// Transport Risk first, then Community Behaviours of Concern — see <see cref="ChecklistItemTypeGroups"/>),
     /// backed by <paramref name="existingRows"/> where a row exists and a synthesized (Id = null,

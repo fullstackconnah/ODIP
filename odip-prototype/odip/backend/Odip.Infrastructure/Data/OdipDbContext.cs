@@ -1,8 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
-using Odip.Domain.Billing;
-using Odip.Domain.Dictionary;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
@@ -100,18 +98,6 @@ public class OdipDbContext : DbContext
 
     /// <summary>Public landing-page early-access requests. NOT tenant-scoped: see <see cref="Entities.EarlyAccessRequest"/>'s type doc.</summary>
     public DbSet<EarlyAccessRequest> EarlyAccessRequests => Set<EarlyAccessRequest>();
-
-    // Billing
-    public DbSet<FundingSource> FundingSources => Set<FundingSource>();
-    public DbSet<ServiceBooking> ServiceBookings => Set<ServiceBooking>();
-    public DbSet<ServiceBookingLine> ServiceBookingLines => Set<ServiceBookingLine>();
-    public DbSet<BillableEvent> BillableEvents => Set<BillableEvent>();
-    public DbSet<ClaimBatch> ClaimBatches => Set<ClaimBatch>();
-
-    // Dictionary / forms engine
-    public DbSet<FieldDefinition> FieldDefinitions => Set<FieldDefinition>();
-    public DbSet<FieldValue> FieldValues => Set<FieldValue>();
-    public DbSet<FormTemplate> FormTemplates => Set<FormTemplate>();
 
     // Rostering (M4)
     public DbSet<Shift> Shifts => Set<Shift>();
@@ -961,8 +947,7 @@ public class OdipDbContext : DbContext
         });
 
         // ── Participant budgets (phase 1): FundingPlan, FundingPool, FundingPeriod, BudgetSettings ────────────
-        // A plan is the root of a participant's budget history, so deleting the participant must not silently cascade it away (Restrict, like the
-        // Billing FundingSource); the pools and periods are parts of the plan and go with it. Money is decimal(18,2) on the period only: a pool's
+        // A plan is the root of a participant's budget history, so deleting the participant must not silently cascade it away (Restrict); the pools and periods are parts of the plan and go with it. Money is decimal(18,2) on the period only: a pool's
         // total is the sum of its periods. Dates are `date` columns (DateOnly), instants are UTC `timestamp` columns like the rest of the model.
         modelBuilder.Entity<FundingPlan>(entity =>
         {
@@ -1060,201 +1045,6 @@ public class OdipDbContext : DbContext
             .HasForeignKey(p => p.PreferredUserId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        // ── FundingSource ────────────────────────────────────────
-        modelBuilder.Entity<FundingSource>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.BudgetCategory).HasMaxLength(200);
-            entity.Property(e => e.NdisPlanNumber).HasMaxLength(50);
-            entity.Property(e => e.Budget).HasPrecision(18, 2);
-            entity.Property(e => e.PayerName).HasMaxLength(200);
-            entity.Property(e => e.PayerEmail).HasMaxLength(200);
-
-            // Restrict: a FundingSource is the root of a participant's billing/claim
-            // history (ServiceBookings and BillableEvents hang off it) — deleting the
-            // participant must not silently cascade that history away.
-            entity.HasOne(e => e.Participant)
-                .WithMany()
-                .HasForeignKey(e => e.ParticipantId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.ParticipantId);
-            entity.HasIndex(e => e.IsActive);
-        });
-
-        // ── ServiceBooking ───────────────────────────────────────
-        modelBuilder.Entity<ServiceBooking>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.ProdaBookingReference).HasMaxLength(50).IsRequired();
-            entity.Ignore(e => e.ClaimDeadline);
-
-            // Restrict: the booking tracks claimed-vs-allocated balance (the #1
-            // documented PRODA rejection cause) — it must not vanish just because its
-            // FundingSource row is removed.
-            entity.HasOne(e => e.FundingSource)
-                .WithMany()
-                .HasForeignKey(e => e.FundingSourceId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.FundingSourceId);
-            entity.HasIndex(e => e.ProdaBookingReference);
-        });
-
-        // ── ServiceBookingLine ───────────────────────────────────
-        // Own DbSet (not owned): it already carries its own Guid Id and an explicit
-        // ServiceBookingId FK in the domain type, i.e. it is shaped as a normal
-        // dependent entity rather than a value object — same idiom as ClaimLineItem.
-        modelBuilder.Entity<ServiceBookingLine>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.SupportItemNumber).HasMaxLength(50).IsRequired();
-            entity.Property(e => e.AllocatedAmount).HasPrecision(18, 2);
-            entity.Property(e => e.ClaimedAmount).HasPrecision(18, 2);
-            entity.Ignore(e => e.RemainingAmount);
-
-            // Cascade: lines have no independent existence outside their booking
-            // (mirrors ClaimLineItem → TripClaim).
-            entity.HasOne(e => e.ServiceBooking)
-                .WithMany(b => b.Lines)
-                .HasForeignKey(e => e.ServiceBookingId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(e => e.ServiceBookingId);
-        });
-
-        // ── BillableEvent ────────────────────────────────────────
-        modelBuilder.Entity<BillableEvent>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.SupportItemNumber).HasMaxLength(50).IsRequired();
-            entity.Property(e => e.SourceEntityType).HasMaxLength(100);
-            entity.Property(e => e.Quantity).HasPrecision(18, 2);
-            entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
-            entity.Property(e => e.TotalAmount).HasPrecision(18, 2);
-            entity.Property(e => e.CancellationReasonCode).HasMaxLength(50);
-            entity.Property(e => e.ClaimReference).HasMaxLength(100).IsRequired();
-            entity.Property(e => e.RejectionReason).HasMaxLength(1000);
-
-            // Restrict everywhere below: BillableEvent is the universal billing unit
-            // (the financial record itself) — none of its parents may cascade-delete it.
-            entity.HasOne(e => e.FundingSource)
-                .WithMany()
-                .HasForeignKey(e => e.FundingSourceId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne<Participant>()
-                .WithMany()
-                .HasForeignKey(e => e.ParticipantId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne<ServiceBooking>()
-                .WithMany()
-                .HasForeignKey(e => e.ServiceBookingId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // ClaimBatch → BillableEvent: BillableEvent has no ClaimBatchId property
-            // (only ClaimBatch.Events is navigable), so the FK is a shadow property.
-            // Restrict per spec: a ClaimBatch already submitted to PRODA must not
-            // silently cascade-delete the BillableEvent rows that make up the claim.
-            entity.HasOne<ClaimBatch>()
-                .WithMany(b => b.Events)
-                .HasForeignKey("ClaimBatchId")
-                .IsRequired(false)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.ParticipantId);
-            entity.HasIndex(e => e.FundingSourceId);
-            entity.HasIndex(e => e.ServiceBookingId);
-            entity.HasIndex(e => e.ClaimReference);
-            entity.HasIndex(e => e.Status);
-            entity.HasIndex(e => e.Stream);
-        });
-
-        // ── ClaimBatch ───────────────────────────────────────────
-        modelBuilder.Entity<ClaimBatch>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.FileName).HasMaxLength(100).IsRequired();
-
-            entity.HasIndex(e => e.FileName);
-            entity.HasIndex(e => e.SubmittedAt);
-        });
-
-        // ── FieldDefinition ──────────────────────────────────────
-        modelBuilder.Entity<FieldDefinition>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.FieldId).HasMaxLength(20).IsRequired();
-            entity.Property(e => e.Name).HasMaxLength(300).IsRequired();
-            entity.Property(e => e.Domain).HasMaxLength(100).IsRequired();
-            entity.Property(e => e.PicklistOptionsRaw).HasMaxLength(2000);
-            entity.Property(e => e.Comments).HasMaxLength(2000);
-            entity.Property(e => e.Notes).HasMaxLength(2000);
-            // Natively mapped to a Postgres array, same idiom as
-            // Participant.MobilitySupportOptions.
-            entity.Property(e => e.AppearsInForms).HasColumnType("text[]");
-            entity.Ignore(e => e.PicklistOptions);
-
-            // FieldId is unique per tenant (per the domain type's own doc comment).
-            entity.HasIndex(e => new { e.TenantId, e.FieldId }).IsUnique();
-            entity.HasIndex(e => e.Domain);
-            entity.HasIndex(e => e.IsActive);
-        });
-
-        // ── FieldValue ───────────────────────────────────────────
-        modelBuilder.Entity<FieldValue>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.UpdatedBy).HasMaxLength(200);
-            // Value is intentionally left unbounded (EAV values vary widely by
-            // FieldDefinition.DataType, e.g. multi-select lists serialised as text).
-
-            // Restrict: a field definition still referenced by recorded values must
-            // not be deleted out from under them (data-integrity guard on the registry).
-            entity.HasOne<FieldDefinition>()
-                .WithMany()
-                .HasForeignKey(e => e.FieldDefinitionId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // Cascade: form-driven field values are participant-owned data with no
-            // independent existence once the participant is gone — same idiom as
-            // SupportProfile → Participant.
-            entity.HasOne<Participant>()
-                .WithMany()
-                .HasForeignKey(e => e.ParticipantId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            // One recorded value per participant/field pair.
-            entity.HasIndex(e => new { e.TenantId, e.ParticipantId, e.FieldDefinitionId }).IsUnique();
-            entity.HasIndex(e => e.FieldDefinitionId);
-        });
-
-        // ── FormTemplate ─────────────────────────────────────────
-        // Sections is a list of plain (non-entity) FormSection value objects — mapped
-        // as a JSON column via a value converter (Npgsql has no native array support
-        // for complex types, unlike the string[]/text[] mapping used above).
-        var formSectionsComparer = new ValueComparer<List<FormSection>>(
-            (a, b) => JsonSerializer.Serialize(a, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(b, (JsonSerializerOptions?)null),
-            v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null).GetHashCode(),
-            v => JsonSerializer.Deserialize<List<FormSection>>(JsonSerializer.Serialize(v, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null) ?? new List<FormSection>());
-
-        modelBuilder.Entity<FormTemplate>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
-            entity.Property(e => e.Description).HasMaxLength(2000);
-
-            var sectionsProperty = entity.Property(e => e.Sections)
-                .HasConversion(
-                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => JsonSerializer.Deserialize<List<FormSection>>(v, (JsonSerializerOptions?)null) ?? new List<FormSection>())
-                .HasColumnType("jsonb");
-            sectionsProperty.Metadata.SetValueComparer(formSectionsComparer);
-
-            entity.HasIndex(e => e.Name);
-        });
-
         // ── Shift ────────────────────────────────────────────────
         modelBuilder.Entity<Shift>(entity =>
         {
@@ -1269,8 +1059,8 @@ public class OdipDbContext : DbContext
             entity.Ignore(e => e.DurationHours);
 
             // Restrict: a rostered participant or staff member must not be silently
-            // cascade-deleted out from under their shifts (same idiom as FundingSource →
-            // Participant and StaffAssignment → User above).
+            // cascade-deleted out from under their shifts (same idiom as
+            // StaffAssignment → User above).
             entity.HasOne(e => e.Participant)
                 .WithMany()
                 .HasForeignKey(e => e.ParticipantId)
@@ -1558,7 +1348,7 @@ public class OdipDbContext : DbContext
 
             // Restrict: a participant with prescribed medication history must not be
             // silently cascade-deleted out from under that record (same idiom as
-            // FundingSource/Shift → Participant above).
+            // Shift → Participant above).
             entity.HasOne(e => e.Participant)
                 .WithMany()
                 .HasForeignKey(e => e.ParticipantId)
@@ -2034,42 +1824,6 @@ public class OdipDbContext : DbContext
         // Tenants table — unique index on EmailDomain
         modelBuilder.Entity<Tenant>()
             .HasIndex(t => t.EmailDomain).IsUnique();
-
-        // ── Billing / Dictionary tenant query filters ─────────────────────────────
-        modelBuilder.Entity<FundingSource>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
-        modelBuilder.Entity<FundingSource>()
-            .HasIndex(e => e.TenantId);
-
-        modelBuilder.Entity<ServiceBooking>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
-        modelBuilder.Entity<ServiceBooking>()
-            .HasIndex(e => e.TenantId);
-
-        modelBuilder.Entity<BillableEvent>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
-        modelBuilder.Entity<BillableEvent>()
-            .HasIndex(e => e.TenantId);
-
-        modelBuilder.Entity<ClaimBatch>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
-        modelBuilder.Entity<ClaimBatch>()
-            .HasIndex(e => e.TenantId);
-
-        modelBuilder.Entity<FieldDefinition>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
-        modelBuilder.Entity<FieldDefinition>()
-            .HasIndex(e => e.TenantId);
-
-        modelBuilder.Entity<FieldValue>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
-        modelBuilder.Entity<FieldValue>()
-            .HasIndex(e => e.TenantId);
-
-        modelBuilder.Entity<FormTemplate>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
-        modelBuilder.Entity<FormTemplate>()
-            .HasIndex(e => e.TenantId);
 
         // ── Rostering tenant query filters ────────────────────────────────────────
         modelBuilder.Entity<Shift>()

@@ -251,7 +251,6 @@ export function useRestoreParticipant() {
  * the apiGet/ApiResponse JSON envelope entirely (the endpoint returns a raw application/pdf file,
  * not JSON) — fetches as a blob directly through apiClient, and uses the filename from the
  * response's Content-Disposition header when present, falling back to the caller-supplied fileName.
- * Same pattern as useDownloadProdaFile in billing.ts.
  */
 export function useDownloadIntakeFormPdf() {
   return useMutation({

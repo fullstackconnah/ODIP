@@ -6,13 +6,13 @@ using Moq;
 using Odip.Application.Interfaces;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
-using Odip.Domain.Interfaces;
 using Odip.Domain.Notifications;
 using Odip.Infrastructure.BackgroundServices;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Notifications;
 using Odip.Infrastructure.Notifications.Templates;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Notifications;
 
@@ -24,23 +24,9 @@ namespace Odip.Tests.Notifications;
 /// </summary>
 public class ScopedTenantContextTests
 {
-    private static OdipDbContext SuperAdminDb(string dbName)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext SuperAdminDb(string dbName) => TestDb.Create(dbName);
 
-    private static OdipDbContext TenantScopedDb(string dbName, Guid tenantId)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns(tenantId);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
-        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext TenantScopedDb(string dbName, Guid tenantId) => TestDb.ForTenant(dbName, tenantId);
 
     private static User SeedUser(OdipDbContext db, Guid tenantId)
     {

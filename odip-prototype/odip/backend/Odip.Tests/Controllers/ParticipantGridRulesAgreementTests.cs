@@ -12,7 +12,7 @@ using Xunit;
 namespace Odip.Tests.Controllers;
 
 /// <summary>
-/// The consent, health, ADL, checklist and community-access grids can be saved one row at a time
+/// The consent, health, ADL and community-access grids can be saved one row at a time
 /// (the PUT controllers) or inside a participant save (wizard, Update, PATCH, caregiver accept).
 /// Both routes must apply an answer the same way; each test saves the same sequence of answers
 /// through both and compares what the row looked like after every step.
@@ -144,33 +144,6 @@ public class ParticipantGridRulesAgreementTests
         var save = await Run(steps, async (db, id, s) =>
         {
             await ParticipantPatchApplier.UpsertAdlAssessmentsAsync(db, id, new() { new() { AdlType = AdlType.Bathing, Level = s.Level, Notes = s.Notes, HowToHelpNotes = s.HowToHelp } }, default);
-            await db.SaveChangesAsync();
-        }, Read);
-
-        Assert.Equal(put, save);
-    }
-
-    [Fact]
-    public async Task ChecklistItem_SingleRowPut_And_ParticipantSave_ApplyAnswersIdentically()
-    {
-        var steps = new (ChecklistItemValue? Value, string? Notes)[]
-        {
-            (ChecklistItemValue.Yes, "  power chair  "),
-            (null, "   "),
-            (ChecklistItemValue.NotApplicable, "n/a"),
-        };
-        async Task<(string, DateTime?, DateTime)> Read(OdipDbContext db, Guid id)
-        {
-            var r = await db.ParticipantChecklistItems.SingleAsync(c => c.ParticipantId == id);
-            return ($"{r.Value}|{r.Notes}", (DateTime?)null, r.UpdatedAt);
-        }
-
-        var put = await Run(steps, async (db, id, s) =>
-            await new ParticipantChecklistItemsController(db).Upsert(id, nameof(ChecklistItemType.UsesWheelchair),
-                new UpsertParticipantChecklistItemDto { Value = s.Value, Notes = s.Notes }, default), Read);
-        var save = await Run(steps, async (db, id, s) =>
-        {
-            await ParticipantPatchApplier.UpsertChecklistItemsAsync(db, id, new() { new() { ItemType = ChecklistItemType.UsesWheelchair, Value = s.Value, Notes = s.Notes } }, default);
             await db.SaveChangesAsync();
         }, Read);
 

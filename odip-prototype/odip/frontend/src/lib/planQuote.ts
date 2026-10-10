@@ -392,12 +392,6 @@ export function pricedNothing(answer: Pick<PlanQuote, 'totals'>): boolean {
   return answer.totals.lineCount - answer.totals.unpricedLines <= 0
 }
 
-/** Which block an issue is about, in the coordinator's words: its position and readable line, never its id. */
-export function blockName(blocks: readonly PlanBlock[], blockId: string, describe: (block: PlanBlock) => string): string {
-  const index = blocks.findIndex(block => block.id === blockId)
-  return index < 0 ? 'A block' : `Block ${index + 1} (${describe(blocks[index])})`
-}
-
 /** "Block 1", "Blocks 1 and 3", "Blocks 1, 3 and 4". */
 function blocksNamed(places: readonly number[]): string {
   if (places.length === 1) return `Block ${places[0]}`

@@ -10,6 +10,7 @@ using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Controllers;
 
@@ -22,18 +23,7 @@ namespace Odip.Tests.Controllers;
 /// </summary>
 public class ParticipantsControllerCommunityAccessTests
 {
-    private static OdipDbContext CreateDb(string dbName)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb(string dbName) => TestDb.Create(dbName);
 
     private static CreateParticipantDto MinimalCreateDto(string firstName = "Sophie", string lastName = "Brown") => new()
     {
@@ -93,6 +83,29 @@ public class ParticipantsControllerCommunityAccessTests
         Assert.Equal(18, untouched.Count);
         Assert.All(untouched, c => Assert.Null(c.Value));
         Assert.All(untouched, c => Assert.Null(c.Id));
+    }
+
+    /// <summary>Notes are trimmed and spaces-only notes are stored as null: the rule in ParticipantGridRules.ApplyAnswer, which the wizard's
+    /// save (UpsertChecklistItemsAsync) goes through. It lost its only test when the nested checklist-items route was deleted.</summary>
+    [Fact]
+    public async Task Create_ChecklistItemNotes_SpacesOnlyAreStoredAsNull_AndPaddedNotesAreTrimmed()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var dto = MinimalCreateDto() with
+        {
+            ChecklistItems = new List<CreateParticipantChecklistItemDto>
+            {
+                new() { ItemType = ChecklistItemType.UsesWheelchair, Value = ChecklistItemValue.Yes, Notes = "   " },
+                new() { ItemType = ChecklistItemType.HarmToSelf, Value = ChecklistItemValue.No, Notes = " x " },
+            },
+        };
+        var created = Assert.IsType<CreatedAtActionResult>((await controller.Create(dto, CancellationToken.None)).Result);
+
+        var detail = await GetByIdData(controller, Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value).Data!.Id);
+
+        Assert.Null(detail.ChecklistItems.Single(c => c.ItemType == ChecklistItemType.UsesWheelchair).Notes);
+        Assert.Equal("x", detail.ChecklistItems.Single(c => c.ItemType == ChecklistItemType.HarmToSelf).Notes);
     }
 
     /// <summary>Task 4 — Upsert, leave-alone mode: an Update payload that omits a previously-set
