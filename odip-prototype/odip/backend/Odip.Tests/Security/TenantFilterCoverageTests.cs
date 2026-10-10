@@ -37,7 +37,7 @@ public class TenantFilterCoverageTests
         ["ServiceBookingLine"] = "through its service booking (ServiceBooking is filtered)",
         ["AuditLog"] = "read only through AuditController, which checks the audited entity first",
         // Shared on purpose.
-        ["Activity"] = "the shared activity library; per organisation or shared is the owner's decision (audit B1-2)",
+        ["Activity"] = "shared library, SuperAdmin-written until it becomes per organisation (audit B1-2)",
         ["SupportCatalogueItem"] = "the NDIS catalogue, the same for every provider; written by SuperAdmin only",
         ["SupportActivityGroup"] = "the NDIS catalogue, the same for every provider; written by SuperAdmin only",
         ["PublicHoliday"] = "a state's calendar, the same for every provider; written by SuperAdmin only",

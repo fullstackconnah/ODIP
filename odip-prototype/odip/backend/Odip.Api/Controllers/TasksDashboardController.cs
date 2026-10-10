@@ -215,8 +215,9 @@ public class ActivitiesController : ControllerBase
         return Ok(ApiResponse<List<ActivityDto>>.Ok(items));
     }
 
+    // One library for every organisation (Activity has no organisation column), so writing it changes every organisation's activity picker: SuperAdmin only until it becomes per organisation.
     [HttpPost]
-    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ActivityDto>>> Create([FromBody] CreateActivityDto dto, CancellationToken ct)
     {
         var a = new Activity
@@ -231,7 +232,7 @@ public class ActivitiesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    [Authorize(Roles = "SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ActivityDto>>> Update(Guid id, [FromBody] UpdateActivityDto dto, CancellationToken ct)
     {
         var a = await _db.Activities.FirstOrDefaultAsync(x => x.Id == id, ct);
