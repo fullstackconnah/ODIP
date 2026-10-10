@@ -17,23 +17,22 @@ let refreshPromise: Promise<string | null> | null = null
 let loggingOut = false
 
 /**
- * Ends the session everywhere and goes to /login: the server drops the 7-day cookie (it outlives the stored token, and the API accepts it when no token is
- * sent), Firebase forgets the user, and the browser keys go. A step that fails does not stop the others, so a sign-out never gets stuck on a bad connection.
+ * Ends the session everywhere and goes to /login. This browser is signed out first (the keys go, Firebase forgets the user), so a slow API cannot leave the app
+ * usable behind a Sign Out button that looks dead. Then the server is told to drop the 7-day cookie (it outlives the stored token, and the API accepts it when no
+ * token is sent), with the token the keys held; that is best effort and gives up after 5 s. A step that fails does not stop the others.
  */
 export async function endSession() {
   if (loggingOut) return
   loggingOut = true
-  // The token is still stored here, so the request is authorised; the timeout keeps an unreachable server from holding the person on the page.
-  try { await apiClient.post('/auth/logout', undefined, { timeout: 5000 }) } catch { /* ignore */ }
+  const token = localStorage.getItem('odip_token')
+  for (const key of ['odip_token', 'odip_user', 'odip_viewing_tenant', 'odip_viewing_user', 'odip_superadmin_user']) localStorage.removeItem(key)
   try {
     const { auth } = await import('../lib/firebase')
     if (auth) await (await import('firebase/auth')).signOut(auth)
   } catch { /* ignore */ }
-  localStorage.removeItem('odip_token')
-  localStorage.removeItem('odip_user')
-  localStorage.removeItem('odip_viewing_tenant')
-  localStorage.removeItem('odip_viewing_user')
-  localStorage.removeItem('odip_superadmin_user')
+  try {
+    await apiClient.post('/auth/logout', undefined, { timeout: 5000, headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+  } catch { /* ignore */ }
   window.location.href = '/login'
 }
 

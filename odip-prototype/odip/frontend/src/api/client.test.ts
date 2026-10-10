@@ -149,13 +149,50 @@ describe('endSession', () => {
     }
   }
 
-  it('asks the server to drop the cookie while the token is still sent, ends the Firebase session, then clears every key', async () => {
+  it('signs out locally, then asks the server to drop the cookie with the token it had', async () => {
     const requests = await endSessionWith(() => ({ status: 200, data: { success: true } }))
 
     expect(requests).toEqual([{ url: '/auth/logout', authorization: 'Bearer a-session' }])
     expect(signOut).toHaveBeenCalledTimes(1)
     expect(signOut).toHaveBeenCalledWith(firebaseAuth)
     for (const key of KEYS) expect(localStorage.getItem(key), key).toBeNull()
+  })
+
+  // The person is signed out of this browser at once; telling the server (the cookie) comes after and is best effort, so a slow or unreachable API cannot leave
+  // the app usable behind a Sign Out button that looks dead. The adapter below does what a real one does with `timeout`: gives up when it is up.
+  it('clears the keys and signs out of Firebase before the logout request is answered, and leaves after its 5 s limit', async () => {
+    const client = await freshClient()
+    const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // endSession imports these on demand; load them now so the faked clock never has to wait for a module load.
+    await import('@/lib/firebase')
+    await import('firebase/auth')
+    vi.useFakeTimers()
+    try {
+      for (const key of KEYS) localStorage.setItem(key, 'x')
+      localStorage.setItem('odip_token', 'a-session')
+      const requests: Array<{ url: string; authorization?: string }> = []
+      client.apiClient.defaults.adapter = (config: InternalAxiosRequestConfig) =>
+        new Promise((_, reject) => {
+          requests.push({ url: String(config.url), authorization: config.headers?.Authorization as string | undefined })
+          setTimeout(() => reject(new AxiosError(`timeout of ${config.timeout}ms exceeded`, 'ECONNABORTED', config)), config.timeout)
+        })
+      let left = false
+      void client.endSession().then(() => { left = true })
+
+      await vi.advanceTimersByTimeAsync(0)
+      for (const key of KEYS) expect(localStorage.getItem(key), key).toBeNull()
+      expect(signOut).toHaveBeenCalledTimes(1)
+      expect(requests).toEqual([{ url: '/auth/logout', authorization: 'Bearer a-session' }])
+      expect(left).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(4999)
+      expect(left).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(left).toBe(true)
+    } finally {
+      vi.useRealTimers()
+      jsdomNoise.mockRestore()
+    }
   })
 
   it('still ends the Firebase session and clears the keys when the server cannot be reached', async () => {
