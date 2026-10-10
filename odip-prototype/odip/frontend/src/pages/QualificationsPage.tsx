@@ -12,7 +12,7 @@ import { usePermissions } from '@/lib/permissions'
 import { staffCredentials, credentialIssueCount } from '@/lib/credentials'
 import { DEADLINE_TONE, deadlineLabel, type DeadlineState, type DeadlineStatus } from '@/lib/deadline'
 import { plural } from '@/lib/format'
-import type { StaffListDto } from '@/api/types/staff'
+import { toUpdateStaffDto, type StaffListDto } from '@/api/types/staff'
 
 type FilterTab = 'all' | 'expired' | 'expiring' | 'no-date'
 
@@ -119,31 +119,7 @@ export default function QualificationsPage() {
     const s = allStaff.find((m: any) => m.id === row.staffId)
     if (!s) return
 
-    const payload = {
-      firstName: s.firstName,
-      lastName: s.lastName,
-      role: s.role,
-      position: s.position,
-      email: s.email ?? '',
-      mobile: s.mobile ?? undefined,
-      region: s.region ?? undefined,
-      isDriverEligible: s.isDriverEligible,
-      isFirstAidQualified: s.isFirstAidQualified,
-      isMedicationCompetent: s.isMedicationCompetent,
-      isManualHandlingCompetent: s.isManualHandlingCompetent,
-      isOvernightEligible: s.isOvernightEligible,
-      isActive: s.isActive,
-      notes: s.notes ?? undefined,
-      firstAidExpiryDate: s.firstAidExpiryDate ?? undefined,
-      driverLicenceExpiryDate: s.driverLicenceExpiryDate ?? undefined,
-      manualHandlingExpiryDate: s.manualHandlingExpiryDate ?? undefined,
-      medicationCompetencyExpiryDate: s.medicationCompetencyExpiryDate ?? undefined,
-      workerScreeningNumber: s.workerScreeningNumber ?? undefined,
-      workerScreeningExpiryDate: s.workerScreeningExpiryDate ?? undefined,
-      [row.fieldKey]: editValue || undefined,
-    }
-
-    updateStaff.mutate({ id: row.staffId, data: payload }, {
+    updateStaff.mutate({ id: row.staffId, data: toUpdateStaffDto(s, { [row.fieldKey]: editValue || undefined }) }, {
       onSuccess: () => { setEditingKey(null); setSaveError(null) },
       onError: () => setSaveError('Failed to save. Please try again.'),
     })

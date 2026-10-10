@@ -337,7 +337,7 @@ public class TripsController : ControllerBase
                 ConfirmationReference = r.ConfirmationReference, BedroomsReserved = r.BedroomsReserved,
                 BedsReserved = r.BedsReserved, Cost = r.Cost, HasOverlapConflict = r.HasOverlapConflict,
                 Comments = r.Comments, RequestSentDate = r.RequestSentDate, DateBooked = r.DateBooked,
-                DateConfirmed = r.DateConfirmed
+                DateConfirmed = r.DateConfirmed, CancellationReason = r.CancellationReason
             }).ToListAsync(ct);
         return Ok(ApiResponse<List<ReservationDto>>.Ok(items));
     }

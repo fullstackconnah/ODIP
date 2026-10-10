@@ -173,3 +173,33 @@ export interface StaffOverviewDto {
   /** Last 10 shift completions submitted by this staff member. */
   recentCompletions: CompletionQueueItemDto[]
 }
+
+/**
+ * The body for PUT /staff/{id}, which replaces the whole record: whatever it leaves out is stored as empty. Build every update from the list row and say only
+ * what changes, so the next field added to the type is not wiped by a status click.
+ */
+export function toUpdateStaffDto(row: StaffListDto, patch: Partial<UpdateStaffDto> = {}): UpdateStaffDto {
+  return {
+    firstName: row.firstName,
+    lastName: row.lastName,
+    email: row.email ?? '',
+    role: row.role,
+    position: row.position,
+    mobile: row.mobile ?? undefined,
+    region: row.region ?? undefined,
+    isDriverEligible: row.isDriverEligible,
+    isFirstAidQualified: row.isFirstAidQualified,
+    isMedicationCompetent: row.isMedicationCompetent,
+    isManualHandlingCompetent: row.isManualHandlingCompetent,
+    isOvernightEligible: row.isOvernightEligible,
+    isActive: row.isActive,
+    notes: row.notes ?? undefined,
+    firstAidExpiryDate: row.firstAidExpiryDate ?? undefined,
+    driverLicenceExpiryDate: row.driverLicenceExpiryDate ?? undefined,
+    manualHandlingExpiryDate: row.manualHandlingExpiryDate ?? undefined,
+    medicationCompetencyExpiryDate: row.medicationCompetencyExpiryDate ?? undefined,
+    workerScreeningNumber: row.workerScreeningNumber ?? undefined,
+    workerScreeningExpiryDate: row.workerScreeningExpiryDate ?? undefined,
+    ...patch,
+  }
+}

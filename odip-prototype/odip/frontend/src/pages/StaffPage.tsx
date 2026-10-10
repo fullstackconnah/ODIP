@@ -13,7 +13,7 @@ import { Plus, UserCog, Check, CalendarOff } from 'lucide-react'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { deadlineState } from '@/lib/deadline'
-import type { StaffListDto, UpdateStaffDto } from '@/api/types/staff'
+import { toUpdateStaffDto, type StaffListDto, type UpdateStaffDto } from '@/api/types/staff'
 import { plural } from '@/lib/format'
 
 // A worker screening is expired once its expiry day has passed (expiring today is not yet expired): lib/deadline.ts, a calendar-day compare.
@@ -58,20 +58,7 @@ export default function StaffPage() {
     : staffData
 
   function handleStatusChange(s: StaffListDto, val: string) {
-    const data: UpdateStaffDto = {
-      ...s,
-      email: s.email ?? '',
-      mobile: s.mobile ?? undefined,
-      region: s.region ?? undefined,
-      notes: s.notes ?? undefined,
-      firstAidExpiryDate: s.firstAidExpiryDate ?? undefined,
-      driverLicenceExpiryDate: s.driverLicenceExpiryDate ?? undefined,
-      manualHandlingExpiryDate: s.manualHandlingExpiryDate ?? undefined,
-      medicationCompetencyExpiryDate: s.medicationCompetencyExpiryDate ?? undefined,
-      workerScreeningNumber: s.workerScreeningNumber ?? undefined,
-      workerScreeningExpiryDate: s.workerScreeningExpiryDate ?? undefined,
-      isActive: val === 'Active',
-    }
+    const data = toUpdateStaffDto(s, { isActive: val === 'Active' })
     if (val === 'Inactive') {
       setConfirmDeactivate({ id: s.id, name: s.fullName, data })
     } else {
