@@ -151,16 +151,13 @@ export const STATUS_TONE: Record<string, Tone> = {
   urgent: 'danger',
   critical: 'danger',
 
-  // Claims, billable events and payments. The billable-event words match billing/constants.ts, so the claim batch page agrees with Billing.
+  // Claims and payments.
   submitted: 'info',
   ready: 'info',
   paid: 'success',
   rejected: 'danger',
   partiallypaid: 'warning',
-  validated: 'info',
-  routed: 'info',
   claimed: 'success',
-  invoiced: 'success',
   notclaimed: 'neutral',
   inclaim: 'info',
   notinvoiced: 'neutral',

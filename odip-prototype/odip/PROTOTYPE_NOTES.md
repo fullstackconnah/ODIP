@@ -1,5 +1,7 @@
 # ODIP Prototype — build notes (2026-08-02)
 
+> **Retired 2026-10-10:** the Billing vertical slice below was removed except `FundingSource` (the plan editor's billing hint still reads it): `ServiceBooking` + lines, `BillableEvent`, `ClaimBatch`, `IncomeStream`, `ProdaBulkFileWriter`, `BillingValidator`, `BillingRouter` and their controller routes, pages, tables and tests are gone.
+
 This repo is the **fork of TripCore → ODIP** (plan doc 08, steps 1–2 plus the billing vertical slice), produced in a sandbox where NuGet and the external APIs (Xero, Brevity, PRODA, Employment Hero) were unreachable. Everything that needs no external dependency is implemented and test-proven; everything that does is stubbed or deferred.
 
 ## What was done

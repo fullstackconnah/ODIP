@@ -355,7 +355,7 @@ Below 768px a table becomes a stack of cards, one per row, each cell labelled by
 (8px otherwise), so two neighbouring 44px hit areas never overlap.
 
 **The Column Rule.** A column is never removed at md and up. The #161 overflow fix hid columns by breakpoint (`priority`: below xl, 2xl and 1792px), so at 1280 a
-task's Trip and Type, a staff member's Manual and Overnight flags, a reservation's Ref and Nights, a billable event's Stream and Day Type were not on the page at all:
+task's Trip and Type, a staff member's Manual and Overnight flags, a reservation's Ref and Nights were not on the page at all:
 the data was deleted to fix the layout. Now every column stays, text is capped with an ellipsis (`maxWidth`, `CellText`), and a table wider than its box scrolls
 sideways inside its own box (the page never does). Two columns stay put while it does, so a row is never anonymous and its actions are never out of reach: the first
 labelled column (the one that says who the row is; an unlabelled tick or avatar column and the select-all checkbox column scroll away) pins to the start edge, and
@@ -508,7 +508,7 @@ the room ("Grace Palmer-Hughes" reads whole at 1920).
 - **Menu:** one config (`components/layout/navConfig.ts`) feeds the sidebar, the drawer and the bottom bar, so a page is added, moved or
   renamed in one place. Eight top-level entries, four of them collapsible groups: Dashboard, My Shifts, **Trips** (All Trips, Schedule,
   Bookings, Accommodation, Vehicles, Tasks), **Participants** (Participants, Medications, Caregiver forms), **Staff & roster** (Board,
-  Patterns, Compatibility, Leave, Completions, Staff, Qualifications), **Finance** (Billing, Claim batches, Budgets), Incidents, Settings.
+  Patterns, Compatibility, Leave, Completions, Staff, Qualifications), **Finance** (Budgets), Incidents, Settings.
   Incidents stays flat on purpose: it is time-critical and one click. The menu is per role. A SupportWorker starts from My Shifts (`/`
   sends them there) and sees only that, Trips (All Trips, Schedule, Tasks), Participants (Participants, Medications) and Incidents.
   ReadOnly is not offered what its API refuses: the five Rostering pages, Finance, Caregiver forms and Settings. A group left with one
@@ -686,7 +686,7 @@ on-container text), a soft wash (a tile or a row, paired with the ink) and an in
   `colorMap` overrides the map for one domain, and its values are tones. The older tone words still work: Callout `error` is `danger`, FactChip `positive` is
   `success` and `negative` is `danger`.
 - **The status words, by domain** (every real value; `STATUS_TONE` is the source). Incidents: Draft neutral, Submitted info, Under review warning, Escalated danger,
-  Resolved success, Closed neutral. Claims and billable events: Draft neutral, Ready, Submitted, Validated, Routed info, Approved, Claimed, Invoiced, Paid success,
+  Resolved success, Closed neutral. Claims and payments: Draft neutral, Ready, Submitted info, Approved, Claimed, Paid success,
   Partially paid warning, Rejected and Cancelled danger. Bookings, reservations, vehicle requests and activities: Enquiry, Held, Waitlist, Requested, Booked warning
   (not yet on the trip, or not yet confirmed), Researching and Planned neutral, Confirmed and Completed success, Cancelled and Unavailable danger. Shifts and tasks:
   Draft and Not started neutral, Published and In progress info, Pending review warning, Completed success, Overdue and Cancelled danger. Payments: Not invoiced neutral,
@@ -723,7 +723,7 @@ unless a person typed it as a clock reading or it is a calendar date.
 
 | Kind | On the wire | Examples | Read it with |
 |---|---|---|---|
-| **Instant** (a moment that happened) | UTC with a trailing Z: `2026-10-03T05:00:00Z` | created, updated, last login, dose given (`administeredAt`), submitted, claim-batch times, a shift's actual start | `parseApiDate`, then `formatWithTimeZone`, `formatRelative`, `formatAge`, `formatDateTimeAu` |
+| **Instant** (a moment that happened) | UTC with a trailing Z: `2026-10-03T05:00:00Z` | created, updated, last login, dose given (`administeredAt`), submitted, a shift's actual start | `parseApiDate`, then `formatWithTimeZone`, `formatRelative`, `formatAge`, `formatDateTimeAu` |
 | **Wall clock** (provider-local digits) | NO zone: `2026-10-03T08:00:00` | a dose slot (`scheduledAt`, `occursAt`), the incident time and the notified-at times typed into a `datetime-local` input, a medication's start, end and review dates, a staff availability day | `formatWallClock`, `toDatetimeInputValue`, `datetimeInputNow` (`src/lib/wallClock.ts`); never converted |
 | **Date** (a calendar day) | `DateOnly`: `2026-10-05` | trip dates, plan dates, due and expiry dates | `src/lib/dateOnly.ts`: `parseDateOnly`, `calendarDaysUntil`, `eachDay`, `localIsoDate`; due-day rules through `deadlineState` / `isPastDue` |
 

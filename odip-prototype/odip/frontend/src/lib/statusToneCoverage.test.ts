@@ -10,12 +10,10 @@ import {
   CLAIM_STATUSES, SHIFT_STATUSES, MEDICATION_STATUSES, MEDICATION_ADMINISTRATION_STATUSES, WITNESS_STATUSES,
   CONTACT_ROLE_STATUSES, PLAN_TYPES,
 } from '@/api/types/enums'
-import { BILLABLE_EVENT_STATUSES } from '@/api/types/billing'
 import { LEAVE_STATUSES, LEAVE_STATUS_COLORS } from '@/api/types/leave'
 import { NOTIFICATION_OUTBOX_STATUSES, NOTIFICATION_STATUS_COLORS } from '@/api/types/notifications'
 import { CAREGIVER_SUBMISSION_STATUSES } from '@/api/types/caregiver'
 import { BUDGET_STATUSES } from '@/api/types/funding'
-import { BILLABLE_EVENT_STATUS_COLORS } from '@/pages/billing/constants'
 
 /**
  * L3-02 guard: every status word the API can send has a deliberate tone, and a status nobody listed falls back to NEUTRAL, never to
@@ -51,7 +49,6 @@ const STATUS_ENUMS: Record<string, readonly string[]> = {
   WitnessStatus: WITNESS_STATUSES,
   ContactRoleStatus: CONTACT_ROLE_STATUSES,
   PlanType: PLAN_TYPES,
-  BillableEventStatus: BILLABLE_EVENT_STATUSES,
   LeaveStatus: LEAVE_STATUSES,
   NotificationOutboxStatus: NOTIFICATION_OUTBOX_STATUSES,
   CaregiverSubmissionStatus: CAREGIVER_SUBMISSION_STATUSES,
@@ -84,8 +81,6 @@ describe('every real status has a deliberate tone (L3-02)', () => {
       underreview: 'warning', escalated: 'danger', resolved: 'success', closed: 'neutral',
       // Claims: Approved is green for leave and witnesses too.
       ready: 'info', approved: 'success', declined: 'danger',
-      // Billable events: the same words Billing shows (billing/constants.ts), so the claim batch page agrees with it.
-      validated: 'info', routed: 'info', claimed: 'success', invoiced: 'success',
       // Not yet on the trip, or not yet confirmed: awaiting a decision, a hold running out, a queue.
       enquiry: 'warning', held: 'warning', waitlist: 'warning', requested: 'warning', booked: 'warning',
       researching: 'neutral', planned: 'neutral',
@@ -132,7 +127,6 @@ describe('every real status has a deliberate tone (L3-02)', () => {
     const maps: Record<string, Record<string, Tone>> = {
       LEAVE_STATUS_COLORS: LEAVE_STATUS_COLORS,
       NOTIFICATION_STATUS_COLORS: NOTIFICATION_STATUS_COLORS,
-      BILLABLE_EVENT_STATUS_COLORS: BILLABLE_EVENT_STATUS_COLORS,
     }
     const disagreements: string[] = []
     for (const [mapName, map] of Object.entries(maps)) {

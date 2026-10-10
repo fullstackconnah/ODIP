@@ -151,16 +151,6 @@ export const navItems: NavEntry[] = [
     label: 'Finance',
     msIcon: 'payments',
     children: [
-      // /billing is exact-only (isExactMatchOnly: Claim batches is nested under it), so the batch and claim pages light Claim batches.
-      { to: '/billing', label: 'Billing', msIcon: 'receipt_long', page: 'billing' },
-      {
-        to: '/billing/claim-batches',
-        label: 'Claim batches',
-        msIcon: 'inventory_2',
-        page: 'billing',
-        // A claim is opened from a trip or a participant, so /claims/:id has no entry of its own: it belongs with the batches.
-        matchActive: pathname => pathname.startsWith('/billing/claim-batches') || pathname.startsWith('/claims/'),
-      },
       // Every participant's budget for the funding period running now, sorted by risk (budget phase 2b). Money, so its own page key: SupportWorker's allow-list does not name it and ReadOnly is refused it.
       { to: '/budgets', label: 'Budgets', msIcon: 'account_balance_wallet', page: 'budgets' },
     ],
@@ -189,7 +179,7 @@ export function isRouteActive(to: string, pathname: string): boolean {
 
 /**
  * Whether a leaf needs an EXACT path match rather than the prefix match. It does when another leaf is nested under it
- * (/rostering has /rostering/patterns, /billing has /billing/claim-batches): otherwise it would stay lit on every one of its
+ * (/rostering has /rostering/patterns): otherwise it would stay lit on every one of its
  * children's pages next to their own entry. A leaf with no such nested sibling (/trips, whose /trips/:id is not a leaf) keeps the
  * prefix match so it stays lit on its own detail pages.
  */

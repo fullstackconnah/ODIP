@@ -2,7 +2,7 @@
 
 ODIP is an NDIS trip and participant operations management platform. It covers participants,
 trips and itineraries, accommodation bookings, vehicle and staff scheduling, NDIS claims with
-PRODA bulk-file generation, incident reporting, audit logging, a support catalogue with pricing,
+the NDIA bulk payment file (BPR CSV), incident reporting, audit logging, a support catalogue with pricing,
 and a field-registry/forms engine. The codebase is a fork-in-progress of an existing product
 called "TripCore", retargeted from net9.0 to net8.0. For the fuller vision and architecture
 picture, see `PROTOTYPE_NOTES.md` and the `Platform Plan/` directory.
@@ -140,11 +140,11 @@ npm run lint
   switching handled via the `X-View-As-Tenant`/`X-View-As-User` request headers — tenant-scoped
   code needs to respect this switching mechanism rather than assuming a single ambient tenant.
 
-- Billing/NDIS logic lives in `Odip.Domain/Billing/`: entities in `BillingEntities.cs` at the
-  top level, with `ProdaBulkFileWriter.cs` (PRODA bulk CSV), `BillingValidator.cs`, and
-  `BillingRouter.cs` one level down in `Billing/Services/`. The claiming flow continues in
-  Infrastructure services — `ClaimGenerationService`, `InvoiceService`, `BprCsvService`,
-  `CatalogueImportService` — with Excel and PDF output via ClosedXML and QuestPDF respectively.
+- Billing/NDIS logic lives in `Odip.Domain/Billing/`: the funding-source entity in `BillingEntities.cs`,
+  the shared price rules in `Services/ClaimPricing.cs`, the plan pricing engine in `Pricing/`. The claiming
+  flow continues in Infrastructure services — `ClaimGenerationService`, `InvoiceService`, `BprCsvService`
+  (the NDIA bulk payment file), `CatalogueImportService` — with Excel and PDF output via ClosedXML and
+  QuestPDF respectively. The old billable-event / claim-batch / service-booking pipeline was retired.
 
 - Startup in `Program.cs` also registers `HolidaySyncBackgroundService` (a hosted service that
   syncs public holidays via the Nager provider, driven by `HolidaySync:*` config), wraps DB
@@ -231,7 +231,7 @@ npm run lint
 
 ## Testing
 
-- Backend tests live in `Odip.Tests` and use xUnit, covering `Billing/BillingPrototypeTests.cs`,
+- Backend tests live in `Odip.Tests` and use xUnit, covering `Billing/ShiftClaimGenerationServiceTests.cs`,
   the `Services/*Tests.cs` files, `Middleware/ExceptionHandlingMiddlewareTests.cs`, and
   `CurrentTenantTests.cs`. They rely on Moq for mocking and EF Core InMemory for the database
   layer, with fixtures defined inline within each test file rather than shared through a common

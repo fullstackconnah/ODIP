@@ -293,7 +293,7 @@ describe('usePermissions.canAccessPage — ReadOnly', () => {
   })
 
   // Each of these sits behind a controller that admits only SuperAdmin, Admin and Coordinator, reads included: see READ_ONLY_REFUSED_PAGES.
-  const REFUSED: PageKey[] = ['rostering', 'leave-approvals', 'billing', 'claims', 'settings', 'caregiver-submissions', 'agreement-drafts', 'budgets']
+  const REFUSED: PageKey[] = ['rostering', 'leave-approvals', 'claims', 'settings', 'caregiver-submissions', 'agreement-drafts', 'budgets']
   const ALLOWED: PageKey[] = [
     'dashboard', 'portal', 'portal-leave', 'trips', 'schedule', 'participants', 'accommodation', 'vehicles', 'staff', 'tasks', 'incidents', 'bookings',
     'qualifications', 'medications',
@@ -326,9 +326,9 @@ describe('usePermissions.canAccessPage — ReadOnly', () => {
   // Round 1b (review F18, decided): a service agreement draft carries money, and money is never visible to SupportWorker or ReadOnly: the API refuses them every GET of it.
   it("keeps the agreement drafts off a SupportWorker's pages too: their allow-list does not name them, as it does not name the other pages that carry money", () => {
     setUserRole('SupportWorker')
-    render(<PermissionsProbe pages={['agreement-drafts', 'billing', 'claims', 'participants']} />)
+    render(<PermissionsProbe pages={['agreement-drafts', 'claims', 'participants']} />)
     expect(screen.getByTestId('page-agreement-drafts')).toHaveTextContent('false')
-    expect(screen.getByTestId('page-billing')).toHaveTextContent('false')
+    expect(screen.getByTestId('page-claims')).toHaveTextContent('false')
     expect(screen.getByTestId('page-participants')).toHaveTextContent('true')
   })
 
@@ -376,7 +376,6 @@ describe('PrivateRoute — pages ReadOnly is refused', () => {
   it.each<[string, PageKey, boolean]>([
     ['/rostering', 'rostering', false],
     ['/rostering/leave', 'leave-approvals', false],
-    ['/billing', 'billing', false],
     ['/claims/c-1', 'claims', false],
     ['/settings', 'settings', false],
     ['/caregiver-submissions', 'caregiver-submissions', true],
