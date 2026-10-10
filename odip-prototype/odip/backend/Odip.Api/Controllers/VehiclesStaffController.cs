@@ -815,7 +815,6 @@ public class StaffController : ControllerBase
         // Newest 10 active incidents where this staff member is the INVOLVED user, not the
         // reporter — same projection shape as IncidentsController.GetAll.
         var recentIncidents = await _db.IncidentReports
-            .Include(i => i.TripInstance).Include(i => i.ReportedByUser).Include(i => i.InvolvedParticipant)
             .Where(i => i.InvolvedUserId == id && i.IsActive)
             .OrderByDescending(i => i.IncidentDateTime)
             .Take(10)

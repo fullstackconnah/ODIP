@@ -219,11 +219,7 @@ public class IncidentsController : ControllerBase
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
-        var query = _db.IncidentReports
-            .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByUser)
-            .Include(i => i.InvolvedParticipant)
-            .AsQueryable();
+        var query = _db.IncidentReports.AsQueryable();
 
         // Default: only active records unless explicitly filtered
         if (isActive != false)
@@ -708,9 +704,6 @@ public class IncidentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetByTrip(Guid tripId, CancellationToken ct)
     {
         var items = await _db.IncidentReports
-            .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByUser)
-            .Include(i => i.InvolvedParticipant)
             .Where(i => i.TripInstanceId == tripId && i.IsActive)
             .OrderByDescending(i => i.IncidentDateTime)
             .Select(IncidentProjections.ToListDto(DateTime.UtcNow)).ToListAsync(ct);
@@ -722,9 +715,6 @@ public class IncidentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetByShift(Guid shiftId, CancellationToken ct)
     {
         var items = await _db.IncidentReports
-            .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByUser)
-            .Include(i => i.InvolvedParticipant)
             .Where(i => i.ShiftId == shiftId && i.IsActive)
             .OrderByDescending(i => i.IncidentDateTime)
             .Select(IncidentProjections.ToListDto(DateTime.UtcNow)).ToListAsync(ct);
@@ -736,9 +726,6 @@ public class IncidentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetOverdueQsc(CancellationToken ct)
     {
         var items = await _db.IncidentReports
-            .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByUser)
-            .Include(i => i.InvolvedParticipant)
             .Where(QscReporting.IsOverdueExpr(DateTime.UtcNow))
             .OrderByDescending(i => i.CreatedAt)
             .Select(IncidentProjections.ToListDto(DateTime.UtcNow)).ToListAsync(ct);
