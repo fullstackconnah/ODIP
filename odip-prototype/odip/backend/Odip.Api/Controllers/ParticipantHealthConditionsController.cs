@@ -6,6 +6,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -17,7 +18,7 @@ namespace Odip.Api.Controllers;
 /// type with no row yet) and an upsert-by-type endpoint. This is the write path for ongoing edits
 /// from the participant detail page; the wizard's initial/draft submissions instead go through
 /// <see cref="ParticipantsController.UpsertHealthConditionsAsync"/>, sharing the same upsert
-/// semantics via <see cref="ApplyAnswer"/>.
+/// semantics via <see cref="ParticipantGridRules"/>.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -55,26 +56,13 @@ public class ParticipantHealthConditionsController : ControllerBase
             _db.ParticipantHealthConditions.Add(row);
         }
 
-        ApplyAnswer(row, dto.Has, dto.Severity, dto.PlanProvided, dto.TrainingRequired, dto.Notes);
+        ParticipantGridRules.ApplyAnswer(row, dto.Has, dto.Severity, dto.PlanProvided, dto.TrainingRequired, dto.Notes);
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<ParticipantHealthConditionDto>.Ok(ToDto(row)));
     }
 
     // ── Helpers ────────────────────────────────────────────────────
-
-    /// <summary>Sets a health-condition row's answer. Unlike ParticipantConsent, there is no separate
-    /// "recorded at" timestamp to conditionally re-stamp here — this grid is support-planning detail,
-    /// not a compliance record with its own audit-timestamp contract.</summary>
-    internal static void ApplyAnswer(ParticipantHealthCondition row, bool? has, string? severity, bool? planProvided, bool? trainingRequired, string? notes)
-    {
-        row.Has = has;
-        row.Severity = string.IsNullOrWhiteSpace(severity) ? null : severity.Trim();
-        row.PlanProvided = planProvided;
-        row.TrainingRequired = trainingRequired;
-        row.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
-        row.UpdatedAt = DateTime.UtcNow;
-    }
 
     /// <summary>Every <see cref="HealthConditionType"/>, in declaration order, backed by <paramref name="existingRows"/>
     /// where a row exists and a synthesized (Id = null, Has = null) placeholder otherwise.</summary>

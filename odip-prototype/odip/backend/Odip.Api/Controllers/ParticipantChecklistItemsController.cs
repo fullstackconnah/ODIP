@@ -6,6 +6,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -17,7 +18,7 @@ namespace Odip.Api.Controllers;
 /// placeholder for any type with no row yet) and an upsert-by-type endpoint. This is the write path
 /// for ongoing edits from the participant detail page; the wizard's initial/draft submissions
 /// instead go through <see cref="ParticipantsController.UpsertChecklistItemsAsync"/>, sharing the
-/// same upsert semantics via <see cref="ApplyAnswer"/>.
+/// same upsert semantics via <see cref="ParticipantGridRules"/>.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -55,21 +56,13 @@ public class ParticipantChecklistItemsController : ControllerBase
             _db.ParticipantChecklistItems.Add(row);
         }
 
-        ApplyAnswer(row, dto.Value, dto.Notes);
+        ParticipantGridRules.ApplyAnswer(row, dto.Value, dto.Notes);
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<ParticipantChecklistItemDto>.Ok(ToDto(row)));
     }
 
     // ── Helpers ────────────────────────────────────────────────────
-
-    /// <summary>Sets a checklist row's answer — same "no separate audit timestamp" shape as ParticipantAdlAssessment.ApplyAnswer.</summary>
-    internal static void ApplyAnswer(ParticipantChecklistItem row, ChecklistItemValue? value, string? notes)
-    {
-        row.Value = value;
-        row.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
-        row.UpdatedAt = DateTime.UtcNow;
-    }
 
     /// <summary>Every <see cref="ChecklistItemType"/>, in declaration order (Community Mobility &amp;
     /// Transport Risk first, then Community Behaviours of Concern — see <see cref="ChecklistItemTypeGroups"/>),
