@@ -206,7 +206,8 @@ owner decision (collected under Open Flags at the end).
     the over and approaching findings already say what the alerts say ("{pool} is $X over
     this period's $Y (to {end})"); only the label and the money format still differ.
   - Follow-ups left by the phase 2b work (small; none blocks the merge):
-    - **B6, a tenancy gap in two claim writes.** `ClaimsController.UpdateClaim` (`PUT /claims/{id}`)
+    - [x] **B6, a tenancy gap in two claim writes.** DONE on `fix/safety-tenancy` (see the end of this
+      item). `ClaimsController.UpdateClaim` (`PUT /claims/{id}`)
       and `UpdateLineItem` (the line-item `PATCH`) read a claim by id with no tenant scope:
       `TripClaim` is not a tenant entity, and claims are meant to be reached through the
       tenant-filtered shifts or bookings of their lines. The gap predates phase 2b, which added
@@ -217,6 +218,11 @@ owner decision (collected under Open Flags at the end).
       both writes through the tenant-filtered shifts or bookings of the claim's lines (as
       `BudgetLedgerService.ForClaimAsync` and `NdiaRejectionReader` already do) and answers 404
       otherwise, with cross-tenant tests.
+      Done: every by-id claim route (the two writes, `GetClaim`, `DeleteClaim`, the trip's claim list,
+      the BPR CSV and the invoice) starts from `ClaimsController.TenantClaims()`, the claims whose trip
+      (Trip kind) or participant (Shift kind) the caller can see, and answers 404 for another
+      organisation's claim. `Odip.Tests/Claims/ClaimsTenantScopeTests.cs` holds a cross-tenant test per
+      route and an own-claim control for each write.
     - **B10, the alerts route depends on the whole-organisation budget ledger.**
       `GET participants/alerts` feeds the dashboard's Critical tile and the Participants table,
       which also carry the medication, restrictive-practice, incident and QSC alerts. It now calls
