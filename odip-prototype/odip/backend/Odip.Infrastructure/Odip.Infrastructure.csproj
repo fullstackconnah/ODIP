@@ -6,12 +6,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.102.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.2.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.11" />
+    <!-- Load-bearing, do not swap for a FrameworkReference: Microsoft.Extensions.Hosting 9.0.0 brings System.Text.Json 9.0.0 into the API.
+         Its TimeOnly converter reads "22:00" (the plan blocks' start and end); the 8.0 framework's reads only "22:00:00", and PlanBlockTests fail without it. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
     <PackageReference Include="QuestPDF" Version="2024.12.2" />
   </ItemGroup>
