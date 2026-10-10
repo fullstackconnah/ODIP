@@ -13,7 +13,7 @@ import { REASON_COPY, addDays, bandLabel, formatServiceDate, friendlyMessage, gr
 import { joinList, plural } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
 import { rosterLink } from '@/lib/rosterLinks'
-import { formatCurrency, formatWithTimeZone } from '@/lib/utils'
+import { extractErrorMessage, formatCurrency, formatWithTimeZone } from '@/lib/utils'
 import ElectronicSigningEvidencePanel from '@/pages/ElectronicSigningEvidencePanel'
 import { ApprovalDialog } from './ApprovalDialog'
 import { FlagBadges } from './PlanMessages'
@@ -30,14 +30,6 @@ function draftStatusLabel(status: string) {
   return DRAFT_STATUS_LABELS[status] ?? status
 }
 
-function messageFor(error: unknown) {
-  if (typeof error === 'object' && error && 'response' in error) {
-    const data = (error as { response?: { data?: { message?: string; errors?: string[] } } }).response?.data
-    return data?.errors?.[0] || data?.message || 'The server could not price this draft. Check the state, effective dates and configured catalogue code.'
-  }
-  return 'The server could not price this draft. Check the state, effective dates and configured catalogue code.'
-}
-
 /** Each card owns its mutation state so results cannot cross draft versions. */
 function DraftSimulationPanel({ participantId, draftId }: { participantId: string; draftId: string }) {
   const simulation = useDemoJourneySimulation()
@@ -49,7 +41,7 @@ function DraftSimulationPanel({ participantId, draftId }: { participantId: strin
       <p className="text-sm">Demo-only, dev-auth walkthrough: simulated signing → activation → booking. It creates no signature evidence, participant activation, booking, billable event, invoice, or claim.</p>
       <button type="button" onClick={() => simulation.mutate({ participantId, draftId })} disabled={simulation.isPending} className="min-h-[44px] rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-[var(--control-h)] text-sm font-medium disabled:opacity-50">{simulation.isPending ? 'Running simulation…' : 'Run Demo-only simulation'}</button>
       {simulation.data && <div role="status" className="rounded border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-sm space-y-1"><strong>{simulation.data.banner}</strong><p>{simulation.data.signing}</p><p>{simulation.data.activation}</p><p>{simulation.data.booking}</p><p className="font-medium">{simulation.data.rateLabel}</p></div>}
-      {simulation.isError && <Callout tone="error" className="max-w-prose">{messageFor(simulation.error)}</Callout>}
+      {simulation.isError && <Callout tone="error" className="max-w-prose">{extractErrorMessage(simulation.error, 'The server could not price this draft. Check the state, effective dates and configured catalogue code.')}</Callout>}
     </div>
   </details>
 }

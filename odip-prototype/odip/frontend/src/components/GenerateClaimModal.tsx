@@ -4,8 +4,8 @@ import { Modal } from '@/components/Modal'
 import { DataTable } from '@/components/DataTable'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import type { TripDetailDto, ClaimPreviewResponseDto, ClaimPreviewLineItemDto } from '@/api/types'
-import type { AxiosError } from 'axios'
 import { plural } from '@/lib/format'
+import { extractErrorMessage } from '@/lib/utils'
 
 interface GenerateClaimModalProps {
   tripId: string
@@ -52,10 +52,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
           setPreviewData(data)
           setStep('preview')
         },
-        onError: (err: unknown) => {
-          const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-          setError(axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || 'Failed to generate preview. Check provider settings and confirm the trip has confirmed bookings.')
-        },
+        onError: (err: unknown) => setError(extractErrorMessage(err, 'Failed to generate preview. Check provider settings and confirm the trip has confirmed bookings.')),
       },
     )
   }
@@ -66,10 +63,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
       { tripId, data: { departureTime, returnTime, activeHoursPerDay } },
       {
         onSuccess: () => onSuccess(),
-        onError: (err: unknown) => {
-          const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-          setError(axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || 'Failed to generate claim.')
-        },
+        onError: (err: unknown) => setError(extractErrorMessage(err, 'Failed to generate claim.')),
       },
     )
   }

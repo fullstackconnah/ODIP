@@ -13,6 +13,7 @@ import {
 import type { EventTemplateDto, TripListDto } from '@/api/types'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { SlideOver } from '@/components/SlideOver'
+import { extractErrorMessage } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
 // Schema & types
@@ -162,11 +163,7 @@ export default function TemplateFormPanel({
         onClose()
       }, 1500)
     } catch (err: any) {
-      setError(
-        err?.response?.data?.errors?.[0] ||
-          err?.response?.data?.message ||
-          'Failed to save template.',
-      )
+      setError(extractErrorMessage(err, 'Failed to save template.'))
     }
   }
 

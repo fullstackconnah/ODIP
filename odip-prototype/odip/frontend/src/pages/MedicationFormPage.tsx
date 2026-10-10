@@ -2,7 +2,6 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
-import type { AxiosError } from 'axios'
 import { useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { useCreateMedication, useUpdateMedication, useMedication, useParticipant } from '@/api/hooks'
@@ -15,7 +14,7 @@ import { MEDICATION_FORMS, MEDICATION_ROUTES, DRUG_SCHEDULES, MEDICATION_SUPPORT
 import type { MedicationForm, MedicationRoute, Weekday } from '@/api/types/enums'
 import { FORM_LABELS, ROUTE_LABELS, DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_STATUS_LABELS, PACKAGING_LABELS, FREQUENCY_LABELS, WEEKDAY_LABELS } from '@/api/types/medications'
 import type { CreateMedicationDto, UpdateMedicationDto } from '@/api/types/medications'
-import { formatDateAu } from '@/lib/utils'
+import { extractErrorMessage, formatDateAu } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
@@ -121,12 +120,7 @@ const medicationResolver: Resolver<MedicationFormData> = (values) => {
 }
 
 function extractMedicationErrorMessage(err: unknown, isEdit: boolean): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return (
-    axiosErr?.response?.data?.errors?.[0] ||
-    axiosErr?.response?.data?.message ||
-    `Failed to ${isEdit ? 'update' : 'create'} medication. Please check your input and try again.`
-  )
+  return extractErrorMessage(err, `Failed to ${isEdit ? 'update' : 'create'} medication. Please check your input and try again.`)
 }
 
 export default function MedicationFormPage() {

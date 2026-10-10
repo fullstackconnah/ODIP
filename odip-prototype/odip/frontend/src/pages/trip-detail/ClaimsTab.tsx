@@ -9,6 +9,7 @@ import { RejectClaimDialog } from '@/components/RejectClaimDialog'
 import type { TripClaimStatus } from '@/api/types/enums'
 import type { TripClaimListDto, UpdateClaimDto } from '@/api/types/claims'
 import type { TripDetailDto } from '@/api/types/trips'
+import { extractErrorMessage } from '@/lib/utils'
 
 const CLAIM_STATUS_ITEMS = [
   { value: 'Draft', label: 'Draft' },
@@ -39,12 +40,6 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
   const [rejectError, setRejectError] = useState<string | null>(null)
   const [rejectLoading, setRejectLoading] = useState(false)
 
-  /** The server's own reason for a refusal, in plain words. */
-  function reasonOf(err: unknown, fallback: string): string {
-    const axiosErr = err as { response?: { data?: { errors?: string[]; message?: string } } }
-    return axiosErr?.response?.data?.errors?.[0] ?? axiosErr?.response?.data?.message ?? fallback
-  }
-
   /**
    * Writes the same change to each claim; settles when every one has been written, and refuses with the first refusal. Each claim is its own `mutateAsync` promise: `mutate` with callbacks reports
    * only the LAST call made on a mutation, so with two or more claims the others never settled and the bulk change waited for ever.
@@ -59,7 +54,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
       await writeClaims(ids, { status: status as TripClaimStatus })
       setSelectedClaimIds(new Set())
     } catch (err: unknown) {
-      setError(reasonOf(err, 'Failed to update claims.'))
+      setError(extractErrorMessage(err, 'Failed to update claims.'))
     } finally {
       setBulkLoading(false)
     }
@@ -79,7 +74,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
       setRejecting(null)
       setSelectedClaimIds(new Set())
     } catch (err: unknown) {
-      setRejectError(reasonOf(err, 'Failed to reject the claim.'))
+      setRejectError(extractErrorMessage(err, 'Failed to reject the claim.'))
     } finally {
       setRejectLoading(false)
     }
@@ -94,8 +89,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
     deleteClaim.mutate(deletingClaim.id, {
       onSuccess: () => setDeletingClaim(null),
       onError: (err: unknown) => {
-        const axiosErr = err as { response?: { data?: { errors?: string[]; message?: string } } }
-        setError(axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || 'Failed to delete claim.')
+        setError(extractErrorMessage(err, 'Failed to delete claim.'))
         setDeletingClaim(null)
       },
     })

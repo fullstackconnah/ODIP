@@ -4,16 +4,11 @@ import { useCreateElectronicSigningSnapshot, useSubmitElectronicSigningEvidence 
 import type { ElectronicSigningSnapshotDto, ServiceAgreementDraftDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { FormField } from '@/components/FormField'
+import { extractErrorMessage } from '@/lib/utils'
 
 type Props = { participantId: string; draft: ServiceAgreementDraftDto }
 
-function errorMessage(error: unknown) {
-  if (typeof error === 'object' && error && 'response' in error) {
-    const data = (error as { response?: { data?: { message?: string; errors?: string[] } } }).response?.data
-    return data?.errors?.[0] || data?.message || 'The evidence request could not be completed.'
-  }
-  return 'The evidence request could not be completed.'
-}
+const errorMessage = (error: unknown) => extractErrorMessage(error, 'The evidence request could not be completed.')
 
 function newIdempotencyKey() {
   return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`

@@ -34,7 +34,7 @@ import {
 } from '@/lib/incidentPrefill'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { formatFlaggedCategoryList } from '@/lib/shiftNoteKeywords'
-import { formatDateAu } from '@/lib/utils'
+import { extractErrorMessage, formatDateAu } from '@/lib/utils'
 import {
   incidentResolver, type IncidentFormData,
   basicsSchema, restrictivePracticeSchema, detailsSchema, witnessesSchema, complianceSchema,
@@ -160,11 +160,7 @@ function extractIncidentErrorMessage(err: unknown, isEdit: boolean): string {
   if (axiosErr?.response?.status === 403) {
     return "You don't have permission to file incident reports."
   }
-  return (
-    axiosErr?.response?.data?.errors?.[0] ||
-    axiosErr?.response?.data?.message ||
-    `Failed to ${isEdit ? 'update' : 'create'} incident report. Please check your input and try again.`
-  )
+  return extractErrorMessage(err, `Failed to ${isEdit ? 'update' : 'create'} incident report. Please check your input and try again.`)
 }
 
 /**
