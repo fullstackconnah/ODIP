@@ -53,7 +53,7 @@ export function NoShowModal({ claimId, lineItem, onClose, onSuccess }: NoShowMod
       size="sm"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button onClick={handleConfirm} disabled={updateLineItem.isPending}>

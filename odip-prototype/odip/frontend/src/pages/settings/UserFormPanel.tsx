@@ -334,7 +334,7 @@ export default function UserFormPanel({
       footerClassName="px-6 py-4"
       footer={
         <div className="flex items-center gap-3 justify-end">
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button onClick={() => handleSubmit()} disabled={isBusy || !isFormValid}>

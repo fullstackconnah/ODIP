@@ -268,7 +268,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
 
         {/* Modal footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[rgba(195,201,181,0.2)]">
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!tripEditForm || updateTrip.isPending}>

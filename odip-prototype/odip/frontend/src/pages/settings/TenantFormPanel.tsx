@@ -395,7 +395,7 @@ export default function TenantFormPanel({
       footerClassName="px-6 py-4 flex items-center justify-end gap-3"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button onClick={() => handleSubmit()} disabled={!canSubmit}>
