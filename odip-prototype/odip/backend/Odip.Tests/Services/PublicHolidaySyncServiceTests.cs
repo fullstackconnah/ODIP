@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Odip.Application.Interfaces;
-using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 using Xunit;

@@ -6,7 +6,6 @@ using Moq;
 using Odip.Application.Interfaces;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
-using Odip.Domain.Interfaces;
 using Odip.Domain.Notifications;
 using Odip.Infrastructure.BackgroundServices;
 using Odip.Infrastructure.Data;
