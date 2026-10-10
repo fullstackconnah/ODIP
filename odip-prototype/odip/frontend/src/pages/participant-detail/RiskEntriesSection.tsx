@@ -6,6 +6,8 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { usePermissions } from '@/lib/permissions'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import { AT_RISK_PARTIES } from '@/api/types/enums'
 import { AT_RISK_PARTY_LABELS } from '@/api/types/risk-entries'
 import type { ParticipantRiskEntryDto } from '@/api/types/risk-entries'
@@ -21,15 +23,6 @@ type RiskEntryFormState = {
 
 const EMPTY_FORM: RiskEntryFormState = {
   atRiskParty: 'Participant', description: '', mitigationNotes: '', isActive: true,
-}
-
-function RiskEntrySkeleton() {
-  return (
-    <div className="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] animate-pulse space-y-2">
-      <div className="h-4 w-1/4 bg-[var(--color-muted)] rounded" />
-      <div className="h-3 w-full bg-[var(--color-muted)] rounded" />
-    </div>
-  )
 }
 
 function RiskEntryRow({ entry, canWrite, onEdit, onDelete }: {
@@ -88,7 +81,10 @@ function RiskEntryRow({ entry, canWrite, onEdit, onDelete }: {
  */
 export default function RiskEntriesSection({ participantId }: { participantId: string | undefined }) {
   const { canWriteRisks } = usePermissions()
-  const { data: entries = [], isLoading } = useParticipantRiskEntries(participantId, true)
+  const entriesQuery = useParticipantRiskEntries(participantId, true)
+  const entries = entriesQuery.data ?? []
+  // A failed or paused request is not an empty list: "No risks recorded" is only for one that succeeded and came back empty.
+  const phase = queryPhase(entriesQuery)
   const createEntry = useCreateRiskEntry()
   const updateEntry = useUpdateRiskEntry()
   const deleteEntry = useDeleteRiskEntry()
@@ -200,10 +196,10 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
         </div>
       )}
 
-      {isLoading ? (
-        <div className="space-y-3">
-          <RiskEntrySkeleton />
-        </div>
+      {phase === 'loading' ? (
+        <PageState kind="loading" noun="risk list" />
+      ) : phase === 'error' ? (
+        <PageState kind="error" noun="risk list" onRetry={() => entriesQuery.refetch()} />
       ) : activeEntries.length === 0 ? (
         // The same compact strip Health Conditions and the ADL grids use for "nothing recorded" (a bordered,
         // centred, muted line about 60px tall), not an EmptyState: its 40px icon, 18px title, three lines of

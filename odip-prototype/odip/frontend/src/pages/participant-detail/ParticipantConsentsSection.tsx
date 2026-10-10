@@ -6,6 +6,8 @@ import { FormField } from '@/components/FormField'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { StatusBadge } from '@/components/StatusBadge'
 import { usePermissions } from '@/lib/permissions'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { CONSENT_TYPES } from '@/api/types/enums'
 import { CONSENT_TYPE_LABELS } from '@/api/types/consents'
@@ -31,10 +33,6 @@ function consentStatus(granted: boolean | null): { status: string; label: string
   return { status: 'draft', label: 'Not recorded' }
 }
 
-function ConsentSkeleton() {
-  return <div className="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] animate-pulse h-14" />
-}
-
 /**
  * INTAKE sub-wave B — a compact section (not a full tab) on the participant detail page's Details
  * tab, mirroring RiskEntriesSection's placement judgement: consents are a short, fixed 7-row list
@@ -46,7 +44,10 @@ function ConsentSkeleton() {
  */
 export default function ParticipantConsentsSection({ participantId }: { participantId: string | undefined }) {
   const { canWriteConsents } = usePermissions()
-  const { data: consents = [], isLoading } = useParticipantConsents(participantId)
+  const consentsQuery = useParticipantConsents(participantId)
+  const consents = consentsQuery.data ?? []
+  // A failed or paused request is not an empty list: "No consents recorded" is only for one that succeeded and came back empty.
+  const phase = queryPhase(consentsQuery)
   const upsertConsent = useUpsertConsent()
 
   const [editing, setEditing] = useState<ParticipantConsentDto | null>(null)
@@ -101,11 +102,10 @@ export default function ParticipantConsentsSection({ participantId }: { particip
         <FileCheck2 className="w-4 h-4" /> Consents
       </h3>
 
-      {isLoading ? (
-        <div className="space-y-2">
-          <ConsentSkeleton />
-          <ConsentSkeleton />
-        </div>
+      {phase === 'loading' ? (
+        <PageState kind="loading" noun="consent list" />
+      ) : phase === 'error' ? (
+        <PageState kind="error" noun="consent list" onRetry={() => consentsQuery.refetch()} />
       ) : ordered.length === 0 ? (
         // GetForParticipant normally returns a row per ConsentType, but a still-empty list must not
         // leave a titled card with an empty body — say so in one muted line (density spec §5).

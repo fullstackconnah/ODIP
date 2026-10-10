@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
 import { PageHeader } from '@/components/PageHeader'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import { useCaregiverSubmissions } from '@/api/hooks/caregiver'
 import type { CaregiverSubmissionListItemDto, CaregiverSubmissionStatus } from '@/api/types/caregiver'
 
@@ -19,7 +21,9 @@ const STATUS_ITEMS = (['Submitted', 'Draft', 'Accepted', 'Rejected', 'Revoked'] 
 
 export default function CaregiverSubmissionsPage() {
   const [status, setStatus] = useState<CaregiverSubmissionStatus>('Submitted')
-  const { data = [], isLoading } = useCaregiverSubmissions(status)
+  const submissions = useCaregiverSubmissions(status)
+  // A failed or paused request is not an empty list: "No submitted caregiver forms" is only for one that succeeded and came back empty.
+  const phase = queryPhase(submissions)
   const navigate = useNavigate()
 
   const columns: Column<CaregiverSubmissionListItemDto>[] = [
@@ -45,14 +49,19 @@ export default function CaregiverSubmissionsPage() {
         title="Caregiver forms"
         action={<Dropdown variant="pill" items={STATUS_ITEMS} value={status} onChange={(v) => setStatus(v as CaregiverSubmissionStatus)} label="Status" />}
       />
-      <DataTable
-        data={data}
-        columns={columns}
-        keyField="id"
-        loading={isLoading}
-        sortable
-        emptyMessage={`No ${status.toLowerCase()} caregiver forms.`}
-      />
+      {phase === 'loading' ? (
+        <PageState kind="loading" noun="caregiver form list" />
+      ) : phase === 'error' ? (
+        <PageState kind="error" noun="caregiver form list" onRetry={() => submissions.refetch()} />
+      ) : (
+        <DataTable
+          data={submissions.data ?? []}
+          columns={columns}
+          keyField="id"
+          sortable
+          emptyMessage={`No ${status.toLowerCase()} caregiver forms.`}
+        />
+      )}
     </div>
   )
 }

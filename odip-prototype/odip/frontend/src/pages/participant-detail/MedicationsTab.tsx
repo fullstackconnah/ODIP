@@ -93,7 +93,9 @@ export default function MedicationsTab({ participantId }: { participantId: strin
   const [showInactive, setShowInactive] = useState(false)
   const { data: medicationsData, isLoading, isError, refetch } = useParticipantMedications(participantId, true)
   const medications = medicationsData ?? NO_MEDICATIONS
-  const { data: administrations = [] } = useParticipantAdministrations(participantId, isoDaysAgo(14), isoDaysAgo(0))
+  const administrationsQuery = useParticipantAdministrations(participantId, isoDaysAgo(14), isoDaysAgo(0))
+  const administrations = administrationsQuery.data ?? []
+  const administrationsPhase = queryPhase(administrationsQuery)
 
   const activeMeds = useMemo(() => medications.filter(m => m.status !== 'Ceased'), [medications])
   const inactiveMeds = useMemo(() => medications.filter(m => m.status === 'Ceased'), [medications])
@@ -169,7 +171,11 @@ export default function MedicationsTab({ participantId }: { participantId: strin
 
       <div>
         <h3 className="text-sm font-semibold text-[var(--color-muted-foreground)] mb-2">Recent administrations (last 14 days)</h3>
-        {administrations.length === 0 ? (
+        {administrationsPhase === 'loading' ? (
+          <PageState kind="loading" noun="administration list" />
+        ) : administrationsPhase === 'error' ? (
+          <PageState kind="error" noun="administration list" onRetry={() => administrationsQuery.refetch()} />
+        ) : administrations.length === 0 ? (
           <p className="text-sm text-[var(--color-muted-foreground)]">No administrations recorded in the last 14 days.</p>
         ) : (
           <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] divide-y divide-[var(--color-border)] overflow-x-auto">

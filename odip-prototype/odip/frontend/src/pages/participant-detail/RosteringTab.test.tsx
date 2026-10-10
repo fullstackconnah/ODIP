@@ -37,7 +37,7 @@ describe('RosteringTab', () => {
     mockUseParticipantRostering.mockReturnValue({ data: undefined, isLoading: true })
     renderTab()
 
-    expect(screen.getByText('Loading...')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(/loading rostering details/i)
   })
 
   it('shows empty states when there is no assigned staff or upcoming shifts', () => {
