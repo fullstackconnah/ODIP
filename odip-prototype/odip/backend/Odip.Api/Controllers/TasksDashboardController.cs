@@ -539,7 +539,7 @@ public class ConflictsController : ControllerBase
         int updated = 0;
 
         // Accommodation conflicts
-        // Only the caller's own rows: reservations and staff assignments have no query filter, so each is limited to the caller's trips (TripInstances is tenant-filtered).
+        // Only the caller's own rows: reservations and the two kinds of assignment have no query filter, so each is limited to the caller's trips (TripInstances is tenant-filtered).
         var reservations = await _db.AccommodationReservations
             .Where(r => _db.TripInstances.Any(t => t.Id == r.TripInstanceId))
             .Where(r => r.ReservationStatus != ReservationStatus.Cancelled && r.ReservationStatus != ReservationStatus.Unavailable)
@@ -556,6 +556,7 @@ public class ConflictsController : ControllerBase
         // Vehicle conflicts
         var vehicleAssignments = await _db.VehicleAssignments
             .Include(a => a.TripInstance)
+            .Where(a => _db.TripInstances.Any(t => t.Id == a.TripInstanceId))
             .Where(a => a.Status != VehicleAssignmentStatus.Cancelled && a.Status != VehicleAssignmentStatus.Unavailable)
             .ToListAsync(ct);
 

@@ -348,8 +348,10 @@ public class CrossTenantTripTests
         using var db = Db();
         var foreign = PlantReservation(db, B, out _, out _);
         var foreignStaff = new StaffAssignment { Id = Guid.NewGuid(), TripInstanceId = foreign.TripInstanceId, UserId = User(db, B).Id, HasConflict = true };
+        var foreignVehicle = new VehicleAssignment { Id = Guid.NewGuid(), TripInstanceId = foreign.TripInstanceId, VehicleId = Vehicle(db, B).Id, HasOverlapConflict = true };
         db.AccommodationReservations.First(r => r.Id == foreign.Id).HasOverlapConflict = true;
         db.StaffAssignments.Add(foreignStaff);
+        db.VehicleAssignments.Add(foreignVehicle);
         db.SaveChanges();
 
         var result = await new ConflictsController(db).Recheck(CancellationToken.None);
@@ -357,5 +359,6 @@ public class CrossTenantTripTests
         Assert.IsType<OkObjectResult>(result.Result);
         Assert.True((await db.AccommodationReservations.AsNoTracking().SingleAsync(r => r.Id == foreign.Id)).HasOverlapConflict);
         Assert.True((await db.StaffAssignments.AsNoTracking().SingleAsync(a => a.Id == foreignStaff.Id)).HasConflict);
+        Assert.True((await db.VehicleAssignments.AsNoTracking().SingleAsync(a => a.Id == foreignVehicle.Id)).HasOverlapConflict);
     }
 }
