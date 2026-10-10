@@ -45,8 +45,7 @@ const TAB_KEYS: TabId[] = TABS.map(t => t.id)
 /**
  * Hub page that unifies the Enquiries, Onboarding and Active participants routes
  * behind one shared PageHeader and one accessible Tabs primitive. Each tab mounts
- * the same body content as the corresponding standalone page; the standalone
- * /inquiries, /onboarding and /participants routes continue to work for deep links.
+ * the table of the corresponding lifecycle stage; /inquiries and /onboarding redirect to its tabs.
  *
  * The New enquiry button lives in the hub's PageHeader `action` slot so it's
  * visible on every stage (enquiries / onboarding / active) for users with the

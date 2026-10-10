@@ -12,9 +12,7 @@ const DashboardPage = React.lazy(() => import('./pages/DashboardPage'))
 const TripsPage = React.lazy(() => import('./pages/TripsPage'))
 const TripDetailPage = React.lazy(() => import('./pages/TripDetailPage'))
 const TripCreatePage = React.lazy(() => import('./pages/TripCreatePage'))
-// ParticipantsPage is still imported lazily by its own test file (./pages/ParticipantsPage.test.tsx),
-// but in App routing the list-level /participants route now resolves to ParticipantsHubPage —
-// the three lifecycle stages share one PageHeader.
+// The list-level /participants route resolves to ParticipantsHubPage: the three lifecycle stages share one PageHeader.
 const ParticipantsHubPage = React.lazy(() => import('./pages/ParticipantsHubPage'))
 const OnboardingDetailPage = React.lazy(() => import('./pages/OnboardingDetailPage'))
 const InquiryFormPage = React.lazy(() => import('./pages/InquiryFormPage'))
