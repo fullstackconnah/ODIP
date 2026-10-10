@@ -7,6 +7,7 @@ using Odip.Domain.Notifications;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Notifications;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Notifications;
 
@@ -17,14 +18,7 @@ namespace Odip.Tests.Notifications;
 /// </summary>
 public class NotificationOutboxTests
 {
-    private static OdipDbContext CreateDb(string dbName)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb(string dbName) => TestDb.Create(dbName);
 
     private static User SeedUser(OdipDbContext db, Guid? tenantId = null)
     {

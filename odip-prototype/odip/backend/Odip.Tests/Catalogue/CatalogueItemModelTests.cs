@@ -8,6 +8,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Catalogue;
 
@@ -19,13 +20,7 @@ public class CatalogueItemModelTests
 {
     private const string MigrationTypeName = "Odip.Infrastructure.Migrations.AddCatalogueItemClassificationAndZonePrices";
 
-    private static OdipDbContext CreateDb()
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-        return new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb() => TestDb.Create();
 
     [Fact]
     public void ClaimDayType_keeps_its_persisted_values_and_appends_WeekdayNight()

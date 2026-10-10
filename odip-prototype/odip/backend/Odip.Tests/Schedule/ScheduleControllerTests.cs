@@ -11,6 +11,7 @@ using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Schedule;
 
@@ -21,18 +22,7 @@ namespace Odip.Tests.Schedule;
 /// </summary>
 public class ScheduleControllerTests
 {
-    private static OdipDbContext CreateDb(string dbName)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb(string dbName) => TestDb.Create(dbName);
 
     private static User SeedStaff(OdipDbContext db)
     {

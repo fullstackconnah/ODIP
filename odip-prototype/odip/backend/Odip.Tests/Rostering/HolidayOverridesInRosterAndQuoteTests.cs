@@ -16,6 +16,7 @@ using Odip.Infrastructure.Services;
 using Odip.Tests.Catalogue;
 using Xunit;
 using static Odip.Tests.PlanPricing.PlanPricingTestSupport;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Rostering;
 
@@ -29,13 +30,7 @@ public class HolidayOverridesInRosterAndQuoteTests
     private static readonly DateOnly BoxingDay = new(2026, 12, 26);   // a Saturday the synced feed has no row for
     private static readonly Guid Tenant = Guid.NewGuid();
 
-    private static OdipDbContext CreateDb()
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-        return new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb() => TestDb.Create();
 
     private static (RosteringController Controller, CheckShiftDto Dto) ArrangeRoster(OdipDbContext db, string providerState, DateOnly serviceDate)
     {

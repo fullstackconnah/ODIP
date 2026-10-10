@@ -9,6 +9,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Controllers;
 
@@ -19,18 +20,7 @@ namespace Odip.Tests.Controllers;
 /// </summary>
 public class StaffControllerTests
 {
-    private static OdipDbContext CreateDb(string dbName, Guid tenantId)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns(tenantId);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb(string dbName, Guid tenantId) => TestDb.ForTenant(dbName, tenantId);
 
     [Fact]
     public async Task Create_WithWorkerScreeningFields_PersistsAndReturnsThem()

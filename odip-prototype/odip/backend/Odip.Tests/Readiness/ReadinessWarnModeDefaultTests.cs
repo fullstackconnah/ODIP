@@ -12,6 +12,7 @@ using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Readiness;
 
@@ -30,18 +31,7 @@ public class ReadinessWarnModeDefaultTests
     // A Monday, so WeekStart(ServiceDate) == ServiceDate.
     private static readonly DateOnly ServiceDate = new(2026, 10, 5);
 
-    private static OdipDbContext CreateDb()
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb() => TestDb.Create();
 
     private static RosteringController Rostering(OdipDbContext db) =>
         new(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
