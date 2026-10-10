@@ -1736,6 +1736,7 @@ public record ActivityDto
 public record CreateActivityDto
 {
     public Guid? EventTemplateId { get; init; }
+    [Required, StringLength(200, MinimumLength = 1)]
     public string ActivityName { get; init; } = string.Empty;
     public ActivityCategory Category { get; init; }
     public string? Location { get; init; }

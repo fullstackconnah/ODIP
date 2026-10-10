@@ -235,11 +235,19 @@ public class ActivitiesController : ControllerBase
         return Ok(ApiResponse<List<ActivityDto>>.Ok(items));
     }
 
-    // One library for every organisation (Activity has no organisation column), so writing it changes every organisation's activity picker: SuperAdmin only until it becomes per organisation.
+    /// <summary>An activity's event template must be the caller's (EventTemplates is tenant-filtered). It need not be active: editing an old activity re-sends the id of a template that has since been deactivated.</summary>
+    private Task<bool> IsValidEventTemplateRefAsync(Guid? templateId, CancellationToken ct) =>
+        templateId.HasValue
+            ? _db.EventTemplates.AnyAsync(e => e.Id == templateId.Value, ct)
+            : Task.FromResult(true);
+
     [HttpPost]
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ActivityDto>>> Create([FromBody] CreateActivityDto dto, CancellationToken ct)
     {
+        if (!await IsValidEventTemplateRefAsync(dto.EventTemplateId, ct))
+            return BadRequest(ApiResponse<ActivityDto>.Fail("Event template not found."));
+
         var a = new Activity
         {
             Id = Guid.NewGuid(), EventTemplateId = dto.EventTemplateId, ActivityName = dto.ActivityName,
@@ -252,11 +260,13 @@ public class ActivitiesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ActivityDto>>> Update(Guid id, [FromBody] UpdateActivityDto dto, CancellationToken ct)
     {
         var a = await _db.Activities.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<ActivityDto>.Fail("Activity not found"));
+        if (!await IsValidEventTemplateRefAsync(dto.EventTemplateId, ct))
+            return BadRequest(ApiResponse<ActivityDto>.Fail("Event template not found."));
 
         a.EventTemplateId = dto.EventTemplateId; a.ActivityName = dto.ActivityName;
         a.Category = dto.Category; a.Location = dto.Location;
@@ -358,6 +368,12 @@ public class TripDayScheduleController : ControllerBase
     private IQueryable<ScheduledActivity> TenantActivities() =>
         _db.ScheduledActivities.Where(s => _db.TripDays.Any(d => d.Id == s.TripDayId && _db.TripInstances.Any(t => t.Id == d.TripInstanceId)));
 
+    /// <summary>A scheduled activity's library activity must be the caller's (Activities is tenant-filtered). It need not be active: editing an old trip re-sends the id of an activity that has since been deactivated.</summary>
+    private Task<bool> IsValidActivityRefAsync(Guid? activityId, CancellationToken ct) =>
+        activityId.HasValue
+            ? _db.Activities.AnyAsync(a => a.Id == activityId.Value, ct)
+            : Task.FromResult(true);
+
     [HttpPut("trip-days/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<TripDayDto>>> UpdateTripDay(Guid id, [FromBody] UpdateTripDayDto dto, CancellationToken ct)
@@ -375,6 +391,8 @@ public class TripDayScheduleController : ControllerBase
     {
         if (!await _db.TripDays.AnyAsync(d => d.Id == id && _db.TripInstances.Any(t => t.Id == d.TripInstanceId), ct))
             return NotFound(ApiResponse<ScheduledActivityDto>.Fail("Trip day not found"));
+        if (!await IsValidActivityRefAsync(dto.ActivityId, ct))
+            return BadRequest(ApiResponse<ScheduledActivityDto>.Fail("Activity not found."));
 
         var a = new ScheduledActivity
         {
@@ -409,6 +427,8 @@ public class TripDayScheduleController : ControllerBase
     {
         var a = await TenantActivities().Include(s => s.Activity).FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<ScheduledActivityDto>.Fail("Activity not found"));
+        if (!await IsValidActivityRefAsync(dto.ActivityId, ct))
+            return BadRequest(ApiResponse<ScheduledActivityDto>.Fail("Activity not found."));
 
         a.ActivityId = dto.ActivityId; a.Title = dto.Title; a.StartTime = dto.StartTime;
         a.EndTime = dto.EndTime; a.Location = dto.Location; a.AccessibilityNotes = dto.AccessibilityNotes;

@@ -163,4 +163,57 @@ public class CrossTenantPostgresTests : IClassFixture<PostgresFixture>
         Assert.True(await check.ParticipantBookings.AnyAsync(x => x.Id == foreign.Booking.Id));
         Assert.Equal(IncidentStatus.Draft, (await check.IncidentReports.AsNoTracking().SingleAsync(i => i.Id == foreign.Incident.Id)).Status);
     }
+
+    [SkippableFact]
+    public async Task TheActivityLibrary_IsPerOrganisation_OnRealPostgres()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var cs = await _pg.CreateDatabaseAsync();
+        await using (var setup = PostgresFixture.NewContext(cs))
+            await setup.Database.MigrateAsync();
+
+        var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+        Activity own, foreign;
+        EventTemplate foreignTemplate;
+        ScheduledActivity scheduled;
+        await using (var admin = PostgresFixture.NewContext(cs))
+        {
+            admin.Tenants.AddRange(new Tenant { Id = a, Name = "A", EmailDomain = "a.example.com" }, new Tenant { Id = b, Name = "B", EmailDomain = "b.example.com" });
+            admin.SaveChanges();
+            own = new Activity { Id = Guid.NewGuid(), TenantId = a, ActivityName = "Own picnic", Category = ActivityCategory.Leisure };
+            foreign = new Activity { Id = Guid.NewGuid(), TenantId = b, ActivityName = "Foreign picnic", Category = ActivityCategory.Leisure };
+            foreignTemplate = new EventTemplate { Id = Guid.NewGuid(), TenantId = b, EventCode = "BEACH", EventName = "Beach week" };
+            var trip = new TripInstance { Id = Guid.NewGuid(), TenantId = a, TripName = "Trip", StartDate = new DateOnly(2026, 2, 1), DurationDays = 3 };
+            var day = new TripDay { Id = Guid.NewGuid(), TripInstanceId = trip.Id, DayNumber = 1, Date = trip.StartDate };
+            scheduled = new ScheduledActivity { Id = Guid.NewGuid(), TripDayId = day.Id, ActivityId = own.Id, Title = "Picnic" };
+            admin.AddRange(own, foreign, foreignTemplate, trip, day, scheduled);
+            admin.SaveChanges();
+        }
+
+        await using var db = TenantDb(cs, a);
+        var ct = CancellationToken.None;
+        var activities = new ActivitiesController(db);
+
+        // The library lists only A's activity, and A cannot reach B's by id.
+        var listed = Assert.IsType<ApiResponse<List<ActivityDto>>>(Assert.IsType<OkObjectResult>((await activities.GetAll(ct)).Result).Value).Data!;
+        Assert.Equal(own.Id, Assert.Single(listed).Id);
+        Assert.IsType<NotFoundObjectResult>((await activities.Update(foreign.Id, new UpdateActivityDto { ActivityName = "Hijacked" }, ct)).Result);
+
+        // A new activity is stamped with A; B's event template and B's activity are refused where an id comes in the body, and A's own are accepted.
+        var created = Assert.IsType<ApiResponse<ActivityDto>>(Assert.IsType<OkObjectResult>((await activities.Create(new CreateActivityDto { ActivityName = "New picnic" }, ct)).Result).Value).Data!;
+        Assert.IsType<BadRequestObjectResult>((await activities.Create(new CreateActivityDto { ActivityName = "Stolen", EventTemplateId = foreignTemplate.Id }, ct)).Result);
+        var days = new TripDayScheduleController(db);
+        Assert.IsType<BadRequestObjectResult>((await days.AddActivity(scheduled.TripDayId, new CreateScheduledActivityDto { Title = "Stolen", ActivityId = foreign.Id }, ct)).Result);
+        Assert.IsType<BadRequestObjectResult>((await days.UpdateActivity(scheduled.Id, new UpdateScheduledActivityDto { Title = "Stolen", ActivityId = foreign.Id }, ct)).Result);
+        Assert.IsType<OkObjectResult>((await days.UpdateActivity(scheduled.Id, new UpdateScheduledActivityDto { Title = "Picnic", ActivityId = created.Id }, ct)).Result);
+
+        // Nothing of organisation B changed, and nothing was written that should have been refused.
+        await using var check = PostgresFixture.NewContext(cs);
+        var rows = await check.Activities.IgnoreQueryFilters().AsNoTracking().ToListAsync();
+        Assert.Equal(3, rows.Count);
+        var kept = rows.Single(r => r.Id == foreign.Id);
+        Assert.Equal(("Foreign picnic", b), (kept.ActivityName, kept.TenantId));
+        Assert.Equal(a, rows.Single(r => r.Id == created.Id).TenantId);
+        Assert.Equal(created.Id, (await check.ScheduledActivities.AsNoTracking().SingleAsync(s => s.Id == scheduled.Id)).ActivityId);
+    }
 }

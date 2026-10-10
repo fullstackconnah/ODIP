@@ -1,13 +1,16 @@
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 
 namespace Odip.Domain.Entities;
 
 /// <summary>
-/// Library of reusable activity options.
+/// An organisation's library of reusable activity options.
 /// </summary>
-public class Activity
+public class Activity : ITenantEntity
 {
     public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Tenant? Tenant { get; set; }
     public Guid? EventTemplateId { get; set; }
     public EventTemplate? EventTemplate { get; set; }
     public string ActivityName { get; set; } = string.Empty;
