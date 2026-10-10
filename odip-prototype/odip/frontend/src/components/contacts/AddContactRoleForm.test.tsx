@@ -219,6 +219,35 @@ describe('AddContactRoleForm', () => {
       expect(onSaved).toHaveBeenCalledTimes(1)
     })
 
+    // Save 1 stores the person and the first role, save 2 is refused (e.g. a primary Next of Kin exists). The form used to keep saying "new person" with both
+    // roles ticked, so the retry posted the first role again and made a second person.
+    it('after a later role is refused, a retry posts only what is left and reuses the person that was made', async () => {
+      const user = userEvent.setup()
+      const onSaved = vi.fn()
+      mockCreateMutateAsync
+        .mockResolvedValueOnce({ data: { id: 'role-1', personId: 'person-new-1' } })
+        .mockRejectedValueOnce(new Error('refused'))
+        .mockResolvedValueOnce({ data: { id: 'role-2', personId: 'person-new-1' } })
+      render(<AddContactRoleForm participantId="participant-1" mode="create" onSaved={onSaved} onCancel={vi.fn()} />)
+
+      await user.click(screen.getByPlaceholderText('Search people…'))
+      await user.click(screen.getByRole('button', { name: /none of these/i }))
+      await user.type(screen.getByLabelText('First name *'), 'Karen')
+      await user.type(screen.getByLabelText('Last name'), 'Johnson')
+      await user.click(screen.getByRole('checkbox', { name: 'Plan Manager' }))
+      await user.click(screen.getByRole('button', { name: 'Save contact' }))
+
+      expect(mockCreateMutateAsync).toHaveBeenCalledTimes(2)
+      expect(onSaved).not.toHaveBeenCalled()
+      const refusedRole = mockCreateMutateAsync.mock.calls[1][0].data.roleType
+
+      await user.click(screen.getByRole('button', { name: 'Save contact' }))
+
+      expect(mockCreateMutateAsync).toHaveBeenCalledTimes(3)
+      expect(mockCreateMutateAsync.mock.calls[2][0].data).toMatchObject({ roleType: refusedRole, personId: 'person-new-1', newPersonFirstName: null })
+      expect(onSaved).toHaveBeenCalledTimes(1)
+    })
+
     it('renders the union of the selected roles\' fields, each grouped under its own role heading', async () => {
       const user = userEvent.setup()
       render(<AddContactRoleForm participantId="participant-1" mode="create" onSaved={vi.fn()} onCancel={vi.fn()} />)

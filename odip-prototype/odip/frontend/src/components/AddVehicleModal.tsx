@@ -38,6 +38,8 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
   const [isInternal, setIsInternal] = useState(true)
   const [isActive, setIsActive] = useState(true)
   const [noIdReturned, setNoIdReturned] = useState(false)
+  // The vehicle this form already created: when its assignment is refused, the next click assigns it instead of creating another.
+  const [newVehicleId, setNewVehicleId] = useState<string>()
 
   const { data: allVehicles = [] } = useVehicles()
   const createAssignment = useCreateVehicleAssignment()
@@ -108,29 +110,32 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
   const handleCreateAndAssign = async () => {
     if (!vehicleName || !vehicleType || totalSeats === '') return
     setNoIdReturned(false)
-    let newVehicleId: string | undefined
-    try {
-      const res = await createVehicle.mutateAsync({
-        vehicleName,
-        registration: registration || undefined,
-        vehicleType: vehicleType as VehicleType,
-        totalSeats: Number(totalSeats),
-        wheelchairPositions: Number(wheelchairPositions),
-        isInternal,
-        isActive,
-      })
-      newVehicleId = res.data?.id
-    } catch {
-      return // createVehicle.isError shows the inline error
+    let vehicleId = newVehicleId
+    if (!vehicleId) {
+      try {
+        const res = await createVehicle.mutateAsync({
+          vehicleName,
+          registration: registration || undefined,
+          vehicleType: vehicleType as VehicleType,
+          totalSeats: Number(totalSeats),
+          wheelchairPositions: Number(wheelchairPositions),
+          isInternal,
+          isActive,
+        })
+        vehicleId = res.data?.id
+      } catch {
+        return // createVehicle.isError shows the inline error
+      }
+      if (!vehicleId) {
+        // Mutation succeeded but response had no ID — unexpected API shape.
+        // Vehicle was created; user can assign it manually from the fleet list.
+        setNoIdReturned(true)
+        return
+      }
+      setNewVehicleId(vehicleId)
     }
-    if (!newVehicleId) {
-      // Mutation succeeded but response had no ID — unexpected API shape.
-      // Vehicle was created; user can assign it manually from the fleet list.
-      setNoIdReturned(true)
-      return
-    }
     try {
-      await createAssignment.mutateAsync({ tripInstanceId, vehicleId: newVehicleId })
+      await createAssignment.mutateAsync({ tripInstanceId, vehicleId })
       onClose()
     } catch {
       // createAssignment.isError shows the inline error.

@@ -504,6 +504,15 @@ export default function AddContactRoleForm({ participantId, mode, role, onSaved,
           const payload = buildCreatePayloadForRole(form, roleType, personId)
           const res = await createRole.mutateAsync({ participantId, data: payload })
           personId = personId ?? res?.data?.personId
+          // Saved: if a later role is refused, the retry must not post this role or make the person again.
+          const savedPersonId = personId
+          setForm(f => ({
+            ...f,
+            roleTypes: f.roleTypes.filter(rt => rt !== roleType),
+            ...(savedPersonId
+              ? { personMode: 'selected' as const, personId: savedPersonId, selectedPersonLabel: f.personMode === 'new' ? `${f.newFirstName} ${f.newLastName}`.trim() : f.selectedPersonLabel }
+              : {}),
+          }))
         }
       }
       onSaved()

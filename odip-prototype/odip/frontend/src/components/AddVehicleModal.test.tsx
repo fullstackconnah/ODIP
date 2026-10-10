@@ -3,9 +3,11 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AddVehicleModal from './AddVehicleModal'
 
-const { mockCheckMutate, mockCreateAssignmentMutate, mockGetRosterFindings } = vi.hoisted(() => ({
+const { mockCheckMutate, mockCreateAssignmentMutate, mockCreateAssignmentMutateAsync, mockCreateVehicleMutateAsync, mockGetRosterFindings } = vi.hoisted(() => ({
   mockCheckMutate: vi.fn(),
   mockCreateAssignmentMutate: vi.fn(),
+  mockCreateAssignmentMutateAsync: vi.fn(),
+  mockCreateVehicleMutateAsync: vi.fn(),
   mockGetRosterFindings: vi.fn(),
 }))
 
@@ -17,8 +19,8 @@ vi.mock('@/api/hooks', () => ({
     { id: 'vehicle-1', vehicleName: 'Bus 1', registration: 'ABC123', vehicleType: 'Bus', totalSeats: 10, wheelchairPositions: 2, isActive: true },
     { id: 'vehicle-2', vehicleName: 'Van 2', registration: 'XYZ789', vehicleType: 'Van', totalSeats: 6, wheelchairPositions: 0, isActive: true },
   ] }),
-  useCreateVehicleAssignment: () => ({ mutate: mockCreateAssignmentMutate, isPending: false, isError: false, reset: vi.fn() }),
-  useCreateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false, isError: false, reset: vi.fn() }),
+  useCreateVehicleAssignment: () => ({ mutate: mockCreateAssignmentMutate, mutateAsync: mockCreateAssignmentMutateAsync, isPending: false, isError: false, reset: vi.fn() }),
+  useCreateVehicle: () => ({ mutateAsync: mockCreateVehicleMutateAsync, isPending: false, isError: false, reset: vi.fn() }),
   useCheckVehicleAssignment: () => ({ mutate: mockCheckMutate }),
   getRosterFindings: mockGetRosterFindings,
 }))
@@ -26,6 +28,8 @@ vi.mock('@/api/hooks', () => ({
 beforeEach(() => {
   mockCheckMutate.mockReset()
   mockCreateAssignmentMutate.mockReset()
+  mockCreateAssignmentMutateAsync.mockReset()
+  mockCreateVehicleMutateAsync.mockReset()
   mockGetRosterFindings.mockReset()
 })
 
@@ -133,5 +137,32 @@ describe('AddVehicleModal — Select Existing live conflict gate (trip-side pari
 
     expect(screen.queryByPlaceholderText(/why this assignment should proceed/i)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /assign vehicle/i })).not.toBeDisabled()
+  })
+})
+
+// Create & Assign is two writes: the vehicle, then its assignment to the trip. When the assignment is refused the vehicle already exists, and the next click used
+// to create a second one.
+describe('AddVehicleModal — Add New Vehicle: a retry after the assignment fails', () => {
+  it('assigns the vehicle that was already created instead of creating another', async () => {
+    const user = userEvent.setup()
+    mockCreateVehicleMutateAsync.mockResolvedValue({ data: { id: 'vehicle-new' } })
+    mockCreateAssignmentMutateAsync.mockRejectedValueOnce(new Error('refused')).mockResolvedValueOnce({ data: { id: 'assignment-1' } })
+    renderModal()
+
+    await user.click(screen.getByRole('button', { name: 'Add New Vehicle' }))
+    await user.type(screen.getByPlaceholderText('e.g. Toyota HiAce'), 'Spare van')
+    await user.click(screen.getByRole('button', { name: /select type/i }))
+    await user.click(screen.getByRole('option', { name: 'Van' }))
+    await user.type(screen.getAllByRole('spinbutton')[0], '8') // Total seats; Wheelchair positions is the second
+    await user.click(screen.getByRole('button', { name: /create vehicle & assign/i }))
+
+    expect(mockCreateVehicleMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateAssignmentMutateAsync).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('button', { name: /create vehicle & assign/i }))
+
+    expect(mockCreateVehicleMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateAssignmentMutateAsync).toHaveBeenCalledTimes(2)
+    expect(mockCreateAssignmentMutateAsync).toHaveBeenLastCalledWith({ tripInstanceId: 'trip-1', vehicleId: 'vehicle-new' })
   })
 })
