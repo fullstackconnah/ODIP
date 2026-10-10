@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { useState } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import StaffAssignModal from './StaffAssignModal'
@@ -110,32 +111,54 @@ describe('RosterGateFields — trip-side call sites', () => {
 })
 
 describe('StaffAssignModal — buttons are the Button primitive', () => {
-  it('closes from a labelled iconOnly Close button (a --control-h-sm square at --radius-sm) and from Cancel', async () => {
+  it('closes from the dialog Close button and from Cancel', async () => {
     const user = userEvent.setup()
     mockCheckMutate.mockImplementation((_vars, { onSuccess }) => onSuccess([]))
     const onClose = vi.fn()
     render(<StaffAssignModal staff={staff} trip={trip} onClose={onClose} onAssign={vi.fn()} isLoading={false} />)
 
-    // The old icon-only button had no accessible name at all, and was a p-1.5 rounded-full 28px circle.
-    const close = screen.getByRole('button', { name: 'Close' })
-    expect(close).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]', 'rounded-[var(--radius-sm)]')
+    const close = screen.getByRole('button', { name: 'Close dialog' })
     await user.click(close)
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
 
     expect(onClose).toHaveBeenCalledTimes(2)
   })
 
-  it('draws Cancel and the submit button at --control-h, side by side', () => {
+  it('draws Cancel and the submit button at --control-h', () => {
     mockCheckMutate.mockImplementation((_vars, { onSuccess }) => onSuccess([]))
     render(<StaffAssignModal staff={staff} trip={trip} onClose={vi.fn()} onAssign={vi.fn()} isLoading={false} />)
 
     const cancel = screen.getByRole('button', { name: 'Cancel' })
     const submit = screen.getByRole('button', { name: /assign staff/i })
     for (const button of [cancel, submit]) {
-      expect(button).toHaveClass('h-[var(--control-h)]', 'flex-1', 'rounded-[var(--radius-sm)]')
+      expect(button).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
       expect(button.className).not.toMatch(/rounded-full|py-2\.5/)
     }
     expect(submit).toHaveAttribute('type', 'submit')
     expect(cancel).toHaveAttribute('type', 'button')
+  })
+})
+
+describe('StaffAssignModal — dialog behaviour', () => {
+  it('is a named dialog that Escape closes, returning focus to the control that opened it', async () => {
+    const user = userEvent.setup()
+    function Harness() {
+      const [open, setOpen] = useState(false)
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Open it</button>
+          {open && <StaffAssignModal staff={staff} trip={trip} onClose={() => setOpen(false)} onAssign={vi.fn()} isLoading={false} />}
+        </>
+      )
+    }
+    render(<Harness />)
+    const opener = screen.getByRole('button', { name: 'Open it' })
+    await user.click(opener)
+    expect(screen.getByRole('dialog', { name: 'Assign Staff' })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(opener).toHaveFocus()
   })
 })
