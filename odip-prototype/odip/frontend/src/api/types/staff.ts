@@ -201,5 +201,5 @@ export function toUpdateStaffDto(row: StaffListDto, patch: Partial<UpdateStaffDt
     workerScreeningNumber: row.workerScreeningNumber ?? undefined,
     workerScreeningExpiryDate: row.workerScreeningExpiryDate ?? undefined,
     ...patch,
-  }
+  } satisfies Record<Exclude<keyof UpdateStaffDto, 'addressConfirmed'>, unknown> // a field added to the type and missed here is a type error (addressConfirmed is create-only)
 }

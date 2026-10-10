@@ -62,5 +62,5 @@ export function toUpdateReservationDto(r: ReservationDto, patch: Partial<UpdateR
     confirmationReference: r.confirmationReference ?? undefined,
     cancellationReason: r.cancellationReason ?? undefined,
     ...patch,
-  }
+  } satisfies Record<keyof UpdateReservationDto, unknown> // a field added to the type and missed here is a type error
 }
