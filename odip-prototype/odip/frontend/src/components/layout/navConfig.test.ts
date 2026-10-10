@@ -100,7 +100,7 @@ describe('navConfig — who sees what', () => {
     ])
   })
 
-  it('gives ReadOnly what its API lets it read: no Rostering pages but Staff and Qualifications, no Finance, no Caregiver forms, no Settings', () => {
+  it('gives ReadOnly what its API lets it read: no Rostering pages but Staff and Qualifications, no Budgets, no Caregiver forms, no Settings', () => {
     expect(shape(resolveNav(navItems, accessFor('ReadOnly')))).toEqual([
       'Dashboard',
       'My Shifts',

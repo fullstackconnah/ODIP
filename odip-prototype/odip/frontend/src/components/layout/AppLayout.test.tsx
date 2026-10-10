@@ -627,7 +627,6 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     for (const name of [/Board$/, /Patterns$/, /Compatibility$/, /Leave$/, /Completions$/, /Budgets$/, /Caregiver forms$/, /Settings$/]) {
       expect(screen.queryByRole('link', { name }), String(name)).not.toBeInTheDocument()
     }
-    expect(screen.queryByRole('button', { name: /Finance$/ })).not.toBeInTheDocument()
   })
 
   it('shows Caregiver forms only to a role whose route would not bounce it (the route needs write access)', () => {

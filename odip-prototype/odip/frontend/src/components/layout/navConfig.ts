@@ -146,15 +146,8 @@ export const navItems: NavEntry[] = [
       { to: '/qualifications', label: 'Qualifications', msIcon: 'health_and_safety', page: 'qualifications' },
     ],
   },
-  {
-    id: 'finance',
-    label: 'Finance',
-    msIcon: 'payments',
-    children: [
-      // Every participant's budget for the funding period running now, sorted by risk (budget phase 2b). Money, so its own page key: SupportWorker's allow-list does not name it and ReadOnly is refused it.
-      { to: '/budgets', label: 'Budgets', msIcon: 'account_balance_wallet', page: 'budgets' },
-    ],
-  },
+  // Every participant's budget for the funding period running now, sorted by risk (budget phase 2b). Money, so its own page key: SupportWorker's allow-list does not name it and ReadOnly is refused it.
+  { to: '/budgets', label: 'Budgets', msIcon: 'account_balance_wallet', page: 'budgets' },
   { to: '/incidents', label: 'Incidents', msIcon: 'emergency', page: 'incidents', bar: { order: 5, audience: 'field' } },
   { to: '/settings', label: 'Settings', msIcon: 'settings', page: 'settings' },
 ]
