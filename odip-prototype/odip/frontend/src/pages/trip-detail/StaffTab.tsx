@@ -17,6 +17,7 @@ import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
 import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
 import { formatDateAu } from '@/lib/utils'
+import { formatRatio } from '@/lib/format'
 import { ASSIGNMENT_STATUSES, SLEEPOVER_TYPES, type SleepoverType, type AssignmentStatus } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { StaffAssignmentDto, StaffListDto, UpdateStaffAssignmentDto } from '@/api/types/staff'
@@ -253,7 +254,7 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${isStaffed
               ? 'bg-[var(--color-primary-fixed)]/30 text-[var(--color-success)]'
               : 'bg-[var(--color-error-container)]/60 text-[var(--color-destructive)]'}`}>
-              <span>{assigned}/{required} staff</span>
+              <span>{formatRatio(assigned, trip.staffRequired ?? '?')} staff</span>
               <span className="text-xs font-normal">({trip.calculatedStaffRequired.toFixed(2)} required from ratios)</span>
               {!isStaffed && <span className="text-xs">— need {required - assigned} more</span>}
             </div>

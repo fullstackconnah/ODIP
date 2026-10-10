@@ -317,4 +317,16 @@ describe('BookingsTab — the staffing summary shows what the server says the tr
     expect(screen.getByText('Staff Assigned').parentElement).toHaveTextContent('1 / 4')
     expect(screen.getByText('Need 3 more')).toBeInTheDocument()
   })
+
+  it('shows ? for the figure the server has not set (all bookings cancelled and no minimum), not a 0', () => {
+    const unknown = { ...trip, calculatedStaffRequired: 0, staffRequired: null, staffAssignedCount: 0 } as unknown as TripDetailDto
+    render(
+      <MemoryRouter>
+        <BookingsTab tripId="trip-1" trip={unknown} bookings={[makeBooking({ id: 'b1' })]} participants={[]} canWrite isReadOnly={false} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Staff Required').parentElement).toHaveTextContent('? (0.00)')
+    expect(screen.getByText('Staff Assigned').parentElement).toHaveTextContent('0 / ?')
+  })
 })

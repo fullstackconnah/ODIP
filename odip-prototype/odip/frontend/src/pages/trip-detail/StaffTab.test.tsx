@@ -397,23 +397,29 @@ describe('StaffTab — touch targets in the row actions', () => {
 describe('StaffTab — the staffing summary shows what the server says the trip needs', () => {
   const tripNeeding = (calculatedStaffRequired: number, staffRequired: number | null) => ({ ...trip, calculatedStaffRequired, staffRequired }) as TripDetailDto
 
-  it('shows 0/3 and "need 3 more" for a trip the server says needs 3, not a green 0/0', () => {
+  it('shows 0 / 3 and "need 3 more" for a trip the server says needs 3, not a green 0/0', () => {
     render(<StaffTab tripId="trip-1" trip={tripNeeding(3, 3)} staff={[]} canWrite />)
 
-    expect(screen.getByText('0/3 staff')).toBeInTheDocument()
+    expect(screen.getByText('0 / 3 staff')).toBeInTheDocument()
     expect(screen.getByText(/need 3 more/i)).toBeInTheDocument()
   })
 
   it('shows the whole-staff figure the server sends, with the exact figure beside it, and does not work the whole figure out again', () => {
     render(<StaffTab tripId="trip-1" trip={tripNeeding(2.5, 4)} staff={[]} canWrite />)
 
-    expect(screen.getByText('0/4 staff')).toBeInTheDocument()
+    expect(screen.getByText('0 / 4 staff')).toBeInTheDocument()
     expect(screen.getByText(/2\.50 required from ratios/)).toBeInTheDocument()
   })
 
   it('shows the figure the server sends while no booking has set one (the trip\'s own minimum)', () => {
     render(<StaffTab tripId="trip-1" trip={tripNeeding(0, 2)} staff={[]} canWrite />)
 
-    expect(screen.getByText('0/2 staff')).toBeInTheDocument()
+    expect(screen.getByText('0 / 2 staff')).toBeInTheDocument()
+  })
+
+  it('shows ? when the server has no figure yet (nothing booked and no minimum), as the schedule screen does, not a 0 that reads as fully staffed', () => {
+    render(<StaffTab tripId="trip-1" trip={tripNeeding(0, null)} staff={[]} canWrite />)
+
+    expect(screen.getByText('0 / ? staff')).toBeInTheDocument()
   })
 })

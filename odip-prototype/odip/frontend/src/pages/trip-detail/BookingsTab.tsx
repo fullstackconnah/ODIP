@@ -627,13 +627,13 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-3">
               <p className="text-xs text-[var(--color-muted-foreground)]">Staff Required</p>
-              <p className="text-xl font-bold mt-1">{rounded} <span className="text-sm font-normal text-[var(--color-muted-foreground)]">({rawTotal.toFixed(2)})</span></p>
+              <p className="text-xl font-bold mt-1">{trip.staffRequired ?? '?'} <span className="text-sm font-normal text-[var(--color-muted-foreground)]">({rawTotal.toFixed(2)})</span></p>
               {noRatioCount > 0 && <p className="text-xs text-[var(--color-warning)] mt-1">{plural(noRatioCount, 'participant')} without ratio</p>}
             </div>
             <div className={`rounded-[var(--radius-md)] p-3 ${isStaffed ? 'bg-[var(--color-primary-fixed)]/30' : 'bg-[var(--color-error-container)]/60'}`}>
               <p className="text-xs text-[var(--color-muted-foreground)]">Staff Assigned</p>
               <p className={`text-xl font-bold mt-1 ${isStaffed ? 'text-[var(--color-success)]' : 'text-[var(--color-destructive)]'}`}>
-                {formatRatio(assigned, rounded)}
+                {formatRatio(assigned, trip.staffRequired ?? '?')}
               </p>
               <p className={`text-xs mt-1 ${isStaffed ? 'text-[var(--color-success)]' : 'text-[var(--color-destructive)]'}`}>
                 {isStaffed ? 'Fully staffed' : `Need ${rounded - assigned} more`}
