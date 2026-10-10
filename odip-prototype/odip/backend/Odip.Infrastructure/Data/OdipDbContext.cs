@@ -1783,6 +1783,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<EventTemplate>()
             .HasIndex(e => e.TenantId);
 
+        modelBuilder.Entity<Activity>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<Activity>()
+            .HasIndex(e => e.TenantId);
+
         modelBuilder.Entity<TripInstance>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<TripInstance>()

@@ -61,6 +61,14 @@ internal static class CrossTenant
         return template;
     }
 
+    public static Activity Activity(OdipDbContext db, Guid tenantId, string name = "Beach morning", bool isActive = true)
+    {
+        var activity = new Activity { Id = Guid.NewGuid(), TenantId = tenantId, ActivityName = name, Category = ActivityCategory.Leisure, IsActive = isActive };
+        db.Activities.Add(activity);
+        db.SaveChanges();
+        return activity;
+    }
+
     public static Vehicle Vehicle(OdipDbContext db, Guid tenantId)
     {
         var vehicle = new Vehicle { Id = Guid.NewGuid(), TenantId = tenantId, VehicleName = "Van", Registration = "ABC123", TotalSeats = 8, WheelchairPositions = 1 };
