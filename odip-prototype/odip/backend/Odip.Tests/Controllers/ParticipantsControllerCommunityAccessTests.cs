@@ -85,6 +85,29 @@ public class ParticipantsControllerCommunityAccessTests
         Assert.All(untouched, c => Assert.Null(c.Id));
     }
 
+    /// <summary>Notes are trimmed and spaces-only notes are stored as null: the rule in ParticipantChecklistItemsController.ApplyAnswer, which the wizard's
+    /// save (UpsertChecklistItemsAsync) goes through. It lost its only test when the nested checklist-items route was deleted.</summary>
+    [Fact]
+    public async Task Create_ChecklistItemNotes_SpacesOnlyAreStoredAsNull_AndPaddedNotesAreTrimmed()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var dto = MinimalCreateDto() with
+        {
+            ChecklistItems = new List<CreateParticipantChecklistItemDto>
+            {
+                new() { ItemType = ChecklistItemType.UsesWheelchair, Value = ChecklistItemValue.Yes, Notes = "   " },
+                new() { ItemType = ChecklistItemType.HarmToSelf, Value = ChecklistItemValue.No, Notes = " x " },
+            },
+        };
+        var created = Assert.IsType<CreatedAtActionResult>((await controller.Create(dto, CancellationToken.None)).Result);
+
+        var detail = await GetByIdData(controller, Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value).Data!.Id);
+
+        Assert.Null(detail.ChecklistItems.Single(c => c.ItemType == ChecklistItemType.UsesWheelchair).Notes);
+        Assert.Equal("x", detail.ChecklistItems.Single(c => c.ItemType == ChecklistItemType.HarmToSelf).Notes);
+    }
+
     /// <summary>Task 4 — Upsert, leave-alone mode: an Update payload that omits a previously-set
     /// checklist item leaves that item's existing row untouched (not cleared, not deleted).
     /// Confirmed by reading UpsertChecklistItemsAsync/ParticipantsController.cs: it iterates only
