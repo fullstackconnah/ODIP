@@ -30,6 +30,13 @@ public class TripClaim
 
     public TripClaimStatus Status { get; set; } = TripClaimStatus.Draft;
     public string ClaimReference { get; set; } = string.Empty;
+
+    /// <summary>
+    /// "TC-{code}-{yyyyMMdd}-{first 6 of the claim id}" for <see cref="ClaimReference"/>, which is unique: the id part keeps apart two claims made the same day for one participant or trip
+    /// (shift claims over different ranges; a rejected trip claim made again). The code is a NDIS number or trip code, at most 20 characters, so this is at most 39 of the column's 50.
+    /// </summary>
+    public static string ReferenceFor(string code, Guid claimId) =>
+        $"TC-{code}-{DateTime.UtcNow.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture)}-{claimId.ToString("N")[..6].ToUpperInvariant()}";
     public decimal TotalAmount { get; set; }
     public decimal TotalApprovedAmount { get; set; }
 
