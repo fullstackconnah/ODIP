@@ -1,4 +1,4 @@
-import { useIncidents, useUpdateIncident, useDeleteIncident, useOverdueQscIncidents, useFlaggedShiftNotes } from '@/api/hooks'
+import { useIncidents, useRestoreIncident, useDeleteIncident, useOverdueQscIncidents, useFlaggedShiftNotes } from '@/api/hooks'
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import type { IncidentListDto, FlaggedShiftNoteDto } from '@/api/types'
 import { INCIDENT_STATUS_LABELS, type IncidentStatus } from '@/api/types/enums'
@@ -192,18 +192,18 @@ export default function IncidentsPage() {
       return next
     })
   }
-  const updateIncident = useUpdateIncident()
+  const restoreIncident = useRestoreIncident()
   const deleteIncident = useDeleteIncident()
   const { data: overdueQsc = [] } = useOverdueQscIncidents()
 
   const { showArchived, params, toggleButtons, confirmDialog, actionButtons } = useArchiveRestore<any>({
     deleteMutation: deleteIncident,
-    restoreMutation: updateIncident,
+    restoreMutation: restoreIncident,
     entityName: (i) => i.title,
     entityId: (i) => i.id,
     archiveVia: 'status',
     archiveStatus: 'Closed',
-    restoreData: (i) => ({ ...i, status: 'Draft', isActive: true }),
+    restoreData: () => ({ status: 'Draft' }),   // the hook builds the rest of the body from the stored incident
     editPath: (i) => `/incidents/${i.id}/edit`,
   })
 
