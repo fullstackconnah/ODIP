@@ -941,6 +941,8 @@ public record TripDetailDto : TripListDto
     public int? RequiredBedrooms { get; init; }
     public int? MinStaffRequired { get; init; }
     public decimal CalculatedStaffRequired { get; init; }
+    /// <summary>Whole staff the trip needs, as <see cref="Odip.Domain.Entities.TripInstance.StaffRequired"/> works it out; null while nothing has set it.</summary>
+    public int? StaffRequired { get; init; }
     public string? Notes { get; init; }
     public int HighSupportCount { get; init; }
     public int WheelchairCount { get; init; }

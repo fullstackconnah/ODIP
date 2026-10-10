@@ -4,7 +4,7 @@ import { useForm, useWatch, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateStaff, useUpdateStaff, useStaffDetail, useEnsureStaffSignInAccount } from '@/api/hooks'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { FormField } from '@/components/FormField'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
@@ -22,6 +22,7 @@ import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
 import { describeEmailOutcome, ensureAndSendSetPasswordEmail, type EmailOutcome } from '@/lib/signInEmail'
 import { extractErrorMessage } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
+import { useFillOnce } from '@/hooks/useFillOnce'
 
 const POSITION_ITEMS: DropdownItem[] = [
   { value: 'SupportWorker', label: 'Support Worker' },
@@ -144,31 +145,29 @@ export default function StaffCreatePage() {
 
   const typedEmail = useWatch({ control, name: 'email' })
 
-  useEffect(() => {
-    if (existing) {
-      reset({
-        firstName: existing.firstName ?? '',
-        lastName: existing.lastName ?? '',
-        position: existing.position ?? 'SupportWorker',
-        role: existing.role ?? 'SupportWorker',
-        email: existing.email ?? '',
-        mobile: existing.mobile ?? '',
-        region: existing.region ?? '',
-        isDriverEligible: existing.isDriverEligible ?? false,
-        isFirstAidQualified: existing.isFirstAidQualified ?? false,
-        isMedicationCompetent: existing.isMedicationCompetent ?? false,
-        isManualHandlingCompetent: existing.isManualHandlingCompetent ?? false,
-        isOvernightEligible: existing.isOvernightEligible ?? false,
-        firstAidExpiryDate: existing.firstAidExpiryDate ?? '',
-        driverLicenceExpiryDate: existing.driverLicenceExpiryDate ?? '',
-        manualHandlingExpiryDate: existing.manualHandlingExpiryDate ?? '',
-        medicationCompetencyExpiryDate: existing.medicationCompetencyExpiryDate ?? '',
-        workerScreeningNumber: existing.workerScreeningNumber ?? '',
-        workerScreeningExpiryDate: existing.workerScreeningExpiryDate ?? '',
-        notes: existing.notes ?? '',
-      })
-    }
-  }, [existing, reset])
+  useFillOnce(existing, record => {
+    reset({
+      firstName: record.firstName ?? '',
+      lastName: record.lastName ?? '',
+      position: record.position ?? 'SupportWorker',
+      role: record.role ?? 'SupportWorker',
+      email: record.email ?? '',
+      mobile: record.mobile ?? '',
+      region: record.region ?? '',
+      isDriverEligible: record.isDriverEligible ?? false,
+      isFirstAidQualified: record.isFirstAidQualified ?? false,
+      isMedicationCompetent: record.isMedicationCompetent ?? false,
+      isManualHandlingCompetent: record.isManualHandlingCompetent ?? false,
+      isOvernightEligible: record.isOvernightEligible ?? false,
+      firstAidExpiryDate: record.firstAidExpiryDate ?? '',
+      driverLicenceExpiryDate: record.driverLicenceExpiryDate ?? '',
+      manualHandlingExpiryDate: record.manualHandlingExpiryDate ?? '',
+      medicationCompetencyExpiryDate: record.medicationCompetencyExpiryDate ?? '',
+      workerScreeningNumber: record.workerScreeningNumber ?? '',
+      workerScreeningExpiryDate: record.workerScreeningExpiryDate ?? '',
+      notes: record.notes ?? '',
+    })
+  }, !isDirty)
 
   const onSubmit = async (data: StaffFormData, addressConfirmed: boolean) => {
     const payload: any = { ...data }

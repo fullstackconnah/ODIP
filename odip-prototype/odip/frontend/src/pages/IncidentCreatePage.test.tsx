@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import IncidentCreatePage from './IncidentCreatePage'
+import { refetchable } from '@/test/refetchable'
 import type { MarIncidentPrefillState, ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import {
   buildIncidentTitleSkeleton, buildIncidentDescriptionSkeleton, buildIncidentDateTime, suggestedIncidentSeverity,
@@ -1201,6 +1202,39 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
         { id: 'witness-1', witnessUserId: 'staff-3', witnessName: 'Alex Rivera' },
       ])
     })
+
+    // UpdateIncident sets the three source links from the body ("assigning null clears the link"), and the router-state hand-offs that carry them exist only on
+    // create. An edit used to send them absent, so saving any change to an incident filed from a MAR or a shift note cut it loose from its source.
+    it('sends the stored source links back on an edit, so saving does not clear them', async () => {
+      mockUseIncident.mockReturnValue({
+        data: { ...existingIncidentWithWitnesses, medicationAdministrationId: 'mar-1', shiftId: 'shift-1', shiftNoteId: 'note-1' },
+      })
+      mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
+      const user = userEvent.setup()
+      renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+      await user.click(await screen.findByRole('button', { name: /Review$/i }))
+      await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+      expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+      const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
+      expect(payload).toMatchObject({ medicationAdministrationId: 'mar-1', shiftId: 'shift-1', shiftNoteId: 'note-1' })
+    })
+
+    it('sends no source links for an edit of an incident that has none', async () => {
+      mockUseIncident.mockReturnValue({ data: { ...existingIncidentWithWitnesses, medicationAdministrationId: null, shiftId: null, shiftNoteId: null } })
+      mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
+      const user = userEvent.setup()
+      renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+      await user.click(await screen.findByRole('button', { name: /Review$/i }))
+      await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+      const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
+      expect(payload.medicationAdministrationId).toBeUndefined()
+      expect(payload.shiftId).toBeUndefined()
+      expect(payload.shiftNoteId).toBeUndefined()
+    })
   })
 })
 
@@ -1244,5 +1278,34 @@ describe('IncidentCreatePage — Back link touch target', () => {
     expect(back).toHaveAttribute('href', '/incidents')
     expect(back).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'hover:text-[var(--color-foreground)]', 'transition-colors')
     expect(back.className).not.toMatch(/44px/)
+  })
+})
+
+// The page builds the form's starting values from the incident once, when it mounts (it waits for the incident to load). A second effect used to reset the form from
+// every later copy of the incident, so a background refetch (window refocus, the 30 s stale time) replaced what the person had typed with the server's values.
+describe('IncidentCreatePage — editing', () => {
+  const incident = {
+    id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'Other', otherTypeSpecify: 'Spilled drink', severity: 'Low', status: 'Draft',
+    title: 'Existing incident', incidentDateTime: '2026-08-01T09:00', location: null, reportedByStaffId: 'staff-1', description: 'Existing description',
+    participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, immediateActionsTaken: null, wereEmergencyServicesCalled: false,
+    emergencyServicesDetails: null, injuries: [], witnesses: [], qscReportingStatus: 'NotRequired', qscReportedAt: null, qscReferenceNumber: null,
+    reviewedByStaffId: null, reviewNotes: null, correctiveActions: null, familyNotified: false, familyNotifiedAt: null,
+    supportCoordinatorNotified: false, supportCoordinatorNotifiedAt: null,
+  }
+
+  it('keeps what was typed when the incident is fetched again', async () => {
+    const user = userEvent.setup()
+    const query = refetchable(incident)
+    mockUseIncident.mockImplementation(() => ({ data: query.useValue() }))
+    renderCreatePage('/incidents/incident-1/edit')
+
+    const title = screen.getByPlaceholderText('Brief incident summary')
+    expect(title).toHaveValue('Existing incident')
+    await user.clear(title)
+    await user.type(title, 'My own title')
+
+    act(() => query.refetchWith({ ...incident, title: 'Changed on the server' }))
+
+    expect(title).toHaveValue('My own title')
   })
 })

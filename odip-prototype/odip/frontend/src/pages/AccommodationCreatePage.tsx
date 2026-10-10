@@ -4,7 +4,6 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateAccommodation, useUpdateAccommodation, useAccommodationDetail } from '@/api/hooks'
-import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
@@ -13,6 +12,7 @@ import { TAP_FLOOR } from '@/components/tapArea'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { formGrid, span } from '@/lib/formGrid'
+import { useFillOnce } from '@/hooks/useFillOnce'
 
 const accommodationSchema = z.object({
   propertyName: z.string().min(1, 'Property name is required'),
@@ -60,35 +60,33 @@ export default function AccommodationCreatePage() {
     },
   })
 
-  useEffect(() => {
-    if (existing) {
-      reset({
-        propertyName: existing.propertyName ?? '',
-        providerOwner: existing.providerOwner ?? '',
-        location: existing.location ?? '',
-        region: existing.region ?? '',
-        address: existing.address ?? '',
-        suburb: existing.suburb ?? '',
-        state: existing.state ?? '',
-        postcode: existing.postcode ?? '',
-        contactPerson: existing.contactPerson ?? '',
-        email: existing.email ?? '',
-        phone: existing.phone ?? '',
-        mobile: existing.mobile ?? '',
-        website: existing.website ?? '',
-        isFullyModified: existing.isFullyModified ?? false,
-        isSemiModified: existing.isSemiModified ?? false,
-        isWheelchairAccessible: existing.isWheelchairAccessible ?? false,
-        accessibilityNotes: existing.accessibilityNotes ?? '',
-        bedroomCount: existing.bedroomCount ?? undefined,
-        bedCount: existing.bedCount ?? undefined,
-        maxCapacity: existing.maxCapacity ?? undefined,
-        beddingConfiguration: existing.beddingConfiguration ?? '',
-        hoistBathroomNotes: existing.hoistBathroomNotes ?? '',
-        generalNotes: existing.generalNotes ?? '',
-      })
-    }
-  }, [existing, reset])
+  useFillOnce(existing, record => {
+    reset({
+      propertyName: record.propertyName ?? '',
+      providerOwner: record.providerOwner ?? '',
+      location: record.location ?? '',
+      region: record.region ?? '',
+      address: record.address ?? '',
+      suburb: record.suburb ?? '',
+      state: record.state ?? '',
+      postcode: record.postcode ?? '',
+      contactPerson: record.contactPerson ?? '',
+      email: record.email ?? '',
+      phone: record.phone ?? '',
+      mobile: record.mobile ?? '',
+      website: record.website ?? '',
+      isFullyModified: record.isFullyModified ?? false,
+      isSemiModified: record.isSemiModified ?? false,
+      isWheelchairAccessible: record.isWheelchairAccessible ?? false,
+      accessibilityNotes: record.accessibilityNotes ?? '',
+      bedroomCount: record.bedroomCount ?? undefined,
+      bedCount: record.bedCount ?? undefined,
+      maxCapacity: record.maxCapacity ?? undefined,
+      beddingConfiguration: record.beddingConfiguration ?? '',
+      hoistBathroomNotes: record.hoistBathroomNotes ?? '',
+      generalNotes: record.generalNotes ?? '',
+    })
+  }, !isDirty)
 
   const onSubmit = async (data: AccommodationFormData) => {
     const payload: any = { ...data }

@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AddContactRoleForm from './AddContactRoleForm'
-import type { ParticipantContactRoleDto, PersonDto } from '@/api/types/contacts'
+import { CONTACT_ROLE_TYPE_LABELS, type ParticipantContactRoleDto, type PersonDto } from '@/api/types/contacts'
+import type { ContactRoleType } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 
 const {
@@ -216,6 +217,38 @@ describe('AddContactRoleForm', () => {
       expect(firstCall.data.newPersonFirstName).toBe('Karen')
       expect(secondCall.data.personId).toBe('person-new-1')
       expect(secondCall.data.newPersonFirstName).toBeNull()
+      expect(onSaved).toHaveBeenCalledTimes(1)
+    })
+
+    // Save 1 stores the person and the first role, save 2 is refused (e.g. a primary Next of Kin exists). The form used to keep saying "new person" with both
+    // roles ticked, so the retry posted the first role again and made a second person.
+    it('after a later role is refused, a retry posts only what is left and reuses the person that was made', async () => {
+      const user = userEvent.setup()
+      const onSaved = vi.fn()
+      mockCreateMutateAsync
+        .mockResolvedValueOnce({ data: { id: 'role-1', personId: 'person-new-1' } })
+        .mockRejectedValueOnce(new Error('refused'))
+        .mockResolvedValueOnce({ data: { id: 'role-2', personId: 'person-new-1' } })
+      render(<AddContactRoleForm participantId="participant-1" mode="create" onSaved={onSaved} onCancel={vi.fn()} />)
+
+      await user.click(screen.getByPlaceholderText('Search people…'))
+      await user.click(screen.getByRole('button', { name: /none of these/i }))
+      await user.type(screen.getByLabelText('First name *'), 'Karen')
+      await user.type(screen.getByLabelText('Last name'), 'Johnson')
+      await user.click(screen.getByRole('checkbox', { name: 'Plan Manager' }))
+      await user.click(screen.getByRole('button', { name: 'Save contact' }))
+
+      expect(mockCreateMutateAsync).toHaveBeenCalledTimes(2)
+      expect(onSaved).not.toHaveBeenCalled()
+      const refusedRole = mockCreateMutateAsync.mock.calls[1][0].data.roleType
+      // The person is told what was saved, or they would add it again.
+      const savedRole = mockCreateMutateAsync.mock.calls[0][0].data.roleType as ContactRoleType
+      expect(screen.getByRole('alert')).toHaveTextContent(`${CONTACT_ROLE_TYPE_LABELS[savedRole]} saved.`)
+
+      await user.click(screen.getByRole('button', { name: 'Save contact' }))
+
+      expect(mockCreateMutateAsync).toHaveBeenCalledTimes(3)
+      expect(mockCreateMutateAsync.mock.calls[2][0].data).toMatchObject({ roleType: refusedRole, personId: 'person-new-1', newPersonFirstName: null })
       expect(onSaved).toHaveBeenCalledTimes(1)
     })
 

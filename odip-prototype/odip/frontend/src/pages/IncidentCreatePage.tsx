@@ -265,46 +265,6 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
     }
   }, [incidentType, setValue])
 
-  useEffect(() => {
-    if (isEdit && existingIncident) {
-      const i = existingIncident
-      reset({
-        serviceType: i.serviceType ?? 'None',
-        tripInstanceId: i.tripInstanceId ?? '',
-        incidentType: i.incidentType ?? 'Other',
-        otherTypeSpecify: i.otherTypeSpecify ?? '',
-        restrictivePracticeType: i.restrictivePracticeType ?? '',
-        restrictivePracticeId: i.restrictivePracticeId ?? '',
-        unapprovedRestrictivePracticeDetails: i.unapprovedRestrictivePracticeDetails ?? '',
-        severity: i.severity ?? 'Medium',
-        title: i.title ?? '',
-        description: i.description ?? '',
-        reportedByStaffId: i.reportedByStaffId ?? '',
-        incidentDateTime: i.incidentDateTime ? i.incidentDateTime.slice(0, 16) : '',
-        location: i.location ?? '',
-        participantBookingId: i.participantBookingId ?? '',
-        involvedParticipantId: i.involvedParticipantId ?? '',
-        involvedStaffId: i.involvedStaffId ?? '',
-        immediateActionsTaken: i.immediateActionsTaken ?? '',
-        wereEmergencyServicesCalled: i.wereEmergencyServicesCalled ?? false,
-        emergencyServicesDetails: i.emergencyServicesDetails ?? '',
-        injuries: (i.injuries ?? []).map((inj) => ({ region: inj.region, injuryType: inj.injuryType, description: inj.description })),
-        witnesses: (i.witnesses ?? []).map((w) => ({ existingId: w.id, witnessUserId: w.witnessUserId, witnessName: w.witnessName })),
-        status: i.status ?? 'Draft',
-        qscReportingStatus: i.qscReportingStatus ?? 'NotRequired',
-        qscReferenceNumber: i.qscReferenceNumber ?? '',
-        qscReportedAt: i.qscReportedAt ? i.qscReportedAt.slice(0, 16) : '',
-        reviewedByStaffId: i.reviewedByStaffId ?? '',
-        reviewNotes: i.reviewNotes ?? '',
-        correctiveActions: i.correctiveActions ?? '',
-        familyNotified: i.familyNotified ?? false,
-        familyNotifiedAt: i.familyNotifiedAt ? i.familyNotifiedAt.slice(0, 16) : '',
-        supportCoordinatorNotified: i.supportCoordinatorNotified ?? false,
-        supportCoordinatorNotifiedAt: i.supportCoordinatorNotifiedAt ? i.supportCoordinatorNotifiedAt.slice(0, 16) : '',
-      })
-    }
-  }, [id, isEdit, existingIncident, reset])
-
   // INC-03: apply the MAR drop-into-draft prefill once, on mount — a useRef "applied once" guard
   // means a coordinator who's already started editing the pre-filled form never has their
   // in-progress edits silently overwritten by a later run of this effect. Every prefilled field
@@ -424,11 +384,12 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         witnessUserId: w.witnessUserId,
         witnessName: w.witnessName,
       })),
-      // Connection map: only ever set on a create-mode submission that started from one of these
-      // two router-state hand-offs — marPrefill/shiftNotePrefill are both hard-gated on !isEdit.
-      medicationAdministrationId: marPrefill ? marPrefill.medicationAdministrationId : undefined,
-      shiftId: shiftNotePrefill ? shiftNotePrefill.shiftId : undefined,
-      shiftNoteId: shiftNotePrefill ? shiftNotePrefill.shiftNoteId : undefined,
+      // Connection map: a create-mode submission takes these from the router-state hand-off it started from
+      // (marPrefill/shiftNotePrefill are both hard-gated on !isEdit). UpdateIncident sets all three from the body,
+      // so an edit sends the stored links back, or saving any change would clear them.
+      medicationAdministrationId: isEdit ? existingIncident?.medicationAdministrationId ?? undefined : marPrefill?.medicationAdministrationId,
+      shiftId: isEdit ? existingIncident?.shiftId ?? undefined : shiftNotePrefill?.shiftId,
+      shiftNoteId: isEdit ? existingIncident?.shiftNoteId ?? undefined : shiftNotePrefill?.shiftNoteId,
     }
 
     try {

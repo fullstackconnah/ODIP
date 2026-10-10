@@ -4,7 +4,6 @@ import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateVehicle, useUpdateVehicle, useVehicleDetail } from '@/api/hooks'
-import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
@@ -14,6 +13,7 @@ import { TAP_FLOOR } from '@/components/tapArea'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { formGrid, span } from '@/lib/formGrid'
+import { useFillOnce } from '@/hooks/useFillOnce'
 
 const VEHICLE_TYPE_ITEMS: DropdownItem[] = [
   { value: 'Car', label: 'Car' },
@@ -59,23 +59,21 @@ export default function VehicleCreatePage() {
     },
   })
 
-  useEffect(() => {
-    if (existing) {
-      reset({
-        vehicleName: existing.vehicleName ?? '',
-        registration: existing.registration ?? '',
-        vehicleType: existing.vehicleType ?? 'Van',
-        totalSeats: existing.totalSeats ?? 0,
-        wheelchairPositions: existing.wheelchairPositions ?? 0,
-        rampHoistDetails: existing.rampHoistDetails ?? '',
-        driverRequirements: existing.driverRequirements ?? '',
-        isInternal: existing.isInternal ?? true,
-        serviceDueDate: existing.serviceDueDate ?? '',
-        registrationDueDate: existing.registrationDueDate ?? '',
-        notes: existing.notes ?? '',
-      })
-    }
-  }, [existing, reset])
+  useFillOnce(existing, record => {
+    reset({
+      vehicleName: record.vehicleName ?? '',
+      registration: record.registration ?? '',
+      vehicleType: record.vehicleType ?? 'Van',
+      totalSeats: record.totalSeats ?? 0,
+      wheelchairPositions: record.wheelchairPositions ?? 0,
+      rampHoistDetails: record.rampHoistDetails ?? '',
+      driverRequirements: record.driverRequirements ?? '',
+      isInternal: record.isInternal ?? true,
+      serviceDueDate: record.serviceDueDate ?? '',
+      registrationDueDate: record.registrationDueDate ?? '',
+      notes: record.notes ?? '',
+    })
+  }, !isDirty)
 
   const onSubmit = async (data: VehicleFormData) => {
     const payload: any = { ...data }

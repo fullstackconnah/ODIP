@@ -301,6 +301,8 @@ export function DataTable<T>({
   const activeSort = isControlled ? controlledSort ?? null : internalSort
 
   const visibleColumns = useMemo(() => columns.filter(c => !c.hidden), [columns])
+  // A server-paged table holds one slice, so it can only offer sorting if the caller turns it into a server request (onSortChange).
+  const canSort = sortable && (!pagination || !!onSortChange)
 
   const sortedData = useMemo(() => {
     // Once a caller pages server-side, `data` is only one slice of the full result set — sorting
@@ -357,7 +359,7 @@ export function DataTable<T>({
   }, [visibleColumns.length, sortedData.length])
 
   function handleSort(key: string) {
-    if (!sortable) return
+    if (!canSort) return
     const col = columns.find(c => c.key === key)
     if (!col?.sortable) return
 
@@ -453,7 +455,7 @@ export function DataTable<T>({
               </th>
             )}
             {visibleColumns.map((col, colIndex) => {
-              const isSortable = sortable && col.sortable
+              const isSortable = canSort && col.sortable
               const isSorted = activeSort?.key === col.key
               const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
 

@@ -5,8 +5,12 @@ import { AxiosError, type InternalAxiosRequestConfig } from 'axios'
 // and when that fails it clears the session and sends the person to /login. That is wrong for the exchange ITSELF. A 401 from it is its answer (a refusal and
 // the code that says why), not an expired session, and the refresh calls the exchange too, so a refusal there used to wait on itself and never settle.
 
-const { getIdToken } = vi.hoisted(() => ({ getIdToken: vi.fn() }))
-vi.mock('@/lib/firebase', () => ({ auth: { currentUser: { getIdToken } }, devAuthEnabled: false }))
+const { getIdToken, signOut, firebaseAuth } = vi.hoisted(() => {
+  const getIdToken = vi.fn()
+  return { getIdToken, signOut: vi.fn(), firebaseAuth: { currentUser: { getIdToken } } }
+})
+vi.mock('@/lib/firebase', () => ({ auth: firebaseAuth, devAuthEnabled: false }))
+vi.mock('firebase/auth', () => ({ signOut }))
 
 type Client = typeof import('./client')
 
@@ -49,6 +53,7 @@ async function freshClient(): Promise<Client> {
 
 beforeEach(() => {
   getIdToken.mockReset().mockResolvedValue('fresh-id-token')
+  signOut.mockReset().mockResolvedValue(undefined)
   localStorage.clear()
 })
 afterEach(() => localStorage.clear())
@@ -118,6 +123,104 @@ describe('a 401 on any other request', () => {
       expect(result).toBe('REJECTED 401')
       expect(localStorage.getItem('odip_token')).toBeNull()
       expect(localStorage.getItem('odip_user')).toBeNull()
+    } finally {
+      jsdomNoise.mockRestore()
+    }
+  })
+})
+
+// Sign-in sets a 7-day cookie that the API accepts when no token is sent, and only POST /auth/logout deletes it. The Sign Out button used to clear the browser
+// keys and leave both the cookie and the Firebase user behind. endSession is the one way out: the button and the expired-session path both use it.
+describe('endSession', () => {
+  const KEYS = ['odip_token', 'odip_user', 'odip_viewing_tenant', 'odip_viewing_user', 'odip_superadmin_user']
+
+  // Signing out sets location.href, which jsdom reports as "not implemented: navigation"; that is the redirect to /login, so keep it out of the output.
+  async function endSessionWith(answers: Parameters<typeof script>[1]) {
+    const client = await freshClient()
+    const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      for (const key of KEYS) localStorage.setItem(key, 'x')
+      localStorage.setItem('odip_token', 'a-session')
+      const requests = script(client, answers)
+      await client.endSession()
+      return requests
+    } finally {
+      jsdomNoise.mockRestore()
+    }
+  }
+
+  it('signs out locally, then asks the server to drop the cookie with the token it had', async () => {
+    const requests = await endSessionWith(() => ({ status: 200, data: { success: true } }))
+
+    expect(requests).toEqual([{ url: '/auth/logout', authorization: 'Bearer a-session' }])
+    expect(signOut).toHaveBeenCalledTimes(1)
+    expect(signOut).toHaveBeenCalledWith(firebaseAuth)
+    for (const key of KEYS) expect(localStorage.getItem(key), key).toBeNull()
+  })
+
+  // The person is signed out of this browser at once; telling the server (the cookie) comes after and is best effort, so a slow or unreachable API cannot leave
+  // the app usable behind a Sign Out button that looks dead. The adapter below does what a real one does with `timeout`: gives up when it is up.
+  it('clears the keys and signs out of Firebase before the logout request is answered, and leaves after its 5 s limit', async () => {
+    const client = await freshClient()
+    const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // endSession imports these on demand; load them now so the faked clock never has to wait for a module load.
+    await import('@/lib/firebase')
+    await import('firebase/auth')
+    vi.useFakeTimers()
+    try {
+      for (const key of KEYS) localStorage.setItem(key, 'x')
+      localStorage.setItem('odip_token', 'a-session')
+      const requests: Array<{ url: string; authorization?: string }> = []
+      client.apiClient.defaults.adapter = (config: InternalAxiosRequestConfig) =>
+        new Promise((_, reject) => {
+          requests.push({ url: String(config.url), authorization: config.headers?.Authorization as string | undefined })
+          setTimeout(() => reject(new AxiosError(`timeout of ${config.timeout}ms exceeded`, 'ECONNABORTED', config)), config.timeout)
+        })
+      let left = false
+      void client.endSession().then(() => { left = true })
+
+      await vi.advanceTimersByTimeAsync(0)
+      for (const key of KEYS) expect(localStorage.getItem(key), key).toBeNull()
+      expect(signOut).toHaveBeenCalledTimes(1)
+      expect(requests).toEqual([{ url: '/auth/logout', authorization: 'Bearer a-session' }])
+      expect(left).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(4999)
+      expect(left).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(left).toBe(true)
+    } finally {
+      vi.useRealTimers()
+      jsdomNoise.mockRestore()
+    }
+  })
+
+  it('still ends the Firebase session and clears the keys when the server cannot be reached', async () => {
+    await endSessionWith(() => ({ status: 500, data: {} }))
+
+    expect(signOut).toHaveBeenCalledTimes(1)
+    for (const key of KEYS) expect(localStorage.getItem(key), key).toBeNull()
+  })
+
+  it('still clears the keys when Firebase refuses to sign out', async () => {
+    signOut.mockRejectedValue(new Error('network'))
+
+    await endSessionWith(() => ({ status: 200, data: { success: true } }))
+
+    for (const key of KEYS) expect(localStorage.getItem(key), key).toBeNull()
+  })
+
+  it('is what an expired session ends with: a refused refresh also posts the logout and signs out of Firebase', async () => {
+    const client = await freshClient()
+    const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      localStorage.setItem('odip_token', 'the-old-token')
+      const requests = script(client, url => (url === '/auth/exchange' ? refusal('TenantInactive') : { status: 401, data: {} }))
+
+      await outcome(client.apiGet('/participants'))
+
+      expect(requests.map(r => r.url)).toContain('/auth/logout')
+      expect(signOut).toHaveBeenCalledTimes(1)
     } finally {
       jsdomNoise.mockRestore()
     }

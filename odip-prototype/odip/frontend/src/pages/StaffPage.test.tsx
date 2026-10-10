@@ -284,3 +284,31 @@ describe('StaffPage — column budget', () => {
     expect(link).toHaveAttribute('title', 'Alex Rivera')
   })
 })
+
+// Restoring from the Archived list is an update, and UpdateStaff replaces the whole record: the body must be the staff member's own fields (toUpdateStaffDto),
+// not the raw list row, which carries list-only fields (id, fullName, username, ...) and nulls where the server wants nothing.
+describe('StaffPage — restoring an archived staff member', () => {
+  it('sends the staff record\'s fields with isActive true, and none of the list-only fields', async () => {
+    const user = userEvent.setup()
+    mockUseStaff.mockReturnValue({
+      data: [makeStaff({ id: 's9', isActive: false, mobile: '0400 111 222', driverLicenceExpiryDate: '2027-03-01', isDriverEligible: true })],
+      isLoading: false,
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('radio', { name: 'Archived' }))
+    await user.click(screen.getByRole('button', { name: 'Restore' }))
+    // The row's Restore opens a confirmation whose own button is also named Restore (the last in the DOM).
+    await user.click(screen.getAllByRole('button', { name: 'Restore' }).at(-1)!)
+
+    expect(mockUpdateMutate).toHaveBeenCalledTimes(1)
+    const { id, data } = mockUpdateMutate.mock.calls[0][0]
+    expect(id).toBe('s9')
+    expect(data).toMatchObject({
+      firstName: 'Alex', lastName: 'Rivera', email: 'alex@example.com', role: 'SupportWorker', position: 'SupportWorker', region: 'North',
+      mobile: '0400 111 222', isDriverEligible: true, driverLicenceExpiryDate: '2027-03-01', isActive: true,
+    })
+    expect(data.notes).toBeUndefined()
+    for (const listOnly of ['id', 'fullName', 'username', 'hasExpiredQualifications']) expect(data).not.toHaveProperty(listOnly)
+  })
+})

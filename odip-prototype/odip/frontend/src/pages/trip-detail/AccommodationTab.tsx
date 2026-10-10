@@ -21,7 +21,7 @@ import { Button } from '@/components/Button'
 import { reservationCountsLabel } from './reservationCounts'
 import { RESERVATION_STATUSES } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
-import type { ReservationDto } from '@/api/types/reservations'
+import { toUpdateReservationDto, type ReservationDto } from '@/api/types/reservations'
 import type { AccommodationListDto } from '@/api/types/accommodation'
 
 /** "Sat, 3 Oct": the weekday and date of a calendar day ("2026-10-03"), the same in every viewer zone (it is never a local midnight). */
@@ -115,8 +115,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
   const handleUpdateReservation = () => {
     if (!editingReservation) return
-    const data: import('@/api/types/reservations').UpdateReservationDto = {
-      tripInstanceId: editReservationForm.tripInstanceId,
+    const data = toUpdateReservationDto(editingReservation, {
       accommodationPropertyId: editReservationForm.accommodationPropertyId,
       checkInDate: editReservationForm.checkInDate,
       checkOutDate: editReservationForm.checkOutDate,
@@ -129,7 +128,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
       dateConfirmed: editReservationForm.dateConfirmed || undefined,
       cancellationReason: editReservationForm.cancellationReason || undefined,
       comments: editReservationForm.comments || undefined,
-    }
+    })
     updateReservation.mutate({ id: editingReservation.id, data }, {
       onSuccess: () => setEditingReservation(null),
     })
@@ -691,18 +690,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
             <button
               onClick={() => {
                 if (!deletingReservation) return
-                const data: import('@/api/types/reservations').UpdateReservationDto = {
-                  tripInstanceId: deletingReservation.tripInstanceId,
-                  accommodationPropertyId: deletingReservation.accommodationPropertyId,
-                  checkInDate: deletingReservation.checkInDate,
-                  checkOutDate: deletingReservation.checkOutDate,
-                  bedroomsReserved: deletingReservation.bedroomsReserved ?? undefined,
-                  bedsReserved: deletingReservation.bedsReserved ?? undefined,
-                  cost: deletingReservation.cost ?? undefined,
-                  reservationStatus: 'Cancelled',
-                  comments: deletingReservation.comments ?? undefined,
-                  confirmationReference: deletingReservation.confirmationReference ?? undefined,
-                }
+                const data = toUpdateReservationDto(deletingReservation, { reservationStatus: 'Cancelled' })
                 cancelReservation.mutate({ id: deletingReservation.id, data }, { onSuccess: () => setDeletingReservation(null) })
               }}
               disabled={cancelReservation.isPending || deleteReservation.isPending}
