@@ -1788,24 +1788,6 @@ public record CreateEventTemplateDto
 public record UpdateEventTemplateDto : CreateEventTemplateDto { }
 
 // ══════════════════════════════════════════════════════════════
-// DOCUMENT DTOs
-// ══════════════════════════════════════════════════════════════
-
-public record TripDocumentDto
-{
-    public Guid Id { get; init; }
-    public Guid TripInstanceId { get; init; }
-    public Guid? ParticipantBookingId { get; init; }
-    public DocumentType DocumentType { get; init; }
-    public string FileName { get; init; } = string.Empty;
-    public string? FilePath { get; init; }
-    public long? FileSize { get; init; }
-    public DateOnly? DocumentDate { get; init; }
-    public string? Notes { get; init; }
-    public DateTime UploadedAt { get; init; }
-}
-
-// ══════════════════════════════════════════════════════════════
 // DASHBOARD DTOs
 // ══════════════════════════════════════════════════════════════
 

@@ -4,7 +4,7 @@
 // differ, so the Funding tab offers to use the plan's), p-0004 a plan with no funding periods, and p-0003 a plan that has ENDED (the tab and the intake card say so, and the readiness
 // reason says the budget has ended). Every other participant has none ("No budget recorded"). All names and figures are fictional.
 //
-// Budget phase 2a adds the LEDGER (GET funding/ledger and funding/ledger/rows). Its arithmetic is mock-ledger.js, which follows the same rules as the server's
+// Budget phase 2a adds the LEDGER (GET funding/ledger). Its arithmetic is mock-ledger.js, which follows the same rules as the server's
 // BudgetLedgerCalculator, so the demo's numbers are worked out rather than typed: p-0002's Core (flexible) pool is FORECAST OVER in the current quarter and its Improved
 // Daily Living Skills pool is APPROACHING, p-0004's Core (flexible) is ON TRACK, and p-0002 has a row in no recorded pool and one dated after its plan ends, so both
 // buckets can be seen on the Funding tab.
@@ -13,7 +13,7 @@
 // kinds only) and the agreement check (POST participants/{id}/funding/agreement-check). The demo has one pool over (p-0005's Core), one forecast over (p-0002's Core), one approaching (p-0002's
 // Improved Daily Living Skills), and one on which the NDIA has refused a claim for want of funds (p-0004's Core, V27), so every alert and every state of the list can be seen.
 
-const { ledgerFor, rowsPage } = require('./mock-ledger.js')
+const { ledgerFor } = require('./mock-ledger.js')
 const { agreementCheckOf, alertsDto, budgetList } = require('./mock-budgets.js')
 
 const DAY = 86_400_000
@@ -193,22 +193,6 @@ function create({ respond, people = [], priceLines = () => [] }) {
       plans: [...plansOf(id)].sort((a, b) => (a.planStart < b.planStart ? 1 : -1)),
       profilePlanDates: profileDates[id] || {},
     })],
-    // Both ledger routes are adjacent because they are one feature: the rows page and the ledger it pages.
-
-    // One more page of one period of one pool's rows, for "show more" once the first 200 are on screen. The
-    // dispatcher matches patterns segment by segment and appends url.searchParams as the trailing argument, so
-    // this handler's only path id is the participant and poolId/periodId/skip/take all arrive in the query string —
-    // which is how the real controller takes them ([FromQuery]), and how the frontend's hook calls it.
-    ['participants/:id/funding/ledger/rows', (id, searchParams) => {
-      const page = rowsPage(
-        ledgerFor(plansOf, id, new Date().toISOString().slice(0, 10), settings.approachingPercent),
-        searchParams.get('poolId'),
-        searchParams.get('periodId'),
-        Number(searchParams.get('skip') || 0),
-        Number(searchParams.get('take') || 200),
-      )
-      return page || respond(404, fail(['That period was not found in the participant\'s current plan.']))
-    }],
     // The budget ledger (phase 2a): the current plan's pools, periods, figures, statuses and rows, worked out by
     // mock-ledger.js (the same rules as the server's calculator). Today is the mock's own date, as the screens use.
     ['participants/:id/funding/ledger', (id) => ledgerFor(plansOf, id, new Date().toISOString().slice(0, 10), settings.approachingPercent)],

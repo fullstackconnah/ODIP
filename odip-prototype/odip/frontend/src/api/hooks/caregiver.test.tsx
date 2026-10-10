@@ -14,7 +14,8 @@ vi.mock('../caregiverClient', () => ({
   caregiverPost: vi.fn(async () => undefined),
 }))
 
-import { useGenerateCaregiverLink, usePublicCaregiverForm, useSaveCaregiverDraft } from './caregiver'
+import { useCaregiverSubmissions, useGenerateCaregiverLink, usePublicCaregiverForm, useSaveCaregiverDraft } from './caregiver'
+import { apiGetWithDefault } from '../client'
 import { caregiverGet, caregiverPut } from '../caregiverClient'
 
 function wrapper(qc: QueryClient) {
@@ -43,5 +44,19 @@ describe('caregiver hooks', () => {
     const { result } = renderHook(() => useSaveCaregiverDraft('tok'), { wrapper: wrapper(qc) })
     await result.current.mutateAsync({ caregiverName: 'Jane', payload: {} })
     expect(caregiverPut).toHaveBeenCalledWith('/public/caregiver/tok/draft', { caregiverName: 'Jane', payload: {} })
+  })
+
+  it('useCaregiverSubmissions asks the server for one participant when given one', async () => {
+    const qc = new QueryClient()
+    renderHook(() => useCaregiverSubmissions('Draft', { participantId: 'p1' }), { wrapper: wrapper(qc) })
+    await waitFor(() => expect(apiGetWithDefault).toHaveBeenCalledWith('/caregiver-submissions?status=Draft&participantId=p1', []))
+  })
+
+  it('useCaregiverSubmissions makes no request while disabled', async () => {
+    vi.mocked(apiGetWithDefault).mockClear()
+    const qc = new QueryClient()
+    const { result } = renderHook(() => useCaregiverSubmissions('Draft', { participantId: 'p1', enabled: false }), { wrapper: wrapper(qc) })
+    await waitFor(() => expect(result.current.fetchStatus).toBe('idle'))
+    expect(apiGetWithDefault).not.toHaveBeenCalled()
   })
 })

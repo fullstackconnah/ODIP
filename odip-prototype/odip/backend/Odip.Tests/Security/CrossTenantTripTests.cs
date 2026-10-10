@@ -64,7 +64,7 @@ public class CrossTenantTripTests
         return booking;
     }
 
-    // ── trips/{id}/schedule and /documents ─────────────────────────────────────────────────────
+    // ── trips/{id}/schedule ─────────────────────────────────────────────────────
 
     [Fact]
     public async Task TripSchedule_TripOfAnotherTenant_ReturnsNotFound()
@@ -85,32 +85,6 @@ public class CrossTenantTripTests
 
         var body = Assert.IsType<ApiResponse<List<TripDayDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.Equal(day.Id, Assert.Single(body.Data!).Id);
-    }
-
-    [Fact]
-    public async Task TripDocuments_TripOfAnotherTenant_ReturnsNotFound()
-    {
-        using var db = Db();
-        var foreignTrip = Trip(db, B);
-        db.TripDocuments.Add(new TripDocument { Id = Guid.NewGuid(), TripInstanceId = foreignTrip.Id, FileName = "medical-summary.pdf", FilePath = "/files/medical-summary.pdf" });
-        db.SaveChanges();
-
-        Assert.IsType<NotFoundObjectResult>((await Trips(db).GetDocuments(foreignTrip.Id, CancellationToken.None)).Result);
-    }
-
-    [Fact]
-    public async Task TripDocuments_OwnTrip_ReturnsItsDocuments()
-    {
-        using var db = Db();
-        var trip = Trip(db, A);
-        var document = new TripDocument { Id = Guid.NewGuid(), TripInstanceId = trip.Id, FileName = "itinerary.pdf" };
-        db.TripDocuments.Add(document);
-        db.SaveChanges();
-
-        var result = await Trips(db).GetDocuments(trip.Id, CancellationToken.None);
-
-        var body = Assert.IsType<ApiResponse<List<TripDocumentDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
-        Assert.Equal(document.Id, Assert.Single(body.Data!).Id);
     }
 
     // Already scoped by a join to a required, tenant-filtered parent; these pin it so the join is not removed by accident.

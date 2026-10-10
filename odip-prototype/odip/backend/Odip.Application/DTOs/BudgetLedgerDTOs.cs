@@ -157,14 +157,6 @@ public record ParticipantLedgerDto
     public LedgerBucketDto OutsideThePlanDates { get; init; } = new();
 }
 
-/// <summary><c>GET .../funding/ledger/rows</c>: one more page of one period's rows.</summary>
-public record LedgerRowsPageDto
-{
-    public int Total { get; init; }
-    public int Skip { get; init; }
-    public List<LedgerRowDto> Rows { get; init; } = new();
-}
-
 // ── The budget effect of one claim ──────────────────────────────────────────
 
 /// <summary>Where the part of a claim in one row of a budget block landed.</summary>
