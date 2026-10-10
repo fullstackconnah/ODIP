@@ -18,9 +18,8 @@ import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
 import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
 import { formatDateAu } from '@/lib/utils'
 import { ASSIGNMENT_STATUSES, SLEEPOVER_TYPES, type SleepoverType, type AssignmentStatus } from '@/api/types/enums'
-import type { TripDetailDto } from '@/api/types/trips'
+import { tripStaffRequired, type TripDetailDto } from '@/api/types/trips'
 import type { StaffAssignmentDto, StaffListDto, UpdateStaffAssignmentDto } from '@/api/types/staff'
-import type { BookingListDto } from '@/api/types/bookings'
 import type { RosterFindingDto } from '@/api/types'
 
 const ASSIGNMENT_STATUS_ITEMS: DropdownItem[] = ASSIGNMENT_STATUSES.map(s => ({ value: s, label: s }))
@@ -49,11 +48,10 @@ interface StaffTabProps {
   tripId: string
   trip: TripDetailDto
   staff: StaffAssignmentDto[]
-  bookings: BookingListDto[]
   canWrite: boolean
 }
 
-export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: StaffTabProps) {
+export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProps) {
   const updateStaffAssignment = useUpdateStaffAssignment()
   const deleteStaffAssignment = useDeleteStaffAssignment()
   const createStaffAssignment = useCreateStaffAssignment()
@@ -247,10 +245,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
     <div className="space-y-4">
       {/* Staffing summary */}
       {(() => {
-        const ratioToStaff: Record<string, number> = { OneToOne: 1, OneToTwo: 0.5, OneToThree: 1/3, OneToFour: 0.25, OneToFive: 0.2, TwoToOne: 2, SharedSupport: 0.25 }
-        const activeBookings = bookings.filter((b: BookingListDto) => !['Cancelled', 'NoLongerAttending'].includes(b.bookingStatus))
-        const rawTotal = activeBookings.reduce((sum: number, b: BookingListDto) => sum + (ratioToStaff[b.supportRatioOverride ?? ''] ?? 0), 0)
-        const required = Math.ceil(rawTotal)
+        const required = tripStaffRequired(trip)
         const assigned = staff.filter((s: StaffAssignmentDto) => s.status !== 'Cancelled').length
         const isStaffed = assigned >= required
         return (
@@ -259,7 +254,7 @@ export default function StaffTab({ tripId, trip, staff, bookings, canWrite }: St
               ? 'bg-[var(--color-primary-fixed)]/30 text-[var(--color-success)]'
               : 'bg-[var(--color-error-container)]/60 text-[var(--color-destructive)]'}`}>
               <span>{assigned}/{required} staff</span>
-              <span className="text-xs font-normal">({rawTotal.toFixed(2)} required from ratios)</span>
+              <span className="text-xs font-normal">({trip.calculatedStaffRequired.toFixed(2)} required from ratios)</span>
               {!isStaffed && <span className="text-xs">— need {required - assigned} more</span>}
             </div>
             {canWrite && (

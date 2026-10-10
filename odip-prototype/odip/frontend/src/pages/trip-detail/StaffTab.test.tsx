@@ -31,7 +31,7 @@ vi.mock('@/api/hooks', () => ({
   useAvailableStaff: mockUseAvailableStaff,
 }))
 
-const trip = { id: 'trip-1', startDate: '2026-09-01T00:00:00Z', endDate: '2026-09-05T00:00:00Z' } as TripDetailDto
+const trip = { id: 'trip-1', startDate: '2026-09-01T00:00:00Z', endDate: '2026-09-05T00:00:00Z', minStaffRequired: null, calculatedStaffRequired: 0 } as TripDetailDto
 
 beforeEach(() => {
   mockCreateMutate.mockReset()
@@ -47,7 +47,7 @@ beforeEach(() => {
 })
 
 function openAddStaffModal() {
-  render(<StaffTab tripId="trip-1" trip={trip} staff={[]} bookings={[]} canWrite />)
+  render(<StaffTab tripId="trip-1" trip={trip} staff={[]} canWrite />)
   return userEvent.setup()
 }
 
@@ -98,7 +98,7 @@ describe('StaffTab — acknowledged-conflict marker (trip-side parity)', () => {
       hasConflict: true, overrideReason: 'Covering a last-minute shortfall.', acknowledgedFindingCodes: 'STAFF_ON_LEAVE',
     } as StaffAssignmentDto
 
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRow]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRow]} canWrite />)
 
     expect(screen.getByTitle('Overridden: Covering a last-minute shortfall.')).toBeInTheDocument()
   })
@@ -112,7 +112,7 @@ describe('StaffTab — acknowledged-conflict marker (trip-side parity)', () => {
       hasConflict: true, overrideReason: null, acknowledgedFindingCodes: null,
     } as StaffAssignmentDto
 
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRow]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRow]} canWrite />)
 
     expect(screen.getByTitle('Conflict acknowledged')).toBeInTheDocument()
   })
@@ -132,7 +132,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     mockCheckMutate.mockImplementation((_vars, { onSuccess }) => {
       onSuccess([{ code: 'STAFF_ON_LEAVE', severity: 'Warning', message: "Alex Rivera's approved leave covers this window — cannot roster without a reason.", requiresReason: true }])
     })
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
 
@@ -148,7 +148,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
       .mockImplementationOnce((_vars, { onSuccess }) => {
         onSuccess([])
       })
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
     await screen.findByText('Worker screening expired.')
@@ -169,7 +169,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     mockCheckMutate.mockImplementation((_vars, { onSuccess }) => {
       onSuccess([{ code: 'STAFF_ON_LEAVE', severity: 'Warning', message: 'Leave overlap', requiresReason: true }])
     })
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
     await screen.findByText('Leave overlap')
@@ -185,7 +185,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     mockCheckMutate.mockImplementation((_vars, { onSuccess }) => {
       onSuccess([{ code: 'STAFF_ON_LEAVE', severity: 'Warning', message: 'Leave overlap', requiresReason: true }])
     })
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
     await screen.findByText('Leave overlap')
@@ -213,7 +213,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
       ...editableStaffRow,
       overrideReason: 'Covering a last-minute shortfall.',
     } as StaffAssignmentDto
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRowWithReason]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRowWithReason]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
 
@@ -229,7 +229,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
       ...editableStaffRow,
       overrideReason: 'Covering a last-minute shortfall.',
     } as StaffAssignmentDto
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRowWithReason]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRowWithReason]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
     await screen.findByDisplayValue('Covering a last-minute shortfall.')
@@ -250,7 +250,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     const serverFindings = [{ code: 'STAFF_ON_LEAVE', severity: 'Warning', message: 'Leave overlap (server)', requiresReason: true }]
     mockGetRosterFindings.mockReturnValue(serverFindings)
     mockUpdateMutate.mockImplementation((_vars, { onError }) => onError(new Error('422')))
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
     // Wait for the 400ms-debounced live dry-run to fire before saving — same guard the add-modal
@@ -372,7 +372,7 @@ describe('StaffTab — touch targets in the row actions', () => {
   } as StaffAssignmentDto
 
   it('gives Edit assignment and Remove from trip the 44px touch shape without changing the mouse look', () => {
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} canWrite />)
 
     for (const title of ['Edit assignment', 'Remove from trip']) {
       const button = screen.getByTitle(title)
@@ -383,10 +383,37 @@ describe('StaffTab — touch targets in the row actions', () => {
   })
 
   it('keeps the two buttons 8px apart in one centred row', () => {
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} canWrite />)
 
     const cluster = screen.getByTitle('Edit assignment').parentElement as HTMLElement
     expect(cluster).toHaveClass('flex', 'items-center', 'justify-center', 'gap-2')
     expect(cluster).toContainElement(screen.getByTitle('Remove from trip'))
+  })
+})
+
+// The staffing summary shows the figure the server works out (RecalculateStaffRequired, the same one the schedule screen uses). The tab used to sum the
+// bookings' override ratios itself: a booking with no override counted 0 (the server uses the participant's ratio, else 1:1) and ratio Other counted 0 (the
+// server counts 1), so a trip that needed 3 staff read a green "0/0 staff".
+describe('StaffTab — the staffing summary shows what the server says the trip needs', () => {
+  const tripNeeding = (calculatedStaffRequired: number, minStaffRequired: number | null) => ({ ...trip, calculatedStaffRequired, minStaffRequired }) as TripDetailDto
+
+  it('shows 0/3 and "need 3 more" for a trip the server says needs 3, not a green 0/0', () => {
+    render(<StaffTab tripId="trip-1" trip={tripNeeding(3, 3)} staff={[]} canWrite />)
+
+    expect(screen.getByText('0/3 staff')).toBeInTheDocument()
+    expect(screen.getByText(/need 3 more/i)).toBeInTheDocument()
+  })
+
+  it('rounds the server figure up to whole staff and shows the exact figure beside it', () => {
+    render(<StaffTab tripId="trip-1" trip={tripNeeding(2.5, 3)} staff={[]} canWrite />)
+
+    expect(screen.getByText('0/3 staff')).toBeInTheDocument()
+    expect(screen.getByText(/2\.50 required from ratios/)).toBeInTheDocument()
+  })
+
+  it('uses the minimum on the trip while no booking has set the figure, as the schedule screen does', () => {
+    render(<StaffTab tripId="trip-1" trip={tripNeeding(0, 2)} staff={[]} canWrite />)
+
+    expect(screen.getByText('0/2 staff')).toBeInTheDocument()
   })
 })

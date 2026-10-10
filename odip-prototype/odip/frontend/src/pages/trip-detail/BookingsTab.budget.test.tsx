@@ -24,7 +24,7 @@ vi.mock('@/api/hooks', () => ({
   PAYMENT_STATUS_COLORS: { NotInvoiced: 'bg-neutral-100 text-neutral-600' },
 }))
 
-const trip = { id: 'trip-1', maxParticipants: 10, staffAssignedCount: 0 } as unknown as TripDetailDto
+const trip = { id: 'trip-1', maxParticipants: 10, staffAssignedCount: 0, minStaffRequired: null, calculatedStaffRequired: 0 } as unknown as TripDetailDto
 
 const booking: BookingListDto = {
   id: 'booking-1', tripInstanceId: 'trip-1', tripName: 'Coastal weekend', participantId: 'participant-1', participantName: 'Sophie Brown', bookingStatus: 'Held', bookingDate: '2026-10-12',
