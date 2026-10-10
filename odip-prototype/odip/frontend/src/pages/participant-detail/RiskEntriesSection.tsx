@@ -14,6 +14,9 @@ import type { ParticipantRiskEntryDto } from '@/api/types/risk-entries'
 import type { AtRiskParty } from '@/api/types/enums'
 import { extractErrorMessage } from '@/lib/utils'
 
+// One empty array for every render while there is no data, so the memos below do not see a new dependency each time.
+const NO_ENTRIES: ParticipantRiskEntryDto[] = []
+
 type RiskEntryFormState = {
   atRiskParty: AtRiskParty
   description: string
@@ -82,7 +85,7 @@ function RiskEntryRow({ entry, canWrite, onEdit, onDelete }: {
 export default function RiskEntriesSection({ participantId }: { participantId: string | undefined }) {
   const { canWriteRisks } = usePermissions()
   const entriesQuery = useParticipantRiskEntries(participantId, true)
-  const entries = entriesQuery.data ?? []
+  const entries = entriesQuery.data ?? NO_ENTRIES
   // A failed or paused request is not an empty list: "No risks recorded" is only for one that succeeded and came back empty.
   const phase = queryPhase(entriesQuery)
   const createEntry = useCreateRiskEntry()
