@@ -250,6 +250,20 @@ describe('RecordAdministrationModal amending a high-risk dose', () => {
     }))
   })
 
+  it('sends the typed witness name back when the amendment turns the dose into a refusal', async () => {
+    const user = userEvent.setup()
+    mockAmendMutateAsync.mockResolvedValue({ success: true, data: {} })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={makeAdministration({ witnessName: 'Old Typed Name' })} />)
+
+    await user.click(screen.getByRole('radio', { name: /^refused$/i }))
+    await user.type(screen.getByLabelText(/^reason/i), 'Participant declined')
+    await user.click(screen.getByRole('button', { name: /save amendment/i }))
+
+    expect(mockAmendMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'Refused', witnessName: 'Old Typed Name' }),
+    }))
+  })
+
   it('still asks for the typed witness name when the dose has no staff witness', async () => {
     const user = userEvent.setup()
     renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={makeAdministration({ witnessName: null })} />)

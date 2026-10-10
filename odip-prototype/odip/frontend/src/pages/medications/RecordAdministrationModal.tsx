@@ -239,8 +239,9 @@ export function RecordAdministrationModal({
       ...buildCommonFields(),
       // Amending only ever edits the legacy free-text witness field — the staff-witness
       // Pending/Approved/Declined workflow (see the portal's Witness approvals queue) is managed
-      // separately and isn't reassignable through this form.
-      witnessName: requiresWitness ? witnessName : undefined,
+      // separately and isn't reassignable through this form. Always sent back, so an amendment that no
+      // longer needs a witness (e.g. changed to Refused) doesn't blank the one already recorded.
+      witnessName,
       // The backend unconditionally overwrites prnOutcome/prnOutcomeAt on PUT — pass through
       // the existing values so amending an administration doesn't silently wipe a previously
       // recorded PRN outcome.

@@ -281,6 +281,23 @@ owner decision (collected under Open Flags at the end).
     - **A running plan with no pools and a later plan recorded.** The Budgets list's tail reads
       "Plan starts {date}" for it while the Funding tab says the running plan has no pools;
       decide which sentence a plan that is running but empty should get.
+    - **Two claim generations at the same moment (found in fix PR B).** Generating a claim checks
+      "no active claim for this trip" (or "no line references this shift") and saves afterwards,
+      with no lock, so two simultaneous requests for one trip or participant can both pass and
+      leave two Draft claims over the same trip or shifts. Until each claim reference got a piece
+      of its own id, the same-day reference collided on its unique index and turned the second
+      request into a raw 500 with no second claim; that accidental guard is gone. The Generate
+      button disables while pending (`GenerateClaimModal`), so it takes a race (two tabs, a
+      retried request) to hit. Two ways to close it, option 1 being the smaller:
+      1. Take a per-trip / per-participant advisory lock around the check and the save in
+         `ClaimGenerationService.GenerateDraftClaimAsync` and `ShiftClaimGenerationService.GenerateAsync`,
+         as `RosterGenerationLock` does for roster generation, with a Postgres concurrency test
+         (two parallel generations, one claim). No migration.
+      2. Let the database refuse the duplicate: a partial unique index on
+         `TripClaims(TripInstanceId) WHERE Status <> 'Rejected'` and a unique index on
+         `ClaimLineItems(ShiftId) WHERE ShiftId IS NOT NULL` (the existing "no line references
+         this shift" rule), then map the 23505 to a 409 "A claim already exists". Needs a
+         migration and a check of live data for existing duplicates first.
 
 ### F. Living Arrangements
 

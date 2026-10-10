@@ -348,4 +348,32 @@ public class MedicationsWitnessTests
         var saved = await db.MedicationAdministrations.SingleAsync();
         Assert.Equal("Corrected Name", saved.WitnessName);
     }
+
+    // The amend form sends no witness name once the dose is no longer a witnessed Administered one (e.g. changed to Refused);
+    // that must not erase the typed witness already on the record.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task UpdateAdministration_LegacyWitnessNameOnly_KeptWhenTheRequestSendsNone(string? sentName)
+    {
+        var (db, tenant) = CreateDb();
+        var participant = SeedParticipant(db);
+        var med = SeedHighRiskMed(db, participant.Id);
+        var admin = new MedicationAdministration
+        {
+            Id = Guid.NewGuid(), ParticipantMedicationId = med.Id, ParticipantId = participant.Id,
+            Status = MedicationAdministrationStatus.Administered, AdministeredAt = DateTime.UtcNow, RecordedByName = "Test",
+            WitnessName = "Old Typed Name",
+        };
+        db.MedicationAdministrations.Add(admin);
+        db.SaveChanges();
+        var controller = new MedicationsController(db, tenant.Object);
+
+        var dto = new UpdateAdministrationDto { Status = MedicationAdministrationStatus.Refused, Reason = "Participant declined", WitnessName = sentName };
+        await controller.UpdateAdministration(admin.Id, dto, CancellationToken.None);
+
+        var saved = await db.MedicationAdministrations.SingleAsync();
+        Assert.Equal(MedicationAdministrationStatus.Refused, saved.Status);
+        Assert.Equal("Old Typed Name", saved.WitnessName);
+    }
 }
