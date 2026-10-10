@@ -105,9 +105,6 @@ for role **RO** globally regardless of what's listed below.
 ## DashboardController — `api/v1/dashboard` — class: `[Authorize]`
 - GET `/summary` — Authenticated — dashboard summary (today's date-based counts etc.)
 
-## ConflictsController — `api/v1/conflicts` — class: `[Authorize]`
-- POST `/recheck` — A, C, SA — re-run scheduling-conflict detection
-
 ## ProviderSettingsController — `api/v1/provider-settings` — class: `[Authorize(Roles = "SuperAdmin,Admin,Coordinator")]`
 - GET `` — SA, A, C (class-level) — get provider settings
 - PUT `` — SA, A — upsert provider settings (Coordinator excluded here specifically)
@@ -200,17 +197,12 @@ Alerts are computed at read, never stored. Budget phase 2b adds four kinds to th
 - GET `` — A, C, SA — get app settings
 - PUT `` — A, C, SA — update app settings
 
-## DevController — `api/v1/dev` — class: `[Authorize(Roles = "Admin,SuperAdmin")]` (dev/non-production only; each action also 403s via `Forbid()` if `IWebHostEnvironment.IsProduction()`)
-- POST `/reseed` — A, SA (+ non-Production) — wipes and re-seeds all data from scratch
-- POST `/seed` — A, SA (+ non-Production) — seeds only if data absent (idempotent)
-
 ## VehiclesController — `api/v1/vehicles` — class: `[Authorize]`
 - GET `` (`?isActive`) — Authenticated — list vehicles
 - GET `/{id:guid}` — Authenticated — vehicle detail
 - POST `` — A, C, SA — create a vehicle
 - PUT `/{id:guid}` — A, C, SA — update a vehicle
 - DELETE `/{id:guid}` — A, C, SA — delete a vehicle
-- GET `/{id:guid}/assignments` — Authenticated — assignments for a vehicle
 
 ## VehicleAssignmentsController — `api/v1/vehicle-assignments` — class: `[Authorize]`
 - POST `` — A, C, SA — create a vehicle assignment

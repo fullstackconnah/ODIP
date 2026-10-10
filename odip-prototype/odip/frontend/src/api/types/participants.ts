@@ -400,7 +400,7 @@ export interface ParticipantDetailDto extends ParticipantListDto {
 
   // ── INTAKE-03/04, CommunityAccessDailyLiving stream — the structured Community Mobility &
   // Transport Risk / Community Behaviours of Concern checklist grid.
-  /** Always all twenty-one ChecklistItemType entries — see ParticipantChecklistItemsController.GetForParticipant. */
+  /** Always all twenty-one ChecklistItemType entries — see ParticipantChecklistItemsController.MaterializeAll. */
   checklistItems: ParticipantChecklistItemDto[]
 
   // ── INTAKE sub-wave C2 — Meals & Diet (Daily Living step, Master Data Dictionary MEAL-001..012

@@ -185,7 +185,7 @@ public record ParticipantDetailDto : ParticipantListDto
     /// <summary>Always all twenty <see cref="Domain.Enums.AdlType"/> entries — see ParticipantAdlAssessmentsController.GetForParticipant.</summary>
     public List<ParticipantAdlAssessmentDto> AdlAssessments { get; init; } = new();
 
-    /// <summary>INTAKE-03/04, CommunityAccessDailyLiving stream. Always all twenty-one <see cref="Domain.Enums.ChecklistItemType"/> entries — see ParticipantChecklistItemsController.GetForParticipant.</summary>
+    /// <summary>INTAKE-03/04, CommunityAccessDailyLiving stream. Always all twenty-one <see cref="Domain.Enums.ChecklistItemType"/> entries — see ParticipantChecklistItemsController.MaterializeAll.</summary>
     public List<ParticipantChecklistItemDto> ChecklistItems { get; init; } = new();
 
     // ── INTAKE sub-wave C2 — Meals & Diet (Daily Living step). See Participant.cs's field group doc.
