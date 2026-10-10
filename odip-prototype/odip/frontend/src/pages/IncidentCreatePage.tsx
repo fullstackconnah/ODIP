@@ -34,7 +34,7 @@ import {
 } from '@/lib/incidentPrefill'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { formatFlaggedCategoryList } from '@/lib/shiftNoteKeywords'
-import { formatDateAu } from '@/lib/utils'
+import { extractErrorMessage, formatDateAu } from '@/lib/utils'
 import {
   incidentResolver, type IncidentFormData,
   basicsSchema, restrictivePracticeSchema, detailsSchema, witnessesSchema, complianceSchema,
@@ -46,6 +46,7 @@ import { IncidentDetailsStep } from './incidents/steps/IncidentDetailsStep'
 import { WitnessesStep } from './incidents/steps/WitnessesStep'
 import { ComplianceStep } from './incidents/steps/ComplianceStep'
 import type { z } from 'zod'
+import { Callout } from '@/components/Callout'
 
 // INC-01: the service-type dropdown offers the business streams plus "None" (untagged) —
 // selecting "Trip" is what reveals the trip-select dropdown below.
@@ -160,11 +161,7 @@ function extractIncidentErrorMessage(err: unknown, isEdit: boolean): string {
   if (axiosErr?.response?.status === 403) {
     return "You don't have permission to file incident reports."
   }
-  return (
-    axiosErr?.response?.data?.errors?.[0] ||
-    axiosErr?.response?.data?.message ||
-    `Failed to ${isEdit ? 'update' : 'create'} incident report. Please check your input and try again.`
-  )
+  return extractErrorMessage(err, `Failed to ${isEdit ? 'update' : 'create'} incident report. Please check your input and try again.`)
 }
 
 /**
@@ -554,9 +551,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       )}
 
       {mutation.isError && (
-        <div role="alert" className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          {extractIncidentErrorMessage(mutation.error, isEdit)}
-        </div>
+        <Callout tone="error">{extractIncidentErrorMessage(mutation.error, isEdit)}</Callout>
       )}
 
       <WizardStepRail

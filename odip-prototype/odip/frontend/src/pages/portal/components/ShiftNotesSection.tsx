@@ -7,6 +7,7 @@ import { formatNoteTimestamp, formatRatio } from '@/lib/format'
 import type { ShiftNoteDto } from '@/api/types'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
+import { Button } from '@/components/Button'
 
 const BODY_MAX_LENGTH = 1000
 
@@ -191,7 +192,7 @@ export function ShiftNotesSection({
       ) : isError ? (
         <div role="alert" className="flex items-center justify-between gap-3 text-sm text-[var(--color-destructive)]">
           <span className="flex items-center gap-1.5"><AlertCircle className="w-4 h-4 shrink-0" /> Couldn't load shift notes.</span>
-          <button type="button" onClick={() => refetch()} className={ghostButtonClass}>Try again</button>
+          <Button variant="ghost" onClick={() => refetch()}>Try again</Button>
         </div>
       ) : notes && notes.length > 0 ? (
         <ul className="space-y-2">
@@ -212,15 +213,13 @@ export function ShiftNotesSection({
                   <div className="flex items-center justify-between gap-2">
                     <CharCount length={editBody.length} />
                     <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => setEditingId(null)} className={ghostButtonClass}>Cancel</button>
-                      <button
-                        type="button"
+                      <Button variant="ghost" onClick={() => setEditingId(null)}>Cancel</Button>
+                      <Button
                         onClick={() => handleSaveEdit(note.id)}
                         disabled={updateNote.isPending || !editBody.trim()}
-                        className={primaryButtonClass}
                       >
                         {updateNote.isPending ? 'Saving…' : 'Save'}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                   {editError && <p id={`edit-note-error-${note.id}`} role="alert" className="text-xs text-[var(--color-destructive)]">{editError}</p>}
@@ -278,9 +277,9 @@ export function ShiftNotesSection({
         />
         <div className="flex items-center justify-between gap-2">
           <CharCount length={body.length} />
-          <button type="submit" disabled={createNote.isPending || !body.trim()} className={primaryButtonClass}>
+          <Button type="submit" disabled={createNote.isPending || !body.trim()}>
             {createNote.isPending ? 'Saving…' : 'Add note'}
-          </button>
+          </Button>
         </div>
         {createError && <p id="new-shift-note-error" role="alert" className="text-sm text-[var(--color-destructive)]">{createError}</p>}
       </form>

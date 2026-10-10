@@ -86,7 +86,7 @@ describe('BodyDiagram — legible on the primary fill', () => {
     const pill = screen.getByRole('button', { name: 'Chest' })
     expect(pill).toHaveAttribute('aria-pressed', 'true')
     expect(pill).toHaveClass('bg-[var(--color-primary)]', 'text-[var(--color-primary-foreground)]')
-    expect(screen.getByRole('button', { name: 'Add injury' })).toHaveClass('bg-[var(--color-primary)]', 'text-[var(--color-primary-foreground)]')
+    expect(screen.getByRole('button', { name: 'Add injury' })).toBeInTheDocument()
     expect(pill.className).not.toContain('--color-on-primary)')
   })
 

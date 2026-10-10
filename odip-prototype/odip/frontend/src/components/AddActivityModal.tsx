@@ -5,6 +5,7 @@ import { Modal } from '@/components/Modal'
 import { Dropdown } from './Dropdown'
 import type { ActivityDto, ScheduledActivityDto, CreateScheduledActivityDto, UpdateScheduledActivityDto } from '@/api/types'
 import type { ScheduledActivityStatus } from '@/api/types/enums'
+import { Button } from '@/components/Button'
 
 interface AddActivityModalProps {
   tripDayId: string
@@ -139,11 +140,10 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
       title={editingActivity ? 'Edit Activity' : 'Add Activity'}
       footer={
         <>
-          <button onClick={onClose} className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-accent)]">Cancel</button>
-          <button onClick={handleSubmit} disabled={!title.trim() || isSubmitting}
-            className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-50">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={!title.trim() || isSubmitting}>
             {isSubmitting ? 'Saving...' : editingActivity ? 'Update' : 'Add Activity'}
-          </button>
+          </Button>
         </>
       }
     >

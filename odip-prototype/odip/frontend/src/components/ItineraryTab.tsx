@@ -7,6 +7,7 @@ import { Dropdown } from './Dropdown'
 import { EmptyState } from './EmptyState'
 import { PageState } from './PageState'
 import { statusClass } from '@/lib/tone'
+import { Callout } from '@/components/Callout'
 
 interface TripAdminData {
   eventTemplateName?: string | null
@@ -99,7 +100,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
     <div className="space-y-6 animate-fade-in">
       {/* Export buttons */}
       {exportError && (
-        <div className="text-sm text-[var(--color-destructive)] bg-[var(--color-error-container)]/60 rounded-[var(--radius-md)] px-4 py-2">{exportError}</div>
+        <Callout tone="error">{exportError}</Callout>
       )}
       <div className="flex items-center justify-end">
         <Dropdown

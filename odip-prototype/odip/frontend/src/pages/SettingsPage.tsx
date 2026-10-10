@@ -32,6 +32,7 @@ import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { plural } from '@/lib/format'
 import { useTabParam } from '@/hooks/useTabParam'
 import PlanPricingSettingsTab from '@/pages/settings/PlanPricingSettingsTab'
+import { Callout } from '@/components/Callout'
 
 function QualificationSettingsTab() {
   const { data: settings } = useSettings()
@@ -484,10 +485,7 @@ function ProviderSettingsTab() {
         <textarea {...f('invoiceFooterNotes')} rows={3} className={textareaClass} placeholder="e.g. All services delivered in accordance with the NDIS Code of Conduct..." />
       </div>
       {error && (
-        <div className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)] flex items-start gap-2">
-          <span className="mt-0.5">⚠</span>
-          <span>{error}</span>
-        </div>
+        <Callout tone="error">{error}</Callout>
       )}
       {canEditProviderSettings && (
         <Button size="md" onClick={handleSave} disabled={upsert.isPending}>
@@ -619,10 +617,7 @@ function SupportCatalogueTab() {
             </div>
 
             {importError && (
-              <div role="alert" className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)] flex items-start gap-2">
-                <span className="mt-0.5">⚠</span>
-                <span>{importError}</span>
-              </div>
+              <Callout tone="error">{importError}</Callout>
             )}
 
             {previewStep === 'upload' && (

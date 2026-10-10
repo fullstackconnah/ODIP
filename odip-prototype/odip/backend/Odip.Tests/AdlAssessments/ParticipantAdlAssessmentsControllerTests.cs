@@ -204,7 +204,7 @@ public class ParticipantAdlAssessmentsControllerTests
     }
 
     /// <summary>INTAKE-03 — HowToHelpNotes null-handling: whitespace-only is stored as null, matching
-    /// the Notes convention (see ParticipantAdlAssessmentsController.ApplyAnswer).</summary>
+    /// the Notes convention (see ParticipantGridRules.ApplyAnswer).</summary>
     [Fact]
     public async Task Upsert_HowToHelpNotes_WhitespaceOnly_IsStoredAsNull()
     {

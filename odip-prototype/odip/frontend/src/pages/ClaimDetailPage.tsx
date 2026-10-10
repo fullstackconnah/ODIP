@@ -1,5 +1,4 @@
 import { useParams, Link } from 'react-router-dom'
-import type { AxiosError } from 'axios'
 import { useClaim, useUpdateClaim, useUpdateClaimLineItem } from '@/api/hooks'
 import type { TripClaimStatus, ClaimLineItemDto } from '@/api/types'
 import { PLAN_TYPE_LABELS, type PlanType } from '@/api/types/enums'
@@ -11,7 +10,7 @@ import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { RejectClaimDialog } from '@/components/RejectClaimDialog'
 import { ndiaCodeMeaning } from '@/lib/ndiaCodes'
-import { formatCurrency, formatDateAu } from '@/lib/utils'
+import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
@@ -31,8 +30,7 @@ function planTypeLabel(planType: string) {
 
 /** The server's own words for why it refused a change of status or of the NDIA code, else a sentence of ours. */
 function refusalOf(err: unknown): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || "Couldn't update the claim status. Please try again."
+  return extractErrorMessage(err, "Couldn't update the claim status. Please try again.")
 }
 
 async function downloadFile(url: string, filename: string) {

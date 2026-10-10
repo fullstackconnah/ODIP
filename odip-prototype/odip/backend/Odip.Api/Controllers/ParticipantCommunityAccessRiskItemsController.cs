@@ -12,8 +12,7 @@ namespace Odip.Api.Controllers;
 
 /// <summary>
 /// PF-10.2 — nested CRUD for a participant's structured Community Access Risk Assessment matrix
-/// (<see cref="ParticipantCommunityAccessRiskItem"/>). Mirrors
-/// <see cref="ParticipantChecklistItemsController"/> exactly: a FIXED enumerated set — one row per
+/// (<see cref="ParticipantCommunityAccessRiskItem"/>): a FIXED enumerated set — one row per
 /// <see cref="CommunityAccessRiskItemType"/> (22 values) — so there is no Create/Delete here, only
 /// Get (always all twenty-two, synthesizing an unrated placeholder for any type with no row yet)
 /// and an upsert-by-type endpoint. This is the write path for ongoing edits from the participant

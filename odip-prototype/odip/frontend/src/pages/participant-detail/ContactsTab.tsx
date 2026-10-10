@@ -15,6 +15,8 @@ import {
 } from '@/api/types/contacts'
 import type { ParticipantContactRoleDto } from '@/api/types/contacts'
 import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 /** The most relevant secondary line for a role row — different role types surface a different
  * "what matters most" field (research §3.1-3.14) rather than one fixed column always showing the
@@ -146,27 +148,17 @@ export default function ContactsTab({ participantId }: { participantId: string |
           <Contact2 className="w-4 h-4" /> Contacts
         </h2>
         {canWrite && participantId && (
-          <button
-            type="button"
-            onClick={openCreate}
-            className="flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all shadow-md shadow-[var(--color-primary)]/20"
-          >
+          <Button onClick={openCreate}>
             <Plus className="w-4 h-4" /> Add contact
-          </button>
+          </Button>
         )}
       </div>
 
       {listError && (
-        <div className="flex items-start justify-between gap-3 p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          <span>{listError}</span>
-          <button
-            type="button"
-            onClick={() => setListError(null)}
-            className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
-          >
-            Dismiss
-          </button>
-        </div>
+        <Callout tone="error"
+          actions={<button type="button" onClick={() => setListError(null)} className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded" > Dismiss </button>}>
+          {listError}
+        </Callout>
       )}
 
       {phase === 'loading' ? (

@@ -1,6 +1,7 @@
 import { useId, useState } from 'react'
 import { Dropdown, type DropdownItem } from './Dropdown'
 import { DataTable, type Column } from './DataTable'
+import { Button } from './Button'
 import { FormField } from './FormField'
 import {
   BODY_REGION_LABELS,
@@ -278,13 +279,7 @@ export function BodyDiagram({ injuries, onAdd, onRemove }: BodyDiagramProps) {
         </p>
       )}
 
-      <button
-        type="button"
-        onClick={handleAdd}
-        className="rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-medium text-[var(--color-primary-foreground)]"
-      >
-        Add injury
-      </button>
+      <Button onClick={handleAdd}>Add injury</Button>
 
       <DataTable data={rows} columns={columns} keyField="_key" emptyMessage="No injuries recorded yet." />
     </div>

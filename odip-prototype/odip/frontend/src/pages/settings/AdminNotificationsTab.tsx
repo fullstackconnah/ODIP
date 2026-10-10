@@ -15,6 +15,7 @@ import {
   type NotificationOutboxStatus,
 } from '@/api/types'
 import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
 
 const STATUS_FILTER_ITEMS: { value: NotificationOutboxStatus | ''; label: string }[] = [
   { value: '', label: 'All statuses' },
@@ -85,14 +86,9 @@ export default function AdminNotificationsTab() {
     {
       key: 'actions', header: '', align: 'right' as const, render: row => (
         row.status === 'Failed' ? (
-          <button
-            type="button"
-            onClick={() => handleRetry(row)}
-            disabled={retryingId === row.id}
-            className="min-h-[36px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] disabled:opacity-50"
-          >
+          <Button variant="secondary" onClick={() => handleRetry(row)} disabled={retryingId === row.id}>
             {retryingId === row.id ? 'Retrying...' : 'Retry'}
-          </button>
+          </Button>
         ) : null
       ),
     },
@@ -165,14 +161,9 @@ export default function AdminNotificationsTab() {
             aria-label="Test email address"
             className="flex-1 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
           />
-          <button
-            type="button"
-            onClick={handleSendTestEmail}
-            disabled={!testEmailTo.trim() || sendTestEmail.isPending}
-            className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-all disabled:opacity-50"
-          >
+          <Button onClick={handleSendTestEmail} disabled={!testEmailTo.trim() || sendTestEmail.isPending}>
             {sendTestEmail.isPending ? 'Sending...' : 'Send test email'}
-          </button>
+          </Button>
         </div>
         {testEmailError && (
           <p role="alert" className="text-xs text-[var(--color-destructive)]">{testEmailError}</p>

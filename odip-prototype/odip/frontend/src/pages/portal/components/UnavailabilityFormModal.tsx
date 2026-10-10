@@ -8,6 +8,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import type { CreateRecurringUnavailabilityDto } from '@/api/types'
+import { Button } from '@/components/Button'
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const
 
@@ -109,17 +110,12 @@ export function UnavailabilityFormModal({ open, onClose, onSubmit, submitting, e
         closeOnBackdrop={false}
         footer={
           <>
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={submit}
-              disabled={submitting}
-              className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 disabled:opacity-50"
-            >
+            </Button>
+            <Button onClick={submit} disabled={submitting}>
               {submitting ? 'Saving…' : isEdit ? 'Save changes' : requireStaff ? 'Save' : 'Submit request'}
-            </button>
+            </Button>
           </>
         }
       >

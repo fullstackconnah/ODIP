@@ -4,16 +4,12 @@ import { useCreateElectronicSigningSnapshot, useSubmitElectronicSigningEvidence 
 import type { ElectronicSigningSnapshotDto, ServiceAgreementDraftDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { FormField } from '@/components/FormField'
+import { extractErrorMessage } from '@/lib/utils'
+import { Callout } from '@/components/Callout'
 
 type Props = { participantId: string; draft: ServiceAgreementDraftDto }
 
-function errorMessage(error: unknown) {
-  if (typeof error === 'object' && error && 'response' in error) {
-    const data = (error as { response?: { data?: { message?: string; errors?: string[] } } }).response?.data
-    return data?.errors?.[0] || data?.message || 'The evidence request could not be completed.'
-  }
-  return 'The evidence request could not be completed.'
-}
+const errorMessage = (error: unknown) => extractErrorMessage(error, 'The evidence request could not be completed.')
 
 function newIdempotencyKey() {
   return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -109,7 +105,7 @@ export default function ElectronicSigningEvidencePanel({ participantId, draft }:
         {submitEvidence.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Record PendingVerification evidence
       </Button>
     </>}
-    {error && <p role="alert" className="p-2 rounded-[var(--radius-md)] bg-[var(--color-destructive)]/10 text-sm text-[var(--color-destructive)]">{error}</p>}
+    {error && <Callout tone="error">{error}</Callout>}
     {success && <p role="status" className="text-sm">{success}</p>}
   </section>
 }
