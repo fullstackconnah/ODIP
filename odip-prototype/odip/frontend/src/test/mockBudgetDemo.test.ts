@@ -36,7 +36,7 @@ const lines = [
 
 function load(): Created {
   const require = createRequire(import.meta.url)
-  return require(FUNDING).create({ respond: (status: number, body: unknown) => ({ status, body }), fundingSources: [], people, priceLines: () => lines }) as Created
+  return require(FUNDING).create({ respond: (status: number, body: unknown) => ({ status, body }), people, priceLines: () => lines }) as Created
 }
 
 const handler = (routes: Route[], pattern: string) => (routes.find(route => route[0] === pattern) as Route)[1]

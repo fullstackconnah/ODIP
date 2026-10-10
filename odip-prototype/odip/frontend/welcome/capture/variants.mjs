@@ -70,26 +70,6 @@ export const variantSpecs = {
     },
   },
 
-  'fund-claim-batch': {
-    cropTarget: 'Build Claim Batch after Validate selection at a small-screen width: selection summary, the error/warning banner and the validated events as stacked cards with their Findings chips',
-    alt: "Build Claim Batch on a narrow screen after validating five events: a red banner reading 3 errors and 1 warning found, fix the flagged events, nothing was created, then five event cards each with a ticked checkbox, participant, stream, support item, day type, dates, hours, amount and reference, and a Findings field showing Clean, an already-claimed reference, an insufficient service booking balance, a closed claim window and a claim window closing soon, each message in full.",
-    notes: "Narrow variant of fund-claim-batch (same fixture and clock). 640px app viewport: the table becomes stacked cards, which also lets the Findings chips wrap so every message is whole (the wide image has to scroll its table). The selection summary card with the disabled Create claim batch button is not in the crop, which starts at the banner. Each card was ticked with a real click (the card layout has no select-all). The code (BOOKING_BALANCE etc.) is only a hover tooltip in the app, so it is not visible text.",
-    async run(ctx) {
-      const { page, goto, settle } = ctx
-      await goto('/billing/claim-batches/new')
-      await page.getByText('Dylan Marchetti').first().waitFor()
-      // The card layout has no select-all: tick each event card (a real click per card).
-      const boxes = page.getByRole('checkbox', { name: /^Select row/ })
-      for (let i = 0, n = await boxes.count(); i < n; i++) await boxes.nth(i).check()
-      await page.getByRole('button', { name: 'Validate selection' }).click()
-      await page.getByText('Fix the flagged events').waitFor()
-      await settle()
-      const banner = page.getByText('Fix the flagged events').locator('xpath=ancestor::div[@role="status"][1]')
-      const table = page.locator('main table').first().locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]')
-      return { locator: [banner, table], pad: 8 }
-    },
-  },
-
   'care-risk-alerts': {
     viewport: { width: 572, height: 900 },
     cropTarget: 'The risk-alert stack from the red Critical alert, the participant tab strip and the top of the Identity card at a small-screen width',

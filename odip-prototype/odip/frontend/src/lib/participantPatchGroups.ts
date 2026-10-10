@@ -189,7 +189,6 @@ export function buildParticipantWirePayload(data: ParticipantFormData): Record<s
  * entry). PhotoVideo/Privacy/EmergencyMedical are always collectible regardless of serviceStreams.
  */
 export const HOLIDAY_STA_CONSENT_TYPES: readonly ConsentType[] = ['Alcohol', 'OtcMedication', 'TravelInsurance', 'TermsAndConditions']
-export const UNGATED_CONSENT_TYPES: readonly ConsentType[] = ['PhotoVideo', 'Privacy', 'EmergencyMedical']
 
 /**
  * THE TRAP, consents flavour: the `consents` collection group is upsert-by-key — a ConsentType

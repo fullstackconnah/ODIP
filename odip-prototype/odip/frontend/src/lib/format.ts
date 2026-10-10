@@ -119,7 +119,7 @@ export function formatAge(value: string | Date | null | undefined, { now = new D
 
 /**
  * "27/03/2026, 01:45 pm": an INSTANT as a date and time in the viewer's zone, en-AU; '—' for nothing. Intl-backed, so the space before "pm" follows the
- * ICU build, exactly as it did when this lived in the claim-batch pages. Read with parseApiDate, so a zone-less instant is UTC (a claim batch
+ * ICU build, exactly as it always did. Read with parseApiDate, so a zone-less instant is UTC (a record
  * created at 3 pm in Sydney printed "05:00 am" when it was read as local time).
  */
 export function formatDateTimeAu(value: string | null | undefined): string {

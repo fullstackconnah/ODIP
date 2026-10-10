@@ -12,6 +12,7 @@ using Odip.Infrastructure.Services;
 using Odip.Infrastructure.Tasks;
 using Odip.Tests.Medications;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Tasks;
 
@@ -25,14 +26,7 @@ namespace Odip.Tests.Tasks;
 /// </summary>
 public class ProviderTodayTests
 {
-    private static OdipDbContext CreateDb()
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb() => TestDb.Create();
 
     private static ICurrentTenant SuperAdmin()
     {

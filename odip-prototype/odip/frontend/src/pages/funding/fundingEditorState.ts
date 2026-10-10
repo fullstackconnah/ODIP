@@ -1,4 +1,4 @@
-import type { BillingSourcesHintDto, BudgetEvidenceSource, FundingPlanDto, FundingPoolKind, PaceCategoryDto, SaveFundingPlanDto } from '@/api/types'
+import type { BudgetEvidenceSource, FundingPlanDto, FundingPoolKind, PaceCategoryDto, SaveFundingPlanDto } from '@/api/types'
 import type { PlanType } from '@/api/types/enums'
 import { addMonthsIso, MAX_PLAN_DAYS, proposePeriods, spreadSetAside, sumAmounts, toCents } from '@/lib/fundingPeriods'
 import { formatDayNumber, parseDateOnly } from '@/lib/dateOnly'
@@ -285,8 +285,6 @@ export function withPeriodEdit(state: EditorState, key: string, index: number, p
 
 // ── Pools ───────────────────────────────────────────────────────────────
 
-export const poolIdentity = (pool: Pick<EditorPool, 'paceCategory' | 'managementType'>): string => `${pool.paceCategory}|${pool.managementType}`
-
 /** Whether the plan already holds this category under this management type (a plan holds each once). */
 export function hasPool(state: EditorState, paceCategory: number, managementType: PlanType): boolean {
   return state.pools.some(pool => pool.paceCategory === paceCategory && pool.managementType === managementType)
@@ -311,16 +309,6 @@ export const removePool = (state: EditorState, key: string): EditorState => ({ .
 export const updatePool = (state: EditorState, key: string, patch: Partial<Pick<EditorPool, 'name' | 'notes'>>): EditorState => ({
   ...state, pools: state.pools.map(pool => (pool.key === key ? { ...pool, ...patch } : pool)),
 })
-
-/**
- * "Start from Billing funding sources": the dates the sources carry (when they carry any) and one Core (flexible) pool holding their total, for the person to review. A starting point
- * only: the sources are never changed.
- */
-export function startFromBilling(state: EditorState, hint: BillingSourcesHintDto, fallbackManagement: PlanType): EditorState {
-  const dated: EditorState = { ...state, planStart: hint.planStart ?? state.planStart, planEnd: hint.planEnd ?? state.planEnd }
-  const reproposed = resplitAll(dated).state
-  return addCorePool(reproposed, hint.managementType ?? fallbackManagement, { totalText: moneyText(hint.total) })
-}
 
 // ── What the periods add up to ──────────────────────────────────────────
 

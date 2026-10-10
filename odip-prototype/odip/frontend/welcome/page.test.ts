@@ -162,7 +162,6 @@ describe('claims: only what PRODUCT-TRUTH and the finish reviews allow', () => {
   it('times the overdue flag from when the incident was logged, and says Odip exports while the provider uploads', () => {
     expect(visibleText).toContain('still unreported 24 hours after it was logged')
     expect(visibleText).toContain('Odip exports the files; you upload them.')
-    expect(visibleText).toContain("Each claim in a batch is checked against its service booking's balance and claim window before you upload")
   })
 
   it('counts exactly the numbers in the code, and names Oassist as the provider it was built with', () => {
@@ -199,19 +198,19 @@ describe('proof: the real product, every figure tagged as sample data', () => {
 
   it('gives every image real alt text', () => {
     const imgs = Array.from(doc.querySelectorAll('img'))
-    expect(imgs.length).toBe(15)
+    expect(imgs.length).toBe(14)
     for (const img of imgs) {
       expect(img.hasAttribute('alt')).toBe(true)
       expect(img.getAttribute('alt')!.length).toBeGreaterThan(30)
     }
   })
 
-  it('shows all 15 proof screens, each a lazy WebP at 1x and 2x', () => {
+  it('shows all 14 proof screens, each a lazy WebP at 1x and 2x', () => {
     const names = Array.from(doc.querySelectorAll('img')).map((i) => fileOf(i.getAttribute('src')).replace('.webp', ''))
     expect(names).toEqual([
       'crew-roster-warning', 'plan-trip-glance', 'plan-dashboard-missing', 'stay-accommodation', 'crew-roster-board', 'crew-credentials',
       'care-shift-notes-phone', 'report-overdue', 'care-risk-alerts', 'care-shift-detail-phone', 'report-body-map-m',
-      'fund-claim-funding-split-m', 'fund-claim-preview', 'fund-claim-batch', 'report-history',
+      'fund-claim-funding-split-m', 'fund-claim-preview', 'report-history',
     ])
     for (const img of Array.from(doc.querySelectorAll('img'))) {
       expect(img.getAttribute('src')).toMatch(/\.webp$/)
@@ -222,7 +221,7 @@ describe('proof: the real product, every figure tagged as sample data', () => {
 
   it('serves the art-directed narrow crops below 1024px as 1x/2x WebP sources', () => {
     const sources = Array.from(doc.querySelectorAll('picture source'))
-    expect(sources.length).toBe(9)
+    expect(sources.length).toBe(8)
     for (const s of sources) {
       expect(s.getAttribute('media')).toBe('(max-width: 1023px)')
       expect(s.getAttribute('srcset')).toMatch(/-m\.webp 1x, .*-m@2x\.webp 2x$/)

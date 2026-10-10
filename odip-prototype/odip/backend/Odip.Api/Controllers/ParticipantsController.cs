@@ -373,7 +373,7 @@ public class ParticipantsController : ControllerBase
             WeightKg = dto.WeightKg, HeightCm = dto.HeightCm,
             FundingSource = dto.FundingSource,
             // Ndis ignores whatever the client sent for the reused "Other — specify" field —
-            // stored as null rather than trusting the client's INTAKE-07 payload exclusion alone.
+            // stored as null rather than trusting the client to leave it out.
             FundingOrganisation = dto.FundingSource == ParticipantFundingSource.Other ? dto.FundingOrganisation : null,
             IsRepeatClient = dto.IsRepeatClient,
             MobilityAidWheelchair = dto.MobilityAidWheelchair, MobilityAidWalker = dto.MobilityAidWalker,
