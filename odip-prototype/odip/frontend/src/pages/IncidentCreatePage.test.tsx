@@ -1202,6 +1202,39 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
         { id: 'witness-1', witnessUserId: 'staff-3', witnessName: 'Alex Rivera' },
       ])
     })
+
+    // UpdateIncident sets the three source links from the body ("assigning null clears the link"), and the router-state hand-offs that carry them exist only on
+    // create. An edit used to send them absent, so saving any change to an incident filed from a MAR or a shift note cut it loose from its source.
+    it('sends the stored source links back on an edit, so saving does not clear them', async () => {
+      mockUseIncident.mockReturnValue({
+        data: { ...existingIncidentWithWitnesses, medicationAdministrationId: 'mar-1', shiftId: 'shift-1', shiftNoteId: 'note-1' },
+      })
+      mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
+      const user = userEvent.setup()
+      renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+      await user.click(await screen.findByRole('button', { name: /Review$/i }))
+      await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+      expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+      const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
+      expect(payload).toMatchObject({ medicationAdministrationId: 'mar-1', shiftId: 'shift-1', shiftNoteId: 'note-1' })
+    })
+
+    it('sends no source links for an edit of an incident that has none', async () => {
+      mockUseIncident.mockReturnValue({ data: { ...existingIncidentWithWitnesses, medicationAdministrationId: null, shiftId: null, shiftNoteId: null } })
+      mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
+      const user = userEvent.setup()
+      renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+      await user.click(await screen.findByRole('button', { name: /Review$/i }))
+      await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+      const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
+      expect(payload.medicationAdministrationId).toBeUndefined()
+      expect(payload.shiftId).toBeUndefined()
+      expect(payload.shiftNoteId).toBeUndefined()
+    })
   })
 })
 

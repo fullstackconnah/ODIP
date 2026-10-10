@@ -384,11 +384,12 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         witnessUserId: w.witnessUserId,
         witnessName: w.witnessName,
       })),
-      // Connection map: only ever set on a create-mode submission that started from one of these
-      // two router-state hand-offs — marPrefill/shiftNotePrefill are both hard-gated on !isEdit.
-      medicationAdministrationId: marPrefill ? marPrefill.medicationAdministrationId : undefined,
-      shiftId: shiftNotePrefill ? shiftNotePrefill.shiftId : undefined,
-      shiftNoteId: shiftNotePrefill ? shiftNotePrefill.shiftNoteId : undefined,
+      // Connection map: a create-mode submission takes these from the router-state hand-off it started from
+      // (marPrefill/shiftNotePrefill are both hard-gated on !isEdit). UpdateIncident sets all three from the body,
+      // so an edit sends the stored links back, or saving any change would clear them.
+      medicationAdministrationId: isEdit ? existingIncident?.medicationAdministrationId ?? undefined : marPrefill?.medicationAdministrationId,
+      shiftId: isEdit ? existingIncident?.shiftId ?? undefined : shiftNotePrefill?.shiftId,
+      shiftNoteId: isEdit ? existingIncident?.shiftNoteId ?? undefined : shiftNotePrefill?.shiftNoteId,
     }
 
     try {
