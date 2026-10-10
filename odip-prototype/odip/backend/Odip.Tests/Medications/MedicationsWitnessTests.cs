@@ -282,4 +282,70 @@ public class MedicationsWitnessTests
         Assert.True(body.Success);
         Assert.Equal(WitnessStatus.Pending, body.Data!.WitnessStatus);
     }
+
+    // Amend (PUT) path: WitnessName mirrors the staff witness's name (see MedicationAdministration.WitnessName),
+    // so a typed, blank or missing name must not replace it while a staff witness is recorded.
+    [Theory]
+    [InlineData("Someone Typed")]
+    [InlineData("")]
+    [InlineData(null)]
+    public async Task UpdateAdministration_StaffWitnessed_KeepsStaffWitnessNameWhateverIsSent(string? typedName)
+    {
+        var (db, tenant) = CreateDb();
+        var participant = SeedParticipant(db);
+        var med = SeedHighRiskMed(db, participant.Id);
+        var witness = SeedUser(db, "Rachel", "Thompson");
+        var admin = new MedicationAdministration
+        {
+            Id = Guid.NewGuid(), ParticipantMedicationId = med.Id, ParticipantId = participant.Id,
+            Status = MedicationAdministrationStatus.Administered, AdministeredAt = DateTime.UtcNow, RecordedByName = "Test",
+            WitnessUserId = witness.Id, WitnessName = "Rachel Thompson", WitnessStatus = WitnessStatus.Pending,
+        };
+        db.MedicationAdministrations.Add(admin);
+        db.SaveChanges();
+        var controller = new MedicationsController(db, tenant.Object);
+
+        var dto = new UpdateAdministrationDto
+        {
+            Status = MedicationAdministrationStatus.Administered, AdministeredAt = admin.AdministeredAt,
+            WitnessName = typedName, Notes = "Typo fixed",
+        };
+        var result = await controller.UpdateAdministration(admin.Id, dto, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<AdministrationDto>>(ok.Value);
+        Assert.Equal("Rachel Thompson", body.Data!.WitnessName);
+        var saved = await db.MedicationAdministrations.SingleAsync();
+        Assert.Equal("Rachel Thompson", saved.WitnessName);
+        Assert.Equal(witness.Id, saved.WitnessUserId);
+        Assert.Equal(WitnessStatus.Pending, saved.WitnessStatus);
+        Assert.Equal("Typo fixed", saved.Notes);
+    }
+
+    [Fact]
+    public async Task UpdateAdministration_LegacyWitnessNameOnly_StillSavesTheTypedName()
+    {
+        var (db, tenant) = CreateDb();
+        var participant = SeedParticipant(db);
+        var med = SeedHighRiskMed(db, participant.Id);
+        var admin = new MedicationAdministration
+        {
+            Id = Guid.NewGuid(), ParticipantMedicationId = med.Id, ParticipantId = participant.Id,
+            Status = MedicationAdministrationStatus.Administered, AdministeredAt = DateTime.UtcNow, RecordedByName = "Test",
+            WitnessName = "Old Typed Name",
+        };
+        db.MedicationAdministrations.Add(admin);
+        db.SaveChanges();
+        var controller = new MedicationsController(db, tenant.Object);
+
+        var dto = new UpdateAdministrationDto
+        {
+            Status = MedicationAdministrationStatus.Administered, AdministeredAt = admin.AdministeredAt,
+            WitnessName = "Corrected Name",
+        };
+        await controller.UpdateAdministration(admin.Id, dto, CancellationToken.None);
+
+        var saved = await db.MedicationAdministrations.SingleAsync();
+        Assert.Equal("Corrected Name", saved.WitnessName);
+    }
 }

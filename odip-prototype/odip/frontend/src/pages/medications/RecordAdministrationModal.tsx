@@ -103,8 +103,8 @@ export function RecordAdministrationModal({
   const [doseGiven, setDoseGiven] = useState(existingAdministration?.doseGiven ?? doseDescription ?? '')
   const [reason, setReason] = useState(existingAdministration?.reason ?? '')
   const [prnReason, setPrnReason] = useState(existingAdministration?.prnReason ?? '')
-  // Legacy free-text witness — only ever shown/edited when amending an administration that
-  // already used it (the create flow below always uses the staff picker instead).
+  // Legacy free-text witness — only shown/edited when amending a dose with no staff witness
+  // (the create flow below always uses the staff picker instead).
   const [witnessName, setWitnessName] = useState(existingAdministration?.witnessName ?? '')
   const [witnessStaffId, setWitnessStaffId] = useState(existingAdministration?.witnessStaffId ?? '')
   const [notes, setNotes] = useState(existingAdministration?.notes ?? '')
@@ -134,6 +134,8 @@ export function RecordAdministrationModal({
   const requiresReason = status !== 'Administered'
   const requiresPrnReason = isPrn && status === 'Administered'
   const requiresWitness = isHighRisk && status === 'Administered'
+  // An amended dose that already has a staff witness keeps it; no typed name is asked for or saved.
+  const hasStaffWitness = isAmend && !!existingAdministration?.witnessStaffId
   // MED-03: wrong-medication recording additionally requires a note on what was actually given
   // instead of the prescribed medication — required both ends (see MedicationsController).
   const requiresWrongMedNote = status === 'WrongMedication'
@@ -192,7 +194,7 @@ export function RecordAdministrationModal({
     if (requiresWrongMedNote && !notes.trim()) errs.notes = 'Required — what was actually given instead'
     if (requiresPrnReason && !prnReason.trim()) errs.prnReason = 'Required for a PRN dose'
     if (requiresWitness) {
-      if (isAmend && !witnessName.trim()) errs.witnessName = 'A second worker must witness this dose'
+      if (isAmend && !hasStaffWitness && !witnessName.trim()) errs.witnessName = 'A second worker must witness this dose'
       if (!isAmend && !witnessStaffId) errs.witnessStaffId = 'Select the staff member who witnessed this dose'
       // Belt-and-suspenders: the picker already excludes the signed-in user (see activeStaff
       // above), but catch it here too rather than letting a self-selection reach the backend's
@@ -434,7 +436,12 @@ export function RecordAdministrationModal({
           </AnimatedField>
 
           <AnimatedField show={requiresWitness}>
-            {isAmend ? (
+            {hasStaffWitness ? (
+              <div>
+                <p className={labelClass}>Witness</p>
+                <p className="text-sm text-[var(--color-foreground)]">{existingAdministration?.witnessName || 'Recorded staff witness'}</p>
+              </div>
+            ) : isAmend ? (
               <FormField label="Witness name" required error={fieldErrors.witnessName} hint={!fieldErrors.witnessName ? 'High-risk medication — a second worker must witness this dose' : undefined}>
                 <input value={witnessName} onChange={e => { setWitnessName(e.target.value); clearFieldError('witnessName') }} />
               </FormField>

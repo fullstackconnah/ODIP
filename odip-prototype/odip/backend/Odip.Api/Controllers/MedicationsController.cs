@@ -385,7 +385,8 @@ public class MedicationsController : ControllerBase
         // buildAmendFields) shouldn't wipe out how that original instant should be displayed.
         admin.AdministeredAtTimeZone = dto.AdministeredAtTimeZone ?? admin.AdministeredAtTimeZone;
         admin.DoseGiven = dto.DoseGiven;
-        admin.WitnessName = dto.WitnessName;
+        // WitnessName mirrors the staff witness's name; only the legacy free-text witness is editable here.
+        if (admin.WitnessUserId is null) admin.WitnessName = dto.WitnessName;
         admin.Reason = dto.Reason;
         admin.PrnReason = dto.PrnReason;
         admin.PrnOutcome = dto.PrnOutcome;
