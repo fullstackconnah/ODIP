@@ -53,6 +53,14 @@ internal static class CrossTenant
         return trip;
     }
 
+    public static EventTemplate EventTemplate(OdipDbContext db, Guid tenantId, bool isActive = true)
+    {
+        var template = new EventTemplate { Id = Guid.NewGuid(), TenantId = tenantId, EventCode = Guid.NewGuid().ToString("N")[..8], EventName = "Beach week", IsActive = isActive };
+        db.EventTemplates.Add(template);
+        db.SaveChanges();
+        return template;
+    }
+
     public static Vehicle Vehicle(OdipDbContext db, Guid tenantId)
     {
         var vehicle = new Vehicle { Id = Guid.NewGuid(), TenantId = tenantId, VehicleName = "Van", Registration = "ABC123", TotalSeats = 8, WheelchairPositions = 1 };
