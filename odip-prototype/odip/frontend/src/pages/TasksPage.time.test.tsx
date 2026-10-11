@@ -7,15 +7,14 @@ import { restoreZone, setZone } from '@/test/timeZone'
 
 vi.mock('@/lib/permissions', () => ({ usePermissions: () => ({ canWrite: true }) }))
 
-const { mockUpdateMutate, mockUpdateMutateAsync, mockUseTasks } = vi.hoisted(() => ({
+const { mockUpdateMutate, mockUseTasks } = vi.hoisted(() => ({
   mockUpdateMutate: vi.fn(),
-  mockUpdateMutateAsync: vi.fn(),
   mockUseTasks: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
   useTasks: mockUseTasks,
-  useUpdateTask: () => ({ mutate: mockUpdateMutate, mutateAsync: mockUpdateMutateAsync }),
+  useUpdateTask: () => ({ mutate: mockUpdateMutate }),
   useDeleteTask: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
 }))
 
@@ -24,7 +23,6 @@ beforeEach(() => {
     data: [{ id: 't1', title: 'Confirm accommodation', tripInstanceId: 'trip-1', tripName: 'Beach Trip', taskType: 'AccommodationRequest', ownerName: 'Sam', dueDate: '2026-10-05', priority: 'Medium', status: 'NotStarted' }],
     isLoading: false,
   })
-  mockUpdateMutateAsync.mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -51,9 +49,10 @@ describe.each([
     render(<MemoryRouter><TasksPage /></MemoryRouter>)
     await user.click(screen.getByRole('button', { name: 'Mark complete' }))
 
-    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({
-      id: 't1', data: expect.objectContaining({ status: 'Completed', completedDate: expectedDate }),
-    })
+    expect(mockUpdateMutate).toHaveBeenCalledWith(
+      { id: 't1', data: expect.objectContaining({ status: 'Completed', completedDate: expectedDate }) },
+      expect.anything(),
+    )
   })
 
   it('choosing Completed in the status pill saves the local date', async () => {

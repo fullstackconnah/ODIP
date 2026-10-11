@@ -58,9 +58,12 @@ export default function TasksPage() {
 
   const { data: tasks = [], isLoading } = useTasks(queryParams)
 
-  const markComplete = async (e: React.MouseEvent, task: any) => {
+  const markComplete = (e: React.MouseEvent, task: any) => {
     e.stopPropagation()
-    await updateTask.mutateAsync({ id: task.id, data: { ...task, status: 'Completed', completedDate: localIsoDate() } })
+    updateTask.mutate({ id: task.id, data: { ...task, status: 'Completed', completedDate: localIsoDate() } }, {
+      onError: () => setFailedRowId(task.id),
+      onSuccess: () => setFailedRowId(prev => prev === task.id ? null : prev),
+    })
   }
 
   const taskColumns: Column<any>[] = [
@@ -68,7 +71,7 @@ export default function TasksPage() {
       key: 'checkbox',
       header: '',
       hidden: showArchived,
-      render: (t) => t.status !== 'Completed' && t.status !== 'Cancelled' && (!isBudgetReview(t) || mayCloseBudgetReview) ? (
+      render: (t) => t.status !== 'Completed' && t.status !== 'Cancelled' && mayChange(t) ? (
         <Button variant="ghost" size="sm" iconOnly onClick={(e) => markComplete(e, t)} title="Mark complete">
           <CheckCircle className="w-4 h-4" />
         </Button>
@@ -124,7 +127,8 @@ export default function TasksPage() {
       sortable: true,
       // "Not Started" / "In Progress" swap in place: reserve the widest so the column does not jump.
       minWidth: '9rem',
-      render: (t) => (
+      // A role that cannot write reads the status; one that can but may not change this row (the emergency review) gets a held pill.
+      render: (t) => !canWrite ? <StatusBadge status={t.status} label={TASK_STATUS_ITEMS.find(i => i.value === t.status)?.label} /> : (
         <div>
           <Dropdown
             variant="pill"

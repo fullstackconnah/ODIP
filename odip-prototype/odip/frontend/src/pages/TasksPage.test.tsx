@@ -276,3 +276,34 @@ describe('TasksPage — the emergency review task', () => {
     expect(title).toHaveAttribute('href', '/rostering/leave')
   })
 })
+
+// STAFF-2 / CORE-2: the tick is a write (PUT /tasks/:id), refused to ReadOnly and SupportWorker; and a refusal is said, not swallowed.
+describe('TasksPage — the Mark complete tick', () => {
+  it('offers no tick to a role that cannot write', () => {
+    perms.canWrite = false
+    renderPage()
+    expect(screen.queryByRole('button', { name: 'Mark complete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Add task/ })).not.toBeInTheDocument()
+  })
+
+  it('shows a role that cannot write the status as text, not a pill', () => {
+    perms.canWrite = false
+    renderPage()
+    expect(screen.getByText('Not Started')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Not Started/i })).not.toBeInTheDocument()
+  })
+
+  it('offers the tick to a role that can write, and shows the row alert when the save fails', async () => {
+    const user = userEvent.setup()
+    mockUpdateMutate.mockImplementation((_data, { onError }) => onError(new Error('403')))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Mark complete' }))
+
+    expect(mockUpdateMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 't1', data: expect.objectContaining({ status: 'Completed' }) }),
+      expect.anything(),
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't update status. Try again.")
+  })
+})
