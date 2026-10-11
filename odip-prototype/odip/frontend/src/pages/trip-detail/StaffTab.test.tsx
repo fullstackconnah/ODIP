@@ -423,3 +423,30 @@ describe('StaffTab — the staffing summary shows what the server says the trip 
     expect(screen.getByText('0 / ? staff')).toBeInTheDocument()
   })
 })
+
+describe('StaffTab — dialogs', () => {
+  const row = {
+    id: 'assign-1', tripInstanceId: 'trip-1', tripName: 'Gold Coast Beach Break',
+    staffId: 'staff-1', staffName: 'Alex Rivera', assignmentRole: 'Support Worker',
+    assignmentStart: '2026-09-10', assignmentEnd: '2026-09-12', status: 'Confirmed',
+    isDriver: false, sleepoverType: 'None', shiftNotes: null,
+    hasConflict: false, overrideReason: null, acknowledgedFindingCodes: null,
+  } as StaffAssignmentDto
+
+  // Each dialog is named, Escape closes it, and focus goes back to the control that opened it.
+  it.each([
+    ['Add Staff to Trip', () => screen.getByRole('button', { name: /add staff/i }), 'Add Staff to Trip'],
+    ['Edit Assignment', () => screen.getByTitle('Edit assignment'), 'Edit Assignment — Alex Rivera'],
+  ])('%s: Escape closes it and focus returns to the opener', async (_label, opener, name) => {
+    const user = userEvent.setup()
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} canWrite />)
+    const control = opener()
+    await user.click(control)
+    expect(screen.getByRole('dialog', { name })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(control).toHaveFocus()
+  })
+})

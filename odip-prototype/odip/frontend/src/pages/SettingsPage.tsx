@@ -2,8 +2,9 @@ import { useEventTemplates, useActivities, useSettings, useUpdateSettings, usePr
 import { useState, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import { LayoutTemplate, Pencil, X } from 'lucide-react'
+import { LayoutTemplate, Pencil } from 'lucide-react'
 import { Tabs } from '@/components/Tabs'
+import { Modal } from '@/components/Modal'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable } from '@/components/DataTable'
@@ -607,15 +608,21 @@ function SupportCatalogueTab() {
 
       {/* Import modal */}
       {importing && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-[var(--color-card)] rounded-[var(--radius-lg)] p-[var(--card-pad)] max-w-lg w-full mx-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-[var(--color-foreground)]">Import NDIS Support Catalogue</h3>
-              <Button variant="ghost" size="sm" iconOnly aria-label="Close" onClick={() => { setImporting(false); setPreviewStep(null); setPreview(null); setImportError(null) }}>
-                <X className="w-4 h-4" />
+        <Modal
+          open
+          onClose={() => { setImporting(false); setPreviewStep(null); setPreview(null); setImportError(null) }}
+          title="Import NDIS Support Catalogue"
+          closeOnBackdrop={false}
+          footer={previewStep === 'preview' && preview ? (
+            <>
+              <Button variant="secondary" size="md" onClick={() => setPreviewStep('upload')}>Back</Button>
+              <Button size="md" onClick={handleConfirm} disabled={confirming}>
+                {confirming ? 'Importing...' : 'Confirm Import'}
               </Button>
-            </div>
-
+            </>
+          ) : undefined}
+        >
+          <div className="space-y-4">
             {importError && (
               <Callout tone="error">{importError}</Callout>
             )}
@@ -651,16 +658,10 @@ function SupportCatalogueTab() {
                   <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Catalogue Version</label>
                   <input value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
-                <div className="flex gap-2 justify-end">
-                  <Button variant="secondary" size="md" onClick={() => setPreviewStep('upload')}>Back</Button>
-                  <Button size="md" onClick={handleConfirm} disabled={confirming}>
-                    {confirming ? 'Importing...' : 'Confirm Import'}
-                  </Button>
-                </div>
               </div>
             )}
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   )

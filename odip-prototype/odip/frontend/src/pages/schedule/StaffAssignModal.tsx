@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { UserPlus, X } from 'lucide-react'
+import { useEffect, useId, useState } from 'react'
 import { Button } from '@/components/Button'
+import { Modal } from '@/components/Modal'
 import { Dropdown } from '@/components/Dropdown'
 import { formatDate } from './helpers'
 import { useCheckStaffAssignment, getRosterFindings } from '@/api/hooks'
@@ -18,6 +18,7 @@ interface StaffAssignModalProps {
 }
 
 export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoading }: StaffAssignModalProps) {
+  const formId = useId()
   const [role, setRole] = useState('Support Worker')
   const [isDriver, setIsDriver] = useState(false)
   const [sleepoverType, setSleepoverType] = useState<SleepoverType>('None')
@@ -78,102 +79,91 @@ export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoa
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-[var(--radius-lg)] shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex h-12 items-center justify-between px-4" style={{ borderBottom: '1px solid rgba(195,201,181,0.25)' }}>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[var(--color-primary-fixed)]/30 flex items-center justify-center">
-              <UserPlus className="w-4 h-4 text-[var(--color-primary)]" />
-            </div>
-            <h3 className="font-display font-bold text-base">Assign Staff</h3>
+    <Modal
+      stickyFooter
+      open
+      onClose={onClose}
+      title="Assign Staff"
+      footer={
+        <>
+          <Button variant="secondary" size="md" onClick={onClose}>Cancel</Button>
+          <Button type="submit" form={formId} size="md" disabled={isBusy || gate.isBlocked}>{isBusy ? 'Assigning...' : gate.needsReason ? 'Assign with override' : 'Assign Staff'}</Button>
+        </>
+      }
+    >
+      <form id={formId} onSubmit={handleSubmit} className="space-y-[var(--section-gap)]">
+        <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)] space-y-1">
+          <div className="text-sm font-bold">{staff.fullName}</div>
+          <div className="text-xs text-[var(--color-muted-foreground)]">→ {trip.tripName}</div>
+          <div className="text-xs text-[var(--color-muted-foreground)]">
+            {formatDate(trip.startDate)} — {formatDate(trip.endDate)} ({trip.durationDays} days)
           </div>
-          <Button variant="ghost" size="sm" iconOnly onClick={onClose} aria-label="Close">
-            <X className="w-4 h-4" />
-          </Button>
         </div>
-        <form onSubmit={handleSubmit} className="p-4 space-y-[var(--section-gap)]">
-          <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)] space-y-1">
-            <div className="text-sm font-bold">{staff.fullName}</div>
-            <div className="text-xs text-[var(--color-muted-foreground)]">→ {trip.tripName}</div>
-            <div className="text-xs text-[var(--color-muted-foreground)]">
-              {formatDate(trip.startDate)} — {formatDate(trip.endDate)} ({trip.durationDays} days)
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">Assignment Role</label>
-            <Dropdown
-              variant="form"
-              value={role}
-              onChange={setRole}
-              items={[
-                { value: 'Support Worker', label: 'Support Worker' },
-                { value: 'Senior Support Worker', label: 'Senior Support Worker' },
-                { value: 'Lead Coordinator', label: 'Lead Coordinator' },
-                { value: 'Team Leader', label: 'Team Leader' },
-                { value: 'Senior Support / Driver', label: 'Senior Support / Driver' },
-                { value: 'Driver', label: 'Driver' },
-              ]}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">Sleepover Type</label>
-            <Dropdown
-              variant="form"
-              value={sleepoverType}
-              onChange={(val: string) => setSleepoverType(val as SleepoverType)}
-              items={[
-                { value: 'None', label: 'None' },
-                { value: 'ActiveNight', label: 'Active Night' },
-                { value: 'PassiveNight', label: 'Passive Night' },
-                { value: 'Sleepover', label: 'Sleepover' },
-              ]}
-            />
-          </div>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isDriver}
-              onChange={e => setIsDriver(e.target.checked)}
-              className="w-4 h-4 rounded accent-[var(--color-primary)]"
-            />
-            <span className="text-sm font-medium">Assigned as driver</span>
-            {staff.isDriverEligible
-              ? <span className="text-[13px] text-[var(--color-primary)] font-semibold">(eligible)</span>
-              : <span className="text-[13px] text-[var(--color-destructive)] font-semibold">(not eligible)</span>
-            }
-          </label>
-          <div>
-            <label className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">Shift Notes (optional)</label>
-            <textarea
-              value={shiftNotes}
-              onChange={e => setShiftNotes(e.target.value)}
-              rows={2}
-              placeholder="E.g. arrive evening before, depart early last day..."
-              className="w-full px-4 py-2.5 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] border-none text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
-            />
-          </div>
-
-          <RosterGateFields
-            findings={findings}
-            overrideReason={overrideReason}
-            onOverrideReasonChange={setOverrideReason}
-            reasonRequired={reasonRequired}
+        <div>
+          <label className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">Assignment Role</label>
+          <Dropdown
+            variant="form"
+            value={role}
+            onChange={setRole}
+            items={[
+              { value: 'Support Worker', label: 'Support Worker' },
+              { value: 'Senior Support Worker', label: 'Senior Support Worker' },
+              { value: 'Lead Coordinator', label: 'Lead Coordinator' },
+              { value: 'Team Leader', label: 'Team Leader' },
+              { value: 'Senior Support / Driver', label: 'Senior Support / Driver' },
+              { value: 'Driver', label: 'Driver' },
+            ]}
           />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">Sleepover Type</label>
+          <Dropdown
+            variant="form"
+            value={sleepoverType}
+            onChange={(val: string) => setSleepoverType(val as SleepoverType)}
+            items={[
+              { value: 'None', label: 'None' },
+              { value: 'ActiveNight', label: 'Active Night' },
+              { value: 'PassiveNight', label: 'Passive Night' },
+              { value: 'Sleepover', label: 'Sleepover' },
+            ]}
+          />
+        </div>
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isDriver}
+            onChange={e => setIsDriver(e.target.checked)}
+            className="w-4 h-4 rounded accent-[var(--color-primary)]"
+          />
+          <span className="text-sm font-medium">Assigned as driver</span>
+          {staff.isDriverEligible
+            ? <span className="text-[13px] text-[var(--color-primary)] font-semibold">(eligible)</span>
+            : <span className="text-[13px] text-[var(--color-destructive)] font-semibold">(not eligible)</span>
+          }
+        </label>
+        <div>
+          <label className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">Shift Notes (optional)</label>
+          <textarea
+            value={shiftNotes}
+            onChange={e => setShiftNotes(e.target.value)}
+            rows={2}
+            placeholder="E.g. arrive evening before, depart early last day..."
+            className="w-full px-4 py-2.5 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] border-none text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
+          />
+        </div>
 
-          {error && (
-            <Callout tone="error">{error}</Callout>
-          )}
+        <RosterGateFields
+          findings={findings}
+          overrideReason={overrideReason}
+          onOverrideReasonChange={setOverrideReason}
+          reasonRequired={reasonRequired}
+        />
 
-          <div className="flex gap-3 pt-1">
-            <Button variant="secondary" size="md" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
-            <Button type="submit" size="md" disabled={isBusy || gate.isBlocked} className="flex-1">
-              {isBusy ? 'Assigning...' : gate.needsReason ? 'Assign with override' : 'Assign Staff'}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+        {error && (
+          <Callout tone="error">{error}</Callout>
+        )}
+      </form>
+    </Modal>
   )
 }

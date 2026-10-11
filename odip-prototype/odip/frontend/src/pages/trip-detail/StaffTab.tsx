@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, X, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
+import { Plus, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
 import {
   useUpdateStaffAssignment,
   useDeleteStaffAssignment,
@@ -23,6 +23,7 @@ import type { TripDetailDto } from '@/api/types/trips'
 import type { StaffAssignmentDto, StaffListDto, UpdateStaffAssignmentDto } from '@/api/types/staff'
 import type { RosterFindingDto } from '@/api/types'
 import { Button } from '@/components/Button'
+import { Modal } from '@/components/Modal'
 
 const ASSIGNMENT_STATUS_ITEMS: DropdownItem[] = ASSIGNMENT_STATUSES.map(s => ({ value: s, label: s }))
 
@@ -345,221 +346,211 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
 
       {/* Edit Staff Assignment Modal */}
       {editingStaff && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditingStaff(null)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Edit Assignment — {editingStaff.staffName}</h3>
-              <button onClick={() => setEditingStaff(null)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
-                <X className="w-5 h-5" />
-              </button>
+        <Modal
+          open
+          onClose={() => setEditingStaff(null)}
+          title={`Edit Assignment — ${editingStaff.staffName}`}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setEditingStaff(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateStaffAssignment} disabled={updateStaffAssignment.isPending || editGate.isBlocked}>
+                {updateStaffAssignment.isPending ? 'Saving...' : editGate.needsReason ? 'Save with override' : 'Save Changes'}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            {/* Assignment Role */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Assignment Role</label>
+              <input type="text" value={editStaffForm.assignmentRole} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentRole: e.target.value })}
+                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
+                placeholder="e.g. Support Worker" />
             </div>
 
-            <div className="space-y-4">
-              {/* Assignment Role */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Assignment Role</label>
-                <input type="text" value={editStaffForm.assignmentRole} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentRole: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                  placeholder="e.g. Support Worker" />
-              </div>
-
-              {/* Status */}
-              <div>
-                <label id="editStaffStatusLabel" className="block text-sm font-medium mb-1">Status</label>
-                <Dropdown
-                  variant="form"
-                  aria-labelledby="editStaffStatusLabel"
-                  value={editStaffForm.status}
-                  onChange={val => setEditStaffForm({ ...editStaffForm, status: val as AssignmentStatus })}
-                  items={ASSIGNMENT_STATUS_ITEMS}
-                />
-              </div>
-
-              {/* Dates */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Assignment Start</label>
-                  <input type="date" value={editStaffForm.assignmentStart} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentStart: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Assignment End</label>
-                  <input type="date" value={editStaffForm.assignmentEnd} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentEnd: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-              </div>
-
-              {/* Is Driver */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium">
-                  <input type="checkbox" checked={editStaffForm.isDriver} onChange={e => setEditStaffForm({ ...editStaffForm, isDriver: e.target.checked })}
-                    className="rounded border-[rgba(195,201,181,0.15)]" />
-                  Is Driver
-                </label>
-              </div>
-
-              {/* Sleepover Type */}
-              <div>
-                <label id="editStaffSleepoverTypeLabel" className="block text-sm font-medium mb-1">Sleepover Type</label>
-                <Dropdown
-                  variant="form"
-                  aria-labelledby="editStaffSleepoverTypeLabel"
-                  value={editStaffForm.sleepoverType}
-                  onChange={val => setEditStaffForm({ ...editStaffForm, sleepoverType: val as SleepoverType })}
-                  items={SLEEPOVER_TYPE_ITEMS}
-                />
-              </div>
-
-              {/* Shift Notes */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Shift Notes</label>
-                <textarea value={editStaffForm.shiftNotes} onChange={e => setEditStaffForm({ ...editStaffForm, shiftNotes: e.target.value })} rows={3}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-                  placeholder="Optional notes..." />
-              </div>
-
-              {/* Conflict findings — same gate as StaffAssignModal, via the shared RosterGateFields */}
-              <RosterGateFields
-                findings={editFindings}
-                overrideReason={editOverrideReason}
-                onOverrideReasonChange={setEditOverrideReason}
-                reasonRequired={editReasonRequired}
-                forceVisible={!!editingStaff?.overrideReason}
+            {/* Status */}
+            <div>
+              <label id="editStaffStatusLabel" className="block text-sm font-medium mb-1">Status</label>
+              <Dropdown
+                variant="form"
+                aria-labelledby="editStaffStatusLabel"
+                value={editStaffForm.status}
+                onChange={val => setEditStaffForm({ ...editStaffForm, status: val as AssignmentStatus })}
+                items={ASSIGNMENT_STATUS_ITEMS}
               />
+            </div>
 
-              {/* Error */}
-              {editError && (
-                <p className="text-sm text-[var(--color-destructive)]">{editError}</p>
-              )}
-
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="secondary" onClick={() => setEditingStaff(null)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleUpdateStaffAssignment} disabled={updateStaffAssignment.isPending || editGate.isBlocked}>
-                  {updateStaffAssignment.isPending ? 'Saving...' : editGate.needsReason ? 'Save with override' : 'Save Changes'}
-                </Button>
+            {/* Dates */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Assignment Start</label>
+                <input type="date" value={editStaffForm.assignmentStart} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentStart: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Assignment End</label>
+                <input type="date" value={editStaffForm.assignmentEnd} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentEnd: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
               </div>
             </div>
+
+            {/* Is Driver */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" checked={editStaffForm.isDriver} onChange={e => setEditStaffForm({ ...editStaffForm, isDriver: e.target.checked })}
+                  className="rounded border-[rgba(195,201,181,0.15)]" />
+                Is Driver
+              </label>
+            </div>
+
+            {/* Sleepover Type */}
+            <div>
+              <label id="editStaffSleepoverTypeLabel" className="block text-sm font-medium mb-1">Sleepover Type</label>
+              <Dropdown
+                variant="form"
+                aria-labelledby="editStaffSleepoverTypeLabel"
+                value={editStaffForm.sleepoverType}
+                onChange={val => setEditStaffForm({ ...editStaffForm, sleepoverType: val as SleepoverType })}
+                items={SLEEPOVER_TYPE_ITEMS}
+              />
+            </div>
+
+            {/* Shift Notes */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Shift Notes</label>
+              <textarea value={editStaffForm.shiftNotes} onChange={e => setEditStaffForm({ ...editStaffForm, shiftNotes: e.target.value })} rows={3}
+                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                placeholder="Optional notes..." />
+            </div>
+
+            {/* Conflict findings — same gate as StaffAssignModal, via the shared RosterGateFields */}
+            <RosterGateFields
+              findings={editFindings}
+              overrideReason={editOverrideReason}
+              onOverrideReasonChange={setEditOverrideReason}
+              reasonRequired={editReasonRequired}
+              forceVisible={!!editingStaff?.overrideReason}
+            />
+
+            {/* Error */}
+            {editError && (
+              <p className="text-sm text-[var(--color-destructive)]">{editError}</p>
+            )}
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Add Staff Modal */}
       {showAddStaff && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowAddStaff(false)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Add Staff to Trip</h3>
-              <button onClick={() => setShowAddStaff(false)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Staff Select — UX-01: staff-scale list, SearchableSelect not a bounded native
-                  select. This file doesn't wrap fields in FormField, so the label/control
-                  association is wired by hand (id + aria-labelledby) the same way FormField does
-                  it for a custom component child. */}
-              <div>
-                <label id="addStaffMemberLabel" className="block text-sm font-medium mb-1">Staff Member</label>
-                <SearchableSelect
-                  aria-labelledby="addStaffMemberLabel"
-                  value={selectedStaffId}
-                  onChange={setSelectedStaffId}
-                  placeholder="Select staff..."
-                  items={allStaff
-                    .filter((s: StaffListDto) => !assignedStaffIds.has(s.id))
-                    .map((s: StaffListDto) => {
-                      const isAvailable = availableStaffIds.has(s.id)
-                      return { value: s.id, label: `${s.fullName}${!isAvailable ? ' (Unavailable)' : ''}` }
-                    })}
-                />
-                {selectedStaffId && !availableStaffIds.has(selectedStaffId) && (
-                  <p className="text-xs text-[var(--color-warning)] mt-1 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> This staff member has a scheduling conflict for the trip dates
-                  </p>
-                )}
-              </div>
-
-              {/* Assignment Role */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Assignment Role</label>
-                <input type="text" value={staffAssignmentRole} onChange={e => setStaffAssignmentRole(e.target.value)}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                  placeholder="e.g. Support Worker" />
-              </div>
-
-              {/* Dates */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Start Date</label>
-                  <input type="date" value={staffAssignmentStart} onChange={e => setStaffAssignmentStart(e.target.value)}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">End Date</label>
-                  <input type="date" value={staffAssignmentEnd} onChange={e => setStaffAssignmentEnd(e.target.value)}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-              </div>
-
-              {/* Is Driver */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium">
-                  <input type="checkbox" checked={staffIsDriver} onChange={e => setStaffIsDriver(e.target.checked)}
-                    className="rounded border-[rgba(195,201,181,0.15)]" />
-                  Is Driver
-                </label>
-              </div>
-
-              {/* Sleepover Type */}
-              <div>
-                <label id="addStaffSleepoverTypeLabel" className="block text-sm font-medium mb-1">Sleepover Type</label>
-                <Dropdown
-                  variant="form"
-                  aria-labelledby="addStaffSleepoverTypeLabel"
-                  value={staffSleepoverType}
-                  onChange={setStaffSleepoverType}
-                  items={SLEEPOVER_TYPE_ITEMS}
-                />
-              </div>
-
-              {/* Shift Notes */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Shift Notes</label>
-                <textarea value={staffShiftNotes} onChange={e => setStaffShiftNotes(e.target.value)} rows={3}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-                  placeholder="Optional notes..." />
-              </div>
-
-              {/* Conflict findings — same gate as the edit modal, via the shared RosterGateFields */}
-              <RosterGateFields
-                findings={addFindings}
-                overrideReason={addOverrideReason}
-                onOverrideReasonChange={setAddOverrideReason}
-                reasonRequired={addReasonRequired}
+        <Modal
+          open
+          onClose={() => setShowAddStaff(false)}
+          title="Add Staff to Trip"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowAddStaff(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateStaffAssignment}
+                disabled={!selectedStaffId || createStaffAssignment.isPending || addGate.isBlocked}>
+                {createStaffAssignment.isPending ? 'Adding...' : addGate.needsReason ? 'Add with override' : 'Add Staff'}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            {/* Staff Select — UX-01: staff-scale list, SearchableSelect not a bounded native
+                select. This file doesn't wrap fields in FormField, so the label/control
+                association is wired by hand (id + aria-labelledby) the same way FormField does
+                it for a custom component child. */}
+            <div>
+              <label id="addStaffMemberLabel" className="block text-sm font-medium mb-1">Staff Member</label>
+              <SearchableSelect
+                aria-labelledby="addStaffMemberLabel"
+                value={selectedStaffId}
+                onChange={setSelectedStaffId}
+                placeholder="Select staff..."
+                items={allStaff
+                  .filter((s: StaffListDto) => !assignedStaffIds.has(s.id))
+                  .map((s: StaffListDto) => {
+                    const isAvailable = availableStaffIds.has(s.id)
+                    return { value: s.id, label: `${s.fullName}${!isAvailable ? ' (Unavailable)' : ''}` }
+                  })}
               />
-
-              {/* Error */}
-              {addError && (
-                <p className="text-sm text-[var(--color-destructive)]">{addError}</p>
+              {selectedStaffId && !availableStaffIds.has(selectedStaffId) && (
+                <p className="text-xs text-[var(--color-warning)] mt-1 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" /> This staff member has a scheduling conflict for the trip dates
+                </p>
               )}
+            </div>
 
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="secondary" onClick={() => setShowAddStaff(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleCreateStaffAssignment}
-                  disabled={!selectedStaffId || createStaffAssignment.isPending || addGate.isBlocked}>
-                  {createStaffAssignment.isPending ? 'Adding...' : addGate.needsReason ? 'Add with override' : 'Add Staff'}
-                </Button>
+            {/* Assignment Role */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Assignment Role</label>
+              <input type="text" value={staffAssignmentRole} onChange={e => setStaffAssignmentRole(e.target.value)}
+                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
+                placeholder="e.g. Support Worker" />
+            </div>
+
+            {/* Dates */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Start Date</label>
+                <input type="date" value={staffAssignmentStart} onChange={e => setStaffAssignmentStart(e.target.value)}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">End Date</label>
+                <input type="date" value={staffAssignmentEnd} onChange={e => setStaffAssignmentEnd(e.target.value)}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
               </div>
             </div>
+
+            {/* Is Driver */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" checked={staffIsDriver} onChange={e => setStaffIsDriver(e.target.checked)}
+                  className="rounded border-[rgba(195,201,181,0.15)]" />
+                Is Driver
+              </label>
+            </div>
+
+            {/* Sleepover Type */}
+            <div>
+              <label id="addStaffSleepoverTypeLabel" className="block text-sm font-medium mb-1">Sleepover Type</label>
+              <Dropdown
+                variant="form"
+                aria-labelledby="addStaffSleepoverTypeLabel"
+                value={staffSleepoverType}
+                onChange={setStaffSleepoverType}
+                items={SLEEPOVER_TYPE_ITEMS}
+              />
+            </div>
+
+            {/* Shift Notes */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Shift Notes</label>
+              <textarea value={staffShiftNotes} onChange={e => setStaffShiftNotes(e.target.value)} rows={3}
+                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                placeholder="Optional notes..." />
+            </div>
+
+            {/* Conflict findings — same gate as the edit modal, via the shared RosterGateFields */}
+            <RosterGateFields
+              findings={addFindings}
+              overrideReason={addOverrideReason}
+              onOverrideReasonChange={setAddOverrideReason}
+              reasonRequired={addReasonRequired}
+            />
+
+            {/* Error */}
+            {addError && (
+              <p className="text-sm text-[var(--color-destructive)]">{addError}</p>
+            )}
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Delete/Cancel Staff Assignment Confirmation */}

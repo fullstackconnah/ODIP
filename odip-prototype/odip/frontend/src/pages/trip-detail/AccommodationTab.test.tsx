@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import type { ReservationDto } from '@/api/types/reservations'
 import type { AccommodationListDto } from '@/api/types/accommodation'
@@ -142,5 +143,32 @@ describe('AccommodationTab — column budget', () => {
     for (const name of ['Property', 'Status', 'Check-in', 'Check-out', 'Nights', 'Cost', 'Bedrooms / Beds', 'Ref']) {
       expect(screen.getByRole('columnheader', { name }).className, name).not.toMatch(/hidden/)
     }
+  })
+})
+
+describe('AccommodationTab — dialogs', () => {
+  const trip = { startDate: '2026-10-10T00:00:00', endDate: '2026-10-14T00:00:00' } as TripDetailDto
+
+  // Each dialog is named, Escape closes it, and focus goes back to the control that opened it.
+  it.each([
+    ['Add Accommodation', () => screen.getByRole('button', { name: 'Add Accommodation' }), 'Add Accommodation'],
+    ['Edit Reservation', () => screen.getByRole('button', { name: 'Edit reservation' }), 'Edit Reservation — Sunshine Beach Retreat'],
+  ])('%s: Escape closes it and focus returns to the opener', async (_label, opener, name) => {
+    const user = userEvent.setup()
+    properties.length = 0
+    properties.push(property())
+    render(
+      <MemoryRouter>
+        <AccommodationTab tripId="t1" trip={trip} accommodation={[reservation()]} canWrite />
+      </MemoryRouter>,
+    )
+    const control = opener()
+    await user.click(control)
+    expect(screen.getByRole('dialog', { name })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(control).toHaveFocus()
   })
 })
