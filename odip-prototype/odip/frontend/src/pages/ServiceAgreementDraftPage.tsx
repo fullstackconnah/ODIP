@@ -341,14 +341,14 @@ function DraftPage() {
         <div className="mt-2">
           {step === 'agreement' && (
             <div className="flex flex-col gap-[var(--section-gap)]">
-            <Callout tone="warning" announce={false} className="max-w-prose">
-              <p><strong>Draft only:</strong> not approved for signing or use. It can&apos;t activate the participant, invoice or claim. Approving a revision for rostering is separate: it only makes that revision&apos;s weekly patterns and unfilled shifts.</p>
-              <p className="mt-2"><strong>Participant identifiers come from the participant record.</strong> NDIS number: {canonicalIdentifiers.ndis}; date of birth: {canonicalIdentifiers.dob}. <Link className="underline font-medium" to={`/participants/${participantId}/profile`}>View or edit participant details</Link>. A snapshot of both is stored with this draft and printed on its PDF, which Admins and Coordinators can open; a later change to the record does not change an existing draft.</p>
-            </Callout>
-            <AgreementStep
-              details={details} onEdit={edit} recorded={recorded} plan={plan} readOnly={readOnly} fundingTab={`/participants/${participantId}?tab=funding`}
-              errors={attempted ? { start: dates.start, end: dates.end } : {}}
-            />
+              <Callout tone="info" announce={false} className="max-w-prose">
+                <p><strong>Draft only:</strong> not approved for signing or use. It can&apos;t activate the participant, invoice or claim. Approving a revision for rostering is separate: it only makes that revision&apos;s weekly patterns and unfilled shifts.</p>
+                <p className="mt-2"><strong>Participant identifiers come from the participant record.</strong> NDIS number: {canonicalIdentifiers.ndis}; date of birth: {canonicalIdentifiers.dob}. <Link className="underline font-medium" to={`/participants/${participantId}/profile`}>View or edit participant details</Link>. A snapshot of both is stored with this draft and printed on its PDF, which Admins and Coordinators can open; a later change to the record does not change an existing draft.</p>
+              </Callout>
+              <AgreementStep
+                details={details} onEdit={edit} recorded={recorded} plan={plan} readOnly={readOnly} fundingTab={`/participants/${participantId}?tab=funding`}
+                errors={attempted ? { start: dates.start, end: dates.end } : {}}
+              />
             </div>
           )}
           {step === 'week' && (
