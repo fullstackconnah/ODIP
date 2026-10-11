@@ -12,15 +12,15 @@ describe('DataTable — the column rule: nothing is removed, the box scrolls, th
   const items: Item[] = [{ id: '1', a: 'alpha', b: 'bravo', c: 'charlie', d: 'delta', e: 'echo', actions: 'Open' }]
   const columns: Column<Item>[] = [
     { key: 'a', header: 'A' },
-    { key: 'b', header: 'B', priority: 'high' },
-    { key: 'c', header: 'C', priority: 'medium' },
-    { key: 'd', header: 'D', priority: 'low' },
-    { key: 'e', header: 'E', priority: 'lowest' },
+    { key: 'b', header: 'B' },
+    { key: 'c', header: 'C' },
+    { key: 'd', header: 'D' },
+    { key: 'e', header: 'E' },
     { key: 'actions', header: '' },
   ]
   const headerOf = (name: string) => screen.getByRole('columnheader', { name })
 
-  it('hides no column at any width, whatever its (deprecated) priority: header and cell alike', () => {
+  it('hides no column at any width, header and cell alike', () => {
     render(<DataTable data={items} columns={columns} keyField="id" />)
 
     for (const el of [...screen.getAllByRole('columnheader'), ...screen.getAllByRole('cell')]) {
@@ -35,7 +35,7 @@ describe('DataTable — the column rule: nothing is removed, the box scrolls, th
   it('does not hide an editing cell either', () => {
     const editable: Column<Item>[] = [
       { key: 'a', header: 'A' },
-      { key: 'd', header: 'D', priority: 'low', editable: { render: (row, onChange) => <input aria-label="edit-d" defaultValue={row.d} onChange={e => onChange(e.target.value)} /> } },
+      { key: 'd', header: 'D', editable: { render: (row, onChange) => <input aria-label="edit-d" defaultValue={row.d} onChange={e => onChange(e.target.value)} /> } },
     ]
     render(<DataTable data={items} columns={editable} keyField="id" editingRow="1" onEditChange={vi.fn()} />)
 

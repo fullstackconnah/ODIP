@@ -70,7 +70,6 @@ audit history, compatibility matrices, restrictive-practice registers.
 | `rowError` | `(row: T) => string \| undefined` | Per-row validation error rendered as its own `role="alert"` row directly beneath a row currently in edit mode (`editingRow` or `editingRows`). Return `undefined` for a row with nothing to show. |
 | `selectable` / `selectedRows` / `onSelectionChange` | | Adds a checkbox column with select-all in the header. |
 | `compact` | `boolean` | Tighter cell padding. |
-| `verticalDividers` | `boolean` | **DS-02.** Adds a vertical rule between every column (header + body). Off by default — most tables read fine with only the horizontal row dividers already in place; turn it on for dense, many-column tables where tracking a column by eye benefits from a rule (e.g. a wide compatibility matrix). |
 | `footer` | `ReactNode` | Rendered in a `<tfoot>` below the body. |
 | `className` | `string` | Overrides the default card/border wrapper entirely. |
 
@@ -163,7 +162,6 @@ summary — reach for `Card`/`StatCard` instead.
   onRowClick={p => navigate(`/participants/${p.id}`)}
   emptyMessage="No participants match these filters."
   loading={isLoading}
-  verticalDividers
 />
 ```
 

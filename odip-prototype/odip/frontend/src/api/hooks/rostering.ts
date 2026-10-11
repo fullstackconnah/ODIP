@@ -267,14 +267,6 @@ export function usePatterns(params?: Record<string, string>) {
   })
 }
 
-export function usePattern(id: string | undefined) {
-  return useQuery({
-    queryKey: ['roster-pattern', id],
-    queryFn: () => apiGet<ShiftPatternDto>(`/rostering/patterns/${id}`),
-    enabled: !!id,
-  })
-}
-
 export function useCreatePattern() {
   const qc = useQueryClient()
   return useMutation({

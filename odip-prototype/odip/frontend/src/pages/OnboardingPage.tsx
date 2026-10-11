@@ -9,13 +9,11 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { ProgressBar } from '@/components/ProgressBar'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
-import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { queryPhase } from '@/lib/queryPhase'
 import { readIntakeCompleteNotice } from './intake/intakeComplete'
-import { plural } from '@/lib/format'
 
 type WorklistRow = {
   participantId: string
@@ -39,26 +37,9 @@ function stageBadge(row: WorklistRow): { status: string; label: string } {
   return { status: 'stalled', label: row.stage }
 }
 
-export default function OnboardingPage() {
-  const screen = useOnboardingScreen()
-  return (
-    <div className="flex flex-col gap-[var(--section-gap)]">
-      <PageHeader
-        title="Onboarding"
-        subtitle={`${plural(screen.allRowsCount, 'participant')} in onboarding. Completing a participant's profile activates them, and moves them to Active participants, when your organisation's readiness rule allows it.`}
-      >
-        {screen.toolbar}
-      </PageHeader>
-      {screen.body}
-    </div>
-  )
-}
-
 /**
  * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns
- * one PageHeader. The standalone /onboarding route is now redirected to
- * /participants?tab=onboarding, so this default page component is only retained for the
- * dedicated OnboardingPage test that mounts it under its own MemoryRouter.
+ * one PageHeader. The standalone /onboarding route is redirected to /participants?tab=onboarding.
  */
 export function OnboardingTable() {
   const screen = useOnboardingScreen()
@@ -194,9 +175,5 @@ function useOnboardingScreen() {
     ? <SearchInput value={search} onChange={setSearch} placeholder="Search participants, stages or gates..." />
     : null
 
-  return {
-    allRowsCount: allRows.length,
-    toolbar,
-    body,
-  }
+  return { toolbar, body }
 }

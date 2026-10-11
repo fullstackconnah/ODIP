@@ -1,7 +1,6 @@
 import { useParticipants, useDeleteParticipant, useRestoreParticipant, useUpdateParticipantStatus, useParticipantAlertsAggregate } from '@/api/hooks'
 import { extractErrorMessage, maskNdisNumber } from '@/lib/utils'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
-import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { Callout } from '@/components/Callout'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -16,10 +15,9 @@ import { ALERT_SEVERITY_STYLES } from '@/components/alertSeverityStyles'
 import type { ParticipantListDto } from '@/api/types'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Users, ChevronRight, Pill } from 'lucide-react'
+import { Users, ChevronRight, Pill } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
-import { plural } from '@/lib/format'
 import { queryPhase } from '@/lib/queryPhase'
 import { readParticipantActivatedNotice } from './profile/participantActivated'
 
@@ -51,35 +49,8 @@ function listParams(view: View, search: string): Record<string, string> {
 /** The row of the participant the user has just activated: the same highlight the Onboarding table gives the participant who has just completed intake. */
 const ARRIVAL_ROW = 'bg-[var(--color-primary)]/10 outline outline-2 -outline-offset-2 outline-[var(--color-primary)]/40'
 
-export default function ParticipantsPage() {
-  const screen = useParticipantsScreen()
-  return (
-    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      {/* PageHeader's title row and filter row are siblings. Directly inside this flex column the
-          section gap opens between them (32 + 16 + 8 + 32 = 88px); in a plain wrapper they stay in
-          block flow: 32px title row + 8px + 32px filters = 72px, the spec §3 header budget. */}
-      <div>
-        <PageHeader
-          title="Participants"
-          subtitle={screen.countLabel}
-          action={screen.view === 'active' && screen.canWrite && (
-            <Button to="/participants/new" size="md">
-              <Plus className="w-4 h-4" /> New Participant
-            </Button>
-          )}
-        >
-          {screen.toolbar}
-        </PageHeader>
-      </div>
-
-      {screen.body}
-    </div>
-  )
-}
-
 /**
- * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns one PageHeader; the standalone page above keeps
- * the same controls in its own header. The hub used to render only the body, which left the Active / Archived toggle and the search
+ * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns one PageHeader. The hub used to render only the body, which left the Active / Archived toggle and the search
  * with no screen to live on (L2-02): Archive could not be undone, and the register could not be searched.
  */
 export function ParticipantsTable() {
@@ -244,8 +215,8 @@ function useParticipantsScreen() {
       ),
     },
     { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
-    { key: 'planType', header: 'Plan Type', priority: 'lowest', maxWidth: '10rem' },
-    { key: 'region', header: 'Region', sortable: true, priority: 'medium', maxWidth: '11rem' },
+    { key: 'planType', header: 'Plan Type', maxWidth: '10rem' },
+    { key: 'region', header: 'Region', sortable: true, maxWidth: '11rem' },
     {
       key: 'serviceStreams',
       header: 'Streams',
@@ -270,8 +241,8 @@ function useParticipantsScreen() {
       align: 'center',
     },
     { key: 'isHighSupport', header: 'High', type: 'boolean', align: 'center' },
-    { key: 'supportRatio', header: 'Support Ratio', priority: 'low', maxWidth: '10rem' },
-    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center', priority: 'low' },
+    { key: 'supportRatio', header: 'Support Ratio', maxWidth: '10rem' },
+    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center' },
     {
       key: 'status',
       header: 'Status',
@@ -467,12 +438,5 @@ function useParticipantsScreen() {
     </>
   )
 
-  return {
-    canWrite,
-    view,
-    toolbar,
-    // A failed load has no count: "0 participants" would read as an empty tenant.
-    countLabel: loadFailed || isLoading ? undefined : plural(participants.length, 'participant'),
-    body,
-  }
+  return { toolbar, body }
 }
