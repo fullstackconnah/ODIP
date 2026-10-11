@@ -87,6 +87,39 @@ describe('ActivityLibraryTab', () => {
     expect(update).toHaveBeenLastCalledWith({ id: 'a2', data: expect.objectContaining({ isActive: true }) })
   })
 
+  it('blocks Confirm on deactivate while the form has unsaved changes, so a typed edit is not saved without warning', async () => {
+    const user = userEvent.setup()
+    render(<ActivityLibraryTab />)
+    await user.click(screen.getByRole('button', { name: 'Edit Beach walk' }))
+    await user.click(screen.getByRole('button', { name: 'Deactivate activity' }))
+    await user.type(screen.getByLabelText(/Name/), ' pier')
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled()
+    expect(screen.getByText('Save or discard your changes first')).toBeInTheDocument()
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('blocks Deactivate and Reactivate while dirty, and enables them again once the edit is reverted or saved', async () => {
+    const user = userEvent.setup()
+    render(<ActivityLibraryTab />)
+    await user.click(screen.getByRole('button', { name: 'Edit Beach walk' }))
+    const name = screen.getByLabelText(/Name/)
+    await user.type(name, ' pier')
+    expect(screen.getByRole('button', { name: 'Deactivate activity' })).toBeDisabled()
+    await user.clear(name)
+    await user.type(name, 'Beach walk')
+    expect(screen.getByRole('button', { name: 'Deactivate activity' })).toBeEnabled()
+    expect(screen.queryByText('Save or discard your changes first')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: 'Edit Old tour' }))
+    await user.type(screen.getByLabelText(/Name/), ' tour')
+    expect(screen.getByRole('button', { name: 'Reactivate activity' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    expect(update).toHaveBeenLastCalledWith({ id: 'a2', data: expect.objectContaining({ activityName: 'Old tour tour', isActive: false }) })
+    await user.click(screen.getByRole('button', { name: 'Edit Old tour' }))
+    expect(screen.getByRole('button', { name: 'Reactivate activity' })).toBeEnabled()
+  })
+
   it('shows the empty state when there are no activities', () => {
     rows.current = []
     render(<ActivityLibraryTab />)
