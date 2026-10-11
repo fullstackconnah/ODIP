@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import type { AgreementBudgetBreakdownView } from '../budgets/components/viewModel'
 import { budgetOf } from '@/test/fixtures/planPricing'
+import { TONE } from '@/lib/tone'
 import { RunningTotal } from './RunningTotal'
 
 const pool = (overBy: number | null) => ({ poolLabel: 'Core', cost: 5000, overBy, alreadyOverBy: null, lines: [] })
@@ -19,6 +20,16 @@ describe('RunningTotal', () => {
   it('adds up what the pools are over by', () => {
     render(<RunningTotal {...base} budgetView={ready([pool(1000), pool(355)])} />)
     expect(screen.getByRole('status')).toHaveTextContent('over by $1,355.00')
+  })
+
+  it('marks being over budget with the warning tone and a sign and says so in words on a phone', () => {
+    const { container, rerender } = render(<RunningTotal {...base} budgetView={ready([pool(null)])} />)
+    expect(container.querySelector('svg')).toBeNull()
+    rerender(<RunningTotal {...base} budgetView={ready([pool(1000)])} />)
+    expect(container.querySelector('svg')).not.toBeNull()
+    expect(screen.getByText('over by $1,000.00').className).toContain(TONE.warning.ink)
+    expect(screen.getByRole('status')).toHaveTextContent('over by $1,000.00')
+    expect(container.querySelector('span[aria-hidden="true"]')).toHaveTextContent('over budget')
   })
 
   it('says there is no budget recorded rather than within budget, and names a check that could not be made', () => {
