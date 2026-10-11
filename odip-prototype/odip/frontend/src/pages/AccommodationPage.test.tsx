@@ -99,3 +99,14 @@ describe('AccommodationPage — card title link touch target', () => {
     expect(title).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'font-semibold', 'hover:underline')
   })
 })
+
+describe('AccommodationPage — write controls by role', () => {
+  it('offers a role that cannot write no Archive on the card', () => {
+    mockUsePermissions.mockReturnValue({ canWrite: false })
+    mockUseAccommodation.mockReturnValue({ data: [makeProperty()], isLoading: false })
+    renderPage()
+
+    expect(screen.getByText('Sunrise House')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument()
+  })
+})

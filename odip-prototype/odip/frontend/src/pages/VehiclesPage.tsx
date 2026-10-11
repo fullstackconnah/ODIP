@@ -107,7 +107,7 @@ export default function VehiclesPage() {
         <EmptyState
           icon={Bus}
           title="No vehicles found"
-          action={!showArchived ? { label: 'Add your first vehicle', to: '/vehicles/new' } : undefined}
+          action={!showArchived && canWrite ? { label: 'Add your first vehicle', to: '/vehicles/new' } : undefined}
         />
       ) : (
         /* Vehicle grid */

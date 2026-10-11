@@ -149,7 +149,7 @@ const router = createBrowserRouter(
         <Route path="/tasks/:id/edit" element={<PrivateRoute page="tasks" requiresWrite><TaskCreatePage /></PrivateRoute>} />
         <Route path="/incidents" element={<PrivateRoute page="incidents"><IncidentsPage /></PrivateRoute>} />
         <Route path="/incidents/new" element={<PrivateRoute page="incidents"><IncidentCreatePage /></PrivateRoute>} />
-        <Route path="/incidents/:id/edit" element={<PrivateRoute page="incidents"><IncidentCreatePage /></PrivateRoute>} />
+        <Route path="/incidents/:id/edit" element={<PrivateRoute page="incidents" requiresWrite><IncidentCreatePage /></PrivateRoute>} />
         <Route path="/incidents/:id" element={<PrivateRoute page="incidents"><IncidentDetailPage /></PrivateRoute>} />
         <Route path="/bookings" element={<PrivateRoute page="bookings"><BookingsPage /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute page="settings"><SettingsPage /></PrivateRoute>} />

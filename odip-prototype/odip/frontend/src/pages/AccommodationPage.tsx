@@ -74,11 +74,13 @@ export default function AccommodationPage() {
                 <Link to={`/accommodation/${a.id}`} className={`${TAP_FLOOR} font-semibold hover:underline`}>{a.propertyName}</Link>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={a.isActive ? 'Active' : 'Inactive'} />
-                  <ActionButtons
-                    onDelete={() => handleDelete(a)}
-                    onRestore={() => handleRestore(a)}
-                    showArchived={showArchived}
-                  />
+                  {canWrite && (
+                    <ActionButtons
+                      onDelete={() => handleDelete(a)}
+                      onRestore={() => handleRestore(a)}
+                      showArchived={showArchived}
+                    />
+                  )}
                 </div>
               </div>
               <Link to={`/accommodation/${a.id}`} className="block space-y-2 text-sm text-[var(--color-muted-foreground)]">

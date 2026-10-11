@@ -3,7 +3,7 @@ import { useTrips, usePatchTrip, useTrip } from '@/api/hooks'
 import type { TripStatus, TripListDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
-import { TONE, statusClass } from '@/lib/tone'
+import { TONE, TRIP_STATUS_LABELS, statusClass } from '@/lib/tone'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Pencil, MapPin } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { Dropdown } from '@/components/Dropdown'
+import { StatusBadge } from '@/components/StatusBadge'
 import { CellText, DataTable, RowActions, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
 import { TAP_AREA } from '@/components/tapArea'
@@ -221,7 +222,7 @@ export default function TripsPage() {
       // caret in the pill + 24 of cell padding = 162px. Reserved up front so the column doesn't jump
       // when a trip's status changes to it.
       minWidth: '10.25rem',
-      render: (t) => (
+      render: (t) => canWrite ? (
         <span onClick={e => e.stopPropagation()} className="inline-flex items-center">
           <Dropdown
             variant="pill"
@@ -231,7 +232,7 @@ export default function TripsPage() {
             items={TRIP_STATUS_ITEMS}
           />
         </span>
-      ),
+      ) : <StatusBadge status={t.status} label={TRIP_STATUS_LABELS[t.status] ?? t.status} />,
     },
     {
       key: 'currentParticipantCount',
@@ -410,13 +411,15 @@ export default function TripsPage() {
                       </button>
                     </div>
                   )}
-                  <Dropdown
-                    variant="pill"
-                    value={t.status}
-                    onChange={val => handleStatusChange(t, val as TripStatus)}
-                    colorClass={statusClass(t.status)}
-                    items={TRIP_STATUS_ITEMS}
-                  />
+                  {canWrite ? (
+                    <Dropdown
+                      variant="pill"
+                      value={t.status}
+                      onChange={val => handleStatusChange(t, val as TripStatus)}
+                      colorClass={statusClass(t.status)}
+                      items={TRIP_STATUS_ITEMS}
+                    />
+                  ) : <StatusBadge status={t.status} label={TRIP_STATUS_LABELS[t.status] ?? t.status} />}
                 </div>
                 <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
                   <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">person</span> {t.currentParticipantCount}/{t.maxParticipants || '—'}</span>

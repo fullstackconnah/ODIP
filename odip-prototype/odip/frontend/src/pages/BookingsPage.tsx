@@ -5,6 +5,7 @@ import { DataTable } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { BudgetWarnings } from '@/components/BudgetWarnings'
 import { Dropdown } from '@/components/Dropdown'
+import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { getStatusColor } from '@/lib/utils'
@@ -13,6 +14,7 @@ import { useState } from 'react'
 import type { BookingStatus } from '@/api/types/enums'
 import type { BookingListDto } from '@/api/types/bookings'
 import { plural } from '@/lib/format'
+import { usePermissions } from '@/lib/permissions'
 import { bookingBudgetNote, bookingBudgetNotice, type BookingBudgetNotice } from '@/lib/bookingBudget'
 
 // Statuses that end a participant's involvement in a trip — confirmed before applying, same
@@ -24,7 +26,18 @@ const CONFIRM_STATUSES: BookingStatus[] = ['Cancelled', 'NoLongerAttending']
 // boundary as plain query strings, not a shared type.
 const BOOKINGS_PAGE_SIZE = 50
 
+const BOOKING_STATUS_ITEMS = [
+  { value: 'Enquiry', label: 'Enquiry' },
+  { value: 'Held', label: 'Held' },
+  { value: 'Confirmed', label: 'Confirmed' },
+  { value: 'Waitlist', label: 'Waitlist' },
+  { value: 'Cancelled', label: 'Cancelled' },
+  { value: 'Completed', label: 'Completed' },
+  { value: 'NoLongerAttending', label: 'No Longer Attending' },
+]
+
 export default function BookingsPage() {
+  const { canWrite } = usePermissions()
   const [page, setPage] = useState(1)
   const { data: bookings = [], isLoading, isError } = useBookings({ page: String(page), pageSize: String(BOOKINGS_PAGE_SIZE) })
   // `bookings` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
@@ -91,22 +104,17 @@ export default function BookingsPage() {
             {
               key: 'bookingStatus',
               header: 'Status',
-              render: (b) => (
+              // ReadOnly is refused PATCH /bookings/:id, so it reads the status instead of a pill it cannot change.
+              render: (b) => canWrite ? (
                 <Dropdown
                   variant="pill"
                   value={b.bookingStatus}
                   onChange={val => handleStatusChange(b, val as BookingStatus)}
                   colorClass={getStatusColor(b.bookingStatus)}
-                  items={[
-                    { value: 'Enquiry', label: 'Enquiry' },
-                    { value: 'Held', label: 'Held' },
-                    { value: 'Confirmed', label: 'Confirmed' },
-                    { value: 'Waitlist', label: 'Waitlist' },
-                    { value: 'Cancelled', label: 'Cancelled' },
-                    { value: 'Completed', label: 'Completed' },
-                    { value: 'NoLongerAttending', label: 'No Longer Attending' },
-                  ]}
+                  items={BOOKING_STATUS_ITEMS}
                 />
+              ) : (
+                <StatusBadge status={b.bookingStatus} label={BOOKING_STATUS_ITEMS.find(i => i.value === b.bookingStatus)?.label} />
               ),
             },
             { key: 'bookingDate', header: 'Booking Date', type: 'date' },

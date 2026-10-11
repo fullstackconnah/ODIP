@@ -312,3 +312,25 @@ describe('StaffPage — restoring an archived staff member', () => {
     for (const listOnly of ['id', 'fullName', 'username', 'hasExpiredQualifications']) expect(data).not.toHaveProperty(listOnly)
   })
 })
+
+// STAFF-3 (owner decision 2026-10-12): ReadOnly is refused every staff write, so it gets no New Staff, no row actions and no status pill.
+describe('StaffPage — write controls by role', () => {
+  it('shows ReadOnly the status as text, with no New Staff, Edit or Archive', () => {
+    setUserRole('ReadOnly')
+    renderPage()
+    const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    expect(within(row).getByText('Active')).toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: /Active/ })).not.toBeInTheDocument()
+    expect(within(row).queryByRole('link', { name: /Edit/ })).not.toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: /Archive/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /New Staff/ })).not.toBeInTheDocument()
+  })
+
+  it.each(['Admin', 'Coordinator'])('offers %s the status pill and New Staff', role => {
+    setUserRole(role)
+    renderPage()
+    const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    expect(within(row).getByRole('button', { name: /Active/ })).toBeEnabled()
+    expect(screen.getByRole('link', { name: /New Staff/ })).toBeInTheDocument()
+  })
+})

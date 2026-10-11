@@ -192,3 +192,16 @@ describe('IncidentDetailPage — failed request vs. missing record (PageState)',
     expect(screen.getByRole('status')).toHaveTextContent('Loading incident…')
   })
 })
+
+// PUT /incidents/:id is Admin, Coordinator and SuperAdmin only (IncidentsController.Update): ReadOnly and SupportWorker read the incident without an Edit.
+describe('IncidentDetailPage — Edit by role', () => {
+  it.each([['ReadOnly', false], ['SupportWorker', false], ['Admin', true], ['Coordinator', true]] as const)('%s: Edit offered %s', (role, offered) => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
+    renderPage()
+
+    expect(screen.getByRole('heading', { name: 'Missed evening medication dose' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Edit' }) !== null).toBe(offered)
+    localStorage.clear()
+  })
+})

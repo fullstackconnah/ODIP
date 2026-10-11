@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom'
 import { useAccommodationDetail } from '@/api/hooks'
+import { usePermissions } from '@/lib/permissions'
 import { Pencil } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
@@ -18,6 +19,7 @@ const FACT_LIST_WRAP = 'grid-cols-[10rem_minmax(0,1fr)]! [&_dd]:break-words'
 export default function AccommodationDetailPage() {
   const { id } = useParams()
   const { data: property, isLoading, isError, error, refetch } = useAccommodationDetail(id)
+  const { canWrite } = usePermissions()
 
   if (isLoading) return <PageState kind="loading" noun="property" />
   if (!property) {
@@ -39,9 +41,11 @@ export default function AccommodationDetailPage() {
         action={
           <div className="flex gap-2 shrink-0">
             <BackButton to="/accommodation" label="accommodation" history={false} />
-            <Button to={`/accommodation/${id}/edit`} variant="primary" size="md">
-              <Pencil className="w-4 h-4" /> Edit
-            </Button>
+            {canWrite && (
+              <Button to={`/accommodation/${id}/edit`} variant="primary" size="md">
+                <Pencil className="w-4 h-4" /> Edit
+              </Button>
+            )}
           </div>
         }
       />

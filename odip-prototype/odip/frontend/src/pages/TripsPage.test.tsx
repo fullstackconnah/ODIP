@@ -391,3 +391,31 @@ describe('TripsPage — Pax ratio', () => {
     expect(screen.getByText('3 / —')).toBeInTheDocument()
   })
 })
+
+// Owner decision 2026-10-12 (TRIPS-5, TRIPS-6): a role the server refuses PATCH /trips/:id is shown the status as a badge, not a pill it can change,
+// and no New Trip or edit pencil, in the table and in the cards.
+describe('TripsPage — write controls follow the role', () => {
+  it.each(['ReadOnly', 'SupportWorker'])('shows %s the status as plain text with no pill, New Trip or edit, in both views', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    const table = renderPage()
+    expect(screen.getByText('Confirmed')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirmed' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /New Trip/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit Beach Weekend' })).not.toBeInTheDocument()
+    table.unmount()
+
+    localStorage.setItem('odip.trips.view', 'cards')
+    renderPage()
+    expect(screen.getByText('Confirmed')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirmed' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Edit/ })).not.toBeInTheDocument()
+  })
+
+  it.each(['Admin', 'Coordinator'])('offers %s the status pill, New Trip and edit', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    renderPage()
+    expect(screen.getByRole('button', { name: 'Confirmed' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /New Trip/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit Beach Weekend' })).toBeInTheDocument()
+  })
+})

@@ -107,16 +107,16 @@ export default function StaffPage() {
       sortable: true,
       render: (s) => {
         const current = s.isActive ? 'Active' : 'Inactive'
-        return (
+        // A role that cannot write reads the status: no pill it cannot change.
+        return canWrite ? (
           <Dropdown
             variant="pill"
             value={current}
             onChange={val => handleStatusChange(s, val)}
             colorClass={`${ACTIVE_STATUS_COLORS[current]} h-[var(--control-h-sm)]`}
             items={ACTIVE_STATUS_ITEMS}
-            disabled={!canWrite}
           />
-        )
+        ) : <StatusBadge status={current} />
       },
     },
     {
@@ -138,7 +138,7 @@ export default function StaffPage() {
               <CalendarOff className="w-4 h-4" />
             </Button>
           )}
-          {actionButtons(s)}
+          {canWrite && actionButtons(s)}
         </RowActions>
       ),
     },

@@ -53,3 +53,14 @@ describe('VehiclesPage — card grid', () => {
     expect(grid).toHaveClass('items-start', 'grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))]')
   })
 })
+
+describe('VehiclesPage — write controls by role', () => {
+  it('offers a role that cannot write no "Add your first vehicle" on the empty page', () => {
+    mockUsePermissions.mockReturnValue({ canWrite: false })
+    mockUseVehicles.mockReturnValue({ data: [], isLoading: false })
+    render(<MemoryRouter><VehiclesPage /></MemoryRouter>)
+
+    expect(screen.getByText('No vehicles found')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Add your first vehicle/ })).not.toBeInTheDocument()
+  })
+})
