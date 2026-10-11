@@ -330,3 +330,34 @@ describe('BookingsTab — the staffing summary shows what the server says the tr
     expect(screen.getByText('Staff Assigned').parentElement).toHaveTextContent('0 / ?')
   })
 })
+
+describe('BookingsTab — dialogs', () => {
+  // Each dialog is named, Escape closes it, and focus goes back to the control that opened it.
+  it.each([
+    ['Add Participant to Trip', () => screen.getByRole('button', { name: /add participant/i }), 'Add Participant to Trip'],
+    ['Edit Booking', () => screen.getByTitle('Edit booking'), /^Edit Booking — /],
+  ])('%s: Escape closes it and focus returns to the opener', async (_label, opener, name) => {
+    const user = userEvent.setup()
+    renderTab()
+    const control = opener()
+    await user.click(control)
+    expect(screen.getByRole('dialog', { name })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(control).toHaveFocus()
+  })
+
+  it('Add Participant: Escape clears the picked participant, so the next dialog opens empty', async () => {
+    const user = userEvent.setup()
+    renderTab([], [readyParticipant, notReadyParticipant])
+    await openModalAndPick(user, 'Mia Chen')
+    expect(screen.getByRole('button', { name: 'Add Booking' })).toBeEnabled()
+
+    await user.keyboard('{Escape}')
+    await openModalAndPick(user)
+
+    expect(screen.getByRole('button', { name: 'Add Booking' })).toBeDisabled()
+  })
+})

@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
-import { Truck, X } from 'lucide-react'
+import React, { useEffect, useId, useState } from 'react'
 import { Button } from '@/components/Button'
+import { Modal } from '@/components/Modal'
 import { Dropdown } from '@/components/Dropdown'
 import { formatDate } from './helpers'
 import { useCheckVehicleAssignment, getRosterFindings } from '@/api/hooks'
@@ -19,6 +19,7 @@ interface VehicleAssignModalProps {
 }
 
 export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAssign, isLoading }: VehicleAssignModalProps) {
+  const formId = useId()
   const [driverStaffId, setDriverStaffId] = useState('')
   const [comments, setComments] = useState('')
   const [overrideReason, setOverrideReason] = useState('')
@@ -77,75 +78,64 @@ export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAs
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-[var(--radius-lg)] shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex h-12 items-center justify-between px-4" style={{ borderBottom: '1px solid rgba(195,201,181,0.25)' }}>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[var(--color-secondary-container)]/60 flex items-center justify-center">
-              <Truck className="w-4 h-4 text-[var(--color-secondary)]" />
-            </div>
-            <h3 className="font-display font-bold text-base">Assign Vehicle</h3>
+    <Modal
+      stickyFooter
+      open
+      onClose={onClose}
+      title="Assign Vehicle"
+      footer={
+        <>
+          <Button variant="secondary" size="md" onClick={onClose}>Cancel</Button>
+          <Button type="submit" form={formId} size="md" disabled={isBusy || gate.isBlocked}>{isBusy ? 'Assigning...' : gate.needsReason ? 'Assign with override' : 'Assign Vehicle'}</Button>
+        </>
+      }
+    >
+      <form id={formId} onSubmit={handleSubmit} className="space-y-[var(--section-gap)]">
+        <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)] space-y-1">
+          <div className="text-sm font-bold">{vehicle.vehicleName}</div>
+          <div className="text-xs text-[var(--color-muted-foreground)]">
+            {vehicle.registration || '—'} · {vehicle.totalSeats} seats
+            {vehicle.wheelchairPositions > 0 && ` · ${vehicle.wheelchairPositions} wheelchair`}
           </div>
-          <Button variant="ghost" size="sm" iconOnly onClick={onClose} aria-label="Close">
-            <X className="w-4 h-4" />
-          </Button>
+          <div className="text-xs text-[var(--color-muted-foreground)]">
+            → {trip.tripName} ({formatDate(trip.startDate)} — {formatDate(trip.endDate)})
+          </div>
         </div>
-        <form onSubmit={handleSubmit} className="p-4 space-y-[var(--section-gap)]">
-          <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)] space-y-1">
-            <div className="text-sm font-bold">{vehicle.vehicleName}</div>
-            <div className="text-xs text-[var(--color-muted-foreground)]">
-              {vehicle.registration || '—'} · {vehicle.totalSeats} seats
-              {vehicle.wheelchairPositions > 0 && ` · ${vehicle.wheelchairPositions} wheelchair`}
-            </div>
-            <div className="text-xs text-[var(--color-muted-foreground)]">
-              → {trip.tripName} ({formatDate(trip.startDate)} — {formatDate(trip.endDate)})
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">Assigned Driver (optional)</label>
-            <Dropdown
-              variant="form"
-              value={driverStaffId}
-              onChange={setDriverStaffId}
-              label="— No driver selected —"
-              items={[
-                { value: '', label: '— No driver selected —' },
-                ...eligibleDrivers.map((s: ScheduleStaffDto) => ({ value: String(s.id), label: s.fullName })),
-              ]}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">Comments (optional)</label>
-            <textarea
-              value={comments}
-              onChange={e => setComments(e.target.value)}
-              rows={2}
-              placeholder="E.g. pickup from depot, needs fuel..."
-              className="w-full px-4 py-2.5 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] border-none text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
-            />
-          </div>
-
-          <RosterGateFields
-            findings={findings}
-            overrideReason={overrideReason}
-            onOverrideReasonChange={setOverrideReason}
-            reasonRequired={reasonRequired}
+        <div>
+          <label className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">Assigned Driver (optional)</label>
+          <Dropdown
+            variant="form"
+            value={driverStaffId}
+            onChange={setDriverStaffId}
+            label="— No driver selected —"
+            items={[
+              { value: '', label: '— No driver selected —' },
+              ...eligibleDrivers.map((s: ScheduleStaffDto) => ({ value: String(s.id), label: s.fullName })),
+            ]}
           />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-[var(--color-muted-foreground)] block mb-1.5">Comments (optional)</label>
+          <textarea
+            value={comments}
+            onChange={e => setComments(e.target.value)}
+            rows={2}
+            placeholder="E.g. pickup from depot, needs fuel..."
+            className="w-full px-4 py-2.5 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] border-none text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
+          />
+        </div>
 
-          {error && (
-            <Callout tone="error">{error}</Callout>
-          )}
+        <RosterGateFields
+          findings={findings}
+          overrideReason={overrideReason}
+          onOverrideReasonChange={setOverrideReason}
+          reasonRequired={reasonRequired}
+        />
 
-          <div className="flex gap-3 pt-1">
-            <Button variant="secondary" size="md" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
-            <Button type="submit" size="md" disabled={isBusy || gate.isBlocked} className="flex-1">
-              {isBusy ? 'Assigning...' : gate.needsReason ? 'Assign with override' : 'Assign Vehicle'}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+        {error && (
+          <Callout tone="error">{error}</Callout>
+        )}
+      </form>
+    </Modal>
   )
 }

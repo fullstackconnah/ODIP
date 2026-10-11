@@ -256,12 +256,38 @@ describe('SettingsPage — buttons are the Button primitive', () => {
     expect(open).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
 
     await user.click(open)
-    expect(screen.getByText('Import NDIS Support Catalogue')).toBeInTheDocument()
-    const close = screen.getByRole('button', { name: 'Close' })
-    expect(close).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]')
+    expect(screen.getByRole('dialog', { name: 'Import NDIS Support Catalogue' })).toBeInTheDocument()
 
-    await user.click(close)
+    await user.click(screen.getByRole('button', { name: 'Close dialog' }))
     expect(screen.queryByText('Import NDIS Support Catalogue')).not.toBeInTheDocument()
+  })
+
+  it('closes the catalogue import on Escape and returns focus to the button that opened it', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    renderSettingsPageWithQueryClient()
+
+    await user.click(screen.getByRole('tab', { name: 'Support Catalogue' }))
+    const open = screen.getByRole('button', { name: 'Import Catalogue' })
+    await user.click(open)
+    expect(screen.getByRole('dialog', { name: 'Import NDIS Support Catalogue' })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(open).toHaveFocus()
+  })
+
+  it('keeps the catalogue import open when the backdrop is clicked (a stray click must not throw away the upload)', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    renderSettingsPageWithQueryClient()
+
+    await user.click(screen.getByRole('tab', { name: 'Support Catalogue' }))
+    await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
+    await user.click(screen.getByRole('dialog', { name: 'Import NDIS Support Catalogue' }).parentElement!)
+
+    expect(screen.getByRole('dialog', { name: 'Import NDIS Support Catalogue' })).toBeInTheDocument()
   })
 })
 

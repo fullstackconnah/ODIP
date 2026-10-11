@@ -12,11 +12,12 @@ import { TAP_ICON_SQUARE } from '@/components/tapArea'
 import { getStatusColor, extractErrorMessage } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
 import { INSURANCE_STATUSES, type BookingStatus, type InsuranceStatus, type PaymentStatus, type SupportRatio } from '@/api/types/enums'
-import { Plus, X, AlertTriangle, Pencil, ExternalLink, Trash2, Download, Loader2 } from 'lucide-react'
+import { Plus, AlertTriangle, Pencil, ExternalLink, Trash2, Download, Loader2 } from 'lucide-react'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { BookingListDto } from '@/api/types/bookings'
 import type { ParticipantListDto } from '@/api/types/participants'
 import { Button } from '@/components/Button'
+import { Modal } from '@/components/Modal'
 
 // Create-form subset of BOOKING_STATUSES — Cancelled/Completed/NoLongerAttending are reached via
 // dedicated actions elsewhere, not offered when first adding a participant to a trip.
@@ -267,160 +268,156 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
 
       {/* Add Booking Modal */}
       {showAddBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => { setShowAddBooking(false); resetForm() }}>
-          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Add Participant to Trip</h3>
-              <button onClick={() => { setShowAddBooking(false); resetForm() }} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Participant Select */}
-              <div>
-                <label id="addBookingParticipantLabel" className="block text-sm font-medium mb-1">Participant *</label>
-                <SearchableSelect
-                  aria-labelledby="addBookingParticipantLabel"
-                  value={selectedParticipantId}
-                  onChange={setSelectedParticipantId}
-                  placeholder="Select a participant..."
-                  items={availableParticipants.map((p: ParticipantListDto) => ({ value: p.id, label: p.fullName }))}
-                />
-                {availableParticipants.length === 0 && (
-                  <p className="text-xs text-[var(--color-muted-foreground)] mt-1">All active participants are already booked on this trip.</p>
-                )}
-                <ReadinessNote issues={selectedParticipantIssues} className="mt-1.5" />
-              </div>
-
-              {/* Booking Status */}
-              <div>
-                <label id="addBookingStatusLabel" className="block text-sm font-medium mb-1">Booking Status</label>
-                <Dropdown
-                  variant="form"
-                  aria-labelledby="addBookingStatusLabel"
-                  value={bookingStatus}
-                  onChange={setBookingStatus}
-                  items={NEW_BOOKING_STATUS_ITEMS}
-                />
-              </div>
-
-              {/* Support Overrides */}
-              <div>
-                <label className="block text-sm font-medium mb-2">Support Requirements</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={wheelchairRequired} onChange={e => setWheelchairRequired(e.target.checked)}
-                      className="rounded border-[rgba(195,201,181,0.15)]" />
-                    Wheelchair
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={highSupportRequired} onChange={e => setHighSupportRequired(e.target.checked)}
-                      className="rounded border-[rgba(195,201,181,0.15)]" />
-                    High Support
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={nightSupportRequired} onChange={e => setNightSupportRequired(e.target.checked)}
-                      className="rounded border-[rgba(195,201,181,0.15)]" />
-                    Night Support
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={hasRestrictivePracticeFlag} onChange={e => setHasRestrictivePracticeFlag(e.target.checked)}
-                      className="rounded border-[rgba(195,201,181,0.15)]" />
-                    Restrictive Practice
-                  </label>
-                </div>
-              </div>
-
-              {/* Support Ratio Override */}
-              <div>
-                <label id="addBookingSupportRatioLabel" className="block text-sm font-medium mb-1">Support Ratio Override</label>
-                <Dropdown
-                  variant="form"
-                  aria-labelledby="addBookingSupportRatioLabel"
-                  label="No override"
-                  value={supportRatioOverride}
-                  onChange={setSupportRatioOverride}
-                  items={SUPPORT_RATIO_ITEMS}
-                />
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Booking Notes</label>
-                <textarea value={bookingNotes} onChange={e => setBookingNotes(e.target.value)} rows={3}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-                  placeholder="Optional notes..." />
-              </div>
-
-              {/* Insurance */}
-              <div className="border-t border-[rgba(195,201,181,0.15)] pt-4 mt-2">
-                <label className="block text-sm font-medium mb-3">Travel Insurance</label>
-                <div className="space-y-3">
-                  <div>
-                    <label id="addBookingInsuranceStatusLabel" className="block text-xs text-[var(--color-muted-foreground)] mb-1">Status</label>
-                    <Dropdown
-                      variant="form"
-                      aria-labelledby="addBookingInsuranceStatusLabel"
-                      value={insuranceStatus}
-                      onChange={setInsuranceStatus}
-                      items={INSURANCE_STATUS_ITEMS}
-                    />
-                  </div>
-                  {insuranceStatus !== 'None' && (
-                    <>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Provider</label>
-                          <input type="text" value={insuranceProvider} onChange={e => setInsuranceProvider(e.target.value)}
-                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                            placeholder="e.g. Allianz" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Policy Number</label>
-                          <input type="text" value={insurancePolicyNumber} onChange={e => setInsurancePolicyNumber(e.target.value)}
-                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                            placeholder="e.g. POL-12345" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage Start</label>
-                          <input type="date" value={insuranceCoverageStart} onChange={e => setInsuranceCoverageStart(e.target.value)}
-                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage End</label>
-                          <input type="date" value={insuranceCoverageEnd} onChange={e => setInsuranceCoverageEnd(e.target.value)}
-                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Error */}
-              {createBooking.isError && (
-                // The server's own words when it sent any (e.g. Enforce mode's "Participant is not ready for booking or rostering."),
-                // the generic line only when it did not. The form above stays as the user left it.
-                <p role="alert" className="text-sm text-[var(--color-destructive)]">
-                  {extractErrorMessage(createBooking.error, 'Failed to create booking. Please try again.')}
-                </p>
+        <Modal
+          stickyFooter
+          open
+          onClose={() => { setShowAddBooking(false); resetForm() }}
+          title="Add Participant to Trip"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => { setShowAddBooking(false); resetForm() }}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateBooking} disabled={!selectedParticipantId || createBooking.isPending}>
+                {createBooking.isPending ? 'Adding...' : 'Add Booking'}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            {/* Participant Select */}
+            <div>
+              <label id="addBookingParticipantLabel" className="block text-sm font-medium mb-1">Participant *</label>
+              <SearchableSelect
+                aria-labelledby="addBookingParticipantLabel"
+                value={selectedParticipantId}
+                onChange={setSelectedParticipantId}
+                placeholder="Select a participant..."
+                items={availableParticipants.map((p: ParticipantListDto) => ({ value: p.id, label: p.fullName }))}
+              />
+              {availableParticipants.length === 0 && (
+                <p className="text-xs text-[var(--color-muted-foreground)] mt-1">All active participants are already booked on this trip.</p>
               )}
+              <ReadinessNote issues={selectedParticipantIssues} className="mt-1.5" />
+            </div>
 
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="secondary" onClick={() => { setShowAddBooking(false); resetForm() }}>
-                  Cancel
-                </Button>
-                <Button onClick={handleCreateBooking} disabled={!selectedParticipantId || createBooking.isPending}>
-                  {createBooking.isPending ? 'Adding...' : 'Add Booking'}
-                </Button>
+            {/* Booking Status */}
+            <div>
+              <label id="addBookingStatusLabel" className="block text-sm font-medium mb-1">Booking Status</label>
+              <Dropdown
+                variant="form"
+                aria-labelledby="addBookingStatusLabel"
+                value={bookingStatus}
+                onChange={setBookingStatus}
+                items={NEW_BOOKING_STATUS_ITEMS}
+              />
+            </div>
+
+            {/* Support Overrides */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Support Requirements</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={wheelchairRequired} onChange={e => setWheelchairRequired(e.target.checked)}
+                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                  Wheelchair
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={highSupportRequired} onChange={e => setHighSupportRequired(e.target.checked)}
+                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                  High Support
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={nightSupportRequired} onChange={e => setNightSupportRequired(e.target.checked)}
+                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                  Night Support
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={hasRestrictivePracticeFlag} onChange={e => setHasRestrictivePracticeFlag(e.target.checked)}
+                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                  Restrictive Practice
+                </label>
               </div>
             </div>
+
+            {/* Support Ratio Override */}
+            <div>
+              <label id="addBookingSupportRatioLabel" className="block text-sm font-medium mb-1">Support Ratio Override</label>
+              <Dropdown
+                variant="form"
+                aria-labelledby="addBookingSupportRatioLabel"
+                label="No override"
+                value={supportRatioOverride}
+                onChange={setSupportRatioOverride}
+                items={SUPPORT_RATIO_ITEMS}
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Booking Notes</label>
+              <textarea value={bookingNotes} onChange={e => setBookingNotes(e.target.value)} rows={3}
+                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                placeholder="Optional notes..." />
+            </div>
+
+            {/* Insurance */}
+            <div className="border-t border-[rgba(195,201,181,0.15)] pt-4 mt-2">
+              <label className="block text-sm font-medium mb-3">Travel Insurance</label>
+              <div className="space-y-3">
+                <div>
+                  <label id="addBookingInsuranceStatusLabel" className="block text-xs text-[var(--color-muted-foreground)] mb-1">Status</label>
+                  <Dropdown
+                    variant="form"
+                    aria-labelledby="addBookingInsuranceStatusLabel"
+                    value={insuranceStatus}
+                    onChange={setInsuranceStatus}
+                    items={INSURANCE_STATUS_ITEMS}
+                  />
+                </div>
+                {insuranceStatus !== 'None' && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Provider</label>
+                        <input type="text" value={insuranceProvider} onChange={e => setInsuranceProvider(e.target.value)}
+                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
+                          placeholder="e.g. Allianz" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Policy Number</label>
+                        <input type="text" value={insurancePolicyNumber} onChange={e => setInsurancePolicyNumber(e.target.value)}
+                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
+                          placeholder="e.g. POL-12345" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage Start</label>
+                        <input type="date" value={insuranceCoverageStart} onChange={e => setInsuranceCoverageStart(e.target.value)}
+                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage End</label>
+                        <input type="date" value={insuranceCoverageEnd} onChange={e => setInsuranceCoverageEnd(e.target.value)}
+                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Error */}
+            {createBooking.isError && (
+              // The server's own words when it sent any (e.g. Enforce mode's "Participant is not ready for booking or rostering."),
+              // the generic line only when it did not. The form above stays as the user left it.
+              <p role="alert" className="text-sm text-[var(--color-destructive)]">
+                {extractErrorMessage(createBooking.error, 'Failed to create booking. Please try again.')}
+              </p>
+            )}
           </div>
-        </div>
+        </Modal>
       )}
 
       <DataTable
@@ -650,161 +647,157 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
 
       {/* Edit Booking Modal */}
       {editingBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditingBooking(null)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Edit Booking — {editingBooking.participantName}</h3>
-              <button onClick={() => setEditingBooking(null)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
-                <X className="w-5 h-5" />
-              </button>
+        <Modal
+          stickyFooter
+          open
+          onClose={() => setEditingBooking(null)}
+          title={`Edit Booking — ${editingBooking.participantName}`}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setEditingBooking(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateBooking} disabled={updateBooking.isPending}>
+                {updateBooking.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            {/* Booking Status */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Booking Status</label>
+              <Dropdown
+                variant="form"
+                value={editForm.bookingStatus}
+                onChange={val => setEditForm({ ...editForm, bookingStatus: val })}
+                items={[
+                  { value: 'Enquiry', label: 'Enquiry' },
+                  { value: 'Held', label: 'Held' },
+                  { value: 'Confirmed', label: 'Confirmed' },
+                  { value: 'Waitlist', label: 'Waitlist' },
+                  { value: 'Cancelled', label: 'Cancelled' },
+                  { value: 'Completed', label: 'Completed' },
+                  { value: 'NoLongerAttending', label: 'No Longer Attending' },
+                ]}
+              />
             </div>
 
-            <div className="space-y-4">
-              {/* Booking Status */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Booking Status</label>
-                <Dropdown
-                  variant="form"
-                  value={editForm.bookingStatus}
-                  onChange={val => setEditForm({ ...editForm, bookingStatus: val })}
-                  items={[
-                    { value: 'Enquiry', label: 'Enquiry' },
-                    { value: 'Held', label: 'Held' },
-                    { value: 'Confirmed', label: 'Confirmed' },
-                    { value: 'Waitlist', label: 'Waitlist' },
-                    { value: 'Cancelled', label: 'Cancelled' },
-                    { value: 'Completed', label: 'Completed' },
-                    { value: 'NoLongerAttending', label: 'No Longer Attending' },
-                  ]}
-                />
-              </div>
-
-              {/* Support Requirements */}
-              <div>
-                <label className="block text-sm font-medium mb-2">Support Requirements</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={editForm.wheelchairRequired} onChange={e => setEditForm({ ...editForm, wheelchairRequired: e.target.checked })}
-                      className="rounded border-[rgba(195,201,181,0.15)]" />
-                    Wheelchair
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={editForm.highSupportRequired} onChange={e => setEditForm({ ...editForm, highSupportRequired: e.target.checked })}
-                      className="rounded border-[rgba(195,201,181,0.15)]" />
-                    High Support
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={editForm.nightSupportRequired} onChange={e => setEditForm({ ...editForm, nightSupportRequired: e.target.checked })}
-                      className="rounded border-[rgba(195,201,181,0.15)]" />
-                    Night Support
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={editForm.hasRestrictivePracticeFlag} onChange={e => setEditForm({ ...editForm, hasRestrictivePracticeFlag: e.target.checked })}
-                      className="rounded border-[rgba(195,201,181,0.15)]" />
-                    Restrictive Practice
-                  </label>
-                </div>
-              </div>
-
-              {/* Support Ratio Override */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Support Ratio Override</label>
-                <Dropdown
-                  variant="form"
-                  value={editForm.supportRatioOverride}
-                  onChange={val => setEditForm({ ...editForm, supportRatioOverride: val })}
-                  label="No override"
-                  items={[
-                    { value: '', label: 'No override' },
-                    { value: 'OneToOne', label: '1:1' },
-                    { value: 'OneToTwo', label: '1:2' },
-                    { value: 'OneToThree', label: '1:3' },
-                    { value: 'OneToFour', label: '1:4' },
-                    { value: 'OneToFive', label: '1:5' },
-                    { value: 'TwoToOne', label: '2:1' },
-                    { value: 'SharedSupport', label: 'Shared' },
-                    { value: 'Other', label: 'Other' },
-                  ]}
-                />
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Booking Notes</label>
-                <textarea value={editForm.bookingNotes} onChange={e => setEditForm({ ...editForm, bookingNotes: e.target.value })} rows={3}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-                  placeholder="Optional notes..." />
-              </div>
-
-              {/* Insurance */}
-              <div className="border-t border-[rgba(195,201,181,0.15)] pt-4 mt-2">
-                <label className="block text-sm font-medium mb-3">Travel Insurance</label>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Status</label>
-                    <Dropdown
-                      variant="form"
-                      value={editForm.insuranceStatus}
-                      onChange={val => setEditForm({ ...editForm, insuranceStatus: val })}
-                      items={[
-                        { value: 'None', label: 'None' },
-                        { value: 'Pending', label: 'Pending' },
-                        { value: 'Confirmed', label: 'Confirmed' },
-                        { value: 'Expired', label: 'Expired' },
-                        { value: 'Cancelled', label: 'Cancelled' },
-                      ]}
-                    />
-                  </div>
-                  {editForm.insuranceStatus !== 'None' && (
-                    <>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Provider</label>
-                          <input type="text" value={editForm.insuranceProvider} onChange={e => setEditForm({ ...editForm, insuranceProvider: e.target.value })}
-                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                            placeholder="e.g. Allianz" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Policy Number</label>
-                          <input type="text" value={editForm.insurancePolicyNumber} onChange={e => setEditForm({ ...editForm, insurancePolicyNumber: e.target.value })}
-                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                            placeholder="e.g. POL-12345" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage Start</label>
-                          <input type="date" value={editForm.insuranceCoverageStart} onChange={e => setEditForm({ ...editForm, insuranceCoverageStart: e.target.value })}
-                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage End</label>
-                          <input type="date" value={editForm.insuranceCoverageEnd} onChange={e => setEditForm({ ...editForm, insuranceCoverageEnd: e.target.value })}
-                            className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Error */}
-              {updateBooking.isError && (
-                <p className="text-sm text-[var(--color-destructive)]">Failed to update booking. Please try again.</p>
-              )}
-
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="secondary" onClick={() => setEditingBooking(null)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleUpdateBooking} disabled={updateBooking.isPending}>
-                  {updateBooking.isPending ? 'Saving...' : 'Save Changes'}
-                </Button>
+            {/* Support Requirements */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Support Requirements</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={editForm.wheelchairRequired} onChange={e => setEditForm({ ...editForm, wheelchairRequired: e.target.checked })}
+                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                  Wheelchair
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={editForm.highSupportRequired} onChange={e => setEditForm({ ...editForm, highSupportRequired: e.target.checked })}
+                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                  High Support
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={editForm.nightSupportRequired} onChange={e => setEditForm({ ...editForm, nightSupportRequired: e.target.checked })}
+                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                  Night Support
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={editForm.hasRestrictivePracticeFlag} onChange={e => setEditForm({ ...editForm, hasRestrictivePracticeFlag: e.target.checked })}
+                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                  Restrictive Practice
+                </label>
               </div>
             </div>
+
+            {/* Support Ratio Override */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Support Ratio Override</label>
+              <Dropdown
+                variant="form"
+                value={editForm.supportRatioOverride}
+                onChange={val => setEditForm({ ...editForm, supportRatioOverride: val })}
+                label="No override"
+                items={[
+                  { value: '', label: 'No override' },
+                  { value: 'OneToOne', label: '1:1' },
+                  { value: 'OneToTwo', label: '1:2' },
+                  { value: 'OneToThree', label: '1:3' },
+                  { value: 'OneToFour', label: '1:4' },
+                  { value: 'OneToFive', label: '1:5' },
+                  { value: 'TwoToOne', label: '2:1' },
+                  { value: 'SharedSupport', label: 'Shared' },
+                  { value: 'Other', label: 'Other' },
+                ]}
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Booking Notes</label>
+              <textarea value={editForm.bookingNotes} onChange={e => setEditForm({ ...editForm, bookingNotes: e.target.value })} rows={3}
+                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                placeholder="Optional notes..." />
+            </div>
+
+            {/* Insurance */}
+            <div className="border-t border-[rgba(195,201,181,0.15)] pt-4 mt-2">
+              <label className="block text-sm font-medium mb-3">Travel Insurance</label>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Status</label>
+                  <Dropdown
+                    variant="form"
+                    value={editForm.insuranceStatus}
+                    onChange={val => setEditForm({ ...editForm, insuranceStatus: val })}
+                    items={[
+                      { value: 'None', label: 'None' },
+                      { value: 'Pending', label: 'Pending' },
+                      { value: 'Confirmed', label: 'Confirmed' },
+                      { value: 'Expired', label: 'Expired' },
+                      { value: 'Cancelled', label: 'Cancelled' },
+                    ]}
+                  />
+                </div>
+                {editForm.insuranceStatus !== 'None' && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Provider</label>
+                        <input type="text" value={editForm.insuranceProvider} onChange={e => setEditForm({ ...editForm, insuranceProvider: e.target.value })}
+                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
+                          placeholder="e.g. Allianz" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Policy Number</label>
+                        <input type="text" value={editForm.insurancePolicyNumber} onChange={e => setEditForm({ ...editForm, insurancePolicyNumber: e.target.value })}
+                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
+                          placeholder="e.g. POL-12345" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage Start</label>
+                        <input type="date" value={editForm.insuranceCoverageStart} onChange={e => setEditForm({ ...editForm, insuranceCoverageStart: e.target.value })}
+                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage End</label>
+                        <input type="date" value={editForm.insuranceCoverageEnd} onChange={e => setEditForm({ ...editForm, insuranceCoverageEnd: e.target.value })}
+                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Error */}
+            {updateBooking.isError && (
+              <p className="text-sm text-[var(--color-destructive)]">Failed to update booking. Please try again.</p>
+            )}
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Delete/Cancel Booking Confirmation */}
