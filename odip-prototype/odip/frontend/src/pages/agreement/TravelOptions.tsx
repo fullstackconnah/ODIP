@@ -5,7 +5,7 @@ import { formGrid, span } from '@/lib/formGrid'
 import { SUPPORT_LABEL, transportFamily } from '@/lib/planBlocks'
 import type { PlanAccommodation, PlanActivityTransport, PlanBlock, PlanProviderTravel, PlanVehicle } from '@/api/types'
 import { FormField } from '@/components/FormField'
-import { NumberField } from './NumberField'
+import { NumberField } from '@/components/NumberField'
 import { fieldError, type StepProps } from './stepTypes'
 
 const VEHICLE_OPTIONS: { key: PlanVehicle; label: string }[] = [
@@ -23,11 +23,11 @@ function sharingOf(value: number, present: number): number | undefined {
 }
 
 /**
- * Travel and transport: the worker's travel to the participant (claimed on the support item, with the minutes capped by the delivery zone and the kilometres at the provider's
+ * Travel and transport (in the shift editor's more options): the worker's travel to the participant (claimed on the support item, with the minutes capped by the delivery zone and the kilometres at the provider's
  * rate), the vehicle costs of taking participants on the activity (kilometres, tolls and parking at cost, shared by whoever is in the vehicle), and, for short-term
  * accommodation, the nights. Each is off until it is switched on, and a family that has no such item says so instead of offering it.
  */
-export function TravelStep({ entry, onChange, problems, settings }: StepProps) {
+export function TravelOptions({ entry, onChange, problems, settings }: StepProps) {
   const { block } = entry
   const patch = (changes: Partial<PlanBlock>) => onChange({ ...entry, block: { ...block, ...changes } })
   const travel = block.travel
@@ -89,7 +89,7 @@ export function TravelStep({ entry, onChange, problems, settings }: StepProps) {
       {block.supportType === 'StaSupport' && (
         <section className="flex flex-col gap-[var(--field-gap-y)] border-t border-[var(--color-border)] pt-[var(--section-gap)]" aria-labelledby="plan-accommodation-heading">
           <h4 id="plan-accommodation-heading" className="text-sm font-semibold">Accommodation nights</h4>
-          <p className="text-[13px] text-[var(--color-muted-foreground)]">The nights of short-term accommodation each shift of this block includes. Legacy per-day items are not offered: they end on 30 June 2027.</p>
+          <p className="text-[13px] text-[var(--color-muted-foreground)]">The nights of short-term accommodation each shift includes. Legacy per-day items are not offered: they end on 30 June 2027.</p>
           <div className={formGrid}>
             <NumberField label="Nights each shift" className={span.short} value={accommodation?.nights ?? 0} min={0} max={14} error={fieldError(problems, 'nights')} onChange={value => patch({ accommodation: { ...(accommodation ?? DEFAULT_ACCOMMODATION), nights: value } })} />
             <CheckboxField label="A support worker must stay on site" className={span.medium} checked={accommodation?.workerOnSite === true} onChange={event => patch({ accommodation: { ...(accommodation ?? DEFAULT_ACCOMMODATION), workerOnSite: event.target.checked } })} />

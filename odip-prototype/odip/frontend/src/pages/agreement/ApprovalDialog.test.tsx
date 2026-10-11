@@ -13,7 +13,7 @@ const { previewCall, previewState, approveMutate, approveState } = vi.hoisted(()
   previewCall: vi.fn(),
   previewState: { current: {} as Record<string, unknown> },
   approveMutate: vi.fn(),
-  approveState: { current: { isPending: false } },
+  approveState: { current: { isPending: false } as { isPending: boolean; error?: unknown } },
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -36,7 +36,7 @@ const preview = (changes: Partial<DraftApprovalPreviewDto> = {}): DraftApprovalP
 const ready = (data: DraftApprovalPreviewDto) => { previewState.current = { data, isLoading: false, isError: false, error: null, refetch: vi.fn() } }
 
 function setUp(props: Partial<Parameters<typeof ApprovalDialog>[0]> = {}) {
-  const handlers = { onClose: vi.fn(), onApproved: vi.fn(), onGoToBlock: vi.fn() }
+  const handlers = { onClose: vi.fn(), onApproved: vi.fn(), onGoToShifts: vi.fn() }
   render(
     <MemoryRouter>
       <ApprovalDialog open participantId="p-1" draft={draft()} {...handlers} {...props} />
@@ -62,7 +62,7 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
   it('names the version, says what it makes and up to when, that it keeps adding shifts, that it is not signing, and that it cannot be undone', () => {
     setUp()
 
-    const dialog = screen.getByRole('dialog', { name: 'Approve version 2 for rostering?' })
+    const dialog = screen.getByRole('dialog', { name: 'Approve this agreement for rostering?' })
     // A short line for each fact, so it scans: the patterns, the shifts, (below) what ends.
     expect(within(dialog).getByText('Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027.')).toBeInTheDocument()
     expect(within(dialog).getByText('Makes 40 unfilled shifts up to Sat 5 Dec 2026. After that, unfilled shifts are added each day until the agreement ends.')).toBeInTheDocument()
@@ -87,7 +87,7 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     expect([...lines.children].map(line => line.textContent)).toEqual([
       'Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027.',
       'Makes 40 unfilled shifts up to Sat 5 Dec 2026. After that, unfilled shifts are added each day until the agreement ends.',
-      'Ends 5 patterns from version 1 the day before Mon 2 Nov 2026.',
+      'Ends 5 patterns from the agreement it replaces the day before Mon 2 Nov 2026.',
     ])
   })
 
@@ -117,7 +117,7 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01' }))
     setUp()
 
-    expect(screen.getByText(/Ends 5 patterns from version 1 the day before Mon 2 Nov 2026\./)).toBeInTheDocument()
+    expect(screen.getByText(/Ends 5 patterns from the agreement it replaces the day before Mon 2 Nov 2026\./)).toBeInTheDocument()
   })
 
   it('agrees its nouns with its counts', () => {
@@ -126,14 +126,14 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
 
     expect(screen.getByText('Creates 1 weekly pattern, Mon 2 Nov 2026 to Wed 31 Mar 2027.')).toBeInTheDocument()
     expect(screen.getByText(/Makes 1 unfilled shift up to Sat 5 Dec 2026\./)).toBeInTheDocument()
-    expect(screen.getByText(/Ends 1 pattern from version 3 the day before Mon 2 Nov 2026\./)).toBeInTheDocument()
+    expect(screen.getByText(/Ends 1 pattern from the agreement it replaces the day before Mon 2 Nov 2026\./)).toBeInTheDocument()
   })
 
   it("names the old version's shifts that stay, unfilled and assigned apart, says the new ones will sit beside them, and offers them on the roster in a new tab", () => {
     ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', oldShiftsRemaining: { open: 21, assigned: 3, firstDate: '2026-11-04', fromVersion: 1 } }))
     setUp()
 
-    expect(screen.getByText(/21 unfilled and 3 assigned shifts from version 1, from Wed 4 Nov 2026 on, stay on the roster\. The new version's unfilled shifts will sit beside them on the same days\./)).toBeInTheDocument()
+    expect(screen.getByText(/21 unfilled and 3 assigned shifts from the agreement it replaces, from Wed 4 Nov 2026 on, stay on the roster\. The new unfilled shifts will sit beside them on the same days\./)).toBeInTheDocument()
     const link = screen.getByRole('link', { name: /See them on the roster/ })
     expect(link).toHaveAttribute('href', '/rostering?date=2026-11-02&participant=p-1')
     expect(link).toHaveAttribute('target', '_blank')
@@ -144,7 +144,7 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', oldShiftsRemaining: { open: 1, assigned: 0, firstDate: '2026-11-04', fromVersion: 1 } }))
     setUp()
 
-    expect(screen.getByText(/1 unfilled and 0 assigned shift from version 1, from Wed 4 Nov 2026 on, stays on the roster. The new version's unfilled shifts will sit beside it on the same days./)).toBeInTheDocument()
+    expect(screen.getByText(/1 unfilled and 0 assigned shift from the agreement it replaces, from Wed 4 Nov 2026 on, stays on the roster. The new unfilled shifts will sit beside it on the same days./)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /See it on the roster/ })).toBeInTheDocument()
   })
 
@@ -265,7 +265,7 @@ describe('ApprovalDialog: approving', () => {
 
     await user.click(screen.getByRole('button', { name: 'Approve' }))
 
-    expect(within(screen.getByRole('alert')).getByText('Block 2: no item on Tue 3 Nov 2026.')).toBeInTheDocument()
+    expect(within(screen.getByRole('alert')).getByText('Sat 09:00 to 15:00: no item on Tue 3 Nov 2026.')).toBeInTheDocument()
   })
 
   it('holds everything that would close it while the approval is on its way: the button, Cancel, the cross, Escape and the backdrop', async () => {
@@ -364,8 +364,8 @@ describe('ApprovalDialog: when it cannot be approved yet', () => {
     const items = within(dialog).getAllByRole('listitem')
     expect(items).toHaveLength(3)
     // The engine's own reasons keep their title and say how many shifts are meant; the sentences only approval has are complete as the server wrote them, so they are not given a title that says it again.
-    expect(items[0]).toHaveTextContent('Part of this block has no price item: Block 2: no item for the night. (4 shifts, from Tue 3 Nov 2026)')
-    expect(within(items[1]).getByText(/^Block 1: a public holiday has no decision yet \(Labour Day on Mon 5 Oct 2026\)\. Choose Charge or Skip for it, then save a new revision\.$/)).toBeInTheDocument()
+    expect(items[0]).toHaveTextContent('Part of this shift has no price item: Sat 09:00 to 15:00: no item for the night. (4 shifts, from Tue 3 Nov 2026)')
+    expect(within(items[1]).getByText(/^Mon, Wed 09:00 to 13:00: a public holiday has no decision yet \(Labour Day on Mon 5 Oct 2026\)\. Choose Charge or Skip for it, then save a new revision\.$/)).toBeInTheDocument()
     expect(within(items[2]).getByText(/^This agreement is delivered in QLD \(Australia\/Brisbane\), but your organisation's roster runs on Australia\/Sydney time\.$/)).toBeInTheDocument()
     expect(within(dialog).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument()
@@ -379,7 +379,7 @@ describe('ApprovalDialog: when it cannot be approved yet', () => {
     setUp()
 
     const item = within(screen.getByRole('dialog', { name: 'Not ready to approve' })).getByRole('listitem')
-    expect(within(item).getByText(/^Block 1: 5 public holidays have no decision yet \(the first is Labour Day on Mon 5 Oct 2026\)\. Choose Charge or Skip for each, then save a new revision\.$/)).toBeInTheDocument()
+    expect(within(item).getByText(/^Mon, Wed 09:00 to 13:00: 5 public holidays have no decision yet \(the first is Labour Day on Mon 5 Oct 2026\)\. Choose Charge or Skip for each, then save a new revision\.$/)).toBeInTheDocument()
     expect(item).not.toHaveTextContent('5 shifts')
   })
 
@@ -388,17 +388,17 @@ describe('ApprovalDialog: when it cannot be approved yet', () => {
     setUp()
 
     const items = within(screen.getByRole('dialog', { name: 'Not ready to approve' })).getAllByRole('listitem')
-    expect(within(items[0]).getByText(REASON_COPY.NoItem.advice)).toBeInTheDocument()
+    expect(within(items[0]).getByText(REASON_COPY.NoItem.advice.replace('block', 'shift'))).toBeInTheDocument()
     expect(within(items[2]).getByText("Check the delivery state of this draft, or ask an Admin to check the organisation's state in Settings.")).toBeInTheDocument()
     // a sentence that already says what to do gets no second line under it: the badge, the sentence and the way to the block, and nothing else
-    expect(items[1].textContent).toBe('ReviewBlock 1: a public holiday has no decision yet (Labour Day on Mon 5 Oct 2026). Choose Charge or Skip for it, then save a new revision.Go to block 1')
+    expect(items[1].textContent).toBe('ReviewMon, Wed 09:00 to 13:00: a public holiday has no decision yet (Labour Day on Mon 5 Oct 2026). Choose Charge or Skip for it, then save a new revision.Show the shifts')
   })
 
   it('opens with what the person does next, and says nothing has been changed', () => {
     ready(preview({ canApprove: false, reasons }))
     setUp()
 
-    expect(screen.getByText('Nothing has been changed. Fix each item, then approve the version you save.')).toBeInTheDocument()
+    expect(screen.getByText('Nothing has been changed. Fix each item, then approve the agreement you save.')).toBeInTheDocument()
   })
 
   it('drops that preface for a revision that has been superseded: the thing to do is a different one', () => {
@@ -409,25 +409,51 @@ describe('ApprovalDialog: when it cannot be approved yet', () => {
     expect(screen.getByText('A newer revision of this agreement draft exists. Approve the latest revision instead.')).toBeInTheDocument()
   })
 
-  it('takes you to the block a reason is about, at the step that fixes it, and closes', async () => {
+  it('takes you to the shifts a reason is about, and closes', async () => {
     ready(preview({ canApprove: false, reasons }))
     const user = userEvent.setup()
-    const { onGoToBlock, onClose } = setUp()
+    const { onGoToShifts, onClose } = setUp()
 
-    await user.click(screen.getByRole('button', { name: 'Go to block 2' }))
+    const buttons = screen.getAllByRole('button', { name: 'Show the shifts' })
+    expect(buttons).toHaveLength(2)                                              // a reason about the whole agreement has no shifts to show
+    await user.click(buttons[0])
 
-    expect(onGoToBlock).toHaveBeenCalledWith('b2', 'times')                      // NoItem is fixed on the times step
+    expect(onGoToShifts).toHaveBeenCalledWith('b2')
     expect(onClose).toHaveBeenCalledTimes(1)
-    await user.click(screen.getByRole('button', { name: 'Go to block 1' }))
-    expect(onGoToBlock).toHaveBeenLastCalledWith('b1', 'review')                // a holiday is decided on the review step
-    expect(screen.queryByRole('button', { name: /Go to block 3/ })).not.toBeInTheDocument()   // a reason about the whole revision has no block to go to
+    await user.click(screen.getAllByRole('button', { name: 'Show the shifts' })[1])
+    expect(onGoToShifts).toHaveBeenLastCalledWith('b1')
   })
 
-  it('says a hand-typed revision has to be rebuilt from blocks', () => {
+  it('tells the page when the preview says a newer save has replaced the agreement, once', () => {
+    previewState.current = { data: undefined, isLoading: false, isError: true, error: { response: { status: 409, data: { code: 'draft-superseded' } } }, refetch: vi.fn() }
+    const onSuperseded = vi.fn()
+    const { rerender } = render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} onSuperseded={onSuperseded} /></MemoryRouter>)
+    rerender(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} onSuperseded={onSuperseded} /></MemoryRouter>)
+
+    expect(onSuperseded).toHaveBeenCalledTimes(1)
+  })
+
+  it('tells the page when approving is refused because a newer save has replaced the agreement', async () => {
+    approveState.current = { isPending: false, error: { response: { status: 409, data: { code: 'draft-superseded' } } } }
+    const onSuperseded = vi.fn()
+    setUp({ onSuperseded })
+
+    expect(onSuperseded).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not tell the page about any other refusal', () => {
+    approveState.current = { isPending: false, error: { response: { status: 409, data: { code: 'something-else' } } } }
+    const onSuperseded = vi.fn()
+    setUp({ onSuperseded })
+
+    expect(onSuperseded).not.toHaveBeenCalled()
+  })
+
+  it('says a hand-typed revision has to be rebuilt from shifts', () => {
     ready(preview({ canApprove: false, reasons: [{ code: 'HandTyped', message: "Rebuild it from blocks to approve it. This revision's lines were typed by hand." }] }))
     setUp()
 
-    expect(screen.getByText(/Rebuild it from blocks to approve it/)).toBeInTheDocument()
+    expect(screen.getByText(/Rebuild it from shifts to approve it/)).toBeInTheDocument()
   })
 })
 
@@ -471,7 +497,7 @@ describe('ApprovalDialog: what the shifts would do to the budget (budget phase 3
     ready(preview({ budgetWarnings: [warning] }))
     const handlers = setUp()
 
-    const dialog = screen.getByRole('dialog', { name: 'Approve version 2 for rostering?' })
+    const dialog = screen.getByRole('dialog', { name: 'Approve this agreement for rostering?' })
     expect(within(dialog).getByText(`These 40 shifts take Core (flexible) to $9,600.00 of $1,000.00 for ${SERVER_PERIOD}.`, { normalizer: asWritten })).toBeInTheDocument()
     expect(within(dialog).getByText('This is a warning only. Approving is not blocked.')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Approve' }))

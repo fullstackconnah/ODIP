@@ -1,0 +1,252 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import type { AgreementCheck, ServiceAgreementDraftDto } from '@/api/types'
+import { budgetOf, draftBlock, mondayWednesday, settings as makeSettings } from '@/test/fixtures/planPricing'
+import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
+
+const { createMutate, downloadMutate, confirmPost, drafts, participant, plans, budget, check, refetchDrafts } = vi.hoisted(() => ({
+  createMutate: vi.fn(), downloadMutate: vi.fn(), confirmPost: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(),
+}))
+vi.mock('@/api/hooks', () => ({
+  useParticipant: () => participant(),
+  useServiceAgreementDrafts: () => drafts(),
+  useCreateServiceAgreementDraft: () => ({ mutate: createMutate, isPending: false }),
+  useDownloadServiceAgreementDraftPdf: () => ({ mutate: downloadMutate, isPending: false, isError: false }),
+  useFundingPlans: () => plans(),
+  useConfirmServiceNeeds: (participantId: string) => ({ mutate: () => confirmPost(participantId), isPending: false, isSuccess: false, isError: false }),
+  useApprovalPreview: () => ({ data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() }),
+  useApproveServiceAgreementDraft: () => ({ mutate: vi.fn(), isPending: false }),
+  usePlanPricingSettings: () => ({ data: makeSettings() }),
+  usePlanBudget: () => budget(),
+  useAgreementCheck: () => check(),
+}))
+
+const asRole = (role: string) => localStorage.setItem('odip_user', JSON.stringify({ role, id: 'u-1' }))
+
+const draft = (changes: Partial<ServiceAgreementDraftDto> = {}): ServiceAgreementDraftDto => ({
+  id: 'd-2', participantId: 'p-1', version: 2, state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-10-01', agreementEndDate: '2027-06-30',
+  blocks: [draftBlock(mondayWednesday('b1'))], lines: [], isSummary: false, blockCount: 1, lineCount: 0, total: 0, caveats: [], ...changes,
+}) as ServiceAgreementDraftDto
+
+const approval = { approvedAt: '2026-10-03T01:00:00Z', approvedByName: 'Alex', patternsCreated: 2, patternsEnded: 0, shiftsCreated: 8 }
+
+const agreementCheck = (overBy: number): AgreementCheck => ({
+  hasBudget: true, asOf: '2026-10-12', periodFrom: '2026-10-01', periodTo: '2027-06-30', agreementCost: 30610.28, notInARecordedPool: 0, outsideThePlan: 0,
+  pools: [{
+    poolName: 'Core', agreementCost: 30610.28, overBy, alreadyOverBy: 0,
+    periods: [{ periodStart: '2026-10-01', periodEnd: '2026-12-31', agreementCost: 30610.28, remaining: 29000, overBy }],
+  }],
+} as unknown as AgreementCheck)
+
+function renderPage(path = '/participants/p-1/agreement-draft') {
+  const router = createMemoryRouter([{ path: '/participants/:id/agreement-draft', element: <ServiceAgreementDraftPage /> }, { path: '*', element: <p>elsewhere</p> }], { initialEntries: [path] })
+  return render(<RouterProvider router={router} />)
+}
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-12T10:00:00') })
+  asRole('Admin')
+  drafts.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: refetchDrafts })
+  participant.mockReturnValue({ data: { id: 'p-1', fullName: 'Marcus Tran', addressState: 'VIC' }, isLoading: false, isError: false, refetch: vi.fn() })
+  plans.mockReturnValue({ data: { plans: [{ id: 'f-1', participantId: 'p-1', planStart: '2026-07-01', planEnd: '2027-06-30' }] }, isLoading: false, isError: false })
+  budget.mockReturnValue({ data: budgetOf('b1'), isError: false, isFetching: false, error: null, refetch: vi.fn() })
+  check.mockReturnValue({ data: agreementCheck(0), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
+  refetchDrafts.mockResolvedValue({ data: [], isError: false })
+  createMutate.mockReset(); downloadMutate.mockReset(); confirmPost.mockReset()
+})
+afterEach(() => { vi.useRealTimers(); localStorage.clear() })
+
+/** A step of the rail: its accessible name is its number and its label. */
+const stepButton = (label: string) => screen.getByRole('button', { name: new RegExp(`${label}$`) })
+const next = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'Next' }))
+
+async function addCommunityWeekdays(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Start from a common week' }))
+  await user.click(screen.getByRole('option', { name: /Community access weekdays/ }))
+}
+
+/** Agreement, then Week with a common week, then Check, then Save. */
+async function toTheSaveStep(user: ReturnType<typeof userEvent.setup>) {
+  await next(user)
+  await addCommunityWeekdays(user)
+  await next(user)
+  await next(user)
+}
+
+describe('ServiceAgreementDraftPage: the wizard', () => {
+  it('starts on the Agreement step with the dates of the participant\'s funding plan and no separate plan-date boxes', () => {
+    renderPage()
+    expect(screen.getByRole('heading', { level: 2, name: 'Agreement' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Agreement starts')).toHaveValue('2026-07-01')
+    expect(screen.getByLabelText('Agreement ends')).toHaveValue('2027-06-30')
+    expect(screen.getByLabelText('State')).toHaveValue('VIC')
+    expect(screen.getByText('Different NDIS plan dates?')).toBeInTheDocument()
+    for (const step of ['Agreement', 'Week', 'Check', 'Save']) expect(stepButton(step)).toBeInTheDocument()
+  })
+
+  it('says what is wrong with the dates and stays on the step', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    fireEvent.change(screen.getByLabelText('Agreement starts'), { target: { value: '' } })
+    await next(user)
+    expect(screen.getByText('Enter the day the agreement starts.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Agreement' })).toBeInTheDocument()
+  })
+
+  it('will not leave an empty week', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await next(user)
+    await next(user)
+    expect(screen.getByText('Add at least one shift to go on.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Week' })).toBeInTheDocument()
+  })
+
+  it('sends the plan dates, the state and the blocks the shifts make, and nothing priced', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    fireEvent.change(screen.getByLabelText('Agreement starts'), { target: { value: '2026-10-01' } })
+    await user.type(screen.getByLabelText('Representative (optional)'), 'A. Representative')
+    await toTheSaveStep(user)
+    await user.click(screen.getByRole('button', { name: 'Save agreement' }))
+
+    expect(createMutate).toHaveBeenCalledTimes(1)
+    const [request] = createMutate.mock.calls[0]
+    expect(request).toEqual({
+      participantId: 'p-1',
+      data: {
+        planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-10-01', agreementEndDate: '2027-06-30', state: 'VIC', serviceTypes: ['Community access'],
+        representative: 'A. Representative', baseVersion: 0,
+        blocks: [{
+          block: {
+            id: 'b1', supportType: 'CommunityAccess', intensity: 'Standard', days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], start: '09:00:00', end: '13:00:00', workers: 1,
+            participantsPresent: 1, headcountChanges: [], setting: 'Community', location: { state: 'VIC', zone: 'National' }, workerMaySleep: false, sleepoverActiveHours: 0, onPublicHoliday: 'Charge',
+          },
+          requirements: { workerGender: 'NoPreference', driver: false, skills: [] },
+        }],
+      },
+    })
+    expect(JSON.stringify(request)).not.toMatch(/itemCode|unitPrice|"lines"|price/i)
+  })
+
+  it('files the plan under the dates the coordinator gave when they differ from the funding plan', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    fireEvent.change(screen.getByLabelText('NDIS plan starts'), { target: { value: '2026-01-01' } })
+    await toTheSaveStep(user)
+    await user.click(screen.getByRole('button', { name: 'Save agreement' }))
+    expect(createMutate.mock.calls[0][0].data).toMatchObject({ planStartDate: '2026-01-01', planEndDate: '2027-06-30' })
+  })
+
+  it('takes the agreement\'s own dates as the plan when no funding plan is recorded, and says so', async () => {
+    plans.mockReturnValue({ data: { plans: [] }, isLoading: false, isError: false })
+    const user = userEvent.setup()
+    renderPage()
+    expect(screen.getByText(/No funding plan is recorded for this participant/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Agreement starts'), { target: { value: '2026-10-01' } })
+    fireEvent.change(screen.getByLabelText('Agreement ends'), { target: { value: '2027-03-31' } })
+    await toTheSaveStep(user)
+    await user.click(screen.getByRole('button', { name: 'Save agreement' }))
+    expect(createMutate.mock.calls[0][0].data).toMatchObject({ planStartDate: '2026-10-01', planEndDate: '2027-03-31' })
+  })
+})
+
+describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
+  it('loads the newest save as shifts and says block, version, template, hash or draft nowhere', async () => {
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    const user = userEvent.setup()
+    renderPage()
+    expect(screen.getByLabelText('Agreement starts')).toHaveValue('2026-10-01')
+    await user.click(stepButton('Week'))
+    expect(screen.getByRole('button', { name: /Monday 09:00 to 13:00 · Community access · 1:1/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Wednesday 09:00 to 13:00/ })).toBeInTheDocument()
+    for (const key of ['Agreement', 'Week', 'Check', 'Save']) {
+      await user.click(stepButton(key))
+      expect(document.body.textContent).not.toMatch(/\bblocks?\b|version|template|sha-?256|provisional blank draft|legal review required|draft versions|draft only/i)
+    }
+  })
+
+  it('shows the budget comparison first on the Check step and the running total in the footer, within budget', async () => {
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Check'))
+    expect(screen.getByRole('heading', { name: /Against the participant's budget/ })).toBeInTheDocument()
+    expect(screen.getAllByRole('status').some(status => /\$588\.64 a week · \$30,610\.28 for the agreement · within budget/.test(status.textContent ?? ''))).toBe(true)
+  })
+
+  it('says over by in the running total when a pool is over', () => {
+    check.mockReturnValue({ data: agreementCheck(1355), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    renderPage()
+    expect(screen.getAllByRole('status').some(status => /over by \$1,355\.00/.test(status.textContent ?? ''))).toBe(true)
+  })
+
+  it('offers the PDF of the saved agreement and the history of its approvals', async () => {
+    drafts.mockReturnValue({ data: [draft(), draft({ id: 'd-1', version: 1, approval })], isLoading: false, isError: false, refetch: refetchDrafts })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Save'))
+    await user.click(screen.getByRole('button', { name: 'Download agreement PDF' }))
+    expect(downloadMutate).toHaveBeenCalledWith({ participantId: 'p-1', id: 'd-2' })
+    expect(screen.getByText('Approved 3 Oct 2026 by Alex.')).toBeInTheDocument()
+  })
+
+  it('opens the approval from the Save step, once everything is saved', async () => {
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Save'))
+    await user.click(screen.getByRole('button', { name: 'Mark approved for rostering' }))
+    expect(screen.getByRole('dialog', { name: 'Approve this agreement for rostering?' })).toBeInTheDocument()
+  })
+
+  it('locks an approved agreement until a new revision is started', async () => {
+    drafts.mockReturnValue({ data: [draft({ approval })], isLoading: false, isError: false, refetch: refetchDrafts })
+    const user = userEvent.setup()
+    renderPage()
+    expect(screen.getByText('Approved for rostering')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Agreement starts')).not.toBeInTheDocument()
+    await user.click(stepButton('Week'))
+    expect(screen.queryByRole('button', { name: /Add a shift/ })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Start a new revision' }))
+    expect(screen.getAllByRole('button', { name: /Add a shift on/ })).toHaveLength(7)
+  })
+
+  it('names a save by somebody else, keeps what is on screen, and offers theirs', async () => {
+    createMutate.mockImplementation((_request, options) => options.onError({ response: { status: 409, data: { code: 'draft-version-conflict', data: { currentVersion: 3 } } } }))
+    const user = userEvent.setup()
+    renderPage()
+    await toTheSaveStep(user)
+    await user.click(screen.getByRole('button', { name: 'Save agreement' }))
+    expect(await screen.findByText('Somebody else saved this agreement')).toBeInTheDocument()
+    expect(refetchDrafts).toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Load their agreement' })).toBeInTheDocument()
+  })
+
+  it('confirms the service needs from onboarding, and only from onboarding', async () => {
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    confirmPost.mockResolvedValue({})
+    const user = userEvent.setup()
+    const { unmount } = renderPage('/participants/p-1/agreement-draft?from=onboarding')
+    await user.click(stepButton('Save'))
+    await user.click(screen.getByRole('button', { name: 'Confirm service needs' }))
+    await waitFor(() => expect(confirmPost).toHaveBeenCalledWith('p-1'))
+    unmount()
+    renderPage()
+    await user.click(stepButton('Save'))
+    expect(screen.queryByRole('button', { name: 'Confirm service needs' })).not.toBeInTheDocument()
+  })
+
+  it('shows what is saved to somebody who cannot change it, with Close in place of Save', async () => {
+    asRole('ReadOnly')
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Save'))
+    expect(within(screen.getByRole('form', { name: 'Service agreement' })).getByRole('button', { name: 'Close' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save agreement' })).not.toBeInTheDocument()
+  })
+})

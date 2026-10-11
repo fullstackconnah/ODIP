@@ -76,6 +76,8 @@ export default function OnboardingDetailPage() {
   const headingTitle = participantLoading ? 'Loading…' : (participantName ?? 'Participant')
 
   const scheduleApproved = d.scheduleApprovedVersion !== undefined
+  // The agreement wizard knows it was opened from here: its Save step offers "Confirm service needs", and Back and Cancel return to this record.
+  const agreementHref = `/participants/${id}/agreement-draft?from=onboarding`
   const approvedOn = d.scheduleApprovedAt ? formatWithTimeZone(d.scheduleApprovedAt, undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : undefined
   const recommended = !d.intakeComplete
     ? {
@@ -101,7 +103,7 @@ export default function OnboardingDetailPage() {
             action: (
               <div className="flex flex-wrap items-center gap-3">
                 <Button disabled={services.isPending} onClick={() => services.mutate()}>Confirm saved service needs</Button>
-                <Button variant="secondary" to={`/participants/${id}?tab=support`}>Edit service needs</Button>
+                <Button variant="secondary" to={canAccessPage('agreement-drafts') ? agreementHref : `/participants/${id}?tab=support`}>Edit service needs</Button>
               </div>
             ),
           }
@@ -109,7 +111,7 @@ export default function OnboardingDetailPage() {
           ? {
               label: 'Review agreement evidence',
               reason: 'Open the agreement draft to check its signing evidence. Agreements are signed and approved there, not on this screen.',
-              action: <Button to={`/participants/${id}/agreement-draft`}>Review agreement evidence</Button>,
+              action: <Button to={agreementHref}>Review agreement evidence</Button>,
             }
           : d.fundingRecorded === false
             ? {
@@ -130,16 +132,16 @@ export default function OnboardingDetailPage() {
                   reason: 'Open the agreement draft and approve its newest revision for rostering. That makes the weekly patterns and unfilled shifts, which you can then check under Shift patterns.',
                   // The draft carries money, so only the roles the API admits to it are sent there.
                   action: canAccessPage('agreement-drafts')
-                    ? <Button to={`/participants/${id}/agreement-draft`}>Open agreement draft</Button>
+                    ? <Button to={agreementHref}>Open agreement draft</Button>
                     : canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
                 }
 
   const gates: Gate[] = [
     { label: 'Intake completed', state: gateState(d.intakeComplete) },
     { label: 'Participant Profile', state: gateState(d.profileComplete), fixRoute: { to: `/participants/${id}/profile`, label: 'Edit profile' } },
-    { label: 'Service needs and provisional lines', state: gateState(d.serviceTypeConfirmed), fixRoute: { to: `/participants/${id}?tab=support`, label: 'Edit service needs' } },
+    { label: 'Service needs and provisional lines', state: gateState(d.serviceTypeConfirmed), fixRoute: { to: canAccessPage('agreement-drafts') ? agreementHref : `/participants/${id}?tab=support`, label: 'Edit service needs' } },
     // The draft carries money, so only the roles the API admits to it are sent there (a ReadOnly or SupportWorker who can read this page would only meet a redirect or a 403).
-    { label: 'Current agreement evidence', state: gateState(d.serviceAgreementSigned), context: 'Agreements are signed and approved elsewhere.', fixRoute: canAccessPage('agreement-drafts') ? { to: `/participants/${id}/agreement-draft`, label: 'Open agreement draft' } : undefined },
+    { label: 'Current agreement evidence', state: gateState(d.serviceAgreementSigned), context: 'Agreements are signed and approved elsewhere.', fixRoute: canAccessPage('agreement-drafts') ? { to: agreementHref, label: 'Open agreement draft' } : undefined },
     // Only an NDIS-funded participant is asked for a plan budget: the server sends fundingRecorded for them alone, and counts it in the worklist's "of 6 gates", so this list shows the
     // same six. The Funding tab holds money, so it is offered only to the roles that may open it.
     ...(typeof d.fundingRecorded === 'boolean'
@@ -158,7 +160,7 @@ export default function OnboardingDetailPage() {
       context: scheduleApproved ? `Approved for rostering: version ${d.scheduleApprovedVersion}${approvedOn ? `, on ${approvedOn}` : ''}.` : undefined,
       // The schedule is made on the agreement draft: the shift patterns page has nothing to show before a revision is approved, so it is only the way for a role the API does not admit to the draft.
       fixRoute: canAccessPage('agreement-drafts')
-        ? { to: `/participants/${id}/agreement-draft`, label: 'Open agreement draft' }
+        ? { to: agreementHref, label: 'Open agreement draft' }
         : canAccessPage('rostering') ? { to: '/rostering/patterns', label: 'Open shift patterns' } : undefined },
   ]
   const completedGateCount = gates.filter(gate => gate.state === 'Complete').length
