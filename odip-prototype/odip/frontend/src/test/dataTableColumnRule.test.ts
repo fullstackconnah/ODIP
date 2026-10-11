@@ -22,12 +22,6 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
   return out
 }
 
-/**
- * Pages that still pass `priority`. ParticipantsPage belongs to the participant data-integrity branch (Fix A), which was in flight when
- * this rule landed: its `priority` props are ignored by DataTable and are deleted with that branch's next change to the file.
- */
-const STILL_PASSING_PRIORITY = new Set(['pages/ParticipantsPage.tsx'])
-
 describe('the DataTable column rule (L3-04)', () => {
   it('has no breakpoint that hides a column in DataTable itself', () => {
     const source = readFileSync(join(SRC, 'components/DataTable.tsx'), 'utf-8')
@@ -38,7 +32,6 @@ describe('the DataTable column rule (L3-04)', () => {
     const offenders: string[] = []
     for (const file of sourceFiles(join(SRC, 'pages'))) {
       const name = relative(SRC, file).split(sep).join('/')
-      if (STILL_PASSING_PRIORITY.has(name)) continue
       const source = readFileSync(file, 'utf-8')
       if (/\bpriority:\s*'(medium|low|lowest)'/.test(source)) offenders.push(name)
     }

@@ -5,7 +5,6 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
-import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { SearchInput } from '@/components/SearchInput'
 import { useConvertParticipantInquiry, useParticipantInquiries } from '@/api/hooks'
@@ -33,26 +32,9 @@ const isOpen = (stage: Stage) => stage === 'new' || stage === 'draftintake'
 /** A direct intake has no enquiry behind it, so no source: the cell says how it started instead of showing nothing. */
 const sourceLabel = (row: ParticipantInquiryDto) => (row.isDirectIntake ? 'Direct intake' : row.source)
 
-export default function InquiriesPage() {
-  const screen = useInquiriesScreen()
-  return (
-    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title="Enquiries"
-        subtitle="Open enquiries and intakes in progress. Starting intake creates an inactive draft participant you can come back to."
-      >
-        {screen.showTable && screen.toolbar}
-      </PageHeader>
-      {screen.body}
-    </div>
-  )
-}
-
 /**
  * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns
- * one PageHeader. The standalone /inquiries route is now redirected to
- * /participants?tab=enquiries, so this default page component is only retained for the
- * dedicated InquiriesPage test that mounts it under its own MemoryRouter.
+ * one PageHeader. The standalone /inquiries route is redirected to /participants?tab=enquiries.
  *
  * Capture/edit lives on its own routed page at /participants/new-inquiry — see
  * InquiryFormPage. Edit and Start-intake remain row-level actions here. The search renders above the table: the hub used to show the body
@@ -170,12 +152,5 @@ function useInquiriesScreen() {
     </>
   )
 
-  return {
-    canManageParticipantLifecycle,
-    toolbar,
-    showEmptyState,
-    showTable,
-    openNew,
-    body,
-  }
+  return { toolbar, showTable, body }
 }

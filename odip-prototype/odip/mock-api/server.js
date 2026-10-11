@@ -1712,32 +1712,6 @@ const dashboardSummary = {
   overdueTasks: tasks.filter((t) => t.status === 'Overdue'),
 }
 
-// Staff "my dashboard" (StaffDashboardDto) — for support-worker view
-const myDashboard = {
-  staffId: 's-0003',
-  fullName: "Jack O'Sullivan",
-  upcomingTripCount: 1,
-  activeAssignmentCount: 1,
-  nextTripCountdownDays: 12,
-  activeTrip: null,
-  assignments: [
-    {
-      assignmentId: 'sa-0002', tripInstanceId: 't-0001',
-      tripName: 'Sunshine Coast Beach Escape', destination: 'Caloundra QLD',
-      region: 'Sunshine Coast', startDate: '2026-08-14', endDate: '2026-08-17',
-      durationDays: 4, tripStatus: 'Confirmed', assignmentStatus: 'Confirmed',
-      assignmentRole: 'Support Worker / Driver', isDriver: true,
-      sleepoverType: 'Sleepover', shiftNotes: 'Driving Big Red. Hoist induction complete.',
-      group: 'Upcoming', daysUntilStart: 12,
-    },
-  ],
-  qualifications: [
-    { name: 'First Aid', status: 'ExpiringSoon', expiryDate: '2026-08-20', daysUntilExpiry: 18 },
-    { name: 'Driver Licence', status: 'Current', expiryDate: '2027-10-09', daysUntilExpiry: 433 },
-    { name: 'Manual Handling', status: 'Current', expiryDate: '2026-10-30', daysUntilExpiry: 89 },
-  ],
-}
-
 // Staff assignments per trip (StaffAssignmentDto)
 const tripStaffAssignments = {
   't-0001': [
@@ -1785,7 +1759,7 @@ const appSettings = { qualificationWarningDays: 30 }
 
 // Leave requests (LeaveRequestDto) + recurring unavailability (RecurringUnavailabilityDto) —
 // offline preview fixtures for the coordinator LeaveApprovalsPage and self-service
-// PortalLeavePage. CURRENT_STAFF_ID mirrors myDashboard.staffId — the "current user" the
+// PortalLeavePage. CURRENT_STAFF_ID is the "current user" the
 // portal/* routes below answer for.
 const CURRENT_STAFF_ID = 's-0003'
 
@@ -2447,7 +2421,6 @@ const routes = [
   }],
 
   // staff (plain array)
-  ['staff/me/dashboard', () => myDashboard],
   ['staff/available', () => staff.filter((s) => s.isActive && s.id !== 's-0005')],
   ['staff', () => staff],
   ['staff/:id/availability', (id) =>

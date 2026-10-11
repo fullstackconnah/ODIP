@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, RouterProvider, createMemoryRouter } from 'react-router-dom'
-import ParticipantsPage, { ParticipantsTable } from './ParticipantsPage'
+import { ParticipantsTable } from './ParticipantsPage'
 import { participantActivatedState } from './profile/participantActivated'
 
 const { mockUseParticipants, mockDeleteMutate, mockUpdateMutate, mockStatusMutate, mockRestoreMutate, mockUseParticipantAlertsAggregate } = vi.hoisted(() => ({
@@ -50,7 +50,7 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/participants']}>
       <Routes>
-        <Route path="/participants" element={<ParticipantsPage />} />
+        <Route path="/participants" element={<ParticipantsTable />} />
         <Route path="/participants/:id" element={<div>Participant detail page</div>} />
       </Routes>
     </MemoryRouter>
@@ -630,17 +630,6 @@ describe('ParticipantsPage — density row actions', () => {
     // Only the name link remains focusable in the row.
     expect(within(row).getAllByRole('link')).toHaveLength(1)
     expect(within(row).queryAllByRole('button')).toHaveLength(0)
-  })
-
-  it('keeps the title row and the filter row in one block-flow wrapper so the header is 72px, not gap-spaced', () => {
-    renderPage()
-
-    const h1 = screen.getByRole('heading', { level: 1, name: 'Participants' })
-    const search = screen.getByPlaceholderText(/search participants/i)
-    const wrapper = h1.parentElement?.parentElement?.parentElement as HTMLElement
-    expect(wrapper).toContainElement(search)
-    expect(wrapper.tagName).toBe('DIV')
-    expect(wrapper.className).toBe('')
   })
 
   it('renders the NDIS number at 13px, not the 12px micro type, and keeps the Streams chips on one line', () => {

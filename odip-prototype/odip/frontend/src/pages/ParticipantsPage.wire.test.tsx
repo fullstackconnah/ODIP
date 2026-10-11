@@ -3,7 +3,7 @@ import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import ParticipantsPage from './ParticipantsPage'
+import { ParticipantsTable } from './ParticipantsPage'
 
 // Wire level: only the HTTP helpers are mocked, so the real hooks, the real page and a real query client run, and every
 // assertion is on the method, URL and FULL body that would leave the browser (a hook-level mock cannot prove any of them).
@@ -75,7 +75,7 @@ function renderPage() {
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/participants']}>
         <Routes>
-          <Route path="/participants" element={<ParticipantsPage />} />
+          <Route path="/participants" element={<ParticipantsTable />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

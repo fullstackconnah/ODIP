@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import InquiriesPage from './InquiriesPage'
+import { InquiriesTable } from './InquiriesPage'
 
 const mocks = vi.hoisted(() => ({ inquiries: vi.fn(), create: vi.fn(), update: vi.fn(), convert: vi.fn(), refetch: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
@@ -17,7 +17,7 @@ function page() {
   return render(
     <MemoryRouter initialEntries={['/inquiries']}>
       <Routes>
-        <Route path="/inquiries" element={<InquiriesPage />} />
+        <Route path="/inquiries" element={<InquiriesTable />} />
         <Route path="/participants/:id/intake" element={<p>Draft intake destination</p>} />
         <Route path="/participants/new-inquiry" element={<p>New inquiry form</p>} />
       </Routes>
