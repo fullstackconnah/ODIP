@@ -16,7 +16,7 @@ vi.mock('@/api/hooks', () => ({
   useDownloadServiceAgreementDraftPdf: () => ({ mutate: downloadMutate, isPending: false, isError: false }),
   useFundingPlans: () => plans(),
   useConfirmServiceNeeds: (participantId: string) => ({ mutate: () => confirmPost(participantId), isPending: false, isSuccess: false, isError: false }),
-  useApprovalPreview: (_participantId: string, draftId: string) => { previewFor(draftId); return { data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() } },
+  useApprovalPreview: (_participantId: string, draftId: string) => previewFor(draftId) ?? { data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() },
   useApproveServiceAgreementDraft: () => ({ mutate: vi.fn(), isPending: false }),
   usePlanPricingSettings: () => ({ data: makeSettings() }),
   usePlanBudget: () => budget(),
@@ -299,6 +299,22 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     await user.click(stepButton('Save'))
     expect(screen.getByText(/You have changes that are not saved/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Mark approved for rostering' })).toBeDisabled()
+  })
+
+  it('shows the shifts of the block a reason names, by the id the server stored (b1, b3)', async () => {
+    const saturday = mondayWednesday('b3', { onPublicHoliday: 'Charge', days: ['Saturday'], start: '09:00:00', end: '15:00:00' })
+    drafts.mockReturnValue({ data: [draft({ blocks: [draftBlock(mondayWednesday('b1', { onPublicHoliday: 'Charge' })), draftBlock(saturday)] })], isLoading: false, isError: false, refetch: refetchDrafts })
+    previewFor.mockReturnValue({
+      data: { canApprove: false, alreadyApproved: false, reasons: [{ code: 'NoItem', message: "Block 'b3': no item for the night.", blockId: 'b3', count: 1 }], patternsToCreate: 0, patternsToEnd: 0, shiftsToCreate: 0, horizonEnd: '2026-12-05', oldShiftsRemaining: { open: 0, assigned: 0 }, overlappingPatterns: [] },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Save'))
+    await user.click(screen.getByRole('button', { name: 'Mark approved for rostering' }))
+    await user.click(screen.getByRole('button', { name: 'Show the shifts' }))
+    expect(screen.getByRole('button', { name: /^Saturday 09:00 to 15:00/ })).toHaveAttribute('aria-pressed', 'true')
+    for (const day of ['Monday', 'Wednesday']) expect(screen.getByRole('button', { name: new RegExp('^' + day + ' ') })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('keeps the budget comparison on an approved agreement, which the person may still price', async () => {
