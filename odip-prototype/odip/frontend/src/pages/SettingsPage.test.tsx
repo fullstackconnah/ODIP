@@ -277,6 +277,18 @@ describe('SettingsPage — buttons are the Button primitive', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(open).toHaveFocus()
   })
+
+  it('keeps the catalogue import open when the backdrop is clicked (a stray click must not throw away the upload)', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    renderSettingsPageWithQueryClient()
+
+    await user.click(screen.getByRole('tab', { name: 'Support Catalogue' }))
+    await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
+    await user.click(screen.getByRole('dialog', { name: 'Import NDIS Support Catalogue' }).parentElement!)
+
+    expect(screen.getByRole('dialog', { name: 'Import NDIS Support Catalogue' })).toBeInTheDocument()
+  })
 })
 
 describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
