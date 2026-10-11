@@ -105,15 +105,16 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
     updateTrip.mutate({ id: trip.id, data }, { onSuccess: onClose })
   }
 
+  // Below lg the bottom nav (z-50, later in the DOM) covers the screen foot: the bottom padding keeps the dialog above it and the safe-area inset.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom)+1rem)] lg:pb-4" onClick={onClose}>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="bg-[var(--color-card)] rounded-[var(--radius-md)] w-full max-w-2xl max-h-[90vh] flex flex-col shadow-[0_32px_64px_-16px_rgba(27,28,26,0.2)]"
+        className="bg-[var(--color-card)] rounded-[var(--radius-md)] w-full max-w-2xl max-h-full lg:max-h-[90vh] flex flex-col shadow-[0_32px_64px_-16px_rgba(27,28,26,0.2)]"
         onClick={e => e.stopPropagation()}
       >
         {/* Modal header */}
@@ -135,7 +136,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
             <div className="space-y-3">
               <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Basic Info</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Trip Name *</label>
                   <input value={tripEditForm.tripName} onChange={e => setTripEditForm({ ...tripEditForm, tripName: e.target.value })}
                     className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" placeholder="e.g. Beach Getaway 2026" />
@@ -210,7 +211,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
                     ]}
                   />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Lead Coordinator</label>
                   <Dropdown
                     variant="form"
