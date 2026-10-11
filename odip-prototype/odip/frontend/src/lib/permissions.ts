@@ -103,25 +103,25 @@ export function usePermissions() {
     },
 
     /**
-     * Controls create/edit/delete button visibility.
+     * Controls create/edit/delete button visibility, and the requiresWrite routes.
      * SupportWorker: false — buttons hidden (except canCreateIncidents).
-     * ReadOnly: true — buttons visible, backend blocks the actual mutations.
+     * ReadOnly: false — owner decision 2026-10-12: ReadOnly hides write controls, since ReadOnlyMiddleware refuses every write it sends.
      */
-    canWrite: !isSupportWorker,
+    canWrite: !isSupportWorker && !isReadOnly,
 
     /**
      * Participant inquiry, draft-intake, and onboarding mutations are restricted by
      * ParticipantInquiriesController to Admin, Coordinator, and SuperAdmin. This is
      * deliberately separate from canWrite: ReadOnly historically satisfied canWrite
-     * even though the lifecycle API rejects its mutation requests.
+     * even though the lifecycle API rejects its mutation requests (canWrite now excludes ReadOnly too).
      */
     canManageParticipantLifecycle: isSuperAdmin || isAdmin || isCoordinator,
 
     /**
      * SupportWorker can create incidents (their only write action).
-     * ReadOnly: true — button visible, backend blocks the save.
+     * ReadOnly: false — ReadOnlyMiddleware refuses the save, so the button is hidden.
      */
-    canCreateIncidents: true,
+    canCreateIncidents: !isReadOnly,
 
     /**
      * Medication CRUD (create/edit medications, amend administrations) is limited to

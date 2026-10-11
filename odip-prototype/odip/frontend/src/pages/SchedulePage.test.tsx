@@ -4,10 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SchedulePage from './SchedulePage'
 import type { ScheduleOverviewDto, ScheduleStaffDto, ScheduleTripDto, ScheduleVehicleDto } from '@/api/types'
 
-vi.mock('@/lib/permissions', () => ({
-  usePermissions: () => ({ canWrite: true }),
-}))
-
 const overview: ScheduleOverviewDto = {
   trips: [{
     id: 'trip-1', tripName: 'Gold Coast Beach Break', tripCode: null, destination: null, region: null,
@@ -82,7 +78,9 @@ const richOverview: ScheduleOverviewDto = {
   vehicles: [vehicle],
 }
 
+// The real permissions, from the signed-in role: a Coordinator unless a test says otherwise.
 beforeEach(() => {
+  localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
   currentOverview = overview
   currentError = null
 })
@@ -337,5 +335,27 @@ describe('SchedulePage — staff role is the role alone, the region is in the ti
     renderPage()
     const button = screen.getByRole('button', { name: /^Priya Nadarajah/ })
     expect(button).toHaveAttribute('title', 'Priya Nadarajah')
+  })
+})
+
+// TRIPS-5 (owner decision 2026-10-12): assigning and unassigning are writes the server refuses ReadOnly and SupportWorker, so the grid offers them neither.
+describe('SchedulePage — assign and unassign by role', () => {
+  it.each(['ReadOnly', 'SupportWorker'])('offers %s no Assign or Unassign, and still shows the assignments', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    currentOverview = richOverview
+    renderPage()
+
+    expect(screen.queryByRole('button', { name: /^Assign/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Unassign/ })).not.toBeInTheDocument()
+    expect(screen.getAllByText('Alex Rivera').length).toBeGreaterThan(0)
+  })
+
+  it.each(['Admin', 'Coordinator'])('offers %s Assign and Unassign', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    currentOverview = richOverview
+    renderPage()
+
+    expect(screen.getAllByRole('button', { name: /^Assign/ }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: /^Unassign/ }).length).toBeGreaterThan(0)
   })
 })
