@@ -395,6 +395,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
       {/* Add Accommodation Modal */}
       {showAddAccommodation && (
         <Modal
+          stickyFooter
           open
           onClose={() => setShowAddAccommodation(false)}
           title="Add Accommodation"
@@ -537,6 +538,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
       {/* Edit Reservation Modal */}
       {editingReservation && (
         <Modal
+          stickyFooter
           open
           onClose={() => setEditingReservation(null)}
           title={`Edit Reservation — ${editingReservation.propertyName}`}
