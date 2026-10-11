@@ -613,6 +613,14 @@ function SupportCatalogueTab() {
           onClose={() => { setImporting(false); setPreviewStep(null); setPreview(null); setImportError(null) }}
           title="Import NDIS Support Catalogue"
           closeOnBackdrop={false}
+          footer={previewStep === 'preview' && preview ? (
+            <>
+              <Button variant="secondary" size="md" onClick={() => setPreviewStep('upload')}>Back</Button>
+              <Button size="md" onClick={handleConfirm} disabled={confirming}>
+                {confirming ? 'Importing...' : 'Confirm Import'}
+              </Button>
+            </>
+          ) : undefined}
         >
           <div className="space-y-4">
             {importError && (
@@ -649,12 +657,6 @@ function SupportCatalogueTab() {
                 <div>
                   <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Catalogue Version</label>
                   <input value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <Button variant="secondary" size="md" onClick={() => setPreviewStep('upload')}>Back</Button>
-                  <Button size="md" onClick={handleConfirm} disabled={confirming}>
-                    {confirming ? 'Importing...' : 'Confirm Import'}
-                  </Button>
                 </div>
               </div>
             )}
