@@ -1,16 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, PillBottle } from 'lucide-react'
+import { PillBottle } from 'lucide-react'
 import { useMedicationRegister } from '@/api/hooks'
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import { CellText, DataTable, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
-import { Button } from '@/components/Button'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu } from '@/lib/utils'
-import { usePermissions } from '@/lib/permissions'
 import { isPastDue } from '@/lib/deadline'
 import { ComplianceFlagChips } from './MedicationBadges'
 import { DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_TYPE_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
@@ -29,7 +27,6 @@ const STATUS_ITEMS = [
 ]
 
 export default function RegisterTab() {
-  const { canManageMedications } = usePermissions()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
@@ -134,11 +131,6 @@ export default function RegisterTab() {
             />
           </div>
         </div>
-        {canManageMedications && (
-          <Button to="/medications/new" size="md">
-            <Plus className="w-4 h-4" /> New medication
-          </Button>
-        )}
       </div>
 
       {!isLoading && medications.length === 0 ? (
