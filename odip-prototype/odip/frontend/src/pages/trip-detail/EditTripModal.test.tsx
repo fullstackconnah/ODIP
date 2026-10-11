@@ -27,7 +27,8 @@ describe('EditTripModal — what Save refuses', () => {
     fireEvent.change(screen.getByLabelText(/Start Date/), { target: { value: '' } })
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
     expect(mutate).not.toHaveBeenCalled()
-    expect(screen.getByText('Start date is required.')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Start date is required.')
+    expect(screen.getByLabelText(/Start Date/)).toHaveFocus()
   })
 
   it('refuses a duration below one day with a field error', async () => {
@@ -35,7 +36,17 @@ describe('EditTripModal — what Save refuses', () => {
     fireEvent.change(screen.getByLabelText(/Duration/), { target: { value: '0' } })
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
     expect(mutate).not.toHaveBeenCalled()
-    expect(screen.getByText('Duration must be at least 1 day.')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Duration must be at least 1 day.')
+    expect(screen.getByLabelText(/Duration/)).toHaveFocus()
+  })
+
+  it('clears a field error once the field is corrected', async () => {
+    const user = await setup()
+    fireEvent.change(screen.getByLabelText(/Start Date/), { target: { value: '' } })
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    fireEvent.change(screen.getByLabelText(/Start Date/), { target: { value: '2026-12-01' } })
+    expect(screen.queryByText('Start date is required.')).toBeNull()
+    expect(screen.getByLabelText(/Start Date/)).toHaveAttribute('aria-invalid', 'false')
   })
 
   it('saves a start date and a duration of one or more days', async () => {
