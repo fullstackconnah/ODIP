@@ -98,7 +98,9 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
   // The server's reasons carry the ids of the STORED blocks, which an older save may have with gaps: they are read as stored, never regrouped (regrouping renumbers them).
   const groups = useMemo<ShiftGroup[]>(() => draft.blocks.map(entry => ({ entry, shiftIds: [] })), [draft.blocks])
   const say = (text: string) => friendlyMessage(shiftWords(text, groups), [])
-  const superseded = [preview.error, approve.error].some(error => httpStatusOf(error) === 409 && (error as { response?: { data?: { code?: string } } } | null)?.response?.data?.code === 'draft-superseded')
+  // The server says it two ways: approving answers 409 draft-superseded; the preview answers 200 with canApprove false and the reason Superseded.
+  const superseded = (httpStatusOf(approve.error) === 409 && (approve.error as { response?: { data?: { code?: string } } } | null)?.response?.data?.code === 'draft-superseded')
+    || !!data?.reasons.some(reason => reason.code === 'Superseded')
   // Told once: the page reads the agreement again, and a second telling would read it again.
   useEffect(() => {
     if (superseded && !supersededSeen.current) { supersededSeen.current = true; onSuperseded?.() }

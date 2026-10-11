@@ -6,8 +6,8 @@ import type { AgreementCheck, ServiceAgreementDraftDto } from '@/api/types'
 import { budgetOf, draftBlock, mondayWednesday, settings as makeSettings } from '@/test/fixtures/planPricing'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
 
-const { createMutate, downloadMutate, confirmPost, drafts, participant, plans, budget, check, refetchDrafts } = vi.hoisted(() => ({
-  createMutate: vi.fn(), downloadMutate: vi.fn(), confirmPost: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(),
+const { createMutate, downloadMutate, confirmPost, drafts, participant, plans, budget, check, refetchDrafts, previewFor } = vi.hoisted(() => ({
+  createMutate: vi.fn(), downloadMutate: vi.fn(), confirmPost: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(), previewFor: vi.fn(),
 }))
 vi.mock('@/api/hooks', () => ({
   useParticipant: () => participant(),
@@ -16,7 +16,7 @@ vi.mock('@/api/hooks', () => ({
   useDownloadServiceAgreementDraftPdf: () => ({ mutate: downloadMutate, isPending: false, isError: false }),
   useFundingPlans: () => plans(),
   useConfirmServiceNeeds: (participantId: string) => ({ mutate: () => confirmPost(participantId), isPending: false, isSuccess: false, isError: false }),
-  useApprovalPreview: () => ({ data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() }),
+  useApprovalPreview: (_participantId: string, draftId: string) => { previewFor(draftId); return { data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() } },
   useApproveServiceAgreementDraft: () => ({ mutate: vi.fn(), isPending: false }),
   usePlanPricingSettings: () => ({ data: makeSettings() }),
   usePlanBudget: () => budget(),
@@ -54,7 +54,7 @@ beforeEach(() => {
   budget.mockReturnValue({ data: budgetOf('b1'), isError: false, isFetching: false, error: null, refetch: vi.fn() })
   check.mockReturnValue({ data: agreementCheck(0), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
   refetchDrafts.mockResolvedValue({ data: [], isError: false })
-  createMutate.mockReset(); downloadMutate.mockReset(); confirmPost.mockReset()
+  createMutate.mockReset(); downloadMutate.mockReset(); confirmPost.mockReset(); previewFor.mockReset()
 })
 afterEach(() => { vi.useRealTimers(); localStorage.clear() })
 
@@ -154,7 +154,7 @@ describe('ServiceAgreementDraftPage: the wizard', () => {
 })
 
 describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
-  it('loads the newest save as shifts and says block, version, template, hash or draft nowhere', async () => {
+  it('loads the newest save as shifts and says block, version, template or hash nowhere', async () => {
     drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
     const user = userEvent.setup()
     renderPage()
@@ -164,7 +164,7 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     expect(screen.getByRole('button', { name: /Wednesday 09:00 to 13:00/ })).toBeInTheDocument()
     for (const key of ['Agreement', 'Week', 'Check', 'Save']) {
       await user.click(stepButton(key))
-      expect(document.body.textContent).not.toMatch(/\bblocks?\b|version|template|sha-?256|provisional blank draft|legal review required|draft versions|draft only/i)
+      expect(document.body.textContent).not.toMatch(/\bblocks?\b|version|template|sha-?256|provisional blank draft|legal review required|draft versions/i)
     }
   })
 
@@ -257,5 +257,65 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     await user.click(stepButton('Save'))
     expect(within(screen.getByRole('form', { name: 'Service agreement' })).getByRole('button', { name: 'Close' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save agreement' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the draft-only notice and the participant identifiers on the Agreement step, and the PDF caveat on the Save step, in the words they always had', async () => {
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    const user = userEvent.setup()
+    renderPage()
+    expect(screen.getByText(/Draft only:/).closest('p')).toHaveTextContent("Draft only: not approved for signing or use. It can't activate the participant, invoice or claim. Approving a revision for rostering is separate: it only makes that revision's weekly patterns and unfilled shifts.")
+    const identifiers = screen.getByText(/Participant identifiers come from the participant record/).closest('p') as HTMLElement
+    expect(identifiers).toHaveTextContent('NDIS number: Not recorded on participant; date of birth: Not recorded on participant.')
+    expect(identifiers).toHaveTextContent('A snapshot of both is stored with this draft and printed on its PDF, which Admins and Coordinators can open; a later change to the record does not change an existing draft.')
+    expect(within(identifiers).getByRole('link', { name: 'View or edit participant details' })).toHaveAttribute('href', '/participants/p-1/profile')
+    await user.click(stepButton('Save'))
+    expect(screen.getByText('Draft PDFs are informational only — not signed and not billing authority.')).toBeInTheDocument()
+  })
+
+  it('acts on the version on screen, not on a newer one read since: the PDF, the approval and Confirm service needs', async () => {
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    const user = userEvent.setup()
+    renderPage('/participants/p-1/agreement-draft?from=onboarding')
+    await user.click(stepButton('Save'))
+    drafts.mockReturnValue({ data: [draft({ id: 'd-3', version: 3 }), draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    await user.click(stepButton('Agreement'))
+    await user.click(stepButton('Save'))
+    await user.click(screen.getByRole('button', { name: 'Download agreement PDF' }))
+    expect(downloadMutate).toHaveBeenCalledWith({ participantId: 'p-1', id: 'd-2' })
+    expect(screen.queryByRole('button', { name: 'Confirm service needs' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Mark approved for rostering' }))
+    expect(previewFor).toHaveBeenLastCalledWith('d-2')
+  })
+
+  it('calls a week with every shift taken out unsaved, so Approve waits for a save', async () => {
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Week'))
+    for (const day of ['Monday', 'Wednesday']) {
+      screen.getByRole('button', { name: new RegExp('^' + day + ' ') }).focus()
+      await user.keyboard('{Delete}')
+    }
+    await user.click(stepButton('Save'))
+    expect(screen.getByText(/You have changes that are not saved/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mark approved for rostering' })).toBeDisabled()
+  })
+
+  it('keeps the budget comparison on an approved agreement, which the person may still price', async () => {
+    drafts.mockReturnValue({ data: [draft({ approval })], isLoading: false, isError: false, refetch: refetchDrafts })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Check'))
+    expect(screen.getByRole('heading', { name: /Against the participant's budget/ })).toBeInTheDocument()
+  })
+
+  it('does not say a saved agreement is shorter than a week when its week is only not priced, for a person who cannot change it', async () => {
+    asRole('ReadOnly')
+    drafts.mockReturnValue({ data: [draft({ pricing: budgetOf('b1').period })], isLoading: false, isError: false, refetch: refetchDrafts })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Check'))
+    expect(screen.getByText('The whole agreement')).toBeInTheDocument()
+    expect(screen.queryByText('The agreement is shorter than a week.')).not.toBeInTheDocument()
   })
 })

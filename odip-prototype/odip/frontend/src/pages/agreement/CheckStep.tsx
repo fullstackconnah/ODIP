@@ -66,7 +66,7 @@ export function CheckStep({ pricing, issues, anySkipped, onFix, onChangeHolidays
                 <p className={LABEL}>An ordinary week</p>
                 {weekly ? (
                   <p className={HEADLINE}>{pricedNothing(weekly) ? NO_FIGURE : formatHours(weekly.totals.supportHours)} h <span className="font-normal text-[var(--color-muted-foreground)]">·</span> {pricedNothing(weekly) ? NO_FIGURE : formatCurrency(weekly.totals.amount)}</p>
-                ) : <p className="text-sm text-[var(--color-muted-foreground)]">The agreement is shorter than a week.</p>}
+                ) : <p className="text-sm text-[var(--color-muted-foreground)]">{pricing.fromStore ? 'Not shown for a saved agreement.' : 'The agreement is shorter than a week.'}</p>}
               </div>
               <div>
                 <p className={LABEL}>The whole agreement</p>

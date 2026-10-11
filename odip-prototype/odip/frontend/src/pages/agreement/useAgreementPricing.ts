@@ -55,7 +55,7 @@ export function useAgreementPricing({ participantId, shifts, state, zone, from, 
   })
   const issues: PlanIssue[] = answer?.period.issues ?? []
   return {
-    settings, groups, answer, status, budgetView, issues, refused: refusals(issues), dates, leftOut,
+    settings, groups, answer, status, fromStore: !canQuote && !!stored, budgetView, issues, refused: refusals(issues), dates, leftOut,
     refreshing: settling || (budget.isFetching && !!answer),
     error: budget.error,
     retry: () => { void budget.refetch() },

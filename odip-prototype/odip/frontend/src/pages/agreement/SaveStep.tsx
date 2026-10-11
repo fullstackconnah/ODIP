@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Download, Loader2 } from 'lucide-react'
+import { Download, FileText, Loader2 } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import type { AgreementIssue } from '@/lib/agreementIssues'
@@ -54,7 +54,8 @@ export function SaveStep({ readOnly, locked, hasSaved, dirty, notices, saved, bl
       {hasSaved && (
         <section aria-labelledby="save-pdf" className={SECTION}>
           <h3 id="save-pdf" className="text-sm font-semibold">Agreement PDF</h3>
-          <p className="text-[13px] text-[var(--color-muted-foreground)]">The weekly schedule and what it costs. It is not signed.</p>
+          <p className="text-[13px] text-[var(--color-muted-foreground)]">The weekly schedule and what it costs.</p>
+          <p className="flex gap-2 text-xs text-[var(--color-muted-foreground)]"><FileText className="h-4 w-4 shrink-0" aria-hidden="true" /> Draft PDFs are informational only — not signed and not billing authority.</p>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="secondary" onClick={onDownload} disabled={downloading || dirty} aria-describedby={dirty ? 'save-unsaved' : undefined}>
               {downloading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}Download agreement PDF

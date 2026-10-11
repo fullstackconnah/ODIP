@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2, X } from 'lucide-react'
 import {
   useConfirmServiceNeeds, useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useFundingPlans, useParticipant, useServiceAgreementDrafts,
@@ -106,6 +106,9 @@ function DraftPage() {
 
   const loaded = drafts.data !== undefined && (!canEdit || !plans.isLoading)
   const newest = drafts.data?.[0]
+  // What is on screen is the save this working copy was loaded from or last saved as, not whatever has been read since: the PDF, the approval and the onboarding confirmation are of that one.
+  const onScreen = drafts.data?.find(entry => entry.version === baseVersion)
+  const behind = !!newest && !!onScreen && newest.id !== onScreen.id
   if (loaded && baseline === null && participant.data) {
     setBaseVersion(newest?.version ?? 0)
     // A save with a block that can no longer be read is not loaded: an empty shift would look like a schedule nobody made, and saving over it would lose it for good.
@@ -136,13 +139,13 @@ function DraftPage() {
   const readOnly = !canEdit || locked
   const plan = planDatesOf(details, recorded)
   const dates = dateProblems(details, plan)
-  const dirty = baseline !== null && shifts.length > 0 && snapshotOf(details, shifts) !== baseline
+  const dirty = baseline !== null && (shifts.length > 0 || !!newest) && snapshotOf(details, shifts) !== baseline
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(dirty)
   const limits = useMemo(() => engineLimits(shifts), [shifts])
 
   const pricing = useAgreementPricing({
     participantId: participantId ?? '', shifts, state: details.state, zone: details.zone, from: details.agreementStartDate, to: details.agreementEndDate,
-    canQuote: !readOnly, stored: newest?.pricing ? { period: newest.pricing, weekly: null, week: null } : undefined,
+    canQuote: canEdit, stored: newest?.pricing ? { period: newest.pricing, weekly: null, week: null } : undefined,
   })
   const issues = useMemo<AgreementIssue[]>(() => {
     const list: AgreementIssue[] = []
@@ -153,6 +156,11 @@ function DraftPage() {
   }, [dates.start, dates.end, dates.plan, shifts, pricing.groups, pricing.issues, pricing.settings, limits, details.agreementEndDate])
   const blocking = issues.filter(issue => issue.tone === 'fix')
   const flagged = useMemo(() => new Set(issues.filter(issue => issue.step === 'week').flatMap(issue => issue.shiftIds)), [issues])
+
+  const canonicalIdentifiers = {
+    ndis: participant.data?.ndisNumber ? 'Recorded on participant' : 'Not recorded on participant',
+    dob: participant.data?.dateOfBirth || 'Not recorded on participant',
+  }
 
   if (participant.isLoading || drafts.isLoading || (canEdit && plans.isLoading && !plans.isError)) return <PageState kind="loading" noun="service agreement" />
   // A read of the saves that fails once the page has them (the second read of a conflict, say) does not take the schedule on screen away: it is said where the person is, not by an error page.
@@ -275,7 +283,7 @@ function DraftPage() {
   // Approval: the newest save, built from shifts, not yet approved, for the roles the organisation lets approve. A SuperAdmin acting for an organisation always may.
   const approverRoles = pricing.settings?.approverRoles
   const mayApprove = isSuperAdmin || !approverRoles || (isAdmin && approverRoles.includes('Admin')) || (isCoordinator && approverRoles.includes('Coordinator'))
-  const approvable = canEdit && !!newest && newest.blocks.length > 0 && !newest.approval && unreadableVersion === null
+  const approvable = canEdit && !!onScreen && onScreen.blocks.length > 0 && !onScreen.approval && unreadableVersion === null
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (step !== 'save') next()
@@ -296,14 +304,14 @@ function DraftPage() {
       message="Loading it replaces the details and the shifts on screen with theirs. What you changed here since this page opened is not kept."
       confirmLabel="Load their agreement"
     />
-    {approvable && newest && mayApprove && (
+    {approvable && onScreen && mayApprove && (
       <ApprovalDialog
         open={approving}
         participantId={participantId}
-        draft={newest}
+        draft={onScreen}
         onClose={() => setApproving(false)}
         onApproved={() => setApproving(false)}
-        onGoToShifts={blockId => { go('week', true); setSelected(shiftIdsOfBlock(newest.blocks, blockId)) }}
+        onGoToShifts={blockId => { go('week', true); setSelected(shiftIdsOfBlock(onScreen.blocks, blockId)) }}
         onSuperseded={superseded}
       />
     )}
@@ -332,10 +340,16 @@ function DraftPage() {
         <WizardStepHeading stepKey={step} label={current.label} />
         <div className="mt-2">
           {step === 'agreement' && (
+            <div className="flex flex-col gap-[var(--section-gap)]">
+            <Callout tone="warning" announce={false} className="max-w-prose">
+              <p><strong>Draft only:</strong> not approved for signing or use. It can&apos;t activate the participant, invoice or claim. Approving a revision for rostering is separate: it only makes that revision&apos;s weekly patterns and unfilled shifts.</p>
+              <p className="mt-2"><strong>Participant identifiers come from the participant record.</strong> NDIS number: {canonicalIdentifiers.ndis}; date of birth: {canonicalIdentifiers.dob}. <Link className="underline font-medium" to={`/participants/${participantId}/profile`}>View or edit participant details</Link>. A snapshot of both is stored with this draft and printed on its PDF, which Admins and Coordinators can open; a later change to the record does not change an existing draft.</p>
+            </Callout>
             <AgreementStep
               details={details} onEdit={edit} recorded={recorded} plan={plan} readOnly={readOnly} fundingTab={`/participants/${participantId}?tab=funding`}
               errors={attempted ? { start: dates.start, end: dates.end } : {}}
             />
+            </div>
           )}
           {step === 'week' && (
             <div className="flex flex-col gap-[var(--section-gap)]">
@@ -354,12 +368,12 @@ function DraftPage() {
           )}
           {step === 'save' && (
             <SaveStep
-              readOnly={!canEdit} locked={locked} hasSaved={!!newest} dirty={dirty} notices={notices} saved={saved ? 'Saved.' : null} blocking={blocking} onGoToCheck={() => go('check')}
+              readOnly={!canEdit} locked={locked} hasSaved={!!onScreen} dirty={dirty} notices={notices} saved={saved ? 'Saved.' : null} blocking={blocking} onGoToCheck={() => go('check')}
               history={approvalHistory(drafts.data ?? [])}
-              onDownload={() => { if (newest) download.mutate({ participantId, id: newest.id }) }}
+              onDownload={() => { if (onScreen) download.mutate({ participantId, id: onScreen.id }) }}
               downloading={download.isPending} downloadFailed={download.isError}
-              approval={approvable ? { mayApprove, approverRoles, notReady: newest?.pricing?.needsReview === true, onOpen: () => setApproving(true) } : undefined}
-              onboarding={fromOnboarding && canEdit ? { onConfirm: () => confirmNeeds.mutate(), pending: confirmNeeds.isPending, done: confirmNeeds.isSuccess, failed: confirmNeeds.isError } : undefined}
+              approval={approvable ? { mayApprove, approverRoles, notReady: onScreen?.pricing?.needsReview === true, onOpen: () => setApproving(true) } : undefined}
+              onboarding={fromOnboarding && canEdit && !behind ? { onConfirm: () => confirmNeeds.mutate(), pending: confirmNeeds.isPending, done: confirmNeeds.isSuccess, failed: confirmNeeds.isError } : undefined}
             />
           )}
         </div>

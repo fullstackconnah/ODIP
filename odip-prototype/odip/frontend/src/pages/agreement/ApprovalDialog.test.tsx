@@ -436,12 +436,11 @@ describe('ApprovalDialog: when it cannot be approved yet', () => {
     expect(onGoToShifts).toHaveBeenCalledWith('b3')
   })
 
-  it('tells the page when the preview says a newer save has replaced the agreement, once', () => {
-    previewState.current = { data: undefined, isLoading: false, isError: true, error: { response: { status: 409, data: { code: 'draft-superseded' } } }, refetch: vi.fn() }
+  it('tells the page when the preview says a newer save has replaced the agreement (a 200 with the reason Superseded, which is how the server says it), once', () => {
+    ready(preview({ canApprove: false, reasons: [{ code: 'Superseded', message: 'A newer revision of this agreement draft exists. Approve the latest revision instead.' }] }))
     const onSuperseded = vi.fn()
     const { rerender } = render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} onSuperseded={onSuperseded} /></MemoryRouter>)
     rerender(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} onSuperseded={onSuperseded} /></MemoryRouter>)
-
     expect(onSuperseded).toHaveBeenCalledTimes(1)
   })
 
