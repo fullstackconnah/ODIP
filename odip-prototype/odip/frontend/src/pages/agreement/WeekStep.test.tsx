@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { PlanDayName } from '@/api/types'
@@ -7,6 +7,9 @@ import { emptyBlock } from '@/lib/planBlocks'
 import { shiftBlockOf, type Shift } from '@/lib/agreementShifts'
 import { settings as makeSettings } from '@/test/fixtures/planPricing'
 import { WeekStep } from './WeekStep'
+
+const screenSize = vi.hoisted(() => ({ belowLg: true }))
+vi.mock('@/hooks/useIsBelowLg', () => ({ useIsBelowLg: () => screenSize.belowLg }))
 
 const shift = (day: PlanDayName, changes: Partial<Shift['block']> = {}, id = `s-${day}-${changes.start ?? '0900'}`): Shift => {
   return { id, day, block: { ...shiftBlockOf(emptyBlock('x', 'NSW')), onPublicHoliday: 'Charge', ...changes }, requirements: { workerGender: 'NoPreference', driver: false, skills: [] } }
@@ -102,5 +105,76 @@ describe('WeekStep', () => {
     expect(screen.queryByRole('button', { name: /Add a shift/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Start from a common week' })).not.toBeInTheDocument()
     expect(screen.getByLabelText(/Monday 09:00 to 13:00/)).toBeInTheDocument()
+  })
+})
+
+describe('WeekStep on a phone', () => {
+  it('keeps a bar in view once shifts are selected, in place of the buttons at the top of the list', async () => {
+    const user = userEvent.setup()
+    render(<Harness initial={weekdays()} />)
+    expect(screen.getByText('Tap shifts to select them')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Selected shifts' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Monday 09:00/ }))
+    await user.click(screen.getByRole('button', { name: /Tuesday 09:00/ }))
+    const bar = screen.getByRole('group', { name: 'Selected shifts' })
+    expect(within(bar).getByText('2 selected')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Edit 2 shifts' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Clear selection' })).toHaveLength(1)
+    await user.click(within(bar).getByRole('button', { name: 'Clear selection' }))
+    expect(screen.queryByRole('group', { name: 'Selected shifts' })).not.toBeInTheDocument()
+  })
+
+  it('puts a pressed chip down with a tick as well as a fill', async () => {
+    const user = userEvent.setup()
+    render(<Harness initial={weekdays()} />)
+    const chip = screen.getByRole('button', { name: /Monday 09:00/ })
+    expect(chip.querySelector('svg')).toBeNull()
+    await user.click(chip)
+    expect(chip.querySelector('svg')).not.toBeNull()
+  })
+
+  it('Done ends the edit and puts focus back on the first shift that was selected', async () => {
+    const user = userEvent.setup()
+    render(<Harness initial={weekdays()} />)
+    await user.click(screen.getByRole('button', { name: /Tuesday 09:00/ }))
+    await user.click(screen.getByRole('button', { name: 'Edit 1 shift' }))
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expect(screen.getByRole('button', { name: /Tuesday 09:00/ })).toHaveFocus()
+    expect(screen.getByRole('button', { name: /Tuesday 09:00/ })).toHaveAttribute('aria-pressed', 'false')
+  })
+})
+
+describe('WeekStep with the editor beside the grid', () => {
+  const wide = () => { screenSize.belowLg = false }
+  const narrow = () => { screenSize.belowLg = true }
+
+  it('moves focus into the editor when a shift is added', async () => {
+    wide()
+    try {
+      const user = userEvent.setup()
+      render(<Harness />)
+      await user.click(screen.getByRole('button', { name: 'Add a shift on Monday' }))
+      expect(screen.getByRole('heading', { name: /Editing 1 shift/ })).toHaveFocus()
+      expect(screen.queryByText('Tap shifts to select them')).not.toBeInTheDocument()
+    } finally { narrow() }
+  })
+
+  it('Done, and Escape in the editor, hand focus back to the first selected shift and leave the editor empty', async () => {
+    wide()
+    try {
+      const user = userEvent.setup()
+      render(<Harness initial={weekdays()} />)
+      await user.click(screen.getByRole('button', { name: /Tuesday 09:00/ }))
+      await user.click(screen.getByRole('button', { name: /Wednesday 09:00/ }))
+      await user.click(screen.getByRole('button', { name: 'Done' }))
+      expect(screen.getByRole('button', { name: /Tuesday 09:00/ })).toHaveFocus()
+      expect(screen.getByText(/Select one or more shifts/)).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: /Monday 09:00/ }))
+      await user.click(screen.getByLabelText('Starts'))
+      await user.keyboard('{Escape}')
+      expect(screen.getByRole('button', { name: /Monday 09:00/ })).toHaveFocus()
+      expect(screen.getByText(/Select one or more shifts/)).toBeInTheDocument()
+    } finally { narrow() }
   })
 })

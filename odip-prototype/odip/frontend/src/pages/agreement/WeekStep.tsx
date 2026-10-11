@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { AlertTriangle, Plus } from 'lucide-react'
+import { AlertTriangle, Check, Plus } from 'lucide-react'
 import type { AgreementState, PlanDayName, PlanPriceZone, PlanPricingSettingsDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
@@ -65,6 +65,14 @@ export function WeekStep({ shifts, onChange, selected, onSelect, state, zone, se
     onChange([...shifts, added])
     onSelect([added.id])
     setEditing(true)
+    focusLater.current = () => editorHeading.current?.focus()
+  }
+  // Done and Escape: the edit is over, so the selection goes and focus returns to where the coordinator was in the grid.
+  const finish = () => {
+    const first = selectedShifts[0]?.id
+    focusLater.current = () => grid.current?.querySelector<HTMLElement>(`[data-shift-id="${first}"]`)?.focus()
+    setEditing(false)
+    onSelect([])
   }
   const toggle = (id: string, range: boolean) => {
     const from = anchor.current ? ordered.findIndex(shift => shift.id === anchor.current) : -1
@@ -123,7 +131,7 @@ export function WeekStep({ shifts, onChange, selected, onSelect, state, zone, se
 
   const title = selectionTitle(selectedShifts)
   const editor = open && (
-    <ShiftEditor shifts={selectedShifts} onPatch={patchSelected} onRemove={() => { remove(selected); setEditing(false) }} onDone={() => setEditing(false)} settings={settings} limitNotice={limitMessage(limits)} />
+    <ShiftEditor shifts={selectedShifts} onPatch={patchSelected} onRemove={() => { remove(selected); setEditing(false) }} onDone={finish} settings={settings} limitNotice={limitMessage(limits)} />
   )
   const note = limitMessage(limits)
 
@@ -134,15 +142,22 @@ export function WeekStep({ shifts, onChange, selected, onSelect, state, zone, se
         {!readOnly && shifts.length > 0 && (
           <>
             <Button variant="secondary" onClick={() => onSelect(ordered.filter(shift => WEEKDAYS.includes(shift.day)).map(shift => shift.id))}>Select weekdays</Button>
-            {selected.length > 0 && <Button variant="ghost" onClick={() => onSelect([])}>Clear selection</Button>}
-            {belowLg && selectedShifts.length > 0 && <Button onClick={() => setEditing(true)}>{`Edit ${plural(selectedShifts.length, 'shift')}`}</Button>}
+            {!belowLg && selected.length > 0 && <Button variant="ghost" onClick={() => onSelect([])}>Clear selection</Button>}
           </>
         )}
       </div>
       <p className="text-sm text-[var(--color-muted-foreground)]">
         {shifts.length === 0 && !readOnly && <span className="mb-1 block font-medium text-[var(--color-foreground)]">Click a day to add a shift</span>}
+        {belowLg && shifts.length > 0 && !readOnly && <span className="mb-1 block">Tap shifts to select them</span>}
         {from && to ? `Repeats every week from ${writtenDay(from)} to ${writtenDay(to)}.` : 'Repeats every week. Set the agreement dates in the first step.'}
       </p>
+      {!readOnly && belowLg && selectedShifts.length > 0 && (
+        <div role="group" aria-label="Selected shifts" className="sticky top-12 z-20 flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-2 shadow-sm">
+          <span className="mr-auto text-sm font-medium">{selectedShifts.length} selected</span>
+          <Button aria-label={`Edit ${plural(selectedShifts.length, 'shift')}`} onClick={() => setEditing(true)}>Edit</Button>
+          <Button variant="ghost" aria-label="Clear selection" onClick={() => onSelect([])}>Clear</Button>
+        </div>
+      )}
       {note && !open && <p role="alert" className={`text-sm ${TONE.warning.ink}`}>{note}</p>}
 
       <div className="flex flex-col gap-[var(--section-gap)] lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
@@ -160,13 +175,14 @@ export function WeekStep({ shifts, onChange, selected, onSelect, state, zone, se
                     <span>{day}<span className="sr-only"> (select all its shifts)</span></span>
                   </label>
                 )}
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                <div className="flex min-h-[var(--control-h)] min-w-0 flex-1 flex-wrap items-center gap-2">
                   {there.map(shift => {
                     const on = selected.includes(shift.id)
                     const marks = [clash.has(shift.id) ? 'overlaps another shift' : '', flagged.has(shift.id) ? 'needs attention' : ''].filter(Boolean)
                     const text = (
                       <>
                         <span className="flex items-center gap-1 font-medium tabular-nums">
+                          {!readOnly && on && <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
                           {marks.length > 0 && <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${on ? '' : TONE.warning.ink}`} aria-hidden="true" />}
                           {clock(shift.block.start)} to {clock(shift.block.end)}{endsNextDay(shift.block) && <span className="text-xs font-normal"> +1 day</span>}
                         </span>
@@ -207,7 +223,7 @@ export function WeekStep({ shifts, onChange, selected, onSelect, state, zone, se
         </div>
 
         {!readOnly && !belowLg && (
-          <aside aria-label="Shift editor" className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] lg:sticky lg:top-20">
+          <aside aria-label="Shift editor" className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto" onKeyDown={event => { if (event.key === 'Escape' && open) finish() }}>
             <h3 ref={editorHeading} tabIndex={-1} className="mb-[var(--section-gap)] text-base font-semibold focus:outline-none">{open ? title : 'Shift editor'}</h3>
             {open ? editor : <p className="text-sm text-[var(--color-muted-foreground)]">Select one or more shifts to change their times, support and more together, or click a day to add one.</p>}
           </aside>
@@ -215,7 +231,7 @@ export function WeekStep({ shifts, onChange, selected, onSelect, state, zone, se
       </div>
 
       {!readOnly && belowLg && (
-        <SlideOver open={editing && open} onClose={() => setEditing(false)} title={title} size="lg">
+        <SlideOver open={editing && open} onClose={finish} title={title} size="lg">
           {editor}
         </SlideOver>
       )}
