@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import AccommodationPage from './AccommodationPage'
 
-const { mockUseAccommodation, mockUsePermissions } = vi.hoisted(() => ({
+const { mockUseAccommodation, mockUsePermissions, mockRestore } = vi.hoisted(() => ({
+  mockRestore: vi.fn(),
   mockUseAccommodation: vi.fn(),
   mockUsePermissions: vi.fn(),
 }))
@@ -11,7 +12,7 @@ const { mockUseAccommodation, mockUsePermissions } = vi.hoisted(() => ({
 vi.mock('@/api/hooks', () => ({
   useAccommodation: mockUseAccommodation,
   useDeleteAccommodation: () => ({ mutate: vi.fn(), isPending: false }),
-  useUpdateAccommodation: () => ({ mutate: vi.fn(), isPending: false }),
+  useRestoreAccommodation: () => ({ mutate: mockRestore, isPending: false }),
 }))
 
 vi.mock('@/lib/permissions', () => ({
@@ -97,5 +98,17 @@ describe('AccommodationPage — card title link touch target', () => {
     const title = screen.getAllByRole('link', { name: 'Sunrise House' })[0]
     expect(title).toHaveAttribute('href', '/accommodation/acc-1')
     expect(title).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'font-semibold', 'hover:underline')
+  })
+})
+
+describe('AccommodationPage — Restore changes only the archived state (TRIPS-2)', () => {
+  it('restores through the restore endpoint by id, never a PUT of the list row', () => {
+    mockUseAccommodation.mockReturnValue({ data: [makeProperty({ isActive: false })], isLoading: false })
+    renderPage()
+    fireEvent.click(screen.getByRole('radio', { name: 'Archived' }))
+    fireEvent.click(screen.getByRole('button', { name: /Restore/ }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Restore' }))
+
+    expect(mockRestore).toHaveBeenCalledWith('acc-1', expect.anything())
   })
 })

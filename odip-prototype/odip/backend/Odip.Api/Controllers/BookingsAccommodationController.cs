@@ -441,6 +441,18 @@ public class AccommodationController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Accommodation archived"));
     }
 
+    /// <summary>Restore an archived property. Only IsActive changes: the list row the Archived view holds lacks most columns, so a PUT of it wiped them (TRIPS-2).</summary>
+    [HttpPost("{id:guid}/restore")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<bool>>> Restore(Guid id, CancellationToken ct)
+    {
+        var a = await _db.AccommodationProperties.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (a == null) return NotFound(ApiResponse<bool>.Fail("Accommodation not found"));
+        a.IsActive = true; a.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Accommodation restored"));
+    }
+
     [HttpGet("{id:guid}/reservations")]
     public async Task<ActionResult<ApiResponse<List<ReservationDto>>>> GetReservations(Guid id, CancellationToken ct)
     {
