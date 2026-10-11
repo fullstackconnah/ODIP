@@ -168,3 +168,27 @@ describe('QualificationsPage and the Dashboard agree', () => {
     expect(tile.querySelector('.text-display')!.textContent).toBe(String(listTotal))
   })
 })
+
+// STAFF-3 / STAFF-9 / CORE-6: ReadOnly is refused Settings and every staff write, so it is offered neither the Settings link nor an edit.
+describe('QualificationsPage: controls by role', () => {
+  it('offers ReadOnly the window and the list, with no Settings link, pencil or inline Edit', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    renderList()
+    expandAll()
+
+    expect(screen.getByText(/Warning window: 30 days/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'change in Settings' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Edit / })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+  })
+
+  it.each(['Admin', 'Coordinator'])('offers %s the Settings link, the pencil and inline Edit', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    renderList()
+    expandAll()
+
+    expect(screen.getByRole('link', { name: 'change in Settings' })).toHaveAttribute('href', '/settings')
+    expect(screen.getByRole('link', { name: 'Edit Dana Expired' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Edit' }).length).toBeGreaterThan(0)
+  })
+})

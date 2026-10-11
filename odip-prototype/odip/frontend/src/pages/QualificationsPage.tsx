@@ -73,7 +73,14 @@ function buildGroups(staff: StaffListDto[], warningDays: number): StaffGroup[] {
 }
 
 export default function QualificationsPage() {
-  const { canWrite } = usePermissions()
+  const { canWrite, canAccessPage } = usePermissions()
+  // ReadOnly is refused Settings: it reads the window without a link to a page that sends it back.
+  const settingsLink = canAccessPage('settings') && (
+    <>
+      {' — '}
+      <Link to="/settings" className="text-[var(--color-primary)] hover:underline">change in Settings</Link>
+    </>
+  )
   const { data: settings } = useSettings()
   const { data: allStaff = [], isLoading } = useStaff({ isActive: 'true' })
   const updateStaff = useUpdateStaff()
@@ -147,10 +154,7 @@ export default function QualificationsPage() {
           title="Staff Qualification Expiry"
           subtitle={(
             <>
-              Warning window: {warningDays} days —{' '}
-              <Link to="/settings" className="text-[var(--color-primary)] hover:underline">
-                change in Settings
-              </Link>
+              Warning window: {warningDays} days{settingsLink}
               {' '}· showing active staff only
             </>
           )}
@@ -171,10 +175,7 @@ export default function QualificationsPage() {
         title="Staff Qualification Expiry"
         subtitle={(
           <>
-            Warning window: {warningDays} days —{' '}
-            <Link to="/settings" className="text-[var(--color-primary)] hover:underline">
-              change in Settings
-            </Link>
+            Warning window: {warningDays} days{settingsLink}
             {' '}· showing active staff only
             {/* The Dashboard's "Qualification Issues" figure counts issues; the tabs below count staff. Both are said here, so 12 reads against 4. */}
             {' '}· {plural(groups.reduce((sum, g) => sum + g.issueCount, 0), 'issue')} across {plural(groups.length, 'staff member')}
@@ -218,13 +219,13 @@ export default function QualificationsPage() {
                   <span className="font-medium truncate">{group.staffName}</span>
                 </button>
                 <StatusBadge tone="danger" label={plural(group.issueCount, 'issue')} />
-                <Link
+                {canWrite && <Link
                   to={`/staff/${group.staffId}/edit`}
                   aria-label={`Edit ${group.staffName}`}
                   className="shrink-0 p-2 -m-2 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
                 >
                   <span className="material-symbols-outlined text-lg" aria-hidden="true">edit</span>
-                </Link>
+                </Link>}
               </div>
 
               {/* Accordion body */}

@@ -154,7 +154,7 @@ export default function RegisterTab() {
           columns={columns}
           keyField="id"
           loading={isLoading}
-          onRowClick={m => navigate(`/medications/${m.id}/edit`)}
+          onRowClick={canManageMedications ? m => navigate(`/medications/${m.id}/edit`) : undefined}
           emptyMessage="No medications found"
           pagination={{
             page,
