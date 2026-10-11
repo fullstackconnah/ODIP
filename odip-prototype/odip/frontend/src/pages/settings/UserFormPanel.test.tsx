@@ -5,7 +5,7 @@ import UserFormPanel from './UserFormPanel'
 import type { AdminUserDto } from '@/api/types'
 
 const { mockTenantsSummary } = vi.hoisted(() => ({
-  mockTenantsSummary: vi.fn((_enabled?: boolean) => ({ data: [{ id: 'tenant-1', name: 'Sample Support Co' }] })),
+  mockTenantsSummary: vi.fn<(enabled?: boolean) => { data: { id: string; name: string }[] }>(() => ({ data: [{ id: 'tenant-1', name: 'Sample Support Co' }] })),
 }))
 
 vi.mock('@/api/hooks', () => ({
