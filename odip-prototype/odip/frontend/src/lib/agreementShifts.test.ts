@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { DraftBlock, PlanBlockRequirements, PlanDayName } from '@/api/types'
 import { emptyBlock } from './planBlocks'
 import {
-  blocksToShifts, engineLimits, groupShifts, newShift, overlappingShiftIds, shiftLabel, shiftWords, shiftsToBlocks, weeklyShiftHours, type Shift,
+  blocksToShifts, engineLimits, shiftBlockOf, groupShifts, newShift, overlappingShiftIds, shiftLabel, shiftWords, shiftsToBlocks, weeklyShiftHours, chargeHolidaysByDefault, patchShift, limitMessage, appendShifts, type Shift,
 } from './agreementShifts'
 
 const NO_REQ: PlanBlockRequirements = { workerGender: 'NoPreference', driver: false, skills: [] }
 const entry = (id: string, days: PlanDayName[], changes: Partial<DraftBlock['block']> = {}): DraftBlock => ({ block: { ...emptyBlock(id, 'NSW'), days, ...changes }, requirements: { ...NO_REQ } })
 const shift = (day: PlanDayName, changes: Partial<Shift['block']> = {}, id = `s-${day}-${changes.start ?? ''}`): Shift => {
-  const { id: _id, days: _days, ...rest } = emptyBlock('x', 'NSW')
-  return { id, day, block: { ...rest, ...changes }, requirements: { ...NO_REQ } }
+  return { id, day, block: { ...shiftBlockOf(emptyBlock('x', 'NSW')), ...changes }, requirements: { ...NO_REQ } }
 }
 
 describe('shiftsToBlocks', () => {
@@ -114,6 +113,39 @@ describe('newShift', () => {
   })
 
   it('starts a first shift from the usual morning of community access', () => {
-    expect(newShift('Monday', [], 'NSW').block).toMatchObject({ supportType: 'CommunityAccess', start: '09:00:00', end: '13:00:00', workers: 1, participantsPresent: 1 })
+    expect(newShift('Monday', [], 'NSW').block).toMatchObject({ supportType: 'CommunityAccess', start: '09:00:00', end: '13:00:00', workers: 1, participantsPresent: 1, onPublicHoliday: 'Charge' })
+  })
+
+  it('charges public holidays at the holiday rate unless the shift says skip, and turns an old undecided shift into a charged one', () => {
+    const shifts = [shift('Monday', { onPublicHoliday: 'Review' }), shift('Tuesday', { onPublicHoliday: 'Skip' })]
+    expect(chargeHolidaysByDefault(shifts).map(s => s.block.onPublicHoliday)).toEqual(['Charge', 'Skip'])
+  })
+})
+
+describe('patchShift', () => {
+  it('changes the named fields and nothing else', () => {
+    const patched = patchShift(shift('Monday'), { block: { end: '15:00:00' }, requirements: { driver: true } })
+    expect(patched).toMatchObject({ day: 'Monday', block: { start: '09:00:00', end: '15:00:00' }, requirements: { driver: true, workerGender: 'NoPreference' } })
+  })
+
+  it('lets go of what the new times no longer allow, as the plan builder did: a sleepover that is no longer eight hours across midnight', () => {
+    const night = shift('Friday', { start: '22:00:00', end: '06:00:00', supportType: 'PersonalCare', setting: 'AtHome', workerMaySleep: true })
+    const day = patchShift(night, { block: { start: '09:00:00', end: '13:00:00' } })
+    expect(day.block).toMatchObject({ workerMaySleep: false, sleepoverActiveHours: 0 })
+  })
+})
+
+describe('limitMessage', () => {
+  it('says nothing under the limits and names the limit in words over them', () => {
+    expect(limitMessage({ blocks: 3, patterns: 9, exceeded: null })).toBeNull()
+    expect(limitMessage({ blocks: 201, patterns: 201, exceeded: 'blocks' })).toBe('This week has 201 different kinds of shift and pricing takes at most 200. Make shifts the same where you can.')
+    expect(limitMessage({ blocks: 3, patterns: 150, exceeded: 'patterns' })).toBe('Approval would make 150 weekly roster patterns (days times workers) and can make at most 100. Use fewer days or workers.')
+  })
+})
+
+describe('appendShifts', () => {
+  it('adds shifts under ids nobody has', () => {
+    const added = appendShifts([shift('Monday', {}, 's1'), shift('Tuesday', {}, 's2')], [shift('Friday', {}, 's1'), shift('Saturday', {}, 's2')])
+    expect(added.map(s => [s.id, s.day])).toEqual([['s1', 'Monday'], ['s2', 'Tuesday'], ['s3', 'Friday'], ['s4', 'Saturday']])
   })
 })

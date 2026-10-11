@@ -2,9 +2,13 @@
 // weekly routine on several days). The wizard keeps shifts and turns them into blocks only to price and to save, so nothing on the server changes: identical shifts group into one block, and an
 // engine message about a block is mapped back to the shifts it came from.
 import type { AgreementState, DraftBlock, PlanBlock, PlanBlockRequirements, PlanDayName, PlanPriceZone } from '@/api/types'
-import { PLAN_DAYS, SUPPORT_LABEL, clock, daysSummary, durationMinutes, emptyBlock, endsNextDay, ratioLabel, toMinutes } from './planBlocks'
+import { plural } from './format'
+import { DAY_SHORT, PLAN_DAYS, SUPPORT_LABEL, clock, daysSummary, durationMinutes, emptyBlock, endsNextDay, normaliseBlock, ratioLabel, toMinutes } from './planBlocks'
 
 /** One support on one day of the week. `block` is the engine's block without the days and the id the engine keys it by. */
+/** The engine's block without the days and the id the engine keys it by: what is the same on every day of a shift. */
+export const shiftBlockOf = (block: PlanBlock): Shift['block'] => Object.fromEntries(Object.entries(block).filter(([key]) => key !== 'id' && key !== 'days')) as Shift['block']
+
 export interface Shift {
   id: string
   day: PlanDayName
@@ -50,10 +54,15 @@ export const shiftsToBlocks = (shifts: readonly Shift[]): DraftBlock[] => groupS
 export function blocksToShifts(entries: readonly DraftBlock[]): Shift[] {
   const shifts: Shift[] = []
   for (const { block, requirements } of entries) {
-    const { id: _id, days, ...rest } = block
-    for (const day of PLAN_DAYS.filter(d => days.includes(d))) shifts.push({ id: `s${shifts.length + 1}`, day, block: structuredClone(rest), requirements: structuredClone(requirements) })
+    for (const day of PLAN_DAYS.filter(d => block.days.includes(d))) shifts.push({ id: `s${shifts.length + 1}`, day, block: structuredClone(shiftBlockOf(block)), requirements: structuredClone(requirements) })
   }
   return shifts
+}
+
+/** The shift with the named fields changed, and whatever only made sense for the old values let go (a sleepover the new times no longer allow, transport on a support that has none). */
+export function patchShift(shift: Shift, patch: { block?: Partial<Shift['block']>; requirements?: Partial<PlanBlockRequirements> }): Shift {
+  const block = shiftBlockOf(normaliseBlock({ ...shift.block, ...patch.block, id: shift.id, days: [shift.day] }))
+  return { ...shift, block, requirements: { ...shift.requirements, ...patch.requirements } }
 }
 
 /** A shift for `day`, starting from the last one in the list (the times and support the coordinator used last) or, for a first shift, from a usual morning of community access. */
@@ -63,9 +72,11 @@ export function newShift(day: PlanDayName, shifts: readonly Shift[], state: Agre
   while (taken.has(`s${n}`)) n += 1
   const last = shifts[shifts.length - 1]
   if (last) return { id: `s${n}`, day, block: structuredClone(last.block), requirements: structuredClone(last.requirements) }
-  const { id: _id, days: _days, ...rest } = emptyBlock('x', state, zone)
-  return { id: `s${n}`, day, block: rest, requirements: { workerGender: 'NoPreference', driver: false, skills: [] } }
+  return { id: `s${n}`, day, block: { ...shiftBlockOf(emptyBlock('x', state, zone)), onPublicHoliday: 'Charge' }, requirements: { workerGender: 'NoPreference', driver: false, skills: [] } }
 }
+
+/** Public holidays are charged at the holiday rate unless a shift says skip (the owner's decision of 2026-10-09): a shift saved as "decide later" is read as charged. */
+export const chargeHolidaysByDefault = (shifts: readonly Shift[]): Shift[] => shifts.map(shift => (shift.block.onPublicHoliday === 'Review' ? { ...shift, block: { ...shift.block, onPublicHoliday: 'Charge' as const } } : shift))
 
 /** The shifts that run at the same time as another shift of the plan. A shift past midnight runs into the next day (Sunday night into Monday morning). */
 export function overlappingShiftIds(shifts: readonly Shift[]): Set<string> {
@@ -111,6 +122,20 @@ export interface EngineLimits {
   exceeded: 'blocks' | 'patterns' | null
 }
 
+/** The limit the schedule is over, said in the screen's words; null while it is within them. */
+export function limitMessage(limits: EngineLimits): string | null {
+  if (limits.exceeded === 'blocks') return `This week has ${limits.blocks} different kinds of shift and pricing takes at most ${MAX_ENGINE_BLOCKS}. Make shifts the same where you can.`
+  if (limits.exceeded === 'patterns') return `Approval would make ${limits.patterns} weekly roster patterns (days times workers) and can make at most ${MAX_ROSTER_PATTERNS}. Use fewer days or workers.`
+  return null
+}
+
+/** `added` after `shifts`, on ids nobody has (both lists number their shifts s1, s2, ...). */
+export function appendShifts(shifts: readonly Shift[], added: readonly Shift[]): Shift[] {
+  const taken = new Set(shifts.map(shift => shift.id))
+  let n = shifts.length
+  return [...shifts, ...added.map(shift => { do { n += 1 } while (taken.has(`s${n}`)); taken.add(`s${n}`); return { ...shift, id: `s${n}` } })]
+}
+
 /** Where the schedule stands against the engine's limits, so the editor and Check can say so early and not only when approval refuses. */
 export function engineLimits(shifts: readonly Shift[]): EngineLimits {
   const groups = groupShifts(shifts)
@@ -118,3 +143,9 @@ export function engineLimits(shifts: readonly Shift[]): EngineLimits {
   return { blocks: groups.length, patterns, exceeded: groups.length > MAX_ENGINE_BLOCKS ? 'blocks' : patterns > MAX_ROSTER_PATTERNS ? 'patterns' : null }
 }
 
+
+/** "Editing 3 shifts: Mon, Wed, Fri": what the editor says it is editing. */
+export function selectionTitle(shifts: readonly Shift[]): string {
+  const days = PLAN_DAYS.filter(day => shifts.some(shift => shift.day === day)).map(day => DAY_SHORT[day]).join(', ')
+  return `Editing ${plural(shifts.length, 'shift')}: ${days}`
+}
