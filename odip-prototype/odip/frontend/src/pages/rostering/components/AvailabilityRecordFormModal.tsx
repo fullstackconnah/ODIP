@@ -28,8 +28,7 @@ const DEFAULT_VALUES: AvailabilityFormValues = {
   staffId: '', availabilityType: 'Available', startDate: '', endDate: '', notes: '',
 }
 
-// Local copies of pages/schedule/helpers.ts's toStartDt/toEndDt — that file is owned by another
-// agent working concurrently, so it can't be imported from or edited here.
+// A record is entered as whole days; the API takes the start of the first day to the end of the last.
 const toStartDt = (d: string) => `${d}T00:00:00`
 const toEndDt = (d: string) => `${d}T23:59:59`
 
