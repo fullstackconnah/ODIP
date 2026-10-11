@@ -5,11 +5,11 @@ import { MemoryRouter } from 'react-router-dom'
 import { RecordAdministrationModal } from './RecordAdministrationModal'
 import type { StaffListDto, AdministrationDto } from '@/api/types'
 
-const { mockRecordMutateAsync, mockAmendMutateAsync, mockUseStaff, mockUseProviderSettings, mockNavigate, permissionsOverride } = vi.hoisted(() => ({
+const { mockRecordMutateAsync, mockAmendMutateAsync, mockUseStaff, mockUseContact, mockNavigate, permissionsOverride } = vi.hoisted(() => ({
   mockRecordMutateAsync: vi.fn(),
   mockAmendMutateAsync: vi.fn(),
   mockUseStaff: vi.fn(),
-  mockUseProviderSettings: vi.fn(),
+  mockUseContact: vi.fn(),
   mockNavigate: vi.fn(),
   // INC-03: null means "use the real usePermissions()" (most tests exercise the genuine
   // localStorage-driven role logic) — a single test overrides just canCreateIncidents to cover
@@ -37,8 +37,8 @@ vi.mock('@/api/hooks', () => ({
   useAmendAdministration: () => ({ mutateAsync: mockAmendMutateAsync, isPending: false }),
   useStaff: mockUseStaff,
   // MissedMedicationGuidance (MED-01, rendered inside the INC-03 "report as incident?" prompt)
-  // reads provider settings for the manager contact and state-aware health advice line.
-  useProviderSettings: mockUseProviderSettings,
+  // reads the manager contact and state (for the health advice line) from its every-role endpoint.
+  useMissedGuidanceContact: mockUseContact,
 }))
 
 // The modal navigates (INC-03) rather than persisting anything server-side, so only the
@@ -87,14 +87,9 @@ beforeEach(() => {
   mockUseStaff.mockReturnValue({
     data: [makeStaff(), makeStaff({ id: 'staff-2', firstName: 'Jordan', lastName: 'Lee', fullName: 'Jordan Lee' })],
   })
-  mockUseProviderSettings.mockReset()
-  mockUseProviderSettings.mockReturnValue({
-    data: {
-      id: 'provider-1', registrationNumber: '123', abn: '456', organisationName: 'Test Org',
-      address: '1 Test St', state: 'VIC', gstRegistered: true, isPaceProvider: false,
-      bankAccountName: null, bsb: null, accountNumber: null, invoiceFooterNotes: null,
-      managerName: 'Priya Sharma', managerPhone: '0412 345 007',
-    },
+  mockUseContact.mockReset()
+  mockUseContact.mockReturnValue({
+    data: { managerName: 'Priya Sharma', managerPhone: '0412 345 007', state: 'VIC' },
   })
   localStorage.clear()
 })
