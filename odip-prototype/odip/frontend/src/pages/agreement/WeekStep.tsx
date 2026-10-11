@@ -223,7 +223,7 @@ export function WeekStep({ shifts, onChange, selected, onSelect, state, zone, se
         </div>
 
         {!readOnly && !belowLg && (
-          <aside aria-label="Shift editor" className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+          <aside aria-label="Shift editor" className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] lg:sticky lg:top-20 lg:max-h-[calc(100vh-10.5rem)] lg:overflow-y-auto">
             <h3 ref={editorHeading} tabIndex={-1} className="mb-[var(--section-gap)] text-base font-semibold focus:outline-none">{open ? title : 'Shift editor'}</h3>
             {open ? editor : <p className="text-sm text-[var(--color-muted-foreground)]">Select one or more shifts to change their times, support and more together, or click a day to add one.</p>}
           </aside>
