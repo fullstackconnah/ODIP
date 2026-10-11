@@ -9,14 +9,16 @@ using Odip.Infrastructure.Data;
 namespace Odip.Api.Controllers;
 
 [ApiController]
-[Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+[Authorize]
 [Route("api/v1/settings")]
 public class SettingsController : ControllerBase
 {
     private readonly OdipDbContext _db;
     public SettingsController(OdipDbContext db) => _db = db;
 
+    // The one setting is the qualification warning window: ReadOnly reads it so its Qualifications, Staff and Dashboard figures match everyone else's.
     [HttpGet]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin,ReadOnly")]
     public async Task<ActionResult<ApiResponse<AppSettingsDto>>> Get(CancellationToken ct)
     {
         var s = await _db.AppSettings.FirstOrDefaultAsync(ct);
@@ -27,6 +29,7 @@ public class SettingsController : ControllerBase
     }
 
     [HttpPut]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<AppSettingsDto>>> Update(
         [FromBody] UpdateAppSettingsDto dto, CancellationToken ct)
     {
