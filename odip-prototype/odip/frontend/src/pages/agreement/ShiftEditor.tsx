@@ -6,7 +6,7 @@ import { CheckboxField } from '@/components/CheckboxField'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
 import { ToggleGroup } from '@/components/ToggleGroup'
-import { formGrid, span } from '@/lib/formGrid'
+import { EDITOR_GRID } from './editorGrid'
 import { plural } from '@/lib/format'
 import type { Shift } from '@/lib/agreementShifts'
 import {
@@ -82,11 +82,11 @@ export function ShiftEditor({ shifts, onPatch, onRemove, onDone, settings, limit
     <div className="flex flex-col gap-[var(--section-gap)]">
       {differ && <p className="text-[13px] text-[var(--color-muted-foreground)]">These {shifts.length} shifts are not all the same. The fields show the first one; changing a field changes all {shifts.length}.</p>}
 
-      <div className={formGrid}>
-        <FormField label="Starts" className={span.short} error={fieldError(problems, 'start')}>
+      <div className={EDITOR_GRID}>
+        <FormField label="Starts" error={fieldError(problems, 'start')}>
           <input type="time" value={clock(block.start)} onChange={event => patch({ start: fromClock(event.target.value) })} />
         </FormField>
-        <FormField label="Ends" className={span.short} error={fieldError(problems, 'end')}>
+        <FormField label="Ends" error={fieldError(problems, 'end')}>
           <input type="time" value={clock(block.end)} onChange={event => patch({ end: fromClock(event.target.value) })} />
         </FormField>
       </div>
@@ -100,12 +100,12 @@ export function ShiftEditor({ shifts, onPatch, onRemove, onDone, settings, limit
         )}
       </p>
 
-      <div className={formGrid}>
-        <FormField label="Support type" className={span.medium} error={fieldError(problems, 'supportType')}>
+      <div className={EDITOR_GRID}>
+        <FormField label="Support type" error={fieldError(problems, 'supportType')}>
           <Dropdown variant="form" value={block.supportType} onChange={value => patch({ supportType: value as PlanSupportType })} items={supportTypes.map(type => ({ value: type, label: SUPPORT_LABEL[type] }))} label="Choose a support type" />
         </FormField>
-        <NumberField label="Workers" className={span.short} value={block.workers} min={1} max={10} error={fieldError(problems, 'workers')} onChange={value => patch({ workers: value })} />
-        <NumberField label="Participants present" className={span.short} value={block.participantsPresent} min={1} max={40} error={fieldError(problems, 'participantsPresent')} onChange={value => patch({ participantsPresent: value })} />
+        <NumberField label="Workers" value={block.workers} min={1} max={10} error={fieldError(problems, 'workers')} onChange={value => patch({ workers: value })} />
+        <NumberField label="Participants present" value={block.participantsPresent} min={1} max={40} error={fieldError(problems, 'participantsPresent')} onChange={value => patch({ participantsPresent: value })} />
       </div>
       <p className="text-[13px] text-[var(--color-muted-foreground)]">Ratio {ratioLabel(block)}: each participant pays their share of the hourly price.</p>
 
@@ -158,19 +158,19 @@ export function ShiftEditor({ shifts, onPatch, onRemove, onDone, settings, limit
                   : { workerMaySleep: false, sleepoverWindow: undefined, sleepoverActiveHours: 0 })}
               />
               {block.workerMaySleep && (
-                <div className={formGrid}>
+                <div className={EDITOR_GRID}>
                   {needsSleepoverWindow(block) && window && (
                     <>
-                      <FormField label="Sleeping from" className={span.short} error={fieldError(problems, 'sleepoverFrom')}>
+                      <FormField label="Sleeping from" error={fieldError(problems, 'sleepoverFrom')}>
                         <input type="time" value={clock(window.from)} onChange={event => patch({ sleepoverWindow: { ...window, from: fromClock(event.target.value) } })} />
                       </FormField>
-                      <FormField label="Sleeping until" className={span.short}>
+                      <FormField label="Sleeping until">
                         <input type="time" value={clock(window.to)} onChange={event => patch({ sleepoverWindow: { ...window, to: fromClock(event.target.value) } })} />
                       </FormField>
                     </>
                   )}
                   <NumberField
-                    label="Active hours in the night" className={span.short} value={block.sleepoverActiveHours} min={0} max={sleepoverMinutes(block) / 60} step={0.25} inputMode="decimal"
+                    label="Active hours in the night" value={block.sleepoverActiveHours} min={0} max={sleepoverMinutes(block) / 60} step={0.25} inputMode="decimal"
                     hint="Hours the worker is expected to be awake and working." error={fieldError(problems, 'sleepoverActiveHours')} onChange={value => patch({ sleepoverActiveHours: value })}
                   />
                 </div>

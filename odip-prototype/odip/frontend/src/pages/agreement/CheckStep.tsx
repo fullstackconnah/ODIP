@@ -92,9 +92,9 @@ export function CheckStep({ pricing, issues, anySkipped, onFix, onChangeHolidays
       )}
 
       <section aria-labelledby="check-issues" className="flex flex-col gap-2">
-        <h3 id="check-issues" className="text-sm font-semibold">{issues.length === 0 ? 'Nothing stops this agreement' : 'To look at'}</h3>
+        <h3 id="check-issues" className="text-sm font-semibold">To look at</h3>
         {issues.length === 0 ? (
-          status === 'ready' && <p className="text-sm text-[var(--color-muted-foreground)]">Nothing needs fixing before it is saved.</p>
+          status === 'ready' && <p className="text-sm text-[var(--color-muted-foreground)]">Nothing to fix before it is saved.</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {issues.map(issue => (

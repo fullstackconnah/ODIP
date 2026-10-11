@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
 import { refreshBudgetFigures } from './funding-ledger'
-import type { ApproveDraftDto, CreateServiceAgreementDraftDto, DemoJourneySimulationDto, DraftApprovalPreviewDto, ElectronicSigningEvidenceDto, ElectronicSigningSnapshotDto, ServiceAgreementDraftDto, SubmitElectronicSigningEvidenceDto } from '../types'
+import type { ApproveDraftDto, CreateServiceAgreementDraftDto, DraftApprovalPreviewDto, ServiceAgreementDraftDto } from '../types'
 
 const path = (participantId: string) => `/participants/${participantId}/service-agreement-drafts`
 
@@ -114,26 +114,5 @@ export function useDownloadServiceAgreementDraftPdf() {
       link.remove()
       window.URL.revokeObjectURL(url)
     },
-  })
-}
-
-export function useCreateElectronicSigningSnapshot() {
-  return useMutation({
-    mutationFn: ({ participantId, draftId, draftVersion }: { participantId: string; draftId: string; draftVersion: number }) =>
-      apiPost<ElectronicSigningSnapshotDto>(`${path(participantId)}/signing-snapshots`, { draftId, draftVersion }),
-  })
-}
-
-export function useSubmitElectronicSigningEvidence() {
-  return useMutation({
-    mutationFn: ({ participantId, snapshotId, data }: { participantId: string; snapshotId: string; data: SubmitElectronicSigningEvidenceDto }) =>
-      apiPost<ElectronicSigningEvidenceDto>(`${path(participantId)}/signing-snapshots/${snapshotId}/evidence`, data),
-  })
-}
-
-export function useDemoJourneySimulation() {
-  return useMutation({
-    mutationFn: ({ participantId, draftId }: { participantId: string; draftId: string }) =>
-      apiPost<DemoJourneySimulationDto>(`${path(participantId)}/${draftId}/demo-journey-simulation`, {}),
   })
 }

@@ -1,12 +1,11 @@
-// The plan builder's block model, pure and JSX-free: how a block is described in words, how long it is, where the prices change inside it, what it
+// The engine's block model, pure and JSX-free: how long a block is, what it
 // asks of the provider's registration groups, and what is wrong with it. The server's PlanBlock.Validate is the authority (it names every problem
 // and the engine prices nothing from a block that breaks one); the checks here only tell the coordinator early, next to the field.
 //
 // Wire format: days are the engine's names ("Monday"), times are local "HH:mm:ss", and a block is never given a price or a catalogue code.
 import type {
-  PlanBlock, PlanDayName, PlanSupportIntensity, PlanSupportType, PlanSetting, PlanGroupOutingFamily, AgreementState, PlanPriceZone, DraftBlock,
+  PlanBlock, PlanDayName, PlanSupportIntensity, PlanSupportType, PlanSetting, PlanGroupOutingFamily, AgreementState, PlanPriceZone,
 } from '@/api/types'
-import { plural } from './format'
 
 export const PLAN_DAYS: readonly PlanDayName[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 export const DAY_SHORT: Record<PlanDayName, string> = { Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed', Thursday: 'Thu', Friday: 'Fri', Saturday: 'Sat', Sunday: 'Sun' }
@@ -22,8 +21,6 @@ export const SETTING_LABEL: Record<PlanSetting, string> = { Community: 'Communit
 export const INTENSITY_LABEL: Record<PlanSupportIntensity, string> = { Standard: 'Standard', HighIntensity: 'High intensity', Icbs: 'ICBS' }
 
 const MINUTES_PER_DAY = 1440
-/** Where the weekday prices change: 06:00 (night to day), 20:00 (day to evening) and midnight (evening to night). */
-export const BAND_EDGES = [0, 360, 1200] as const
 /** A sleepover needs this many elapsed hours across midnight. */
 export const SLEEPOVER_MINUTES = 8 * 60
 /** Past this length a block where the worker may sleep must say which part of it is the night. */
@@ -55,12 +52,6 @@ export function clock(time: string): string {
 export function fromClock(value: string): string {
   const minutes = toMinutes(value)
   return Number.isNaN(minutes) ? '' : toWireTime(minutes)
-}
-
-/** Minutes past midnight as "HH:MM", with the end of the day (1440) as "24:00". */
-export function formatMinute(minutes: number): string {
-  if (minutes >= MINUTES_PER_DAY) return '24:00'
-  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(Math.round(minutes % 60)).padStart(2, '0')}`
 }
 
 /** The end is on the next day when it is not after the start; the same time twice is a 24 hour block. Derived, never typed. */
@@ -108,41 +99,6 @@ export function daysSummary(days: readonly PlanDayName[]): string {
 export function ratioLabel(block: Pick<PlanBlock, 'workers' | 'participantsPresent'>): string {
   return `${block.workers}:${block.participantsPresent}`
 }
-
-/** "09:00–13:00", or "22:00–06:00 next day". */
-export function timesLabel(block: Pick<PlanBlock, 'start' | 'end'>): string {
-  return `${clock(block.start)}–${clock(block.end)}${endsNextDay(block) ? ' next day' : ''}`
-}
-
-function kmLabel(km: number): string {
-  return `${Math.round(km * 10) / 10} km`
-}
-
-/** What a block adds to its support: transport, provider travel, a sleepover, accommodation nights. */
-export function extrasOf(block: PlanBlock): string[] {
-  const extras: string[] = []
-  const transport = block.transport
-  if (transport && transport.km > 0) extras.push(`+${kmLabel(transport.km)} transport`)
-  else if (transport && (transport.tolls > 0 || transport.parking > 0)) extras.push('+transport costs')
-  if (block.travel?.claim && (block.travel.minutesEachWay > 0 || block.travel.kmEachWay > 0)) extras.push(`+provider travel ${block.travel.minutesEachWay} min each way`)
-  if (block.workerMaySleep) extras.push('sleepover')
-  if (block.accommodation && block.accommodation.nights > 0) extras.push(plural(block.accommodation.nights, 'night'))
-  if (block.onPublicHoliday === 'Charge') extras.push('holidays charged')
-  if (block.onPublicHoliday === 'Skip') extras.push('holidays skipped')
-  return extras
-}
-
-/** The block as one readable line: "Mon, Wed · 09:00–13:00 · Community access 1:1 · +20 km transport". */
-export function describeBlock(block: PlanBlock): string {
-  return [daysSummary(block.days), timesLabel(block), `${SUPPORT_LABEL[block.supportType]} ${ratioLabel(block)}`, ...extrasOf(block)].join(' · ')
-}
-
-/** The hours of support the block asks for in an ordinary week, by arithmetic alone (the server's quote is what prices them). */
-export function weeklyHours(block: Pick<PlanBlock, 'days' | 'start' | 'end'>): number {
-  return (durationMinutes(block) * block.days.length) / 60
-}
-
-// ── Registration groups ───────────────────────────────────────────────────────
 
 /** The registration group a block's support sits in (the engine's rule): high intensity is 0104 whatever the family, and a group outing is 0136 unless the provider bills them under 0125. */
 export function registrationGroupFor(block: Pick<PlanBlock, 'supportType' | 'intensity'>, groupOutings: PlanGroupOutingFamily = 'GroupActivities'): string {
@@ -203,75 +159,6 @@ export function defaultSleepoverWindow(block: Pick<PlanBlock, 'start' | 'end'>):
   return fits ? { from: '22:00:00', to: '06:00:00' } : { from: toWireTime(start), to: toWireTime(start + SLEEPOVER_MINUTES) }
 }
 
-// ── Where the prices change ───────────────────────────────────────────────────
-
-export type WeekdayBand = 'night' | 'day' | 'evening'
-export const WEEKDAY_BAND_LABEL: Record<WeekdayBand, string> = { night: 'Night', day: 'Daytime', evening: 'Evening' }
-
-export interface BandPart {
-  band: WeekdayBand
-  /** Minutes past midnight of the day the block starts (the part after midnight continues past 1440). */
-  from: number
-  to: number
-  minutes: number
-}
-
-function bandAt(minuteOfDay: number): WeekdayBand {
-  return minuteOfDay < 360 ? 'night' : minuteOfDay < 1200 ? 'day' : 'evening'
-}
-
-/** The block cut at 06:00, 20:00 and midnight, as a weekday is priced: each part is the band it falls in and how long it lasts. */
-export function weekdayBandParts(block: Pick<PlanBlock, 'start' | 'end'>): BandPart[] {
-  const start = toMinutes(block.start)
-  const length = durationMinutes(block)
-  if (Number.isNaN(start) || length === 0) return []
-  const parts: BandPart[] = []
-  let at = start
-  const end = start + length
-  while (at < end) {
-    const minuteOfDay = at % MINUTES_PER_DAY
-    const edge = minuteOfDay < 360 ? 360 : minuteOfDay < 1200 ? 1200 : MINUTES_PER_DAY
-    const to = Math.min(end, at - minuteOfDay + edge)
-    parts.push({ band: bandAt(minuteOfDay), from: at, to, minutes: to - at })
-    at = to
-  }
-  return parts
-}
-
-/** Saturday, Sunday and a public holiday are one price for the whole calendar day. */
-export function hasWholeDayBands(days: readonly PlanDayName[]): boolean {
-  return days.includes('Saturday') || days.includes('Sunday')
-}
-
-export interface DayBar {
-  blockId: string
-  day: PlanDayName
-  /** Minutes past midnight on this day. */
-  from: number
-  to: number
-  /** The part of a block that runs on into the next day. */
-  continued: boolean
-}
-
-/** Every stretch of every block on the week, for the week strip: a block across midnight is a bar to the end of its day and another from the start of the next. */
-export function dayBars(blocks: readonly PlanBlock[]): DayBar[] {
-  const bars: DayBar[] = []
-  for (const block of blocks) {
-    const start = toMinutes(block.start)
-    const length = durationMinutes(block)
-    if (Number.isNaN(start) || length === 0) continue
-    for (const day of PLAN_DAYS.filter(d => block.days.includes(d))) {
-      const end = start + length
-      bars.push({ blockId: block.id, day, from: start, to: Math.min(end, MINUTES_PER_DAY), continued: false })
-      if (end > MINUTES_PER_DAY) {
-        const next = PLAN_DAYS[(PLAN_DAYS.indexOf(day) + 1) % 7]
-        bars.push({ blockId: block.id, day: next, from: 0, to: end - MINUTES_PER_DAY, continued: true })
-      }
-    }
-  }
-  return bars
-}
-
 // ── A new block ───────────────────────────────────────────────────────────────
 
 export function emptyBlock(id: string, state: AgreementState, zone: PlanPriceZone = 'National'): PlanBlock {
@@ -279,19 +166,6 @@ export function emptyBlock(id: string, state: AgreementState, zone: PlanPriceZon
     id, supportType: 'CommunityAccess', intensity: 'Standard', days: [], start: '09:00:00', end: '13:00:00', workers: 1, participantsPresent: 1,
     headcountChanges: [], setting: 'Community', location: { state, zone }, workerMaySleep: false, sleepoverActiveHours: 0, onPublicHoliday: 'Review',
   }
-}
-
-/** The next free block id ("b1", "b2"...): the engine's key for the block, at most 64 characters and unique in the plan. */
-export function nextBlockId(blocks: readonly Pick<PlanBlock, 'id'>[]): string {
-  const taken = new Set(blocks.map(block => block.id))
-  let n = blocks.length + 1
-  while (taken.has(`b${n}`)) n += 1
-  return `b${n}`
-}
-
-/** The same block on another id, the way "duplicate" makes "same, but Thursday". */
-export function duplicateBlock(entry: DraftBlock, id: string): DraftBlock {
-  return JSON.parse(JSON.stringify({ ...entry, block: { ...entry.block, id } })) as DraftBlock
 }
 
 /**
@@ -422,28 +296,4 @@ function windowInsideBlock(block: Pick<PlanBlock, 'start' | 'end' | 'sleepoverWi
   const from = toMinutes(block.sleepoverWindow.from)
   const offset = (((from - start) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY
   return offset < durationMinutes(block) && offset + sleepoverMinutes(block) <= durationMinutes(block)
-}
-
-/** The price is the NDIS maximum, times the workers and divided by the participants present, rounded down to the cent: said once, in plain words, under the two numbers. */
-export function ratioSentence(workers: number, participants: number): string {
-  if (!(workers >= 1) || !(participants >= 1)) return ''
-  if (workers === 1 && participants === 1) return 'One worker for one participant: the full hourly price.'
-  const times = workers > 1 ? ` times ${workers}` : ''
-  const share = participants > 1 ? ` divided by ${participants}` : ''
-  return `${workers}:${participants}. Each participant's hourly price is the NDIS maximum${times}${share}, rounded down to the cent.`
-}
-
-export type PlacedBar = DayBar & { lane: number; lanes: number }
-
-/** Bars on one day side by side: each takes the first lane free at its start, and every bar of the day shares the day's lane count. */
-export function layoutDay(bars: readonly DayBar[]): PlacedBar[] {
-  const sorted = [...bars].sort((a, b) => a.from - b.from || a.to - b.to)
-  const laneEnds: number[] = []
-  const placed = sorted.map(bar => {
-    let lane = laneEnds.findIndex(end => end <= bar.from)
-    if (lane === -1) { lane = laneEnds.length; laneEnds.push(bar.to) } else laneEnds[lane] = bar.to
-    return { ...bar, lane }
-  })
-  const lanes = Math.max(1, laneEnds.length)
-  return placed.map(bar => ({ ...bar, lanes }))
 }

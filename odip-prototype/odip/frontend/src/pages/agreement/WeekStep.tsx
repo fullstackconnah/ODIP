@@ -153,7 +153,7 @@ export function WeekStep({ shifts, onChange, selected, onSelect, state, zone, se
             return (
               <div key={day} className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-2 sm:flex-row sm:items-start">
                 {readOnly || there.length === 0 ? (
-                  <p className="flex min-h-[var(--control-h)] items-center text-sm font-semibold sm:w-32 sm:shrink-0">{day}</p>
+                  <p className={`flex min-h-[var(--control-h)] items-center text-sm font-semibold sm:w-32 sm:shrink-0${readOnly ? '' : ' pl-6'}`}>{day}</p>
                 ) : (
                   <label className="flex min-h-[var(--control-h)] cursor-pointer items-center gap-2 text-sm font-semibold sm:w-32 sm:shrink-0">
                     <input type="checkbox" checked={allOn} onChange={() => onSelect(allOn ? selected.filter(id => !there.some(shift => shift.id === id)) : [...new Set([...selected, ...there.map(shift => shift.id)])])} />

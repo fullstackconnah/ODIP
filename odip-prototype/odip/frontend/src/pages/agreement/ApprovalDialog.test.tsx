@@ -22,7 +22,7 @@ vi.mock('@/api/hooks', () => ({
 }))
 
 const draft = (): ServiceAgreementDraftDto => ({
-  id: 'd-2', participantId: 'p-1', version: 2, status: 'UnapprovedDraft', templateVersion: 't', templateDocxSha256: 'a', templatePdfSha256: 'b', state: 'NSW',
+  id: 'd-2', participantId: 'p-1', version: 2, state: 'NSW',
   planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-11-02', agreementEndDate: '2027-03-31',
   blocks: [draftBlock(mondayWednesday('b1')), draftBlock(mondayWednesday('b2', { supportType: 'GroupActivity', days: ['Saturday'], start: '09:00:00', end: '15:00:00', participantsPresent: 3 }))],
   lines: [], isSummary: false, blockCount: 2, lineCount: 0, total: 0, caveats: [],

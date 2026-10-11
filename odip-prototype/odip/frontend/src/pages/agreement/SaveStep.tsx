@@ -47,7 +47,7 @@ export function SaveStep({ readOnly, locked, hasSaved, dirty, notices, saved, bl
       )}
       <div role="status" className="text-sm">
         {saved && <p className="font-medium">{saved}</p>}
-        {!readOnly && !locked && dirty && hasSaved && <p className="text-[var(--color-muted-foreground)]">You have changes that are not saved. Save the agreement to put them in the PDF.</p>}
+        {!readOnly && !locked && dirty && hasSaved && <p id="save-unsaved" className="text-[var(--color-muted-foreground)]">You have changes that are not saved. Save the agreement first: the PDF and the approval are of the saved agreement.</p>}
         {!readOnly && !locked && !hasSaved && blocking.length === 0 && <p className="text-[var(--color-muted-foreground)]">Save the agreement to get its PDF and to approve it.</p>}
       </div>
 
@@ -56,10 +56,9 @@ export function SaveStep({ readOnly, locked, hasSaved, dirty, notices, saved, bl
           <h3 id="save-pdf" className="text-sm font-semibold">Agreement PDF</h3>
           <p className="text-[13px] text-[var(--color-muted-foreground)]">The weekly schedule and what it costs. It is not signed.</p>
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="secondary" onClick={onDownload} disabled={downloading || dirty}>
+            <Button variant="secondary" onClick={onDownload} disabled={downloading || dirty} aria-describedby={dirty ? 'save-unsaved' : undefined}>
               {downloading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}Download agreement PDF
             </Button>
-            {dirty && !readOnly && !locked && <p className="text-[13px] text-[var(--color-muted-foreground)]">Save first: the PDF is of the saved agreement.</p>}
           </div>
           {downloadFailed && <Callout tone="error" className="max-w-prose">Could not download the PDF. Try again.</Callout>}
         </section>
@@ -70,9 +69,9 @@ export function SaveStep({ readOnly, locked, hasSaved, dirty, notices, saved, bl
           <h3 id="save-approve" className="text-sm font-semibold">Rostering</h3>
           {approval.mayApprove ? (
             <div className="flex flex-wrap items-center gap-3">
-              <Button variant={approval.notReady ? 'secondary' : 'primary'} onClick={approval.onOpen} disabled={dirty}>Mark approved for rostering</Button>
+              <Button variant={approval.notReady ? 'secondary' : 'primary'} onClick={approval.onOpen} disabled={dirty} aria-describedby={dirty ? 'save-unsaved' : undefined}>Mark approved for rostering</Button>
               {dirty
-                ? <p className="text-[13px] text-[var(--color-muted-foreground)]">Save first: approval is of the saved agreement.</p>
+                ? null
                 : approval.notReady
                   ? <p className="text-sm text-[var(--color-on-warning-container)]">Not ready yet: some lines need fixing or a decision. Select to see which.</p>
                   : <p className="text-[13px] text-[var(--color-muted-foreground)]">Makes this schedule&apos;s weekly roster patterns and unfilled shifts. Separate from signing.</p>}
