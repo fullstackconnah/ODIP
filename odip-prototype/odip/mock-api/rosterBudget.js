@@ -19,6 +19,7 @@
 // start, and does not end the next day) is refused, as the server refuses it.
 
 const { ledgerFor } = require('./mock-ledger.js')
+const { approachingAt } = require('./mock-money.js')
 
 const RATE = 60
 const BLOCKING = 'Blocking'
@@ -116,8 +117,8 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
     if (used > available) {
       // The over and approaching sentences are phase 2b's participant alert words ("{pool} is $X over this period's $Y (to {end})"), so one condition is said one way everywhere.
       findings.push({ code: 'BUDGET_OVER', severity: 'Warning', requiresReason: false, message: `${pool.name} is ${money(round2(used - available))} over this period's ${money(available)} (to ${periodEnd}).`, budget: figures })
-    } else if (available > 0 && used * 100 >= approaching() * available) {
-      findings.push({ code: 'BUDGET_APPROACHING', severity: 'Warning', requiresReason: false, message: `${pool.name} is at ${Math.floor((used * 100) / available)}% of this period's ${money(available)} (to ${periodEnd}).`, budget: figures })
+    } else if (approachingAt(used, available, approaching()) !== null) {
+      findings.push({ code: 'BUDGET_APPROACHING', severity: 'Warning', requiresReason: false, message: `${pool.name} is at ${approachingAt(used, available, approaching())}% of this period's ${money(available)} (to ${periodEnd}).`, budget: figures })
     }
     return { findings, note: null }
   }

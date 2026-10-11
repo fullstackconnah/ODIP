@@ -6,6 +6,8 @@
 // finish it over) and one APPROACHING, so both states can be seen without editing
 // anything. Every name and figure here is fictional.
 
+const { cents, approachingAt } = require('./mock-money.js')
+
 const round2 = (n) => Math.round(n * 100) / 100
 const sum = (rows) => round2(rows.reduce((total, r) => total + r.amount, 0))
 /** The sum of plain money figures (one of each period): `sum` is over rows with an `amount`, and given numbers it answered NaN, which the JSON carried as null. */
@@ -18,11 +20,12 @@ const startedTrips = (rows) => new Set(rows.filter((r) => r.kind === 'TripBookin
 const unpricedShifts = (rows) => rows.filter((r) => (r.notPricedKinds || []).length > 0)
 const unpricedReasons = (rows) => [...new Set(unpricedShifts(rows).flatMap((r) => r.notPricedKinds))].sort()
 
-/** The worst status that applies, in the server's own words and arithmetic (decimals, no rounding deciding it). */
+/** The worst status that applies, in the server's own words and arithmetic (whole cents, mock-money.js). */
 function statusOf(available, used, forecast, approachingPercent) {
-  if (used > available) return 'Over'
-  if (forecast > available) return 'ForecastOver'
-  if (available > 0 && used * 100 >= approachingPercent * available) return 'Approaching'
+  const [a, u, f] = [cents(available), cents(used), cents(forecast)]
+  if (u > a) return 'Over'
+  if (f > a) return 'ForecastOver'
+  if (approachingAt(used, available, approachingPercent) !== null) return 'Approaching'
   return 'OnTrack'
 }
 
