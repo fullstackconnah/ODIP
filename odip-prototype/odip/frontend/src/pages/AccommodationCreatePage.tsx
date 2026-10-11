@@ -52,7 +52,7 @@ export default function AccommodationCreatePage() {
   const { data: existing, isLoading: isLoadingExisting } = useAccommodationDetail(isEdit ? id : undefined)
   const mutation = isEdit ? updateAccommodation : createAccommodation
 
-  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm<AccommodationFormData>({
+  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm({
     resolver: zodResolver(accommodationSchema),
     defaultValues: {
       isFullyModified: false,
