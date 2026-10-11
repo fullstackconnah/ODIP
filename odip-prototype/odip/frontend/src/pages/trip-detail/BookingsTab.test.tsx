@@ -348,4 +348,16 @@ describe('BookingsTab — dialogs', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(control).toHaveFocus()
   })
+
+  it('Add Participant: Escape clears the picked participant, so the next dialog opens empty', async () => {
+    const user = userEvent.setup()
+    renderTab([], [readyParticipant, notReadyParticipant])
+    await openModalAndPick(user, 'Mia Chen')
+    expect(screen.getByRole('button', { name: 'Add Booking' })).toBeEnabled()
+
+    await user.keyboard('{Escape}')
+    await openModalAndPick(user)
+
+    expect(screen.getByRole('button', { name: 'Add Booking' })).toBeDisabled()
+  })
 })
