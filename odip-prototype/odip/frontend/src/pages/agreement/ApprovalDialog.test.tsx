@@ -424,6 +424,18 @@ describe('ApprovalDialog: when it cannot be approved yet', () => {
     expect(onGoToShifts).toHaveBeenLastCalledWith('b1')
   })
 
+  it('names the shifts by the ids the server stored, even when an older save has gaps in them (b1, b3)', async () => {
+    const gapped = { ...draft(), blocks: [draftBlock(mondayWednesday('b1')), draftBlock(mondayWednesday('b3', { supportType: 'GroupActivity', days: ['Saturday'], start: '09:00:00', end: '15:00:00' }))] }
+    ready(preview({ canApprove: false, reasons: [{ code: 'NoItem', message: "Block 'b3': no item for the night.", blockId: 'b3', count: 1 }] }))
+    const user = userEvent.setup()
+    const { onGoToShifts } = setUp({ draft: gapped })
+
+    expect(screen.getByText(/Sat 09:00 to 15:00: no item for the night/)).toBeInTheDocument()
+    expect(screen.queryByText(/'b3'/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show the shifts' }))
+    expect(onGoToShifts).toHaveBeenCalledWith('b3')
+  })
+
   it('tells the page when the preview says a newer save has replaced the agreement, once', () => {
     previewState.current = { data: undefined, isLoading: false, isError: true, error: { response: { status: 409, data: { code: 'draft-superseded' } } }, refetch: vi.fn() }
     const onSuperseded = vi.fn()

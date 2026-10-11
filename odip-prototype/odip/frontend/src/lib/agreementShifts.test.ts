@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { DraftBlock, PlanBlockRequirements, PlanDayName } from '@/api/types'
 import { emptyBlock } from './planBlocks'
 import {
-  blocksToShifts, engineLimits, shiftBlockOf, groupShifts, newShift, overlappingShiftIds, shiftLabel, shiftWords, shiftsToBlocks, weeklyShiftHours, chargeHolidaysByDefault, patchShift, limitMessage, appendShifts, type Shift,
+  blocksToShifts, engineLimits, shiftBlockOf, groupShifts, newShift, overlappingShiftIds, shiftLabel, shiftWords, shiftsToBlocks, weeklyShiftHours, chargeHolidaysByDefault, patchShift, shiftIdsOfBlock, limitMessage, appendShifts, type Shift,
 } from './agreementShifts'
 
 const NO_REQ: PlanBlockRequirements = { workerGender: 'NoPreference', driver: false, skills: [] }
@@ -147,5 +147,14 @@ describe('appendShifts', () => {
   it('adds shifts under ids nobody has', () => {
     const added = appendShifts([shift('Monday', {}, 's1'), shift('Tuesday', {}, 's2')], [shift('Friday', {}, 's1'), shift('Saturday', {}, 's2')])
     expect(added.map(s => [s.id, s.day])).toEqual([['s1', 'Monday'], ['s2', 'Tuesday'], ['s3', 'Friday'], ['s4', 'Saturday']])
+  })
+})
+
+describe('shiftIdsOfBlock', () => {
+  it('finds the shifts of a stored block by the id the server knows it by, whatever the ids are numbered', () => {
+    const entries = [entry('b1', ['Monday']), entry('b3', ['Tuesday', 'Friday']), entry('b4', ['Saturday'])]
+    const shifts = blocksToShifts(entries)
+    expect(shiftIdsOfBlock(entries, 'b3')).toEqual(shifts.filter(s => s.day === 'Tuesday' || s.day === 'Friday').map(s => s.id))
+    expect(shiftIdsOfBlock(entries, 'b9')).toEqual([])
   })
 })

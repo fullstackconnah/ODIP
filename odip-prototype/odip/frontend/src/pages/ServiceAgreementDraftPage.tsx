@@ -15,7 +15,7 @@ import { WizardNavFooter, WizardShell, WizardStepHeading, WizardStepRail, type W
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { agreementIssues, type AgreementIssue } from '@/lib/agreementIssues'
 import { approvalHistory } from '@/lib/agreementHistory'
-import { blocksToShifts, chargeHolidaysByDefault, engineLimits, type Shift } from '@/lib/agreementShifts'
+import { blocksToShifts, chargeHolidaysByDefault, engineLimits, shiftIdsOfBlock, type Shift } from '@/lib/agreementShifts'
 import { localIsoDate } from '@/lib/dateOnly'
 import { currentPlanOf, planStatus } from '@/lib/fundingPlan'
 import { isNotFoundError } from '@/lib/httpStatus'
@@ -116,10 +116,12 @@ function DraftPage() {
         state: newest.state, zone: newest.blocks[0].block.location.zone, agreementStartDate: newest.agreementStartDate, agreementEndDate: newest.agreementEndDate,
         representative: newest.representative ?? '', planOverride: loadedPlan.start === derived.start && loadedPlan.end === derived.end ? null : loadedPlan,
       }
-      const loadedShifts = chargeHolidaysByDefault(blocksToShifts(newest.blocks))
+      const storedShifts = blocksToShifts(newest.blocks)
+      const loadedShifts = chargeHolidaysByDefault(storedShifts)
       setDetails(next)
       setShifts(loadedShifts)
-      setBaseline(snapshotOf(next, loadedShifts))
+      // The baseline is what was SAVED: a save with undecided holidays reads as charged on screen, and that is a change nobody has saved.
+      setBaseline(snapshotOf(next, storedShifts))
       setVisited(new Set(STEPS.map(entry => entry.key)))
     } else {
       const fromParticipant = participant.data.addressState as AgreementState | null
@@ -301,7 +303,7 @@ function DraftPage() {
         draft={newest}
         onClose={() => setApproving(false)}
         onApproved={() => setApproving(false)}
-        onGoToShifts={blockId => selectShiftsOf([blockId])}
+        onGoToShifts={blockId => { go('week', true); setSelected(shiftIdsOfBlock(newest.blocks, blockId)) }}
         onSuperseded={superseded}
       />
     )}

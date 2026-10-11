@@ -2,7 +2,7 @@ import type React from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost } from '@/api/client'
-import { useParticipant, useProviderSettings } from '@/api/hooks'
+import { useConfirmServiceNeeds, useParticipant, useProviderSettings } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
 import { PageState } from '@/components/PageState'
@@ -60,7 +60,7 @@ export default function OnboardingDetailPage() {
   const readinessMode = useProviderSettings(canManageFunding).data?.participantReadinessMode
   // These retain the existing server endpoints and empty payloads: server-side saved-record validation remains authoritative.
   const profile = useMutation({ mutationFn: () => apiPost<Detail>(`/inquiries/${id}/onboarding/profile-validation`, {}), onSuccess: () => qc.invalidateQueries({ queryKey: ['onboarding', id] }) })
-  const services = useMutation({ mutationFn: () => apiPost<Detail>(`/inquiries/${id}/onboarding/service-needs-confirmation`, {}), onSuccess: () => qc.invalidateQueries({ queryKey: ['onboarding', id] }) })
+  const services = useConfirmServiceNeeds(id)
   const d = detail.data
 
   if (detail.isLoading) return <PageState kind="loading" noun="onboarding record" />

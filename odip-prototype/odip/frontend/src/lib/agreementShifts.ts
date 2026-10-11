@@ -50,6 +50,14 @@ export function groupShifts(shifts: readonly Shift[]): ShiftGroup[] {
 
 export const shiftsToBlocks = (shifts: readonly Shift[]): DraftBlock[] => groupShifts(shifts).map(group => group.entry)
 
+/** The ids `blocksToShifts` gives the shifts of the stored block named `blockId` (the server's id for it, which may have gaps): found by the block's place, not by regrouping. */
+export function shiftIdsOfBlock(entries: readonly DraftBlock[], blockId: string): string[] {
+  const at = entries.findIndex(entry => entry.block.id === blockId)
+  if (at < 0) return []
+  const before = entries.slice(0, at).reduce((sum, entry) => sum + new Set(entry.block.days).size, 0)
+  return Array.from({ length: new Set(entries[at].block.days).size }, (_, index) => `s${before + index + 1}`)
+}
+
 /** One shift for each day of each block, block by block, Monday first. */
 export function blocksToShifts(entries: readonly DraftBlock[]): Shift[] {
   const shifts: Shift[] = []

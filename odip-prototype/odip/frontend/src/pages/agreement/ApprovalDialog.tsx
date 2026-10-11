@@ -12,7 +12,7 @@ import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { plural } from '@/lib/format'
 import { httpStatusOf } from '@/lib/httpStatus'
-import { blocksToShifts, groupShifts, shiftWords, type ShiftGroup } from '@/lib/agreementShifts'
+import { shiftWords, type ShiftGroup } from '@/lib/agreementShifts'
 import { REASON_COPY, formatServiceDate, friendlyMessage, isRefusal } from '@/lib/planQuote'
 import { rosterLink } from '@/lib/rosterLinks'
 import { formatShiftTime } from '@/lib/utils'
@@ -95,7 +95,8 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
   }
 
   const data = preview.data
-  const groups = useMemo(() => groupShifts(blocksToShifts(draft.blocks)), [draft.blocks])
+  // The server's reasons carry the ids of the STORED blocks, which an older save may have with gaps: they are read as stored, never regrouped (regrouping renumbers them).
+  const groups = useMemo<ShiftGroup[]>(() => draft.blocks.map(entry => ({ entry, shiftIds: [] })), [draft.blocks])
   const say = (text: string) => friendlyMessage(shiftWords(text, groups), [])
   const superseded = [preview.error, approve.error].some(error => httpStatusOf(error) === 409 && (error as { response?: { data?: { code?: string } } } | null)?.response?.data?.code === 'draft-superseded')
   // Told once: the page reads the agreement again, and a second telling would read it again.

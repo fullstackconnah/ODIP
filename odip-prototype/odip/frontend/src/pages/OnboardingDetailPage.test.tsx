@@ -5,8 +5,8 @@ import { createMemoryRouter, MemoryRouter, Route, Routes, RouterProvider } from 
 import OnboardingDetailPage from './OnboardingDetailPage'
 import { __testHooks } from '@/hooks/useBackNavigation'
 
-const { mockUseQuery, mockUseMutation, mockInvalidate, mockUseParticipant, mockUseProviderSettings } = vi.hoisted(() => ({
-  mockUseQuery: vi.fn(), mockUseMutation: vi.fn(), mockInvalidate: vi.fn(), mockUseParticipant: vi.fn(), mockUseProviderSettings: vi.fn(),
+const { mockUseQuery, mockUseMutation, mockInvalidate, mockUseParticipant, mockUseProviderSettings, mockConfirmNeeds } = vi.hoisted(() => ({
+  mockUseQuery: vi.fn(), mockUseMutation: vi.fn(), mockInvalidate: vi.fn(), mockUseParticipant: vi.fn(), mockUseProviderSettings: vi.fn(), mockConfirmNeeds: vi.fn(() => ({ mutate: vi.fn(), error: null, isPending: false })),
 }))
 vi.mock('@tanstack/react-query', () => ({
   useQuery: mockUseQuery,
@@ -14,7 +14,7 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: mockInvalidate }),
 }))
 vi.mock('@/api/client', () => ({ apiGet: vi.fn(), apiPost: vi.fn() }))
-vi.mock('@/api/hooks', () => ({ useParticipant: mockUseParticipant, useProviderSettings: mockUseProviderSettings }))
+vi.mock('@/api/hooks', () => ({ useParticipant: mockUseParticipant, useProviderSettings: mockUseProviderSettings, useConfirmServiceNeeds: () => mockConfirmNeeds() }))
 
 const incomplete = {
   participantId: 'p-1', intakeComplete: true, profileComplete: false,
@@ -107,7 +107,7 @@ describe('OnboardingDetailPage', () => {
 
   it('uses the existing validation endpoint only when the lifecycle capability is present, and gives a remediation hint on failure', async () => {
     const profileMutate = vi.fn()
-    mockUseMutation.mockReturnValueOnce({ mutate: profileMutate, error: new Error('validation failed'), isPending: false }).mockReturnValueOnce({ mutate: vi.fn(), error: null, isPending: false })
+    mockUseMutation.mockReturnValue({ mutate: profileMutate, error: new Error('validation failed'), isPending: false })
     const user = userEvent.setup()
     renderDetail()
 

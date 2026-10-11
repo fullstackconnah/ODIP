@@ -27,7 +27,7 @@ const asRole = (role: string) => localStorage.setItem('odip_user', JSON.stringif
 
 const draft = (changes: Partial<ServiceAgreementDraftDto> = {}): ServiceAgreementDraftDto => ({
   id: 'd-2', participantId: 'p-1', version: 2, state: 'NSW', planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: '2026-10-01', agreementEndDate: '2027-06-30',
-  blocks: [draftBlock(mondayWednesday('b1'))], lines: [], isSummary: false, blockCount: 1, lineCount: 0, total: 0, caveats: [], ...changes,
+  blocks: [draftBlock(mondayWednesday('b1', { onPublicHoliday: 'Charge' }))], lines: [], isSummary: false, blockCount: 1, lineCount: 0, total: 0, caveats: [], ...changes,
 }) as ServiceAgreementDraftDto
 
 const approval = { approvedAt: '2026-10-03T01:00:00Z', approvedByName: 'Alex', patternsCreated: 2, patternsEnded: 0, shiftsCreated: 8 }
@@ -192,6 +192,15 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     await user.click(screen.getByRole('button', { name: 'Download agreement PDF' }))
     expect(downloadMutate).toHaveBeenCalledWith({ participantId: 'p-1', id: 'd-2' })
     expect(screen.getByText('Approved 3 Oct 2026 by Alex.')).toBeInTheDocument()
+  })
+
+  it('calls an agreement saved with undecided holidays unsaved, so Save comes before Approve', async () => {
+    drafts.mockReturnValue({ data: [draft({ blocks: [draftBlock(mondayWednesday('b1', { onPublicHoliday: 'Review' }))] })], isLoading: false, isError: false, refetch: refetchDrafts })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Save'))
+    expect(screen.getByText(/You have changes that are not saved/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mark approved for rostering' })).toBeDisabled()
   })
 
   it('opens the approval from the Save step, once everything is saved', async () => {
