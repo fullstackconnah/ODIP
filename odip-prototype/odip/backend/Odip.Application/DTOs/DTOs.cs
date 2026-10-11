@@ -958,7 +958,7 @@ public record TripDetailDto : TripListDto
     public DateTime UpdatedAt { get; init; }
 }
 
-public record CreateTripDto
+public record CreateTripDto : IValidatableObject
 {
     [Required, StringLength(200, MinimumLength = 1)]
     public string TripName { get; init; } = string.Empty;
@@ -988,6 +988,12 @@ public record CreateTripDto
     public int? MinStaffRequired { get; init; }
     [StringLength(4000)]
     public string? Notes { get; init; }
+
+    // A body without a start date binds to 0001-01-01, which a DateOnly cannot refuse on its own.
+    public IEnumerable<ValidationResult> Validate(ValidationContext context)
+    {
+        if (StartDate == default) yield return new ValidationResult("Start date is required.", new[] { nameof(StartDate) });
+    }
 }
 
 public record UpdateTripDto : CreateTripDto

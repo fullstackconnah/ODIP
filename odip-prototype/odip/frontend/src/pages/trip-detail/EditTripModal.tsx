@@ -41,6 +41,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
   const { data: allStaff = [] } = useStaff()
   const [tripEditForm, setTripEditForm] = useState<TripEditFormState | null>(null)
   const initialized = useRef(false)
+  const [errors, setErrors] = useState<{ startDate?: string; durationDays?: string }>({})
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
 
@@ -73,6 +74,12 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
 
   const handleSave = () => {
     if (!trip?.id || !tripEditForm) return
+    const found = {
+      startDate: tripEditForm.startDate ? undefined : 'Start date is required.',
+      durationDays: tripEditForm.durationDays >= 1 ? undefined : 'Duration must be at least 1 day.',
+    }
+    setErrors(found)
+    if (found.startDate || found.durationDays) return
     const toOptionalString = (v: string) => v || undefined
     const toOptionalNumber = (v: number | string) => (v === '' || v === null) ? undefined : Number(v) || undefined
     const data: UpdateTripDto = {
@@ -168,14 +175,16 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
               <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Dates & Status</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Start Date *</label>
-                  <input type="date" value={tripEditForm.startDate} onChange={e => setTripEditForm({ ...tripEditForm, startDate: e.target.value })}
+                  <label htmlFor="editTripStartDate" className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Start Date *</label>
+                  <input id="editTripStartDate" type="date" aria-invalid={!!errors.startDate} aria-describedby={errors.startDate ? 'editTripStartDateError' : undefined} value={tripEditForm.startDate} onChange={e => setTripEditForm({ ...tripEditForm, startDate: e.target.value })}
                     className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                  {errors.startDate && <p id="editTripStartDateError" className="text-xs text-[var(--color-destructive)] mt-1">{errors.startDate}</p>}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Duration (Days)</label>
-                  <input type="number" min={1} value={tripEditForm.durationDays} onChange={e => setTripEditForm({ ...tripEditForm, durationDays: Number(e.target.value) })}
+                  <label htmlFor="editTripDuration" className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Duration (Days)</label>
+                  <input id="editTripDuration" type="number" aria-invalid={!!errors.durationDays} aria-describedby={errors.durationDays ? 'editTripDurationError' : undefined} min={1} value={tripEditForm.durationDays} onChange={e => setTripEditForm({ ...tripEditForm, durationDays: Number(e.target.value) })}
                     className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                  {errors.durationDays && <p id="editTripDurationError" className="text-xs text-[var(--color-destructive)] mt-1">{errors.durationDays}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Booking Cutoff</label>
