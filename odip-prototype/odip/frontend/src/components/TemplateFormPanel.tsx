@@ -94,7 +94,7 @@ export default function TemplateFormPanel({
     reset,
     getValues,
     formState: { errors, isSubmitting, isDirty },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) })
+  } = useForm({ resolver: zodResolver(schema) })
 
   // Populate form when panel opens
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, type Resolver } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/components/Button'
@@ -75,7 +75,8 @@ export function AvailabilityRecordFormModal({ open, onClose, onSubmit, submittin
   const schema = useMemo(() => buildSchema(requireStaff), [requireStaff])
   const resetValues = useMemo<AvailabilityFormValues>(() => ({ ...DEFAULT_VALUES, ...initialValues }), [initialValues])
   const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm<AvailabilityFormValues>({
-    resolver: zodResolver(schema),
+    // The schema marks some fields optional, but the defaults keep every field a string, so the parsed values match.
+    resolver: zodResolver(schema) as Resolver<AvailabilityFormValues>,
     defaultValues: resetValues,
   })
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
