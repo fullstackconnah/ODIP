@@ -1,4 +1,4 @@
-import { useEventTemplates, useActivities, useSettings, useUpdateSettings, useProviderSettings, useUpsertProviderSettings, useSupportCatalogue, usePublicHolidays, useCreatePublicHoliday, useDeletePublicHoliday, useSyncHolidays } from '@/api/hooks'
+import { useEventTemplates, useSettings, useUpdateSettings, useProviderSettings, useUpsertProviderSettings, useSupportCatalogue, usePublicHolidays, useCreatePublicHoliday, useDeletePublicHoliday, useSyncHolidays } from '@/api/hooks'
 import { useState, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
@@ -6,7 +6,6 @@ import { LayoutTemplate, Pencil } from 'lucide-react'
 import { Tabs } from '@/components/Tabs'
 import { Modal } from '@/components/Modal'
 import { EmptyState } from '@/components/EmptyState'
-import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
 import { ToggleGroup } from '@/components/ToggleGroup'
@@ -15,7 +14,7 @@ import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import TemplateFormPanel from '@/components/TemplateFormPanel'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
-import type { MedicationCompetencyMode, EventTemplateDto, ActivityDto, ProviderSettingsDto, ParticipantReadinessMode, UpsertProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueFileFormat, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
+import type { MedicationCompetencyMode, EventTemplateDto, ProviderSettingsDto, ParticipantReadinessMode, UpsertProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueFileFormat, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
 import type { AxiosError } from 'axios'
 import TenantsTab from '@/pages/settings/TenantsTab'
 import TenantFormPanel from '@/pages/settings/TenantFormPanel'
@@ -24,6 +23,7 @@ import UserFormPanel from '@/pages/settings/UserFormPanel'
 import TenantDetailView from '@/pages/settings/TenantDetailView'
 import NotificationPreferencesTab from '@/pages/settings/NotificationPreferencesTab'
 import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
+import ActivityLibraryTab from '@/pages/settings/ActivityLibraryTab'
 import BudgetSettingsTab from '@/pages/settings/BudgetSettingsTab'
 import type { TenantSummaryDto, AdminUserDto } from '@/api/types'
 import { usePermissions } from '@/lib/permissions'
@@ -123,7 +123,6 @@ export default function SettingsPage() {
   const { data: templates = [], isLoading: templatesLoading } = useEventTemplates()
   const [panelOpen, setPanelOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<EventTemplateDto | undefined>(undefined)
-  const { data: activities = [] } = useActivities()
 
   const activeTemplates = templates.filter((t) => t.isActive)
   // Only claim "no templates" once the fetch has settled, so the empty state doesn't flash on load.
@@ -247,26 +246,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {tab === 'activities' && (
-        <DataTable
-          data={activities}
-          keyField="id"
-          sortable
-          columns={[
-            { key: 'activityName', header: 'Activity', sortable: true, className: 'font-medium' },
-            { key: 'category', header: 'Category', sortable: true },
-            { key: 'location', header: 'Location', render: (a: ActivityDto) => a.location || '—' },
-            {
-              key: 'isActive',
-              header: 'Status',
-              sortable: true,
-              render: (a: ActivityDto) => (
-                <StatusBadge status={a.isActive ? 'Active' : 'Inactive'} />
-              ),
-            },
-          ]}
-        />
-      )}
+      {tab === 'activities' && <ActivityLibraryTab />}
 
       {tab === 'qualifications' && <QualificationSettingsTab />}
       {tab === 'appearance' && <AppearanceSettingsTab />}

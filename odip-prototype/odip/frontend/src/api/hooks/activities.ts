@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiPutRaw, apiDeleteRaw } from '../client'
 import type {
   ActivityDto,
+  CreateActivityDto,
+  UpdateActivityDto,
   EventTemplateDto,
   CreateEventTemplateDto,
   UpdateEventTemplateDto,
@@ -15,6 +17,23 @@ export function useActivities() {
   return useQuery({
     queryKey: ['activities'],
     queryFn: () => apiGet<ActivityDto[]>('/activities'),
+  })
+}
+
+export function useCreateActivity() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateActivityDto) => apiPostRaw<ActivityDto>('/activities', data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
+  })
+}
+
+/** There is no delete route: deactivating is an update with isActive false. */
+export function useUpdateActivity() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateActivityDto }) => apiPutRaw<ActivityDto>(`/activities/${id}`, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
   })
 }
 
