@@ -29,10 +29,11 @@ export default function ActivitiesTab({ tripId, trip, schedule, canWrite, isRead
   // Auto-generate trip days when tab is opened
   const hasTriedGenerate = useRef(false)
   useEffect(() => {
-    if (!tripId || !trip || schedule.length > 0 || generateSchedule.isPending || hasTriedGenerate.current) return
+    // Generating is a write (POST .../schedule/generate): a role that cannot write, or a cancelled or archived trip, only reads.
+    if (!canWrite || isReadOnly || !tripId || !trip || schedule.length > 0 || generateSchedule.isPending || hasTriedGenerate.current) return
     hasTriedGenerate.current = true
     generateSchedule.mutate(tripId)
-  }, [tripId, schedule.length, trip])
+  }, [canWrite, isReadOnly, tripId, schedule.length, trip])
 
   const toggleActivityExpanded = (activityId: string) => {
     setExpandedActivities(prev => {
@@ -57,7 +58,7 @@ export default function ActivitiesTab({ tripId, trip, schedule, canWrite, isRead
               </Button>
             </div>
           ) : (
-            <p>No schedule available. Check that the trip has dates configured.</p>
+            <p>{canWrite && !isReadOnly ? 'No schedule available. Check that the trip has dates configured.' : 'No schedule yet.'}</p>
           )}
         </div>
       ) : schedule.map((day: TripDayDto) => (

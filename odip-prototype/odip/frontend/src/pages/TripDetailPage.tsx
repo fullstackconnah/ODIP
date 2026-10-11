@@ -32,11 +32,13 @@ export default function TripDetailPage() {
   const { id } = useParams()
   const isAdmin = isAdminRole || isSuperAdmin
   const canAccessIncidents = canAccessPage('incidents')
+  // ClaimsController admits only SuperAdmin, Admin and Coordinator: anyone else gets no Claims tab and sends no claims request.
+  const canAccessClaims = canAccessPage('claims')
   // PP-60: URL-synced so a shared/reloaded link lands on the same tab. Only the tabs this role can see are valid keys (L5-05): a ?tab= for
   // a tab it cannot see (incidents, history) reads as Overview, instead of selecting nothing over an empty body.
   const tabKeys = useMemo(
-    () => TAB_KEYS.filter(key => (key === 'incidents' ? canAccessIncidents : key === 'history' ? isAdmin : true)),
-    [canAccessIncidents, isAdmin],
+    () => TAB_KEYS.filter(key => (key === 'incidents' ? canAccessIncidents : key === 'claims' ? canAccessClaims : key === 'history' ? isAdmin : true)),
+    [canAccessIncidents, canAccessClaims, isAdmin],
   )
   const [activeTab, setActiveTab] = useTabParam(tabKeys, 'overview')
   const [showEditTrip, setShowEditTrip] = useState(false)
@@ -52,10 +54,9 @@ export default function TripDetailPage() {
   // count badges below, which render outside the Activities/Claims tabpanels (i.e. before
   // either tab is ever opened). Gating these on `activeTab` made those badges misleadingly show
   // 0 until the corresponding tab was visited once. The `enabled` option added to
-  // useTripSchedule/useTripClaims for this stays in place as a harmless additive parameter, but
-  // nothing on this page currently uses it.
+  // useTripSchedule/useTripClaims for this stays in place; the claims call uses it for the role gate only.
   const { data: schedule = [] } = useTripSchedule(id)
-  const { data: claims = [] } = useTripClaims(id)
+  const { data: claims = [] } = useTripClaims(id, { enabled: canAccessClaims })
   const { data: incidents = [] } = useTripIncidents(id)
   // INTAKE-08: the trip/booking picker (BookingsTab) excludes drafts.
   const { data: participants = [] } = useParticipants({ isDraft: 'false' })
@@ -78,7 +79,7 @@ export default function TripDetailPage() {
     { id: 'staff', label: 'Staff', icon: UserCog, badge: staff.length },
     { id: 'tasks', label: 'Tasks', icon: ListChecks, badge: tasks.length },
     { id: 'activities', label: 'Activities', icon: Calendar, badge: schedule.reduce((sum: number, d: any) => sum + (d.scheduledActivities?.length || 0), 0) },
-    { id: 'claims', label: 'Claims', icon: FileText, badge: claims.length },
+    ...(canAccessClaims ? [{ id: 'claims' as string, label: 'Claims', icon: FileText, badge: claims.length }] : []),
     ...(canAccessIncidents ? [{ id: 'incidents' as string, label: 'Incidents', icon: ShieldAlert, badge: incidents.length }] : []),
     ...(isAdmin ? [{ id: 'history' as string, label: 'History', icon: ClockIcon }] : []),
   ]
@@ -193,7 +194,7 @@ export default function TripDetailPage() {
           <ActivitiesTab tripId={id} trip={trip} schedule={schedule} canWrite={canWrite} isReadOnly={isReadOnly} />
         )}
 
-        {activeTab === 'claims' && trip && (
+        {activeTab === 'claims' && canAccessClaims && trip && (
           <ClaimsTab tripId={String(trip.id)} claims={claims} trip={trip} canWrite={canWrite} />
         )}
 
