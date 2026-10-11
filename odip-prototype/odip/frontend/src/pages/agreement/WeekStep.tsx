@@ -67,7 +67,7 @@ export function WeekStep({ shifts, onChange, selected, onSelect, state, zone, se
     setEditing(true)
     focusLater.current = () => editorHeading.current?.focus()
   }
-  // Done and Escape: the edit is over, so the selection goes and focus returns to where the coordinator was in the grid.
+  // Done (and Escape in the phone panel, which useDialogBehavior closes through onClose): the edit is over, so the selection goes and focus returns to where the coordinator was in the grid.
   const finish = () => {
     const first = selectedShifts[0]?.id
     focusLater.current = () => grid.current?.querySelector<HTMLElement>(`[data-shift-id="${first}"]`)?.focus()
@@ -223,7 +223,7 @@ export function WeekStep({ shifts, onChange, selected, onSelect, state, zone, se
         </div>
 
         {!readOnly && !belowLg && (
-          <aside aria-label="Shift editor" className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto" onKeyDown={event => { if (event.key === 'Escape' && open) finish() }}>
+          <aside aria-label="Shift editor" className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
             <h3 ref={editorHeading} tabIndex={-1} className="mb-[var(--section-gap)] text-base font-semibold focus:outline-none">{open ? title : 'Shift editor'}</h3>
             {open ? editor : <p className="text-sm text-[var(--color-muted-foreground)]">Select one or more shifts to change their times, support and more together, or click a day to add one.</p>}
           </aside>

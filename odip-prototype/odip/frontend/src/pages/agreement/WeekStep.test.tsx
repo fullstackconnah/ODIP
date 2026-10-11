@@ -133,6 +133,15 @@ describe('WeekStep on a phone', () => {
     expect(chip.querySelector('svg')).not.toBeNull()
   })
 
+  it('Escape in the panel does the same as Done', async () => {
+    const user = userEvent.setup()
+    render(<Harness initial={weekdays()} />)
+    await user.click(screen.getByRole('button', { name: /Wednesday 09:00/ }))
+    await user.click(screen.getByRole('button', { name: 'Edit 1 shift' }))
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('button', { name: /Wednesday 09:00/ })).toHaveFocus()
+  })
+
   it('Done ends the edit and puts focus back on the first shift that was selected', async () => {
     const user = userEvent.setup()
     render(<Harness initial={weekdays()} />)
@@ -159,7 +168,7 @@ describe('WeekStep with the editor beside the grid', () => {
     } finally { narrow() }
   })
 
-  it('Done, and Escape in the editor, hand focus back to the first selected shift and leave the editor empty', async () => {
+  it('Done hands focus back to the first selected shift and leaves the editor empty', async () => {
     wide()
     try {
       const user = userEvent.setup()
@@ -170,11 +179,6 @@ describe('WeekStep with the editor beside the grid', () => {
       expect(screen.getByRole('button', { name: /Tuesday 09:00/ })).toHaveFocus()
       expect(screen.getByText(/Select one or more shifts/)).toBeInTheDocument()
 
-      await user.click(screen.getByRole('button', { name: /Monday 09:00/ }))
-      await user.click(screen.getByLabelText('Starts'))
-      await user.keyboard('{Escape}')
-      expect(screen.getByRole('button', { name: /Monday 09:00/ })).toHaveFocus()
-      expect(screen.getByText(/Select one or more shifts/)).toBeInTheDocument()
     } finally { narrow() }
   })
 })
