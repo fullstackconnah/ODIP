@@ -1,4 +1,4 @@
-import { Check } from 'lucide-react'
+import { Check, ChevronDown } from 'lucide-react'
 import type { DraftBlock, PlanBlock, PlanBlockRequirements, PlanPricingSettingsDto, PlanSetting, PlanSkill, PlanSupportIntensity, PlanSupportType, PlanWorkerGender } from '@/api/types'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -111,8 +111,8 @@ export function ShiftEditor({ shifts, onPatch, onRemove, onDone, settings, limit
 
       {limitNotice && <Callout tone="warning" className="max-w-prose">{limitNotice}</Callout>}
 
-      <details className="rounded-[var(--radius-md)] border border-[var(--color-border)]">
-        <summary className="flex min-h-[var(--control-h)] cursor-pointer select-none items-center px-3 text-sm font-medium">More options</summary>
+      <details className="group rounded-[var(--radius-md)] border border-[var(--color-border)]">
+        <summary className="flex min-h-[var(--control-h)] cursor-pointer select-none items-center justify-between px-3 text-sm font-medium">More options<ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" /></summary>
         <div className="flex flex-col gap-[var(--section-gap)] border-t border-[var(--color-border)] p-3">
           <FormField label="Setting" hint={block.setting === 'Centre' ? 'A centre adds the centre capital cost for community access and group activities.' : undefined}>
             <ToggleGroup className="flex-wrap" ariaLabel="Setting" options={SETTING_OPTIONS} value={block.setting} onChange={value => patch({ setting: value as PlanSetting })} />

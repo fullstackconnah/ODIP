@@ -85,7 +85,7 @@ export function CheckStep({ pricing, issues, anySkipped, onFix, onChangeHolidays
           {holidays.days > 0 && (
             <p className="text-sm">
               {plural(holidays.days, 'public holiday')} {holidays.days === 1 ? 'falls' : 'fall'} in this agreement; shifts on them are charged at the holiday rate{anySkipped ? ', except those set to skip' : ''}.{' '}
-              {!readOnly && <Button variant="ghost" size="sm" onClick={() => onChangeHolidays(holidays.blockIds)}>Change</Button>}
+              {!readOnly && <Button variant="ghost" size="sm" onClick={() => onChangeHolidays(holidays.blockIds)}>Change<span className="sr-only"> how holiday shifts are charged</span></Button>}
             </p>
           )}
         </>
@@ -100,7 +100,7 @@ export function CheckStep({ pricing, issues, anySkipped, onFix, onChangeHolidays
             {issues.map(issue => (
               <li key={issue.key} className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-2">
                 <div className="flex min-w-0 flex-1 items-start gap-2 text-sm">
-                  <StatusBadge tone={issue.tone === 'fix' ? 'danger' : 'warning'} label={issue.tone === 'fix' ? 'Fix' : 'Review'} />
+                  <StatusBadge tone={issue.tone === 'fix' ? 'danger' : 'warning'} label={issue.tone === 'fix' ? 'Must fix' : 'Check'} />
                   <span className="min-w-0 flex-1">
                     {issue.title}
                     {issue.detail && <span className="block text-[13px] text-[var(--color-muted-foreground)]">{issue.detail}</span>}

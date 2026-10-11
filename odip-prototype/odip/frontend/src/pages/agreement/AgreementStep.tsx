@@ -1,3 +1,4 @@
+import { ChevronDown } from 'lucide-react'
 import type { AgreementState, PlanPriceZone } from '@/api/types'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -57,7 +58,7 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
 
       <div className="flex flex-col gap-2 text-sm">
         {recorded && !details.planOverride ? (
-          <p>NDIS plan: {writtenSpan(recorded.start, recorded.end)}, from the Funding tab. The agreement starts with these dates.</p>
+          <p>NDIS plan: {writtenSpan(recorded.start, recorded.end)}, from the Funding tab. A new agreement is given these dates to begin with.</p>
         ) : details.planOverride ? (
           <p>NDIS plan: {writtenSpan(details.planOverride.start, details.planOverride.end)}, as you set it below.</p>
         ) : (
@@ -66,8 +67,8 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
             <Button variant="ghost" size="sm" to={fundingTab}>Record the plan</Button> to compare the agreement with the budget.
           </p>
         )}
-        <details className="rounded-[var(--radius-md)] border border-[var(--color-border)]" open={!!details.planOverride}>
-          <summary className="flex min-h-[var(--control-h)] cursor-pointer select-none items-center px-3 font-medium">Different NDIS plan dates?</summary>
+        <details className="group rounded-[var(--radius-md)] border border-[var(--color-border)]" open={!!details.planOverride}>
+          <summary className="flex min-h-[var(--control-h)] cursor-pointer select-none items-center justify-between px-3 font-medium">Different NDIS plan dates?<ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" /></summary>
           <div className="flex flex-col gap-[var(--section-gap)] border-t border-[var(--color-border)] p-3">
             <div className={formGrid}>
               <FormField label="NDIS plan starts" className={span.date}>
@@ -80,8 +81,8 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
             {details.planOverride && <div><Button variant="secondary" size="sm" onClick={() => onEdit({ planOverride: null })}>Use the recorded dates</Button></div>}
           </div>
         </details>
-        <details className="rounded-[var(--radius-md)] border border-[var(--color-border)]">
-          <summary className="flex min-h-[var(--control-h)] cursor-pointer select-none items-center px-3 font-medium">More</summary>
+        <details className="group rounded-[var(--radius-md)] border border-[var(--color-border)]">
+          <summary className="flex min-h-[var(--control-h)] cursor-pointer select-none items-center justify-between px-3 font-medium">More<ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" /></summary>
           <div className="border-t border-[var(--color-border)] p-3">
             <div className={formGrid}>
               <FormField label="Price zone" className={span.medium} hint="Where the supports are delivered. Remote and very remote add the NDIS loading.">

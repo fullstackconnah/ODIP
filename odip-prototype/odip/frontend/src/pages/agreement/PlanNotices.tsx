@@ -28,7 +28,8 @@ export function PlanNotices({ notices }: PlanNoticesProps) {
   const loud = others.filter(notice => (NOTICE_TITLE[notice.code]?.tone ?? 'info') === 'warning')
   const quiet = others.filter(notice => (NOTICE_TITLE[notice.code]?.tone ?? 'info') !== 'warning')
   return (
-    <div className="flex flex-col gap-2">
+    <section aria-labelledby="check-notices" className="flex flex-col gap-2">
+      <h3 id="check-notices" className="text-sm font-semibold">Good to know</h3>
       {registration && (
         <p className="text-sm text-[var(--color-muted-foreground)]" title={registration.message}>
           Registration groups are not confirmed.{' '}
@@ -48,6 +49,6 @@ export function PlanNotices({ notices }: PlanNoticesProps) {
           <ul className="mt-1 flex max-w-prose flex-col gap-1">{quiet.map(notice => <li key={notice.code}>{friendlyMessage(notice.message, [])}</li>)}</ul>
         </details>
       )}
-    </div>
+    </section>
   )
 }
