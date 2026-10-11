@@ -79,6 +79,7 @@ export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAs
 
   return (
     <Modal
+      stickyFooter
       open
       onClose={onClose}
       title="Assign Vehicle"

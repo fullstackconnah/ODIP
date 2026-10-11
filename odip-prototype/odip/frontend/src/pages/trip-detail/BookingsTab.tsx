@@ -269,6 +269,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
       {/* Add Booking Modal */}
       {showAddBooking && (
         <Modal
+          stickyFooter
           open
           onClose={() => { setShowAddBooking(false); resetForm() }}
           title="Add Participant to Trip"
@@ -647,6 +648,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
       {/* Edit Booking Modal */}
       {editingBooking && (
         <Modal
+          stickyFooter
           open
           onClose={() => setEditingBooking(null)}
           title={`Edit Booking — ${editingBooking.participantName}`}

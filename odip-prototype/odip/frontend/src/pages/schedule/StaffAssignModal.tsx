@@ -80,6 +80,7 @@ export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoa
 
   return (
     <Modal
+      stickyFooter
       open
       onClose={onClose}
       title="Assign Staff"
