@@ -24,7 +24,7 @@ const toForm = (a: ActivityDto, isActive = a.isActive): Form => ({
 
 /** Settings > Activity Library. Admin, Coordinator and SuperAdmin write it (the server's roles); everyone else reads the list. */
 export default function ActivityLibraryTab() {
-  const { data: activities = [], isLoading } = useActivities()
+  const { data: activities = [], isLoading, isError, refetch } = useActivities()
   const { isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
   const canEdit = isSuperAdmin || isAdmin || isCoordinator
   const create = useCreateActivity()
@@ -74,6 +74,8 @@ export default function ActivityLibraryTab() {
         keyField="id"
         sortable
         loading={isLoading}
+        error={isError}
+        onRetry={() => refetch()}
         emptyMessage="No activities yet. Add one to offer it when planning trips."
         columns={[
           { key: 'activityName', header: 'Activity', sortable: true, className: 'font-medium' },

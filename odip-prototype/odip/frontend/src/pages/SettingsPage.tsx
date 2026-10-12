@@ -8,6 +8,7 @@ import { Tabs } from '@/components/Tabs'
 import { Modal } from '@/components/Modal'
 import { EmptyState } from '@/components/EmptyState'
 import { DataTable } from '@/components/DataTable'
+import { PageState } from '@/components/PageState'
 import { Dropdown } from '@/components/Dropdown'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -121,13 +122,13 @@ function AppearanceSettingsTab() {
 }
 
 export default function SettingsPage() {
-  const { data: templates = [], isLoading: templatesLoading } = useEventTemplates()
+  const { data: templates = [], isLoading: templatesLoading, isError: templatesError, refetch: refetchTemplates } = useEventTemplates()
   const [panelOpen, setPanelOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<EventTemplateDto | undefined>(undefined)
 
   const activeTemplates = templates.filter((t) => t.isActive)
   // Only claim "no templates" once the fetch has settled, so the empty state doesn't flash on load.
-  const templatesEmpty = !templatesLoading && activeTemplates.length === 0
+  const templatesEmpty = !templatesLoading && !templatesError && activeTemplates.length === 0
   const openNewTemplate = () => { setEditingTemplate(undefined); setPanelOpen(true) }
 
   const { isSuperAdmin, isAdmin, canManageNotifications } = usePermissions()
@@ -186,7 +187,9 @@ export default function SettingsPage() {
 
       {tab === 'templates' && (
         <div className="space-y-4">
-          {templatesEmpty ? (
+          {templatesError && templates.length === 0 ? (
+            <PageState kind="error" noun="template list" onRetry={() => refetchTemplates()} />
+          ) : templatesEmpty ? (
             // "New template" is the header action, so the empty state carries no second one.
             <EmptyState
               icon={LayoutTemplate}
@@ -470,7 +473,7 @@ function catalogueFormatLabel(format: CatalogueFileFormat): string {
 }
 
 function SupportCatalogueTab() {
-  const { data: groups = [] } = useSupportCatalogue()
+  const { data: groups = [], isLoading: catalogueLoading, isError: catalogueError, refetch: refetchCatalogue } = useSupportCatalogue()
   const [importing, setImporting] = useState(false)
   const [previewStep, setPreviewStep] = useState<'upload' | 'preview' | null>(null)
   const [preview, setPreview] = useState<CatalogueImportPreviewDto | null>(null)
@@ -570,6 +573,9 @@ function SupportCatalogueTab() {
           { key: 'priceLimit_VeryRemote', header: 'V.Remote', align: 'right' as const, type: 'currency' as const, sortable: true },
           { key: 'effectiveFrom', header: 'Effective From', type: 'date' as const, sortable: true },
         ]}
+        loading={catalogueLoading}
+        error={catalogueError}
+        onRetry={() => refetchCatalogue()}
         emptyMessage="No catalogue items. Import the NDIS Support Catalogue XLSX."
       />
 
@@ -642,7 +648,7 @@ function SupportCatalogueTab() {
 function PublicHolidaysTab({ canEdit }: { canEdit: boolean }) {
   const [year, setYear] = useState(new Date().getFullYear())
   const [state, setState] = useState('VIC')
-  const { data: holidays = [] } = usePublicHolidays(year, state)
+  const { data: holidays = [], isLoading: holidaysLoading, isError: holidaysError, refetch: refetchHolidays } = usePublicHolidays(year, state)
   const createHoliday = useCreatePublicHoliday()
   const deleteHoliday = useDeletePublicHoliday()
   const syncHolidays = useSyncHolidays()
@@ -776,6 +782,9 @@ function PublicHolidaysTab({ canEdit }: { canEdit: boolean }) {
               }]
             : []),
         ]}
+        loading={holidaysLoading}
+        error={holidaysError}
+        onRetry={() => refetchHolidays()}
         emptyMessage={`No holidays found for ${year} in ${state}.`}
       />
 

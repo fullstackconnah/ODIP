@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Tabs } from '@/components/Tabs'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { TAP_FLOOR, TAP_TRUNCATED_LINK } from '@/components/tapArea'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -46,7 +47,7 @@ function buildFlaggedNotePrefill(row: FlaggedShiftNoteDto, reportedByUserId: str
   }
 }
 
-function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShiftNoteDto[]; isLoading: boolean }) {
+function FlaggedNotesTab({ flaggedNotes, isLoading, isError, onRetry }: { flaggedNotes: FlaggedShiftNoteDto[]; isLoading: boolean; isError: boolean; onRetry: () => void }) {
   const navigate = useNavigate()
   const { id: currentUserId } = usePermissions()
 
@@ -113,7 +114,7 @@ function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShi
     },
   ]
 
-  if (!isLoading && flaggedNotes.length === 0) {
+  if (!isLoading && !isError && flaggedNotes.length === 0) {
     return (
       <EmptyState
         icon={FileWarning}
@@ -129,6 +130,8 @@ function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShi
       columns={columns}
       keyField="shiftNoteId"
       loading={isLoading}
+      error={isError}
+      onRetry={onRetry}
       emptyMessage="No flagged notes found"
     />
   )
@@ -177,7 +180,7 @@ export default function IncidentsPage() {
   // the Incidents tab. Only sets the initial tab — switching tabs afterwards via Tabs doesn't
   // write the param back, matching how qscOverdueOnly is a one-way filter, not a synced tab state.
   const [tab, setTab] = useState<IncidentsTab>(searchParams.get('view') === 'flagged-notes' ? 'flagged-notes' : 'incidents')
-  const { data: flaggedNotes = [], isLoading: flaggedNotesLoading } = useFlaggedShiftNotes(
+  const { data: flaggedNotes = [], isLoading: flaggedNotesLoading, isError: flaggedNotesError, refetch: refetchFlaggedNotes } = useFlaggedShiftNotes(
     { withoutIncident: true },
     { enabled: canViewFlaggedNotes },
   )
@@ -194,7 +197,7 @@ export default function IncidentsPage() {
   }
   const restoreIncident = useRestoreIncident()
   const deleteIncident = useDeleteIncident()
-  const { data: overdueQsc = [] } = useOverdueQscIncidents()
+  const { data: overdueQsc = [], isError: overdueQscError, refetch: refetchOverdueQsc } = useOverdueQscIncidents()
 
   const { showArchived, params, toggleButtons, confirmDialog, errorNotice, actionButtons } = useArchiveRestore<any>({
     deleteMutation: deleteIncident,
@@ -334,7 +337,8 @@ export default function IncidentsPage() {
                 <Tabs
                   tabs={[
                     { id: 'incidents', label: 'Reports' },
-                    { id: 'flagged-notes', label: `Flagged notes (${flaggedNotes.length})` },
+                    // A failed load is not a count of 0: the label drops the count until there is one.
+                    { id: 'flagged-notes', label: flaggedNotesError && flaggedNotes.length === 0 ? 'Flagged notes' : `Flagged notes (${flaggedNotes.length})` },
                   ]}
                   active={tab}
                   onChange={key => setTab(key as IncidentsTab)}
@@ -380,7 +384,7 @@ export default function IncidentsPage() {
       </div>
 
       {showFlaggedNotes ? (
-        <FlaggedNotesTab flaggedNotes={flaggedNotes} isLoading={flaggedNotesLoading} />
+        <FlaggedNotesTab flaggedNotes={flaggedNotes} isLoading={flaggedNotesLoading} isError={flaggedNotesError} onRetry={() => refetchFlaggedNotes()} />
       ) : (
       <>
       {/* QSC Overdue Alert Banner — one 40px line: the headline, the reason and the link all stay,
@@ -399,6 +403,13 @@ export default function IncidentsPage() {
             View overdue incidents
           </Link>
         </div>
+      )}
+
+      {/* The overdue check is a compliance warning: a failed check says so, it never hides the banner as if nothing were overdue. */}
+      {!showArchived && overdueQscError && overdueQsc.length === 0 && (
+        <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetchOverdueQsc()}>Try again</Button>}>
+          Couldn't check for incidents past the 24-hour QSC deadline.
+        </Callout>
       )}
 
       {qscOverdueOnly && (
