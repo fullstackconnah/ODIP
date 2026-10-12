@@ -1,9 +1,7 @@
-import { useState, useEffect, useRef, useId } from 'react'
-import { X } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
 import { useUpdateTrip, useEventTemplates, useStaff } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
-import { TAP_AREA } from '@/components/tapArea'
-import { useDialogBehavior } from '@/hooks/useDialogBehavior'
+import { Modal } from '@/components/Modal'
 import type { TripDetailDto, UpdateTripDto } from '@/api/types/trips'
 import type { TripStatus } from '@/api/types/enums'
 import type { EventTemplateDto } from '@/api/types/events'
@@ -44,11 +42,6 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
   const [tripEditForm, setTripEditForm] = useState<TripEditFormState | null>(null)
   const initialized = useRef(false)
   const [errors, setErrors] = useState<{ startDate?: string; durationDays?: string }>({})
-  const titleId = useId()
-  const dialogRef = useRef<HTMLDivElement>(null)
-
-  // Escape, the Tab trap, scroll lock and focus in / back (the parent mounts this only while it is open).
-  useDialogBehavior({ open: true, onClose, containerRef: dialogRef })
 
   useEffect(() => {
     if (!trip || initialized.current) return
@@ -107,194 +100,176 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
     updateTrip.mutate({ id: trip.id, data }, { onSuccess: onClose })
   }
 
-  // Below lg the bottom nav (z-50, later in the DOM) covers the screen foot: the bottom padding keeps the dialog above it and the safe-area inset.
+  // A form, so a stray backdrop click must not throw the typing away; the sticky footer keeps Save in view while the body scrolls.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom)+1rem)] lg:pb-4" onClick={onClose}>
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        className="bg-[var(--color-card)] rounded-[var(--radius-md)] w-full max-w-2xl max-h-full lg:max-h-[90vh] flex flex-col shadow-[0_32px_64px_-16px_rgba(27,28,26,0.2)]"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Modal header */}
-        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-[rgba(195,201,181,0.2)]">
-          <div>
-            <h2 id={titleId} className="text-lg font-bold text-[var(--color-foreground)]">Edit Trip</h2>
-            {!tripEditForm && <p className="text-xs text-[var(--color-muted-foreground)] mt-0.5">Loading trip details…</p>}
-          </div>
-          {/* TAP_AREA: the 32px button keeps its look and gets a 44px hit area on touch. */}
-          <button type="button" onClick={onClose} aria-label="Close dialog" className={`${TAP_AREA} p-2 rounded-full hover:bg-[var(--color-surface-container-low)] transition-colors`}>
-            <X className="w-4 h-4 text-[var(--color-muted-foreground)]" />
-          </button>
-        </div>
-
-        {/* Modal body */}
-        {tripEditForm ? (
-          <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
-            {/* Basic Info */}
-            <div className="space-y-3">
-              <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Basic Info</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Trip Name *</label>
-                  <input value={tripEditForm.tripName} onChange={e => setTripEditForm({ ...tripEditForm, tripName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" placeholder="e.g. Beach Getaway 2026" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Trip Code</label>
-                  <input value={tripEditForm.tripCode} onChange={e => setTripEditForm({ ...tripEditForm, tripCode: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" placeholder="e.g. BG-2026-01" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Event Template</label>
-                  <Dropdown
-                    variant="form"
-                    value={tripEditForm.eventTemplateId}
-                    onChange={val => setTripEditForm({ ...tripEditForm, eventTemplateId: val })}
-                    label="None"
-                    items={[
-                      { value: '', label: 'None' },
-                      ...templates.map((t: EventTemplateDto) => ({ value: String(t.id), label: t.eventName })),
-                    ]}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Destination</label>
-                  <input value={tripEditForm.destination} onChange={e => setTripEditForm({ ...tripEditForm, destination: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" placeholder="e.g. Gold Coast" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Region</label>
-                  <input value={tripEditForm.region} onChange={e => setTripEditForm({ ...tripEditForm, region: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" placeholder="e.g. QLD" />
-                </div>
-              </div>
-            </div>
-
-            {/* Dates & Status */}
-            <div className="space-y-3">
-              <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Dates & Status</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="editTripStartDate" className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Start Date *</label>
-                  <input id="editTripStartDate" type="date" aria-invalid={!!errors.startDate} aria-describedby={errors.startDate ? 'editTripStartDateError' : undefined} value={tripEditForm.startDate} onChange={e => { setTripEditForm({ ...tripEditForm, startDate: e.target.value }); setErrors(er => ({ ...er, startDate: undefined })) }}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                  {errors.startDate && <p id="editTripStartDateError" role="alert" className="text-xs text-[var(--color-destructive)] mt-1">{errors.startDate}</p>}
-                </div>
-                <div>
-                  <label htmlFor="editTripDuration" className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Duration (Days)</label>
-                  <input id="editTripDuration" type="number" aria-invalid={!!errors.durationDays} aria-describedby={errors.durationDays ? 'editTripDurationError' : undefined} min={1} value={tripEditForm.durationDays} onChange={e => { setTripEditForm({ ...tripEditForm, durationDays: Number(e.target.value) }); setErrors(er => ({ ...er, durationDays: undefined })) }}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                  {errors.durationDays && <p id="editTripDurationError" role="alert" className="text-xs text-[var(--color-destructive)] mt-1">{errors.durationDays}</p>}
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Booking Cutoff</label>
-                  <input type="date" value={tripEditForm.bookingCutoffDate} onChange={e => setTripEditForm({ ...tripEditForm, bookingCutoffDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Status</label>
-                  <Dropdown
-                    variant="form"
-                    value={tripEditForm.status}
-                    onChange={val => setTripEditForm({ ...tripEditForm, status: val as TripStatus })}
-                    items={[
-                      { value: 'Draft', label: 'Draft' },
-                      { value: 'Planning', label: 'Planning' },
-                      { value: 'OpenForBookings', label: 'Open For Bookings' },
-                      { value: 'Confirmed', label: 'Confirmed' },
-                      { value: 'InProgress', label: 'In Progress' },
-                      { value: 'Completed', label: 'Completed' },
-                      { value: 'Cancelled', label: 'Cancelled' },
-                      { value: 'Archived', label: 'Archived' },
-                    ]}
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Lead Coordinator</label>
-                  <Dropdown
-                    variant="form"
-                    value={tripEditForm.leadCoordinatorId}
-                    onChange={val => setTripEditForm({ ...tripEditForm, leadCoordinatorId: val })}
-                    label="None"
-                    items={[
-                      { value: '', label: 'None' },
-                      ...allStaff.map((s: StaffListDto) => ({ value: String(s.id), label: s.fullName })),
-                    ]}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Capacity */}
-            <div className="space-y-3">
-              <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Capacity & Requirements</p>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Min Participants</label>
-                  <input type="number" min={0} value={tripEditForm.minParticipants} onChange={e => setTripEditForm({ ...tripEditForm, minParticipants: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Max Participants</label>
-                  <input type="number" min={0} value={tripEditForm.maxParticipants} onChange={e => setTripEditForm({ ...tripEditForm, maxParticipants: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Wheelchair Capacity</label>
-                  <input type="number" min={0} value={tripEditForm.requiredWheelchairCapacity} onChange={e => setTripEditForm({ ...tripEditForm, requiredWheelchairCapacity: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Required Beds</label>
-                  <input type="number" min={0} value={tripEditForm.requiredBeds} onChange={e => setTripEditForm({ ...tripEditForm, requiredBeds: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Required Bedrooms</label>
-                  <input type="number" min={0} value={tripEditForm.requiredBedrooms} onChange={e => setTripEditForm({ ...tripEditForm, requiredBedrooms: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Min Staff Required</label>
-                  <input type="number" min={0} value={tripEditForm.minStaffRequired} onChange={e => setTripEditForm({ ...tripEditForm, minStaffRequired: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div className="space-y-2">
-              <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Notes</p>
-              <textarea value={tripEditForm.notes} onChange={e => setTripEditForm({ ...tripEditForm, notes: e.target.value })}
-                rows={3} className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" placeholder="Any additional notes..." />
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 flex items-center justify-center py-12 text-[var(--color-muted-foreground)] text-sm">
-            Loading trip details…
-          </div>
-        )}
-
-        {updateTrip.isError && (
-          <div className="px-6 pt-4">
-            <Callout tone="error">{extractErrorMessage(updateTrip.error, 'Failed to save the trip.')}</Callout>
-          </div>
-        )}
-
-        {/* Modal footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[rgba(195,201,181,0.2)]">
+    <Modal
+      open
+      onClose={onClose}
+      title="Edit Trip"
+      size="lg"
+      closeOnBackdrop={false}
+      stickyFooter
+      footer={
+        <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!tripEditForm || !tripEditForm.tripName.trim() || updateTrip.isPending}>
             {updateTrip.isPending ? 'Saving…' : 'Save Changes'}
           </Button>
+        </>
+      }
+    >
+      {tripEditForm ? (
+        <div className="space-y-5">
+          {/* Basic Info */}
+          <div className="space-y-3">
+            <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Basic Info</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Trip Name *</label>
+                <input value={tripEditForm.tripName} onChange={e => setTripEditForm({ ...tripEditForm, tripName: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" placeholder="e.g. Beach Getaway 2026" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Trip Code</label>
+                <input value={tripEditForm.tripCode} onChange={e => setTripEditForm({ ...tripEditForm, tripCode: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" placeholder="e.g. BG-2026-01" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Event Template</label>
+                <Dropdown
+                  variant="form"
+                  value={tripEditForm.eventTemplateId}
+                  onChange={val => setTripEditForm({ ...tripEditForm, eventTemplateId: val })}
+                  label="None"
+                  items={[
+                    { value: '', label: 'None' },
+                    ...templates.map((t: EventTemplateDto) => ({ value: String(t.id), label: t.eventName })),
+                  ]}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Destination</label>
+                <input value={tripEditForm.destination} onChange={e => setTripEditForm({ ...tripEditForm, destination: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" placeholder="e.g. Gold Coast" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Region</label>
+                <input value={tripEditForm.region} onChange={e => setTripEditForm({ ...tripEditForm, region: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" placeholder="e.g. QLD" />
+              </div>
+            </div>
+          </div>
+
+          {/* Dates & Status */}
+          <div className="space-y-3">
+            <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Dates & Status</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="editTripStartDate" className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Start Date *</label>
+                <input id="editTripStartDate" type="date" aria-invalid={!!errors.startDate} aria-describedby={errors.startDate ? 'editTripStartDateError' : undefined} value={tripEditForm.startDate} onChange={e => { setTripEditForm({ ...tripEditForm, startDate: e.target.value }); setErrors(er => ({ ...er, startDate: undefined })) }}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                {errors.startDate && <p id="editTripStartDateError" role="alert" className="text-xs text-[var(--color-destructive)] mt-1">{errors.startDate}</p>}
+              </div>
+              <div>
+                <label htmlFor="editTripDuration" className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Duration (Days)</label>
+                <input id="editTripDuration" type="number" aria-invalid={!!errors.durationDays} aria-describedby={errors.durationDays ? 'editTripDurationError' : undefined} min={1} value={tripEditForm.durationDays} onChange={e => { setTripEditForm({ ...tripEditForm, durationDays: Number(e.target.value) }); setErrors(er => ({ ...er, durationDays: undefined })) }}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                {errors.durationDays && <p id="editTripDurationError" role="alert" className="text-xs text-[var(--color-destructive)] mt-1">{errors.durationDays}</p>}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Booking Cutoff</label>
+                <input type="date" value={tripEditForm.bookingCutoffDate} onChange={e => setTripEditForm({ ...tripEditForm, bookingCutoffDate: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Status</label>
+                <Dropdown
+                  variant="form"
+                  value={tripEditForm.status}
+                  onChange={val => setTripEditForm({ ...tripEditForm, status: val as TripStatus })}
+                  items={[
+                    { value: 'Draft', label: 'Draft' },
+                    { value: 'Planning', label: 'Planning' },
+                    { value: 'OpenForBookings', label: 'Open For Bookings' },
+                    { value: 'Confirmed', label: 'Confirmed' },
+                    { value: 'InProgress', label: 'In Progress' },
+                    { value: 'Completed', label: 'Completed' },
+                    { value: 'Cancelled', label: 'Cancelled' },
+                    { value: 'Archived', label: 'Archived' },
+                  ]}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Lead Coordinator</label>
+                <Dropdown
+                  variant="form"
+                  value={tripEditForm.leadCoordinatorId}
+                  onChange={val => setTripEditForm({ ...tripEditForm, leadCoordinatorId: val })}
+                  label="None"
+                  items={[
+                    { value: '', label: 'None' },
+                    ...allStaff.map((s: StaffListDto) => ({ value: String(s.id), label: s.fullName })),
+                  ]}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Capacity */}
+          <div className="space-y-3">
+            <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Capacity & Requirements</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Min Participants</label>
+                <input type="number" min={0} value={tripEditForm.minParticipants} onChange={e => setTripEditForm({ ...tripEditForm, minParticipants: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Max Participants</label>
+                <input type="number" min={0} value={tripEditForm.maxParticipants} onChange={e => setTripEditForm({ ...tripEditForm, maxParticipants: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Wheelchair Capacity</label>
+                <input type="number" min={0} value={tripEditForm.requiredWheelchairCapacity} onChange={e => setTripEditForm({ ...tripEditForm, requiredWheelchairCapacity: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Required Beds</label>
+                <input type="number" min={0} value={tripEditForm.requiredBeds} onChange={e => setTripEditForm({ ...tripEditForm, requiredBeds: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Required Bedrooms</label>
+                <input type="number" min={0} value={tripEditForm.requiredBedrooms} onChange={e => setTripEditForm({ ...tripEditForm, requiredBedrooms: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Min Staff Required</label>
+                <input type="number" min={0} value={tripEditForm.minStaffRequired} onChange={e => setTripEditForm({ ...tripEditForm, minStaffRequired: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Notes</p>
+            <textarea value={tripEditForm.notes} onChange={e => setTripEditForm({ ...tripEditForm, notes: e.target.value })}
+              rows={3} className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" placeholder="Any additional notes..." />
+          </div>
         </div>
-      </div>
-    </div>
+      ) : (
+        <div className="flex items-center justify-center py-12 text-[var(--color-muted-foreground)] text-sm">
+          Loading trip details…
+        </div>
+      )}
+
+      {updateTrip.isError && (
+        <Callout tone="error" className="mt-4">{extractErrorMessage(updateTrip.error, 'Failed to save the trip.')}</Callout>
+      )}
+    </Modal>
   )
 }

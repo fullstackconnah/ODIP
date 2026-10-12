@@ -521,7 +521,7 @@ confirm footer.
 
 `hooks/useDialogBehavior.ts` is the behaviour every modal layer owes its user, in one hook: **Escape** closes it, **Tab**
 stays inside it (and wraps both ways), focus **moves in** on open and **returns** to whatever had it when the layer
-opened, and the **page behind does not scroll**. `Modal`, `SlideOver`, `EditTripModal` and the unsaved-changes dialog
+opened, and the **page behind does not scroll**. `Modal`, `SlideOver` and the unsaved-changes dialog
 (`useUnsavedChangesWarning`) all run on it. It renders nothing and sets no ARIA: the caller marks up the dialog.
 
 ```tsx

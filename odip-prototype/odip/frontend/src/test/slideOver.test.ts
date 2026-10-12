@@ -58,8 +58,8 @@ describe('useDialogBehavior', () => {
     expect(offendersOf(text => /const FOCUSABLE_SELECTOR\s*=/.test(text), ['hooks/useDialogBehavior.ts'])).toEqual([])
   })
 
-  it('is what Modal, SlideOver, EditTripModal, the unsaved-changes dialog and the nav drawer run on', () => {
-    for (const path of ['components/Modal.tsx', 'components/SlideOver.tsx', 'pages/trip-detail/EditTripModal.tsx', 'hooks/useUnsavedChangesWarning.tsx', 'components/layout/AppLayout.tsx']) {
+  it('is what Modal, SlideOver, the unsaved-changes dialog and the nav drawer run on', () => {
+    for (const path of ['components/Modal.tsx', 'components/SlideOver.tsx', 'hooks/useUnsavedChangesWarning.tsx', 'components/layout/AppLayout.tsx']) {
       expect(textOf(path), `${path} should call useDialogBehavior`).toMatch(/useDialogBehavior\(/)
     }
   })
@@ -97,7 +97,7 @@ describe('useDialogBehavior', () => {
   })
 
   it('aria-modal appears only on dialogs that run on the hook', () => {
-    const allowed = ['components/Modal.tsx', 'components/SlideOver.tsx', 'components/layout/AppLayout.tsx', 'hooks/useUnsavedChangesWarning.tsx', 'pages/trip-detail/EditTripModal.tsx']
+    const allowed = ['components/Modal.tsx', 'components/SlideOver.tsx', 'components/layout/AppLayout.tsx', 'hooks/useUnsavedChangesWarning.tsx']
     expect(offendersOf(text => /aria-modal=/.test(text), allowed)).toEqual([])
     for (const path of allowed) expect(textOf(path), `${path} marks itself modal, so it must run on the hook`).toMatch(/useDialogBehavior\(/)
   })
