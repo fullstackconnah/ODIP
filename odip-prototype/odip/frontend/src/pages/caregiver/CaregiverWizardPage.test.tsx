@@ -292,3 +292,41 @@ describe('App — /caregiver/:token route registration', () => {
     expect(screen.queryByRole('navigation', { name: /main/i })).not.toBeInTheDocument()
   })
 })
+
+// PARTICIPANTS-6: "Save and continue later" checks the name first, says when the save failed, and says when it worked.
+describe('CaregiverWizardPage — Save and continue later', () => {
+  async function open() {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    return user
+  }
+
+  it('asks for the name before saving, with the message the form uses', async () => {
+    const user = await open()
+    await user.click(screen.getByRole('button', { name: 'Save and continue later' }))
+
+    expect(mockSaveDraftMutateAsync).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent('Please enter your name')
+  })
+
+  it('says the save failed, in plain words', async () => {
+    const user = await open()
+    mockSaveDraftMutateAsync.mockRejectedValue({ response: { status: 500, data: { message: 'NullReferenceException at Odip.Api' } } })
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    await user.click(screen.getByRole('button', { name: 'Save and continue later' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't save your progress.")
+    expect(screen.queryByText(/NullReferenceException/)).not.toBeInTheDocument()
+  })
+
+  it('says the progress was saved', async () => {
+    const user = await open()
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    await user.click(screen.getByRole('button', { name: 'Save and continue later' }))
+
+    expect(mockSaveDraftMutateAsync).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText(/Progress saved/)).toHaveAttribute('role', 'status')
+  })
+})
