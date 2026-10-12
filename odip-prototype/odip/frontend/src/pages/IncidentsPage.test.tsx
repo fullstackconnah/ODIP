@@ -749,7 +749,7 @@ describe('IncidentsPage — incident type label', () => {
 
 // Platform review V2-A (Incidents 3): the phone card was a grid of caps labels with blank space under it.
 describe('IncidentsPage — phone card', () => {
-  it('puts the title and status on the title line, the facts on one muted line, Reported by included', () => {
+  it('puts the title and status on the title line, the facts on one muted line, and the reporter as a labelled field', () => {
     mockUseIncidents.mockReturnValue({ data: [baseIncident({ incidentType: 'MedicationError', reportedByName: 'Pat Jones' })], isLoading: false })
     renderPage()
 
@@ -757,7 +757,10 @@ describe('IncidentsPage — phone card', () => {
     expect(row.querySelector('td[data-label="Title"]')).toHaveAttribute('data-card', 'primary')
     expect(row.querySelector('td[data-label="Status"]')).toHaveAttribute('data-card', 'status')
     for (const label of ['Type', 'Severity', 'Date']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
-    // VC check A: the reporter stays on the card, on the muted line.
-    expect(row.querySelector('td[data-label="Reported By"]')).toHaveAttribute('data-card', 'meta')
+    // On the muted line the reporter's name sat unlabelled beside the participant's; as a labelled field it says who it is.
+    const reporter = row.querySelector('td[data-label="Reported By"]') as HTMLElement
+    expect(reporter).not.toHaveAttribute('data-card')
+    expect(reporter).not.toHaveClass('max-md:hidden')
+    expect(reporter).toHaveTextContent('Pat Jones')
   })
 })

@@ -35,11 +35,6 @@ const VIEW_OPTIONS: { key: View; label: string }[] = [
   { key: 'archived', label: 'Archived' },
 ]
 
-/**
- * What each view asks the server for. Active is the operational register (the server owns the stage rule, so a browser filter cannot
- * bypass onboarding). Archived is every finalised participant who is not active, NOT narrowed by that rule: someone archived after
- * going through onboarding has an onboarding row and would otherwise be listed nowhere they could be restored from.
- */
 // A care need the phone card must not lose: the table keeps the tick a 'boolean' column draws, the card shows the need as a chip.
 function CareNeed({ label }: { label: string }) {
   return (
@@ -50,6 +45,11 @@ function CareNeed({ label }: { label: string }) {
   )
 }
 
+/**
+ * What each view asks the server for. Active is the operational register (the server owns the stage rule, so a browser filter cannot
+ * bypass onboarding). Archived is every finalised participant who is not active, NOT narrowed by that rule: someone archived after
+ * going through onboarding has an onboarding row and would otherwise be listed nowhere they could be restored from.
+ */
 function listParams(view: View, search: string): Record<string, string> {
   const params: Record<string, string> = view === 'archived'
     ? { isActive: 'false', isDraft: 'false' }

@@ -284,7 +284,7 @@ export default function IncidentsPage() {
     },
     { key: 'severity', header: 'Severity', mobile: 'meta', render: (i) => <StatusBadge status={i.severity} /> },
     { key: 'status', header: 'Status', mobile: 'status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
-    { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem', mobile: 'meta' },
+    { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem' },
     { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta' },
     {
       key: 'qscReportingStatus',
