@@ -3,6 +3,7 @@ import type { TruncatableList } from '@/api/hooks/pagedList'
 import { Link } from 'react-router-dom'
 import { DataTable } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
+import { SearchInput } from '@/components/SearchInput'
 import { BudgetWarnings } from '@/components/BudgetWarnings'
 import { Dropdown } from '@/components/Dropdown'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -51,7 +52,10 @@ function Needs({ booking }: { booking: BookingListDto }) {
 export default function BookingsPage() {
   const { canWrite } = usePermissions()
   const [page, setPage] = useState(1)
-  const { data: bookings = [], isLoading, isError, refetch } = useBookings({ page: String(page), pageSize: String(BOOKINGS_PAGE_SIZE) })
+  const [search, setSearch] = useState('')
+  const term = search.trim()
+  // The list is paged on the server, so the search is a server parameter (participant or trip name): a client filter would search one page.
+  const { data: bookings = [], isLoading, isError, refetch } = useBookings({ page: String(page), pageSize: String(BOOKINGS_PAGE_SIZE), ...(term ? { search: term } : {}) })
   // `bookings` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
   // while loading is a plain array without that extra field — read it as optional, same pattern
   // as IncidentsPage/RegisterTab.
@@ -89,7 +93,9 @@ export default function BookingsPage() {
       <PageHeader
         title="Bookings"
         subtitle={loadFailed ? undefined : plural(totalCount, 'booking')}
-      />
+      >
+        <SearchInput value={search} onChange={value => { setSearch(value); setPage(1) }} placeholder="Search participants or trips..." />
+      </PageHeader>
 
       {budgetNotice && <BudgetWarnings warnings={budgetNotice.warnings} note={bookingBudgetNote(budgetNotice)} onDismiss={() => setBudgetNotice(null)} />}
 
@@ -99,7 +105,14 @@ export default function BookingsPage() {
         </Callout>
       )}
 
-      {loadFailed ? <PageState kind="error" noun="booking list" onRetry={() => refetch()} /> : isLoading ? <PageState kind="loading" noun="bookings" /> : bookings.length === 0 ? (
+      {loadFailed ? <PageState kind="error" noun="booking list" onRetry={() => refetch()} /> : isLoading ? <PageState kind="loading" noun="bookings" /> : bookings.length === 0 && term ? (
+        <EmptyState
+          icon={CalendarCheck}
+          title="No results for your search"
+          description="Try a different search term, or clear your search to see all bookings."
+          action={{ label: 'Clear search', onClick: () => setSearch('') }}
+        />
+      ) : bookings.length === 0 ? (
         <EmptyState
           icon={CalendarCheck}
           title="No bookings yet"
