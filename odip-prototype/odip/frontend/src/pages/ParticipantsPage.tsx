@@ -6,6 +6,7 @@ import { Callout } from '@/components/Callout'
 import { PLAN_TYPE_LABELS, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
+import { PageState } from '@/components/PageState'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
 import { TextField } from '@/components/TextField'
 import { ToggleGroup } from '@/components/ToggleGroup'
@@ -380,12 +381,7 @@ function useParticipantsScreen() {
       )}
       {errorNotice}
       {loadFailed ? (
-        <Callout
-          tone="error"
-          actions={<button type="button" className="font-medium underline shrink-0" onClick={() => refetch()}>Retry</button>}
-        >
-          Could not load participants. Please try again.
-        </Callout>
+        <PageState kind="error" noun="participant list" onRetry={() => refetch()} />
       ) : !isLoading && participants.length === 0 ? (
         emptyState
       ) : (

@@ -12,6 +12,7 @@ import TripsPage from './TripsPage'
 import IncidentsPage from './IncidentsPage'
 import QualificationsPage from './QualificationsPage'
 import SchedulePage from './SchedulePage'
+import { ParticipantsTable } from './ParticipantsPage'
 import UsersTab from './settings/UsersTab'
 import TenantsTab from './settings/TenantsTab'
 import RegisterTab from './medications/RegisterTab'
@@ -37,6 +38,7 @@ const pages: [string, ComponentType, RegExp][] = [
   ['IncidentsPage', IncidentsPage, /No incidents reported/],
   ['QualificationsPage', QualificationsPage, /No staff members yet/],
   ['SchedulePage', SchedulePage, /No trips scheduled/],
+  ['ParticipantsPage', ParticipantsTable, /No participants yet/],
   ['UsersTab', () => <UsersTab onAddUser={noop} onEditUser={noop} />, /No users found/],
   ['TenantsTab', () => <TenantsTab onAddTenant={noop} onEditTenant={noop} onViewTenantDetail={noop} />, /No tenants yet/],
   ['RegisterTab', RegisterTab, /No medications in the register yet/],
