@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import IncidentsPage from './IncidentsPage'
 
-const { mockUseIncidents, mockUseOverdueQscIncidents, mockUseFlaggedShiftNotes, mockNavigate, mockRestoreMutate } = vi.hoisted(() => ({
+const { mockUseIncidents, mockUseOverdueQscIncidents, mockUseFlaggedShiftNotes, mockNavigate, mockRestoreMutate, mockDeleteMutate } = vi.hoisted(() => ({
+  mockDeleteMutate: vi.fn(),
   mockRestoreMutate: vi.fn(),
   mockUseIncidents: vi.fn(),
   mockUseOverdueQscIncidents: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock('@/api/hooks', () => ({
   useIncidents: mockUseIncidents,
   useOverdueQscIncidents: mockUseOverdueQscIncidents,
   useRestoreIncident: () => ({ mutate: mockRestoreMutate, isPending: false }),
-  useDeleteIncident: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteIncident: () => ({ mutate: mockDeleteMutate, isPending: false }),
   useFlaggedShiftNotes: mockUseFlaggedShiftNotes,
 }))
 
@@ -705,5 +706,31 @@ describe('IncidentsPage — restoring an archived incident', () => {
 
     expect(mockRestoreMutate).toHaveBeenCalledTimes(1)
     expect(mockRestoreMutate.mock.calls[0][0]).toEqual({ id: 'inc-9', data: { status: 'Draft' } })
+  })
+})
+
+// STAFF-5: an archive the server refuses says why above the list.
+describe('IncidentsPage — a refused archive', () => {
+  it('shows the server message', async () => {
+    const user = userEvent.setup()
+    mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
+    mockDeleteMutate.mockImplementation((_id: unknown, o?: { onError?: (e: unknown) => void }) => o?.onError?.({ response: { status: 403, data: { message: 'You do not have permission to do that.' } } }))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Archive' }))
+
+    expect(screen.getByText('You do not have permission to do that.')).toBeInTheDocument()
+  })
+})
+
+// STAFF-6: the title opens the incident, for every role that sees the list (the detail route admits them all).
+describe('IncidentsPage — the title links to the incident', () => {
+  it.each(['Admin', 'Coordinator', 'ReadOnly', 'SupportWorker'])('links the title for %s', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'user-1', role }))
+    mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
+    renderPage()
+
+    expect(screen.getByRole('link', { name: 'Slip in kitchen' })).toHaveAttribute('href', '/incidents/inc-1')
   })
 })

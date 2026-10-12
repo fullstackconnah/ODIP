@@ -11,7 +11,8 @@ vi.mock('@/lib/permissions', () => ({
   usePermissions: () => perms,
 }))
 
-const { mockUpdateMutate } = vi.hoisted(() => ({
+const { mockUpdateMutate, mockDeleteMutate } = vi.hoisted(() => ({
+  mockDeleteMutate: vi.fn(),
   mockUpdateMutate: vi.fn(),
 }))
 
@@ -20,7 +21,7 @@ const { mockUseTasks } = vi.hoisted(() => ({ mockUseTasks: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
   useTasks: mockUseTasks,
   useUpdateTask: () => ({ mutate: mockUpdateMutate, mutateAsync: vi.fn() }),
-  useDeleteTask: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeleteTask: () => ({ mutate: mockDeleteMutate, mutateAsync: vi.fn() }),
 }))
 
 function renderPage() {
@@ -331,5 +332,19 @@ describe('TasksPage — View for ReadOnly on a linked task', () => {
 
     expect(screen.getByRole('link', { name: 'Cover leave for Sam' })).toHaveAttribute('href', '/rostering/leave')
     expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/tasks/t9/edit')
+  })
+})
+
+// STAFF-5: an archive the server refuses says why above the list.
+describe('TasksPage — a refused archive', () => {
+  it('shows the server message', async () => {
+    const user = userEvent.setup()
+    mockDeleteMutate.mockImplementation((_id: unknown, o?: { onError?: (e: unknown) => void }) => o?.onError?.({ response: { status: 403, data: { message: 'You do not have permission to do that.' } } }))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Archive' }))
+
+    expect(screen.getByText('You do not have permission to do that.')).toBeInTheDocument()
   })
 })
