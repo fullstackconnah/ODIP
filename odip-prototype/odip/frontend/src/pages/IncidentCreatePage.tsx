@@ -564,6 +564,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         visitedSteps={wizard.visitedSteps}
         currentKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
         onSelect={wizard.goToStep}
+        // One row at every width: the rail sits in the page flow above the form, where the vertical list cost about 200px (V2-E).
+        orientation="horizontal"
         ariaLabel="Incident report steps"
       />
 

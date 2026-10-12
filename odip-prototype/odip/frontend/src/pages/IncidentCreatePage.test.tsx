@@ -1328,3 +1328,18 @@ describe('IncidentCreatePage — editing an unknown incident', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
 })
+
+// V2-E: the rail is the horizontal step row at every width. From lg it used to turn into a vertical four-line list about 200px tall in the page flow, above the form.
+describe('IncidentCreatePage — the step rail is one row', () => {
+  it('never stacks into the vertical list, and still says which step this is', () => {
+    renderCreatePage()
+    const rail = screen.getByRole('navigation', { name: 'Incident report steps' })
+    expect(rail).toHaveTextContent(/Step 1 of \d/)
+    expect(rail.querySelector('ol')!.className).not.toMatch(/lg:flex-col/)
+  })
+
+  it('offers Cancel on the first step', () => {
+    renderCreatePage()
+    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/incidents')
+  })
+})

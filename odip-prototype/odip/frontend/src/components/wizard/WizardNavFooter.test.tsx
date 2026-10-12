@@ -86,3 +86,14 @@ describe('WizardNavFooter', () => {
     expect(screen.getByRole('button', { name: 'Next' })).toBeInTheDocument()
   })
 })
+
+// V2-E: the first step has no Back, so it offers the way out in that slot: Cancel, to the same place as the review step's Cancel.
+describe('WizardNavFooter — the first step', () => {
+  it('offers Cancel where Back would be, and only on a step without Back', () => {
+    const { unmount } = renderFooter({ showBack: false })
+    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/participants')
+    unmount()
+    renderFooter({ showBack: true })
+    expect(screen.queryByRole('link', { name: 'Cancel' })).not.toBeInTheDocument()
+  })
+})

@@ -11,7 +11,7 @@ export type WizardNavFooterProps = {
    * ("Save as draft" and PF-1's "Save changes" are exact complements), but the shell doesn't
    * enforce that; it just maps over whatever it's given. */
   secondaryActions: WizardSecondaryAction[]
-  /** Destination for the Review step's "Cancel" link. */
+  /** Destination for "Cancel": the Review step's, and the first step's (where Back would be). */
   cancelTo: string
   submitLabel: string
   isSubmitting: boolean
@@ -43,8 +43,11 @@ export function WizardNavFooter({
   return (
     <div className={`sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 ${summary ? 'flex-row flex-wrap items-center justify-between' : 'flex-col'} gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between`}>
       <div className="flex min-w-0 flex-wrap items-center gap-3">
-        {showBack && (
+        {/* The first step has no Back, so the way out takes its place (the review step has its own Cancel). */}
+        {showBack ? (
           <Button type="button" variant="secondary" onClick={onBack}>Back</Button>
+        ) : !isReviewStep && (
+          <Button variant="secondary" to={cancelTo}>Cancel</Button>
         )}
         {secondaryActions.map((action) => (
           <Button
