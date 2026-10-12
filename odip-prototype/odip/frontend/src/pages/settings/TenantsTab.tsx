@@ -5,7 +5,7 @@ import { DataTable } from '@/components/DataTable'
 import type { TenantSummaryDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { PageState } from '@/components/PageState'
-import { formatDateAu } from '@/lib/utils'
+import { formatInstantDateAu } from '@/lib/format'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -95,7 +95,7 @@ export default function TenantsTab({
             key: 'createdAt',
             header: 'Created',
             className: 'text-[var(--color-muted-foreground)]',
-            render: (tenant: TenantSummaryDto) => formatDateAu(tenant.createdAt),
+            render: (tenant: TenantSummaryDto) => formatInstantDateAu(tenant.createdAt),
           },
           { key: 'userCount', header: 'Users', className: 'text-[var(--color-muted-foreground)]' },
           {

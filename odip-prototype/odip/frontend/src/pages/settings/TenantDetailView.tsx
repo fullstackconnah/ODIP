@@ -6,7 +6,7 @@ import { useAdminTenantProviderSettings } from '@/api/hooks/admin'
 import { DataTable } from '@/components/DataTable'
 import type { TenantSummaryDto, TenantUserDto, ProviderSettingsDto } from '@/api/types'
 import { Button } from '@/components/Button'
-import { formatDateAu } from '@/lib/utils'
+import { formatInstantDateAu } from '@/lib/format'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -105,7 +105,7 @@ export default function TenantDetailView({
         />
         <SummaryCard
           icon={<Clock className="w-5 h-5 text-[var(--color-muted-foreground)]" />}
-          value={formatDateAu(tenant.createdAt)}
+          value={formatInstantDateAu(tenant.createdAt)}
           label="Created"
           loading={false}
         />
