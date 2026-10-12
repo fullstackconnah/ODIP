@@ -734,3 +734,14 @@ describe('IncidentsPage — the title links to the incident', () => {
     expect(screen.getByRole('link', { name: 'Slip in kitchen' })).toHaveAttribute('href', '/incidents/inc-1')
   })
 })
+
+// Platform review V2-B: the Type column printed the raw enum ("MedicationError").
+describe('IncidentsPage — incident type label', () => {
+  it('shows the incident type in words', () => {
+    mockUseIncidents.mockReturnValue({ data: [baseIncident({ incidentType: 'MedicationError' })], isLoading: false })
+    renderPage()
+
+    expect(screen.getByText('Medication Error')).toBeInTheDocument()
+    expect(screen.queryByText('MedicationError')).not.toBeInTheDocument()
+  })
+})

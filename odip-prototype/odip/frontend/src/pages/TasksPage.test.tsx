@@ -141,9 +141,11 @@ describe('TasksPage — obligation-engine tasks (item 9)', () => {
     expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/rostering?date=2026-08-17&participant=p-1')
   })
 
-  it('still shows the raw type text for an existing task type not in the new label map', () => {
+  // Platform review V2-B: every type has a label now, the trip-bound ones included (it printed "AccommodationRequest").
+  it('shows an existing task type in words too, never the raw enum', () => {
     renderPage()
-    expect(screen.getByText('AccommodationRequest')).toBeInTheDocument()
+    expect(screen.getByText('Accommodation request')).toBeInTheDocument()
+    expect(screen.queryByText('AccommodationRequest')).not.toBeInTheDocument()
   })
 })
 

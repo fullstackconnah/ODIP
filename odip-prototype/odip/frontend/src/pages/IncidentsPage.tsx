@@ -1,7 +1,7 @@
 import { useIncidents, useRestoreIncident, useDeleteIncident, useOverdueQscIncidents, useFlaggedShiftNotes } from '@/api/hooks'
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import type { IncidentListDto, FlaggedShiftNoteDto } from '@/api/types'
-import { INCIDENT_STATUS_LABELS, type IncidentStatus } from '@/api/types/enums'
+import { INCIDENT_STATUS_LABELS, INCIDENT_TYPE_LABELS, type IncidentStatus, type IncidentType } from '@/api/types/enums'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -252,7 +252,7 @@ export default function IncidentsPage() {
       // The way into the incident for every role that sees the list; the cap sits on the link itself so its focus ring is not clipped.
       render: (i) => <Link to={`/incidents/${i.id}`} title={i.title ?? undefined} className={`block md:truncate md:max-w-[15rem] 2xl:max-w-[18rem] text-[var(--color-primary)] hover:underline ${TAP_TRUNCATED_LINK}`}>{i.title ?? '—'}</Link>,
     },
-    { key: 'incidentType', header: 'Type', maxWidth: '9rem' },
+    { key: 'incidentType', header: 'Type', maxWidth: '9rem', render: (i) => INCIDENT_TYPE_LABELS[i.incidentType as IncidentType] ?? i.incidentType },
     {
       key: 'tripName',
       header: 'Trip',

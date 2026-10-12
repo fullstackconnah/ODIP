@@ -16,7 +16,10 @@ import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { deadlineState } from '@/lib/deadline'
 import { toUpdateStaffDto, type StaffListDto, type UpdateStaffDto } from '@/api/types/staff'
+import { POSITION_LABELS } from '@/api/types/enums'
 import { plural } from '@/lib/format'
+
+const positionLabel = (s: StaffListDto) => POSITION_LABELS[s.position] ?? s.position ?? ''
 
 // A worker screening is expired once its expiry day has passed (expiring today is not yet expired): lib/deadline.ts, a calendar-day compare.
 const isExpired = (date: string) => deadlineState(date, { warnDays: 0 }).status === 'overdue'
@@ -57,7 +60,7 @@ export default function StaffPage() {
   const staff = search
     ? staffData.filter((s: StaffListDto) => {
         const q = search.toLowerCase()
-        return s.fullName?.toLowerCase().includes(q) || s.position?.toLowerCase().includes(q) || s.region?.toLowerCase().includes(q)
+        return s.fullName?.toLowerCase().includes(q) || positionLabel(s).toLowerCase().includes(q) || s.region?.toLowerCase().includes(q)
       })
     : staffData
 
@@ -95,7 +98,7 @@ export default function StaffPage() {
     // Column budget (density §4): eleven columns need ~1140px, the box at 1280 is ~1006. The text columns are capped (ellipsis, full
     // text in the tooltip); every column stays (Manual and Overnight were deleted below 1536, L3-04), and what does not fit scrolls in the
     // box with the name and the row actions pinned, so the actions stay on screen whatever the names and regions are.
-    { key: 'position', header: 'Position', sortable: true, maxWidth: '7rem' },
+    { key: 'position', header: 'Position', sortable: true, render: positionLabel },
     { key: 'region', header: 'Region', sortable: true, maxWidth: '7rem' },
     { key: 'isDriverEligible', header: 'Driver', type: 'boolean', align: 'center' },
     { key: 'isFirstAidQualified', header: 'First Aid', type: 'boolean', align: 'center' },

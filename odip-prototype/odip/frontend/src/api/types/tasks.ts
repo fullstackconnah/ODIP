@@ -1,16 +1,28 @@
 import type { TaskType, TaskPriority, TaskItemStatus } from './enums'
 
-/** Item 9 (tasks as the obligation engine): the label map for every TaskType, including the
- * obligation-engine types that have no trip to hang off (LeaveCoverage, IncidentQscReport,
- * MedicationWitness, FlaggedNoteFollowUp). Existing types keep rendering their raw enum text
- * elsewhere (TasksPage falls back to the raw value for any key not listed here), so only the new
- * types are given a friendly label — this isn't a full relabel of the column. */
-export const TASK_TYPE_LABELS: Partial<Record<TaskType, string>> = {
+/** Every TaskType in words, for the task list and anywhere else a type is shown (item 9 added the obligation-engine ones; platform
+ * review V2-B the rest, which printed the raw enum). */
+export const TASK_TYPE_LABELS: Record<TaskType, string> = {
+  AccommodationRequest: 'Accommodation request',
+  AccommodationConfirmation: 'Accommodation confirmation',
+  VehicleRequest: 'Vehicle request',
+  VehicleConfirmation: 'Vehicle confirmation',
+  ParticipantConfirmation: 'Participant confirmation',
+  FamilyContact: 'Family contact',
+  InvoiceOop: 'Invoice / OOP',
+  StaffingAllocation: 'Staffing allocation',
+  RiskReview: 'Risk review',
+  MedicationCheck: 'Medication check',
+  PreDeparture: 'Pre-departure',
+  PostTrip: 'Post-trip',
+  InsuranceConfirmation: 'Insurance confirmation',
+  GenerateNdisClaims: 'Generate NDIS claims',
   LeaveCoverage: 'Leave coverage',
   IncidentQscReport: 'QSC incident report',
   MedicationWitness: 'Medication witness',
   FlaggedNoteFollowUp: 'Flagged note follow-up',
   BudgetEmergencyReview: 'Budget emergency review',
+  Other: 'Other',
 }
 
 export interface TaskDto {

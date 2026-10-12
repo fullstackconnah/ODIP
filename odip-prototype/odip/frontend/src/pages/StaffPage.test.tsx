@@ -275,10 +275,11 @@ describe('StaffPage — column budget', () => {
     }
   })
 
-  it('caps Position and Region, and truncates the name link on the link itself with the full name in a tooltip', () => {
+  // Platform review V2-B: Position no longer cuts "Senior support worker" at 7rem; it is in words now, so it gets the default cap.
+  it('caps Region, not Position, and truncates the name link on the link itself with the full name in a tooltip', () => {
     renderPage()
     const row = screen.getByRole('link', { name: 'Alex Rivera' }).closest('tr')!
-    expect(within(row).getByText('Coordinator')).toHaveStyle('--cell-max: 7rem')
+    expect(within(row).getByText('Coordinator')).not.toHaveStyle('--cell-max: 7rem')
     expect(within(row).getByText('North')).toHaveStyle('--cell-max: 7rem')
     const link = screen.getByRole('link', { name: 'Alex Rivera' })
     expect(link).toHaveClass('block', 'truncate', 'md:max-w-[11rem]')
@@ -379,5 +380,20 @@ describe('StaffPage — refused writes are shown', () => {
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Archive' }))
 
     expect(screen.getByText('You do not have permission to do that.')).toBeInTheDocument()
+  })
+})
+
+// Platform review V2-B: the list printed the raw enum (SupportWorker).
+describe('StaffPage — position label', () => {
+  it('shows the position in words, and search finds it by those words', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(screen.getByText('Support worker')).toBeInTheDocument()
+    expect(screen.queryByText('SupportWorker')).not.toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText(/search staff/i), 'support worker')
+    expect(screen.getByText('Sam Lee')).toBeInTheDocument()
+    expect(screen.queryByText('Alex Rivera')).not.toBeInTheDocument()
   })
 })
