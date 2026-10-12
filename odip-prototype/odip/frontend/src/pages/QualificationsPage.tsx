@@ -8,7 +8,8 @@ import { Card } from '@/components/Card'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import { PageHeader } from '@/components/PageHeader'
-import { UserCog } from 'lucide-react'
+import { Settings, UserCog } from 'lucide-react'
+import { Button } from '@/components/Button'
 import { usePermissions } from '@/lib/permissions'
 import { staffCredentials, credentialIssueCount } from '@/lib/credentials'
 import { DEADLINE_TONE, deadlineLabel, type DeadlineState, type DeadlineStatus } from '@/lib/deadline'
@@ -74,7 +75,7 @@ function buildGroups(staff: StaffListDto[], warningDays: number): StaffGroup[] {
 }
 
 export default function QualificationsPage() {
-  const { canWrite } = usePermissions()
+  const { canWrite, canAccessPage } = usePermissions()
   const { data: settings } = useSettings()
   const { data: allStaff = [], isLoading, isError, refetch } = useStaff({ isActive: 'true' })
   const updateStaff = useUpdateStaff()
@@ -129,7 +130,7 @@ export default function QualificationsPage() {
   const tabs: { key: FilterTab; label: string }[] = [
     { key: 'all', label: `All issues (${counts.all})` },
     { key: 'expired', label: `Expired (${counts.expired})` },
-    { key: 'expiring', label: `Expiring soon (${counts.expiring})` },
+    { key: 'expiring', label: `Expiring within ${warningDays} days (${counts.expiring})` },
     { key: 'no-date', label: `No date set (${counts['no-date']})` },
   ]
 
@@ -137,8 +138,17 @@ export default function QualificationsPage() {
 
   // The Dashboard's "Qualification Issues" figure counts issues; the tabs below count staff. The subtitle says both, so 12 reads against 4.
   const issueCount = groups.reduce((sum, g) => sum + g.issueCount, 0)
+  // ReadOnly is refused Settings: it reads the window in the Expiring tab, with no link to a page that sends it back.
   const header = (
-    <PageHeader title="Qualifications" subtitle={allStaff.length > 0 ? `${plural(issueCount, 'issue')} across ${groups.length} staff` : undefined} />
+    <PageHeader
+      title="Qualifications"
+      subtitle={allStaff.length > 0 ? `${plural(issueCount, 'issue')} across ${groups.length} active staff` : undefined}
+      action={canAccessPage('settings') && (
+        <Button to="/settings?tab=qualifications" variant="secondary" size="md">
+          <Settings className="w-4 h-4" /> Warning window
+        </Button>
+      )}
+    />
   )
 
   if (allStaff.length === 0) {
