@@ -145,7 +145,7 @@ export default function TaskCreatePage() {
         <div className="text-sm text-[var(--color-muted-foreground)]">
           <Link to="/tasks" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Tasks</Link>
         </div>
-        <PageHeader title="Edit Task" />
+        <PageHeader title={viewOnly ? 'View task' : 'Edit Task'} />
         <Callout tone="error">
           Couldn't find this task. It may have been deleted, or something went wrong loading it.
         </Callout>

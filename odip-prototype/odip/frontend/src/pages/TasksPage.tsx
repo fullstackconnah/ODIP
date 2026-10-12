@@ -10,7 +10,7 @@ import { getStatusColor } from '@/lib/utils'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
-import { Filter, CheckCircle, Plus, ListChecks } from 'lucide-react'
+import { Filter, CheckCircle, Plus, ListChecks, Eye } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { plural } from '@/lib/format'
 import { localIsoDate } from '@/lib/dateOnly'
@@ -171,7 +171,12 @@ export default function TasksPage() {
         </Link>
       ) : null,
     },
-    { key: 'actions', header: '', render: (t) => mayChange(t) ? actionButtons(t) : null },
+    // ReadOnly has no Edit: View opens the task itself, which a linked task's title does not (it goes to the linked page).
+    { key: 'actions', header: '', render: (t) => mayChange(t) ? actionButtons(t) : isReadOnly && !isBudgetReview(t) ? (
+      <Button to={`/tasks/${t.id}/edit`} variant="ghost" size="sm" iconOnly title="View" aria-label="View">
+        <Eye className="w-4 h-4" />
+      </Button>
+    ) : null },
   ]
 
   return (

@@ -318,3 +318,18 @@ describe('TasksPage — the Mark complete tick', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't update status. Try again.")
   })
 })
+
+// Q2 fix round 2: a task with a linkTo (leave cover, incident witness ...) sends its title elsewhere, so ReadOnly needs View in the actions to read the task itself.
+describe('TasksPage — View for ReadOnly on a linked task', () => {
+  it('shows ReadOnly a View link to the task view on a row with a linkTo', () => {
+    Object.assign(perms, { canWrite: false, isReadOnly: true })
+    mockUseTasks.mockReturnValue({
+      data: [{ id: 't9', title: 'Cover leave for Sam', taskType: 'Other', ownerName: null, dueDate: '2026-10-01', priority: 'Medium', status: 'NotStarted', linkTo: '/rostering/leave' }],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.getByRole('link', { name: 'Cover leave for Sam' })).toHaveAttribute('href', '/rostering/leave')
+    expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/tasks/t9/edit')
+  })
+})
