@@ -64,7 +64,7 @@ describe('DataTable phone card: column mobile modes', () => {
     expect(container.querySelectorAll('tbody td')).toHaveLength(columns.length)
   })
 
-  it('leaves an empty meta value off the card, so the line never shows a dash or a dangling dot', () => {
+  it('leaves an empty meta value off the card, so the line never shows a dash', () => {
     const { container } = render(<DataTable data={rows} columns={columns} keyField="id" />)
 
     const trip = container.querySelector('td[data-label="Trip"]') as HTMLElement

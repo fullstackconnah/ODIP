@@ -235,8 +235,8 @@ function pinsOf<T>(columns: Column<T>[]): Array<ColumnPin | undefined> {
 }
 
 // The phone card's placement of a column that opts in (`mobile`), on top of the card CSS in index.css: the title and its status come
-// first, a break, then the meta cells as one muted line (index.css drops their caps labels and puts a dot between them), then the
-// labelled fields as before. An empty meta value leaves the card, so the line never shows a dash or a dangling dot.
+// first, a break, then the meta cells as one muted line without caps labels (index.css), a break, then the
+// labelled fields as before. An empty meta value leaves the card, so the line never shows a dash.
 const CARD_CLASS: Record<NonNullable<ColumnBase<unknown>['mobile']>, string> = {
   primary: 'max-md:-order-2 max-md:flex-1 max-md:min-w-0',
   status: 'max-md:-order-2 max-md:ml-auto',

@@ -199,24 +199,22 @@
     margin-bottom: 2px;
   }
   /*
-   * A card whose columns opt in with DataTable `mobile` (title, status, meta): those cells carry no caps label, a zero-height break
-   * (the row's own ::before, ordered between them) ends the title line, and the meta cells follow as one line with a dot between values.
-   * Row gaps become top margins, so the meta line sits close under the title while the labelled fields keep their spacing.
+   * A card whose columns opt in with DataTable `mobile` (title, status, meta): those cells carry no caps label, and two zero-height
+   * breaks (the row's own ::before and ::after, ordered around the meta cells) put the title line first, then the meta values as their
+   * own wrapping line, then the labelled fields. The meta values are told apart by a wider gap, not a dot: a dot starts the next line
+   * wherever a value wraps. Row gaps become top margins, so the meta line sits close under the title while the fields keep their spacing.
    */
   .mobile-card-table tbody td[data-card]::before {
     content: none;
   }
-  .mobile-card-table tbody td[data-card='meta'] ~ td[data-card='meta']::before {
-    content: '\00B7';
-    display: inline;
-    margin: 0 0.375rem 0 0;
-    text-transform: none;
-    letter-spacing: 0;
+  .mobile-card-table tbody td[data-card='meta'] {
+    margin-right: 0.25rem;
   }
   .mobile-card-table tbody tr:has(> td[data-card]) {
     row-gap: 0;
   }
-  .mobile-card-table tbody tr:has(> td[data-card])::before {
+  .mobile-card-table tbody tr:has(> td[data-card])::before,
+  .mobile-card-table tbody tr:has(> td[data-card])::after {
     content: '';
     order: -1;
     flex-basis: 100%;
