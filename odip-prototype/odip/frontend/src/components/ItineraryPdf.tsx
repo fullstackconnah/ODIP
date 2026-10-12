@@ -218,7 +218,7 @@ function ItineraryDocument({ data, version }: { data: ItineraryDto; version: Exp
       {/* Schedule pages */}
       {data.days.length > 0 && (
         <Page size="A4" style={styles.page} wrap>
-          <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Day-by-Day Schedule</Text>
+          <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Day-by-day schedule</Text>
 
           {data.days.map((day: ItineraryDayDto) => (
             <View key={day.dayNumber} style={styles.dayCard} wrap={false}>

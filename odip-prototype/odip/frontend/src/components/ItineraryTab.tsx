@@ -2,6 +2,7 @@ import { useTripItinerary } from '@/api/hooks'
 import { formatCurrency, formatDateAu } from '@/lib/utils'
 import { MapPin, Clock, Users, Building2, UserCog, FileDown, Calendar, Utensils, Camera, Bus, Compass, Palette, Dumbbell, Star } from 'lucide-react'
 import { Fragment, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { Dropdown } from './Dropdown'
 import { EmptyState } from './EmptyState'
 import { PageState } from './PageState'
@@ -82,20 +83,20 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
   // [label, value] facts with a value; a 0 minimum or requirement counts as not set, as it always has.
   const recorded = (facts: [string, ReactNode][]) => facts.filter(([, value]) => !!value)
   const factGroups = ([
-    ['Trip Details', recorded([
-      ['Event Template', trip?.eventTemplateName],
+    ['Trip details', recorded([
+      ['Event template', trip?.eventTemplateName],
       ['Region', itinerary.region],
-      ['OOP Due Date', trip?.oopDueDate && formatDateAu(trip.oopDueDate)],
-      ['Booking Cutoff', trip?.bookingCutoffDate && formatDateAu(trip.bookingCutoffDate)],
-      ['Lead Coordinator', itinerary.leadCoordinatorName],
-      ['Min Participants', trip?.minParticipants],
-      ['Min Staff', trip?.minStaffRequired],
-      ['Est. Cost', Number(itinerary.totalEstimatedCost) > 0 && formatCurrency(Number(itinerary.totalEstimatedCost))],
+      ['OOP due date', trip?.oopDueDate && formatDateAu(trip.oopDueDate)],
+      ['Booking cutoff', trip?.bookingCutoffDate && formatDateAu(trip.bookingCutoffDate)],
+      ['Lead coordinator', itinerary.leadCoordinatorName],
+      ['Min participants', trip?.minParticipants],
+      ['Min staff', trip?.minStaffRequired],
+      ['Est. cost', Number(itinerary.totalEstimatedCost) > 0 && formatCurrency(Number(itinerary.totalEstimatedCost))],
     ])],
     ['Requirements', recorded([
-      ['Wheelchair Capacity', trip?.requiredWheelchairCapacity],
-      ['Required Beds', trip?.requiredBeds],
-      ['Required Bedrooms', trip?.requiredBedrooms],
+      ['Wheelchair capacity', trip?.requiredWheelchairCapacity],
+      ['Required beds', trip?.requiredBeds],
+      ['Required bedrooms', trip?.requiredBedrooms],
     ])],
   ] as [string, [string, ReactNode][]][]).filter(([, facts]) => facts.length > 0)
 
@@ -158,7 +159,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
       <div>
         <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
           <Calendar className="w-5 h-5 text-[var(--color-primary)]" />
-          Day-by-Day Schedule
+          Day-by-day schedule
         </h3>
 
         <div className="relative">
@@ -290,7 +291,12 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
         <div className="text-center py-12 text-[var(--color-muted-foreground)]">
           <Calendar className="w-12 h-12 mx-auto mb-3 opacity-40 text-[var(--color-primary)]" />
           <p className="font-medium text-[var(--color-foreground)]">No schedule has been generated yet.</p>
-          <p className="text-sm mt-1">Go to the Activities tab to generate the day-by-day schedule first.</p>
+          <p className="text-sm mt-1">
+            Go to the{' '}
+            {/* The trip page keeps its tab in ?tab=, so a link to it switches tabs (replace, as the tab strip does). */}
+            <Link to={{ search: '?tab=activities' }} replace className="font-medium text-[var(--color-primary)] underline underline-offset-2">Activities tab</Link>
+            {' '}to generate the day-by-day schedule first.
+          </p>
         </div>
       )}
     </div>

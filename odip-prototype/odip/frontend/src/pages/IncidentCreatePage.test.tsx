@@ -662,10 +662,26 @@ describe('IncidentCreatePage — IN-8 producer field trace through to Review', (
   })
 })
 
+// V-D2 follow-up: the wizard's step labels and step-card headings are sentence case, like every other heading (DESIGN.md).
+describe('IncidentCreatePage — sentence-case steps', () => {
+  it('names the steps in sentence case on the rail', () => {
+    renderCreatePage()
+    expect(screen.getAllByText('Incident details').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Incident Details')).not.toBeInTheDocument()
+  })
+
+  it('heads the Incident details step card in sentence case', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await fillBasicsMinimallyAndNext(user)
+    expect(screen.getByRole('heading', { name: 'Incident details' })).toBeInTheDocument()
+  })
+})
+
 describe('IncidentCreatePage — INC-04 RP incident authorisation determination', () => {
   it('does not show the Restrictive Practice Details card for non-RP incident types', () => {
     renderCreatePage()
-    expect(screen.queryByText('Restrictive Practice Details')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Restrictive Practice Details/i)).not.toBeInTheDocument()
   })
 
   it('shows the RP type picker once Incident Type is Restrictive Practice Use (a new step reached via Next)', async () => {
@@ -674,7 +690,7 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
 
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i })
 
-    expect(screen.getByText('Restrictive Practice Details')).toBeInTheDocument()
+    expect(screen.getByText('Restrictive practice details')).toBeInTheDocument()
     expect(screen.getByLabelText(/Restrictive Practice Type/i)).toBeInTheDocument()
   })
 
@@ -985,7 +1001,7 @@ describe('IncidentCreatePage — UX-01 SearchableSelect keyboard support', () =>
     renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
     // Edit mode's 'all' initialVisited means every step's rail button is clickable immediately.
-    await user.click(await screen.findByRole('button', { name: /Review & Compliance/i }))
+    await user.click(await screen.findByRole('button', { name: /Review & compliance/ }))
 
     const reviewedBy = await screen.findByLabelText('Reviewed By')
     await user.click(reviewedBy)

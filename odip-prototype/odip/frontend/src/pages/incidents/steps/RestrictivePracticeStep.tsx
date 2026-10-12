@@ -100,7 +100,7 @@ export function RestrictivePracticeStep({
   }
 
   return (
-    <Card title="Restrictive Practice Details" className="space-y-4">
+    <Card title="Restrictive practice details" className="space-y-4">
       <div className={formGrid}>
         <FormField label="Restrictive Practice Type" required error={errors.restrictivePracticeType?.message} className={span.medium}>
           <Dropdown
