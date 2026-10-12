@@ -280,10 +280,7 @@ export function useUpdatePattern() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateShiftPatternDto }) =>
       apiPut<ShiftPatternDto>(`/rostering/patterns/${id}`, data),
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['roster-patterns'] })
-      qc.invalidateQueries({ queryKey: ['roster-pattern', vars.id] })
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-patterns'] }),
   })
 }
 

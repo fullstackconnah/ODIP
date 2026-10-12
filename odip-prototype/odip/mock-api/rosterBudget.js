@@ -114,11 +114,12 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
         message: `Takes ${pool.name} to ${money(forecast)} of ${money(available)} for ${when}, ${money(overBy)} over.${already}${costWords}`, budget: figures,
       })
     }
+    const pct = approachingAt(used, available, approaching())
     if (used > available) {
       // The over and approaching sentences are phase 2b's participant alert words ("{pool} is $X over this period's $Y (to {end})"), so one condition is said one way everywhere.
       findings.push({ code: 'BUDGET_OVER', severity: 'Warning', requiresReason: false, message: `${pool.name} is ${money(round2(used - available))} over this period's ${money(available)} (to ${periodEnd}).`, budget: figures })
-    } else if (approachingAt(used, available, approaching()) !== null) {
-      findings.push({ code: 'BUDGET_APPROACHING', severity: 'Warning', requiresReason: false, message: `${pool.name} is at ${approachingAt(used, available, approaching())}% of this period's ${money(available)} (to ${periodEnd}).`, budget: figures })
+    } else if (pct !== null) {
+      findings.push({ code: 'BUDGET_APPROACHING', severity: 'Warning', requiresReason: false, message: `${pool.name} is at ${pct}% of this period's ${money(available)} (to ${periodEnd}).`, budget: figures })
     }
     return { findings, note: null }
   }

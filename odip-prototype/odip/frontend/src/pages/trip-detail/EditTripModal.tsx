@@ -41,6 +41,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
   const { data: allStaff = [] } = useStaff()
   const [tripEditForm, setTripEditForm] = useState<TripEditFormState | null>(null)
   const initialized = useRef(false)
+  const [errors, setErrors] = useState<{ startDate?: string; durationDays?: string }>({})
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
 
@@ -73,6 +74,13 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
 
   const handleSave = () => {
     if (!trip?.id || !tripEditForm) return
+    const found = {
+      startDate: tripEditForm.startDate ? undefined : 'Start date is required.',
+      durationDays: tripEditForm.durationDays >= 1 ? undefined : 'Duration must be at least 1 day.',
+    }
+    setErrors(found)
+    // Focus the first field in error; its message is a role="alert", so it is also announced.
+    if (found.startDate || found.durationDays) { document.getElementById(found.startDate ? 'editTripStartDate' : 'editTripDuration')?.focus(); return }
     const toOptionalString = (v: string) => v || undefined
     const toOptionalNumber = (v: number | string) => (v === '' || v === null) ? undefined : Number(v) || undefined
     const data: UpdateTripDto = {
@@ -97,15 +105,16 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
     updateTrip.mutate({ id: trip.id, data }, { onSuccess: onClose })
   }
 
+  // Below lg the bottom nav (z-50, later in the DOM) covers the screen foot: the bottom padding keeps the dialog above it and the safe-area inset.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom)+1rem)] lg:pb-4" onClick={onClose}>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="bg-[var(--color-card)] rounded-[var(--radius-md)] w-full max-w-2xl max-h-[90vh] flex flex-col shadow-[0_32px_64px_-16px_rgba(27,28,26,0.2)]"
+        className="bg-[var(--color-card)] rounded-[var(--radius-md)] w-full max-w-2xl max-h-full lg:max-h-[90vh] flex flex-col shadow-[0_32px_64px_-16px_rgba(27,28,26,0.2)]"
         onClick={e => e.stopPropagation()}
       >
         {/* Modal header */}
@@ -127,7 +136,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
             <div className="space-y-3">
               <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Basic Info</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Trip Name *</label>
                   <input value={tripEditForm.tripName} onChange={e => setTripEditForm({ ...tripEditForm, tripName: e.target.value })}
                     className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" placeholder="e.g. Beach Getaway 2026" />
@@ -168,14 +177,16 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
               <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Dates & Status</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Start Date *</label>
-                  <input type="date" value={tripEditForm.startDate} onChange={e => setTripEditForm({ ...tripEditForm, startDate: e.target.value })}
+                  <label htmlFor="editTripStartDate" className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Start Date *</label>
+                  <input id="editTripStartDate" type="date" aria-invalid={!!errors.startDate} aria-describedby={errors.startDate ? 'editTripStartDateError' : undefined} value={tripEditForm.startDate} onChange={e => { setTripEditForm({ ...tripEditForm, startDate: e.target.value }); setErrors(er => ({ ...er, startDate: undefined })) }}
                     className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                  {errors.startDate && <p id="editTripStartDateError" role="alert" className="text-xs text-[var(--color-destructive)] mt-1">{errors.startDate}</p>}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Duration (Days)</label>
-                  <input type="number" min={1} value={tripEditForm.durationDays} onChange={e => setTripEditForm({ ...tripEditForm, durationDays: Number(e.target.value) })}
+                  <label htmlFor="editTripDuration" className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Duration (Days)</label>
+                  <input id="editTripDuration" type="number" aria-invalid={!!errors.durationDays} aria-describedby={errors.durationDays ? 'editTripDurationError' : undefined} min={1} value={tripEditForm.durationDays} onChange={e => { setTripEditForm({ ...tripEditForm, durationDays: Number(e.target.value) }); setErrors(er => ({ ...er, durationDays: undefined })) }}
                     className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                  {errors.durationDays && <p id="editTripDurationError" role="alert" className="text-xs text-[var(--color-destructive)] mt-1">{errors.durationDays}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Booking Cutoff</label>
@@ -200,7 +211,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
                     ]}
                   />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Lead Coordinator</label>
                   <Dropdown
                     variant="form"

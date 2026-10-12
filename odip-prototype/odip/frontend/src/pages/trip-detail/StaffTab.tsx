@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Plus, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
 import {
   useUpdateStaffAssignment,
-  useDeleteStaffAssignment,
   useCreateStaffAssignment,
   useCheckStaffAssignment,
   getRosterFindings,
@@ -56,7 +55,6 @@ interface StaffTabProps {
 
 export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProps) {
   const updateStaffAssignment = useUpdateStaffAssignment()
-  const deleteStaffAssignment = useDeleteStaffAssignment()
   const createStaffAssignment = useCreateStaffAssignment()
   const checkStaffAssignment = useCheckStaffAssignment()
   const [editingStaff, setEditingStaff] = useState<StaffAssignmentDto | null>(null)
@@ -563,7 +561,7 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
             <p>
               What would you like to do with <span className="font-medium text-[var(--color-foreground)]">{deletingStaff?.staffName}</span>'s assignment?
             </p>
-            {(updateStaffAssignment.isError || deleteStaffAssignment.isError) && (
+            {updateStaffAssignment.isError && (
               <p className="text-[var(--color-destructive)]">Something went wrong. Please try again.</p>
             )}
           </>
@@ -586,17 +584,10 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
                 }
                 updateStaffAssignment.mutate({ id: deletingStaff.id, data }, { onSuccess: () => setDeletingStaff(null) })
               }}
-              disabled={updateStaffAssignment.isPending || deleteStaffAssignment.isPending}
+              disabled={updateStaffAssignment.isPending}
               className="w-full px-4 py-2 rounded-[var(--radius-md)] bg-[#fef3c7]/60 text-sm font-medium hover:bg-[#fef3c7] transition-colors disabled:opacity-50 text-left">
               <span className="font-semibold">Cancel assignment</span>
               <span className="block text-xs text-[var(--color-muted-foreground)] mt-0.5">Mark as cancelled — keeps the record for history</span>
-            </button>
-            <button
-              onClick={() => deletingStaff && deleteStaffAssignment.mutate(deletingStaff.id, { onSuccess: () => setDeletingStaff(null) })}
-              disabled={deleteStaffAssignment.isPending || updateStaffAssignment.isPending}
-              className="w-full px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm font-medium hover:bg-[var(--color-destructive)]/20 transition-colors disabled:opacity-50 text-left">
-              <span className="font-semibold">Delete permanently</span>
-              <span className="block text-xs mt-0.5 opacity-80">Remove completely from the trip — cannot be undone</span>
             </button>
           </div>
         }
