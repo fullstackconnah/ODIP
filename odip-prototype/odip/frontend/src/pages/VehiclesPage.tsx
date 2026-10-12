@@ -5,6 +5,7 @@ import { deadlineState } from '@/lib/deadline'
 import { Plus, Pencil, Trash2, ArchiveRestore, Car, Bus, Truck, Users, Wrench, Calendar, Accessibility } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
+import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/Button'
@@ -60,7 +61,7 @@ export default function VehiclesPage() {
   const { canWrite } = usePermissions()
   const [showArchived, setShowArchived] = useState(false)
   const params: Record<string, string> = { isActive: showArchived ? 'false' : 'true' }
-  const { data: vehicles = [], isLoading } = useVehicles(params)
+  const { data: vehicles = [], isLoading, isError, refetch } = useVehicles(params)
   const deleteVehicle = useDeleteVehicle()
   const restoreVehicle = useRestoreVehicle()
   const [confirmState, setConfirmState] = useState<{ type: 'archive' | 'restore'; item: VehicleListDto } | null>(null)
@@ -101,7 +102,9 @@ export default function VehiclesPage() {
 
       {/* Loading state */}
       {isLoading ? (
-        <div className="text-center py-16 text-[var(--color-muted-foreground)]">Loading...</div>
+        <PageState kind="loading" noun="vehicles" />
+      ) : isError && vehicles.length === 0 ? (
+        <PageState kind="error" noun="vehicle list" onRetry={() => refetch()} />
       ) : vehicles.length === 0 ? (
         /* Empty state */
         <EmptyState
@@ -153,7 +156,7 @@ export default function VehiclesPage() {
                     <StatCell
                       icon={Accessibility}
                       label="Wheelchair"
-                      value={v.wheelchairPositions > 0 ? `${v.wheelchairPositions} positions` : 'None'}
+                      value={v.wheelchairPositions > 0 ? plural(v.wheelchairPositions, 'position') : 'None'}
                     />
                     <StatCell
                       icon={Wrench}

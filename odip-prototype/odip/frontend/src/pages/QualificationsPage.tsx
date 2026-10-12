@@ -6,6 +6,7 @@ import { Tabs } from '@/components/Tabs'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Card } from '@/components/Card'
 import { EmptyState } from '@/components/EmptyState'
+import { PageState } from '@/components/PageState'
 import { PageHeader } from '@/components/PageHeader'
 import { UserCog } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
@@ -82,7 +83,7 @@ export default function QualificationsPage() {
     </>
   )
   const { data: settings } = useSettings()
-  const { data: allStaff = [], isLoading } = useStaff({ isActive: 'true' })
+  const { data: allStaff = [], isLoading, isError, refetch } = useStaff({ isActive: 'true' })
   const updateStaff = useUpdateStaff()
 
   const [filterTab, setFilterTab] = useState<FilterTab>('all')
@@ -139,13 +140,7 @@ export default function QualificationsPage() {
     { key: 'no-date', label: `No Date Set (${counts['no-date']})` },
   ]
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full" />
-      </div>
-    )
-  }
+  if (isLoading) return <PageState kind="loading" noun="staff qualifications" />
 
   if (allStaff.length === 0) {
     return (
@@ -159,12 +154,12 @@ export default function QualificationsPage() {
             </>
           )}
         />
-        <EmptyState
+        {isError ? <PageState kind="error" noun="staff list" onRetry={() => refetch()} /> : <EmptyState
           icon={UserCog}
           title="No staff members yet"
           description="This page tracks expiry dates for staff certifications like First Aid, driver licences, and manual handling. Add a staff member to start tracking theirs."
           action={canWrite ? { label: 'Add staff member', to: '/staff/new' } : undefined}
-        />
+        />}
       </div>
     )
   }

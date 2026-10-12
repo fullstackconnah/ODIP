@@ -11,6 +11,7 @@ import { useNow } from '@/hooks/useNow'
 import { ALERT_SEVERITY_STYLES, ALERT_TYPE_LABELS } from '@/components/alertSeverityStyles'
 import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
 import { Card } from '@/components/Card'
+import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { AttentionBand, type BandItem } from './dashboard/AttentionBand'
@@ -93,9 +94,14 @@ export default function DashboardPage() {
     return { qualIssueCount: issues, qualIssueStaffCount: staffWithIssues }
   }, [allStaff, warningDays, today])
 
-  if (summary.isError) return (
-    <div className="p-[var(--card-pad)] text-center text-[var(--color-destructive)]">Failed to load dashboard. Please refresh the page.</div>
-  )
+  if (summary.isError) {
+    return (
+      <div className="flex flex-col gap-[var(--section-gap)]">
+        <DashboardHeader now={now} fullName={fullName} />
+        <PageState kind="error" noun="dashboard" onRetry={() => summary.refetch()} />
+      </div>
+    )
+  }
 
   // No summary yet (in flight, or paused offline) is a spinner, never a summary of zeros: the band's "All clear" is only ever said over data that arrived. The greeting and the
   // date do not wait for it, so the personality is the first thing on screen and the spinner sits under it.

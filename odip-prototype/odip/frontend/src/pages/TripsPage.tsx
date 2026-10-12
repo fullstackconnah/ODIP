@@ -8,6 +8,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Pencil, MapPin } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
+import { PageState } from '@/components/PageState'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { Dropdown } from '@/components/Dropdown'
@@ -114,7 +115,7 @@ export default function TripsPage() {
     params.status = 'Completed'
   }
 
-  const { data: allTrips = [], isLoading } = useTrips(params)
+  const { data: allTrips = [], isLoading, isError, refetch } = useTrips(params)
   // PP-63: the exact data EditTripModal needs — TripsPage already fetched it for the old
   // hand-rolled modal, so this stays even though the modal itself moved to trip-detail/.
   const { data: tripDetail } = useTrip(editingTripId ?? undefined)
@@ -334,7 +335,9 @@ export default function TripsPage() {
 
       {/* Trips list */}
       {isLoading ? (
-        <div className="py-12 text-center text-[var(--color-muted-foreground)]">Loading trips...</div>
+        <PageState kind="loading" noun="trips" />
+      ) : isError && allTrips.length === 0 ? (
+        <PageState kind="error" noun="trip list" onRetry={() => refetch()} />
       ) : trips.length === 0 ? (
         tab === 'completed' ? (
           search ? (

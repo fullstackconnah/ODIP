@@ -25,7 +25,7 @@ export default function ReportTab() {
 
   // INTAKE-08: the medication picker excludes drafts.
   const { data: participants = [] } = useParticipants({ isDraft: 'false' })
-  const { data: report, isLoading } = useAdministrationsReport({
+  const { data: report, isLoading, isError, refetch } = useAdministrationsReport({
     participantId: participantId || undefined,
     from: from || undefined,
     to: to || undefined,
@@ -111,7 +111,7 @@ export default function ReportTab() {
         </p>
       )}
 
-      {rangeInvalid ? null : !isLoading && items.length === 0 ? (
+      {rangeInvalid ? null : !isLoading && !isError && items.length === 0 ? (
         <EmptyState
           icon={FileClock}
           title="No administrations found"
@@ -124,6 +124,8 @@ export default function ReportTab() {
           keyField="id"
           sortable
           loading={isLoading}
+          error={isError}
+          onRetry={() => refetch()}
           emptyMessage="No administrations found"
         />
       )}

@@ -40,6 +40,25 @@ describe('DataTable — basic rendering', () => {
   })
 })
 
+describe('DataTable — a failed load (error)', () => {
+  it('shows the error banner with a working Try again instead of the empty message', async () => {
+    const onRetry = vi.fn()
+    render(<DataTable data={[]} columns={columns} keyField="id" emptyMessage="Nothing here yet" error onRetry={onRetry} />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't load this list/i)
+    expect(screen.queryByText('Nothing here yet')).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps rows already on screen when a later refetch fails', () => {
+    render(<DataTable data={rows} columns={columns} keyField="id" error />)
+
+    expect(screen.getByText('Bianca')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
 describe('DataTable — sortable columns', () => {
   it('marks a sortable header with aria-sort and toggles it on click: none -> asc -> desc -> none', async () => {
     const user = userEvent.setup()

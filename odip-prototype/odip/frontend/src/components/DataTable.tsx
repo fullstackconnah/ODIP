@@ -6,6 +6,7 @@ import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { TAP_AREA_LINKS } from './tapArea'
 import { plural } from '@/lib/format'
+import { PageState } from '@/components/PageState'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -87,6 +88,13 @@ export type DataTableProps<T> = {
   emptyMessage?: string
   footer?: ReactNode
   loading?: boolean
+  /**
+   * The list query failed (its `isError`). With no rows to show, the table is replaced by the house error banner with a "Try again" that calls
+   * `onRetry` (normally the query's `refetch`), never the `emptyMessage`: an empty list is an answer, a failed load is not. Rows already on
+   * screen stay when a background refetch fails, as with `PageState`.
+   */
+  error?: boolean
+  onRetry?: () => void
   editingRow?: string | number | null
   /**
    * Row keys currently in "every editable column open at once" mode — the shape DS-01's
@@ -268,6 +276,8 @@ export function DataTable<T>({
   emptyMessage = 'No data',
   footer,
   loading = false,
+  error = false,
+  onRetry,
   editingRow,
   editingRows,
   onEditChange,
@@ -402,6 +412,8 @@ export function DataTable<T>({
   const bodyRowHeight = compact ? 'md:h-[calc(var(--row-h)-4px)]' : 'md:h-[var(--row-h)]'
   const headerRowHeight = 'h-[var(--table-head-h)]'
   const dividerClass = prefs.tableVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
+
+  if (error && data.length === 0) return <PageState kind="error" noun="list" onRetry={onRetry} />
 
   return (
     <div ref={scrollRef} className={className ?? 'relative bg-[var(--color-card)] rounded-md border border-[var(--color-border)] overflow-x-auto'}>

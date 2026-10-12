@@ -51,7 +51,7 @@ export default function StaffPage() {
     editPath: (s) => `/staff/${s.id}/edit`,
   })
 
-  const { data: staffData = [], isLoading } = useStaff(params)
+  const { data: staffData = [], isLoading, isError, refetch } = useStaff(params)
   // PP-45 — StaffController's GetAll only supports `isActive`, no server-side text search, so the
   // filter is applied client-side (same approach CompatibilityPage takes for its matrix filters).
   const staff = search
@@ -178,7 +178,7 @@ export default function StaffPage() {
       {errorNotice}
       {statusError && <Callout tone="error">{statusError}</Callout>}
 
-      {!isLoading && staff.length === 0 ? (
+      {!isLoading && !isError && staff.length === 0 ? (
         search ? (
           <EmptyState
             icon={UserCog}
@@ -201,6 +201,8 @@ export default function StaffPage() {
           keyField="id"
           sortable
           loading={isLoading}
+          error={isError}
+          onRetry={() => refetch()}
           emptyMessage="No staff found"
         />
       )}
