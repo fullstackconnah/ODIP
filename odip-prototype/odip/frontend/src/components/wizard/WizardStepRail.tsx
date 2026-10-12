@@ -25,10 +25,10 @@ export type WizardStepRailProps<V> = {
    */
   ariaLabel?: string
   /**
-   * Fills the steps by state: the current step solid, the finished ones tinted, the rest on the plain accent. Off by default, and the incident and the
-   * caregiver wizards leave it off: their rail is a full-width stack from `lg`, in the page flow, and a solid band there is the loudest thing on a form
-   * page. (On main the fill never reached the DOM at all, so those two are exactly as they were.) The plan builder, the intake and the profile wizards turn
-   * it on, where the rail sits in its own column. A step that cannot be opened yet is not dimmed with `opacity`, which left its label at about 2.9:1; it
+   * Fills the steps by state: the current step solid, the finished ones tinted, the rest on the plain accent. Off by default, and the caregiver wizard
+   * leaves it off: its rail is a full-width stack from `lg`, in the page flow, and a solid band there is the loudest thing on a form page. The plan builder,
+   * the intake and the profile wizards turn it on, where the rail sits in its own column, and so does the incident wizard, whose rail is a horizontal pill
+   * row at every width (unfilled, its current step's marker was white at 20% on the cream ground: no mark at all). A step that cannot be opened yet is not dimmed with `opacity`, which left its label at about 2.9:1; it
    * keeps the full ink on a lighter fill, and the current step's focus ring stands off the pill so it can be seen against the same olive.
    */
   filled?: boolean

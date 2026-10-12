@@ -1343,3 +1343,11 @@ describe('IncidentCreatePage — the step rail is one row', () => {
     expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/incidents')
   })
 })
+
+describe('IncidentCreatePage — the current step is marked', () => {
+  it('fills the current step on the one-row rail', () => {
+    renderCreatePage()
+    const current = screen.getByRole('navigation', { name: 'Incident report steps' }).querySelector('[aria-current="step"]')!
+    expect(current).toHaveClass('bg-[var(--color-primary)]', 'text-white')
+  })
+})
