@@ -4,6 +4,7 @@ import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
+import { hasRisksHazardsSummary } from './recorded'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
 
@@ -16,11 +17,6 @@ type RisksHazardsSummaryDraft = { behaviourRiskSummary: string; notes: string }
 
 function readRisksHazardsSummary(p: ParticipantDetailDto): RisksHazardsSummaryDraft {
   return { behaviourRiskSummary: p.behaviourRiskSummary ?? '', notes: p.notes ?? '' }
-}
-
-/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
-export function hasRisksHazardsSummary(p: ParticipantDetailDto): boolean {
-  return !!(p.behaviourRiskSummary || p.notes)
 }
 
 export function ParticipantRisksHazardsSummarySection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {

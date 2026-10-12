@@ -4,6 +4,7 @@ import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
+import { hasAboutMe } from './recorded'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
 
@@ -19,11 +20,6 @@ function readAboutMe(p: ParticipantDetailDto): AboutMeDraft {
     goals: p.goals ?? '', supportAreas: p.supportAreas ?? '', strengthsFears: p.strengthsFears ?? '',
     thingsToKnow: p.thingsToKnow ?? '', whoIsImportant: p.whoIsImportant ?? '', likesDislikes: p.likesDislikes ?? '',
   }
-}
-
-/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
-export function hasAboutMe(p: ParticipantDetailDto): boolean {
-  return !!(p.goals || p.supportAreas || p.strengthsFears || p.thingsToKnow || p.whoIsImportant || p.likesDislikes)
 }
 
 export function ParticipantAboutMeSection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {

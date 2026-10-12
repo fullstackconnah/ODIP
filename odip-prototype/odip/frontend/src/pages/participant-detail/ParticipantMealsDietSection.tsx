@@ -4,6 +4,7 @@ import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
+import { hasMealsDiet } from './recorded'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
 
@@ -25,13 +26,6 @@ function readMealsDiet(p: ParticipantDetailDto): MealsDietDraft {
     favouriteBreakfast: p.favouriteBreakfast ?? '', favouriteLunch: p.favouriteLunch ?? '', favouriteDinner: p.favouriteDinner ?? '',
     medicationTricks: p.medicationTricks ?? '', foodsAlwaysEaten: p.foodsAlwaysEaten ?? '',
   }
-}
-
-/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
-export function hasMealsDiet(p: ParticipantDetailDto): boolean {
-  return !!(p.mealAssistanceDetail || p.chokingRiskMealDetail || p.modifiedDietDetail || p.pegRegimeMealDetail
-    || p.specialUtensilsDetail || p.specialDietaryNeedsDetail || p.favouriteBreakfast || p.favouriteLunch
-    || p.favouriteDinner || p.medicationTricks || p.foodsAlwaysEaten)
 }
 
 export function ParticipantMealsDietSection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {

@@ -5,6 +5,7 @@ import { FactList } from '@/components/FactList'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
+import { hasCulturalBackground } from './recorded'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
 
@@ -44,14 +45,6 @@ function readCulturalBackground(p: ParticipantDetailDto): CulturalBackgroundDraf
     receivedAdvocacyInfo: triToKey(p.receivedAdvocacyInfo),
     personalInterests: p.personalInterests ?? '', choiceControlNotes: p.choiceControlNotes ?? '',
   }
-}
-
-/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
-export function hasCulturalBackground(p: ParticipantDetailDto): boolean {
-  return p.isCald != null || p.isLgbtqi != null || p.isFamilyCommunity != null || p.isAboriginalOrTorresStraitIslander != null
-    || p.receivedRightsAndResponsibilitiesInfo != null || p.receivedPrivacyAndConfidentialityInfo != null
-    || p.receivedFeedbackInfo != null || p.receivedBeingSafeInfo != null || p.receivedAdvocacyInfo != null
-    || !!p.personalInterests || !!p.choiceControlNotes
 }
 
 export function ParticipantCulturalBackgroundSection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {

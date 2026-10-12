@@ -5,6 +5,7 @@ import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
+import { hasKeyIdentifiers } from './recorded'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 
 /** PD-7: Key Identifiers card — CORE-02's `keyIdentifiers` group, fully rendered (all fields optional, no merge needed). */
@@ -26,12 +27,6 @@ function readKeyIdentifiers(p: ParticipantDetailDto): KeyIdentifiersDraft {
     taxiCardNumber: p.taxiCardNumber ?? '', hairColour: p.hairColour ?? '', eyeColour: p.eyeColour ?? '',
     weightKg: p.weightKg != null ? String(p.weightKg) : '', heightCm: p.heightCm != null ? String(p.heightCm) : '',
   }
-}
-
-/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
-export function hasKeyIdentifiers(p: ParticipantDetailDto): boolean {
-  return !!(p.pensionCardNumber || p.medicareNumber || p.companionCardNumber || p.privateHealthFund
-    || p.taxiCardNumber || p.hairColour || p.eyeColour || p.weightKg || p.heightCm)
 }
 
 export function ParticipantKeyIdentifiersSection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {

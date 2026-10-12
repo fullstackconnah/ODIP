@@ -5,6 +5,7 @@ import { FactList } from '@/components/FactList'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
+import { hasBehaviourCommunication } from './recorded'
 import { MEMORY_LEVELS, RISK_RATING_LEVELS } from '@/api/types/enums'
 import { MEMORY_LEVEL_LABELS, RISK_RATING_LEVEL_LABELS } from '@/api/types/participants'
 import type { MemoryLevel, RiskRatingLevel } from '@/api/types/enums'
@@ -47,14 +48,6 @@ function readBehaviourCommunication(p: ParticipantDetailDto): BehaviourCommunica
     ridsLogged: triToKey(p.ridsLogged), bspPlanProvided: triToKey(p.bspPlanProvided), bocChartProvided: triToKey(p.bocChartProvided),
     expressiveSkills: p.expressiveSkills ?? '', receptiveSkills: p.receptiveSkills ?? '', readingAbility: p.readingAbility ?? '', communicationAids: p.communicationAids ?? '',
   }
-}
-
-/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
-export function hasBehaviourCommunication(p: ParticipantDetailDto): boolean {
-  return p.memory != null || p.memoryAids != null || p.impairedUnderstanding != null || p.impairedJudgementReasoning != null
-    || p.behavioursOfConcernCurrent != null || p.behavioursOfConcernFiveYearHistory != null || p.behaviourRiskRating != null
-    || p.ridsLogged != null || p.bspPlanProvided != null || p.bocChartProvided != null
-    || !!p.expressiveSkills || !!p.receptiveSkills || !!p.readingAbility || !!p.communicationAids
 }
 
 export function ParticipantBehaviourCommunicationSection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {

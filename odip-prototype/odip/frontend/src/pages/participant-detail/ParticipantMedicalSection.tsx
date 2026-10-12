@@ -6,6 +6,7 @@ import { FactList } from '@/components/FactList'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
+import { hasMedical } from './recorded'
 import { HIDPA_SUPPORT_CATEGORIES } from '@/api/types/enums'
 import {
   DIAGNOSIS_OPTIONS, DIAGNOSIS_OTHER_SENTINEL, HIDPA_CATEGORY_LABELS, HIDPA_CATEGORY_TITLES,
@@ -57,12 +58,6 @@ function readMedical(p: ParticipantDetailDto): MedicalDraft {
     hidpaNotes: p.hidpaNotes ?? '', medicalSummary: p.medicalSummary ?? '',
     allergiesDetail: p.allergiesDetail ?? '', isAnaphylaxisRisk: triToKey(p.isAnaphylaxisRisk), allergyManagementNotes: p.allergyManagementNotes ?? '',
   }
-}
-
-/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
-export function hasMedical(p: ParticipantDetailDto): boolean {
-  return !!(p.primaryDiagnosis || p.otherDiagnoses?.length || parseHidpaCategories(p.hidpaSupportCategories).length || p.hidpaNotes || p.medicalSummary
-    || p.allergiesDetail || p.isAnaphylaxisRisk != null || p.allergyManagementNotes)
 }
 
 export function ParticipantMedicalSection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {
