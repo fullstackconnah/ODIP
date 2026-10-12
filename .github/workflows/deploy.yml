@@ -24,7 +24,45 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # GitHub can start a run for an older main commit after a newer one has
+  # merged, and the concurrency group only orders the runs. This job stops the
+  # stale one so it cannot redeploy old images over the newer deploy.
+  freshness:
+    runs-on: [self-hosted, odip]
+    timeout-minutes: 5
+
+    outputs:
+      stale: ${{ steps.check.outputs.stale }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip if main has moved past this commit
+        id: check
+        run: |
+          set -euo pipefail
+          stale=false
+          # Only main is deployed from a moving tip; a manual run on another branch deploys what it was asked to.
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            git fetch --no-tags origin main
+            tip=$(git rev-parse FETCH_HEAD)
+            # Skip only when a newer commit changed something this deploy would ship.
+            # A newer doc-only commit has no run of its own, so skipping for it would leave this commit undeployed.
+            if [ "$tip" != "$GITHUB_SHA" ] && ! git diff --quiet "$GITHUB_SHA" "$tip" -- \
+                 odip-prototype/odip/backend odip-prototype/odip/frontend odip-prototype/odip/nginx \
+                 deploy/compose.yaml .github/workflows/deploy.yml; then
+              stale=true
+              echo "::notice::main has moved to $tip; the newer run deploys it"
+            fi
+          fi
+          echo "stale=$stale" >> "$GITHUB_OUTPUT"
+
   deploy:
+    needs: freshness
+    if: needs.freshness.outputs.stale != 'true'
     runs-on: [self-hosted, odip]
     timeout-minutes: 45
 
