@@ -786,6 +786,7 @@ describe('DashboardPage — loading and error keep their behaviour', () => {
     mockUseDashboard.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
     renderPage()
 
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this dashboard.")
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(refetch).toHaveBeenCalled()

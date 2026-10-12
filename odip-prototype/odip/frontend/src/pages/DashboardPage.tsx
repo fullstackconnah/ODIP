@@ -94,7 +94,14 @@ export default function DashboardPage() {
     return { qualIssueCount: issues, qualIssueStaffCount: staffWithIssues }
   }, [allStaff, warningDays, today])
 
-  if (summary.isError) return <PageState kind="error" noun="dashboard" onRetry={() => summary.refetch()} />
+  if (summary.isError) {
+    return (
+      <div className="flex flex-col gap-[var(--section-gap)]">
+        <DashboardHeader now={now} fullName={fullName} />
+        <PageState kind="error" noun="dashboard" onRetry={() => summary.refetch()} />
+      </div>
+    )
+  }
 
   // No summary yet (in flight, or paused offline) is a spinner, never a summary of zeros: the band's "All clear" is only ever said over data that arrived. The greeting and the
   // date do not wait for it, so the personality is the first thing on screen and the spinner sits under it.
