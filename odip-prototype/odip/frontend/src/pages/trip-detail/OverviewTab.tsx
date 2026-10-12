@@ -63,12 +63,12 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
           </div>
         )}
 
-        {/* The Team */}
+        {/* The team */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[var(--color-foreground)]">The Team</h3>
+            <h3 className="text-sm font-semibold text-[var(--color-foreground)]">The team</h3>
             <button className={`${TAP_AREA} text-[var(--color-primary)] text-xs font-bold hover:opacity-70 transition-opacity`} onClick={() => onSwitchTab('bookings')}>
-              Manage All
+              Manage all
             </button>
           </div>
 
@@ -176,7 +176,7 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
           <div className="bg-[var(--color-surface-container-high)] p-[var(--card-pad)] rounded-[var(--radius-md)] space-y-2">
             <h3 className="font-semibold text-sm flex items-center gap-2 text-[var(--color-foreground)]">
               <span className="material-symbols-outlined text-[var(--color-secondary)]" style={{ fontSize: '18px' }}>local_shipping</span>
-              Fleet Manifest
+              Fleet manifest
             </h3>
             <div className="space-y-1.5">
               {vehicles.map((v: VehicleAssignmentDto) => (

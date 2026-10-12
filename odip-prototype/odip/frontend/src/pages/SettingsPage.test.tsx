@@ -207,6 +207,11 @@ describe('SettingsPage — Public Holidays tab: who may change the calendar', ()
       expect(screen.getByRole('button', { name })).toBeInTheDocument()
     }
     expect(screen.queryByText(/only a super admin can add, delete or sync public holidays/i)).not.toBeInTheDocument()
+
+    // Q5 review: the sync year fields are named by their labels.
+    await user.click(screen.getByRole('button', { name: 'Advanced' }))
+    expect(screen.getByLabelText('From year')).toHaveAttribute('type', 'number')
+    expect(screen.getByLabelText('To year')).toHaveAttribute('type', 'number')
   })
 })
 
@@ -555,7 +560,7 @@ describe('SettingsPage — catalogue import preview', () => {
     await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
     const file = new File(['xlsx'], 'support-catalogue-2026-27.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file)
-    await screen.findByText('Catalogue Version')
+    await screen.findByLabelText('Catalogue version')
     return { user, file }
   }
 
@@ -609,7 +614,7 @@ describe('SettingsPage — catalogue import preview', () => {
     await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, new File(['x'], 'notes.xlsx'))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No support items found. Upload the NDIS Support Catalogue .xlsx (the 2026-27 or 2025-26 file).')
-    expect(screen.queryByText('Catalogue Version')).not.toBeInTheDocument()   // still on the upload step
+    expect(screen.queryByLabelText('Catalogue version')).not.toBeInTheDocument()   // still on the upload step
   })
 
   it("shows the server's refusal and keeps the typed version when the confirm is rejected", async () => {

@@ -631,8 +631,8 @@ function SupportCatalogueTab() {
                   </div>
                 )}
                 <div>
-                  <label className={labelClass}>Catalogue Version</label>
-                  <input value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                  <label htmlFor="catalogue-version" className={labelClass}>Catalogue version</label>
+                  <input id="catalogue-version" value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
               </div>
             )}
@@ -809,16 +809,18 @@ function PublicHolidaysTab({ canEdit }: { canEdit: boolean }) {
 
           {showSyncAdvanced && (
             <div className="flex items-center gap-3 mt-3">
-              <label className="text-sm text-[var(--color-muted-foreground)]">From year</label>
+              <label htmlFor="holiday-sync-from" className="text-sm text-[var(--color-muted-foreground)]">From year</label>
               <input
+                id="holiday-sync-from"
                 type="number"
                 value={syncFromYear ?? ''}
                 onChange={e => setSyncFromYear(e.target.value ? Number(e.target.value) : undefined)}
                 placeholder={String(new Date().getFullYear())}
                 className="w-24 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
               />
-              <label className="text-sm text-[var(--color-muted-foreground)]">To year</label>
+              <label htmlFor="holiday-sync-to" className="text-sm text-[var(--color-muted-foreground)]">To year</label>
               <input
+                id="holiday-sync-to"
                 type="number"
                 value={syncToYear ?? ''}
                 onChange={e => setSyncToYear(e.target.value ? Number(e.target.value) : undefined)}

@@ -93,15 +93,18 @@ beforeEach(() => {
 
 // Platform review Q4b follow-up: a tab whose list failed to load said "none" (its empty state). It says the load failed, with a retry.
 describe('TripDetailPage — a tab list that fails to load', () => {
-  it.each(['bookings', 'accommodation', 'vehicles', 'staff', 'tasks', 'activities', 'claims', 'incidents'])(
+  it.each([
+    ['bookings', 'booking list'], ['accommodation', 'accommodation list'], ['vehicles', 'vehicle list'], ['staff', 'staff list'],
+    ['tasks', 'task list'], ['activities', 'activity schedule'], ['claims', 'claim list'], ['incidents', 'incident list'],
+  ])(
     '%s shows the error and a retry, not the tab body',
-    async (tab) => {
+    async (tab, noun) => {
       failedLists.add(tab)
       const user = userEvent.setup()
       renderPage(`/trips/trip-1?tab=${tab}`)
 
       const panel = screen.getByRole('tabpanel')
-      expect(within(panel).getByText(/couldn't load/i)).toBeInTheDocument()
+      expect(within(panel).getByText(`Couldn't load this ${noun}. Check your connection and try again.`)).toBeInTheDocument()
       expect(within(panel).queryByText(/ panel$/)).not.toBeInTheDocument()
       await user.click(within(panel).getByRole('button', { name: 'Try again' }))
       expect(listRefetch).toHaveBeenCalledTimes(1)

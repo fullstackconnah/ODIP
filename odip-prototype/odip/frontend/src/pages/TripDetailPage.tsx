@@ -27,6 +27,12 @@ type Tab = 'overview' | 'bookings' | 'accommodation' | 'vehicles' | 'staff' | 't
 
 const TAB_KEYS: Tab[] = ['overview', 'bookings', 'accommodation', 'vehicles', 'staff', 'tasks', 'activities', 'claims', 'incidents', 'history']
 
+// What a tab's failed list is called in its error: "Couldn't load this booking list".
+const LIST_NOUNS: Partial<Record<Tab, string>> = {
+  bookings: 'booking list', accommodation: 'accommodation list', vehicles: 'vehicle list', staff: 'staff list',
+  tasks: 'task list', activities: 'activity schedule', claims: 'claim list', incidents: 'incident list',
+}
+
 export default function TripDetailPage() {
   const { canWrite, canAccessPage, isAdmin: isAdminRole, isSuperAdmin } = usePermissions()
   const { id } = useParams()
@@ -181,7 +187,7 @@ export default function TripDetailPage() {
         aria-labelledby={`trip-tab-${activeTab}`}
       >
         {activeListFailed ? (
-          <PageState kind="error" noun={`${activeTab} list`} onRetry={() => activeList?.refetch()} />
+          <PageState kind="error" noun={LIST_NOUNS[activeTab] ?? 'list'} onRetry={() => activeList?.refetch()} />
         ) : (
           <>
         {activeTab === 'overview' && id && (
