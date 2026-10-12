@@ -545,7 +545,7 @@ the room ("Grace Palmer-Hughes" reads whole at 1920).
 - **Tabs:** `text-sm` medium, olive underline on the active tab, `--tap-min` minimum height; the active tab lives in the URL (`?tab=`, through `useTabParam`: written with `replace`, dropped at the default, other params kept), so a reload and a shared link land on the same tab; count
   chips are round. Below `md` the strip is ONE row that scrolls sideways (`flex-nowrap`, scrollbar hidden),
   so ten tabs cost a single 44px row on a phone instead of five wrapped ones, and the active tab is scrolled
-  into view inside the strip when it changes; from `md` the strip wraps as it always did. Keyboard
+  into view inside the strip when it changes; from `md` the strip wraps as it always did, except a strip asked to stay one row (`overflow="scroll"`, Settings) which fades out over its last 2rem (a CSS mask) and pads its end by the same, so a cut tab reads as "more this way". Keyboard
   (arrows, Home, End, roving tabindex) and ARIA are the same at every width.
 - Icons are Material Symbols Outlined, always preceding the label (16-20px in chrome).
 
@@ -630,7 +630,7 @@ member is assigned to a trip on the Schedule (the assignments the count reads) a
 Overdue open their lists already filtered to the rule the figure counts. ReadOnly reaches the Schedule but its writes are refused, so for ReadOnly both Schedule links read "Open schedule" (the same page, no verb it cannot use).
 
 - **Tall tile.** Stacked: the display-step tabular figure, the label at the title step (14px, 600), the line at body secondary (13px) and the link (14px, 700, with a chevron), padded
-  `--section-gap` on every side (16px, 20px on touch), the airier step that no dense page uses. Nothing sits beside the figure, so the tile stays tall at any width; four lines deep it is the biggest
+  `--section-gap` on every side (16px, 20px on touch), the airier step that no dense page uses. Nothing sits beside the figure, so the tile stays tall at any width the band gives two or more tiles a row; four lines deep it is the biggest
   colour field on the page. The fill is the tone's solid pair (`TONE.danger.solid` the error container, `TONE.warning.solid` the warning container, the Attention Tint Rule), and the figure, label, line
   and link all take the matching on-container colour, so secondary text is tinted from the hue, never grey (6.4:1 on the warning container, 7.2:1 on the error container). No icon, no chip. The tile is a
   named group, so its accessible name carries the number and the label ("Overdue 2"), and holds ONE link whose name says what it does ("Open overdue tasks"). The link's pad stretches over the whole tile
@@ -650,6 +650,7 @@ Overdue open their lists already filtered to the rule the figure counts. ReadOnl
   is 4 + 3) and equal in width within a row, so every row is full and none has a hole (`pages/dashboard/bandLayout.ts`: a 60-track grid, each tile spanning 60 / its row length). The 8px between tiles is padding,
   not a grid gap (60 tracks would add 59 gaps). Nothing truncates, scrolls sideways or shrinks the type, and no label wraps inside its tile at any width.
 - **Touch.** The whole tile is the target and the link keeps a `--tap-min` floor, so it is a 44px target.
+- **Phone.** In a band under 36rem (one tile a row) a tall tile is one compact row instead: the figure, the label and a chevron, padded `--card-pad` top and bottom; the line folds away and the link's words stay as its accessible name only (the link still covers the tile). Container queries on the band, CSS only (`StatCard`), so seven tiles no longer run about 1300px before the first trip.
 
 **The Quiet Zero Rule.** Only a count somebody can act on is loud, and only that is a tile. A zero is a name in the All clear row (Pale Sprout, never a tint), and a value that is not known yet, or failed to load,
 is an en dash tile, never a 0 and never an "All clear". The band is the all-clear field only when every item has data and is at zero. If most items are tiles the band has stopped saying anything, so review

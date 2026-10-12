@@ -198,7 +198,7 @@ function ActionTile({ label, value, className, tone = 'neutral', detail, action 
         <span className="text-display tabular-nums">{value}</span>
         <span className="text-sm font-semibold leading-tight">{label}</span>
         {detail && <span className="text-[13px] leading-snug text-balance @max-[36rem]:hidden">{detail}</span>}
-        <Link to={action.to} className={`${ACTION_LINK} @max-[36rem]:ml-auto @max-[36rem]:self-center @max-[36rem]:pt-0`}>
+        <Link to={action.to} className={`${ACTION_LINK} @max-[36rem]:ml-auto @max-[36rem]:mt-0 @max-[36rem]:pt-0`}>
           <span className="@max-[36rem]:sr-only">{action.label}</span>
           <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
         </Link>
