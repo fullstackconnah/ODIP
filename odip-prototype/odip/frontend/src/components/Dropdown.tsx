@@ -293,7 +293,7 @@ export function Dropdown({
       id={panelId}
       role="listbox"
       style={panelStyle}
-      className={`bg-white rounded-md shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)] ${panelWidthClass}`}
+      className={`bg-[var(--color-card)] rounded-md shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)] ${panelWidthClass}`}
     >
       {searchable && (
         <div className="p-2">
@@ -317,7 +317,7 @@ export function Dropdown({
         visibleItems.map((item, idx) => (
           <div key={item.value}>
             {variant === 'menu' && idx > 0 && item.description && (
-              <div className="h-px bg-[rgba(195,201,181,0.25)] mx-4" />
+              <div className="h-px bg-[var(--color-border)]/25 mx-4" />
             )}
             <div
               role="option"

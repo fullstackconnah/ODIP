@@ -24,14 +24,15 @@ interface ItineraryTabProps {
   trip?: TripAdminData
 }
 
+// Palette tokens only (DESIGN.md, The Semantic Colour Rule): there are fewer tokens than categories, so some share a fill; the icon and the label tell them apart.
 const categoryConfig: Record<string, { icon: typeof Star; color: string; bg: string }> = {
   Leisure: { icon: Star, color: 'var(--color-primary)', bg: 'var(--color-primary-fixed)' },
-  Dining: { icon: Utensils, color: '#92400e', bg: '#fef3c7' },
+  Dining: { icon: Utensils, color: 'var(--color-on-warning-container)', bg: 'var(--color-warning-container)' },
   Transport: { icon: Bus, color: 'var(--color-secondary)', bg: 'var(--color-secondary-container)' },
-  Sightseeing: { icon: Camera, color: '#065f46', bg: '#d1fae5' },
+  Sightseeing: { icon: Camera, color: 'var(--color-on-primary-fixed)', bg: 'var(--color-primary-fixed)' },
   Adventure: { icon: Compass, color: 'var(--color-destructive)', bg: 'var(--color-error-container)' },
-  Cultural: { icon: Palette, color: '#9a3412', bg: '#fed7aa' },
-  Sport: { icon: Dumbbell, color: '#115e59', bg: '#ccfbf1' },
+  Cultural: { icon: Palette, color: 'var(--color-on-warning-container)', bg: 'var(--color-warning-container)' },
+  Sport: { icon: Dumbbell, color: 'var(--color-info)', bg: 'var(--color-secondary-container)' },
   Other: { icon: Star, color: 'var(--color-muted-foreground)', bg: 'var(--color-input)' },
 }
 
@@ -196,13 +197,13 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
 
         <div className="relative">
           {/* Timeline connector line */}
-          <div className="absolute left-6 top-0 bottom-0 w-1 bg-[#b9c7df] rounded-full hidden md:block" />
+          <div className="absolute left-6 top-0 bottom-0 w-1 bg-[var(--color-secondary-container)] rounded-full hidden md:block" />
 
           <div className="space-y-6">
             {itinerary.days.map((day: any) => (
               <div key={day.dayNumber} className="relative md:pl-16">
                 {/* Day number badge on timeline */}
-                <div className="hidden md:flex absolute left-0 top-5 w-12 h-12 rounded-full bg-[#8e337b] items-center justify-center text-white font-bold text-sm z-10 shadow-[0_8px_24px_-4px_rgba(142,51,123,0.35)]">
+                <div className="hidden md:flex absolute left-0 top-5 w-12 h-12 rounded-full bg-[var(--color-on-accessible-container)] items-center justify-center text-white font-bold text-sm z-10 shadow-lg">
                   {day.dayNumber}
                 </div>
 
@@ -210,7 +211,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
                   {/* Day header */}
                   <div className="bg-gradient-to-r from-[var(--color-primary)]/8 to-transparent px-5 py-4">
                     <div className="flex items-center gap-3">
-                      <span className="md:hidden w-8 h-8 rounded-full bg-[#8e337b] flex items-center justify-center text-white font-bold text-xs">{day.dayNumber}</span>
+                      <span className="md:hidden w-8 h-8 rounded-full bg-[var(--color-on-accessible-container)] flex items-center justify-center text-white font-bold text-xs">{day.dayNumber}</span>
                       <div>
                         <h4 className="font-bold text-[var(--color-foreground)]">{day.dayTitle || `Day ${day.dayNumber}`}</h4>
                         <p className="text-sm text-[var(--color-muted-foreground)]">{formatDayName(day.date)} · {formatDateAu(day.date)}</p>

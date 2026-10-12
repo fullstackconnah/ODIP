@@ -106,15 +106,15 @@ function BodySvg({ view, regions, draftRegion, hasInjury, onSelect }: BodySvgPro
         const fill = selected
           ? 'var(--color-primary)'
           : marked
-          ? 'var(--color-primary-container, #ddd6fe)'
-          : 'var(--color-muted, #e5e7eb)'
+          ? 'var(--color-primary-container)'
+          : 'var(--color-muted)'
 
         const shared = {
           'data-region': region,
           'data-testid': `svg-region-${view}-${region}`,
           onClick: () => onSelect(region),
           fill,
-          stroke: 'var(--color-border, #94a3b8)',
+          stroke: 'var(--color-border)',
           strokeWidth: 1,
           style: { cursor: 'pointer' as const },
         }

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useAdminTenantUsers } from '@/api/hooks'
 import type { TenantUserDto, ApiResponse } from '@/api/types'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { TONE } from '@/lib/tone'
 
 export default function UserSwitcher() {
   const [open, setOpen] = useState(false)
@@ -75,31 +76,31 @@ export default function UserSwitcher() {
         aria-expanded={open}
         aria-label={`USR ${currentViewUser?.fullName ?? 'View as user…'}`}
         title={currentViewUser?.fullName}
-        className="flex min-h-[var(--tap-min)] items-center gap-1.5 bg-[#fff7ed] border border-[#fed7aa] rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-[#ffedd5] transition-colors"
+        className={`flex min-h-[var(--tap-min)] items-center gap-1.5 ${TONE.warning.solid} border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 cursor-pointer hover:brightness-95 transition-[filter]`}
       >
-        <span className="text-xs bg-[#ea580c] text-white px-1.5 py-0.5 rounded font-bold tracking-wide">USR</span>
-        <span className="hidden text-sm font-semibold text-[#9a3412] sm:inline">
+        <span className="text-xs bg-[var(--color-on-warning-container)] text-[var(--color-card)] px-1.5 py-0.5 rounded font-bold tracking-wide">USR</span>
+        <span className="hidden text-sm font-semibold sm:inline">
           {currentViewUser?.fullName ?? 'View as user…'}
         </span>
-        <span className="text-[#ea580c] text-xs">▾</span>
+        <span className="text-xs">▾</span>
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-1 w-64 bg-[#1e2030] border border-[#334155] rounded-xl shadow-2xl overflow-hidden z-50">
-          <div className="px-3 py-2 border-b border-[#334155] text-xs text-[#64748b] uppercase tracking-wider">
+        <div className="absolute right-0 mt-1 w-64 bg-[var(--color-popover)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
+          <div className="px-3 py-2 border-b border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)] uppercase tracking-wider">
             View as user
           </div>
           <div className="p-1.5">
             {viewingUserId && (
               <button
                 onClick={() => { setOpen(false); setConfirmingExit(true) }}
-                className="w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-[rgba(255,255,255,0.05)] mb-1 border-b border-[#334155] pb-2"
+                className="w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-[var(--color-accent)] mb-1 border-b border-[var(--color-border)] pb-2"
               >
-                <span className="text-sm text-[#64748b]">↩ Exit view</span>
+                <span className="text-sm text-[var(--color-muted-foreground)]">↩ Exit view</span>
               </button>
             )}
             {users.length === 0 && (
-              <p className="px-2.5 py-2 text-sm text-[#64748b]">No users in this tenant</p>
+              <p className="px-2.5 py-2 text-sm text-[var(--color-muted-foreground)]">No users in this tenant</p>
             )}
             {users.map(user => (
               <button
@@ -108,15 +109,15 @@ export default function UserSwitcher() {
                 disabled={!user.isActive}
                 className={`w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors ${
                   user.id === viewingUserId
-                    ? 'bg-[rgba(234,88,12,0.15)]'
-                    : user.isActive ? 'hover:bg-[rgba(255,255,255,0.05)]' : ''
+                    ? TONE.warning.soft
+                    : user.isActive ? 'hover:bg-[var(--color-accent)]' : ''
                 } ${!user.isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${user.isActive ? 'bg-[#22c55e]' : 'bg-[#ef4444]'}`} />
-                <span className={`text-sm flex-1 ${user.id === viewingUserId ? 'text-[#e2e8f0] font-medium' : 'text-[#94a3b8]'}`}>
+                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${user.isActive ? 'bg-[var(--color-success)]' : 'bg-[var(--color-destructive)]'}`} />
+                <span className={`text-sm flex-1 ${user.id === viewingUserId ? 'text-[var(--color-foreground)] font-medium' : 'text-[var(--color-muted-foreground)]'}`}>
                   {user.fullName}
                 </span>
-                <span className="text-[13px] text-[#64748b]">{user.role}</span>
+                <span className="text-[13px] text-[var(--color-muted-foreground)]">{user.role}</span>
               </button>
             ))}
           </div>

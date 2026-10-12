@@ -10,7 +10,7 @@ import { RejectClaimDialog } from '@/components/RejectClaimDialog'
 import type { TripClaimStatus } from '@/api/types/enums'
 import type { TripClaimListDto, UpdateClaimDto } from '@/api/types/claims'
 import type { TripDetailDto } from '@/api/types/trips'
-import { extractErrorMessage } from '@/lib/utils'
+import { extractErrorMessage, getStatusColor } from '@/lib/utils'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 
@@ -21,14 +21,6 @@ const CLAIM_STATUS_ITEMS = [
   { value: 'Rejected', label: 'Rejected' },
   { value: 'PartiallyPaid', label: 'Partially Paid' },
 ]
-
-const CLAIM_STATUS_COLORS: Record<string, string> = {
-  Draft: 'bg-gray-100 text-gray-600',
-  Submitted: 'bg-blue-100 text-blue-700',
-  Paid: 'bg-[#bff285] text-[#294800]',
-  Rejected: 'bg-red-100 text-red-700',
-  PartiallyPaid: 'bg-amber-100 text-amber-700',
-}
 
 export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: string; claims: TripClaimListDto[]; trip: TripDetailDto; canWrite: boolean }) {
   const deleteClaim = useDeleteClaim()
@@ -142,7 +134,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
                   variant="pill"
                   value={c.status}
                   onChange={val => (val === 'Rejected' ? askForNdiaCode([c.id]) : updateClaim.mutate({ claimId: c.id, data: { status: val as TripClaimStatus } }))}
-                  colorClass={CLAIM_STATUS_COLORS[c.status] ?? 'bg-gray-100 text-gray-600'}
+                  colorClass={getStatusColor(c.status)}
                   items={CLAIM_STATUS_ITEMS}
                   disabled={!canWrite}
                 />
@@ -160,7 +152,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
                   {canWrite && c.status !== 'Submitted' && c.status !== 'Paid' && (
                     <button
                       onClick={() => handleDelete(c)}
-                      className="text-xs text-red-500 hover:underline"
+                      className="text-xs text-[var(--color-destructive)] hover:underline"
                     >Delete</button>
                   )}
                 </div>

@@ -342,10 +342,10 @@ function ProviderSettingsTab() {
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(dirty)
 
-  const inputClass = 'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
+  const inputClass = 'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
   // A textarea must not take inputClass's fixed height: an explicit height beats `rows`, so the invoice footer notes were one line
   // tall (and resize-none kept them that way). min-h keeps it level with the 32px / 44px inputs; h-auto lets `rows` set the height.
-  const textareaClass = 'w-full px-3 min-h-[var(--control-h)] h-auto py-1.5 rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all resize-y'
+  const textareaClass = 'w-full px-3 min-h-[var(--control-h)] h-auto py-1.5 rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all resize-y'
   const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   const f = (field: keyof ProviderSettingsDto) => ({
@@ -636,7 +636,7 @@ function SupportCatalogueTab() {
                 )}
                 <div>
                   <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Catalogue Version</label>
-                  <input value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                  <input value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
               </div>
             )}
@@ -675,7 +675,7 @@ function PublicHolidaysTab({ canEdit }: { canEdit: boolean }) {
     }
   }, [])
 
-  const inputClass = 'px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
+  const inputClass = 'px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
   function handleAdd() {
     createHoliday.mutate(newForm, {
@@ -816,7 +816,7 @@ function PublicHolidaysTab({ canEdit }: { canEdit: boolean }) {
                 value={syncFromYear ?? ''}
                 onChange={e => setSyncFromYear(e.target.value ? Number(e.target.value) : undefined)}
                 placeholder={String(new Date().getFullYear())}
-                className="w-24 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                className="w-24 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
               />
               <label className="text-sm text-[var(--color-muted-foreground)]">To year</label>
               <input
@@ -824,7 +824,7 @@ function PublicHolidaysTab({ canEdit }: { canEdit: boolean }) {
                 value={syncToYear ?? ''}
                 onChange={e => setSyncToYear(e.target.value ? Number(e.target.value) : undefined)}
                 placeholder={String(new Date().getFullYear() + 1)}
-                className="w-24 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                className="w-24 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
               />
             </div>
           )}

@@ -153,7 +153,7 @@ export default function AdminNotificationsTab() {
             onChange={e => setTestEmailTo(e.target.value)}
             placeholder="name@example.com"
             aria-label="Test email address"
-            className="flex-1 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+            className="flex-1 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
           />
           <Button onClick={handleSendTestEmail} disabled={!testEmailTo.trim() || sendTestEmail.isPending}>
             {sendTestEmail.isPending ? 'Sending...' : 'Send test email'}

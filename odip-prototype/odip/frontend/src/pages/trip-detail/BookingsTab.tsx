@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { useCreateBooking, useUpdateBooking, usePatchBooking, useDeleteBooking, useCancelBooking, useDownloadClientOverviewPdf, PAYMENT_STATUS_ITEMS, PAYMENT_STATUS_COLORS } from '@/api/hooks'
+import { useCreateBooking, useUpdateBooking, usePatchBooking, useDeleteBooking, useCancelBooking, useDownloadClientOverviewPdf, PAYMENT_STATUS_ITEMS } from '@/api/hooks'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { DataTable } from '@/components/DataTable'
@@ -327,22 +327,22 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={wheelchairRequired} onChange={e => setWheelchairRequired(e.target.checked)}
-                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                    className="rounded border-[var(--color-border)]" />
                   Wheelchair
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={highSupportRequired} onChange={e => setHighSupportRequired(e.target.checked)}
-                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                    className="rounded border-[var(--color-border)]" />
                   High Support
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={nightSupportRequired} onChange={e => setNightSupportRequired(e.target.checked)}
-                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                    className="rounded border-[var(--color-border)]" />
                   Night Support
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={hasRestrictivePracticeFlag} onChange={e => setHasRestrictivePracticeFlag(e.target.checked)}
-                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                    className="rounded border-[var(--color-border)]" />
                   Restrictive Practice
                 </label>
               </div>
@@ -370,7 +370,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
             </div>
 
             {/* Insurance */}
-            <div className="border-t border-[rgba(195,201,181,0.15)] pt-4 mt-2">
+            <div className="border-t border-[var(--color-border)]/15 pt-4 mt-2">
               <label className="block text-sm font-medium mb-3">Travel Insurance</label>
               <div className="space-y-3">
                 <div>
@@ -561,7 +561,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                 variant="pill"
                 value={b.paymentStatus || 'NotInvoiced'}
                 onChange={val => patchRow(b, { paymentStatus: val as PaymentStatus })}
-                colorClass={PAYMENT_STATUS_COLORS[b.paymentStatus || 'NotInvoiced'] ?? 'bg-neutral-100 text-neutral-600'}
+                colorClass={getStatusColor(b.paymentStatus || 'NotInvoiced')}
                 items={PAYMENT_STATUS_ITEMS}
                 disabled={isReadOnly || !canWrite}
               />
@@ -697,22 +697,22 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={editForm.wheelchairRequired} onChange={e => setEditForm({ ...editForm, wheelchairRequired: e.target.checked })}
-                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                    className="rounded border-[var(--color-border)]" />
                   Wheelchair
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={editForm.highSupportRequired} onChange={e => setEditForm({ ...editForm, highSupportRequired: e.target.checked })}
-                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                    className="rounded border-[var(--color-border)]" />
                   High Support
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={editForm.nightSupportRequired} onChange={e => setEditForm({ ...editForm, nightSupportRequired: e.target.checked })}
-                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                    className="rounded border-[var(--color-border)]" />
                   Night Support
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={editForm.hasRestrictivePracticeFlag} onChange={e => setEditForm({ ...editForm, hasRestrictivePracticeFlag: e.target.checked })}
-                    className="rounded border-[rgba(195,201,181,0.15)]" />
+                    className="rounded border-[var(--color-border)]" />
                   Restrictive Practice
                 </label>
               </div>
@@ -749,7 +749,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
             </div>
 
             {/* Insurance */}
-            <div className="border-t border-[rgba(195,201,181,0.15)] pt-4 mt-2">
+            <div className="border-t border-[var(--color-border)]/15 pt-4 mt-2">
               <label className="block text-sm font-medium mb-3">Travel Insurance</label>
               <div className="space-y-3">
                 <div>
@@ -844,7 +844,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                 cancelBooking.mutate({ id: deletingBooking.id, data }, { onSuccess: () => setDeletingBooking(null) })
               }}
               disabled={cancelBooking.isPending || deleteBooking.isPending}
-              className="w-full px-4 py-2 rounded-[var(--radius-md)] bg-[#fef3c7]/60 text-sm font-medium hover:bg-[#fef3c7] transition-colors disabled:opacity-50 text-left">
+              className="w-full px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-warning-container)]/60 text-sm font-medium hover:bg-[var(--color-warning-container)] transition-colors disabled:opacity-50 text-left">
               <span className="font-semibold">Cancel booking</span>
               <span className="block text-xs text-[var(--color-muted-foreground)] mt-0.5">Mark as cancelled — keeps the record for history</span>
             </button>

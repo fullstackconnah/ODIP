@@ -88,8 +88,8 @@ describe('ActionButtons — 44px hit areas on a coarse pointer', () => {
     }
     expect(link).toHaveClass('inline-block', 'hover:bg-[var(--color-accent)]', 'hover:text-[var(--color-primary)]')
     expect(edit).toHaveClass('hover:bg-[var(--color-accent)]', 'hover:text-[var(--color-primary)]')
-    expect(archive).toHaveClass('hover:bg-red-500/20', 'hover:text-red-400')
-    expect(restore).toHaveClass('hover:bg-green-500/20', 'hover:text-green-400')
+    expect(archive).toHaveClass('hover:bg-[var(--color-error-container)]', 'hover:text-[var(--color-destructive)]')
+    expect(restore).toHaveClass('hover:bg-[var(--color-primary-fixed)]/40', 'hover:text-[var(--color-primary)]')
   })
 
   it('opens the gap from 4px to 8px on touch: two 36px buttons with 4px pads each touch, never overlap', () => {
