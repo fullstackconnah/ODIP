@@ -63,7 +63,7 @@ export default function CaregiverWizardPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [progressSaved, setProgressSaved] = useState(false)
 
-  const { control, register, getValues, setError, clearErrors, reset, formState: { errors, isDirty } } = useForm<CaregiverFormData>({
+  const { control, register, getValues, setError, clearErrors, reset, watch, formState: { errors, isDirty } } = useForm<CaregiverFormData>({
     defaultValues: {
       caregiverName: '', caregiverRelationship: '',
       consents: [], healthConditions: [], adlAssessments: [], checklistItems: [], communityAccessRiskItems: [],
@@ -71,6 +71,12 @@ export default function CaregiverWizardPage() {
   })
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
+
+  // "Progress saved" is true only until the caregiver changes something (the refetch after a save resets the form: not a change).
+  useEffect(() => {
+    const sub = watch((_, { type }) => { if (type === 'change') setProgressSaved(false) })
+    return () => sub.unsubscribe()
+  }, [watch])
 
   const consentsFieldArray = useFieldArray({ control, name: 'consents' })
   const healthConditionFieldArray = useFieldArray({ control, name: 'healthConditions' })
@@ -156,7 +162,9 @@ export default function CaregiverWizardPage() {
     setProgressSaved(false)
     const named = aboutYouSchema.safeParse(getValues())
     if (!named.success) {
-      setSaveError(named.error.issues[0].message)
+      const message = named.error.issues[0].message
+      setSaveError(message)
+      setError('caregiverName', { type: 'manual', message })
       return
     }
     try {
@@ -192,7 +200,8 @@ export default function CaregiverWizardPage() {
         </div>
       )}
       {saveError && <p role="alert" className="mb-4 text-sm text-[var(--color-destructive)]">{saveError}</p>}
-      {progressSaved && <p role="status" className="mb-4 text-sm">Progress saved. Open this link again to carry on.</p>}
+      {/* Always mounted: screen readers announce a change inside a live region, not a region inserted already filled. */}
+      <p role="status" className={progressSaved ? 'mb-4 text-sm' : undefined}>{progressSaved ? 'Progress saved. Open this link again to carry on.' : ''}</p>
 
       <WizardStepRail
         steps={stepsForRail}

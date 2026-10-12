@@ -308,7 +308,9 @@ describe('CaregiverWizardPage — Save and continue later', () => {
     await user.click(screen.getByRole('button', { name: 'Save and continue later' }))
 
     expect(mockSaveDraftMutateAsync).not.toHaveBeenCalled()
-    expect(screen.getByRole('alert')).toHaveTextContent('Please enter your name')
+    expect(screen.getAllByRole('alert')[0]).toHaveTextContent('Please enter your name')
+    // The field itself is marked too, with its inline message.
+    expect(screen.getByLabelText(/your name/i)).toHaveAttribute('aria-invalid', 'true')
   })
 
   it('says the save failed, in plain words', async () => {
@@ -321,12 +323,20 @@ describe('CaregiverWizardPage — Save and continue later', () => {
     expect(screen.queryByText(/NullReferenceException/)).not.toBeInTheDocument()
   })
 
-  it('says the progress was saved', async () => {
+  it('says the progress was saved in a live region that was already on the page, and clears it on the next edit', async () => {
     const user = await open()
+    const regionsBefore = screen.queryAllByRole('status')
     await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
     await user.click(screen.getByRole('button', { name: 'Save and continue later' }))
 
     expect(mockSaveDraftMutateAsync).toHaveBeenCalledTimes(1)
-    expect(await screen.findByText(/Progress saved/)).toHaveAttribute('role', 'status')
+    const saved = await screen.findByText(/Progress saved/)
+    expect(saved).toHaveAttribute('role', 'status')
+    // Screen readers announce a change inside a live region, not a region inserted already filled.
+    expect(regionsBefore).toContain(saved)
+
+    await user.type(screen.getByLabelText(/your name/i), 's')
+    expect(saved).toBeInTheDocument()
+    expect(saved).toHaveTextContent(/^$/)
   })
 })
