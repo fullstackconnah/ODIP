@@ -55,6 +55,19 @@ describe('VehiclesPage — card grid', () => {
   })
 })
 
+describe('VehiclesPage — wheelchair positions', () => {
+  it('says "1 position", not "1 positions"', () => {
+    mockUseVehicles.mockReturnValue({ data: [makeVehicle({ wheelchairPositions: 1 })], isLoading: false })
+    render(
+      <MemoryRouter>
+        <VehiclesPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('1 position')).toBeInTheDocument()
+  })
+})
+
 describe('VehiclesPage — write controls by role', () => {
   it('offers a role that cannot write no "Add your first vehicle" on the empty page', () => {
     mockUsePermissions.mockReturnValue({ canWrite: false })

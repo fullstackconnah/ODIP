@@ -156,7 +156,7 @@ export default function VehiclesPage() {
                     <StatCell
                       icon={Accessibility}
                       label="Wheelchair"
-                      value={v.wheelchairPositions > 0 ? `${v.wheelchairPositions} positions` : 'None'}
+                      value={v.wheelchairPositions > 0 ? plural(v.wheelchairPositions, 'position') : 'None'}
                     />
                     <StatCell
                       icon={Wrench}

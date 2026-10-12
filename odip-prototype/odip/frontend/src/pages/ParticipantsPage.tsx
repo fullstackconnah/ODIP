@@ -3,6 +3,7 @@ import { extractErrorMessage, maskNdisNumber } from '@/lib/utils'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
 import { Callout } from '@/components/Callout'
+import { PLAN_TYPE_LABELS, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
@@ -215,7 +216,7 @@ function useParticipantsScreen() {
       ),
     },
     { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
-    { key: 'planType', header: 'Plan Type', maxWidth: '10rem' },
+    { key: 'planType', header: 'Plan Type', maxWidth: '10rem', render: (p) => PLAN_TYPE_LABELS[p.planType] ?? p.planType },
     { key: 'region', header: 'Region', sortable: true, maxWidth: '11rem' },
     {
       key: 'serviceStreams',
@@ -241,7 +242,7 @@ function useParticipantsScreen() {
       align: 'center',
     },
     { key: 'isHighSupport', header: 'High', type: 'boolean', align: 'center' },
-    { key: 'supportRatio', header: 'Support Ratio', maxWidth: '10rem' },
+    { key: 'supportRatio', header: 'Support Ratio', maxWidth: '10rem', render: (p) => SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio },
     { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center' },
     {
       key: 'status',
