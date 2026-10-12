@@ -10,6 +10,7 @@ import type {
   CreateAdministrationDto,
   UpdateAdministrationDto,
   MarDayDto,
+  MissedMedicationContactDto,
   PagedResult,
 } from '../types'
 
@@ -60,6 +61,13 @@ export function useMar(date: string, participantId?: string) {
     queryKey: ['mar', date, participantId],
     queryFn: () => apiGet<MarDayDto>('/medications/mar', { date, participantId }),
     enabled: !!date,
+  })
+}
+
+export function useMissedGuidanceContact() {
+  return useQuery({
+    queryKey: ['missed-guidance-contact'],
+    queryFn: () => apiGet<MissedMedicationContactDto | null>('/medications/missed-guidance-contact'),
   })
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, type Resolver } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/components/Button'
@@ -28,8 +28,7 @@ const DEFAULT_VALUES: AvailabilityFormValues = {
   staffId: '', availabilityType: 'Available', startDate: '', endDate: '', notes: '',
 }
 
-// Local copies of pages/schedule/helpers.ts's toStartDt/toEndDt — that file is owned by another
-// agent working concurrently, so it can't be imported from or edited here.
+// A record is entered as whole days; the API takes the start of the first day to the end of the last.
 const toStartDt = (d: string) => `${d}T00:00:00`
 const toEndDt = (d: string) => `${d}T23:59:59`
 
@@ -75,7 +74,8 @@ export function AvailabilityRecordFormModal({ open, onClose, onSubmit, submittin
   const schema = useMemo(() => buildSchema(requireStaff), [requireStaff])
   const resetValues = useMemo<AvailabilityFormValues>(() => ({ ...DEFAULT_VALUES, ...initialValues }), [initialValues])
   const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm<AvailabilityFormValues>({
-    resolver: zodResolver(schema),
+    // The schema marks some fields optional, but the defaults keep every field a string, so the parsed values match.
+    resolver: zodResolver(schema) as Resolver<AvailabilityFormValues>,
     defaultValues: resetValues,
   })
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)

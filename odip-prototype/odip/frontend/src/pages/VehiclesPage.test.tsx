@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import VehiclesPage from './VehiclesPage'
 
-const { mockUseVehicles, mockUsePermissions } = vi.hoisted(() => ({
+const { mockUseVehicles, mockUsePermissions, mockRestore } = vi.hoisted(() => ({
+  mockRestore: vi.fn(),
   mockUseVehicles: vi.fn(),
   mockUsePermissions: vi.fn(),
 }))
@@ -11,7 +12,7 @@ const { mockUseVehicles, mockUsePermissions } = vi.hoisted(() => ({
 vi.mock('@/api/hooks', () => ({
   useVehicles: mockUseVehicles,
   useDeleteVehicle: () => ({ mutate: vi.fn(), isPending: false }),
-  useUpdateVehicle: () => ({ mutate: vi.fn(), isPending: false }),
+  useRestoreVehicle: () => ({ mutate: mockRestore, isPending: false }),
 }))
 
 vi.mock('@/lib/permissions', () => ({
@@ -75,5 +76,17 @@ describe('VehiclesPage — View for a role that cannot write', () => {
     expect(screen.queryByRole('link', { name: 'View' }) !== null).toBe(view)
     if (view) expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/vehicles/v-1/edit')
     expect(screen.queryByRole('link', { name: /Edit/ }) !== null).toBe(!view)
+  })
+})
+
+describe('VehiclesPage — Restore changes only the archived state (TRIPS-2)', () => {
+  it('restores through the restore endpoint by id, never a PUT of the list row', () => {
+    mockUseVehicles.mockReturnValue({ data: [makeVehicle({ isActive: false })], isLoading: false })
+    render(<MemoryRouter><VehiclesPage /></MemoryRouter>)
+    fireEvent.click(screen.getByRole('radio', { name: 'Archived' }))
+    fireEvent.click(screen.getByRole('button', { name: /Restore/ }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Restore' }))
+
+    expect(mockRestore).toHaveBeenCalledWith('v-1', expect.anything())
   })
 })

@@ -59,3 +59,14 @@ describe('RegisterTab — row click by role', () => {
     expect(screen.getByText('Metformin')).toBeInTheDocument()
   })
 })
+
+// PARTICIPANTS-1: a medication belongs to a participant, and /medications/new without one is a dead end, so the register offers no "New medication".
+describe('Medication register', () => {
+  it('offers no participant-less "New medication" link, and says where medications are added', () => {
+    mockUseMedicationRegister.mockReturnValue({ data: [], isLoading: false })
+    render(<MemoryRouter><RegisterTab /></MemoryRouter>)
+
+    expect(screen.queryByRole('link', { name: /new medication/i })).toBeNull()
+    expect(screen.getByText("Medications are added from a participant's Medications tab.")).toBeInTheDocument()
+  })
+})

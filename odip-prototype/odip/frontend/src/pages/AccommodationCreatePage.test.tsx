@@ -41,12 +41,6 @@ beforeEach(() => {
 })
 
 describe('AccommodationCreatePage — email validation (PP-70)', () => {
-  // NOTE: this environment's installed @hookform/resolvers (3.10.0) predates zod 4's ZodError
-  // shape (confirmed directly against the resolver: it throws instead of returning a field
-  // error map for *any* zod validation failure here — a pre-existing, repo-wide mismatch, not
-  // something introduced by this fix). So the rendered "Enter a valid email" copy can't be
-  // asserted in this suite today; what IS verifiable, and what PP-70 is actually about, is that
-  // an invalid email blocks the create call while a blank (optional) one does not.
   it('blocks submission when the email is malformed', async () => {
     const user = userEvent.setup()
     renderCreatePage()

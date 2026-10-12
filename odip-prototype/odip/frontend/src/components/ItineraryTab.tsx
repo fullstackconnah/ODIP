@@ -2,7 +2,6 @@ import { useTripItinerary } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
 import { MapPin, Clock, Users, Building2, UserCog, DollarSign, FileDown, Calendar, Utensils, Camera, Bus, Compass, Palette, Dumbbell, Star } from 'lucide-react'
 import { useState } from 'react'
-import { generateItineraryPdf } from './ItineraryPdf'
 import { Dropdown } from './Dropdown'
 import { EmptyState } from './EmptyState'
 import { PageState } from './PageState'
@@ -87,6 +86,8 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
     setExporting(true)
     setExportError(null)
     try {
+      // The PDF library is large: fetch it when a PDF is asked for, not with every trip page.
+      const { generateItineraryPdf } = await import('./ItineraryPdf')
       await generateItineraryPdf(itinerary, version)
     } catch (err) {
       console.error('PDF export failed:', err)

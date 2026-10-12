@@ -62,6 +62,18 @@ export function useDeleteAccommodation() {
   })
 }
 
+/** Restore an archived property: only isActive changes server-side, so no list row is sent back (TRIPS-2). */
+export function useRestoreAccommodation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiPostRaw<boolean>(`/accommodation/${id}/restore`, {}),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ['accommodation'] })
+      qc.invalidateQueries({ queryKey: ['accommodation-detail', id] })
+    },
+  })
+}
+
 export function useCreateReservation() {
   const qc = useQueryClient()
   return useMutation({

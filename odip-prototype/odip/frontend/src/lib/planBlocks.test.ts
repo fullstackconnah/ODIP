@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { PlanBlock } from '@/api/types'
 import {
-  BAND_EDGES, blockProblems, canOfferSleepover, clock, dayBars, daysSummary, defaultSleepoverWindow, describeBlock, duplicateBlock, durationMinutes, emptyBlock, endsNextDay, formatDuration, formatHours,
-  forTheServer, formatMinute, fromClock, layoutDay, needsSleepoverWindow, nextBlockId, normaliseBlock, offeredSupportTypes, ratioSentence, registrationGroupFor, stampLocation, toMinutes, toWireTime, weekdayBandParts,
-  weeklyHours,
+  blockProblems, canOfferSleepover, clock, daysSummary, defaultSleepoverWindow, durationMinutes, emptyBlock, endsNextDay, forTheServer, fromClock,
+  needsSleepoverWindow, normaliseBlock, offeredSupportTypes, registrationGroupFor, stampLocation, toMinutes, toWireTime,
 } from './planBlocks'
 import { PLAN_TEMPLATES } from './planTemplates'
 
@@ -24,11 +23,6 @@ describe('times', () => {
     expect(durationMinutes({ start: '', end: '13:00:00' })).toBe(0)
   })
 
-  it('says a length in words, an hours figure without a trailing zero, and the end of the day as 24:00', () => {
-    expect([formatDuration(480), formatDuration(510), formatDuration(45), formatDuration(1440)]).toEqual(['8 h', '8 h 30 min', '45 min', '24 h'])
-    expect([formatHours(8), formatHours(4.5), formatHours(6.6667), formatHours(0.1 + 0.2)]).toEqual(['8', '4.5', '6.67', '0.3'])
-    expect([formatMinute(0), formatMinute(1439), formatMinute(1440), formatMinute(75)]).toEqual(['00:00', '23:59', '24:00', '01:15'])
-  })
 })
 
 describe('words', () => {
@@ -41,25 +35,6 @@ describe('words', () => {
     expect(daysSummary([])).toBe('No days')
   })
 
-  it('describes a block as the one readable line the plan shows', () => {
-    expect(describeBlock(block({ transport: { km: 20, vehicle: 'Standard', tolls: 0, parking: 0 } }))).toBe('Mon, Wed · 09:00–13:00 · Community access 1:1 · +20 km transport')
-    expect(describeBlock(block({ supportType: 'GroupActivity', days: ['Saturday'], start: '09:00:00', end: '15:00:00', participantsPresent: 3 }))).toBe('Sat · 09:00–15:00 · Group activity 1:3')
-    expect(describeBlock(block({ supportType: 'PersonalCare', days: ['Friday'], start: '22:00:00', end: '06:00:00', workerMaySleep: true, workers: 2 }))).toBe('Fri · 22:00–06:00 next day · Personal care 2:1 · sleepover')
-    expect(describeBlock(block({ travel: { claim: true, minutesEachWay: 20, returnToBase: true, kmEachWay: 5 }, onPublicHoliday: 'Skip' }))).toBe('Mon, Wed · 09:00–13:00 · Community access 1:1 · +provider travel 20 min each way · holidays skipped')
-    expect(describeBlock(block({ supportType: 'StaSupport', accommodation: { nights: 1, workerOnSite: false }, onPublicHoliday: 'Charge' }))).toContain('1 night · holidays charged')
-  })
-
-  it('works out a week of hours by arithmetic alone', () => {
-    expect(weeklyHours(block())).toBe(8)
-    expect(weeklyHours(block({ days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], start: '22:00:00', end: '06:00:00' }))).toBe(40)
-  })
-
-  it('says what the ratio does to the price in one plain sentence', () => {
-    expect(ratioSentence(1, 1)).toBe('One worker for one participant: the full hourly price.')
-    expect(ratioSentence(1, 3)).toBe("1:3. Each participant's hourly price is the NDIS maximum divided by 3, rounded down to the cent.")
-    expect(ratioSentence(2, 1)).toBe("2:1. Each participant's hourly price is the NDIS maximum times 2, rounded down to the cent.")
-    expect(ratioSentence(Number.NaN, 1)).toBe('')
-  })
 })
 
 describe('registration groups', () => {
@@ -95,33 +70,6 @@ describe('sleepovers', () => {
     expect(needsSleepoverWindow({ start: '16:00:00', end: '16:00:00', workerMaySleep: false })).toBe(false)
     expect(defaultSleepoverWindow({ start: '16:00:00', end: '16:00:00' })).toEqual({ from: '22:00:00', to: '06:00:00' })
     expect(defaultSleepoverWindow({ start: '23:00:00', end: '12:00:00' })).toEqual({ from: '23:00:00', to: '07:00:00' })
-  })
-})
-
-describe('where the prices change', () => {
-  const parts = (start: string, end: string) => weekdayBandParts({ start, end }).map(part => [part.band, part.minutes])
-
-  it('cuts a block at 06:00, 20:00 and midnight', () => {
-    expect(BAND_EDGES).toEqual([0, 360, 1200])
-    expect(parts('09:00:00', '13:00:00')).toEqual([['day', 240]])
-    expect(parts('22:00:00', '06:00:00')).toEqual([['evening', 120], ['night', 360]])
-    expect(parts('05:00:00', '07:00:00')).toEqual([['night', 60], ['day', 60]])
-    expect(parts('16:00:00', '16:00:00')).toEqual([['day', 240], ['evening', 240], ['night', 360], ['day', 600]])
-    expect(parts('', '13:00:00')).toEqual([])
-  })
-
-  it('draws a block across midnight as a bar to the end of its day and another from the start of the next', () => {
-    const night = block({ id: 'n', days: ['Friday', 'Sunday'], start: '22:00:00', end: '06:00:00' })
-    expect(dayBars([night]).map(bar => [bar.day, bar.from, bar.to, bar.continued])).toEqual([
-      ['Friday', 1320, 1440, false], ['Saturday', 0, 360, true], ['Sunday', 1320, 1440, false], ['Monday', 0, 360, true],
-    ])
-    expect(dayBars([block({ days: ['Monday'], start: '16:00:00', end: '16:00:00' })]).map(bar => [bar.day, bar.from, bar.to])).toEqual([['Monday', 960, 1440], ['Tuesday', 0, 960]])
-  })
-
-  it('puts overlapping bars of one day side by side and lets an earlier one\'s lane be reused', () => {
-    const bar = (from: number, to: number) => ({ blockId: `${from}`, day: 'Monday' as const, from, to, continued: false })
-    expect(layoutDay([bar(540, 780), bar(600, 720), bar(780, 900)]).map(placed => [placed.from, placed.lane, placed.lanes])).toEqual([[540, 0, 2], [600, 1, 2], [780, 0, 2]])
-    expect(layoutDay([bar(540, 780)]).map(placed => [placed.lane, placed.lanes])).toEqual([[0, 1]])
   })
 })
 
@@ -239,23 +187,6 @@ describe('normaliseBlock', () => {
 })
 
 describe('blocks as the plan keeps them', () => {
-  it('numbers a new block after the others without reusing an id', () => {
-    expect(nextBlockId([])).toBe('b1')
-    expect(nextBlockId([{ id: 'b1' }, { id: 'b2' }])).toBe('b3')
-    expect(nextBlockId([{ id: 'b2' }])).toBe('b3')
-    expect(nextBlockId([{ id: 'b1' }, { id: 'b3' }])).toBe('b4')
-  })
-
-  it('duplicates a block as a deep copy on its own id', () => {
-    const original = { block: block({ travel: { claim: true, minutesEachWay: 10, returnToBase: false, kmEachWay: 0 } }), requirements: { workerGender: 'Female' as const, driver: true, skills: ['FirstAid' as const] } }
-    const copy = duplicateBlock(original, 'b2')
-    expect(copy.block.id).toBe('b2')
-    expect(copy.block.travel).toEqual(original.block.travel)
-    expect(copy.block.travel).not.toBe(original.block.travel)
-    expect(copy.requirements.skills).not.toBe(original.requirements.skills)
-    expect(original.block.id).toBe('b1')
-  })
-
   it('puts the agreement\'s delivery location on a block, whatever it carried', () => {
     expect(stampLocation(block(), 'VIC', 'Remote').location).toEqual({ state: 'VIC', zone: 'Remote' })
   })
@@ -270,15 +201,6 @@ describe('the templates', () => {
       expect(entry.requirements).toEqual({ workerGender: 'NoPreference', driver: false, skills: [] })
       expect(entry.block.location).toEqual({ state: 'NSW', zone: 'National' })
     }
-  })
-
-  it('read as the lines the brief gives', () => {
-    const line = (key: string) => describeBlock(PLAN_TEMPLATES.find(template => template.key === key)!.build('t', 'NSW', 'National').block)
-    expect(line('community-weekdays')).toBe('Mon–Fri · 09:00–13:00 · Community access 1:1')
-    expect(line('saturday-outing')).toBe('Sat · 09:00–15:00 · Group activity 1:3')
-    expect(line('personal-care-mornings')).toBe('Mon–Fri · 07:00–09:00 · Personal care 1:1')
-    expect(line('overnight-sleepover')).toBe('Every day · 22:00–06:00 next day · Personal care 1:1 · sleepover')
-    expect(line('weekend-respite-sta')).toBe('Fri, Sat · 16:00–16:00 next day · Short-term accommodation 1:1 · sleepover · 1 night')
   })
 
   it('keep the overnight and respite templates where a sleepover qualifies', () => {

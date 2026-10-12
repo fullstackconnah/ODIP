@@ -13,7 +13,7 @@ import { formGrid, span } from '@/lib/formGrid'
 import { REGISTRATION_GROUP_NAME } from '@/lib/planBlocks'
 import { apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { extractErrorMessage } from '@/lib/utils'
-import { NumberField } from '@/pages/plan-builder/NumberField'
+import { NumberField } from '@/components/NumberField'
 
 const ALL_GROUPS = ['0107', '0104', '0125', '0136', '0115', '0108'] as const
 const APPROVER_ROLES = ['Admin', 'Coordinator'] as const

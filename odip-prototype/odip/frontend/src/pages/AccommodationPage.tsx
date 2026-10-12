@@ -1,4 +1,4 @@
-import { useAccommodation, useDeleteAccommodation, useUpdateAccommodation } from '@/api/hooks'
+import { useAccommodation, useDeleteAccommodation, useRestoreAccommodation } from '@/api/hooks'
 import type { AccommodationListDto } from '@/api/types'
 import { Link } from 'react-router-dom'
 import { Plus, Home } from 'lucide-react'
@@ -22,7 +22,7 @@ export default function AccommodationPage() {
   const params: Record<string, string> = { isActive: showArchived ? 'false' : 'true' }
   const { data: properties = [], isLoading } = useAccommodation(params)
   const deleteAccommodation = useDeleteAccommodation()
-  const updateAccommodation = useUpdateAccommodation()
+  const restoreAccommodation = useRestoreAccommodation()
   const [confirmState, setConfirmState] = useState<{ type: 'archive' | 'restore'; item: AccommodationListDto } | null>(null)
 
   const handleRestore = (a: AccommodationListDto) => {
@@ -107,23 +107,7 @@ export default function AccommodationPage() {
         onConfirm={() => {
           if (!confirmState) return
           if (confirmState.type === 'restore') {
-            const item = confirmState.item
-            updateAccommodation.mutate({ id: item.id, data: {
-              propertyName: item.propertyName,
-              location: item.location ?? undefined,
-              region: item.region ?? undefined,
-              address: item.address ?? undefined,
-              suburb: item.suburb ?? undefined,
-              state: item.state ?? undefined,
-              postcode: item.postcode ?? undefined,
-              isFullyModified: item.isFullyModified,
-              isSemiModified: item.isSemiModified,
-              isWheelchairAccessible: item.isWheelchairAccessible,
-              bedroomCount: item.bedroomCount ?? undefined,
-              bedCount: item.bedCount ?? undefined,
-              maxCapacity: item.maxCapacity ?? undefined,
-              isActive: true,
-            } }, { onSuccess: () => setConfirmState(null) })
+            restoreAccommodation.mutate(confirmState.item.id, { onSuccess: () => setConfirmState(null) })
           } else {
             deleteAccommodation.mutate(confirmState.item.id, { onSuccess: () => setConfirmState(null) })
           }
@@ -136,7 +120,7 @@ export default function AccommodationPage() {
         }
         confirmLabel={confirmState?.type === 'restore' ? 'Restore' : 'Archive'}
         variant={confirmState?.type === 'restore' ? 'default' : 'danger'}
-        loading={updateAccommodation.isPending || deleteAccommodation.isPending}
+        loading={restoreAccommodation.isPending || deleteAccommodation.isPending}
       />
     </div>
   )

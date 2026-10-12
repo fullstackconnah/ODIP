@@ -54,7 +54,7 @@ export default function VehicleCreatePage() {
   const { data: existing, isLoading: isLoadingExisting } = useVehicleDetail(isEdit ? id : undefined)
   const mutation = isEdit ? updateVehicle : createVehicle
 
-  const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm<VehicleFormData>({
+  const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm({
     resolver: zodResolver(vehicleSchema),
     defaultValues: {
       vehicleType: 'Van',

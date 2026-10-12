@@ -1,4 +1,4 @@
-import { useVehicles, useDeleteVehicle, useUpdateVehicle } from '@/api/hooks'
+import { useVehicles, useDeleteVehicle, useRestoreVehicle } from '@/api/hooks'
 import type { VehicleListDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
 import { deadlineState } from '@/lib/deadline'
@@ -62,7 +62,7 @@ export default function VehiclesPage() {
   const params: Record<string, string> = { isActive: showArchived ? 'false' : 'true' }
   const { data: vehicles = [], isLoading } = useVehicles(params)
   const deleteVehicle = useDeleteVehicle()
-  const updateVehicle = useUpdateVehicle()
+  const restoreVehicle = useRestoreVehicle()
   const [confirmState, setConfirmState] = useState<{ type: 'archive' | 'restore'; item: VehicleListDto } | null>(null)
 
   const handleRestore = (e: React.MouseEvent, v: VehicleListDto) => {
@@ -230,14 +230,7 @@ export default function VehiclesPage() {
         onConfirm={() => {
           if (!confirmState) return
           if (confirmState.type === 'restore') {
-            const { id: _id, ...rest } = confirmState.item
-            updateVehicle.mutate({ id: confirmState.item.id, data: {
-              ...rest,
-              isActive: true,
-              registration: rest.registration ?? undefined,
-              serviceDueDate: rest.serviceDueDate ?? undefined,
-              registrationDueDate: rest.registrationDueDate ?? undefined,
-            } }, { onSuccess: () => setConfirmState(null) })
+            restoreVehicle.mutate(confirmState.item.id, { onSuccess: () => setConfirmState(null) })
           } else {
             deleteVehicle.mutate(confirmState.item.id, { onSuccess: () => setConfirmState(null) })
           }
@@ -250,7 +243,7 @@ export default function VehiclesPage() {
         }
         confirmLabel={confirmState?.type === 'restore' ? 'Restore' : 'Archive'}
         variant={confirmState?.type === 'restore' ? 'default' : 'danger'}
-        loading={updateVehicle.isPending || deleteVehicle.isPending}
+        loading={restoreVehicle.isPending || deleteVehicle.isPending}
       />
     </div>
   )

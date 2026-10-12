@@ -20,7 +20,6 @@ const { mockCreateMutate, mockUpdateMutate, mockCheckMutate, mockGetRosterFindin
 // StaffAssignModal.test.tsx makes for its own live-check tests).
 vi.mock('@/api/hooks', () => ({
   useUpdateStaffAssignment: () => ({ mutate: mockUpdateMutate, isPending: false, isError: false }),
-  useDeleteStaffAssignment: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useCreateStaffAssignment: () => ({ mutate: mockCreateMutate, isPending: false, isError: false }),
   useCheckStaffAssignment: () => ({ mutate: mockCheckMutate }),
   getRosterFindings: mockGetRosterFindings,
@@ -448,5 +447,22 @@ describe('StaffTab — dialogs', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(control).toHaveFocus()
+  })
+})
+
+describe('StaffTab — Remove Staff offers only what the server does', () => {
+  it('has Cancel assignment (keeps the record) and no "Delete permanently", which the server turns into the same cancellation', async () => {
+    const user = userEvent.setup()
+    const row = {
+      id: 'assign-1', tripInstanceId: 'trip-1', tripName: 'Gold Coast Beach Break',
+      staffId: 'staff-1', staffName: 'Alex Rivera', assignmentRole: 'Support Worker',
+      assignmentStart: '2026-09-10', assignmentEnd: '2026-09-12', status: 'Confirmed',
+      isDriver: false, sleepoverType: 'None', shiftNotes: null,
+      hasConflict: false, overrideReason: null, acknowledgedFindingCodes: null,
+    } as StaffAssignmentDto
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} canWrite />)
+    await user.click(screen.getByTitle('Remove from trip'))
+    expect(screen.getByRole('button', { name: /Cancel assignment/ })).toBeInTheDocument()
+    expect(screen.queryByText(/Delete permanently/)).not.toBeInTheDocument()
   })
 })

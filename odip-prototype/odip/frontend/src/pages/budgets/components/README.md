@@ -2,7 +2,7 @@
 
 Presentation-only components for the budget warnings (budget phase 2b). They draw what the server worked out and decide nothing: no endpoint, no fetch, no financial rule, no navigation.
 The pages and the adapters beside them own the wiring: `pages/BudgetsPage.tsx` and `../budgetRows.ts` map the Budgets list's DTO onto these types, and
-`pages/plan-builder/agreementBudgetView.ts` maps the agreement check's DTO onto the bar's.
+`pages/agreement/agreementBudgetView.ts` maps the agreement check's DTO onto the bar's.
 
 ## The files
 

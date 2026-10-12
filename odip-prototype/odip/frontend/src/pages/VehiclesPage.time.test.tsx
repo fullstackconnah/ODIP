@@ -10,7 +10,7 @@ const { mockUseVehicles } = vi.hoisted(() => ({ mockUseVehicles: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
   useVehicles: mockUseVehicles,
   useDeleteVehicle: () => ({ mutate: vi.fn(), isPending: false }),
-  useUpdateVehicle: () => ({ mutate: vi.fn(), isPending: false }),
+  useRestoreVehicle: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 vi.mock('@/lib/permissions', () => ({ usePermissions: () => ({ canWrite: true }) }))
 

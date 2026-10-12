@@ -145,7 +145,7 @@ public class PlanQuoteFrontendFixtureTests
             foreach (var shape in shapes)
                 blocks.Add(Block($"{type}-{intensity}-{shape.Name}", type, shape.Day, shape.Start, shape.End, b => b with { Intensity = intensity }));
         }
-        // The sleepover items: a worker who may sleep across midnight (community access and group activities have none, and are left out: the mock still prices them, see the report).
+        // The sleepover items: one Friday 22:00-07:00 block with a worker who may sleep, for personal care and STA support only. Community access and group activities have no sleepover item, so they get no such block here (the mock still prices them, see the report).
         foreach (var type in new[] { PlanSupportType.PersonalCare, PlanSupportType.StaSupport })
             blocks.Add(Block($"{type}-sleepover", type, DayOfWeek.Friday, T(22), T(7), b => b with { WorkerMaySleep = true }));
         var (from, to) = (Mon5Oct, new DateOnly(2026, 10, 11));

@@ -5,7 +5,7 @@
 // track but the NDIA has refused one of her claims for want of funds (V27). Every name and figure here is fictional.
 
 const { poolFor } = require('./mock-ledger.js')
-const { cents } = require('./mock-money.js')
+const { approachingAt } = require('./mock-money.js')
 
 const round2 = (n) => Math.round(n * 100) / 100
 const WRITTEN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -60,7 +60,7 @@ function budgetAlertsOf(ledger) {
     const end = say(period.periodEnd)
     if (period.status === 'Over') alerts.push(alert('budget-over', 'Critical', withTheGap(`${label} is ${money(period.used - period.available)} over this period's ${money(period.available)} (to ${end})`, period)))
     else if (period.status === 'ForecastOver') alerts.push(alert('budget-forecast-over', 'Warning', withTheGap(`Booked shifts would take ${label} ${money(period.forecast - period.available)} over this period's ${money(period.available)} by ${end}`, period)))
-    else if (period.status === 'Approaching') alerts.push(alert('budget-approaching', 'Warning', withTheGap(`${label} is at ${Math.floor((cents(period.used) * 100) / cents(period.available))}% of this period's ${money(period.available)} (to ${end})`, period)))
+    else if (period.status === 'Approaching') alerts.push(alert('budget-approaching', 'Warning', withTheGap(`${label} is at ${approachingAt(period.used, period.available, 0)}% of this period's ${money(period.available)} (to ${end})`, period)))
     if (pool.ndiaRejection) alerts.push(alert('budget-ndia-exhausted', 'Critical', `NDIA rejected a claim for ${label} on ${say(pool.ndiaRejection.date)}: not enough funds${fundsScope(pool.ndiaRejection.code)} (${pool.ndiaRejection.code})`))
   }
   return alerts

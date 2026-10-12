@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, type Resolver } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Modal } from '@/components/Modal'
@@ -57,9 +57,7 @@ export type LeaveRequestFormModalProps = {
 /**
  * Date-range leave request form (§2 CreateLeaveRequestDto). Reused unchanged by both
  * PortalLeavePage (self-service, no staffOptions) and LeaveApprovalsPage's "Enter on behalf"
- * (staffOptions supplied) and "Edit" (mode="edit") flows. The zod@4/@hookform/resolvers@3
- * mismatch means rendered validation text can't be reliably asserted in tests — the schema still
- * runs so a user gets inline errors; tests assert submit payloads/disabled states instead.
+ * (staffOptions supplied) and "Edit" (mode="edit") flows.
  */
 export function LeaveRequestFormModal({ open, onClose, onSubmit, submitting, errorMessage, staffOptions, mode = 'create', initialValues }: LeaveRequestFormModalProps) {
   const isEdit = mode === 'edit'
@@ -67,7 +65,8 @@ export function LeaveRequestFormModal({ open, onClose, onSubmit, submitting, err
   const schema = useMemo(() => buildSchema(requireStaff), [requireStaff])
   const resetValues = useMemo<LeaveFormValues>(() => ({ ...DEFAULT_VALUES, ...initialValues }), [initialValues])
   const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm<LeaveFormValues>({
-    resolver: zodResolver(schema),
+    // The schema marks some fields optional, but the defaults keep every field a string, so the parsed values match.
+    resolver: zodResolver(schema) as Resolver<LeaveFormValues>,
     defaultValues: resetValues,
   })
   // Wired the same way VehicleCreatePage.tsx (an existing RHF+zod create form) does — see this
