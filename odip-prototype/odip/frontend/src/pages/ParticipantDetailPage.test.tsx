@@ -1342,3 +1342,19 @@ describe('ParticipantDetailPage — a refused caregiver link Revoke', () => {
     expect(screen.getByText('This link has already been used.')).toBeInTheDocument()
   })
 })
+
+// Review N6: a refused Generate is caught and shown on the existing error line, not left as an unhandled rejection.
+describe('ParticipantDetailPage — a refused caregiver link Generate', () => {
+  it('shows the server message', async () => {
+    setUserRole('Admin')
+    const user = userEvent.setup()
+    const refused = { response: { status: 400, data: { message: 'Participant has no consent on file.' } } }
+    mockUseGenerateCaregiverLink.mockReturnValue({ mutateAsync: vi.fn().mockRejectedValue(refused), isPending: false, isError: true, error: refused } as ReturnType<typeof mockUseGenerateCaregiverLink>)
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    await user.click(screen.getByRole('button', { name: /generate caregiver link/i }))
+
+    expect(screen.getByText('Participant has no consent on file.')).toBeInTheDocument()
+  })
+})

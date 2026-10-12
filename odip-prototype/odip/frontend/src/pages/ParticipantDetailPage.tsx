@@ -514,7 +514,9 @@ function CaregiverLinkControl({ participantId }: { participantId: string }) {
           variant="secondary"
           size="md"
           onClick={async () => {
-            const res = await generate.mutateAsync({ participantId })
+            // A refusal shows on the error line below (generate.isError); there is nothing else to do with it.
+            const res = await generate.mutateAsync({ participantId }).catch(() => null)
+            if (!res) return
             const token = res.data!.token
             setIssued({ url: `${window.location.origin}/caregiver/${token}`, expiresAt: res.data!.expiresAt })
           }}
