@@ -122,6 +122,18 @@ public class VehiclesController : ControllerBase
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true, "Vehicle archived"));
     }
+
+    /// <summary>Restore an archived vehicle. Only IsActive changes: the list row the Archived view holds lacks the notes and access details, so a PUT of it wiped them (TRIPS-2).</summary>
+    [HttpPost("{id:guid}/restore")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<bool>>> Restore(Guid id, CancellationToken ct)
+    {
+        var v = await _db.Vehicles.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (v == null) return NotFound(ApiResponse<bool>.Fail("Vehicle not found"));
+        v.IsActive = true; v.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Vehicle restored"));
+    }
 }
 
 [ApiController]

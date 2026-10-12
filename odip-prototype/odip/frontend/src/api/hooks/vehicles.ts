@@ -54,6 +54,18 @@ export function useUpdateVehicle() {
   })
 }
 
+/** Restore an archived vehicle: only isActive changes server-side, so no list row is sent back (TRIPS-2). */
+export function useRestoreVehicle() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiPostRaw<boolean>(`/vehicles/${id}/restore`, {}),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ['vehicles'] })
+      qc.invalidateQueries({ queryKey: ['vehicle-detail', id] })
+    },
+  })
+}
+
 export function useDeleteVehicle() {
   const qc = useQueryClient()
   return useMutation({

@@ -344,6 +344,14 @@ public record MarPrnDto
     public Guid? IncidentId { get; init; }
 }
 
+/// <summary>The provider-settings fields the missed-medication guidance shows to every role: the manager to call, and the state that picks the health advice line.</summary>
+public record MissedMedicationContactDto
+{
+    public string? ManagerName { get; init; }
+    public string? ManagerPhone { get; init; }
+    public string State { get; init; } = "VIC";
+}
+
 public record MarDayDto
 {
     public DateOnly Date { get; init; }

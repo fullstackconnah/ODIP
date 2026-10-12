@@ -22,6 +22,7 @@ export function useUpsertProviderSettings() {
       apiPut<ProviderSettingsDto>('/provider-settings', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['provider-settings'] })
+      qc.invalidateQueries({ queryKey: ['missed-guidance-contact'] })
     },
   })
 }

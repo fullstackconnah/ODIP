@@ -247,6 +247,21 @@ public class MedicationsController : ControllerBase
         return Ok(ApiResponse<PagedResult<MedicationListDto>>.Ok(result));
     }
 
+    /// <summary>
+    /// The manager contact and state for the missed-medication guidance. Open to every role, because the support worker giving the dose is the one
+    /// who must call the manager; provider settings themselves stay Admin/Coordinator only, so this carries those two fields and nothing else.
+    /// </summary>
+    [HttpGet("medications/missed-guidance-contact")]
+    public async Task<ActionResult<ApiResponse<MissedMedicationContactDto>>> GetMissedGuidanceContact(CancellationToken ct)
+    {
+        var s = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+        if (s == null) return Ok(ApiResponse<MissedMedicationContactDto?>.Ok(null));
+        return Ok(ApiResponse<MissedMedicationContactDto>.Ok(new MissedMedicationContactDto
+        {
+            ManagerName = s.ManagerName, ManagerPhone = s.ManagerPhone, State = s.State,
+        }));
+    }
+
     // ── MAR (Medication Administration Record) ──────────────────────
 
     [HttpGet("medications/mar")]
