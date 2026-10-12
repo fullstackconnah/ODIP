@@ -13,7 +13,7 @@ const { patchMutate } = vi.hoisted(() => ({ patchMutate: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
   useCreateBooking: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useUpdateBooking: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
-  usePatchBooking: () => ({ mutate: patchMutate, isPending: false, isError: false }),
+  usePatchBooking: () => ({ mutateAsync: patchMutate, isPending: false, isError: false }),
   useDeleteBooking: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useCancelBooking: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useDownloadClientOverviewPdf: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
@@ -29,11 +29,10 @@ const booking: BookingListDto = {
 }
 
 const refused = { response: { status: 400, data: { message: 'This booking is locked.' } } }
-type Callbacks = { onSuccess?: (r: unknown) => void; onError?: (e: unknown) => void }
-const refuse = () => patchMutate.mockImplementation((_v: unknown, o?: Callbacks) => o?.onError?.(refused))
-const accept = () => patchMutate.mockImplementation((_v: unknown, o?: Callbacks) => o?.onSuccess?.({ data: {} }))
+const refuse = () => patchMutate.mockRejectedValue(refused)
+const accept = () => patchMutate.mockResolvedValue({ data: {} })
 
-beforeEach(() => patchMutate.mockReset())
+beforeEach(() => { patchMutate.mockReset() })
 
 function renderTab() {
   return render(
@@ -59,7 +58,7 @@ describe('BookingsTab — a refused inline change', () => {
     renderTab()
     await pick(user, from, to)
 
-    expect(screen.getByText(/Couldn't update Sophie Brown's booking\./)).toBeInTheDocument()
+    expect(await screen.findByText(/Couldn't update Sophie Brown's booking\./)).toBeInTheDocument()
     expect(screen.getByText(/This booking is locked\./)).toBeInTheDocument()
   })
 
@@ -68,6 +67,7 @@ describe('BookingsTab — a refused inline change', () => {
     refuse()
     renderTab()
     await pick(user, /^Held/, 'Confirmed')
+    await screen.findByText(/This booking is locked\./)
     accept()
     await pick(user, /^None/, 'Pending')
 

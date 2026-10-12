@@ -50,16 +50,19 @@ export default function BookingsPage() {
   const [confirmTarget, setConfirmTarget] = useState<{ booking: BookingListDto; status: BookingStatus } | null>(null)
   // Budget phase 3: what confirming a booking does to the participant's budget, as the server says it. A warning only; the status change has already gone through.
   const [budgetNotice, setBudgetNotice] = useState<BookingBudgetNotice | null>(null)
-  const [statusError, setStatusError] = useState<{ participantName: string; message: string } | null>(null)
+  // Only a later success on the same booking clears it, so another row's success never hides this refusal.
+  const [statusError, setStatusError] = useState<{ bookingId: string; participantName: string; message: string } | null>(null)
   // A failed refetch over rows already on screen keeps them; only a list that never loaded is replaced.
   const loadFailed = isError && bookings.length === 0
 
   function patchStatus(booking: BookingListDto, status: BookingStatus, onSuccess?: (response: Parameters<typeof bookingBudgetNotice>[0]) => void) {
-    patchBooking.mutate({ id: booking.id, data: { bookingStatus: status } }, {
-      onSuccess: response => { setStatusError(null); onSuccess?.(response) },
-      onError: err => setStatusError({ participantName: booking.participantName || 'this participant', message: extractErrorMessage(err, 'Please try again.') }),
-      onSettled: () => setConfirmTarget(null),
-    })
+    // Its own promise, not mutate() callbacks: TanStack keeps only the latest call's, so a second change would drop this answer.
+    patchBooking.mutateAsync({ id: booking.id, data: { bookingStatus: status } })
+      .then(
+        response => { setStatusError(e => (e?.bookingId === booking.id ? null : e)); onSuccess?.(response) },
+        err => setStatusError({ bookingId: booking.id, participantName: booking.participantName || 'this participant', message: extractErrorMessage(err, 'Please try again.') }),
+      )
+      .finally(() => setConfirmTarget(null))
   }
 
   function handleStatusChange(booking: BookingListDto, status: BookingStatus) {

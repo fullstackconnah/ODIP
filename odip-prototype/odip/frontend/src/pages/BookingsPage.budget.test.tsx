@@ -13,7 +13,7 @@ const { patchMutate, listed } = vi.hoisted(() => ({ patchMutate: vi.fn(), listed
 
 vi.mock('@/api/hooks', () => ({
   useBookings: () => ({ data: Object.assign([...listed.rows], { totalCount: listed.rows.length }), isLoading: false, isError: false }),
-  usePatchBooking: () => ({ mutate: patchMutate, isPending: false }),
+  usePatchBooking: () => ({ mutateAsync: patchMutate, isPending: false }),
 }))
 
 const booking: BookingListDto = {
@@ -33,7 +33,7 @@ beforeEach(() => {
 
 const confirmFromList = async (response: object | undefined) => {
   const user = userEvent.setup()
-  patchMutate.mockImplementation((_vars: unknown, opts?: { onSuccess?: (r: unknown) => void }) => opts?.onSuccess?.(response))
+  patchMutate.mockResolvedValue(response)
   render(<MemoryRouter><BookingsPage /></MemoryRouter>)
   await user.click(screen.getByRole('button', { name: /Held/ }))
   await user.click(await screen.findByRole('option', { name: 'Confirmed' }))
@@ -44,8 +44,8 @@ describe('BookingsPage — the budget warning of a booking just confirmed', () =
   it('sends the status change, then shows the server’s warning with the participant named and that the booking is confirmed', async () => {
     await confirmFromList({ data: { participantName: 'Sophie Brown', bookingStatus: 'Confirmed', budgetWarnings: [warning] } })
 
-    expect(patchMutate).toHaveBeenCalledWith({ id: 'booking-1', data: { bookingStatus: 'Confirmed' } }, expect.objectContaining({ onSuccess: expect.any(Function) }))
-    expect(screen.getByText(`This booking takes Core (flexible) to $1,440.00 of $1,000.00 for ${SERVER_PERIOD}.`, { normalizer: asWritten })).toBeInTheDocument()
+    expect(patchMutate).toHaveBeenCalledWith({ id: 'booking-1', data: { bookingStatus: 'Confirmed' } })
+    expect(await screen.findByText(`This booking takes Core (flexible) to $1,440.00 of $1,000.00 for ${SERVER_PERIOD}.`, { normalizer: asWritten })).toBeInTheDocument()
     expect(screen.getByText('This is a warning only. Sophie Brown’s booking is confirmed.')).toBeInTheDocument()
   })
 
@@ -58,14 +58,14 @@ describe('BookingsPage — the budget warning of a booking just confirmed', () =
   it('can be dismissed', async () => {
     const user = await confirmFromList({ data: { participantName: 'Sophie Brown', budgetWarnings: [warning] } })
 
-    await user.click(screen.getByRole('button', { name: 'Dismiss' }))
+    await user.click(await screen.findByRole('button', { name: 'Dismiss' }))
 
     expect(screen.queryByText(BUDGET_WARNINGS_TITLE)).not.toBeInTheDocument()
   })
 
   it('goes away when the next status change starts, so a stale warning never sits beside a different booking', async () => {
     const user = await confirmFromList({ data: { participantName: 'Sophie Brown', budgetWarnings: [warning] } })
-    patchMutate.mockImplementation(() => undefined)   // the next change has not been answered yet
+    patchMutate.mockImplementation(() => new Promise(() => {}))   // the next change has not been answered yet
 
     await user.click(screen.getByRole('button', { name: /Held|Confirmed/ }))
     await user.click(await screen.findByRole('option', { name: 'Waitlist' }))

@@ -99,7 +99,10 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
   const [bookingBulkLoading, setBookingBulkLoading] = useState(false)
   // Budget phase 3: what confirming a booking does to the participant's budget, as the server says it. A warning only; the booking is already confirmed.
   const [budgetNotice, setBudgetNotice] = useState<BookingBudgetNotice | null>(null)
-  const [patchError, setPatchError] = useState<{ participantName: string; message: string } | null>(null)
+  // `what` completes "Couldn't update …": one participant's booking, or a count after a bulk change. `ids` are the refused rows:
+  // only a later success on one of them clears it, so another row's success never hides this refusal.
+  const [patchError, setPatchError] = useState<{ ids: string[]; what: string; message: string } | null>(null)
+  const clearPatchErrorFor = (ids: string[]) => setPatchError(e => (e && e.ids.every(id => ids.includes(id)) ? null : e))
 
   const createBooking = useCreateBooking()
   const updateBooking = useUpdateBooking()
@@ -113,12 +116,13 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
   const downloadClientOverview = useDownloadClientOverviewPdf()
   const [downloadingBookingId, setDownloadingBookingId] = useState<string | null>(null)
 
-  // One row's pill change; a refusal shows above the roster until the next change goes through.
+  // One row's pill change; a refusal shows above the roster until the next change goes through. Each call reads its own
+  // promise: TanStack keeps only the latest mutate() call's callbacks, so a second row changing would drop the first one's answer.
   const patchRow = (b: BookingListDto, data: Partial<{ bookingStatus: BookingStatus; insuranceStatus: InsuranceStatus; paymentStatus: PaymentStatus }>, onSuccess?: (response: Parameters<typeof bookingBudgetNotice>[0]) => void) =>
-    patchBooking.mutate({ id: b.id, data }, {
-      onSuccess: response => { setPatchError(null); onSuccess?.(response) },
-      onError: err => setPatchError({ participantName: b.participantName || 'this participant', message: extractErrorMessage(err, 'Please try again.') }),
-    })
+    patchBooking.mutateAsync({ id: b.id, data }).then(
+      response => { clearPatchErrorFor([b.id]); onSuccess?.(response) },
+      err => setPatchError({ ids: [b.id], what: `${b.participantName || 'this participant'}'s booking`, message: extractErrorMessage(err, 'Please try again.') }),
+    )
 
   const handleDownloadClientOverview = (b: BookingListDto) => {
     setDownloadingBookingId(b.id)
@@ -153,25 +157,14 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
   ) {
     setBookingBulkLoading(true)
     setBudgetNotice(null)
-    try {
-      const notices = await Promise.all(
-        ids.map(
-          id =>
-            new Promise<BookingBudgetNotice | null>((resolve, reject) => {
-              patchBooking.mutate(
-                { id, data: patch },
-                { onSuccess: response => resolve(bookingBudgetNotice(response)), onError: err => reject(err) }
-              )
-            })
-        )
-      )
-      setBudgetNotice(mergeBookingBudgetNotices(notices))
-      setSelectedBookingIds(new Set())
-    } catch {
-      // individual mutation errors surface through TanStack Query
-    } finally {
-      setBookingBulkLoading(false)
-    }
+    const results = await Promise.allSettled(ids.map(id => patchBooking.mutateAsync({ id, data: patch })))
+    const refusedIds = ids.filter((_, i) => results[i].status === 'rejected')
+    const refused = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    setBudgetNotice(mergeBookingBudgetNotices(results.map(r => (r.status === 'fulfilled' ? bookingBudgetNotice(r.value) : null))))
+    if (refused.length) setPatchError({ ids: refusedIds, what: plural(refused.length, 'booking'), message: extractErrorMessage(refused[0].reason, 'Please try again.') })
+    else clearPatchErrorFor(ids)
+    setSelectedBookingIds(new Set())
+    setBookingBulkLoading(false)
   }
 
   const resetForm = () => {
@@ -275,7 +268,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
 
       {patchError && (
         <Callout tone="error">
-          <strong>Couldn't update {patchError.participantName}'s booking.</strong> {patchError.message}
+          <strong>Couldn't update {patchError.what}.</strong> {patchError.message}
         </Callout>
       )}
 

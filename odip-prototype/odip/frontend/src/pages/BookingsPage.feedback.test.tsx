@@ -11,7 +11,7 @@ const { patchMutate, list } = vi.hoisted(() => ({ patchMutate: vi.fn(), list: { 
 
 vi.mock('@/api/hooks', () => ({
   useBookings: () => list.value,
-  usePatchBooking: () => ({ mutate: patchMutate, isPending: false }),
+  usePatchBooking: () => ({ mutateAsync: patchMutate, isPending: false }),
 }))
 
 const booking = {
@@ -20,9 +20,8 @@ const booking = {
 } as unknown as BookingListDto
 
 const refused = { response: { status: 400, data: { message: 'This trip is full.' } } }
-type Callbacks = { onSuccess?: (r: unknown) => void; onError?: (e: unknown) => void; onSettled?: () => void }
-const refuse = () => patchMutate.mockImplementation((_v: unknown, o?: Callbacks) => { o?.onError?.(refused); o?.onSettled?.() })
-const accept = () => patchMutate.mockImplementation((_v: unknown, o?: Callbacks) => { o?.onSuccess?.({ data: {} }); o?.onSettled?.() })
+const refuse = () => patchMutate.mockRejectedValue(refused)
+const accept = () => patchMutate.mockResolvedValue({ data: {} })
 
 beforeEach(() => {
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
@@ -43,7 +42,7 @@ describe('BookingsPage — a refused status change', () => {
     render(<MemoryRouter><BookingsPage /></MemoryRouter>)
     await pick(user, /Held/, 'Confirmed')
 
-    expect(screen.getByText(/Couldn't update Sophie Brown's booking\./)).toBeInTheDocument()
+    expect(await screen.findByText(/Couldn't update Sophie Brown's booking\./)).toBeInTheDocument()
     expect(screen.getByText(/This trip is full\./)).toBeInTheDocument()
   })
 
@@ -54,8 +53,8 @@ describe('BookingsPage — a refused status change', () => {
     await pick(user, /Held/, 'Cancelled')
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel booking' }))
 
+    expect(await screen.findByText(/This trip is full\./)).toBeInTheDocument()
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
-    expect(screen.getByText(/This trip is full\./)).toBeInTheDocument()
   })
 
   it('clears the banner on the next change that succeeds', async () => {
@@ -63,6 +62,7 @@ describe('BookingsPage — a refused status change', () => {
     refuse()
     render(<MemoryRouter><BookingsPage /></MemoryRouter>)
     await pick(user, /Held/, 'Confirmed')
+    await screen.findByText(/This trip is full\./)
     accept()
     await pick(user, /Held/, 'Waitlist')
 
