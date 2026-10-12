@@ -43,7 +43,7 @@ async function openFirstUser() {
 }
 
 const password = () => screen.getByLabelText('Password') as HTMLInputElement
-const createButton = () => screen.getByRole('button', { name: 'Create Tenant' })
+const createButton = () => screen.getByRole('button', { name: 'Create tenant' })
 
 describe('TenantFormPanel: the first user\'s password', () => {
   it('draws Generate as a Button, so it carries the shared focus ring and the height of the field beside it', async () => {

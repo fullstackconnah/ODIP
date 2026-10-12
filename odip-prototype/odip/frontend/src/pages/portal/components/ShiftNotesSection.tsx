@@ -211,7 +211,7 @@ export function ShiftNotesSection({
                   <div className="flex items-center justify-between gap-2">
                     <CharCount length={editBody.length} />
                     <div className="flex items-center gap-2">
-                      <Button variant="ghost" onClick={() => setEditingId(null)}>Cancel</Button>
+                      <Button variant="secondary" onClick={() => setEditingId(null)}>Cancel</Button>
                       <Button
                         onClick={() => handleSaveEdit(note.id)}
                         disabled={updateNote.isPending || !editBody.trim()}

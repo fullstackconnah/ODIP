@@ -399,7 +399,7 @@ export default function TenantFormPanel({
             Cancel
           </Button>
           <Button onClick={() => handleSubmit()} disabled={!canSubmit}>
-            {isBusy ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Tenant'}
+            {isBusy ? 'Saving…' : isEdit ? 'Save' : 'Create tenant'}
           </Button>
         </>
       }

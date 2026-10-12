@@ -59,7 +59,7 @@ describe('AccommodationTab — reservation writes keep what the reservation hold
     renderTab()
 
     await user.click(screen.getByRole('button', { name: 'Edit reservation' }))
-    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(updateMutate).toHaveBeenCalledTimes(1)
     expect(updateMutate.mock.calls[0][0].data).toMatchObject({ requestSentDate: '2026-08-20', dateBooked: '2026-09-01', dateConfirmed: '2026-09-05' })

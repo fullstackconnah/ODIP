@@ -285,7 +285,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
             <ExternalLink className="w-3.5 h-3.5" />
           </Button>
           {canWrite && (
-            <Button variant="ghost-danger" size="sm" iconOnly onClick={() => setDeletingReservation(r)} title="Remove reservation" aria-label="Remove reservation">
+            <Button variant="ghost-danger" size="sm" iconOnly onClick={() => setDeletingReservation(r)} title="Remove Reservation" aria-label="Remove reservation">
               <Trash2 className="w-3.5 h-3.5" />
             </Button>
           )}
@@ -548,7 +548,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                 Cancel
               </Button>
               <Button onClick={handleUpdateReservation} disabled={updateReservation.isPending}>
-                {updateReservation.isPending ? 'Saving...' : 'Save Changes'}
+                {updateReservation.isPending ? 'Saving…' : 'Save'}
               </Button>
             </>
           }

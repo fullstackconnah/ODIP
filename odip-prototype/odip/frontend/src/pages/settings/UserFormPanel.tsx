@@ -339,7 +339,7 @@ export default function UserFormPanel({
             Cancel
           </Button>
           <Button onClick={() => handleSubmit()} disabled={isBusy || !isFormValid}>
-            {isBusy ? 'Saving...' : isEdit ? 'Save Changes' : 'Create User'}
+            {isBusy ? 'Saving…' : isEdit ? 'Save' : 'Create user'}
           </Button>
         </div>
       }

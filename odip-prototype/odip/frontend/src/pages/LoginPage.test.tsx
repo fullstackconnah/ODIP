@@ -62,7 +62,7 @@ function renderPage() {
 async function signIn(u: ReturnType<typeof userEvent.setup>, password = 'a-password') {
   await u.type(screen.getByLabelText('Email'), EMAIL)
   await u.type(screen.getByLabelText('Password'), password)
-  await u.click(screen.getByRole('button', { name: 'Sign In' }))
+  await u.click(screen.getByRole('button', { name: 'Sign in' }))
 }
 
 /** The one alert on the page: errors are announced, once. */
@@ -241,7 +241,7 @@ describe('LoginPage: a sign-in the exchange refused', () => {
     await signIn(u)
     await alert()
 
-    await u.click(screen.getByRole('button', { name: 'Sign In' }))
+    await u.click(screen.getByRole('button', { name: 'Sign in' }))
 
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   })
@@ -344,7 +344,7 @@ describe('LoginPage: the verification link is sent at most once per hold', () =>
     return userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime })
   }
 
-  const signInAgain = (u: ReturnType<typeof userEvent.setup>) => u.click(screen.getByRole('button', { name: 'Sign In' }))
+  const signInAgain = (u: ReturnType<typeof userEvent.setup>) => u.click(screen.getByRole('button', { name: 'Sign in' }))
 
   it('asks the sign-in to send the first time, and not to send on a second attempt inside the hold, saying a link went a moment ago', async () => {
     mockLogin.mockRejectedValueOnce(unverified('sent')).mockRejectedValueOnce(unverified('recent'))
@@ -469,7 +469,7 @@ describe('LoginPage: sending the verification link again', () => {
   }
 
   const sendAgain = () => screen.getByRole('button', { name: 'Send it again' })
-  const signInButton = () => screen.getByRole('button', { name: 'Sign In' })
+  const signInButton = () => screen.getByRole('button', { name: 'Sign in' })
 
   it('keeps the text of the alert, Send it again included, as it was while the link is being sent, and marks the button busy', async () => {
     const resend = pendingResend()

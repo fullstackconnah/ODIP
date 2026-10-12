@@ -143,7 +143,7 @@ export default function CaregiverSubmissionReviewPage() {
         size="sm"
         footer={
           <>
-            <Button variant="ghost" size="md" onClick={() => setShowReject(false)}>
+            <Button variant="secondary" size="md" onClick={() => setShowReject(false)}>
               Cancel
             </Button>
             <Button

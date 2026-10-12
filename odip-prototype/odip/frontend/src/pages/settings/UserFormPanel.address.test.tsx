@@ -69,7 +69,7 @@ async function submitCreate() {
   await u.type(screen.getByLabelText(/username/i), 'newperson')
   await u.click(screen.getByRole('button', { name: 'Role *' }))
   await u.click(await screen.findByRole('option', { name: 'Coordinator' }))
-  await u.click(screen.getByRole('button', { name: 'Create User' }))
+  await u.click(screen.getByRole('button', { name: 'Create user' }))
   return { u, onClose }
 }
 
@@ -111,7 +111,7 @@ describe('UserFormPanel create: an address the server wants checked', () => {
     expect(onClose).not.toHaveBeenCalled()
     expect(screen.getByLabelText(/^email/i)).toHaveValue(EMAIL)
     expect(screen.getByLabelText(/first name/i)).toHaveValue('New')
-    expect(screen.getByRole('button', { name: 'Create User' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Create user' })).toBeEnabled()
   })
 
   it('does not carry a confirmation over to a later attempt: after going back and changing the address it asks afresh', async () => {
@@ -119,7 +119,7 @@ describe('UserFormPanel create: an address the server wants checked', () => {
     await u.click(within(await dialog()).getByRole('button', { name: 'Go back' }))
     mockCreate.mockRejectedValueOnce(confirmationRequest())
 
-    await u.click(screen.getByRole('button', { name: 'Create User' }))
+    await u.click(screen.getByRole('button', { name: 'Create user' }))
 
     expect(await dialog()).toBeInTheDocument()
     expect(mockCreate).toHaveBeenCalledTimes(2)
@@ -144,7 +144,7 @@ async function submitEdit() {
   await waitFor(() => expect(email).toHaveValue(EXISTING_EMAIL))
   await u.clear(email)
   await u.type(email, EDITED_EMAIL)
-  await u.click(screen.getByRole('button', { name: 'Save Changes' }))
+  await u.click(screen.getByRole('button', { name: 'Save' }))
   return { u, onClose }
 }
 
@@ -185,7 +185,7 @@ describe('UserFormPanel edit: a changed address the server wants checked', () =>
     expect(mockUpdate).toHaveBeenCalledTimes(1)
     expect(onClose).not.toHaveBeenCalled()
     expect(screen.getByLabelText(/^email/i)).toHaveValue(EDITED_EMAIL)
-    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
   })
 
   it('still shows any other refusal as the error it is, with no question', async () => {

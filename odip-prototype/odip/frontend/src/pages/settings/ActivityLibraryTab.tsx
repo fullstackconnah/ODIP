@@ -122,7 +122,7 @@ export default function ActivityLibraryTab() {
             )}
             <div className="flex items-center gap-3 justify-end">
               <Button variant="secondary" onClick={close}>Cancel</Button>
-              <Button onClick={submit} disabled={busy}>{busy ? 'Saving…' : editing ? 'Save Changes' : 'Create Activity'}</Button>
+              <Button onClick={submit} disabled={busy}>{busy ? 'Saving…' : editing ? 'Save' : 'Create Activity'}</Button>
             </div>
           </>
         }
