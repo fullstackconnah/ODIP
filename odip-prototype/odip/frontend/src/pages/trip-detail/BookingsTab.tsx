@@ -11,7 +11,8 @@ import { bookingBudgetNote, bookingBudgetNotice, mergeBookingBudgetNotices, type
 import { TAP_ICON_SQUARE } from '@/components/tapArea'
 import { getStatusColor, extractErrorMessage } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
-import { INSURANCE_STATUSES, type BookingStatus, type InsuranceStatus, type PaymentStatus, type SupportRatio } from '@/api/types/enums'
+import { BOOKING_STATUSES, INSURANCE_STATUSES, type BookingStatus, type InsuranceStatus, type PaymentStatus, type SupportRatio } from '@/api/types/enums'
+import { BOOKING_STATUS_LABELS, statusItems } from '@/lib/tone'
 import { Plus, AlertTriangle, Pencil, ExternalLink, Trash2, Download, Loader2 } from 'lucide-react'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { BookingListDto } from '@/api/types/bookings'
@@ -450,15 +451,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
             header: 'Status',
             sortable: true,
             ...(canWrite ? { bulkEditable: {
-              items: [
-                { value: 'Enquiry', label: 'Enquiry' },
-                { value: 'Held', label: 'Held' },
-                { value: 'Confirmed', label: 'Confirmed' },
-                { value: 'Waitlist', label: 'Waitlist' },
-                { value: 'Cancelled', label: 'Cancelled' },
-                { value: 'Completed', label: 'Completed' },
-                { value: 'NoLongerAttending', label: 'No Longer Attending' },
-              ],
+              items: statusItems(BOOKING_STATUSES, BOOKING_STATUS_LABELS),
               onBulkChange: (ids: string[], value: string) =>
                 bulkPatchBookings(ids, { bookingStatus: value as BookingStatus }),
             } } : {}),
@@ -471,15 +464,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                   patchRow(b, { bookingStatus: val as BookingStatus }, response => setBudgetNotice(bookingBudgetNotice(response)))
                 }}
                 colorClass={getStatusColor(b.bookingStatus)}
-                items={[
-                  { value: 'Enquiry', label: 'Enquiry' },
-                  { value: 'Held', label: 'Held' },
-                  { value: 'Confirmed', label: 'Confirmed' },
-                  { value: 'Waitlist', label: 'Waitlist' },
-                  { value: 'Cancelled', label: 'Cancelled' },
-                  { value: 'Completed', label: 'Completed' },
-                  { value: 'NoLongerAttending', label: 'No Longer Attending' },
-                ]}
+                items={statusItems(BOOKING_STATUSES, BOOKING_STATUS_LABELS)}
                 disabled={!canWrite}
               />
             ),
@@ -666,7 +651,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                 Cancel
               </Button>
               <Button onClick={handleUpdateBooking} disabled={updateBooking.isPending}>
-                {updateBooking.isPending ? 'Saving...' : 'Save Changes'}
+                {updateBooking.isPending ? 'Saving…' : 'Save'}
               </Button>
             </>
           }
@@ -679,15 +664,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                 variant="form"
                 value={editForm.bookingStatus}
                 onChange={val => setEditForm({ ...editForm, bookingStatus: val })}
-                items={[
-                  { value: 'Enquiry', label: 'Enquiry' },
-                  { value: 'Held', label: 'Held' },
-                  { value: 'Confirmed', label: 'Confirmed' },
-                  { value: 'Waitlist', label: 'Waitlist' },
-                  { value: 'Cancelled', label: 'Cancelled' },
-                  { value: 'Completed', label: 'Completed' },
-                  { value: 'NoLongerAttending', label: 'No Longer Attending' },
-                ]}
+                items={statusItems(BOOKING_STATUSES, BOOKING_STATUS_LABELS)}
               />
             </div>
 

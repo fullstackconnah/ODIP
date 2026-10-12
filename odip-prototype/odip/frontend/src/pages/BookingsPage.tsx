@@ -14,7 +14,8 @@ import { PageState } from '@/components/PageState'
 import { getStatusColor, extractErrorMessage } from '@/lib/utils'
 import { CalendarCheck } from 'lucide-react'
 import { useState } from 'react'
-import type { BookingStatus } from '@/api/types/enums'
+import { BOOKING_STATUSES, type BookingStatus } from '@/api/types/enums'
+import { BOOKING_STATUS_LABELS, statusItems } from '@/lib/tone'
 import type { BookingListDto } from '@/api/types/bookings'
 import { plural } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
@@ -29,15 +30,7 @@ const CONFIRM_STATUSES: BookingStatus[] = ['Cancelled', 'NoLongerAttending']
 // boundary as plain query strings, not a shared type.
 const BOOKINGS_PAGE_SIZE = 50
 
-const BOOKING_STATUS_ITEMS = [
-  { value: 'Enquiry', label: 'Enquiry' },
-  { value: 'Held', label: 'Held' },
-  { value: 'Confirmed', label: 'Confirmed' },
-  { value: 'Waitlist', label: 'Waitlist' },
-  { value: 'Cancelled', label: 'Cancelled' },
-  { value: 'Completed', label: 'Completed' },
-  { value: 'NoLongerAttending', label: 'No Longer Attending' },
-]
+const BOOKING_STATUS_ITEMS = statusItems(BOOKING_STATUSES, BOOKING_STATUS_LABELS)
 
 const NEEDS: Array<[keyof BookingListDto, string]> = [
   ['wheelchairRequired', 'Wheelchair'],

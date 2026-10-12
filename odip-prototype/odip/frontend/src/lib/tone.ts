@@ -1,4 +1,4 @@
-import type { TripStatus } from '@/api/types/enums'
+import type { BookingStatus, TripStatus } from '@/api/types/enums'
 
 /**
  * The tone system: what red, amber, green, slate and pink MEAN in ODIP, decided in this one file.
@@ -272,4 +272,20 @@ export const TRIP_STATUS_LABELS: Record<TripStatus, string> = {
   Completed: 'Completed',
   Cancelled: 'Cancelled',
   Archived: 'Archived',
+}
+
+/** Sentence-case labels for every booking status, as TRIP_STATUS_LABELS is for trips. */
+export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
+  Enquiry: 'Enquiry',
+  Held: 'Held',
+  Confirmed: 'Confirmed',
+  Waitlist: 'Waitlist',
+  Cancelled: 'Cancelled',
+  Completed: 'Completed',
+  NoLongerAttending: 'No longer attending',
+}
+
+/** Dropdown items for some statuses, each labelled from its label map: `statusItems(BOOKING_STATUSES, BOOKING_STATUS_LABELS)`. */
+export function statusItems<S extends string>(statuses: readonly S[], labels: Record<S, string>): { value: S; label: string }[] {
+  return statuses.map(value => ({ value, label: labels[value] }))
 }

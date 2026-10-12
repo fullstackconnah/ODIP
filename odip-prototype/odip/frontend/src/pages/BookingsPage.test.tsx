@@ -21,13 +21,13 @@ describe('BookingsPage — the status by role', () => {
   it('shows ReadOnly the status as text, not a pill', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
     render(<MemoryRouter><BookingsPage /></MemoryRouter>)
-    expect(screen.getByText('No Longer Attending')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /No Longer Attending/ })).not.toBeInTheDocument()
+    expect(screen.getByText('No longer attending')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /No longer attending/ })).not.toBeInTheDocument()
   })
 
   it.each(['Admin', 'Coordinator'])('offers %s the pill', role => {
     localStorage.setItem('odip_user', JSON.stringify({ role }))
     render(<MemoryRouter><BookingsPage /></MemoryRouter>)
-    expect(screen.getByRole('button', { name: /No Longer Attending/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /No longer attending/ })).toBeInTheDocument()
   })
 })
