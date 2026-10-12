@@ -94,6 +94,17 @@ describe('AdminNotificationsTab', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/only failed notifications can be retried/i)
   })
 
+  it('shows a failed load as the house error banner whose Try again refetches', async () => {
+    const refetch = vi.fn()
+    mockUseAdminNotifications.mockReturnValue({ data: [], isLoading: false, isError: true, refetch })
+    render(<AdminNotificationsTab />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't load/i)
+    expect(screen.queryByText(/no notifications match/i)).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalled()
+  })
+
   it('sends a test email and shows the result', async () => {
     mockSendTestEmailMutateAsync.mockResolvedValue({ sent: true })
     mockUseAdminNotifications.mockReturnValue({ data: [], isLoading: false, isError: false })

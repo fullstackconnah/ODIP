@@ -109,7 +109,7 @@ export function PrivateRoute({ children, page, requiresWrite, viewableByReadOnly
 // createBrowserRouter instead of rendered directly.
 const router = createBrowserRouter(
   createRoutesFromElements(
-    <Route element={<Suspense fallback={<div className="flex items-center justify-center h-screen text-[#43493a]">Loading...</div>}><Outlet /></Suspense>}>
+    <Route element={<Suspense fallback={<div className="flex items-center justify-center h-screen text-[var(--color-muted-foreground)]">Loading...</div>}><Outlet /></Suspense>}>
       <Route path="/login" element={<LoginPage />} />
       {/* Caregiver profile form — public, token-authenticated, deliberately OUTSIDE the
           authenticated shell: no PrivateRoute, no AppLayout, no UiPreferencesProvider. */}

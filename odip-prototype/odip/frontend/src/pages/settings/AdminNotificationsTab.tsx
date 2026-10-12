@@ -128,21 +128,15 @@ export default function AdminNotificationsTab() {
           <p role="alert" className="text-xs text-[var(--color-destructive)]">{retryError}</p>
         )}
 
-        {isLoading ? (
-          <p className="text-sm text-[var(--color-muted-foreground)]">Loading...</p>
-        ) : isError ? (
-          <div className="text-sm text-[var(--color-muted-foreground)]">
-            Couldn't load notifications.{' '}
-            <button type="button" onClick={() => refetch()} className="underline">Try again</button>
-          </div>
-        ) : (
-          <DataTable
-            data={rows}
-            columns={columns}
-            keyField="id"
-            emptyMessage="No notifications match these filters."
-          />
-        )}
+        <DataTable
+          data={rows}
+          columns={columns}
+          keyField="id"
+          loading={isLoading}
+          error={isError}
+          onRetry={() => refetch()}
+          emptyMessage="No notifications match these filters."
+        />
       </div>
 
       <div className="max-w-md space-y-3 border-t border-[var(--color-border)] pt-6">
