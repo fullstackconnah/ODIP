@@ -1,4 +1,4 @@
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
@@ -9,7 +9,8 @@ import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
-import { TAP_FLOOR } from '@/components/tapArea'
+import { TRIP_STATUS_LABELS, statusItems } from '@/lib/tone'
+import { BackButton } from '@/components/BackButton'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { formGrid, span } from '@/lib/formGrid'
@@ -84,10 +85,10 @@ export default function TripCreatePage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
-      <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/trips" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Trips</Link>
+      <div className="flex items-start gap-2">
+        <BackButton to="/trips" label="trips" variant="icon" history={false} />
+        <div className="flex-1 min-w-0"><PageHeader title="New trip" /></div>
       </div>
-      <PageHeader title="Create New Trip" />
 
       {createTrip.isError && (
         <Callout tone="error">
@@ -157,11 +158,7 @@ export default function TripCreatePage() {
                     value={field.value ?? ''}
                     onChange={field.onChange}
                     onBlur={field.onBlur}
-                    items={[
-                      { value: 'Draft', label: 'Draft' },
-                      { value: 'Planning', label: 'Planning' },
-                      { value: 'OpenForBookings', label: 'Open For Bookings' },
-                    ]}
+                    items={statusItems(['Draft', 'Planning', 'OpenForBookings'], TRIP_STATUS_LABELS)}
                   />
                 )}
               />
@@ -190,7 +187,7 @@ export default function TripCreatePage() {
         </Card>
 
         {/* Capacity & Requirements */}
-        <Card title="Capacity & Requirements">
+        <Card title="Capacity & requirements">
           <div className={formGrid}>
             <FormField label="Min Participants" hint="Smallest group size this trip needs to go ahead." className={span.short}>
               <input type="number" min={0} {...register('minParticipants')} />
@@ -225,7 +222,7 @@ export default function TripCreatePage() {
         <div className="flex justify-end gap-3">
           <Button variant="secondary" to="/trips">Cancel</Button>
           <Button type="submit" disabled={createTrip.isPending}>
-            {createTrip.isPending ? 'Creating...' : 'Create Trip'}
+            {createTrip.isPending ? 'Creating…' : 'Create trip'}
           </Button>
         </div>
       </form>

@@ -145,9 +145,12 @@ export default function PortalWitnessApprovalsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader title="Witness approvals" subtitle="Medication doses and incident reports waiting for you to confirm you witnessed them">
-        <BackButton to="/portal" label="my shifts" variant="link" history={false} />
-      </PageHeader>
+      <div className="flex items-start gap-2">
+        <BackButton to="/portal" label="my shifts" variant="icon" history={false} />
+        <div className="flex-1 min-w-0">
+          <PageHeader title="Witness approvals" />
+        </div>
+      </div>
 
       {error && (
         <Callout tone="error">{error}</Callout>

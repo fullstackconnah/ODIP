@@ -52,7 +52,7 @@ test.describe('ReadOnly', () => {
     const row = page.getByRole('row').filter({ hasText: trip.token });
     await expect(row).toBeVisible();
     await expect(row.getByRole('button')).toHaveCount(0);
-    await expect(page.getByRole('link', { name: /New Trip/ })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /New trip/ })).toHaveCount(0);
 
     await page.goto('/schedule');
     await expect(page.getByText(trip.token).first()).toBeVisible();
@@ -96,7 +96,7 @@ test.describe('Coordinator (control)', () => {
     const row = page.getByRole('row').filter({ hasText: trip.token });
     await expect(row).toBeVisible();
     await expect(row.getByRole('button').first()).toBeVisible();
-    await expect(page.getByRole('link', { name: /New Trip/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /New trip/ })).toBeVisible();
 
     await page.goto('/schedule');
     await expect(page.getByText(trip.token).first()).toBeVisible();
@@ -107,7 +107,7 @@ test.describe('Coordinator (control)', () => {
     await expect(page.getByRole('link', { name: /^Edit$/ })).toBeVisible();
 
     await page.goto(`/tasks/${taskId}/edit`);
-    await expect(page.getByRole('heading', { name: 'Edit Task' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Edit task' })).toBeVisible();
     await expect(page.locator('input[name="title"]')).toBeEnabled();
   });
 });

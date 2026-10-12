@@ -121,30 +121,30 @@ export default function TripDetailPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {/* Detail header pattern: display title + meta row (PageHeader variant="detail"), then the glance strip
           (FactBar variant="glance"). The tab strip and everything below it is the ordinary dense page. */}
-      <PageHeader
-        variant="detail"
-        title={trip.tripName}
-        subtitle={
-          <PageHeaderMeta>
-            <StatusBadge status={trip.status} label={TRIP_STATUS_LABELS[trip.status] ?? trip.status} size="md" />
-            {trip.destination}
-            {trip.tripCode && <span className="font-mono text-[var(--color-secondary)]">{trip.tripCode}</span>}
-            {formatDateRange(trip.startDate, trip.endDate)}
-            {typeof trip.durationDays === 'number' && plural(trip.durationDays, 'day')}
-          </PageHeaderMeta>
-        }
-        action={
-          <div className="flex gap-2 shrink-0">
-            <BackButton to="/trips" label="trips" history={false} />
-            {canWrite && (
+      <div className="flex items-start gap-2">
+        <BackButton to="/trips" label="trips" variant="icon" history={false} className="mt-1.5" />
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            variant="detail"
+            title={trip.tripName}
+            subtitle={
+              <PageHeaderMeta>
+                <StatusBadge status={trip.status} label={TRIP_STATUS_LABELS[trip.status] ?? trip.status} size="md" />
+                {trip.destination}
+                {trip.tripCode && <span className="font-mono text-[var(--color-secondary)]">{trip.tripCode}</span>}
+                {formatDateRange(trip.startDate, trip.endDate)}
+                {typeof trip.durationDays === 'number' && plural(trip.durationDays, 'day')}
+              </PageHeaderMeta>
+            }
+            action={canWrite && (
               <Button variant="primary" size="md" onClick={() => setShowEditTrip(true)}>
                 <Pencil className="w-4 h-4" />
-                Edit Trip
+                Edit
               </Button>
             )}
-          </div>
-        }
-      />
+          />
+        </div>
+      </div>
 
       <FactBar variant="glance" segments={factBarSegments} />
 

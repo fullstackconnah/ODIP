@@ -1,4 +1,4 @@
-import { useNavigate, useParams, useLocation, Link } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import type { AxiosError } from 'axios'
 import { useForm, useWatch } from 'react-hook-form'
@@ -8,7 +8,7 @@ import { Info } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
-import { TAP_FLOOR } from '@/components/tapArea'
+import { BackButton } from '@/components/BackButton'
 import type { CreateIncidentDto, UpdateIncidentDto, IncidentDetailDto } from '@/api/types/incidents'
 import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus } from '@/api/types/enums'
 import { SERVICE_STREAMS, INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, QSC_REPORTING_STATUS_LABELS, BODY_REGION_LABELS, INJURY_TYPE_LABELS } from '@/api/types/enums'
@@ -514,10 +514,10 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
-      <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/incidents" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Incidents</Link>
+      <div className="flex items-start gap-2">
+        <BackButton to="/incidents" label="incidents" variant="icon" history={false} />
+        <div className="flex-1 min-w-0"><PageHeader title={isEdit ? 'Edit incident report' : 'Report incident'} /></div>
       </div>
-      <PageHeader title={isEdit ? 'Edit Incident Report' : 'Report New Incident'} />
 
       {marPrefill && (
         <Card className="bg-[var(--color-secondary-container)]/40 border-[var(--color-secondary-container)]">
@@ -649,7 +649,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
           isReviewStep={isReviewStep}
           secondaryActions={[]}
           cancelTo="/incidents"
-          submitLabel={mutation.isPending ? (isEdit ? 'Saving...' : 'Submitting...') : (isEdit ? 'Save Changes' : 'Submit Incident Report')}
+          submitLabel={mutation.isPending ? (isEdit ? 'Saving…' : 'Submitting…') : (isEdit ? 'Save' : 'Submit incident report')}
           isSubmitting={mutation.isPending}
         />
       </form>

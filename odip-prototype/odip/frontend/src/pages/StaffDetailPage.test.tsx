@@ -354,12 +354,12 @@ describe('StaffDetailPage — Completions tab', () => {
 // phone (scrollWidth 400 at 390, 401 at 360). PageHeader now stacks the cluster on its own row below
 // md; the cluster itself must be allowed to wrap. jsdom applies no CSS, so these assert the class contract.
 describe('StaffDetailPage — mobile header and tap targets', () => {
-  it('lets the Back / Leave / Edit cluster wrap instead of holding it at its full width', () => {
+  it('lets the Leave / Edit cluster wrap instead of holding it at its full width, with Back left of the title', () => {
     mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
     renderAt('staff-1')
 
     const cluster = screen.getByRole('link', { name: /edit/i }).parentElement!
-    expect(cluster).toContainElement(screen.getByRole('link', { name: /back to staff/i }))
+    expect(cluster).not.toContainElement(screen.getByRole('link', { name: /back to staff/i }))
     expect(cluster).toHaveClass('flex', 'flex-wrap')
     expect(cluster).not.toHaveClass('shrink-0')
   })

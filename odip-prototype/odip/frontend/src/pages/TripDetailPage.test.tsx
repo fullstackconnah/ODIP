@@ -269,18 +269,18 @@ describe('TripDetailPage — detail header (the bolder header pattern)', () => {
     expect(row.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2)
   })
 
-  it('keeps the Back link and the Edit Trip action', () => {
+  it('keeps the Back link, left of the title, and the Edit action', () => {
     renderPage()
 
     expect(screen.getByRole('link', { name: 'Back to trips' })).toHaveAttribute('href', '/trips')
-    expect(screen.getByRole('button', { name: /edit trip/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
   })
 
-  it('still hides Edit Trip from a read-only user', () => {
+  it('still hides Edit from a read-only user', () => {
     canWrite = false
     renderPage()
 
-    expect(screen.queryByRole('button', { name: /edit trip/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
     expect(screen.getByRole('link', { name: /back/i })).toBeInTheDocument()
   })
 

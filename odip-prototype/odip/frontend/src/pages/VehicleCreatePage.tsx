@@ -1,4 +1,4 @@
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
@@ -9,8 +9,8 @@ import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
+import { BackButton } from '@/components/BackButton'
 import { usePermissions } from '@/lib/permissions'
-import { TAP_FLOOR } from '@/components/tapArea'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { formGrid, span } from '@/lib/formGrid'
@@ -111,10 +111,10 @@ export default function VehicleCreatePage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
-      <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/vehicles" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Vehicles</Link>
+      <div className="flex items-start gap-2">
+        <BackButton to="/vehicles" label="vehicles" variant="icon" history={false} />
+        <div className="flex-1 min-w-0"><PageHeader title={viewOnly ? 'View vehicle' : isEdit ? 'Edit vehicle' : 'New vehicle'} /></div>
       </div>
-      <PageHeader title={viewOnly ? 'View vehicle' : isEdit ? 'Edit Vehicle' : 'New Vehicle'} />
 
       {mutation.isError && (
         <Callout tone="error">
@@ -125,7 +125,7 @@ export default function VehicleCreatePage() {
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
         <fieldset disabled={viewOnly} className="flex flex-col gap-[var(--section-gap)] min-w-0">
         {/* Vehicle Information */}
-        <Card title="Vehicle Information">
+        <Card title="Vehicle information">
           <div className={formGrid}>
             <FormField label="Vehicle Name" required error={errors.vehicleName?.message} className={span.medium}>
               <input {...register('vehicleName')} placeholder="e.g. Blue Van 1" autoFocus />
@@ -158,7 +158,7 @@ export default function VehicleCreatePage() {
         </Card>
 
         {/* Capacity & Accessibility */}
-        <Card title="Capacity & Accessibility">
+        <Card title="Capacity & accessibility">
           <div className={formGrid}>
             <FormField label="Total Seats" required error={errors.totalSeats?.message} className={span.short}>
               <input type="number" min="0" {...register('totalSeats')} />
@@ -178,7 +178,7 @@ export default function VehicleCreatePage() {
         </Card>
 
         {/* Dates & Notes */}
-        <Card title="Service & Notes">
+        <Card title="Service & notes">
           <div className={formGrid}>
             <FormField label="Service Due Date" className={span.date}>
               <input type="date" {...register('serviceDueDate')} />
@@ -199,7 +199,7 @@ export default function VehicleCreatePage() {
         {!viewOnly && <div className="flex justify-end gap-3">
           <Button variant="secondary" to="/vehicles">Cancel</Button>
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Vehicle')}
+            {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save' : 'Create vehicle')}
           </Button>
         </div>}
       </form>

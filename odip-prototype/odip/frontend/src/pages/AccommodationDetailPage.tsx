@@ -30,30 +30,30 @@ export default function AccommodationDetailPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title={property.propertyName}
-        subtitle={
-          <div className="flex flex-wrap items-center gap-3 text-[13px] text-[var(--color-muted-foreground)]">
-            <StatusBadge status={property.isActive ? 'Active' : 'Inactive'} />
-            <span>{property.location || 'No location'}{property.region ? ` · ${property.region}` : ''}</span>
-          </div>
-        }
-        action={
-          <div className="flex gap-2 shrink-0">
-            <BackButton to="/accommodation" label="accommodation" history={false} />
-            {canWrite && (
+      <div className="flex items-start gap-2">
+        <BackButton to="/accommodation" label="accommodation" variant="icon" history={false} className="mt-1" />
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            title={property.propertyName}
+            subtitle={
+              <div className="flex flex-wrap items-center gap-3 text-[13px] text-[var(--color-muted-foreground)]">
+                <StatusBadge status={property.isActive ? 'Active' : 'Inactive'} />
+                <span>{property.location || 'No location'}{property.region ? ` · ${property.region}` : ''}</span>
+              </div>
+            }
+            action={canWrite && (
               <Button to={`/accommodation/${id}/edit`} variant="primary" size="md">
                 <Pencil className="w-4 h-4" /> Edit
               </Button>
             )}
-          </div>
-        }
-      />
+          />
+        </div>
+      </div>
 
       {/* min(26rem,100%): a bare 26rem track floor (416px) overflows a 390px phone viewport. */}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]">
         {/* Details */}
-        <Card title="Property Details">
+        <Card title="Property details">
           <FactList
             className={FACT_LIST_WRAP}
             items={[
@@ -74,7 +74,7 @@ export default function AccommodationDetailPage() {
         </Card>
 
         {/* Contact & Address */}
-        <Card title="Contact & Address">
+        <Card title="Contact & address">
           <FactList
             className={FACT_LIST_WRAP}
             items={[

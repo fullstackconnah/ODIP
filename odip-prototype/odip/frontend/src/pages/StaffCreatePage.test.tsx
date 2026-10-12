@@ -102,7 +102,7 @@ describe('StaffCreatePage account-role lock (Coordinator editing an Admin)', () 
     const mobileInput = await screen.findByLabelText(/mobile/i)
     await user.clear(mobileInput)
     await user.type(mobileInput, '0411 222 333')
-    await user.click(screen.getByRole('button', { name: /save changes/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
 
     expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
     const call = mockUpdateMutateAsync.mock.calls[0][0]
@@ -197,7 +197,7 @@ describe('StaffCreatePage editing a SuperAdmin target', () => {
     expect(screen.getByText(/managed in settings/i)).toBeInTheDocument()
 
     // No form at all — not just a disabled submit button.
-    expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/account role/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/mobile/i)).not.toBeInTheDocument()
 
@@ -205,17 +205,15 @@ describe('StaffCreatePage editing a SuperAdmin target', () => {
   })
 })
 
-// Density polish (touch): the "← Back to Staff" text link was a 19px tap target. It takes the shared TAP_FLOOR
-// (a --tap-min height floor, inline-flex + centring under `pointer: coarse` only), so it is 44px tall on touch and
-// exactly what it was, box for box, on a mouse (--tap-min is 0px there).
-describe('StaffCreatePage — Back link touch target', () => {
-  it('floors the "Back to Staff" link at --tap-min and keeps its destination and hover colour', () => {
+// The one Back standard (UI survey s.1): the icon BackButton left of the title, named for where it goes.
+describe('StaffCreatePage — Back', () => {
+  it('is the icon Back before the title, a real link to /staff', () => {
     renderCreatePage()
 
     const back = screen.getByRole('link', { name: /back to staff/i })
     expect(back).toHaveAttribute('href', '/staff')
-    expect(back).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'hover:text-[var(--color-foreground)]', 'transition-colors')
-    expect(back.className).not.toMatch(/44px/)
+    expect(back).toHaveClass('min-w-[var(--tap-min)]')
+    expect(back.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 
@@ -231,6 +229,6 @@ describe('StaffCreatePage — editing an unknown staff member', () => {
     mockUseStaffDetail.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } } })
     renderEditPage('missing')
     expect(screen.getByText('Staff member not found')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Save Changes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
   })
 })

@@ -1,4 +1,4 @@
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -8,7 +8,7 @@ import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
-import { TAP_FLOOR } from '@/components/tapArea'
+import { BackButton } from '@/components/BackButton'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { formGrid, span } from '@/lib/formGrid'
@@ -129,10 +129,10 @@ export default function AccommodationCreatePage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
-      <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to={isEdit ? `/accommodation/${id}` : '/accommodation'} className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Accommodation</Link>
+      <div className="flex items-start gap-2">
+        <BackButton to={isEdit ? `/accommodation/${id}` : '/accommodation'} label="accommodation" variant="icon" history={false} />
+        <div className="flex-1 min-w-0"><PageHeader title={isEdit ? 'Edit accommodation' : 'New accommodation'} /></div>
       </div>
-      <PageHeader title={isEdit ? 'Edit Accommodation' : 'New Accommodation'} />
 
       {mutation.isError && (
         <Callout tone="error">
@@ -142,7 +142,7 @@ export default function AccommodationCreatePage() {
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
         {/* Property Information */}
-        <Card title="Property Information">
+        <Card title="Property information">
           <div className={formGrid}>
             <FormField label="Property Name" required error={errors.propertyName?.message} className={span.medium}>
               <input {...register('propertyName')} placeholder="e.g. Sunrise Beach House" autoFocus />
@@ -163,7 +163,7 @@ export default function AccommodationCreatePage() {
         </Card>
 
         {/* Address & Contact */}
-        <Card title="Address & Contact">
+        <Card title="Address & contact">
           <div className={formGrid}>
             <FormField label="Address" className={span.long}>
               <input {...register('address')} placeholder="e.g. 123 Ocean Drive" />
@@ -200,7 +200,7 @@ export default function AccommodationCreatePage() {
         </Card>
 
         {/* Capacity & Accessibility */}
-        <Card title="Capacity & Accessibility">
+        <Card title="Capacity & accessibility">
           <div className={formGrid}>
             <FormField label="Bedrooms" className={span.short}>
               <input type="number" min="0" {...register('bedroomCount')} placeholder="0" />
@@ -251,7 +251,7 @@ export default function AccommodationCreatePage() {
         <div className="flex justify-end gap-3">
           <Button variant="secondary" to={isEdit ? `/accommodation/${id}` : '/accommodation'}>Cancel</Button>
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Accommodation')}
+            {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save' : 'Create accommodation')}
           </Button>
         </div>
       </form>

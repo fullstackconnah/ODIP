@@ -49,29 +49,29 @@ export default function IncidentDetailPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title={incident.title}
-        subtitle={
-          <div className="flex flex-wrap items-center gap-3">
-            <StatusBadge status={incident.severity} label={INCIDENT_SEVERITY_LABELS[incident.severity]} />
-            <StatusBadge status={incident.status} label={INCIDENT_STATUS_LABELS[incident.status]} />
-            <span>
-              {INCIDENT_TYPE_LABELS[incident.incidentType] ?? incident.incidentType}
-              {incident.involvedParticipantName ? ` · ${incident.involvedParticipantName}` : ''}
-            </span>
-          </div>
-        }
-        action={
-          <div className="flex shrink-0 items-center gap-2">
-            <BackButton to="/incidents" label="incidents" history={false} />
-            {canWrite && (
+      <div className="flex items-start gap-2">
+        <BackButton to="/incidents" label="incidents" variant="icon" history={false} className="mt-1" />
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            title={incident.title}
+            subtitle={
+              <div className="flex flex-wrap items-center gap-3">
+                <StatusBadge status={incident.severity} label={INCIDENT_SEVERITY_LABELS[incident.severity]} />
+                <StatusBadge status={incident.status} label={INCIDENT_STATUS_LABELS[incident.status]} />
+                <span>
+                  {INCIDENT_TYPE_LABELS[incident.incidentType] ?? incident.incidentType}
+                  {incident.involvedParticipantName ? ` · ${incident.involvedParticipantName}` : ''}
+                </span>
+              </div>
+            }
+            action={canWrite && (
               <Button to={`/incidents/${incident.id}/edit`} variant="secondary" size="md">
                 Edit
               </Button>
             )}
-          </div>
-        }
-      />
+          />
+        </div>
+      </div>
 
       <Card>
         <FactList
