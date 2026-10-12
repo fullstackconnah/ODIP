@@ -182,7 +182,8 @@ describe('BudgetsPage: the participants with no budget in force', () => {
 
     const list = document.getElementById(screen.getByRole('button', { name: /no budget recorded/ }).getAttribute('aria-controls')!)!
     expect(within(list).getByText('Noor Hassan')).toBeVisible()
-    expect(within(list).getByText('No budget recorded')).toBeVisible()
+    // The toggle already says "with no budget recorded": the row does not say it again (V2-F). A plan that ended still says when.
+    expect(within(list).queryByText('No budget recorded')).not.toBeInTheDocument()
     expect(within(list).getByText('Edna Ended')).toBeVisible()
     expect(within(list).getByText('Plan ended 30 Jun 2026')).toBeVisible()
     expect(within(list).getByRole('link', { name: 'Record budget for Noor Hassan' })).toHaveAttribute('href', '/participants/p-0005?tab=funding')
@@ -220,11 +221,12 @@ describe('BudgetsPage: the participants with no budget in force', () => {
     expect(screen.getByRole('button', { name: '1 participant with no budget recorded' })).toBeInTheDocument()   // ...but one without a budget does
   })
 
-  it('is what the page says when nobody has a budget yet: no filters, no caption about risk order, the words, and the people open from the start', () => {
+  it('is what the page says when nobody has a budget yet: no filters, no caption about risk order, and the people open from the start under their own note', () => {
     mockUseBudgetList.mockReturnValue(ready(budgetList({ rows: [] })))
     renderPage()
 
-    expect(screen.getByText('No budgets are being tracked yet. Record a participant’s plan to start.')).toBeInTheDocument()
+    // The open list's own note says what to do; the "nothing tracked" box above it said it a second time (V2-F).
+    expect(screen.queryByText('No budgets are being tracked yet. Record a participant’s plan to start.')).not.toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: /^All/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Search participants' })).not.toBeInTheDocument()
     expect(screen.queryByText(/Riskiest first/)).not.toBeInTheDocument()
