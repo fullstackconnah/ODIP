@@ -178,8 +178,9 @@ export default function TasksPage() {
       ) : null,
     },
     // ReadOnly has no Edit: View opens the task itself, which a linked task's title does not (it goes to the linked page).
-    { key: 'actions', header: '', render: (t) => mayChange(t) ? <RowActions>{actionButtons(t)}</RowActions> : isReadOnly && !isBudgetReview(t) ? (
-      <RowActions>
+    // On a mouse the cluster overlays the row's last cells (RowActions overlay) instead of holding a column, so "Open" is not cut at 1440.
+    { key: 'actions', header: '', className: 'relative', render: (t) => mayChange(t) ? <RowActions overlay>{actionButtons(t)}</RowActions> : isReadOnly && !isBudgetReview(t) ? (
+      <RowActions overlay>
         <Button to={`/tasks/${t.id}/edit`} variant="ghost" size="sm" iconOnly title="View" aria-label="View">
           <Eye className="w-4 h-4" />
         </Button>

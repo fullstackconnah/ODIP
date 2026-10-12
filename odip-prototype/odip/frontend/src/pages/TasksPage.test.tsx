@@ -371,6 +371,8 @@ describe('TasksPage — phone card', () => {
 
     const edit = screen.getByRole('link', { name: 'Edit' })
     expect(edit.closest('div.flex.justify-end')).toHaveClass('max-md:[&_:is(a,button)]:min-h-11', 'max-md:[&_:is(a,button)]:min-w-11')
+    // On a mouse at md+ the cluster overlays the row instead of holding a column, so the Open link beside Status is not cut at 1440.
+    expect(edit.closest('div.flex.justify-end')).toHaveClass('md:pointer-fine:absolute')
     expect(screen.getByRole('button', { name: 'Mark complete' })).toHaveClass('max-md:min-h-11', 'max-md:min-w-11')
   })
 })
