@@ -59,6 +59,12 @@ function readMedical(p: ParticipantDetailDto): MedicalDraft {
   }
 }
 
+/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
+export function hasMedical(p: ParticipantDetailDto): boolean {
+  return !!(p.primaryDiagnosis || p.otherDiagnoses?.length || parseHidpaCategories(p.hidpaSupportCategories).length || p.hidpaNotes || p.medicalSummary
+    || p.allergiesDetail || p.isAnaphylaxisRisk != null || p.allergyManagementNotes)
+}
+
 export function ParticipantMedicalSection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {
   const patchParticipant = usePatchParticipant()
   const [customDiagnosisInput, setCustomDiagnosisInput] = useState('')
@@ -71,8 +77,7 @@ export function ParticipantMedicalSection({ p, participantId, canEdit }: { p: Pa
     || draft.hidpaNotes !== saved.hidpaNotes || draft.medicalSummary !== saved.medicalSummary
     || draft.allergiesDetail !== saved.allergiesDetail || draft.isAnaphylaxisRisk !== saved.isAnaphylaxisRisk || draft.allergyManagementNotes !== saved.allergyManagementNotes
 
-  const hasAnyData = !!(p.primaryDiagnosis || p.otherDiagnoses?.length || hidpaCategories.length || p.hidpaNotes || p.medicalSummary
-    || p.allergiesDetail || p.isAnaphylaxisRisk != null || p.allergyManagementNotes)
+  const hasAnyData = hasMedical(p)
 
   if (!canEdit && !hasAnyData) return null
 

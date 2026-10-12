@@ -46,15 +46,20 @@ function readCulturalBackground(p: ParticipantDetailDto): CulturalBackgroundDraf
   }
 }
 
+/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
+export function hasCulturalBackground(p: ParticipantDetailDto): boolean {
+  return p.isCald != null || p.isLgbtqi != null || p.isFamilyCommunity != null || p.isAboriginalOrTorresStraitIslander != null
+    || p.receivedRightsAndResponsibilitiesInfo != null || p.receivedPrivacyAndConfidentialityInfo != null
+    || p.receivedFeedbackInfo != null || p.receivedBeingSafeInfo != null || p.receivedAdvocacyInfo != null
+    || !!p.personalInterests || !!p.choiceControlNotes
+}
+
 export function ParticipantCulturalBackgroundSection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {
   const patchParticipant = usePatchParticipant()
   const saved = readCulturalBackground(p)
   const [draft, setDraft] = useState<CulturalBackgroundDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof CulturalBackgroundDraft)[]).some((k) => draft[k] !== saved[k])
-  const hasAnyData = p.isCald != null || p.isLgbtqi != null || p.isFamilyCommunity != null || p.isAboriginalOrTorresStraitIslander != null
-    || p.receivedRightsAndResponsibilitiesInfo != null || p.receivedPrivacyAndConfidentialityInfo != null
-    || p.receivedFeedbackInfo != null || p.receivedBeingSafeInfo != null || p.receivedAdvocacyInfo != null
-    || !!p.personalInterests || !!p.choiceControlNotes
+  const hasAnyData = hasCulturalBackground(p)
 
   if (!canEdit && !hasAnyData) return null
 

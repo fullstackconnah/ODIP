@@ -42,6 +42,11 @@ function readAddressLiving(p: ParticipantDetailDto): AddressLivingDraft {
   }
 }
 
+/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
+export function hasAddressLiving(p: ParticipantDetailDto): boolean {
+  return !!(p.addressStreet || p.addressSuburb || p.addressState || p.addressPostcode || p.country || p.livingArrangement)
+}
+
 export function ParticipantAddressLivingSection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {
   const patchParticipant = usePatchParticipant()
   const saved = readAddressLiving(p)

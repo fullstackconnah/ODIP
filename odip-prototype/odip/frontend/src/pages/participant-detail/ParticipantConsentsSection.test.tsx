@@ -167,3 +167,14 @@ describe('ParticipantConsentsSection', () => {
     })
   })
 })
+
+// VISUAL-1 V2: seven "Not recorded" rows on a new participant fold into one line that opens to them.
+describe('ParticipantConsentsSection — nothing recorded yet', () => {
+  it('folds the list into one closed "Not recorded" line that holds the rows and their Edit', () => {
+    render(<ParticipantConsentsSection participantId="participant-1" />)
+    const fold = screen.getByText('Not recorded: 7 consents').closest('details')!
+    expect(fold).not.toHaveAttribute('open')
+    expect(fold).toContainElement(screen.getByText('Terms & Conditions'))
+    expect(within(fold).getAllByRole('button', { name: /edit/i }).length).toBeGreaterThan(0)
+  })
+})

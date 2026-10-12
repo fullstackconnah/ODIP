@@ -170,7 +170,6 @@ export default function ContactsTab({ participantId }: { participantId: string |
           icon={Contact2}
           title="No contacts recorded"
           description="Add next of kin, guardians, support coordinators, plan managers, and other key contacts for this participant."
-          action={canWrite && participantId ? { label: 'Add contact', onClick: openCreate } : undefined}
         />
       ) : (
         <DataTable

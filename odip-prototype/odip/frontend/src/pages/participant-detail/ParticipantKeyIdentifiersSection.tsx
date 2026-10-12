@@ -28,13 +28,18 @@ function readKeyIdentifiers(p: ParticipantDetailDto): KeyIdentifiersDraft {
   }
 }
 
+/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
+export function hasKeyIdentifiers(p: ParticipantDetailDto): boolean {
+  return !!(p.pensionCardNumber || p.medicareNumber || p.companionCardNumber || p.privateHealthFund
+    || p.taxiCardNumber || p.hairColour || p.eyeColour || p.weightKg || p.heightCm)
+}
+
 export function ParticipantKeyIdentifiersSection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {
   const patchParticipant = usePatchParticipant()
   const saved = readKeyIdentifiers(p)
   const [draft, setDraft] = useState<KeyIdentifiersDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof KeyIdentifiersDraft)[]).some((k) => draft[k] !== saved[k])
-  const hasAnyData = !!(p.pensionCardNumber || p.medicareNumber || p.companionCardNumber || p.privateHealthFund
-    || p.taxiCardNumber || p.hairColour || p.eyeColour || p.weightKg || p.heightCm)
+  const hasAnyData = hasKeyIdentifiers(p)
 
   if (!canEdit && !hasAnyData) return null
 

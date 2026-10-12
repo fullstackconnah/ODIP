@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { HeartPulse } from 'lucide-react'
+import { NotRecordedFold } from './NotRecordedFold'
+import { plural } from '@/lib/format'
 import { useParticipantHealthConditions, useUpsertHealthCondition } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
@@ -128,6 +130,10 @@ export default function ParticipantHealthConditionsSection({ participantId }: { 
     },
   ]
 
+  // VISUAL-1 V2: ten "Not recorded" rows on a new participant fold into one line that opens to them.
+  const foldIfNoneRecorded = (table: ReactNode) =>
+    ordered.length > 0 && ordered.every((c) => c.has == null) ? <NotRecordedFold summary={plural(ordered.length, 'health condition')}>{table}</NotRecordedFold> : table
+
   return (
     <div className="space-y-4">
       <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
@@ -138,7 +144,7 @@ export default function ParticipantHealthConditionsSection({ participantId }: { 
         <PageState kind="loading" noun="health condition list" />
       ) : phase === 'error' ? (
         <PageState kind="error" noun="health condition list" onRetry={() => conditionsQuery.refetch()} />
-      ) : (
+      ) : foldIfNoneRecorded(
         <DataTable
           data={ordered}
           columns={columns}

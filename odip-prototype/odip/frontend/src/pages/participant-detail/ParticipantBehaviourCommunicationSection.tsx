@@ -49,16 +49,21 @@ function readBehaviourCommunication(p: ParticipantDetailDto): BehaviourCommunica
   }
 }
 
+/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
+export function hasBehaviourCommunication(p: ParticipantDetailDto): boolean {
+  return p.memory != null || p.memoryAids != null || p.impairedUnderstanding != null || p.impairedJudgementReasoning != null
+    || p.behavioursOfConcernCurrent != null || p.behavioursOfConcernFiveYearHistory != null || p.behaviourRiskRating != null
+    || p.ridsLogged != null || p.bspPlanProvided != null || p.bocChartProvided != null
+    || !!p.expressiveSkills || !!p.receptiveSkills || !!p.readingAbility || !!p.communicationAids
+}
+
 export function ParticipantBehaviourCommunicationSection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {
   const patchParticipant = usePatchParticipant()
   const saved = readBehaviourCommunication(p)
   const [draft, setDraft] = useState<BehaviourCommunicationDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof BehaviourCommunicationDraft)[]).some((k) => draft[k] !== saved[k])
 
-  const hasAnyData = p.memory != null || p.memoryAids != null || p.impairedUnderstanding != null || p.impairedJudgementReasoning != null
-    || p.behavioursOfConcernCurrent != null || p.behavioursOfConcernFiveYearHistory != null || p.behaviourRiskRating != null
-    || p.ridsLogged != null || p.bspPlanProvided != null || p.bocChartProvided != null
-    || !!p.expressiveSkills || !!p.receptiveSkills || !!p.readingAbility || !!p.communicationAids
+  const hasAnyData = hasBehaviourCommunication(p)
 
   if (!canEdit && !hasAnyData) return null
 

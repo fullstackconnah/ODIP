@@ -27,15 +27,20 @@ function readMealsDiet(p: ParticipantDetailDto): MealsDietDraft {
   }
 }
 
+/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
+export function hasMealsDiet(p: ParticipantDetailDto): boolean {
+  return !!(p.mealAssistanceDetail || p.chokingRiskMealDetail || p.modifiedDietDetail || p.pegRegimeMealDetail
+    || p.specialUtensilsDetail || p.specialDietaryNeedsDetail || p.favouriteBreakfast || p.favouriteLunch
+    || p.favouriteDinner || p.medicationTricks || p.foodsAlwaysEaten)
+}
+
 export function ParticipantMealsDietSection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {
   const patchParticipant = usePatchParticipant()
   const saved = readMealsDiet(p)
   const [draft, setDraft] = useState<MealsDietDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof MealsDietDraft)[]).some((k) => draft[k] !== saved[k])
 
-  const hasAnyData = !!(p.mealAssistanceDetail || p.chokingRiskMealDetail || p.modifiedDietDetail || p.pegRegimeMealDetail
-    || p.specialUtensilsDetail || p.specialDietaryNeedsDetail || p.favouriteBreakfast || p.favouriteLunch
-    || p.favouriteDinner || p.medicationTricks || p.foodsAlwaysEaten)
+  const hasAnyData = hasMealsDiet(p)
 
   if (!canEdit && !hasAnyData) return null
 

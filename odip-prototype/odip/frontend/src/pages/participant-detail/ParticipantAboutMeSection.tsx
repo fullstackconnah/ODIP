@@ -21,13 +21,18 @@ function readAboutMe(p: ParticipantDetailDto): AboutMeDraft {
   }
 }
 
+/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
+export function hasAboutMe(p: ParticipantDetailDto): boolean {
+  return !!(p.goals || p.supportAreas || p.strengthsFears || p.thingsToKnow || p.whoIsImportant || p.likesDislikes)
+}
+
 export function ParticipantAboutMeSection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {
   const patchParticipant = usePatchParticipant()
   const saved = readAboutMe(p)
   const [draft, setDraft] = useState<AboutMeDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof AboutMeDraft)[]).some((k) => draft[k] !== saved[k])
 
-  const hasAnyData = !!(p.goals || p.supportAreas || p.strengthsFears || p.thingsToKnow || p.whoIsImportant || p.likesDislikes)
+  const hasAnyData = hasAboutMe(p)
 
   if (!canEdit && !hasAnyData) return null
 

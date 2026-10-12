@@ -18,13 +18,18 @@ function readRisksHazardsSummary(p: ParticipantDetailDto): RisksHazardsSummaryDr
   return { behaviourRiskSummary: p.behaviourRiskSummary ?? '', notes: p.notes ?? '' }
 }
 
+/** Whether anything in this card is recorded: the Details tab folds a card with nothing into its "Not recorded" line. */
+export function hasRisksHazardsSummary(p: ParticipantDetailDto): boolean {
+  return !!(p.behaviourRiskSummary || p.notes)
+}
+
 export function ParticipantRisksHazardsSummarySection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {
   const patchParticipant = usePatchParticipant()
   const saved = readRisksHazardsSummary(p)
   const [draft, setDraft] = useState<RisksHazardsSummaryDraft>(saved)
   const isDirty = draft.behaviourRiskSummary !== saved.behaviourRiskSummary || draft.notes !== saved.notes
 
-  const hasAnyData = !!(p.behaviourRiskSummary || p.notes)
+  const hasAnyData = hasRisksHazardsSummary(p)
   if (!canEdit && !hasAnyData) return null
 
   async function handleSave() {
