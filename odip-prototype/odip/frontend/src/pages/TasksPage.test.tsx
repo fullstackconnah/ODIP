@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import TasksPage from './TasksPage'
 
 // A test sets the role it needs and beforeEach puts it back: a Coordinator-like user who can write (the default).
-const { perms } = vi.hoisted(() => ({ perms: { canWrite: true, isAdmin: false, isSuperAdmin: false } }))
+const { perms } = vi.hoisted(() => ({ perms: { canWrite: true, isAdmin: false, isSuperAdmin: false, isReadOnly: false } }))
 
 vi.mock('@/lib/permissions', () => ({
   usePermissions: () => perms,
@@ -32,7 +32,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
-  Object.assign(perms, { canWrite: true, isAdmin: false, isSuperAdmin: false })
+  Object.assign(perms, { canWrite: true, isAdmin: false, isSuperAdmin: false, isReadOnly: false })
   mockUseTasks.mockReturnValue({
     data: [
       { id: 't1', title: 'Confirm accommodation', tripInstanceId: 'trip-1', tripName: 'Beach Trip', taskType: 'AccommodationRequest', ownerName: 'Sam', dueDate: '2026-10-01', priority: 'Medium', status: 'NotStarted' },
@@ -274,5 +274,62 @@ describe('TasksPage — the emergency review task', () => {
     expect(title).toHaveClass('block', 'md:truncate', 'md:max-w-[16rem]')
     expect(title).toHaveAttribute('title', 'Find leave cover')
     expect(title).toHaveAttribute('href', '/rostering/leave')
+  })
+})
+
+// STAFF-2 / CORE-2: the tick is a write (PUT /tasks/:id), refused to ReadOnly and SupportWorker; and a refusal is said, not swallowed.
+describe('TasksPage — the Mark complete tick', () => {
+  it('offers no tick to a role that cannot write', () => {
+    perms.canWrite = false
+    renderPage()
+    expect(screen.queryByRole('button', { name: 'Mark complete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Add task/ })).not.toBeInTheDocument()
+  })
+
+  // Q2 fix round: ReadOnly has no Edit action, so the title opens the task as a view; SupportWorker is sent away from that route, so its title is text.
+  it('links the title to the task view for ReadOnly only', () => {
+    Object.assign(perms, { canWrite: false, isReadOnly: true })
+    const { unmount } = renderPage()
+    expect(screen.getByRole('link', { name: 'Confirm accommodation' })).toHaveAttribute('href', '/tasks/t1/edit')
+    unmount()
+    Object.assign(perms, { canWrite: false, isReadOnly: false })
+    renderPage()
+    expect(screen.queryByRole('link', { name: 'Confirm accommodation' })).not.toBeInTheDocument()
+  })
+
+  it('shows a role that cannot write the status as text, not a pill', () => {
+    perms.canWrite = false
+    renderPage()
+    expect(screen.getByText('Not Started')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Not Started/i })).not.toBeInTheDocument()
+  })
+
+  it('offers the tick to a role that can write, and shows the row alert when the save fails', async () => {
+    const user = userEvent.setup()
+    mockUpdateMutate.mockImplementation((_data, { onError }) => onError(new Error('403')))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Mark complete' }))
+
+    expect(mockUpdateMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 't1', data: expect.objectContaining({ status: 'Completed' }) }),
+      expect.anything(),
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't update status. Try again.")
+  })
+})
+
+// Q2 fix round 2: a task with a linkTo (leave cover, incident witness ...) sends its title elsewhere, so ReadOnly needs View in the actions to read the task itself.
+describe('TasksPage — View for ReadOnly on a linked task', () => {
+  it('shows ReadOnly a View link to the task view on a row with a linkTo', () => {
+    Object.assign(perms, { canWrite: false, isReadOnly: true })
+    mockUseTasks.mockReturnValue({
+      data: [{ id: 't9', title: 'Cover leave for Sam', taskType: 'Other', ownerName: null, dueDate: '2026-10-01', priority: 'Medium', status: 'NotStarted', linkTo: '/rostering/leave' }],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.getByRole('link', { name: 'Cover leave for Sam' })).toHaveAttribute('href', '/rostering/leave')
+    expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/tasks/t9/edit')
   })
 })

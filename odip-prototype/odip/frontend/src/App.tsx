@@ -85,17 +85,19 @@ export function HomeRoute() {
   return <PrivateRoute page="dashboard"><DashboardPage /></PrivateRoute>
 }
 
-export function PrivateRoute({ children, page, requiresWrite, requiresParticipantLifecycleMutation }: {
+export function PrivateRoute({ children, page, requiresWrite, viewableByReadOnly, requiresParticipantLifecycleMutation }: {
   children: React.ReactNode
   page?: PageKey
   requiresWrite?: boolean
+  /** The record's only read view is its edit form: ReadOnly opens it as a view (the form hides its writes when canWrite is false). */
+  viewableByReadOnly?: boolean
   requiresParticipantLifecycleMutation?: boolean
 }) {
   const token = localStorage.getItem('odip_token')
   const permissions = usePermissions()
   if (!token) return <Navigate to="/login" replace />
   if (page && !permissions.canAccessPage(page)) return <Navigate to="/" replace />
-  if (requiresWrite && !permissions.canWrite) return <Navigate to="/" replace />
+  if (requiresWrite && !permissions.canWrite && !(viewableByReadOnly && permissions.isReadOnly)) return <Navigate to="/" replace />
   if (requiresParticipantLifecycleMutation && !permissions.canManageParticipantLifecycle) return <Navigate to="/" replace />
   return <>{children}</>
 }
@@ -139,17 +141,17 @@ const router = createBrowserRouter(
         <Route path="/accommodation/:id/edit" element={<PrivateRoute page="accommodation" requiresWrite><AccommodationCreatePage /></PrivateRoute>} />
         <Route path="/vehicles" element={<PrivateRoute page="vehicles"><VehiclesPage /></PrivateRoute>} />
         <Route path="/vehicles/new" element={<PrivateRoute page="vehicles" requiresWrite><VehicleCreatePage /></PrivateRoute>} />
-        <Route path="/vehicles/:id/edit" element={<PrivateRoute page="vehicles" requiresWrite><VehicleCreatePage /></PrivateRoute>} />
+        <Route path="/vehicles/:id/edit" element={<PrivateRoute page="vehicles" requiresWrite viewableByReadOnly><VehicleCreatePage /></PrivateRoute>} />
         <Route path="/staff" element={<PrivateRoute page="staff"><StaffPage /></PrivateRoute>} />
         <Route path="/staff/new" element={<PrivateRoute page="staff" requiresWrite><StaffCreatePage /></PrivateRoute>} />
         <Route path="/staff/:id/edit" element={<PrivateRoute page="staff" requiresWrite><StaffCreatePage /></PrivateRoute>} />
         <Route path="/staff/:id" element={<PrivateRoute page="staff"><StaffDetailPage /></PrivateRoute>} />
         <Route path="/tasks" element={<PrivateRoute page="tasks"><TasksPage /></PrivateRoute>} />
         <Route path="/tasks/new" element={<PrivateRoute page="tasks" requiresWrite><TaskCreatePage /></PrivateRoute>} />
-        <Route path="/tasks/:id/edit" element={<PrivateRoute page="tasks" requiresWrite><TaskCreatePage /></PrivateRoute>} />
+        <Route path="/tasks/:id/edit" element={<PrivateRoute page="tasks" requiresWrite viewableByReadOnly><TaskCreatePage /></PrivateRoute>} />
         <Route path="/incidents" element={<PrivateRoute page="incidents"><IncidentsPage /></PrivateRoute>} />
         <Route path="/incidents/new" element={<PrivateRoute page="incidents"><IncidentCreatePage /></PrivateRoute>} />
-        <Route path="/incidents/:id/edit" element={<PrivateRoute page="incidents"><IncidentCreatePage /></PrivateRoute>} />
+        <Route path="/incidents/:id/edit" element={<PrivateRoute page="incidents" requiresWrite><IncidentCreatePage /></PrivateRoute>} />
         <Route path="/incidents/:id" element={<PrivateRoute page="incidents"><IncidentDetailPage /></PrivateRoute>} />
         <Route path="/bookings" element={<PrivateRoute page="bookings"><BookingsPage /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute page="settings"><SettingsPage /></PrivateRoute>} />
@@ -163,7 +165,7 @@ const router = createBrowserRouter(
         <Route path="/rostering/completions" element={<PrivateRoute page="rostering"><CompletionReviewPage /></PrivateRoute>} />
         <Route path="/medications" element={<PrivateRoute page="medications"><MedicationsPage /></PrivateRoute>} />
         <Route path="/medications/new" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />
-        <Route path="/medications/:id/edit" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />
+        <Route path="/medications/:id/edit" element={<PrivateRoute page="medications" requiresWrite viewableByReadOnly><MedicationFormPage /></PrivateRoute>} />
         <Route path="/portal" element={<PrivateRoute page="portal"><PortalShiftsPage /></PrivateRoute>} />
         <Route path="/portal/shifts/:id" element={<PrivateRoute page="portal"><PortalShiftDetailPage /></PrivateRoute>} />
         <Route path="/portal/witness-approvals" element={<PrivateRoute page="portal"><PortalWitnessApprovalsPage /></PrivateRoute>} />

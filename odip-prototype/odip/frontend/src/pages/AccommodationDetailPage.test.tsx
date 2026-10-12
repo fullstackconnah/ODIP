@@ -126,3 +126,17 @@ describe('AccommodationDetailPage — a 404 is not a failure (PageState)', () =>
     expect(screen.getByRole('status')).toHaveTextContent('Loading property…')
   })
 })
+
+// Owner decision 2026-10-12: ReadOnly HIDES write controls; the edit route sends it away and the server refuses the save.
+describe('AccommodationDetailPage — Edit by role', () => {
+  const property = { id: 'acc-1', propertyName: 'Sunrise House', isActive: true, location: 'Gold Coast', maxCapacity: 4 }
+
+  it.each([['ReadOnly', false], ['SupportWorker', false], ['Admin', true], ['Coordinator', true]] as const)('%s: Edit offered %s', (role, offered) => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    mockUseAccommodationDetail.mockReturnValue({ data: property, isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.queryByRole('link', { name: /Edit/ }) !== null).toBe(offered)
+    localStorage.clear()
+  })
+})

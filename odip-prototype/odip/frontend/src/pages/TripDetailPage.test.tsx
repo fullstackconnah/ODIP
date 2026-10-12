@@ -134,7 +134,7 @@ describe('TripDetailPage — PP-61 sub-resource fetches', () => {
     renderPage()
 
     expect(mockUseTripSchedule).toHaveBeenCalledWith('trip-1')
-    expect(mockUseTripClaims).toHaveBeenCalledWith('trip-1')
+    expect(mockUseTripClaims).toHaveBeenCalledWith('trip-1', { enabled: true })
   })
 
   it('still fetches schedule and claims the same way after switching tabs', async () => {
@@ -144,7 +144,26 @@ describe('TripDetailPage — PP-61 sub-resource fetches', () => {
     await user.click(screen.getByRole('tab', { name: /claims/i }))
 
     expect(mockUseTripSchedule).toHaveBeenCalledWith('trip-1')
-    expect(mockUseTripClaims).toHaveBeenCalledWith('trip-1')
+    expect(mockUseTripClaims).toHaveBeenCalledWith('trip-1', { enabled: true })
+  })
+})
+
+// TRIPS-4: ClaimsController admits only SuperAdmin, Admin and Coordinator, so a role refused the claims page gets no Claims tab and no claims request.
+describe('TripDetailPage — Claims tab by role', () => {
+  it('hides the tab from a role refused claims, sends no request, and reads ?tab=claims as Overview', () => {
+    deniedPages.add('claims')
+    renderPage('/trips/trip-1?tab=claims')
+
+    expect(screen.queryByRole('tab', { name: /claims/i })).not.toBeInTheDocument()
+    expect(screen.queryByText('Claims panel')).not.toBeInTheDocument()
+    expect(screen.getByText('Overview panel')).toBeInTheDocument()
+    expect(mockUseTripClaims).toHaveBeenCalledWith('trip-1', { enabled: false })
+  })
+
+  it('shows the tab to a role allowed claims', () => {
+    renderPage('/trips/trip-1?tab=claims')
+    expect(screen.getByRole('tab', { name: /claims/i })).toBeInTheDocument()
+    expect(screen.getByText('Claims panel')).toBeInTheDocument()
   })
 })
 

@@ -1459,7 +1459,7 @@ describe('DashboardPage — the Schedule links say what the role can do', () => 
     }
   })
 
-  // ReadOnly reaches the dashboard and the Schedule (permissions.ts keeps canWrite for it, and the server then refuses the write), so a verb it cannot use is a promise the page breaks.
+  // ReadOnly reaches the dashboard and the Schedule (canWrite is false for it, and the server then refuses the write), so a verb it cannot use is a promise the page breaks.
   it('offers ReadOnly "Open schedule" for both, the same page with no verb it cannot use', () => {
     asRole('ReadOnly')
     mockUseDashboard.mockReturnValue(summaryData({ tripsMissingVehicles: 1, tripsMissingStaff: 2 }))

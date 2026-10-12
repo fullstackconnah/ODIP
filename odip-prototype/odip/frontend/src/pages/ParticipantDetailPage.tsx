@@ -76,7 +76,7 @@ export default function ParticipantDetailPage() {
   const { id } = useParams()
   const isMdUp = useIsMdUp()
   const canAccessClaims = canAccessPage('claims')
-  // The agreement draft carries money: only the roles the API admits to its GETs are offered it (ReadOnly satisfies canWrite, and would only meet a 403).
+  // The agreement draft carries money: only the roles the API admits to its GETs are offered it (ReadOnly would only meet a 403).
   const canOpenAgreementDraft = canAccessPage('agreement-drafts')
   // Connection map item 12 — the Rostering tab, same canAccessPage gate RosterBoardPage itself
   // uses (see lib/permissions.ts's SUPPORT_WORKER_PAGES — SupportWorker is excluded).

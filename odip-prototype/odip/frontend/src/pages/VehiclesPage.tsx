@@ -107,7 +107,7 @@ export default function VehiclesPage() {
         <EmptyState
           icon={Bus}
           title="No vehicles found"
-          action={!showArchived ? { label: 'Add your first vehicle', to: '/vehicles/new' } : undefined}
+          action={!showArchived && canWrite ? { label: 'Add your first vehicle', to: '/vehicles/new' } : undefined}
         />
       ) : (
         /* Vehicle grid */
@@ -200,6 +200,12 @@ export default function VehiclesPage() {
                           <Trash2 className="w-3.5 h-3.5" /> Archive
                         </Button>
                       )}
+                    </div>
+                  )}
+                  {/* ReadOnly has no detail page for a vehicle: it opens the form as a view (notes, ramp, driver requirements). */}
+                  {!canWrite && (
+                    <div className="border-t border-[var(--color-border)] pt-2 flex gap-2">
+                      <Button to={`/vehicles/${v.id}/edit`} variant="secondary" size="sm" className="flex-1">View</Button>
                     </div>
                   )}
                 </div>

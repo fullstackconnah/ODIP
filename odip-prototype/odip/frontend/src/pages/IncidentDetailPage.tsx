@@ -1,6 +1,7 @@
 import { useParams, Link } from 'react-router-dom'
 import { Pill, CalendarClock, FileText } from 'lucide-react'
 import { useIncident } from '@/api/hooks'
+import { usePermissions } from '@/lib/permissions'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
@@ -33,6 +34,8 @@ function FlagChip({ category }: { category: ShiftNoteFlagCategory }) {
 export default function IncidentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: incident, isLoading, isError, error, refetch } = useIncident(id)
+  // PUT /incidents/:id is Admin, Coordinator and SuperAdmin only, the roles canWrite admits.
+  const { canWrite } = usePermissions()
 
   if (isLoading) return <PageState kind="loading" noun="incident" />
   if (!incident) {
@@ -61,9 +64,11 @@ export default function IncidentDetailPage() {
         action={
           <div className="flex shrink-0 items-center gap-2">
             <BackButton to="/incidents" label="incidents" history={false} />
-            <Button to={`/incidents/${incident.id}/edit`} variant="secondary" size="md">
-              Edit
-            </Button>
+            {canWrite && (
+              <Button to={`/incidents/${incident.id}/edit`} variant="secondary" size="md">
+                Edit
+              </Button>
+            )}
           </div>
         }
       />

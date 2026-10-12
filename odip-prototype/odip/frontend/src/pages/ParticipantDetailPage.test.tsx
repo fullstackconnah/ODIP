@@ -572,6 +572,26 @@ describe('ParticipantDetailPage — PD-1 header warning pill', () => {
     expect(screen.getByRole('heading', { name: 'Sophie Brown' })).toBeInTheDocument()
   })
 
+  // PARTICIPANTS-3 / PARTICIPANTS-4 (owner decision 2026-10-12): ReadOnly is refused the profile wizard and the intake, so it gets neither Edit nor Resume intake.
+  it('offers ReadOnly the draft banner with no Edit and no Resume intake', () => {
+    setUserRole('ReadOnly')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true }), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('status')).toHaveTextContent(/this participant is a draft/i)
+    expect(screen.queryByRole('link', { name: /^edit$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /resume intake/i })).not.toBeInTheDocument()
+  })
+
+  it.each(['Admin', 'Coordinator'])('offers %s Edit and Resume intake on a draft', role => {
+    setUserRole(role)
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true }), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('link', { name: /^edit$/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /resume intake/i })).toBeInTheDocument()
+  })
+
   it('keeps the draft banner and its Resume intake action regardless of the button cluster width (Edit button present, PDF download pending)', () => {
     setUserRole('Admin')
     mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: true, isError: false })
@@ -1256,7 +1276,7 @@ describe('ParticipantDetailPage — Funding tab', () => {
     expect(tab).toHaveAttribute('data-plan-type', makeParticipant().planType)
   })
 
-  it.each(['SupportWorker', 'ReadOnly'])('has no Funding tab for a %s (ReadOnly satisfies canWrite and must still not see money), and reads ?tab=funding as Details', role => {
+  it.each(['SupportWorker', 'ReadOnly'])('has no Funding tab for a %s (neither may see money), and reads ?tab=funding as Details', role => {
     setUserRole(role)
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAtTab('participant-1', 'funding')

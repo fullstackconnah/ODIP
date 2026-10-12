@@ -178,7 +178,7 @@ export default function DashboardPage() {
     const budgetItem = budgetsAtRiskItem(budgetRisk)
     if (budgetItem) attentionItems.push(budgetItem)
   }
-  // ReadOnly reaches the Schedule but its writes are refused (permissions.ts keeps canWrite for it and the server answers 403), so it is offered the page and not a verb it
+  // ReadOnly reaches the Schedule but its writes are refused (canWrite is false for it: the server answers every write with 403), so it is offered the page and not a verb it
   // cannot use. Both links go to the same page, so they may share a name.
   const scheduleVerb = (verb: string) => (isReadOnly ? 'Open schedule' : verb)
   attentionItems.push(

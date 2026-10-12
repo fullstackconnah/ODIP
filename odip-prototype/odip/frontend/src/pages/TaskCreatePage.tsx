@@ -15,6 +15,7 @@ import { TAP_FLOOR } from '@/components/tapArea'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { formGrid, span } from '@/lib/formGrid'
 import { Callout } from '@/components/Callout'
+import { usePermissions } from '@/lib/permissions'
 
 const TASK_TYPE_ITEMS: DropdownItem[] = [
   { value: 'AccommodationRequest', label: 'Accommodation Request' },
@@ -66,6 +67,9 @@ export default function TaskCreatePage() {
   const [searchParams] = useSearchParams()
   const tripInstanceIdParam = searchParams.get('tripInstanceId') ?? ''
   const isEdit = !!id
+  // A role that cannot write (ReadOnly; the route admits no one else without write) reads the task here: the only place its details are shown.
+  const { canWrite } = usePermissions()
+  const viewOnly = isEdit && !canWrite
   const createTask = useCreateTask()
   const updateTask = useUpdateTask()
   const mutation = isEdit ? updateTask : createTask
@@ -141,7 +145,7 @@ export default function TaskCreatePage() {
         <div className="text-sm text-[var(--color-muted-foreground)]">
           <Link to="/tasks" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Tasks</Link>
         </div>
-        <PageHeader title="Edit Task" />
+        <PageHeader title={viewOnly ? 'View task' : 'Edit Task'} />
         <Callout tone="error">
           Couldn't find this task. It may have been deleted, or something went wrong loading it.
         </Callout>
@@ -155,7 +159,7 @@ export default function TaskCreatePage() {
       <div className="text-sm text-[var(--color-muted-foreground)]">
         <Link to="/tasks" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Tasks</Link>
       </div>
-      <PageHeader title={isEdit ? 'Edit Task' : 'New Task'} />
+      <PageHeader title={viewOnly ? 'View task' : isEdit ? 'Edit Task' : 'New Task'} />
 
       {mutation.isError && (
         <Callout tone="error">
@@ -164,6 +168,7 @@ export default function TaskCreatePage() {
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
+        <fieldset disabled={viewOnly} className="min-w-0">
         {/* Task Details */}
         <Card title="Task Details">
           <div className={formGrid}>
@@ -273,13 +278,15 @@ export default function TaskCreatePage() {
           </div>
         </Card>
 
+        </fieldset>
+
         {/* Submit */}
-        <div className="flex justify-end gap-3">
+        {!viewOnly && <div className="flex justify-end gap-3">
           <Button variant="secondary" to="/tasks">Cancel</Button>
           <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Task')}
           </Button>
-        </div>
+        </div>}
       </form>
     </div>
   )

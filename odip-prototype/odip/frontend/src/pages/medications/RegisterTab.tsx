@@ -9,6 +9,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu } from '@/lib/utils'
+import { usePermissions } from '@/lib/permissions'
 import { isPastDue } from '@/lib/deadline'
 import { ComplianceFlagChips } from './MedicationBadges'
 import { DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_TYPE_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
@@ -27,6 +28,7 @@ const STATUS_ITEMS = [
 ]
 
 export default function RegisterTab() {
+  const { canManageMedications, isReadOnly } = usePermissions()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
@@ -146,7 +148,7 @@ export default function RegisterTab() {
           columns={columns}
           keyField="id"
           loading={isLoading}
-          onRowClick={m => navigate(`/medications/${m.id}/edit`)}
+          onRowClick={canManageMedications || isReadOnly ? m => navigate(`/medications/${m.id}/edit`) : undefined}
           emptyMessage="No medications found"
           pagination={{
             page,

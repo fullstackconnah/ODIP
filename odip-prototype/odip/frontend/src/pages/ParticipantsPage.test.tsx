@@ -632,6 +632,18 @@ describe('ParticipantsPage — density row actions', () => {
     expect(within(row).queryAllByRole('button')).toHaveLength(0)
   })
 
+  // PARTICIPANTS-3 (owner decision 2026-10-12): ReadOnly is refused every participant write, so its row offers no Change status, Edit or Archive.
+  it('offers ReadOnly no Change status, Edit or Archive in the row', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant({ hasActiveMedications: false })], isLoading: false })
+    renderPage()
+
+    const row = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
+    expect(within(row).queryByRole('button', { name: /change status/i })).not.toBeInTheDocument()
+    expect(within(row).queryByRole('link', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(within(row).queryAllByRole('button')).toHaveLength(0)
+  })
+
   it('renders the NDIS number at 13px, not the 12px micro type, and keeps the Streams chips on one line', () => {
     mockUseParticipants.mockReturnValue({
       data: [baseParticipant({ maskedNdisNumber: '123456789', serviceStreams: 'STA, Trip' })],

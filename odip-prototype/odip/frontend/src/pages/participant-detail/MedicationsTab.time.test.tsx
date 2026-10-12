@@ -14,7 +14,7 @@ vi.mock('@/api/hooks', () => ({
   useParticipantMedications: mockUseParticipantMedications,
   useParticipantAdministrations: mockUseParticipantAdministrations,
 }))
-vi.mock('@/lib/permissions', () => ({ usePermissions: () => ({ canManageMedications: true, canCreateIncidents: true }) }))
+vi.mock('@/lib/permissions', () => ({ usePermissions: () => ({ canManageMedications: true, canCreateIncidents: true, isReadOnly: false }) }))
 
 afterEach(() => {
   vi.useRealTimers()

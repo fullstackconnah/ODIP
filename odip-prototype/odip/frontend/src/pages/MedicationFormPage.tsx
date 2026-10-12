@@ -17,6 +17,7 @@ import type { CreateMedicationDto, UpdateMedicationDto } from '@/api/types/medic
 import { extractErrorMessage, formatDateAu } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
 import { PageHeader } from '@/components/PageHeader'
+import { usePermissions } from '@/lib/permissions'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
 import { plural } from '@/lib/format'
@@ -130,6 +131,9 @@ export default function MedicationFormPage() {
   const [searchParams] = useSearchParams()
   const participantIdParam = searchParams.get('participantId')
   const isEdit = !!id
+  // ReadOnly reads a medication's full record only here (the route admits it to /:id/edit, not /new): every field is disabled and nothing is saved.
+  const { canManageMedications } = usePermissions()
+  const viewOnly = isEdit && !canManageMedications
   const createMedication = useCreateMedication()
   const updateMedication = useUpdateMedication()
   const { data: existing, isLoading: isLoadingExisting } = useMedication(isEdit ? id : undefined)
@@ -290,7 +294,7 @@ export default function MedicationFormPage() {
       <div className="flex items-center gap-4">
         <BackButton to={backTo} label="medications" variant="icon" history={false} />
         <div className="flex-1">
-          <PageHeader title={isEdit ? 'Edit Medication' : 'New Medication'} subtitle={participant?.fullName} />
+          <PageHeader title={viewOnly ? 'View medication' : isEdit ? 'Edit Medication' : 'New Medication'} subtitle={participant?.fullName} />
         </div>
       </div>
 
@@ -299,6 +303,7 @@ export default function MedicationFormPage() {
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
+        <fieldset disabled={viewOnly} className="flex flex-col gap-[var(--section-gap)] min-w-0">
         {/* Medication */}
         <Card title="Medication">
           <div className={formGrid}>
@@ -672,13 +677,15 @@ export default function MedicationFormPage() {
         </div>
         </Card>
 
+        </fieldset>
+
         {/* Submit */}
-        <div className="flex justify-end gap-2">
+        {!viewOnly && <div className="flex justify-end gap-2">
           <Button to={backTo} variant="secondary">Cancel</Button>
           <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Medication')}
           </Button>
-        </div>
+        </div>}
       </form>
     </div>
   )

@@ -39,7 +39,8 @@ const SUPPORT_WORKER_PAGES: PageKey[] = [
  * The pages ReadOnly cannot open. ReadOnly reads most of the app, but each of these sits behind a controller that admits only
  * SuperAdmin, Admin and Coordinator for EVERY request, reads included (ReadOnlyMiddleware, which 403s writes, never gets that far):
  * RosteringController (the five Rostering pages, and the flagged-notes read that Incidents makes), LeaveController,
- * ClaimsController (claims), CaregiverSubmissionsController, SettingsController / ProviderSettingsController, and the GETs of ServiceAgreementDraftsController (the agreement draft
+ * ClaimsController (claims), CaregiverSubmissionsController, ProviderSettingsController and the admin controllers behind the Settings page
+ * (its one GET ReadOnly may make, GET /settings for the qualification warning window, is read by the Qualifications, Staff and Dashboard pages, not here), and the GETs of ServiceAgreementDraftsController (the agreement draft
  * page: a draft carries unit prices, totals and the pricing answer, and money is never visible to ReadOnly or SupportWorker; SupportWorker's allow-list above does not name it either), and the
  * Budgets list (GET api/v1/funding/budgets is class-wide SuperAdmin, Admin and Coordinator, like the participant's Funding tab: every figure on it is money, and `canManageFunding` below is its rule).
  * Listing them here keeps the menu, the routes and the in-page links from offering ReadOnly a page that can only answer 403.
@@ -103,25 +104,25 @@ export function usePermissions() {
     },
 
     /**
-     * Controls create/edit/delete button visibility.
+     * Controls create/edit/delete button visibility, and the requiresWrite routes.
      * SupportWorker: false — buttons hidden (except canCreateIncidents).
-     * ReadOnly: true — buttons visible, backend blocks the actual mutations.
+     * ReadOnly: false — owner decision 2026-10-12: ReadOnly hides write controls, since ReadOnlyMiddleware refuses every write it sends.
      */
-    canWrite: !isSupportWorker,
+    canWrite: !isSupportWorker && !isReadOnly,
 
     /**
      * Participant inquiry, draft-intake, and onboarding mutations are restricted by
      * ParticipantInquiriesController to Admin, Coordinator, and SuperAdmin. This is
      * deliberately separate from canWrite: ReadOnly historically satisfied canWrite
-     * even though the lifecycle API rejects its mutation requests.
+     * even though the lifecycle API rejects its mutation requests (canWrite now excludes ReadOnly too).
      */
     canManageParticipantLifecycle: isSuperAdmin || isAdmin || isCoordinator,
 
     /**
      * SupportWorker can create incidents (their only write action).
-     * ReadOnly: true — button visible, backend blocks the save.
+     * ReadOnly: false — ReadOnlyMiddleware refuses the save, so the button is hidden.
      */
-    canCreateIncidents: true,
+    canCreateIncidents: !isReadOnly,
 
     /**
      * Medication CRUD (create/edit medications, amend administrations) is limited to

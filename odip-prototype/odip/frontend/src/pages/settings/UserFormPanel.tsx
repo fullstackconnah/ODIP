@@ -75,7 +75,8 @@ export default function UserFormPanel({
   const roleLabelId = useId()
   const passwordHintId = useId()
 
-  const { data: tenants = [] } = useAdminTenantsSummary()
+  // Settings mounts this panel for Admin and Coordinator too; GET /admin/tenants is SuperAdmin only, and the panel opens only from the SuperAdmin Users tab.
+  const { data: tenants = [] } = useAdminTenantsSummary(isOpen)
   const createMutation = useCreateAdminUser()
   const updateMutation = useUpdateAdminUser()
   const ensureAccount = useEnsureUserSignInAccount()

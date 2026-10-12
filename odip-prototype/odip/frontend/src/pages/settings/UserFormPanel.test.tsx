@@ -4,8 +4,12 @@ import userEvent from '@testing-library/user-event'
 import UserFormPanel from './UserFormPanel'
 import type { AdminUserDto } from '@/api/types'
 
+const { mockTenantsSummary } = vi.hoisted(() => ({
+  mockTenantsSummary: vi.fn<(enabled?: boolean) => { data: { id: string; name: string }[] }>(() => ({ data: [{ id: 'tenant-1', name: 'Sample Support Co' }] })),
+}))
+
 vi.mock('@/api/hooks', () => ({
-  useAdminTenantsSummary: () => ({ data: [{ id: 'tenant-1', name: 'Sample Support Co' }] }),
+  useAdminTenantsSummary: mockTenantsSummary,
   useCreateAdminUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateAdminUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useEnsureUserSignInAccount: () => ({ mutateAsync: vi.fn() }),
@@ -76,5 +80,16 @@ describe('UserFormPanel as a dialog', () => {
     await u.type(screen.getByLabelText(/first name/i), 'ie')
     await u.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+// CORE-4: Settings mounts this panel for every role that opens Settings, and GET /admin/tenants is SuperAdmin only: it reads the tenants only while open
+// (it opens from the SuperAdmin-only Users tab).
+describe('UserFormPanel — the tenants request', () => {
+  it('asks for the tenants only while the panel is open', () => {
+    const { rerender } = render(<UserFormPanel isOpen={false} onClose={() => {}} />)
+    expect(mockTenantsSummary).toHaveBeenLastCalledWith(false)
+    rerender(<UserFormPanel isOpen onClose={() => {}} />)
+    expect(mockTenantsSummary).toHaveBeenLastCalledWith(true)
   })
 })

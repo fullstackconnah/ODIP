@@ -55,6 +55,30 @@ describe('VehiclesPage — card grid', () => {
   })
 })
 
+describe('VehiclesPage — write controls by role', () => {
+  it('offers a role that cannot write no "Add your first vehicle" on the empty page', () => {
+    mockUsePermissions.mockReturnValue({ canWrite: false })
+    mockUseVehicles.mockReturnValue({ data: [], isLoading: false })
+    render(<MemoryRouter><VehiclesPage /></MemoryRouter>)
+
+    expect(screen.getByText('No vehicles found')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Add your first vehicle/ })).not.toBeInTheDocument()
+  })
+})
+
+// Q2 fix round: there is no vehicle detail page, so a role that cannot write gets View (the form as a view) instead of Edit and Archive.
+describe('VehiclesPage — View for a role that cannot write', () => {
+  it.each([[false, true], [true, false]] as const)('canWrite %s: View offered %s', (canWrite, view) => {
+    mockUsePermissions.mockReturnValue({ canWrite })
+    mockUseVehicles.mockReturnValue({ data: [makeVehicle()], isLoading: false })
+    render(<MemoryRouter><VehiclesPage /></MemoryRouter>)
+
+    expect(screen.queryByRole('link', { name: 'View' }) !== null).toBe(view)
+    if (view) expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/vehicles/v-1/edit')
+    expect(screen.queryByRole('link', { name: /Edit/ }) !== null).toBe(!view)
+  })
+})
+
 describe('VehiclesPage — Restore changes only the archived state (TRIPS-2)', () => {
   it('restores through the restore endpoint by id, never a PUT of the list row', () => {
     mockUseVehicles.mockReturnValue({ data: [makeVehicle({ isActive: false })], isLoading: false })

@@ -10,7 +10,7 @@ import { getStatusColor } from '@/lib/utils'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
-import { Filter, CheckCircle, Plus, ListChecks } from 'lucide-react'
+import { Filter, CheckCircle, Plus, ListChecks, Eye } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { plural } from '@/lib/format'
 import { localIsoDate } from '@/lib/dateOnly'
@@ -27,7 +27,7 @@ const TASK_STATUS_ITEMS = [
 const isBudgetReview = (task: { taskType?: string }) => task.taskType === 'BudgetEmergencyReview'
 
 export default function TasksPage() {
-  const { canWrite, isAdmin, isSuperAdmin } = usePermissions()
+  const { canWrite, isAdmin, isSuperAdmin, isReadOnly } = usePermissions()
   const mayCloseBudgetReview = !!isAdmin || !!isSuperAdmin
   // The one place the rule lives: a row the user may not change gets no tick, a held status and no edit or archive.
   const mayChange = (task: { taskType?: string }) => canWrite && (!isBudgetReview(task) || mayCloseBudgetReview)
@@ -58,9 +58,12 @@ export default function TasksPage() {
 
   const { data: tasks = [], isLoading } = useTasks(queryParams)
 
-  const markComplete = async (e: React.MouseEvent, task: any) => {
+  const markComplete = (e: React.MouseEvent, task: any) => {
     e.stopPropagation()
-    await updateTask.mutateAsync({ id: task.id, data: { ...task, status: 'Completed', completedDate: localIsoDate() } })
+    updateTask.mutate({ id: task.id, data: { ...task, status: 'Completed', completedDate: localIsoDate() } }, {
+      onError: () => setFailedRowId(task.id),
+      onSuccess: () => setFailedRowId(prev => prev === task.id ? null : prev),
+    })
   }
 
   const taskColumns: Column<any>[] = [
@@ -68,7 +71,7 @@ export default function TasksPage() {
       key: 'checkbox',
       header: '',
       hidden: showArchived,
-      render: (t) => t.status !== 'Completed' && t.status !== 'Cancelled' && (!isBudgetReview(t) || mayCloseBudgetReview) ? (
+      render: (t) => t.status !== 'Completed' && t.status !== 'Cancelled' && mayChange(t) ? (
         <Button variant="ghost" size="sm" iconOnly onClick={(e) => markComplete(e, t)} title="Mark complete">
           <CheckCircle className="w-4 h-4" />
         </Button>
@@ -95,6 +98,9 @@ export default function TasksPage() {
         </Link>
       ) : isBudgetReview(t) ? (
         <span className="block whitespace-normal md:max-w-[16rem]" title={t.title}>{t.title}</span>
+      ) : isReadOnly ? (
+        // ReadOnly has no Edit action: the title opens the task as a view (the only place its notes are shown).
+        <Link to={`/tasks/${t.id}/edit`} title={t.title} className="block text-[var(--color-primary)] hover:underline md:truncate md:max-w-[16rem]">{t.title}</Link>
       ) : t.title,
     },
     {
@@ -124,7 +130,8 @@ export default function TasksPage() {
       sortable: true,
       // "Not Started" / "In Progress" swap in place: reserve the widest so the column does not jump.
       minWidth: '9rem',
-      render: (t) => (
+      // A role that cannot write reads the status; one that can but may not change this row (the emergency review) gets a held pill.
+      render: (t) => !canWrite ? <StatusBadge status={t.status} label={TASK_STATUS_ITEMS.find(i => i.value === t.status)?.label} /> : (
         <div>
           <Dropdown
             variant="pill"
@@ -164,7 +171,12 @@ export default function TasksPage() {
         </Link>
       ) : null,
     },
-    { key: 'actions', header: '', render: (t) => mayChange(t) ? actionButtons(t) : null },
+    // ReadOnly has no Edit: View opens the task itself, which a linked task's title does not (it goes to the linked page).
+    { key: 'actions', header: '', render: (t) => mayChange(t) ? actionButtons(t) : isReadOnly && !isBudgetReview(t) ? (
+      <Button to={`/tasks/${t.id}/edit`} variant="ghost" size="sm" iconOnly title="View" aria-label="View">
+        <Eye className="w-4 h-4" />
+      </Button>
+    ) : null },
   ]
 
   return (

@@ -47,7 +47,7 @@ export default function StaffDetailPage() {
   const { id } = useParams()
   const { canWrite, canAccessPage, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
   const canAccessLeaveApprovals = canAccessPage('leave-approvals')
-  // POST /staff/{id}/sign-in-account is Admin, Coordinator and SuperAdmin only (canWrite also admits ReadOnly, whom the server refuses), and
+  // POST /staff/{id}/sign-in-account is Admin, Coordinator and SuperAdmin only (the same three roles canWrite admits), and
   // Firebase sends the email, so without Firebase (local dev auth) the action is not offered rather than offered and broken.
   const canManageSignIn = (isSuperAdmin || isAdmin || isCoordinator) && canSendSetPasswordEmail()
   const ensureAccount = useEnsureStaffSignInAccount()

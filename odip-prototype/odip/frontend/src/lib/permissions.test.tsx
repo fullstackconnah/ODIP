@@ -20,7 +20,7 @@ function PermissionsProbe({ pages }: { pages: PageKey[] }) {
 }
 
 function CapabilityProbe() {
-  const { canRequestLeave, canApproveLeave, canCompleteOwnShifts, canReviewCompletions, canManageNotifications, canManageParticipantLifecycle, canManageFunding, canWrite } = usePermissions()
+  const { canRequestLeave, canApproveLeave, canCompleteOwnShifts, canReviewCompletions, canManageNotifications, canManageParticipantLifecycle, canManageFunding, canWrite, canCreateIncidents } = usePermissions()
   return (
     <ul>
       <li data-testid="can-request-leave">{String(canRequestLeave)}</li>
@@ -31,6 +31,7 @@ function CapabilityProbe() {
       <li data-testid="can-manage-participant-lifecycle">{String(canManageParticipantLifecycle)}</li>
       <li data-testid="can-manage-funding">{String(canManageFunding)}</li>
       <li data-testid="can-write">{String(canWrite)}</li>
+      <li data-testid="can-create-incidents">{String(canCreateIncidents)}</li>
     </ul>
   )
 }
@@ -172,7 +173,7 @@ describe('usePermissions.canManageFunding', () => {
   })
 
   // A participant's plan budget is money, and money is never visible to SupportWorker or ReadOnly: ParticipantFundingController admits SuperAdmin, Admin and Coordinator for every request,
-  // reads included. canWrite is NOT that gate (ReadOnly historically satisfied it), which is why the Funding tab has a boolean of its own.
+  // reads included. canWrite is NOT that gate (it is about writes, not money), which is why the Funding tab has a boolean of its own.
   it('is true for SuperAdmin, Admin and Coordinator only', () => {
     for (const role of ['SuperAdmin', 'Admin', 'Coordinator'] as UserRole[]) {
       setUserRole(role)
@@ -188,12 +189,45 @@ describe('usePermissions.canManageFunding', () => {
     }
   })
 
-  it('is not canWrite: ReadOnly satisfies canWrite and must still never see a budget', () => {
+  it('is false for ReadOnly, like canWrite', () => {
     setUserRole('ReadOnly')
     render(<CapabilityProbe />)
 
-    expect(screen.getByTestId('can-write')).toHaveTextContent('true')
+    expect(screen.getByTestId('can-write')).toHaveTextContent('false')
     expect(screen.getByTestId('can-manage-funding')).toHaveTextContent('false')
+  })
+})
+
+// Owner decision 2026-10-12: ReadOnly HIDES write controls. ReadOnlyMiddleware refuses every POST, PUT, PATCH and DELETE it sends, so it is offered none.
+describe('usePermissions.canWrite and canCreateIncidents', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it.each<[UserRole, string, string]>([
+    ['SuperAdmin', 'true', 'true'],
+    ['Admin', 'true', 'true'],
+    ['Coordinator', 'true', 'true'],
+    ['SupportWorker', 'false', 'true'],
+    ['ReadOnly', 'false', 'false'],
+  ])('%s: canWrite %s, canCreateIncidents %s', (role, write, incidents) => {
+    setUserRole(role)
+    render(<CapabilityProbe />)
+    expect(screen.getByTestId('can-write')).toHaveTextContent(write)
+    expect(screen.getByTestId('can-create-incidents')).toHaveTextContent(incidents)
+  })
+
+  it('sends ReadOnly and SupportWorker away from a write-only route, and admits the three management roles', () => {
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator'] as UserRole[]) {
+      const { unmount } = renderGuarded(role, '/trips/new', { page: 'trips', requiresWrite: true })
+      expect(screen.getByText('The page'), role).toBeInTheDocument()
+      unmount()
+    }
+    for (const role of ['ReadOnly', 'SupportWorker'] as UserRole[]) {
+      const { unmount } = renderGuarded(role, '/trips/new', { page: 'trips', requiresWrite: true })
+      expect(screen.getByText('Redirected'), role).toBeInTheDocument()
+      unmount()
+    }
   })
 })
 
@@ -368,6 +402,38 @@ function renderGuarded(role: UserRole, path: string, route: { page: PageKey; req
   )
 }
 
+// Q2 fix round: a record whose only read view is its edit form opens as a view for ReadOnly; its /new route and SupportWorker stay out.
+describe('PrivateRoute — viewableByReadOnly', () => {
+  afterEach(() => localStorage.clear())
+
+  function renderView(role: UserRole, path: string) {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    localStorage.setItem('odip_token', 'test-token')
+    return render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/" element={<div>Redirected</div>} />
+          <Route path="/tasks/new" element={<PrivateRoute page="tasks" requiresWrite><div>The page</div></PrivateRoute>} />
+          <Route path="/tasks/:id/edit" element={<PrivateRoute page="tasks" requiresWrite viewableByReadOnly><div>The page</div></PrivateRoute>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('admits ReadOnly to the edit route, not to /new', () => {
+    const { unmount } = renderView('ReadOnly', '/tasks/t-1/edit')
+    expect(screen.getByText('The page')).toBeInTheDocument()
+    unmount()
+    renderView('ReadOnly', '/tasks/new')
+    expect(screen.getByText('Redirected')).toBeInTheDocument()
+  })
+
+  it('still sends SupportWorker away from the edit route', () => {
+    renderView('SupportWorker', '/tasks/t-1/edit')
+    expect(screen.getByText('Redirected')).toBeInTheDocument()
+  })
+})
+
 describe('PrivateRoute — pages ReadOnly is refused', () => {
   afterEach(() => {
     localStorage.clear()
@@ -389,7 +455,7 @@ describe('PrivateRoute — pages ReadOnly is refused', () => {
     expect(screen.getByText('The page')).toBeInTheDocument()
   })
 
-  // The route used to be page="participants" with requiresWrite, and ReadOnly satisfies canWrite: it opened the draft page, which now meets a 403 on the list.
+  // The route used to be page="participants" with requiresWrite, and ReadOnly then satisfied canWrite: it opened the draft page, which now meets a 403 on the list.
   it('admits SuperAdmin, Admin and Coordinator to the agreement draft and sends ReadOnly and SupportWorker away from it', () => {
     for (const role of ['SuperAdmin', 'Admin', 'Coordinator'] as UserRole[]) {
       const { unmount } = renderGuarded(role, '/participants/p-1/agreement-draft', { page: 'agreement-drafts' })

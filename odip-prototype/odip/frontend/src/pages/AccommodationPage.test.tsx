@@ -101,6 +101,17 @@ describe('AccommodationPage — card title link touch target', () => {
   })
 })
 
+describe('AccommodationPage — write controls by role', () => {
+  it('offers a role that cannot write no Archive on the card', () => {
+    mockUsePermissions.mockReturnValue({ canWrite: false })
+    mockUseAccommodation.mockReturnValue({ data: [makeProperty()], isLoading: false })
+    renderPage()
+
+    expect(screen.getByText('Sunrise House')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument()
+  })
+})
+
 describe('AccommodationPage — Restore changes only the archived state (TRIPS-2)', () => {
   it('restores through the restore endpoint by id, never a PUT of the list row', () => {
     mockUseAccommodation.mockReturnValue({ data: [makeProperty({ isActive: false })], isLoading: false })
