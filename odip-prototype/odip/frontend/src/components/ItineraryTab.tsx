@@ -1,5 +1,5 @@
 import { useTripItinerary } from '@/api/hooks'
-import { formatDateAu } from '@/lib/utils'
+import { formatCurrency, formatDateAu } from '@/lib/utils'
 import { MapPin, Clock, Users, Building2, UserCog, DollarSign, FileDown, Calendar, Utensils, Camera, Bus, Compass, Palette, Dumbbell, Star } from 'lucide-react'
 import { useState } from 'react'
 import { Dropdown } from './Dropdown'
@@ -284,7 +284,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
                                   )}
                                   {activity.estimatedCost != null && (
                                     <span className="flex items-center gap-1">
-                                      <DollarSign className="w-3 h-3" /> ${Number(activity.estimatedCost).toFixed(2)}
+                                      <DollarSign className="w-3 h-3" /> {formatCurrency(Number(activity.estimatedCost))}
                                     </span>
                                   )}
                                 </div>

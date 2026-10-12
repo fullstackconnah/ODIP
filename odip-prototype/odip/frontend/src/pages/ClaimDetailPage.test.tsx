@@ -458,3 +458,13 @@ describe('ClaimDetailPage — the "Saved!" reset timer', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 })
+
+// Standard 8: money goes through formatCurrency, so the fact bar shows the thousands separator the line and the footer already had.
+describe('ClaimDetailPage — the total in the fact bar', () => {
+  it('formats the total as AUD with a thousands separator (fact bar, line and footer)', () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem({ totalAmount: 1234.5 })]), isLoading: false })
+    renderPage()
+    expect(screen.queryByText('$1234.50')).toBeNull()
+    expect(screen.getAllByText('$1,234.50')).toHaveLength(3)
+  })
+})

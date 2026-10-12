@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { ParticipantIdentitySection } from './ParticipantIdentitySection'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import type { StaffListDto } from '@/api/types/staff'
+import { restoreZone, setZone } from '@/test/timeZone'
 
 const { mockPatchMutateAsync, mockUseStaff } = vi.hoisted(() => ({
   mockPatchMutateAsync: vi.fn(),
@@ -128,5 +129,17 @@ describe('ParticipantIdentitySection — edit/save cycle', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Network error, please retry.')
     expect((screen.getByLabelText(/^First Name/) as HTMLInputElement).value).toBe('Sophia')
+  })
+})
+
+// Standard 8: a date of birth is a DateOnly ("1990-05-01"). `new Date("1990-05-01")` is UTC midnight, which west of UTC is still the
+// evening before, so the page printed 30/04/1990.
+describe('ParticipantIdentitySection — date of birth', () => {
+  afterEach(() => restoreZone())
+
+  it.each(['America/Los_Angeles', 'UTC', 'Australia/Sydney'])('prints the calendar day in %s', zone => {
+    if (!setZone(zone)) return
+    render(<ParticipantIdentitySection p={makeParticipant({ dateOfBirth: '1990-05-01' })} participantId="participant-1" canEdit={false} />)
+    expect(screen.getByText('01/05/1990')).toBeInTheDocument()
   })
 })

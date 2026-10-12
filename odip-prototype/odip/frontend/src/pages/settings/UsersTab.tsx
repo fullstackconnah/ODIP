@@ -59,7 +59,7 @@ const MONTH_MS = 30 * 86_400_000
 function formatRelativeTime(dateStr: string | null): string {
   if (!dateStr) return 'Never'
   const date = parseApiDate(dateStr) // an instant: UTC, never the viewer's local time
-  if (Date.now() - date.getTime() >= MONTH_MS) return date.toLocaleDateString()
+  if (Date.now() - date.getTime() >= MONTH_MS) return date.toLocaleDateString('en-AU')
   return formatRelative(date, { style: 'compact' })
 }
 
