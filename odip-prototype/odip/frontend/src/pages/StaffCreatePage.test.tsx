@@ -202,6 +202,8 @@ describe('StaffCreatePage editing a SuperAdmin target', () => {
     expect(screen.queryByLabelText(/mobile/i)).not.toBeInTheDocument()
 
     expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+    // One Back: the icon left of the title, no second text link in the card.
+    expect(screen.getAllByRole('link', { name: /back to staff/i })).toHaveLength(1)
   })
 })
 

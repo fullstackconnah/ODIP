@@ -93,7 +93,7 @@ export const navItems: NavEntry[] = [
     msIcon: 'map',
     bar: { order: 2 },
     children: [
-      { to: '/trips', label: 'All Trips', msIcon: 'map', page: 'trips' },
+      { to: '/trips', label: 'Trips', msIcon: 'map', page: 'trips' },
       { to: '/schedule', label: 'Schedule', msIcon: 'calendar_month', page: 'schedule' },
       { to: '/bookings', label: 'Bookings', msIcon: 'description', page: 'bookings' },
       { to: '/accommodation', label: 'Accommodation', msIcon: 'home_work', page: 'accommodation' },
@@ -124,7 +124,7 @@ export const navItems: NavEntry[] = [
     bar: { order: 3, label: 'Roster', audience: 'office' },
     children: [
       { to: '/rostering', label: 'Roster board', msIcon: 'calendar_view_week', page: 'rostering' },
-      { to: '/rostering/patterns', label: 'Patterns', msIcon: 'event_repeat', page: 'rostering' },
+      { to: '/rostering/patterns', label: 'Shift patterns', msIcon: 'event_repeat', page: 'rostering' },
       { to: '/rostering/compatibility', label: 'Compatibility', msIcon: 'join_inner', page: 'rostering' },
       {
         to: '/rostering/leave',

@@ -256,7 +256,7 @@ export default function AppLayout() {
       {/*
         Mobile overlay. Below lg the open drawer (z-[60]) and its scrim (z-[55]) sit ABOVE the fixed bottom nav
         (z-50). They used to be z-50 and z-40: the nav comes later in the DOM, so it painted over the drawer's own
-        "Sign Out" (which could not be tapped) and stayed live above the scrim. From lg up the sidebar is permanent,
+        "Sign out" (which could not be tapped) and stayed live above the scrim. From lg up the sidebar is permanent,
         there is no bottom nav, and it keeps z-50 (`lg:z-50`) so a Modal (z-50, later in the DOM) still covers it.
       */}
       {drawerOpen && (
@@ -321,7 +321,7 @@ export default function AppLayout() {
           <button onClick={endSession}
             className="flex items-center gap-3 px-3 py-1.5 h-8 min-h-[var(--tap-min)] rounded-md text-sm text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)] w-full transition-colors">
             <LogOut className="w-4 h-4" />
-            Sign Out
+            Sign out
           </button>
         </div>
       </aside>

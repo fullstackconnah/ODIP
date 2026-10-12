@@ -214,7 +214,7 @@ export default function CompletionReviewPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader title="Completion review">
+      <PageHeader title="Completions">
         {canReviewCompletions && selectedRows.size > 0 && (
           <Button onClick={() => setBatchConfirmOpen(true)}>
             Approve selected ({selectedRows.size})

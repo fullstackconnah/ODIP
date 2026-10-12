@@ -208,7 +208,7 @@ export default function CompatibilityPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader title="Staff–participant compatibility" />
+      <PageHeader title="Compatibility" />
 
       {saveError && (
         <Callout

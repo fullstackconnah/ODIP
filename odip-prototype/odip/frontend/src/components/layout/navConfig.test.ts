@@ -96,7 +96,7 @@ describe('navConfig — who sees what', () => {
 
   it('gives a SupportWorker only their pages, no Dashboard, and no group that has lost every child', () => {
     expect(shape(resolveNav(navItems, accessFor('SupportWorker')))).toEqual([
-      'My shifts', 'Trips: All Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents',
+      'My shifts', 'Trips: Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents',
     ])
   })
 
@@ -104,7 +104,7 @@ describe('navConfig — who sees what', () => {
     expect(shape(resolveNav(navItems, accessFor('ReadOnly')))).toEqual([
       'Dashboard',
       'My shifts',
-      'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
+      'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
       'Participants: Participants | Medications',
       'Staff & roster: Staff | Qualifications',
       'Incidents',
@@ -123,9 +123,9 @@ describe('navConfig — who sees what', () => {
     expect(shape(resolveNav(navItems, accessFor('Admin')))).toEqual([
       'Dashboard',
       'My shifts',
-      'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
+      'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
       'Participants: Participants | Medications | Caregiver forms',
-      'Staff & roster: Roster board | Patterns | Compatibility | Leave | Completions | Staff | Qualifications',
+      'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Staff | Qualifications',
       'Budgets',
       'Incidents',
       'Settings',

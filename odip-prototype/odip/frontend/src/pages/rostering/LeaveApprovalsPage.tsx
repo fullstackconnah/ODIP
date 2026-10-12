@@ -539,7 +539,7 @@ export default function LeaveApprovalsPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
-        title="Leave approvals"
+        title="Leave"
         action={canApproveLeave && (
           <Dropdown
             variant="menu"

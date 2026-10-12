@@ -1,4 +1,4 @@
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { z } from 'zod'
@@ -270,9 +270,6 @@ export default function StaffCreatePage() {
           <p className="text-sm text-[var(--color-muted-foreground)]">
             SuperAdmin accounts are managed in Settings › Users. Contact a SuperAdmin if this account's role or profile needs to change.
           </p>
-          <Link to="/staff" className="inline-block mt-2 px-4 py-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors">
-            Back to staff
-          </Link>
         </Card>
       </div>
     )
