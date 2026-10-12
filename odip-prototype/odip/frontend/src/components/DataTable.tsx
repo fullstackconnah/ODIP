@@ -234,12 +234,13 @@ function pinsOf<T>(columns: Column<T>[]): Array<ColumnPin | undefined> {
   })
 }
 
-// The phone card's placement of a column that opts in (`mobile`). `order-first` puts the title, its status and the meta line (rendered
-// after every column) ahead of the labelled fields, in that order; `data-card` drops the caps label (index.css).
+// The phone card's placement of a column that opts in (`mobile`), on top of the card CSS in index.css: the title and its status come
+// first, a break, then the meta cells as one muted line (index.css drops their caps labels and puts a dot between them), then the
+// labelled fields as before. An empty meta value leaves the card, so the line never shows a dash or a dangling dot.
 const CARD_CLASS: Record<NonNullable<ColumnBase<unknown>['mobile']>, string> = {
-  primary: 'max-md:order-first max-md:flex-1 max-md:min-w-0',
-  status: 'max-md:order-first max-md:ml-auto',
-  meta: 'max-md:hidden',
+  primary: 'max-md:-order-2 max-md:flex-1 max-md:min-w-0',
+  status: 'max-md:-order-2 max-md:ml-auto',
+  meta: 'max-md:-order-1 max-md:flex max-md:items-center max-md:min-w-0 max-md:text-[13px] max-md:text-[var(--color-muted-foreground)]',
   hidden: 'max-md:hidden',
 }
 
@@ -310,7 +311,6 @@ export function DataTable<T>({
   const activeSort = isControlled ? controlledSort ?? null : internalSort
 
   const visibleColumns = useMemo(() => columns.filter(c => !c.hidden), [columns])
-  const metaColumns = visibleColumns.filter(c => c.mobile === 'meta')
   // A server-paged table holds one slice, so it can only offer sorting if the caller turns it into a server request (onSortChange).
   const canSort = sortable && (!pagination || !!onSortChange)
 
@@ -583,6 +583,7 @@ export function DataTable<T>({
                     }
 
                     const content = renderCell(row, col, rowIndex)
+                    const card = col.mobile === 'meta' && (content == null || content === '' || content === '—') ? 'hidden' : col.mobile
                     const text = col.wrap ? null : plainTextOf(row, col, content)
 
                     // TAP_AREA_LINKS: under a coarse pointer every link in a body cell (a name, a trip, "Open")
@@ -591,10 +592,10 @@ export function DataTable<T>({
                     return (
                       <td
                         key={col.key}
-                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${pinClass(colIndex, false)} ${col.mobile ? CARD_CLASS[col.mobile] : ''} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
+                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${pinClass(colIndex, false)} ${card ? CARD_CLASS[card] : ''} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
                         style={columnStyle(col)}
                         data-label={typeof col.header === 'string' ? col.header : ''}
-                        data-card={col.mobile === 'primary' || col.mobile === 'status' ? col.mobile : undefined}
+                        data-card={card === 'hidden' ? undefined : card}
                       >
                         {text != null ? (
                           <span
@@ -608,24 +609,6 @@ export function DataTable<T>({
                       </td>
                     )
                   })}
-                  {metaColumns.length > 0 && (
-                    <td data-card="meta" className={`md:hidden max-md:order-first max-md:basis-full text-[13px] text-[var(--color-muted-foreground)] ${TAP_AREA_LINKS}`}>
-                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                        {metaColumns
-                          .map(col => ({ col, content: renderCell(row, col, rowIndex) }))
-                          .filter(({ content }) => content != null && content !== false && content !== '' && content !== '—')
-                          .map(({ col, content }, index) => (
-                            <Fragment key={col.key}>
-                              {index > 0 && <span aria-hidden="true">·</span>}
-                              <span className="min-w-0">
-                                {typeof col.header === 'string' && col.header && <span className="sr-only">{col.header}: </span>}
-                                {content}
-                              </span>
-                            </Fragment>
-                          ))}
-                      </div>
-                    </td>
-                  )}
                 </tr>
                 {errorMessage && (
                   <tr className={dividerClass}>

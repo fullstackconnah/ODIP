@@ -28,12 +28,12 @@ describe('DataTable phone card: column mobile modes', () => {
     { key: 'status', header: 'Status', mobile: 'status' },
   ]
 
-  it('primary is the title line: first in the card, takes the row, no caps label', () => {
+  it('primary is the title line: ahead of everything on the card, takes the row, no caps label', () => {
     render(<DataTable data={rows} columns={columns} keyField="id" />)
 
     const cell = cellOf('Book the bus')
     expect(cell).toHaveAttribute('data-card', 'primary')
-    expect(cell).toHaveClass('max-md:order-first', 'max-md:flex-1', 'max-md:min-w-0')
+    expect(cell).toHaveClass('max-md:-order-2', 'max-md:flex-1', 'max-md:min-w-0')
   })
 
   it('status is a pill on the title row: ordered with the title and pushed to its end, no caps label', () => {
@@ -41,7 +41,7 @@ describe('DataTable phone card: column mobile modes', () => {
 
     const cell = cellOf('Open')
     expect(cell).toHaveAttribute('data-card', 'status')
-    expect(cell).toHaveClass('max-md:order-first', 'max-md:ml-auto')
+    expect(cell).toHaveClass('max-md:-order-2', 'max-md:ml-auto')
   })
 
   it('hidden is left off the card and kept in the table', () => {
@@ -49,29 +49,28 @@ describe('DataTable phone card: column mobile modes', () => {
 
     const cell = cellOf('Long notes')
     expect(cell).toHaveClass('max-md:hidden')
-    expect(cell).not.toHaveClass('md:hidden')
+    expect(cell).not.toHaveAttribute('data-card')
+    expect(cell.className.split(' ')).not.toContain('md:hidden')
   })
 
-  it('meta folds into one muted line under the title: its own cells leave the card, empty values are skipped, the headers stay for screen readers', () => {
+  it('meta cells follow the title as one muted line, rendered once (the table cell itself), without caps labels', () => {
     const { container } = render(<DataTable data={rows} columns={columns} keyField="id" />)
 
-    // The table cells stay for md and up, off the card.
-    const ownerCells = [...container.querySelectorAll('td[data-label="Owner"]')]
-    expect(ownerCells).toHaveLength(1)
-    expect(ownerCells[0]).toHaveClass('max-md:hidden')
-
-    const meta = container.querySelector('td[data-card="meta"]') as HTMLElement
-    expect(meta).toHaveClass('md:hidden', 'max-md:order-first', 'max-md:basis-full', 'text-[var(--color-muted-foreground)]')
-    // The empty trip ("—") is left out, so the line never starts with a dash or a dangling separator.
-    expect(meta).toHaveTextContent(/^Owner: Priya$/)
-    expect(meta.querySelector('.sr-only')).toHaveTextContent('Owner:')
+    expect(screen.getAllByText('Priya')).toHaveLength(1)
+    const cell = cellOf('Priya')
+    expect(cell).toHaveAttribute('data-card', 'meta')
+    expect(cell).toHaveAttribute('data-label', 'Owner')
+    expect(cell).toHaveClass('max-md:-order-1', 'max-md:text-[13px]', 'max-md:text-[var(--color-muted-foreground)]')
+    expect(container.querySelectorAll('tbody td')).toHaveLength(columns.length)
   })
 
-  it('joins several meta values with a separator only between them', () => {
-    const { container } = render(<DataTable data={[{ ...rows[0], trip: 'Byron Bay' }]} columns={columns} keyField="id" />)
+  it('leaves an empty meta value off the card, so the line never shows a dash or a dangling dot', () => {
+    const { container } = render(<DataTable data={rows} columns={columns} keyField="id" />)
 
-    const meta = container.querySelector('td[data-card="meta"]') as HTMLElement
-    expect(meta).toHaveTextContent(/^Trip: Byron Bay ?· ?Owner: Priya$/)
+    const trip = container.querySelector('td[data-label="Trip"]') as HTMLElement
+    expect(trip).toHaveTextContent('—')
+    expect(trip).not.toHaveAttribute('data-card')
+    expect(trip).toHaveClass('max-md:hidden')
   })
 })
 
