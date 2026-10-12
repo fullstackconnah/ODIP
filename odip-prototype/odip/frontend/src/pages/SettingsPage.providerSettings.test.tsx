@@ -485,3 +485,15 @@ describe('Provider Settings — the two mode controls together (participant read
     expect(server?.medicationCompetencyMode).toBe('Enforce')
   })
 })
+
+// V2-F: the panel's field labels are the house field label (FormField's labelClass: 13px, medium, muted), not a local 12px look-alike.
+describe('Provider settings — field labels', () => {
+  it('use the house field label class', async () => {
+    const user = userEvent.setup()
+    renderProviderSettings()
+    await openProviderSettings(user)
+    for (const label of ['ABN', 'Manager Name', 'Account Name']) {
+      expect(screen.getByText(label), label).toHaveClass('text-[13px]', 'font-medium', 'mb-1')
+    }
+  })
+})

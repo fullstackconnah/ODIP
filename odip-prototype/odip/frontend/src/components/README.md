@@ -988,7 +988,7 @@ the strip whenever `active` changes; from `md` up it wraps onto extra rows as be
 
 `overflow` (optional, `'wrap'` by default): `overflow="scroll"` keeps the strip to ONE row that scrolls sideways at EVERY width, md and up included (a thin scrollbar from md, the
 native hidden one below it), instead of wrapping from md up. Use it for a strip too long to fit one row at the widest layout, where wrapping leaves the last tab alone on a second row:
-Settings, with its ten tabs. The active tab (including one named by `?tab=`) is scrolled into view either way, arrow-key navigation is unchanged, and `'wrap'` renders exactly what it did before.
+Settings, with its ten tabs. The active tab (including one named by `?tab=`) is scrolled into view either way, arrow-key navigation is unchanged, and `'wrap'` renders exactly what it did before. The one-row strip fades out over its last 2rem and pads its end by the same, so a tab cut by the edge reads as "more this way" and the last tab is clear of the fade at the end.
 
 > When a test previously did `getByRole('button', { name: <tab> })`, it is now
 > `getByRole('tab', { name: <tab> })` — the role change is the accessibility fix, not a

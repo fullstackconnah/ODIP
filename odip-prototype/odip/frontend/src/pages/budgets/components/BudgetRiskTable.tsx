@@ -10,7 +10,7 @@ import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { formatCurrency } from '@/lib/utils'
 import { BUDGET_RISK_STATUS, budgetRiskRank, type BudgetAttentionAction, type BudgetRiskRow, type BudgetRiskTableState, type NoBudgetEntry } from './viewModel'
 import { BudgetFigure } from './BudgetFigure'
-import { NDIA_FUNDS_RAN_OUT, NOTHING_TRACKED, NO_FIGURE, ROLLED_OVER_LEGEND, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, noBudgetNote, noBudgetNoteUpcoming, rolledOverLabel, unavailableFigure, unpricedForecastLabel } from './wording'
+import { NDIA_FUNDS_RAN_OUT, NOTHING_TRACKED, NO_BUDGET_REASON, NO_FIGURE, ROLLED_OVER_LEGEND, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, noBudgetNote, noBudgetNoteUpcoming, rolledOverLabel, unavailableFigure, unpricedForecastLabel } from './wording'
 
 // The Budgets list's body: one row per participant and pool for the current funding period, in the DataTable idiom, with the server's own status and figures and nothing of its own invented.
 //
@@ -254,7 +254,8 @@ export function NoBudgetTail({ entries, defaultOpen = false }: { entries: NoBudg
             <li key={entry.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-[var(--card-pad)] py-2">
               <span className="min-w-0 text-sm font-medium text-[var(--color-foreground)]">{entry.participantLabel}</span>
               <span className="flex flex-wrap items-center gap-2">
-                <span>{entry.reason}</span>
+                {/* The toggle already says "with no budget recorded": only a reason that adds something (when a plan ended or starts) is printed. */}
+                {entry.reason !== NO_BUDGET_REASON && <span>{entry.reason}</span>}
                 {entry.action && <RowAction action={entry.action} participantLabel={entry.participantLabel} />}
               </span>
             </li>
@@ -280,15 +281,9 @@ export function BudgetRiskTable({ state, caption }: { state: BudgetRiskTableStat
   if (state.status === 'failed') return <PageState kind="error" noun="budget list" onRetry={state.onRetry} />
   if (state.status === 'empty') return <NothingTracked />
 
-  // Nothing is tracked, but some people have no budget recorded: they are the only useful thing on the page, so they are open from the start.
-  if (state.rows.length === 0) {
-    return (
-      <div className="flex flex-col gap-3">
-        <NothingTracked />
-        <NoBudgetTail entries={state.noBudget ?? []} defaultOpen />
-      </div>
-    )
-  }
+  // Nothing is tracked, but some people have no budget recorded: they are the only useful thing on the page, so they are open from the start, and the
+  // list's own note says what to do (a "nothing tracked" box above it said it a second time, V2-F).
+  if (state.rows.length === 0) return state.noBudget?.length ? <NoBudgetTail entries={state.noBudget} defaultOpen /> : <NothingTracked />
 
   return (
     <div className="flex flex-col gap-2">

@@ -152,9 +152,8 @@ describe('StaffDetailPage — Availability tab (default)', () => {
 
     // "Availability" itself is ambiguous — it's both the active TabNav button's label and
     // AvailabilityList's own section heading — so assert on the manage-link text unique to
-    // AvailabilityList instead. It's ambiguous too (the header link plus the empty-state's own
-    // repeated link), hence getAllByText rather than getByText.
-    expect(screen.getAllByText(/manage on leave page/i).length).toBeGreaterThan(0)
+    // AvailabilityList instead: one link now (the empty sentence no longer repeats it, V2-G).
+    expect(screen.getByText(/manage on leave page/i)).toBeInTheDocument()
   })
 
   it('flushes the list to the Card padding — AvailabilityList\'s own pl-8 indent (built for the Schedule accordion) read as a blank ~30px icon slot here', () => {

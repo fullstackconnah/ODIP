@@ -1,3 +1,4 @@
+import { labelClass } from '@/components/FormField'
 import { useEventTemplates, useSettings, useUpdateSettings, useProviderSettings, useUpsertProviderSettings, useSupportCatalogue, usePublicHolidays, useCreatePublicHoliday, useDeletePublicHoliday, useSyncHolidays } from '@/api/hooks'
 import { useState, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -333,7 +334,6 @@ function ProviderSettingsTab() {
   // A textarea must not take inputClass's fixed height: an explicit height beats `rows`, so the invoice footer notes were one line
   // tall (and resize-none kept them that way). min-h keeps it level with the 32px / 44px inputs; h-auto lets `rows` set the height.
   const textareaClass = 'w-full px-3 min-h-[var(--control-h)] h-auto py-1.5 rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all resize-y'
-  const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   const f = (field: keyof ProviderSettingsDto) => ({
     value: (form[field] as string) ?? '',
@@ -622,7 +622,7 @@ function SupportCatalogueTab() {
                   </div>
                 )}
                 <div>
-                  <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Catalogue Version</label>
+                  <label className={labelClass}>Catalogue Version</label>
                   <input value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
               </div>

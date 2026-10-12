@@ -1,3 +1,4 @@
+import { labelClass } from '@/components/FormField'
 import { useState, useEffect, useId, useRef } from 'react'
 import {
   useAdminTenantsSummary,
@@ -274,8 +275,6 @@ export default function UserFormPanel({
 
   const inputClass =
     'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
-  const labelClass =
-    'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   if (!isOpen) return null
 

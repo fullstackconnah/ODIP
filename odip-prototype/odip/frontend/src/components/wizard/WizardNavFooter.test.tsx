@@ -51,11 +51,12 @@ describe('WizardNavFooter', () => {
     expect(onClick).toHaveBeenCalledTimes(1)
   })
 
-  it('uses a full-width, wrapping mobile layout with safe-area bottom clearance', () => {
+  it('is one wrapping row at every width (so a phone keeps Cancel or Back and Next on one line), with safe-area bottom clearance', () => {
     renderFooter({ showBack: true })
-    const footer = screen.getByRole('button', { name: 'Next' }).closest('div[class*=flex-col]')
+    const footer = screen.getByRole('button', { name: 'Next' }).closest('div[class*=sticky]')
 
-    expect(footer).toHaveClass('w-full', 'min-w-0', 'flex-col', 'sm:flex-row')
+    expect(footer).toHaveClass('w-full', 'min-w-0', 'flex-row', 'flex-wrap', 'justify-between')
+    expect(footer).not.toHaveClass('flex-col')
     expect(footer).toHaveClass('pb-[max(0.75rem,env(safe-area-inset-bottom))]')
   })
 
@@ -64,7 +65,7 @@ describe('WizardNavFooter', () => {
     // Pinned at `bottom-0` the footer sits under the z-50 bottom nav on a phone or portrait tablet, so Next is neither
     // visible nor tappable until the very end of the page. The offset is the nav's own height var, so the two cannot drift.
     renderFooter({ showBack: true })
-    const footer = screen.getByRole('button', { name: 'Next' }).closest('div[class*=flex-col]')
+    const footer = screen.getByRole('button', { name: 'Next' }).closest('div[class*=sticky]')
     expect(footer).toHaveClass('sticky', 'bottom-[var(--mobile-nav-h)]', 'lg:bottom-0')
     expect(footer).not.toHaveClass('bottom-0')
   })
@@ -84,5 +85,16 @@ describe('WizardNavFooter', () => {
     renderFooter({ showBack: true, summary: <p>A week: 14 h</p> })
     expect(screen.getByText('A week: 14 h')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Next' })).toBeInTheDocument()
+  })
+})
+
+// V2-E: the first step has no Back, so it offers the way out in that slot: Cancel, to the same place as the review step's Cancel.
+describe('WizardNavFooter — the first step', () => {
+  it('offers Cancel where Back would be, and only on a step without Back', () => {
+    const { unmount } = renderFooter({ showBack: false })
+    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/participants')
+    unmount()
+    renderFooter({ showBack: true })
+    expect(screen.queryByRole('link', { name: 'Cancel' })).not.toBeInTheDocument()
   })
 })

@@ -68,10 +68,7 @@ const BASELINE: Record<Rule, Record<string, number>> = {
     'pages/LoginPage.tsx': 2,
     'pages/TripsPage.tsx': 1,
   },
-  button: {
-    // The Active switch has no role="switch" / aria-checked yet (UserFormPanel's twin has both); it is a toggle, not an action.
-    'pages/settings/TenantFormPanel.tsx': 1,
-  },
+  button: {},
   overlay: {},
   format: {},
 }

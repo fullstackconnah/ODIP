@@ -130,3 +130,13 @@ describe('WeekToolbar week navigation', () => {
     expect(screen.getByRole('button', { name: 'New shift' })).toHaveClass('h-[var(--control-h)]')
   })
 })
+
+describe('WeekToolbar — the exceptions button', () => {
+  it('is not drawn while there are no exceptions, and is drawn with its count when there are', () => {
+    const { unmount } = renderToolbar({ exceptionsCount: 0 })
+    expect(screen.queryByRole('button', { name: /exception/ })).not.toBeInTheDocument()
+    unmount()
+    renderToolbar({ exceptionsCount: 1 })
+    expect(screen.getByRole('button', { name: '1 exception' })).toBeInTheDocument()
+  })
+})

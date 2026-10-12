@@ -1,3 +1,4 @@
+import { labelClass } from '@/components/FormField'
 import { useState, useEffect, useRef } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
@@ -336,7 +337,6 @@ export default function TenantFormPanel({
   // line. min-h keeps it level with the 32px / 44px inputs; h-auto lets `rows` set the height; resize-y lets the user grow it.
   const textareaClass =
     'w-full px-3 min-h-[var(--control-h)] h-auto py-1.5 rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all resize-y'
-  const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   if (!isOpen) return null
 
@@ -437,11 +437,14 @@ export default function TenantFormPanel({
 
         {isEdit && (
           <div className="flex items-center gap-3">
-            <label className="text-xs font-medium text-[var(--color-muted-foreground)]">
+            <label id="tenant-active-label" className="text-xs font-medium text-[var(--color-muted-foreground)]">
               Active
             </label>
             <button
               type="button"
+              role="switch"
+              aria-checked={isActive}
+              aria-labelledby="tenant-active-label"
               onClick={() => setIsActive(v => !v)}
               className={`relative w-10 h-5 rounded-full transition-colors ${
                 isActive ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-border)]'
