@@ -63,7 +63,7 @@ export default function CaregiverWizardPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [progressSaved, setProgressSaved] = useState(false)
 
-  const { control, register, getValues, setError, clearErrors, reset, watch, formState: { errors, isDirty } } = useForm<CaregiverFormData>({
+  const { control, register, getValues, setError, clearErrors, reset, formState: { errors, isDirty } } = useForm<CaregiverFormData>({
     defaultValues: {
       caregiverName: '', caregiverRelationship: '',
       consents: [], healthConditions: [], adlAssessments: [], checklistItems: [], communityAccessRiskItems: [],
@@ -71,12 +71,6 @@ export default function CaregiverWizardPage() {
   })
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
-
-  // "Progress saved" is true only until the caregiver changes something (the refetch after a save resets the form: not a change).
-  useEffect(() => {
-    const sub = watch((_, { type }) => { if (type === 'change') setProgressSaved(false) })
-    return () => sub.unsubscribe()
-  }, [watch])
 
   const consentsFieldArray = useFieldArray({ control, name: 'consents' })
   const healthConditionFieldArray = useFieldArray({ control, name: 'healthConditions' })
@@ -211,7 +205,8 @@ export default function CaregiverWizardPage() {
         ariaLabel="Caregiver form steps"
       />
 
-      <form onSubmit={(e) => { e.preventDefault(); void onSubmit() }} noValidate>
+      {/* "Progress saved" holds only until the caregiver changes something. */}
+      <form onSubmit={(e) => { e.preventDefault(); void onSubmit() }} onChange={() => setProgressSaved(false)} noValidate>
         <WizardStepHeading
           stepKey={wizard.isReviewStep ? REVIEW_STEP_KEY : wizard.currentStep.key}
           label={wizard.isReviewStep ? 'Review' : wizard.currentStep.label}
