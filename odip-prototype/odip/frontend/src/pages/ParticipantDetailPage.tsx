@@ -20,7 +20,7 @@ import { Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, Shi
 import { useMemo, useState, useSyncExternalStore } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
-import { formatDateAu } from '@/lib/utils'
+import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { copyText } from '@/lib/clipboard'
 import {
   MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection,
@@ -539,13 +539,14 @@ function CaregiverLinkControl({ participantId }: { participantId: string }) {
         </div>
       )}
       {(generate.isError || revoke.isError) && (
-        <p role="alert" className="text-xs text-[var(--color-destructive)]">Something went wrong. Try again.</p>
+        <p role="alert" className="text-xs text-[var(--color-destructive)]">{extractErrorMessage(revoke.isError ? revoke.error : generate.error, 'Something went wrong. Try again.')}</p>
       )}
       <ConfirmDialog
         open={confirmingRevoke}
         onCancel={() => setConfirmingRevoke(false)}
         onConfirm={async () => {
-          await revoke.mutateAsync({ participantId })
+          // A refusal closes the dialog too, so the message below is not left behind it (revoke.isError renders it).
+          await revoke.mutateAsync({ participantId }).catch(() => {})
           setConfirmingRevoke(false)
         }}
         title="Revoke caregiver link?"
