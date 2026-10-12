@@ -4,6 +4,7 @@ import { useAdminTenantsSummary } from '@/api/hooks/admin'
 import { DataTable } from '@/components/DataTable'
 import type { TenantSummaryDto } from '@/api/types'
 import { Button } from '@/components/Button'
+import { PageState } from '@/components/PageState'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -38,13 +39,7 @@ export default function TenantsTab({
   }, [tenants, search])
 
   // ── Loading state ────────────────────────────────────────────────────────
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-sm text-[var(--color-muted-foreground)]">
-        Loading tenants...
-      </div>
-    )
-  }
+  if (isLoading) return <PageState kind="loading" noun="tenants" />
 
   return (
     <div className="space-y-4">

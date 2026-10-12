@@ -140,13 +140,7 @@ export default function QualificationsPage() {
     { key: 'no-date', label: `No Date Set (${counts['no-date']})` },
   ]
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full" />
-      </div>
-    )
-  }
+  if (isLoading) return <PageState kind="loading" noun="staff qualifications" />
 
   if (allStaff.length === 0) {
     return (
