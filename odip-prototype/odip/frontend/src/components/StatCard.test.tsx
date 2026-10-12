@@ -415,7 +415,7 @@ describe('StatCard attention action tile — the compact row on a narrow band', 
     expect(within(tile).getByText('Tasks past their due date and still open.')).toHaveClass('@max-[36rem]:hidden')
     const link = within(tile).getByRole('link', { name: 'Open overdue tasks' })
     expect(within(link).getByText('Open overdue tasks')).toHaveClass('@max-[36rem]:sr-only')
-    // mt-auto would push the chevron to the bottom of the row: the row centres it instead.
-    expect(link).toHaveClass('@max-[36rem]:ml-auto', '@max-[36rem]:mt-0')
+    // mt-auto would push the chevron to the bottom of the row and the link's own self-start to the top: centre it in the row.
+    expect(link).toHaveClass('@max-[36rem]:ml-auto', '@max-[36rem]:mt-0', '@max-[36rem]:self-center')
   })
 })
