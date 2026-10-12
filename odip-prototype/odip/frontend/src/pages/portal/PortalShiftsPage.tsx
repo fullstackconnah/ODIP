@@ -72,7 +72,7 @@ export default function PortalShiftsPage() {
       <PageHeader
         title="My shifts"
         action={
-          <>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Button to="/portal/leave" variant="secondary" size="md">
               <CalendarOff className="w-4 h-4" /> My leave
             </Button>
@@ -87,7 +87,7 @@ export default function PortalShiftsPage() {
                 </span>
               )}
             </Button>
-          </>
+          </div>
         }
       >
         {/* One row that never wraps (a phone split it over two): the same square chevrons as the roster board's week toolbar. */}
