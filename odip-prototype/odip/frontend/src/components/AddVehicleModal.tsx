@@ -239,7 +239,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                   <p className="font-medium text-sm">{v.vehicleName}</p>
                   <p className="text-xs text-[var(--color-muted-foreground)] mt-0.5">
                     {v.registration || 'No rego'} · {v.vehicleType} · {v.totalSeats} seats
-                    {v.wheelchairPositions ? <> · <span className="material-symbols-outlined text-base leading-none">accessible</span> {v.wheelchairPositions}</> : ''}
+                    {v.wheelchairPositions > 0 && ` · ${plural(v.wheelchairPositions, 'wheelchair position')}`}
                   </p>
                 </button>
               ))}

@@ -2,6 +2,7 @@ import { useParticipants, useDeleteParticipant, useRestoreParticipant, useUpdate
 import { extractErrorMessage, maskNdisNumber } from '@/lib/utils'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { Callout } from '@/components/Callout'
 import { PLAN_TYPE_LABELS, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -128,7 +129,9 @@ function useParticipantsScreen() {
     setStatusNotice(null)
   }
 
-  const participantsQuery = useParticipants(listParams(view, search.trim()))
+  // Asked once typing pauses, not on every keystroke (each one sent a request and flashed the table to loading).
+  const term = useDebouncedValue(search.trim(), 300)
+  const participantsQuery = useParticipants(listParams(view, term))
   const { data: participants = [], refetch } = participantsQuery
   // Three different facts: loading, failed, and loaded. A failed load is not an empty register, and neither is a request that has not run
   // (TanStack Query pauses it while the browser reports offline: isLoading false, isError false, data undefined), so "No participants yet"

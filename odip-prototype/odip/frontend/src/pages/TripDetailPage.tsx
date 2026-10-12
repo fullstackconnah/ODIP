@@ -27,6 +27,12 @@ type Tab = 'overview' | 'bookings' | 'accommodation' | 'vehicles' | 'staff' | 't
 
 const TAB_KEYS: Tab[] = ['overview', 'bookings', 'accommodation', 'vehicles', 'staff', 'tasks', 'activities', 'claims', 'incidents', 'history']
 
+// What a tab's failed list is called in its error: "Couldn't load this booking list".
+const LIST_NOUNS: Partial<Record<Tab, string>> = {
+  bookings: 'booking list', accommodation: 'accommodation list', vehicles: 'vehicle list', staff: 'staff list',
+  tasks: 'task list', activities: 'activity schedule', claims: 'claim list', incidents: 'incident list',
+}
+
 export default function TripDetailPage() {
   const { canWrite, canAccessPage, isAdmin: isAdminRole, isSuperAdmin } = usePermissions()
   const { id } = useParams()
@@ -44,20 +50,34 @@ export default function TripDetailPage() {
   const [showEditTrip, setShowEditTrip] = useState(false)
 
   const { data: trip, isLoading, isError, error, refetch } = useTrip(id)
-  const { data: bookings = [] } = useTripBookings(id)
-  const { data: accommodation = [] } = useTripAccommodation(id)
-  const { data: vehicles = [] } = useTripVehicles(id)
-  const { data: staff = [] } = useTripStaff(id)
-  const { data: tasks = [] } = useTripTasks(id)
-  // PP-61 follow-up: NOT gated by activeTab, despite schedule/claims being among the
-  // least-visited tabs — both `schedule.reduce(...)` and `claims.length` feed the tab-label
-  // count badges below, which render outside the Activities/Claims tabpanels (i.e. before
-  // either tab is ever opened). Gating these on `activeTab` made those badges misleadingly show
-  // 0 until the corresponding tab was visited once. The `enabled` option added to
-  // useTripSchedule/useTripClaims for this stays in place; the claims call uses it for the role gate only.
-  const { data: schedule = [] } = useTripSchedule(id)
-  const { data: claims = [] } = useTripClaims(id, { enabled: canAccessClaims })
-  const { data: incidents = [] } = useTripIncidents(id)
+  // Each tab's own list, by tab key: a list that failed to load shows its error in the tab, never the tab's "none yet" body.
+  const tabLists = {
+    bookings: useTripBookings(id),
+    accommodation: useTripAccommodation(id),
+    vehicles: useTripVehicles(id),
+    staff: useTripStaff(id),
+    tasks: useTripTasks(id),
+    // PP-61 follow-up: NOT gated by activeTab, despite schedule/claims being among the
+    // least-visited tabs — both `schedule.reduce(...)` and `claims.length` feed the tab-label
+    // count badges below, which render outside the Activities/Claims tabpanels (i.e. before
+    // either tab is ever opened). Gating these on `activeTab` made those badges misleadingly show
+    // 0 until the corresponding tab was visited once. The `enabled` option added to
+    // useTripSchedule/useTripClaims for this stays in place; the claims call uses it for the role gate only.
+    activities: useTripSchedule(id),
+    claims: useTripClaims(id, { enabled: canAccessClaims }),
+    incidents: useTripIncidents(id),
+  }
+  const bookings = tabLists.bookings.data ?? []
+  const accommodation = tabLists.accommodation.data ?? []
+  const vehicles = tabLists.vehicles.data ?? []
+  const staff = tabLists.staff.data ?? []
+  const tasks = tabLists.tasks.data ?? []
+  const schedule = tabLists.activities.data ?? []
+  const claims = tabLists.claims.data ?? []
+  const incidents = tabLists.incidents.data ?? []
+  // A refetch that fails over rows already on screen keeps them (Q4b): only a list with nothing loaded counts as failed.
+  const activeList: { isError: boolean; data?: unknown[]; refetch: () => unknown } | undefined = tabLists[activeTab as keyof typeof tabLists]
+  const activeListFailed = !!activeList?.isError && !activeList.data?.length
   // INTAKE-08: the trip/booking picker (BookingsTab) excludes drafts.
   const { data: participants = [] } = useParticipants({ isDraft: 'false' })
 
@@ -166,6 +186,10 @@ export default function TripDetailPage() {
         id={`trip-tabpanel-${activeTab}`}
         aria-labelledby={`trip-tab-${activeTab}`}
       >
+        {activeListFailed ? (
+          <PageState kind="error" noun={LIST_NOUNS[activeTab] ?? 'list'} onRetry={() => activeList?.refetch()} />
+        ) : (
+          <>
         {activeTab === 'overview' && id && (
           <OverviewTab tripId={id} trip={trip} bookings={bookings} accommodation={accommodation} staff={staff} vehicles={vehicles} onSwitchTab={tab => setActiveTab(tab as Tab)} />
         )}
@@ -204,6 +228,8 @@ export default function TripDetailPage() {
 
         {activeTab === 'history' && isAdmin && trip && (
           <AuditHistoryTab entityType="TripInstance" entityId={String(trip.id)} />
+        )}
+          </>
         )}
       </div>
 

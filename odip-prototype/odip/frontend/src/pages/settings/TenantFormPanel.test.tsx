@@ -101,3 +101,18 @@ describe('TenantFormPanel — Active switch', () => {
     expect(toggle).toHaveAttribute('aria-checked', 'false')
   })
 })
+
+// V-D2 follow-up: the labels sat beside their inputs without naming them, so a screen reader announced every field as an unnamed edit box.
+describe('TenantFormPanel — every field is named by its label', () => {
+  it('finds each create-mode field by its visible label', async () => {
+    const user = userEvent.setup()
+    render(<TenantFormPanel isOpen onClose={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: /provider settings/i }))
+    for (const label of ['Organisation Name *', 'Email Domain *', 'Registration Number', 'ABN', 'Organisation Name', 'Address', 'Bank Account Name', 'BSB', 'Account Number', 'Invoice Footer Notes']) {
+      expect(screen.getByLabelText(label, { selector: 'input, textarea' }), label).toBeInTheDocument()
+    }
+    expect(screen.getByLabelText('State')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /initial admin user/i }))
+    expect(screen.getByLabelText('Role')).toBeInTheDocument()
+  })
+})

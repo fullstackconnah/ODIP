@@ -9,7 +9,7 @@
 // "Sept" in others (the rule dateRange.ts follows). The two date-time formatters at the bottom are the exception and stay Intl-backed, so
 // they print exactly what they always printed. Nothing reads the clock unless you leave `now` out.
 import { calendarDaysUntil, isDateOnly } from './dateOnly'
-import { formatWithTimeZone, parseApiDate } from './utils'
+import { formatDateAu, formatWithTimeZone, parseApiDate } from './utils'
 
 /**
  * The count and the noun that agrees with it: "1 day", "2 days", "0 days". Only exactly 1 is singular. Pass the plural for an
@@ -127,6 +127,16 @@ export function formatDateTimeAu(value: string | null | undefined): string {
   return parseApiDate(value).toLocaleString('en-AU', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   })
+}
+
+/**
+ * "02/03/2026": the calendar day of an INSTANT (a UTC DateTime: a record's created, submitted or rejected time) in the viewer's zone; '—' for
+ * nothing. Read with parseApiDate, so 23:30Z is the next day in Sydney and a zone-less instant is UTC, never local time. A date-only value is a
+ * calendar day already and goes through formatDateAu unchanged.
+ */
+export function formatInstantDateAu(value: string | null | undefined): string {
+  if (!value || isDateOnly(value)) return formatDateAu(value)
+  return parseApiDate(value).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 /** "8 Sept 2026, 7:30 pm": the medium date and short time of a shift note, in the viewer's own zone. Intl-backed, like formatDateTimeAu. */

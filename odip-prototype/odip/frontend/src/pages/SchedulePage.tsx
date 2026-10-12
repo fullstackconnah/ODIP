@@ -355,8 +355,8 @@ export default function SchedulePage() {
 
                 {sectionVehicles && vehicles?.map((v: ScheduleVehicleDto) => {
                   const vehicleType = v.vehicleType?.replace(/([A-Z])/g, ' $1').trim() ?? ''
-                  // Plain-text twin of the meta line below, for its title: the wheelchair count is an icon there.
-                  const metaText = `${v.registration || '—'} · ${vehicleType} · ${v.totalSeats} seats${v.wheelchairPositions > 0 ? ` · ${v.wheelchairPositions} wheelchair` : ''}`
+                  // The meta line, also its title: it truncates in the grid.
+                  const metaText = `${v.registration || '—'} · ${vehicleType} · ${v.totalSeats} seats${v.wheelchairPositions > 0 ? ` · ${plural(v.wheelchairPositions, 'wheelchair position')}` : ''}`
                   return (
                     <tr key={v.id} className={ROW}>
                       <td className={`${STICKY_COL} px-[var(--cell-px)] py-1 align-middle md:py-0 ${ROW_LINE}`}>
@@ -365,8 +365,7 @@ export default function SchedulePage() {
                         <div className="flex min-w-0 flex-col pl-5 md:flex-row md:items-center md:gap-2">
                           <span className="min-w-0 truncate text-sm font-semibold" title={v.vehicleName}>{v.vehicleName}</span>
                           <span className="min-w-0 truncate text-[13px] text-[var(--color-muted-foreground)] md:flex-1" title={metaText}>
-                            {v.registration || '—'} · {vehicleType} · {v.totalSeats} seats
-                            {v.wheelchairPositions > 0 && <> · {v.wheelchairPositions} <span className="material-symbols-outlined align-middle text-[14px] leading-none">accessible</span></>}
+                            {metaText}
                           </span>
                         </div>
                       </td>

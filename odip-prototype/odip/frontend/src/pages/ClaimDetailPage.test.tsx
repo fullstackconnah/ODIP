@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import ClaimDetailPage from './ClaimDetailPage'
 import type { ClaimLineItemDto, TripClaimDetailDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
+import { restoreZone, setZone } from '@/test/timeZone'
 
 const { mockUseClaim, mockUpdateClaim } = vi.hoisted(() => ({
   mockUseClaim: vi.fn(),
@@ -135,6 +136,24 @@ beforeEach(() => {
 })
 
 // Landing-spotted: the page mapped 'NdiaManaged', a value the API never sends, so every line item printed the raw enum "AgencyManaged".
+// VA follow-up: the claim's dates are UTC instants. Near midnight UTC they fall on the next day in Sydney, and one sent without a zone is UTC.
+describe('ClaimDetailPage — instants near midnight', () => {
+  afterEach(restoreZone)
+
+  it("shows Created, Submitted and Rejected on the viewer's day", () => {
+    if (!setZone('Australia/Sydney')) return
+    mockUseClaim.mockReturnValue({
+      data: { ...baseClaim([baseLineItem()]), status: 'Rejected', createdAt: '2026-03-01T23:30:00Z', submittedDate: '2026-03-02T23:30:00', rejectedDate: '2026-03-03T23:30:00Z', rejectionCode: 'V17' },
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.getByText('02/03/2026')).toBeInTheDocument()
+    expect(screen.getByText('03/03/2026')).toBeInTheDocument()
+    expect(screen.getByText(/04\/03\/2026/)).toBeInTheDocument()
+  })
+})
+
 describe('ClaimDetailPage — plan type label', () => {
   it.each([
     ['AgencyManaged', 'Agency Managed'],

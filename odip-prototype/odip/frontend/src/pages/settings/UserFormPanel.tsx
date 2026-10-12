@@ -483,6 +483,7 @@ export default function UserFormPanel({
             type="button"
             role="switch"
             aria-checked={isActive}
+            aria-label="Active"
             onClick={() => setIsActive(v => !v)}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
               isActive ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-border)]'

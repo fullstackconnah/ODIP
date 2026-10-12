@@ -72,12 +72,12 @@ function computeSteps(incidentType: string | undefined, isEdit: boolean): Wizard
     { key: 'basics', label: 'Basics', fields: STEP_BASICS_FIELDS },
   ]
   if (incidentType === 'RestrictivePracticeUse') {
-    steps.push({ key: 'restrictivePractice', label: 'Restrictive Practice', fields: STEP_RESTRICTIVE_PRACTICE_FIELDS })
+    steps.push({ key: 'restrictivePractice', label: 'Restrictive practice', fields: STEP_RESTRICTIVE_PRACTICE_FIELDS })
   }
-  steps.push({ key: 'details', label: 'Incident Details', fields: STEP_DETAILS_FIELDS })
+  steps.push({ key: 'details', label: 'Incident details', fields: STEP_DETAILS_FIELDS })
   steps.push({ key: 'witnesses', label: 'Witnesses', fields: STEP_WITNESSES_FIELDS })
   if (isEdit) {
-    steps.push({ key: 'compliance', label: 'Review & Compliance', fields: STEP_COMPLIANCE_FIELDS })
+    steps.push({ key: 'compliance', label: 'Review & compliance', fields: STEP_COMPLIANCE_FIELDS })
   }
   return steps
 }

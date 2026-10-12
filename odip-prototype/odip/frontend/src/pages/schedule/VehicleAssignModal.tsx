@@ -3,6 +3,7 @@ import { Button } from '@/components/Button'
 import { Modal } from '@/components/Modal'
 import { Dropdown } from '@/components/Dropdown'
 import { formatDate } from './helpers'
+import { plural } from '@/lib/format'
 import { useCheckVehicleAssignment, getRosterFindings } from '@/api/hooks'
 import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
 import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
@@ -95,7 +96,7 @@ export default function VehicleAssignModal({ vehicle, trip, staff, onClose, onAs
           <div className="text-sm font-bold">{vehicle.vehicleName}</div>
           <div className="text-xs text-[var(--color-muted-foreground)]">
             {vehicle.registration || '—'} · {vehicle.totalSeats} seats
-            {vehicle.wheelchairPositions > 0 && ` · ${vehicle.wheelchairPositions} wheelchair`}
+            {vehicle.wheelchairPositions > 0 && ` · ${plural(vehicle.wheelchairPositions, 'wheelchair position')}`}
           </div>
           <div className="text-xs text-[var(--color-muted-foreground)]">
             → {trip.tripName} ({formatDate(trip.startDate)} — {formatDate(trip.endDate)})

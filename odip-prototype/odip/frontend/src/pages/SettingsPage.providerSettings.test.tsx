@@ -80,7 +80,7 @@ const readinessGroup = () => screen.getByRole('radiogroup', { name: 'Participant
 const modeRadio = (name: 'Warn only' | 'Enforce') => screen.getByRole('radio', { name })
 // The button reads 'Saved!' for two seconds after a successful save, so a second save in the same test finds it under that name.
 const saveButton = () => screen.getByRole('button', { name: /^(Save Settings|Saved!)$/ })
-const managerNameInput = () => screen.getByText('Manager Name').nextElementSibling as HTMLInputElement
+const managerNameInput = () => screen.getByLabelText('Manager Name') as HTMLInputElement
 
 /** The body of the Nth PUT /provider-settings (the first by default). */
 function putBody(nth = 0): Record<string, unknown> {
@@ -495,5 +495,21 @@ describe('Provider settings — field labels', () => {
     for (const label of ['ABN', 'Manager Name', 'Account Name']) {
       expect(screen.getByText(label), label).toHaveClass('text-[13px]', 'font-medium', 'mb-1')
     }
+  })
+})
+
+// V-D2 follow-up: the labels sat beside their inputs without naming them, so a screen reader announced every field as an unnamed edit box.
+describe('Provider settings — every field is named by its label', () => {
+  it('finds each field by its visible label', async () => {
+    const user = userEvent.setup()
+    renderProviderSettings()
+    await openProviderSettings(user)
+    const values: [string, string][] = [
+      ['Registration Number', '4050012345'], ['ABN', '51824753556'], ['Organisation Name', 'Sunrise Support Services'],
+      ['Address', '12 Wattle St, Brisbane QLD 4000'], ['Account Name', 'Sunrise Support'], ['BSB', '064-000'], ['Account Number', '12345678'],
+      ['Manager Name', 'Priya Sharma'], ['Manager Phone', '0412 345 007'], ['Invoice Footer Notes', 'Thank you for choosing Sunrise.'],
+    ]
+    for (const [label, value] of values) expect(screen.getByLabelText(label), label).toHaveValue(value)
+    expect(screen.getByLabelText('State')).toHaveTextContent('QLD')
   })
 })

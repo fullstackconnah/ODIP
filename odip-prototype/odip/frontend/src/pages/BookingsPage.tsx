@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { DataTable } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { BudgetWarnings } from '@/components/BudgetWarnings'
 import { Dropdown } from '@/components/Dropdown'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -53,7 +54,8 @@ export default function BookingsPage() {
   const { canWrite } = usePermissions()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
-  const term = search.trim()
+  // Asked once typing pauses, not on every keystroke (each one sent a request and flashed the table to loading).
+  const term = useDebouncedValue(search.trim(), 300)
   // The list is paged on the server, so the search is a server parameter (participant or trip name): a client filter would search one page.
   const { data: bookings = [], isLoading, isError, refetch } = useBookings({ page: String(page), pageSize: String(BOOKINGS_PAGE_SIZE), ...(term ? { search: term } : {}) })
   // `bookings` is normally a TruncatableList (see pagedList.ts), but the `= []` default used

@@ -123,7 +123,7 @@ export default function ActivitiesTab({ tripId, trip, schedule, canWrite, isRead
                     {isExpanded && (
                       <div className="px-3 pb-3 pt-0 border-t border-[var(--color-border)]/15 ml-7 space-y-2 text-sm">
                         {a.category && <div><span className="text-[var(--color-muted-foreground)]">Category:</span> {a.category}</div>}
-                        {a.estimatedCost != null && <div><span className="text-[var(--color-muted-foreground)]">Est. Cost:</span> {formatCurrency(Number(a.estimatedCost))}</div>}
+                        {a.estimatedCost != null && <div><span className="text-[var(--color-muted-foreground)]">Est. cost:</span> {formatCurrency(Number(a.estimatedCost))}</div>}
                         {a.providerName && <div><span className="text-[var(--color-muted-foreground)]">Provider:</span> {a.providerName}</div>}
                         {a.providerPhone && <div><span className="text-[var(--color-muted-foreground)]">Phone:</span> {a.providerPhone}</div>}
                         {a.providerEmail && <div><span className="text-[var(--color-muted-foreground)]">Email:</span> {a.providerEmail}</div>}

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { formatAge, formatDateTimeAu, formatNoteTimestamp, formatRatio, formatRelative, glanceRatio, joinList, plural } from './format'
+import { formatAge, formatDateTimeAu, formatInstantDateAu, formatNoteTimestamp, formatRatio, formatRelative, glanceRatio, joinList, plural } from './format'
 import { restoreZone, setZone } from '@/test/timeZone'
 
 afterEach(restoreZone)
@@ -212,5 +212,23 @@ describe('formatNoteTimestamp', () => {
     setZone('UTC')
     // "Sept" or "Sep" depending on the ICU build, like every en-AU medium date.
     expect(formatNoteTimestamp('2026-09-08T19:30:00Z')).toMatch(/^8 Sept? 2026, 7:30\spm$/)
+  })
+})
+
+describe('formatInstantDateAu', () => {
+  it('reads an en dash for nothing', () => {
+    for (const value of [null, undefined, '']) expect(formatInstantDateAu(value)).toBe('—')
+  })
+
+  // VA follow-up: an instant near midnight UTC is the next day in Sydney; one sent without a zone is UTC too, never the viewer's local time.
+  it("shows the viewer's calendar day of an instant at 23:30Z", () => {
+    if (!setZone('Australia/Sydney')) return
+    expect(formatInstantDateAu('2026-03-01T23:30:00Z')).toBe('02/03/2026')
+    expect(formatInstantDateAu('2026-03-01T23:30:00')).toBe('02/03/2026')
+  })
+
+  it('keeps a date-only value on its own day', () => {
+    if (!setZone('America/Los_Angeles')) return
+    expect(formatInstantDateAu('2026-03-01')).toBe('01/03/2026')
   })
 })

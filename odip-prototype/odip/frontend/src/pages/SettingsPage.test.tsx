@@ -207,6 +207,11 @@ describe('SettingsPage — Public Holidays tab: who may change the calendar', ()
       expect(screen.getByRole('button', { name })).toBeInTheDocument()
     }
     expect(screen.queryByText(/only a super admin can add, delete or sync public holidays/i)).not.toBeInTheDocument()
+
+    // Q5 review: the sync year fields are named by their labels.
+    await user.click(screen.getByRole('button', { name: 'Advanced' }))
+    expect(screen.getByLabelText('From year')).toHaveAttribute('type', 'number')
+    expect(screen.getByLabelText('To year')).toHaveAttribute('type', 'number')
   })
 })
 
@@ -323,7 +328,7 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
     await user.click(screen.getByRole('tab', { name: /provider settings/i }))
     // ProviderSettingsTab's labels aren't associated via htmlFor/id, so select the input
     // relative to its label text instead of by accessible label.
-    const abnInput = screen.getByText('ABN').nextElementSibling as HTMLInputElement
+    const abnInput = screen.getByLabelText('ABN') as HTMLInputElement
     await user.type(abnInput, '12345678901')
 
     await act(async () => { router.navigate('/elsewhere') })
@@ -402,7 +407,7 @@ describe('SettingsPage — Provider Settings: medication competency check', () =
     providerSettings.current = { ...saved, medicationCompetencyMode: 'Enforce' }
     const user = await openProviderSettings()
 
-    await user.type(screen.getByText('Manager Phone').nextElementSibling as HTMLInputElement, '0412000111')
+    await user.type(screen.getByLabelText('Manager Phone') as HTMLInputElement, '0412000111')
     await user.click(screen.getByRole('button', { name: 'Save Settings' }))
 
     expect(mockUpsertMutate).toHaveBeenCalledTimes(1)
@@ -419,7 +424,7 @@ describe('SettingsPage — Provider Settings: medication competency check', () =
     const user = await openProviderSettings()
     providerSettings.current = { ...saved, medicationCompetencyMode: 'Enforce' }   // another admin sets Enforce; the query refetches, the open form does not reset
 
-    await user.type(screen.getByText('Manager Phone').nextElementSibling as HTMLInputElement, '0412000111')
+    await user.type(screen.getByLabelText('Manager Phone') as HTMLInputElement, '0412000111')
     await user.click(screen.getByRole('button', { name: 'Save Settings' }))
 
     expect(mockUpsertMutate.mock.calls[0][0]).not.toHaveProperty('medicationCompetencyMode')
@@ -446,7 +451,7 @@ describe('SettingsPage — Provider Settings: medication competency check', () =
     await user.click(screen.getByRole('button', { name: /medication competency check/i }))
     await user.click(screen.getByRole('option', { name: 'Enforce' }))
     await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-    await user.type(screen.getByText('Manager Phone').nextElementSibling as HTMLInputElement, '0412000111')
+    await user.type(screen.getByLabelText('Manager Phone') as HTMLInputElement, '0412000111')
     await user.click(screen.getByRole('button', { name: /^save/i }))   // the label reads Saved! for two seconds after a save
 
     expect(mockUpsertMutate).toHaveBeenCalledTimes(2)
@@ -555,7 +560,7 @@ describe('SettingsPage — catalogue import preview', () => {
     await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
     const file = new File(['xlsx'], 'support-catalogue-2026-27.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file)
-    await screen.findByText('Catalogue Version')
+    await screen.findByLabelText('Catalogue version')
     return { user, file }
   }
 
@@ -609,7 +614,7 @@ describe('SettingsPage — catalogue import preview', () => {
     await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, new File(['x'], 'notes.xlsx'))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No support items found. Upload the NDIS Support Catalogue .xlsx (the 2026-27 or 2025-26 file).')
-    expect(screen.queryByText('Catalogue Version')).not.toBeInTheDocument()   // still on the upload step
+    expect(screen.queryByLabelText('Catalogue version')).not.toBeInTheDocument()   // still on the upload step
   })
 
   it("shows the server's refusal and keeps the typed version when the confirm is rejected", async () => {
@@ -666,7 +671,7 @@ describe('SettingsPage — the timer that puts a confirmation away dies with its
     const user = userEvent.setup()
     const { unmount } = renderSettingsPage()
     await user.click(screen.getByRole('tab', { name: /provider settings/i }))
-    await user.type(screen.getByText('ABN').nextElementSibling as HTMLInputElement, '1')
+    await user.type(screen.getByLabelText('ABN') as HTMLInputElement, '1')
 
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const pending = actTwiceThenLeave(() => screen.getByRole('button', { name: /^(Save Settings|Saved!)$/ }), unmount)

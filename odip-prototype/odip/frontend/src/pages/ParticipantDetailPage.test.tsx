@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import ParticipantDetailPage from './ParticipantDetailPage'
@@ -695,6 +695,25 @@ describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
 
     expect(revokeMutateAsync).not.toHaveBeenCalled()
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  // Q4a follow-up: the line showed the Revoke error whenever both had failed, so a later failed Generate still read as the old Revoke refusal.
+  it('shows the latest refusal: a failed Generate after a failed Revoke shows the Generate error', async () => {
+    setUserRole('Admin')
+    const user = userEvent.setup()
+    const refused = (message: string) => async () => { throw { response: { data: { message } } } }
+    mockUseRevokeCaregiverLink.mockReturnValue({ mutate: vi.fn(), mutateAsync: vi.fn(refused('Revoke refused')), isPending: false, isError: false })
+    mockUseGenerateCaregiverLink.mockReturnValue({ mutateAsync: vi.fn(refused('Generate refused')), isPending: false, isError: false })
+    withActiveLink()
+    setup()
+
+    await chooseFromDocuments(/revoke caregiver link/i)
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: /^revoke$/i }))
+    const control = screen.getByTestId('caregiver-link-control')
+    expect(await within(control).findByRole('alert')).toHaveTextContent('Revoke refused')
+
+    await chooseFromDocuments(/regenerate caregiver link/i)
+    await waitFor(() => expect(within(control).getByRole('alert')).toHaveTextContent('Generate refused'))
   })
 })
 

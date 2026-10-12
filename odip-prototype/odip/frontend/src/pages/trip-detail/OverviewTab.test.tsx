@@ -24,20 +24,20 @@ function renderTab(onSwitchTab = vi.fn()) {
   return onSwitchTab
 }
 
-// Density verdict, touch: "Manage All" is a 16px text button and the three roster call icons are 24px squares.
+// Density verdict, touch: "Manage all" is a 16px text button and the three roster call icons are 24px squares.
 // Under `pointer: coarse` each carries the TAP_AREA pad (a 44px hit area centred on it) without growing.
 describe('OverviewTab — 44px coarse-pointer hit areas', () => {
   const pad = TAP_AREA.split(' ')
 
-  it('pads the "Manage All" team button and keeps its text styling', () => {
+  it('pads the "Manage all" team button and keeps its text styling', () => {
     renderTab()
-    expect(screen.getByRole('button', { name: 'Manage All' })).toHaveClass(...pad, 'text-xs', 'font-bold', 'text-[var(--color-primary)]')
+    expect(screen.getByRole('button', { name: 'Manage all' })).toHaveClass(...pad, 'text-xs', 'font-bold', 'text-[var(--color-primary)]')
   })
 
   it('still switches to the bookings tab from the padded button', async () => {
     const user = userEvent.setup()
     const onSwitchTab = renderTab()
-    await user.click(screen.getByRole('button', { name: 'Manage All' }))
+    await user.click(screen.getByRole('button', { name: 'Manage all' }))
     expect(onSwitchTab).toHaveBeenCalledWith('bookings')
   })
 
@@ -53,6 +53,17 @@ describe('OverviewTab — 44px coarse-pointer hit areas', () => {
     renderTab()
     const more = screen.getByRole('button', { name: /\+1 more staff assigned/ })
     expect(more.className).not.toContain('before:')
+  })
+})
+
+// Q5 review: the overview's headings and link are sentence case like the rest of the app.
+describe('OverviewTab — sentence case', () => {
+  it('reads "The team", "Manage all" and "Fleet manifest"', () => {
+    const vehicles = [{ id: 'va1', vehicleName: 'Big Red', seatRequirement: 8 }] as unknown as VehicleAssignmentDto[]
+    render(<OverviewTab tripId="trip-1" trip={trip} bookings={bookings} accommodation={[]} staff={staff} vehicles={vehicles} onSwitchTab={vi.fn()} />)
+    expect(screen.getByRole('heading', { name: 'The team' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Manage all' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Fleet manifest/ })).toBeInTheDocument()
   })
 })
 

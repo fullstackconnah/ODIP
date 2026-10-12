@@ -8,6 +8,7 @@ import { Tabs } from '@/components/Tabs'
 import { Modal } from '@/components/Modal'
 import { EmptyState } from '@/components/EmptyState'
 import { DataTable } from '@/components/DataTable'
+import { PageState } from '@/components/PageState'
 import { Dropdown } from '@/components/Dropdown'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -121,13 +122,13 @@ function AppearanceSettingsTab() {
 }
 
 export default function SettingsPage() {
-  const { data: templates = [], isLoading: templatesLoading } = useEventTemplates()
+  const { data: templates = [], isLoading: templatesLoading, isError: templatesError, refetch: refetchTemplates } = useEventTemplates()
   const [panelOpen, setPanelOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<EventTemplateDto | undefined>(undefined)
 
   const activeTemplates = templates.filter((t) => t.isActive)
   // Only claim "no templates" once the fetch has settled, so the empty state doesn't flash on load.
-  const templatesEmpty = !templatesLoading && activeTemplates.length === 0
+  const templatesEmpty = !templatesLoading && !templatesError && activeTemplates.length === 0
   const openNewTemplate = () => { setEditingTemplate(undefined); setPanelOpen(true) }
 
   const { isSuperAdmin, isAdmin, canManageNotifications } = usePermissions()
@@ -186,7 +187,9 @@ export default function SettingsPage() {
 
       {tab === 'templates' && (
         <div className="space-y-4">
-          {templatesEmpty ? (
+          {templatesError && templates.length === 0 ? (
+            <PageState kind="error" noun="template list" onRetry={() => refetchTemplates()} />
+          ) : templatesEmpty ? (
             // "New template" is the header action, so the empty state carries no second one.
             <EmptyState
               icon={LayoutTemplate}
@@ -339,6 +342,8 @@ function ProviderSettingsTab() {
     value: (form[field] as string) ?? '',
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => { setForm((p) => ({ ...p, [field]: e.target.value })); setDirty(true) },
     className: inputClass,
+    // Names the field: each label points at it with htmlFor.
+    id: `provider-${field}`,
   })
 
   function handleSave() {
@@ -374,14 +379,15 @@ function ProviderSettingsTab() {
         <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Organisation Details</h2>
         <p className="text-sm text-[var(--color-muted-foreground)] mb-4">Used on NDIS claims, BPR CSV files, and invoices.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div><label className={labelClass}>Registration Number</label><input {...f('registrationNumber')} /></div>
-          <div><label className={labelClass}>ABN</label><input {...f('abn')} /></div>
-          <div className="col-span-2"><label className={labelClass}>Organisation Name</label><input {...f('organisationName')} /></div>
-          <div className="col-span-2"><label className={labelClass}>Address</label><input {...f('address')} /></div>
+          <div><label htmlFor="provider-registrationNumber" className={labelClass}>Registration Number</label><input {...f('registrationNumber')} /></div>
+          <div><label htmlFor="provider-abn" className={labelClass}>ABN</label><input {...f('abn')} /></div>
+          <div className="col-span-2"><label htmlFor="provider-organisationName" className={labelClass}>Organisation Name</label><input {...f('organisationName')} /></div>
+          <div className="col-span-2"><label htmlFor="provider-address" className={labelClass}>Address</label><input {...f('address')} /></div>
           <div>
-            <label className={labelClass}>State</label>
+            <label id="provider-state-label" className={labelClass}>State</label>
             <Dropdown
               variant="form"
+              aria-labelledby="provider-state-label"
               value={form.state ?? 'VIC'}
               onChange={v => setForm((p) => ({ ...p, state: v }))}
               items={['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'].map(s => ({ value: s, label: s }))}
@@ -402,9 +408,9 @@ function ProviderSettingsTab() {
         <div>
           <h2 className="font-semibold text-[var(--color-foreground)] mb-4">Bank Details</h2>
           <div className="grid grid-cols-3 gap-4">
-            <div><label className={labelClass}>Account Name</label><input {...f('bankAccountName')} /></div>
-            <div><label className={labelClass}>BSB</label><input {...f('bsb')} /></div>
-            <div><label className={labelClass}>Account Number</label><input {...f('accountNumber')} /></div>
+            <div><label htmlFor="provider-bankAccountName" className={labelClass}>Account Name</label><input {...f('bankAccountName')} /></div>
+            <div><label htmlFor="provider-bsb" className={labelClass}>BSB</label><input {...f('bsb')} /></div>
+            <div><label htmlFor="provider-accountNumber" className={labelClass}>Account Number</label><input {...f('accountNumber')} /></div>
           </div>
         </div>
       )}
@@ -412,8 +418,8 @@ function ProviderSettingsTab() {
         <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Manager Contact</h2>
         <p className="text-sm text-[var(--color-muted-foreground)] mb-4">The primary manager contact shown first when staff need guidance on a missed medication.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div><label className={labelClass}>Manager Name</label><input {...f('managerName')} placeholder="e.g. Priya Sharma" /></div>
-          <div><label className={labelClass}>Manager Phone</label><input {...f('managerPhone')} placeholder="e.g. 0412 345 007" /></div>
+          <div><label htmlFor="provider-managerName" className={labelClass}>Manager Name</label><input {...f('managerName')} placeholder="e.g. Priya Sharma" /></div>
+          <div><label htmlFor="provider-managerPhone" className={labelClass}>Manager Phone</label><input {...f('managerPhone')} placeholder="e.g. 0412 345 007" /></div>
         </div>
       </div>
       <div>
@@ -449,8 +455,8 @@ function ProviderSettingsTab() {
         </div>
       </div>
       <div>
-        <h2 className="font-semibold text-[var(--color-foreground)] mb-2">Invoice Footer Notes</h2>
-        <textarea {...f('invoiceFooterNotes')} rows={3} className={textareaClass} placeholder="e.g. All services delivered in accordance with the NDIS Code of Conduct..." />
+        <h2 id="provider-invoice-footer-notes-label" className="font-semibold text-[var(--color-foreground)] mb-2">Invoice Footer Notes</h2>
+        <textarea {...f('invoiceFooterNotes')} aria-labelledby="provider-invoice-footer-notes-label" rows={3} className={textareaClass} placeholder="e.g. All services delivered in accordance with the NDIS Code of Conduct..." />
       </div>
       {error && (
         <Callout tone="error">{error}</Callout>
@@ -470,7 +476,7 @@ function catalogueFormatLabel(format: CatalogueFileFormat): string {
 }
 
 function SupportCatalogueTab() {
-  const { data: groups = [] } = useSupportCatalogue()
+  const { data: groups = [], isLoading: catalogueLoading, isError: catalogueError, refetch: refetchCatalogue } = useSupportCatalogue()
   const [importing, setImporting] = useState(false)
   const [previewStep, setPreviewStep] = useState<'upload' | 'preview' | null>(null)
   const [preview, setPreview] = useState<CatalogueImportPreviewDto | null>(null)
@@ -570,6 +576,9 @@ function SupportCatalogueTab() {
           { key: 'priceLimit_VeryRemote', header: 'V.Remote', align: 'right' as const, type: 'currency' as const, sortable: true },
           { key: 'effectiveFrom', header: 'Effective From', type: 'date' as const, sortable: true },
         ]}
+        loading={catalogueLoading}
+        error={catalogueError}
+        onRetry={() => refetchCatalogue()}
         emptyMessage="No catalogue items. Import the NDIS Support Catalogue XLSX."
       />
 
@@ -622,8 +631,8 @@ function SupportCatalogueTab() {
                   </div>
                 )}
                 <div>
-                  <label className={labelClass}>Catalogue Version</label>
-                  <input value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                  <label htmlFor="catalogue-version" className={labelClass}>Catalogue version</label>
+                  <input id="catalogue-version" value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
                 </div>
               </div>
             )}
@@ -642,7 +651,7 @@ function SupportCatalogueTab() {
 function PublicHolidaysTab({ canEdit }: { canEdit: boolean }) {
   const [year, setYear] = useState(new Date().getFullYear())
   const [state, setState] = useState('VIC')
-  const { data: holidays = [] } = usePublicHolidays(year, state)
+  const { data: holidays = [], isLoading: holidaysLoading, isError: holidaysError, refetch: refetchHolidays } = usePublicHolidays(year, state)
   const createHoliday = useCreatePublicHoliday()
   const deleteHoliday = useDeletePublicHoliday()
   const syncHolidays = useSyncHolidays()
@@ -776,6 +785,9 @@ function PublicHolidaysTab({ canEdit }: { canEdit: boolean }) {
               }]
             : []),
         ]}
+        loading={holidaysLoading}
+        error={holidaysError}
+        onRetry={() => refetchHolidays()}
         emptyMessage={`No holidays found for ${year} in ${state}.`}
       />
 
@@ -797,16 +809,18 @@ function PublicHolidaysTab({ canEdit }: { canEdit: boolean }) {
 
           {showSyncAdvanced && (
             <div className="flex items-center gap-3 mt-3">
-              <label className="text-sm text-[var(--color-muted-foreground)]">From year</label>
+              <label htmlFor="holiday-sync-from" className="text-sm text-[var(--color-muted-foreground)]">From year</label>
               <input
+                id="holiday-sync-from"
                 type="number"
                 value={syncFromYear ?? ''}
                 onChange={e => setSyncFromYear(e.target.value ? Number(e.target.value) : undefined)}
                 placeholder={String(new Date().getFullYear())}
                 className="w-24 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
               />
-              <label className="text-sm text-[var(--color-muted-foreground)]">To year</label>
+              <label htmlFor="holiday-sync-to" className="text-sm text-[var(--color-muted-foreground)]">To year</label>
               <input
+                id="holiday-sync-to"
                 type="number"
                 value={syncToYear ?? ''}
                 onChange={e => setSyncToYear(e.target.value ? Number(e.target.value) : undefined)}

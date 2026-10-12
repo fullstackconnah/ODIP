@@ -11,6 +11,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { RejectClaimDialog } from '@/components/RejectClaimDialog'
 import { ndiaCodeMeaning } from '@/lib/ndiaCodes'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
+import { formatInstantDateAu } from '@/lib/format'
 import { StatusBadge } from '@/components/StatusBadge'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
@@ -214,8 +215,8 @@ export default function ClaimDetailPage() {
           claim.kind === 'Shift'
             ? { label: 'Period', value: <span className="tabular-nums">{`${formatDateAu(claim.periodFrom)} – ${formatDateAu(claim.periodTo)}`}</span> }
             : { label: 'Trip', value: claim.tripName || '—' },
-          { label: 'Created', value: <span className="tabular-nums">{formatDateAu(claim.createdAt)}</span> },
-          { label: 'Submitted', value: <span className="tabular-nums">{formatDateAu(claim.submittedDate)}</span> },
+          { label: 'Created', value: <span className="tabular-nums">{formatInstantDateAu(claim.createdAt)}</span> },
+          { label: 'Submitted', value: <span className="tabular-nums">{formatInstantDateAu(claim.submittedDate)}</span> },
           // What the NDIA said, once it has refused the claim: when, and the code it gave (V17, V18, V27 and V28 say the funds ran out). Nothing is said of a claim that is not rejected.
           ...(claim.status === 'Rejected'
             ? [{
@@ -223,7 +224,7 @@ export default function ClaimDetailPage() {
               value: (
                 <>
                   <span className="tabular-nums">
-                    {formatDateAu(claim.rejectedDate)}
+                    {formatInstantDateAu(claim.rejectedDate)}
                     {' · '}{claim.rejectionCode ? `NDIA code ${claim.rejectionCode}${ndiaCodeMeaning(claim.rejectionCode) ? ` (${ndiaCodeMeaning(claim.rejectionCode)})` : ''}` : 'no NDIA code recorded'}
                   </span>
                   {/* The code is the one input that switches the budget warning on, and the reason often arrives after the status is set: a claim rejected with none can be given one here. */}

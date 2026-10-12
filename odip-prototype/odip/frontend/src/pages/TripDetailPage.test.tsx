@@ -20,11 +20,15 @@ let isAdmin = false
 let isSuperAdmin = false
 // Pages a test denies (canAccessPage returns false for them); cleared before each test.
 const deniedPages = new Set<string>()
+// Tab lists a test makes fail (their query is in error with nothing loaded); cleared before each test.
+const failedLists = new Set<string>()
+const listRefetch = vi.fn()
+const tabList = (tab: string) => (failedLists.has(tab) ? { data: undefined, isError: true, refetch: listRefetch } : { data: [] })
 
 const { mockUseTripSchedule, mockUseTripClaims, mockUseTripIncidents } = vi.hoisted(() => ({
-  mockUseTripSchedule: vi.fn(() => ({ data: [] })),
-  mockUseTripClaims: vi.fn(() => ({ data: [] })),
-  mockUseTripIncidents: vi.fn(() => ({ data: [] as { id: string }[] })),
+  mockUseTripSchedule: vi.fn((): { data?: unknown[]; isError?: boolean } => ({ data: [] })),
+  mockUseTripClaims: vi.fn((): { data?: unknown[]; isError?: boolean } => ({ data: [] })),
+  mockUseTripIncidents: vi.fn((): { data?: { id: string }[]; isError?: boolean } => ({ data: [] })),
 }))
 
 vi.mock('@/lib/permissions', () => ({
@@ -33,11 +37,11 @@ vi.mock('@/lib/permissions', () => ({
 
 vi.mock('@/api/hooks', () => ({
   useTrip: () => ({ data: trip, isLoading: tripLoading, isError: tripFailure !== null, error: tripFailure?.error, refetch: tripRefetch }),
-  useTripBookings: () => ({ data: [] }),
-  useTripAccommodation: () => ({ data: [] }),
-  useTripVehicles: () => ({ data: [] }),
-  useTripStaff: () => ({ data: [] }),
-  useTripTasks: () => ({ data: [] }),
+  useTripBookings: () => tabList('bookings'),
+  useTripAccommodation: () => tabList('accommodation'),
+  useTripVehicles: () => tabList('vehicles'),
+  useTripStaff: () => tabList('staff'),
+  useTripTasks: () => tabList('tasks'),
   useTripSchedule: mockUseTripSchedule,
   useTripClaims: mockUseTripClaims,
   useTripIncidents: mockUseTripIncidents,
@@ -80,7 +84,39 @@ beforeEach(() => {
   mockUseTripSchedule.mockClear()
   mockUseTripClaims.mockClear()
   mockUseTripIncidents.mockClear()
-  mockUseTripIncidents.mockReturnValue({ data: [] })
+  failedLists.clear()
+  listRefetch.mockClear()
+  mockUseTripSchedule.mockImplementation(() => tabList('activities'))
+  mockUseTripClaims.mockImplementation(() => tabList('claims'))
+  mockUseTripIncidents.mockImplementation(() => tabList('incidents'))
+})
+
+// Platform review Q4b follow-up: a tab whose list failed to load said "none" (its empty state). It says the load failed, with a retry.
+describe('TripDetailPage — a tab list that fails to load', () => {
+  it.each([
+    ['bookings', 'booking list'], ['accommodation', 'accommodation list'], ['vehicles', 'vehicle list'], ['staff', 'staff list'],
+    ['tasks', 'task list'], ['activities', 'activity schedule'], ['claims', 'claim list'], ['incidents', 'incident list'],
+  ])(
+    '%s shows the error and a retry, not the tab body',
+    async (tab, noun) => {
+      failedLists.add(tab)
+      const user = userEvent.setup()
+      renderPage(`/trips/trip-1?tab=${tab}`)
+
+      const panel = screen.getByRole('tabpanel')
+      expect(within(panel).getByText(`Couldn't load this ${noun}. Check your connection and try again.`)).toBeInTheDocument()
+      expect(within(panel).queryByText(/ panel$/)).not.toBeInTheDocument()
+      await user.click(within(panel).getByRole('button', { name: 'Try again' }))
+      expect(listRefetch).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it('leaves the other tabs alone', () => {
+    failedLists.add('bookings')
+    renderPage('/trips/trip-1?tab=vehicles')
+    expect(screen.getByText('Vehicles panel')).toBeInTheDocument()
+    expect(screen.queryByText(/couldn't load/i)).not.toBeInTheDocument()
+  })
 })
 
 describe('TripDetailPage — PP-60 URL-synced tabs', () => {
