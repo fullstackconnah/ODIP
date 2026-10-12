@@ -152,12 +152,14 @@ describe('IncidentDetailPage — Context panel', () => {
 })
 
 describe('IncidentDetailPage — Back', () => {
-  it('is a real link to the incident list: the text says "Back", the accessible name says where it goes', () => {
+  it('is the icon Back before the title, a real link to the incident list named for where it goes', () => {
     mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
     renderPage()
     const back = screen.getByRole('link', { name: 'Back to incidents' })
     expect(back).toHaveAttribute('href', '/incidents')
-    expect(back).toHaveTextContent(/^Back$/)
+    // The icon Back left of the title (UI survey s.1), not a "Back" button beside Edit.
+    expect(back).toHaveClass('min-w-[var(--tap-min)]')
+    expect(back.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 

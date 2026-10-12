@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import TripStatusBadge from './TripStatusBadge'
 import { StatusBadge } from '@/components/StatusBadge'
-import { TONE } from '@/lib/tone'
+import { TONE, TRIP_STATUS_LABELS } from '@/lib/tone'
 import { TRIP_STATUSES } from '@/api/types/enums'
 
 // The schedule's trip status pill is coloured by StatusBadge's tones, like the trip header, the dashboard and the trips list.
@@ -19,8 +19,14 @@ describe('TripStatusBadge (schedule)', () => {
     ['Archived', 'neutral'],
   ] as const)('colours %s with the %s tone', (status, tone) => {
     render(<TripStatusBadge status={status} />)
-    const pill = screen.getByText(status.replace(/([A-Z])/g, ' $1').trim())
+    const pill = screen.getByText(TRIP_STATUS_LABELS[status])
     expect(pill).toHaveClass('shrink-0', 'whitespace-nowrap', 'text-xs', 'px-2', 'py-0.5', 'rounded-full', 'font-semibold', ...TONE[tone].solid.split(' '))
+  })
+
+  // The words come from the label map, not from splitting the enum ("Open For Bookings").
+  it('reads OpenForBookings as "Open for bookings"', () => {
+    render(<TripStatusBadge status="OpenForBookings" />)
+    expect(screen.getByText('Open for bookings')).toBeInTheDocument()
   })
 
   it('wears the same colours as StatusBadge for every trip status', () => {

@@ -294,7 +294,7 @@ export default function MedicationFormPage() {
       <div className="flex items-center gap-4">
         <BackButton to={backTo} label="medications" variant="icon" history={false} />
         <div className="flex-1">
-          <PageHeader title={viewOnly ? 'View medication' : isEdit ? 'Edit Medication' : 'New Medication'} subtitle={participant?.fullName} />
+          <PageHeader title={viewOnly ? 'View medication' : isEdit ? 'Edit medication' : 'New medication'} subtitle={participant?.fullName} />
         </div>
       </div>
 
@@ -683,7 +683,7 @@ export default function MedicationFormPage() {
         {!viewOnly && <div className="flex justify-end gap-2">
           <Button to={backTo} variant="secondary">Cancel</Button>
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Medication')}
+            {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save' : 'Create medication')}
           </Button>
         </div>}
       </form>

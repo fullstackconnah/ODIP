@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useActivities, useCreateActivity, useUpdateActivity } from '@/api/hooks'
 import type { ActivityDto, CreateActivityDto } from '@/api/types'
 import { ACTIVITY_CATEGORIES } from '@/api/types/enums'
+import { Plus } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { DataTable } from '@/components/DataTable'
@@ -66,7 +67,7 @@ export default function ActivityLibraryTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-[var(--color-muted-foreground)]">Inactive activities are hidden from the trip picker.</p>
-        {canEdit && <Button size="md" onClick={() => open()}>+ New Activity</Button>}
+        {canEdit && <Button size="md" onClick={() => open()}><Plus className="w-4 h-4" /> New activity</Button>}
       </div>
       <DataTable
         data={activities}
@@ -90,7 +91,7 @@ export default function ActivityLibraryTab() {
       <SlideOver
         open={!!form}
         onClose={close}
-        title={editing ? 'Edit Activity' : 'New Activity'}
+        title={editing ? 'Edit activity' : 'New activity'}
         dirty={dirty}
         footerClassName="py-3 space-y-3"
         footer={
@@ -122,7 +123,7 @@ export default function ActivityLibraryTab() {
             )}
             <div className="flex items-center gap-3 justify-end">
               <Button variant="secondary" onClick={close}>Cancel</Button>
-              <Button onClick={submit} disabled={busy}>{busy ? 'Saving…' : editing ? 'Save Changes' : 'Create Activity'}</Button>
+              <Button onClick={submit} disabled={busy}>{busy ? 'Saving…' : editing ? 'Save' : 'Create activity'}</Button>
             </div>
           </>
         }

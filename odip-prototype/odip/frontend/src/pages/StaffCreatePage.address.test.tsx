@@ -76,7 +76,7 @@ async function fillAndCreate(u: ReturnType<typeof userEvent.setup>) {
   await u.type(screen.getByLabelText(/first name/i), 'Sam')
   await u.type(screen.getByLabelText(/last name/i), 'Staff')
   await u.type(screen.getByLabelText(/^email/i), 'Sam.Staff@Gmial.com')
-  await u.click(screen.getByRole('button', { name: 'Create Staff Member' }))
+  await u.click(screen.getByRole('button', { name: 'Create staff member' }))
 }
 
 describe('StaffCreatePage create: an address the server wants checked', () => {
@@ -116,7 +116,7 @@ describe('StaffCreatePage create: an address the server wants checked', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(mockCreate).toHaveBeenCalledTimes(1)
     expect(screen.getByLabelText(/^email/i)).toHaveValue('Sam.Staff@Gmial.com')
-    expect(screen.getByRole('button', { name: 'Create Staff Member' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Create staff member' })).toBeEnabled()
   })
 
   it('does not carry the confirmation over: a later attempt after a confirmed one that failed asks afresh', async () => {
@@ -128,9 +128,9 @@ describe('StaffCreatePage create: an address the server wants checked', () => {
     await fillAndCreate(u)
     await u.click(within(await dialog()).getByRole('button', { name: 'Use this address' }))
     await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Staff Member' })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create staff member' })).toBeEnabled())
 
-    await u.click(screen.getByRole('button', { name: 'Create Staff Member' }))
+    await u.click(screen.getByRole('button', { name: 'Create staff member' }))
 
     expect(await dialog()).toBeInTheDocument()
     expect(mockCreate).toHaveBeenCalledTimes(3)
@@ -147,7 +147,7 @@ describe('StaffCreatePage edit: a changed address the server wants checked', () 
 
     await u.clear(email)
     await u.type(email, 'sam.staff@gmial.com')
-    await u.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await u.click(screen.getByRole('button', { name: 'Save' }))
 
     const asking = await dialog()
     expect(within(asking).getByText(SENTENCE)).toBeInTheDocument()

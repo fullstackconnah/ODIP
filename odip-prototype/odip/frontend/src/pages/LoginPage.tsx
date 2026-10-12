@@ -299,7 +299,7 @@ export default function LoginPage() {
               disabled={login.isPending || resend === 'sending'}
               className="w-full py-2.5 rounded-[var(--radius-lg)] bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[var(--color-primary)]/20"
             >
-              {login.isPending ? 'Signing in...' : 'Sign In'}
+              {login.isPending ? 'Signing in…' : 'Sign in'}
             </button>
           </div>
 
@@ -369,7 +369,7 @@ export default function LoginPage() {
                 disabled={devLogin.isPending}
                 className="w-full py-2.5 rounded-[var(--radius-lg)] bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[var(--color-primary)]/20"
               >
-                {devLogin.isPending ? 'Signing in...' : 'Sign in as selected user'}
+                {devLogin.isPending ? 'Signing in…' : 'Sign in as selected user'}
               </button>
 
               <p className="text-xs text-center text-[var(--color-on-warning-container)] bg-[var(--color-warning-container)] rounded-[var(--radius-lg)] py-2 px-3">

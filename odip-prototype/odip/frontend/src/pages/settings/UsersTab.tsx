@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Pencil, Mail } from 'lucide-react'
+import { Search, Pencil, Mail, Plus } from 'lucide-react'
 import { useAdminUsers, useAdminTenantsSummary, useEnsureUserSignInAccount } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
 import { Button } from '@/components/Button'
@@ -181,7 +181,7 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
         </div>
 
         <Button onClick={() => onAddUser(tenantId || undefined)}>
-          + Add User
+          <Plus className="w-4 h-4" /> New user
         </Button>
       </div>
 
@@ -234,7 +234,7 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
           },
           {
             key: 'lastLoginAt',
-            header: 'Last Login',
+            header: 'Last sign-in',
             className: 'text-[var(--color-muted-foreground)]',
             render: (user: AdminUserDto) => formatRelativeTime(user.lastLoginAt),
           },

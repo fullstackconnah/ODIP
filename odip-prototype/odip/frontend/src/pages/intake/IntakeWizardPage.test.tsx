@@ -122,6 +122,13 @@ afterEach(() => {
 })
 
 describe('IntakeWizardPage', () => {
+  // Its own h1 shell, not a PageHeader, so it names the tab itself (UI standard 6).
+  it('names the browser tab after its heading', () => {
+    renderPage()
+    expect(screen.getByRole('heading', { level: 1, name: 'Intake' })).toBeInTheDocument()
+    expect(document.title).toBe('Intake — Odip')
+  })
+
   it('renders the create wizard with no profile-only identity fields and enough focus clearance for every fixed and true-mobile narrow viewport', () => {
     renderPage()
     expect(screen.getByText('Step 1 of 9')).toBeVisible()

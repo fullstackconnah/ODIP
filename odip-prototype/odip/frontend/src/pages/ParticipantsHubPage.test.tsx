@@ -145,40 +145,32 @@ describe('ParticipantsHubPage — single PageHeader + tabbed lifecycle', () => {
   })
 })
 
-// Density verdict: the header block was ~136px before the first row because the stage's description
-// sat in its own row inside the panel, under a generic subtitle that restated the tab labels.
-describe('ParticipantsHubPage — one description line, not two', () => {
-  const ACTIVE = 'The operational register — participants you can roster and book.'
-  const ENQUIRIES = 'Open enquiries and intakes in progress — start or resume an intake.'
-
-  it('shows the active stage\'s description once, as the inline subtitle beside the H1', () => {
+// A subtitle is a count or nothing (UI survey s.1): the stage descriptions that sat beside the H1 are gone, the tabs name the stages.
+describe('ParticipantsHubPage — no instruction subtitle', () => {
+  it('shows the title alone beside the action, with no stage description', () => {
     renderHub()
 
     const h1 = screen.getByRole('heading', { level: 1, name: 'Participants' })
-    expect(screen.getAllByText(ACTIVE)).toHaveLength(1)
-    expect(h1.parentElement).toContainElement(screen.getByText(ACTIVE))
-    // The generic subtitle that repeated the three tab labels is gone.
-    expect(screen.queryByText(/one view, three stages/i)).not.toBeInTheDocument()
+    expect(h1.parentElement).toHaveTextContent(/^Participants$/)
+    expect(screen.queryByText(/operational register/i)).not.toBeInTheDocument()
   })
 
   it('opens the panel straight onto its table: no description paragraph inside it', () => {
     renderHub()
 
     const panel = screen.getByRole('tabpanel')
-    expect(within(panel).queryByText(ACTIVE)).not.toBeInTheDocument()
     // The empty state is the panel's first content now, not a paragraph the hub put above it.
     expect(panel).toHaveTextContent(/No participants yet/i)
     expect(panel.firstElementChild?.tagName).not.toBe('P')
   })
 
-  it('swaps the subtitle with the stage, still a single line', async () => {
+  it('keeps the title alone on another stage', async () => {
     const user = userEvent.setup()
     renderHub()
 
     await user.click(screen.getByRole('tab', { name: 'Enquiries' }))
-    expect(screen.getByText(ENQUIRIES)).toBeInTheDocument()
-    expect(screen.queryByText(ACTIVE)).not.toBeInTheDocument()
-    expect(within(screen.getByRole('tabpanel')).queryByText(ENQUIRIES)).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Participants' }).parentElement).toHaveTextContent(/^Participants$/)
+    expect(screen.queryByText(/start or resume an intake/i)).not.toBeInTheDocument()
   })
 
   it('keeps the title row and the tab strip in one block-flow wrapper, with no section gap between them', () => {

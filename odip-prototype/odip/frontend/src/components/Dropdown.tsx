@@ -3,6 +3,7 @@ import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { TAP_AREA } from './tapArea'
+import { buttonClasses } from './buttonClasses'
 
 export type DropdownItem = {
   value: string
@@ -13,7 +14,7 @@ export type DropdownItem = {
 }
 
 type DropdownProps = {
-  /** 'icon' is a compact icon-only trigger (e.g. a kebab action menu on a card/chip) — same portal/keyboard machinery as 'menu', just a small icon button instead of the pill CTA. */
+  /** 'icon' is a compact icon-only trigger (e.g. a kebab action menu on a card/chip) — same portal/keyboard machinery as 'menu', just a small icon button instead of the Button-look trigger. */
   variant: 'pill' | 'form' | 'menu' | 'icon'
   items: DropdownItem[]
 
@@ -462,7 +463,8 @@ export function Dropdown({
         disabled={disabled || loading}
         onClick={() => setOpen(v => !v)}
         onKeyDown={handleKeyDown}
-        className={`${TAP_AREA} flex items-center gap-2 px-5 py-2.5 text-sm bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white rounded-full font-bold shadow-lg shadow-[var(--color-primary)]/20 hover:opacity-90 disabled:opacity-50 transition-all`}
+        // A primary md Button (the header-action standard), 44px on a touch screen like any md Button, so no pad.
+        className={buttonClasses('primary', 'md')}
       >
         {icon}
         {label}

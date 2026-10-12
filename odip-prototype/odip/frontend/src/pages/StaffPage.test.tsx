@@ -329,7 +329,7 @@ describe('StaffPage — write controls by role', () => {
     expect(within(row).queryByRole('button', { name: /Active/ })).not.toBeInTheDocument()
     expect(within(row).queryByRole('link', { name: /Edit/ })).not.toBeInTheDocument()
     expect(within(row).queryByRole('button', { name: /Archive/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /New Staff/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /New staff member/ })).not.toBeInTheDocument()
   })
 
   it.each(['Admin', 'Coordinator'])('offers %s the status pill and New Staff', role => {
@@ -337,7 +337,7 @@ describe('StaffPage — write controls by role', () => {
     renderPage()
     const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
     expect(within(row).getByRole('button', { name: /Active/ })).toBeEnabled()
-    expect(screen.getByRole('link', { name: /New Staff/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /New staff member/ })).toBeInTheDocument()
   })
 })
 

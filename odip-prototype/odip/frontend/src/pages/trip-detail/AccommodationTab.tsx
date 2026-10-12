@@ -548,7 +548,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                 Cancel
               </Button>
               <Button onClick={handleUpdateReservation} disabled={updateReservation.isPending}>
-                {updateReservation.isPending ? 'Saving...' : 'Save Changes'}
+                {updateReservation.isPending ? 'Saving…' : 'Save'}
               </Button>
             </>
           }
@@ -662,7 +662,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
       <ConfirmDialog
         open={deletingReservation !== null}
         onCancel={() => setDeletingReservation(null)}
-        title="Remove Reservation"
+        title="Remove reservation"
         message={
           <>
             <p>

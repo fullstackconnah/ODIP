@@ -18,7 +18,7 @@ let loggingOut = false
 
 /**
  * Ends the session everywhere and goes to /login. This browser is signed out first (the keys go, Firebase forgets the user), so a slow API cannot leave the app
- * usable behind a Sign Out button that looks dead. Then the server is told to drop the 7-day cookie (it outlives the stored token, and the API accepts it when no
+ * usable behind a Sign out button that looks dead. Then the server is told to drop the 7-day cookie (it outlives the stored token, and the API accepts it when no
  * token is sent), with the token the keys held; that is best effort and gives up after 5 s. A step that fails does not stop the others.
  */
 export async function endSession() {

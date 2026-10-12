@@ -45,6 +45,7 @@ import {
   type WizardStepDef, type WizardValidate, type WizardSecondaryAction, type ReviewGroup, type ReviewRow,
 } from '@/components/wizard'
 import { BackButton } from '@/components/BackButton'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { PageState } from '@/components/PageState'
@@ -92,6 +93,9 @@ export default function IntakeWizardPage() {
   const saveIntake = useSaveParticipantIntake()
   const saveMutation = isEditMode ? saveIntake : createParticipant
   const { data: participant, isLoading: participantLoading, isError: participantFailed, error: participantError, refetch: refetchParticipant } = useParticipant(id)
+  // Its own h1 shell, not a PageHeader, so it names the tab itself.
+  const heading = isEditMode ? 'Resume intake' : 'Intake'
+  useDocumentTitle(heading)
   // PF-10.5 edit mode: the wizard's own contact and risk field arrays hold only the NEW rows added in this session — existing rows
   // are surfaced read-only from their own nested-CRUD endpoints, same data source ParticipantContactRolesSection/RiskEntriesSection
   // already use on the detail page.
@@ -424,7 +428,7 @@ export default function IntakeWizardPage() {
       {unsavedChangesDialog}
       <div className="flex items-center gap-3">
         <BackButton to={fallbackBack} label={isEditMode ? 'participant' : 'participants'} variant="icon" data-testid="intake-header-back" />
-        <h1 className="text-xl font-bold">{isEditMode ? 'Resume Intake' : 'Intake'}</h1>
+        <h1 className="text-xl font-bold">{heading}</h1>
       </div>
 
       {saveMutation.isError && (

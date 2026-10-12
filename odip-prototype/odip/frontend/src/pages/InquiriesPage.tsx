@@ -61,7 +61,6 @@ function useInquiriesScreen() {
   const convert = useConvertParticipantInquiry()
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const openNew = () => navigate('/participants/new-inquiry')
   const editExisting = (row: ParticipantInquiryDto) => navigate(`/participants/new-inquiry?id=${encodeURIComponent(row.id)}`)
   const startIntake = (id: string) => {
     setError(null)
@@ -145,7 +144,7 @@ function useInquiriesScreen() {
       )}
       {!canManageParticipantLifecycle && <p role="status" className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-accent)] p-3 text-sm text-[var(--color-muted-foreground)]">You can review enquiries, but your role cannot capture, edit, or start participant intake.</p>}
       {error && <Callout tone="error">{error}</Callout>}
-      {showEmptyState && <EmptyState icon={ClipboardPlus} title="No open enquiries" description="Capture an enquiry when someone first contacts the service, then start their intake. Once an intake is complete, the participant moves to the Onboarding tab." action={canManageParticipantLifecycle ? { label: 'New enquiry', onClick: openNew } : undefined} />}
+      {showEmptyState && <EmptyState icon={ClipboardPlus} title="No open enquiries" description="Capture an enquiry when someone first contacts the service, then start their intake. Once an intake is complete, the participant moves to the Onboarding tab." />}
       {showTable && !isLoading && filtered.length === 0
         ? <EmptyState icon={Search} title="No enquiries match your search" description="Try a different search term, or clear the search to see every open enquiry." action={{ label: 'Clear search', onClick: () => setSearch('') }} />
         : showTable && <DataTable data={filtered} columns={columns} keyField="id" loading={isLoading} sortable emptyMessage="No open enquiries." />}

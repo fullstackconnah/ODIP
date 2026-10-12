@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { StatusBadge } from './StatusBadge'
-import { STATUS_TONE, TONE, TRIP_STATUS_LABELS } from '@/lib/tone'
-import { TRIP_STATUSES } from '@/api/types/enums'
+import { BOOKING_STATUS_LABELS, STATUS_TONE, TONE, TRIP_STATUS_LABELS } from '@/lib/tone'
+import { BOOKING_STATUSES, TRIP_STATUSES } from '@/api/types/enums'
 
 describe('StatusBadge — size', () => {
   it('renders the 12px pill exactly as before when `size` is omitted', () => {
@@ -96,6 +96,12 @@ describe('StatusBadge — every trip status', () => {
     expect(TRIP_STATUS_LABELS.OpenForBookings).toBe('Open for bookings')
     expect(TRIP_STATUS_LABELS.WaitlistOnly).toBe('Waitlist only')
     expect(TRIP_STATUS_LABELS.InProgress).toBe('In progress')
+  })
+
+  it('gives every value in BOOKING_STATUSES a sentence-case label', () => {
+    expect(Object.keys(BOOKING_STATUS_LABELS).sort()).toEqual([...BOOKING_STATUSES].sort())
+    for (const status of BOOKING_STATUSES) expect(BOOKING_STATUS_LABELS[status], status).toMatch(/^[A-Z][a-z]+( [a-z]+)*$/)
+    expect(BOOKING_STATUS_LABELS.NoLongerAttending).toBe('No longer attending')
   })
 
   it('leaves StatusBadge\'s own text alone: without a label it still shows what it is given (other callers are unchanged)', () => {

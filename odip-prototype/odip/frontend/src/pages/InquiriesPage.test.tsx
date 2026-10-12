@@ -33,16 +33,12 @@ beforeEach(() => {
 })
 
 describe('InquiriesPage lifecycle handoff', () => {
-  it('shows the empty state with a New enquiry CTA that routes to /participants/new-inquiry', async () => {
-    const user = userEvent.setup()
+  // "New enquiry" is the Participants hub header's action, so the empty state does not repeat it.
+  it('shows the empty state with no create action of its own', () => {
     page()
     expect(screen.getByText('No open enquiries')).toBeInTheDocument()
     expect(screen.queryByLabelText(/First name/)).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'New enquiry' }))
-    // Inline capture has been replaced by a routed page; the standalone /inquiries
-    // route no longer mounts the form fields itself.
-    expect(screen.getByText('New inquiry form')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'New enquiry' })).not.toBeInTheDocument()
   })
 
   it('renders Start intake for an unconverted inquiry and routes to intake after successful conversion', async () => {

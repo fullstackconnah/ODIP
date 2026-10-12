@@ -151,7 +151,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
 
     await user.click(screen.getByTitle('Edit assignment'))
     await screen.findByText('Worker screening expired.')
-    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
 
     fireEvent.change(screen.getByDisplayValue('2026-09-10'), { target: { value: '2026-09-15' } })
 
@@ -160,7 +160,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
       expect.objectContaining({ assignmentStart: '2026-09-15' }),
       expect.anything(),
     )
-    await waitFor(() => expect(screen.getByRole('button', { name: /save changes/i })).not.toBeDisabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: /^save$/i })).not.toBeDisabled())
   })
 
   it('requires a non-empty override reason before submitting when a finding requires one', async () => {
@@ -232,7 +232,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
 
     await user.click(screen.getByTitle('Edit assignment'))
     await screen.findByDisplayValue('Covering a last-minute shortfall.')
-    await user.click(screen.getByRole('button', { name: /save changes/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
 
     expect(mockUpdateMutate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -257,7 +257,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     // (setEditFindings([])) can land AFTER the save's onError sets the server findings, wiping
     // them right back out — a real race that only showed up in a slower (deploy-image) container.
     await waitFor(() => expect(mockCheckMutate).toHaveBeenCalled())
-    await user.click(screen.getByRole('button', { name: /save changes/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
 
     expect(await screen.findByText('Leave overlap (server)')).toBeInTheDocument()
     expect(screen.queryByText(/Failed to update assignment/)).toBeNull()

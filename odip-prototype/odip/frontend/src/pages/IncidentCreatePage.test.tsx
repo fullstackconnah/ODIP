@@ -1194,7 +1194,7 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
       renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
       await user.click(await screen.findByRole('button', { name: /Review$/i }))
-      await user.click(screen.getByRole('button', { name: /save changes/i }))
+      await user.click(screen.getByRole('button', { name: /^save$/i }))
 
       expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
       const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
@@ -1214,7 +1214,7 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
       renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
       await user.click(await screen.findByRole('button', { name: /Review$/i }))
-      await user.click(screen.getByRole('button', { name: /save changes/i }))
+      await user.click(screen.getByRole('button', { name: /^save$/i }))
 
       expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
       const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
@@ -1228,7 +1228,7 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
       renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
       await user.click(await screen.findByRole('button', { name: /Review$/i }))
-      await user.click(screen.getByRole('button', { name: /save changes/i }))
+      await user.click(screen.getByRole('button', { name: /^save$/i }))
 
       const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
       expect(payload.medicationAdministrationId).toBeUndefined()
@@ -1267,17 +1267,15 @@ describe('IncidentCreatePage — save-failure banner', () => {
   })
 })
 
-// Density polish (touch): the "← Back to Incidents" text link was a 19px tap target. It takes the shared TAP_FLOOR
-// (a --tap-min height floor, inline-flex + centring under `pointer: coarse` only), so it is 44px tall on touch and
-// exactly what it was, box for box, on a mouse (--tap-min is 0px there).
-describe('IncidentCreatePage — Back link touch target', () => {
-  it('floors the "Back to Incidents" link at --tap-min and keeps its destination and hover colour', () => {
+// The one Back standard (UI survey s.1): the icon BackButton left of the title, named for where it goes.
+describe('IncidentCreatePage — Back', () => {
+  it('is the icon Back before the title, a real link to /incidents', () => {
     renderCreatePage()
 
     const back = screen.getByRole('link', { name: /back to incidents/i })
     expect(back).toHaveAttribute('href', '/incidents')
-    expect(back).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'hover:text-[var(--color-foreground)]', 'transition-colors')
-    expect(back.className).not.toMatch(/44px/)
+    expect(back).toHaveClass('min-w-[var(--tap-min)]')
+    expect(back.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 

@@ -1,4 +1,4 @@
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { z } from 'zod'
@@ -12,8 +12,8 @@ import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
+import { BackButton } from '@/components/BackButton'
 import { SignInEmailOutcome } from '@/components/SignInEmailOutcome'
-import { TAP_FLOOR } from '@/components/tapArea'
 import { useRefocusWhenLost } from '@/hooks/useRefocusWhenLost'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { addressConfirmationRequest } from '@/lib/addressConfirmation'
@@ -259,10 +259,10 @@ export default function StaffCreatePage() {
   if (isTargetSuperAdmin) {
     return (
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
-        <div className="text-sm text-[var(--color-muted-foreground)]">
-          <Link to="/staff" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Staff</Link>
+        <div className="flex items-start gap-2">
+          <BackButton to="/staff" label="staff" variant="icon" history={false} />
+          <div className="flex-1 min-w-0"><PageHeader title="Edit staff member" /></div>
         </div>
-        <PageHeader title="Edit Staff Member" />
         <Card className="space-y-2">
           <p role="alert" className="text-sm font-medium text-[var(--color-destructive)]">
             SuperAdmin accounts can't be edited here.
@@ -270,9 +270,6 @@ export default function StaffCreatePage() {
           <p className="text-sm text-[var(--color-muted-foreground)]">
             SuperAdmin accounts are managed in Settings › Users. Contact a SuperAdmin if this account's role or profile needs to change.
           </p>
-          <Link to="/staff" className="inline-block mt-2 px-4 py-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors">
-            Back to Staff
-          </Link>
         </Card>
       </div>
     )
@@ -282,10 +279,10 @@ export default function StaffCreatePage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       <AnnouncementRegion message={announcement} />
       {unsavedChangesDialog}
-      <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/staff" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Staff</Link>
+      <div className="flex items-start gap-2">
+        <BackButton to="/staff" label="staff" variant="icon" history={false} />
+        <div className="flex-1 min-w-0"><PageHeader title={isEdit ? 'Edit staff member' : 'New staff member'} /></div>
       </div>
-      <PageHeader title={isEdit ? 'Edit Staff Member' : 'New Staff Member'} />
 
       {mutation.isError && (
         <Callout tone="error">
@@ -295,7 +292,7 @@ export default function StaffCreatePage() {
 
       <form onSubmit={submitWith(false)} className="flex flex-col gap-[var(--section-gap)]">
         {/* Personal Information */}
-        <Card title="Personal Information">
+        <Card title="Personal information">
           <div className={formGrid}>
             <FormField label="First Name" required error={errors.firstName?.message} className={span.medium}>
               <input {...register('firstName')} placeholder="e.g. Sarah" autoFocus />
@@ -389,7 +386,7 @@ export default function StaffCreatePage() {
         </Card>
 
         {/* Qualifications */}
-        <Card title="Qualifications & Eligibility">
+        <Card title="Qualifications & eligibility">
           <div className={formGrid}>
             <div className={`${span.medium} space-y-1`}>
               <FormField label="First Aid Qualified" layout="checkbox">
@@ -455,10 +452,10 @@ export default function StaffCreatePage() {
           <Button variant="secondary" to="/staff">Cancel</Button>
           <Button type="submit" disabled={mutation.isPending || submitting}>
             {mutation.isPending
-              ? (isEdit ? 'Saving...' : 'Creating...')
+              ? (isEdit ? 'Saving…' : 'Creating…')
               : submitting && !isEdit && emailLinkAvailable
                 ? 'Sending link...'
-                : (isEdit ? 'Save Changes' : 'Create Staff Member')}
+                : (isEdit ? 'Save' : 'Create staff member')}
           </Button>
         </div>
       </form>

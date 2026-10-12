@@ -80,7 +80,7 @@ describe('TenantFormPanel as a dialog', () => {
     render(<TenantFormPanel isOpen onClose={onClose} />)
     await user.type(screen.getByPlaceholderText('e.g. Acme Travel Co'), 'Acme')
     await user.type(screen.getByPlaceholderText('e.g. acme.com.au'), 'acme.com.au')
-    await user.click(screen.getByRole('button', { name: 'Create Tenant' }))
+    await user.click(screen.getByRole('button', { name: 'Create tenant' }))
     expect(await screen.findByText('Tenant created')).toBeInTheDocument()
     await user.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalledTimes(1)

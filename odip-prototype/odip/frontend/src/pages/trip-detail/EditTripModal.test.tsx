@@ -26,7 +26,7 @@ describe('EditTripModal — what Save refuses', () => {
   it('refuses an empty start date with a field error', async () => {
     const user = await setup()
     fireEvent.change(screen.getByLabelText(/Start Date/), { target: { value: '' } })
-    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(mutate).not.toHaveBeenCalled()
     expect(screen.getByRole('alert')).toHaveTextContent('Start date is required.')
     expect(screen.getByLabelText(/Start Date/)).toHaveFocus()
@@ -35,7 +35,7 @@ describe('EditTripModal — what Save refuses', () => {
   it('refuses a duration below one day with a field error', async () => {
     const user = await setup()
     fireEvent.change(screen.getByLabelText(/Duration/), { target: { value: '0' } })
-    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(mutate).not.toHaveBeenCalled()
     expect(screen.getByRole('alert')).toHaveTextContent('Duration must be at least 1 day.')
     expect(screen.getByLabelText(/Duration/)).toHaveFocus()
@@ -44,7 +44,7 @@ describe('EditTripModal — what Save refuses', () => {
   it('clears a field error once the field is corrected', async () => {
     const user = await setup()
     fireEvent.change(screen.getByLabelText(/Start Date/), { target: { value: '' } })
-    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     fireEvent.change(screen.getByLabelText(/Start Date/), { target: { value: '2026-12-01' } })
     expect(screen.queryByText('Start date is required.')).toBeNull()
     expect(screen.getByLabelText(/Start Date/)).toHaveAttribute('aria-invalid', 'false')
@@ -52,7 +52,7 @@ describe('EditTripModal — what Save refuses', () => {
 
   it('saves a start date and a duration of one or more days', async () => {
     const user = await setup()
-    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(mutate).toHaveBeenCalledWith({ id: 't1', data: expect.objectContaining({ startDate: '2026-11-01', durationDays: 3 }) }, expect.anything())
   })
 })
@@ -68,7 +68,7 @@ describe('EditTripModal — a refused save', () => {
   it('disables Save while the trip name is blank', async () => {
     await setup()
     fireEvent.change(screen.getByPlaceholderText('e.g. Beach Getaway 2026'), { target: { value: '   ' } })
-    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 })
 

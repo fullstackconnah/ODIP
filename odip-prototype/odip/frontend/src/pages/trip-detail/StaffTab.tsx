@@ -354,7 +354,7 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
                 Cancel
               </Button>
               <Button onClick={handleUpdateStaffAssignment} disabled={updateStaffAssignment.isPending || editGate.isBlocked}>
-                {updateStaffAssignment.isPending ? 'Saving...' : editGate.needsReason ? 'Save with override' : 'Save Changes'}
+                {updateStaffAssignment.isPending ? 'Saving…' : editGate.needsReason ? 'Save with override' : 'Save'}
               </Button>
             </>
           }

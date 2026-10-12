@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Users, UserCheck, Clock, ChevronDown, ChevronRight } from 'lucide-react'
+import { Users, UserCheck, Clock, ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { BackButton } from '@/components/BackButton'
 import { useAdminTenantUsers } from '@/api/hooks/settings'
 import { useAdminTenantProviderSettings } from '@/api/hooks/admin'
@@ -81,10 +81,10 @@ export default function TenantDetailView({
 
         <div className="flex items-center gap-2">
           <Button variant="secondary" onClick={onEditTenant}>
-            Edit Tenant
+            Edit
           </Button>
           <Button onClick={() => onAddUser(tenant.id)}>
-            + Add User
+            <Plus className="w-4 h-4" /> New user
           </Button>
         </div>
       </div>

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useTrips, usePatchTrip, useTrip } from '@/api/hooks'
-import type { TripStatus, TripListDto } from '@/api/types'
+import { TRIP_STATUSES, type TripStatus, type TripListDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
-import { TONE, TRIP_STATUS_LABELS, statusClass } from '@/lib/tone'
+import { TONE, TRIP_STATUS_LABELS, statusClass, statusItems } from '@/lib/tone'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Pencil, MapPin } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
@@ -24,19 +24,9 @@ import { EditTripModal } from './trip-detail'
 type Tab = 'active' | 'completed'
 type TripsView = 'table' | 'cards'
 
-const activeStatuses = ['Draft', 'Planning', 'OpenForBookings', 'Confirmed', 'InProgress']
+const activeStatuses: TripStatus[] = ['Draft', 'Planning', 'OpenForBookings', 'Confirmed', 'InProgress']
 
-const TRIP_STATUS_ITEMS = [
-  { value: 'Draft', label: 'Draft' },
-  { value: 'Planning', label: 'Planning' },
-  { value: 'OpenForBookings', label: 'Open For Bookings' },
-  { value: 'WaitlistOnly', label: 'Waitlist Only' },
-  { value: 'Confirmed', label: 'Confirmed' },
-  { value: 'InProgress', label: 'In Progress' },
-  { value: 'Completed', label: 'Completed' },
-  { value: 'Cancelled', label: 'Cancelled' },
-  { value: 'Archived', label: 'Archived' },
-]
+const TRIP_STATUS_ITEMS = statusItems(TRIP_STATUSES, TRIP_STATUS_LABELS)
 
 const VIEW_STORAGE_KEY = 'odip.trips.view'
 const WIDE_QUERY = '(min-width: 1280px)'
@@ -126,13 +116,7 @@ export default function TripsPage() {
     : allTrips
 
   const statusOptions = tab === 'active'
-    ? [
-        { value: 'Draft', label: 'Draft' },
-        { value: 'Planning', label: 'Planning' },
-        { value: 'OpenForBookings', label: 'Open for Bookings' },
-        { value: 'Confirmed', label: 'Confirmed' },
-        { value: 'InProgress', label: 'In Progress' },
-      ]
+    ? statusItems(activeStatuses, TRIP_STATUS_LABELS)
     : []
 
   const switchTab = (newTab: string) => {
@@ -296,7 +280,7 @@ export default function TripsPage() {
               />
               {canWrite && (
                 <Button to="/trips/new" size="md">
-                  <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New Trip</span><span className="sm:hidden">New</span>
+                  <Plus className="h-4 w-4" /> New trip
                 </Button>
               )}
             </div>
@@ -366,7 +350,6 @@ export default function TripsPage() {
             icon={MapPin}
             title="No trips yet"
             description="Trips are the group outings you plan for participants — set dates, capacity, and requirements, then book people onto them."
-            action={canWrite ? { label: 'Create trip', to: '/trips/new' } : undefined}
           />
         )
       ) : view === 'table' ? (

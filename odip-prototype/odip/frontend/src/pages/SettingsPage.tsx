@@ -2,7 +2,7 @@ import { useEventTemplates, useSettings, useUpdateSettings, useProviderSettings,
 import { useState, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import { LayoutTemplate, Pencil } from 'lucide-react'
+import { LayoutTemplate, Pencil, Plus } from 'lucide-react'
 import { Tabs } from '@/components/Tabs'
 import { Modal } from '@/components/Modal'
 import { EmptyState } from '@/components/EmptyState'
@@ -142,22 +142,22 @@ export default function SettingsPage() {
   const userNotices = useNotices()
 
   const allTabs = [
-    { key: 'templates' as const, label: 'Event Templates' },
-    { key: 'activities' as const, label: 'Activity Library' },
-    { key: 'qualifications' as const, label: 'Qualification Warnings' },
+    { key: 'templates' as const, label: 'Event templates' },
+    { key: 'activities' as const, label: 'Activity library' },
+    { key: 'qualifications' as const, label: 'Qualification warnings' },
     { key: 'appearance' as const, label: 'Appearance' },
-    { key: 'provider' as const, label: 'Provider Settings' },
+    { key: 'provider' as const, label: 'Provider settings' },
     // The pricing engine's own answers (registration groups, crossing policy, travel rates): the provider's to set, so Admins and SuperAdmins only.
-    { key: 'pricing' as const, label: 'Plan Pricing', hidden: !(isAdmin || isSuperAdmin) },
+    { key: 'pricing' as const, label: 'Plan pricing', hidden: !(isAdmin || isSuperAdmin) },
     // What a budget check does about a one-off shift that would put a participant over budget, and when a participant counts as approaching it (budget phase 1 stores the choice): Admins and SuperAdmins only.
     { key: 'budgets' as const, label: 'Budgets', hidden: !(isAdmin || isSuperAdmin) },
-    { key: 'catalogue' as const, label: 'Support Catalogue', superAdminOnly: true },
+    { key: 'catalogue' as const, label: 'Support catalogue', superAdminOnly: true },
     // Everyone reads the calendar (it prices their plans and claims); only a SuperAdmin changes it, so the tab is read-only for the rest.
-    { key: 'holidays' as const, label: 'Public Holidays' },
+    { key: 'holidays' as const, label: 'Public holidays' },
     { key: 'tenants' as const, label: 'Tenants', superAdminOnly: true },
     { key: 'users' as const, label: 'Users', superAdminOnly: true },
     { key: 'notifications' as const, label: 'Notifications' },
-    { key: 'notifications-admin' as const, label: 'Failed Sends', hidden: !canManageNotifications },
+    { key: 'notifications-admin' as const, label: 'Failed sends', hidden: !canManageNotifications },
   ]
   const tabs = allTabs.filter(t => (!t.superAdminOnly || isSuperAdmin) && !t.hidden)
   // The active tab lives in the URL (?tab=pricing), so a link, a reload and the plan builder's "Confirm in Settings" all land on it; a tab this user cannot see reads as the first.
@@ -167,7 +167,11 @@ export default function SettingsPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Settings"
-        subtitle="Manage event templates, activity library, and qualification settings"
+        action={tab === 'templates' && (
+          <Button onClick={openNewTemplate} size="md">
+            <Plus className="w-4 h-4" /> New template
+          </Button>
+        )}
       />
 
       <Tabs
@@ -182,31 +186,14 @@ export default function SettingsPage() {
       {tab === 'templates' && (
         <div className="space-y-4">
           {templatesEmpty ? (
-            // The "+ New Template" action lives inside the empty state (not also in the toolbar)
-            // so there is exactly one control for it, right where the eye lands. It is a real
-            // <Button size="md"> under the EmptyState rather than EmptyState's own `action` slot, which
-            // draws a hand-rolled min-h-[44px] text button that ignores the density tokens (44px on a
-            // mouse; this one is 32px, and 44px on a coarse pointer). gap-5 + pb-10 reproduce the slot's
-            // spacing (gap-3 + mt-2 above it, py-10 around it), hence the pb-0! on the EmptyState.
-            <div className="flex flex-col items-center gap-5 pb-10">
-              <EmptyState
-                icon={LayoutTemplate}
-                title="No event templates yet"
-                description="Templates pre-fill the destination, region and duration when you create a trip. Add one to get started."
-                className="pb-0!"
-              />
-              <Button onClick={openNewTemplate} size="md">
-                + New Template
-              </Button>
-            </div>
+            // "New template" is the header action, so the empty state carries no second one.
+            <EmptyState
+              icon={LayoutTemplate}
+              title="No event templates yet"
+              description="Templates pre-fill the destination, region and duration when you create a trip. Add one to get started."
+            />
           ) : (
             <>
-              <div className="flex justify-end">
-                <Button onClick={openNewTemplate} size="md">
-                  + New Template
-                </Button>
-              </div>
-
               <div className="grid gap-4 md:grid-cols-2">
                 {activeTemplates.map((t) => (
                   <div key={t.id} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] group">

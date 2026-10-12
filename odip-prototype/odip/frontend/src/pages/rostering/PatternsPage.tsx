@@ -190,7 +190,6 @@ export default function PatternsPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Shift patterns"
-        subtitle="Weekly recurring shifts that generate real shifts onto the roster."
         action={canWrite && (
           <Button onClick={() => setSlideOverTarget({ mode: 'create' })} size="md">
             <Plus className="h-4 w-4" /> New pattern
@@ -227,7 +226,6 @@ export default function PatternsPage() {
           icon={Repeat}
           title="No recurring patterns yet"
           description="A pattern generates a participant's regular shifts automatically, week after week, instead of you adding them to the board one at a time."
-          action={canWrite ? { label: 'Set up a pattern', onClick: () => setSlideOverTarget({ mode: 'create' }) } : undefined}
         />
       )}
 

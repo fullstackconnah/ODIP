@@ -85,7 +85,7 @@ describe('SettingsPage Users tab: creating a user', () => {
   it('stays open to say the set-password email went, and Done closes the panel', async () => {
     const u = await openUsersTab()
 
-    await u.click(screen.getByRole('button', { name: '+ Add User' }))
+    await u.click(screen.getByRole('button', { name: 'New user' }))
     await u.click(screen.getByRole('button', { name: 'Tenant *' }))
     await u.click(await screen.findByRole('option', { name: 'Sample Support Co' }))
     await u.type(screen.getByLabelText(/first name/i), 'New')
@@ -94,7 +94,7 @@ describe('SettingsPage Users tab: creating a user', () => {
     await u.type(screen.getByLabelText(/username/i), 'newperson')
     await u.click(screen.getByRole('button', { name: 'Role *' }))
     await u.click(await screen.findByRole('option', { name: 'Coordinator' }))
-    await u.click(screen.getByRole('button', { name: 'Create User' }))
+    await u.click(screen.getByRole('button', { name: 'Create user' }))
 
     expect(
       await screen.findByText("We've sent new.person@example.com a link to set their password. It can take a few minutes, so ask them to check spam."),

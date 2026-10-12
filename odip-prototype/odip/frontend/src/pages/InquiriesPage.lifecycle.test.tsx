@@ -112,7 +112,7 @@ describe('InquiriesPage — open enquiries only', () => {
     expect(screen.getByText('No open enquiries')).toBeInTheDocument()
     expect(screen.queryByText('No enquiries captured yet')).not.toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'New enquiry' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'New enquiry' })).not.toBeInTheDocument() // the hub header's action
   })
 })
 

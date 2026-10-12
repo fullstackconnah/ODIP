@@ -138,7 +138,7 @@ export default function OnboardingDetailPage() {
 
   const gates: Gate[] = [
     { label: 'Intake completed', state: gateState(d.intakeComplete) },
-    { label: 'Participant Profile', state: gateState(d.profileComplete), fixRoute: canManageParticipantLifecycle ? { to: `/participants/${id}/profile`, label: 'Edit profile' } : undefined },
+    { label: 'Participant profile', state: gateState(d.profileComplete), fixRoute: canManageParticipantLifecycle ? { to: `/participants/${id}/profile`, label: 'Edit profile' } : undefined },
     { label: 'Service needs and provisional lines', state: gateState(d.serviceTypeConfirmed), fixRoute: { to: canAccessPage('agreement-drafts') ? agreementHref : `/participants/${id}?tab=support`, label: canManageParticipantLifecycle ? 'Edit service needs' : 'Open service needs' } },
     // The draft carries money, so only the roles the API admits to it are sent there (a ReadOnly or SupportWorker who can read this page would only meet a redirect or a 403).
     { label: 'Current agreement evidence', state: gateState(d.serviceAgreementSigned), context: 'Agreements are signed and approved elsewhere.', fixRoute: canAccessPage('agreement-drafts') ? { to: agreementHref, label: 'Open agreement draft' } : undefined },
@@ -174,11 +174,15 @@ export default function OnboardingDetailPage() {
 
   return <div className="flex flex-col gap-[var(--section-gap)]">
     <div className="flex flex-col gap-[var(--section-gap)]">
-      <PageHeader
-        title={headingTitle}
-        subtitle={<Link to={`/participants/${id}`} className="font-medium text-[var(--color-primary)] hover:underline">View participant record</Link>}
-        action={<BackButton to="/participants?tab=onboarding" label="onboarding" history={false} />}
-      />
+      <div className="flex items-start gap-2">
+        <BackButton to="/participants?tab=onboarding" label="onboarding" variant="icon" history={false} className="mt-1" />
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            title={headingTitle}
+            subtitle={<Link to={`/participants/${id}`} className="font-medium text-[var(--color-primary)] hover:underline">View participant record</Link>}
+          />
+        </div>
+      </div>
       {/* min(26rem,100%) is what collapses this to one column on a phone (a bare 26rem floor
           overflows a 390px viewport), so the old max-md:grid-cols-1 override is redundant. */}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]">

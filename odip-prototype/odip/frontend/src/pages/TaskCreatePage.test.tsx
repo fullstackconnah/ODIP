@@ -136,17 +136,15 @@ describe('TaskCreatePage — edit mode single-task fetch (PP-10/PP-11)', () => {
   })
 })
 
-// Density polish (touch): the "← Back to Tasks" text link was a 19px tap target. It takes the shared TAP_FLOOR
-// (a --tap-min height floor, inline-flex + centring under `pointer: coarse` only), so it is 44px tall on touch and
-// exactly what it was, box for box, on a mouse (--tap-min is 0px there).
-describe('TaskCreatePage — Back link touch target', () => {
-  it('floors the "Back to Tasks" link at --tap-min and keeps its destination and hover colour', () => {
+// The one Back standard (UI survey s.1): the icon BackButton left of the title, named for where it goes.
+describe('TaskCreatePage — Back', () => {
+  it('is the icon Back before the title, a real link to /tasks', () => {
     renderCreatePage()
 
     const back = screen.getByRole('link', { name: /back to tasks/i })
     expect(back).toHaveAttribute('href', '/tasks')
-    expect(back).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'hover:text-[var(--color-foreground)]', 'transition-colors')
-    expect(back.className).not.toMatch(/44px/)
+    expect(back).toHaveClass('min-w-[var(--tap-min)]')
+    expect(back.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 
@@ -177,9 +175,9 @@ describe('TaskCreatePage — view mode for a role that cannot write', () => {
     mockUseTask.mockReturnValue({ data: task, isError: false })
     renderEditPage()
 
-    expect(screen.getByRole('heading', { name: 'Edit Task' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Edit task' })).toBeInTheDocument()
     expect(screen.getByDisplayValue('Confirm accommodation booking')).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
     localStorage.clear()
   })
 })

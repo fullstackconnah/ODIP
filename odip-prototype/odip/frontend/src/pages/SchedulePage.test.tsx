@@ -133,11 +133,12 @@ describe('SchedulePage — density (spec §7)', () => {
     expect(within(strip).getByText('0')).not.toHaveClass('text-[var(--color-conflict)]')
   })
 
-  it('puts the subtitle inline with the heading via PageHeader instead of on its own line', () => {
+  // Title = nav label, and no subtitle restating it (UI survey s.1).
+  it('titles the page with its nav label and no subtitle', () => {
     renderPage()
 
-    const h1 = screen.getByRole('heading', { level: 1, name: 'Schedule Overview' })
-    expect(h1.parentElement).toHaveTextContent(/^Schedule OverviewStaff and vehicle assignment across active trips$/)
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Schedule' })
+    expect(h1.parentElement).toHaveTextContent(/^Schedule$/)
   })
 
   it('offers no dead controls: no view toggle, no disabled Timeline, Filter or Download', () => {
@@ -273,7 +274,7 @@ describe('SchedulePage — density (spec §7)', () => {
     currentError = new Error('boom')
     renderPage()
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Schedule Overview' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Schedule' })).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this schedule.")
   })
 

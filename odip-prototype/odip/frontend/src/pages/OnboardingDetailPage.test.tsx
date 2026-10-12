@@ -88,7 +88,7 @@ describe('OnboardingDetailPage', () => {
     renderDetail()
 
     expect(screen.getByText('Intake completed').parentElement).toHaveTextContent('Complete')
-    expect(screen.getByText('Participant Profile').parentElement).toHaveTextContent('Needs attention')
+    expect(screen.getByText('Participant profile').parentElement).toHaveTextContent('Needs attention')
     expect(screen.getByText('Schedule review').parentElement).toHaveTextContent('Blocked')
     // approving an agreement revision for rostering makes the patterns and shifts, so nothing says that none can be made; and what the schedule needs is not said a third time on its own row
     expect(screen.queryByText(/The schedule is made when/)).not.toBeInTheDocument()
@@ -100,7 +100,7 @@ describe('OnboardingDetailPage', () => {
   it('gives a Needs-attention profile gate row an Edit profile link', () => {
     renderDetail()
 
-    const profileGate = screen.getByText('Participant Profile').closest('article')!
+    const profileGate = screen.getByText('Participant profile').closest('article')!
     const editLink = within(profileGate).getByRole('link', { name: 'Edit profile' })
     expect(editLink).toHaveAttribute('href', '/participants/p-1/profile')
   })
@@ -224,7 +224,7 @@ describe('OnboardingDetailPage', () => {
     for (const role of ['ReadOnly', 'SupportWorker']) {
       localStorage.setItem('odip_user', JSON.stringify({ role }))
       const { unmount } = renderDetail()
-      const profileGate = screen.getByText('Participant Profile').closest('article')!
+      const profileGate = screen.getByText('Participant profile').closest('article')!
       expect(within(profileGate).queryByRole('link', { name: 'Edit profile' }), role).not.toBeInTheDocument()
       const needsGate = screen.getByText('Service needs and provisional lines').closest('article')!
       expect(within(needsGate).getByRole('link', { name: 'Open service needs' }), role).toHaveAttribute('href', '/participants/p-1?tab=support')
@@ -540,7 +540,7 @@ describe('OnboardingDetailPage — hook ordering across the loading transition',
       expect(screen.getByRole('heading', { level: 1, name: 'Jamie Rivers' })).toBeInTheDocument()
     })
     expect(screen.queryByText('Loading onboarding record\u2026')).not.toBeInTheDocument()
-    expect(screen.getByText('Participant Profile')).toBeInTheDocument()
+    expect(screen.getByText('Participant profile')).toBeInTheDocument()
     expect(orderWarning()).toBe(false)
     } finally {
       consoleError.mockRestore()

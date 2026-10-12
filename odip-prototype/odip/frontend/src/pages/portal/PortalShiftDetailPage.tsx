@@ -5,6 +5,7 @@ import { usePortalShiftDetail, useStartShift, useStartBreak, useEndBreak } from 
 import { usePermissions } from '@/lib/permissions'
 import { StatusBadge } from '@/components/StatusBadge'
 import { BackButton } from '@/components/BackButton'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { PageState } from '@/components/PageState'
@@ -109,6 +110,8 @@ function SubmittedSummary({ shift }: { shift: PortalShiftDetailDto }) {
 export default function PortalShiftDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: shift, isLoading, isError, error, refetch } = usePortalShiftDetail(id)
+  // ShiftHeader's own h1 (the participant), not a PageHeader, so the page names the tab itself.
+  useDocumentTitle(shift ? shift.participant.fullName : 'Shift')
   const { canCompleteOwnShifts } = usePermissions()
   const online = useOnline()
   const belowLg = useIsBelowLg()

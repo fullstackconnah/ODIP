@@ -314,7 +314,7 @@ export default function IncidentsPage() {
     : `${overdueQsc.length} incidents require QSC reporting — 24-hour deadline exceeded`
   const reportIncidentAction = !showFlaggedNotes && !showArchived && canCreateIncidents && (
     <Button to="/incidents/new" size="md">
-      <Plus className="w-4 h-4" /> Report Incident
+      <Plus className="w-4 h-4" /> Report incident
     </Button>
   )
 
@@ -326,14 +326,14 @@ export default function IncidentsPage() {
           the title and filter rows in block flow, without the flex column's section gap between them. */}
       <div className="[&>div:first-child]:flex-wrap [&>div:first-child]:gap-y-1">
         <PageHeader
-          title="Incident Reports"
+          title="Incidents"
           subtitle={showFlaggedNotes ? undefined : plural(totalCount, 'incident')}
           action={(canViewFlaggedNotes || reportIncidentAction) && (
             <div className="flex flex-auto flex-wrap items-center gap-x-4 gap-y-1">
               {canViewFlaggedNotes && (
                 <Tabs
                   tabs={[
-                    { id: 'incidents', label: 'Incidents' },
+                    { id: 'incidents', label: 'Reports' },
                     { id: 'flagged-notes', label: `Flagged notes (${flaggedNotes.length})` },
                   ]}
                   active={tab}
@@ -429,7 +429,6 @@ export default function IncidentsPage() {
             icon={ShieldAlert}
             title="No incidents reported"
             description="Incident reports log injuries, behaviours of concern, and other events that happen on a trip, including any NDIS Quality and Safeguards Commission reporting. Report one to get started."
-            action={!showArchived && canCreateIncidents ? { label: 'Report incident', to: '/incidents/new' } : undefined}
           />
         )
       ) : (

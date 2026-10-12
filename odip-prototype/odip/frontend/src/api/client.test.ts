@@ -159,7 +159,7 @@ describe('endSession', () => {
   })
 
   // The person is signed out of this browser at once; telling the server (the cookie) comes after and is best effort, so a slow or unreachable API cannot leave
-  // the app usable behind a Sign Out button that looks dead. The adapter below does what a real one does with `timeout`: gives up when it is up.
+  // the app usable behind a Sign out button that looks dead. The adapter below does what a real one does with `timeout`: gives up when it is up.
   it('clears the keys and signs out of Firebase before the logout request is answered, and leaves after its 5 s limit', async () => {
     const client = await freshClient()
     const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})

@@ -283,7 +283,7 @@ describe('LeaveApprovalsPage', () => {
 
     await user.click(screen.getByRole('button', { name: /^cancel leave$/i }))
     const dialog = screen.getByRole('alertdialog')
-    await user.click(within(dialog).getByRole('button', { name: /^yes, cancel it$/i }))
+    await user.click(within(dialog).getByRole('button', { name: /^cancel request$/i }))
 
     expect(mockCancelLeaveMutateAsync).toHaveBeenCalledWith('leave-1')
   })
@@ -296,7 +296,7 @@ describe('LeaveApprovalsPage', () => {
 
     await user.click(screen.getByRole('button', { name: /^cancel leave$/i }))
     const dialog = screen.getByRole('alertdialog')
-    await user.click(within(dialog).getByRole('button', { name: /^yes, cancel it$/i }))
+    await user.click(within(dialog).getByRole('button', { name: /^cancel request$/i }))
 
     expect(await within(dialog).findByText(/only pending requests can be withdrawn\./i)).toBeInTheDocument()
     // The cancel dialog stays open and the row is unchanged — still Approved, with its own
@@ -380,7 +380,7 @@ describe('LeaveApprovalsPage', () => {
 
     await user.click(screen.getByRole('button', { name: /^cancel rule$/i }))
     const dialog = screen.getByRole('alertdialog')
-    await user.click(within(dialog).getByRole('button', { name: /^yes, cancel it$/i }))
+    await user.click(within(dialog).getByRole('button', { name: /^cancel request$/i }))
 
     expect(mockCancelUnavailabilityMutateAsync).toHaveBeenCalledWith('rule-1')
   })
@@ -618,7 +618,7 @@ describe('LeaveApprovalsPage', () => {
       await user.click(screen.getByRole('button', { name: /^delete$/i }))
       const dialog = screen.getByRole('alertdialog')
       expect(within(dialog).getByText('Delete record')).toBeInTheDocument()
-      await user.click(within(dialog).getByRole('button', { name: /^yes, delete it$/i }))
+      await user.click(within(dialog).getByRole('button', { name: /^delete$/i }))
 
       expect(mockDeleteStaffAvailabilityMutateAsync).toHaveBeenCalledWith('av-1')
     })

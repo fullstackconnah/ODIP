@@ -1,4 +1,4 @@
-import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
@@ -9,9 +9,9 @@ import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
+import { BackButton } from '@/components/BackButton'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
-import { TAP_FLOOR } from '@/components/tapArea'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { formGrid, span } from '@/lib/formGrid'
 import { Callout } from '@/components/Callout'
@@ -144,10 +144,10 @@ export default function TaskCreatePage() {
   if (isEdit && isTaskError) {
     return (
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
-        <div className="text-sm text-[var(--color-muted-foreground)]">
-          <Link to="/tasks" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Tasks</Link>
+        <div className="flex items-start gap-2">
+          <BackButton to="/tasks" label="tasks" variant="icon" history={false} />
+          <div className="flex-1 min-w-0"><PageHeader title={viewOnly ? 'View task' : 'Edit task'} /></div>
         </div>
-        <PageHeader title={viewOnly ? 'View task' : 'Edit Task'} />
         <Callout tone="error">
           Couldn't find this task. It may have been deleted, or something went wrong loading it.
         </Callout>
@@ -158,10 +158,10 @@ export default function TaskCreatePage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
-      <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/tasks" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Tasks</Link>
+      <div className="flex items-start gap-2">
+        <BackButton to="/tasks" label="tasks" variant="icon" history={false} />
+        <div className="flex-1 min-w-0"><PageHeader title={viewOnly ? 'View task' : isEdit ? 'Edit task' : 'New task'} /></div>
       </div>
-      <PageHeader title={viewOnly ? 'View task' : isEdit ? 'Edit Task' : 'New Task'} />
 
       {mutation.isError && (
         <Callout tone="error">
@@ -172,7 +172,7 @@ export default function TaskCreatePage() {
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
         <fieldset disabled={viewOnly} className="min-w-0">
         {/* Task Details */}
-        <Card title="Task Details">
+        <Card title="Task details">
           <div className={formGrid}>
             <FormField label="Title" required error={errors.title?.message} className={span.medium}>
               <input {...register('title')} placeholder="e.g. Confirm accommodation booking" autoFocus />
@@ -286,7 +286,7 @@ export default function TaskCreatePage() {
         {!viewOnly && <div className="flex justify-end gap-3">
           <Button variant="secondary" to="/tasks">Cancel</Button>
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Task')}
+            {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save' : 'Create task')}
           </Button>
         </div>}
       </form>
