@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { act, cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 import { BAND_GRID_CLASS, BAND_SPAN_CLASS, bandSpans } from './dashboard/bandLayout'
@@ -781,11 +781,15 @@ describe('DashboardPage — loading and error keep their behaviour', () => {
     vi.useRealTimers()
   })
 
-  it('shows the failure message, not a band of zeros, when the summary fails', () => {
-    mockUseDashboard.mockReturnValue({ data: undefined, isLoading: false, isError: true })
+  it('shows the house error banner with a working Try again, not a band of zeros, when the summary fails', () => {
+    const refetch = vi.fn()
+    mockUseDashboard.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
     renderPage()
 
-    expect(screen.getByText('Failed to load dashboard. Please refresh the page.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this dashboard.")
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalled()
     expect(screen.queryByRole('region', { name: 'Needs attention' })).not.toBeInTheDocument()
   })
 })

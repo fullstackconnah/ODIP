@@ -159,11 +159,11 @@ describe('ParticipantsHubPage (wire) — the register has its controls back', ()
     })
     renderHub()
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/could not load participants/i)
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load this participant list.")
     expect(screen.queryByText('No participants yet')).not.toBeInTheDocument()
 
     serve({ active: [row()] })
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }))
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByText('Jamie Smith')).toBeInTheDocument()
   })
 

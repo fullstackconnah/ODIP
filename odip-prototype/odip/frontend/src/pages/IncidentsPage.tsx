@@ -218,7 +218,7 @@ export default function IncidentsPage() {
   // client-side `.filter(i => i.isOverdue24h)`, which ran unconditionally too.
   if (qscOverdueOnly) queryParams.isOverdueQsc = 'true'
 
-  const { data: incidents = [], isLoading } = useIncidents(queryParams)
+  const { data: incidents = [], isLoading, isError, refetch } = useIncidents(queryParams)
   // `incidents` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
   // while loading is a plain array without that extra field — read it as optional, same pattern
   // as ParticipantPicker.
@@ -404,7 +404,7 @@ export default function IncidentsPage() {
         </p>
       )}
 
-      {!isLoading && incidents.length === 0 ? (
+      {!isLoading && !isError && incidents.length === 0 ? (
         qscOverdueOnly ? (
           <EmptyState
             icon={ShieldAlert}
@@ -432,6 +432,8 @@ export default function IncidentsPage() {
           columns={incidentColumns}
           keyField="id"
           loading={isLoading}
+          error={isError}
+          onRetry={() => refetch()}
           emptyMessage="No incidents found"
           pagination={{
             page,

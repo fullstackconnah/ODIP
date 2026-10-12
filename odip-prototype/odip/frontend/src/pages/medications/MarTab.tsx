@@ -6,6 +6,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { Modal } from '@/components/Modal'
 import { EmptyState } from '@/components/EmptyState'
+import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
 import { formatRelative } from '@/lib/format'
@@ -78,7 +79,7 @@ export default function MarTab() {
   const { canRecordAdministrations, canManageMedications, canCreateIncidents } = usePermissions()
   const [date, setDate] = useState(todayIso())
   const [participantId, setParticipantId] = useState('')
-  const { data: mar, isLoading } = useMar(date, participantId || undefined)
+  const { data: mar, isLoading, isError, refetch } = useMar(date, participantId || undefined)
   // INTAKE-08: the medication picker excludes drafts.
   const { data: participants = [] } = useParticipants({ isDraft: 'false' })
   const recordPrnOutcome = useRecordPrnOutcome()
@@ -179,6 +180,8 @@ export default function MarTab() {
           <SkeletonRow />
           <SkeletonRow />
         </div>
+      ) : isError && !mar ? (
+        <PageState kind="error" noun="medication round" onRetry={() => refetch()} />
       ) : groups.length === 0 ? (
         <EmptyState
           icon={CalendarClock}

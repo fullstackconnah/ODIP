@@ -5,6 +5,7 @@ import { usePermissions } from '@/lib/permissions'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
+import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Tabs } from '@/components/Tabs'
@@ -146,7 +147,7 @@ export default function PortalLeavePage() {
       />
 
       {isLoading ? (
-        <p className="text-sm text-[var(--color-muted-foreground)]">Loading…</p>
+        <PageState kind="loading" noun="leave requests" />
       ) : isError ? (
         <EmptyState
           icon={CalendarOff}

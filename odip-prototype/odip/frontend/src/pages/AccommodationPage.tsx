@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { ActionButtons } from '@/components/ActionButtons'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { EmptyState } from '@/components/EmptyState'
+import { PageState } from '@/components/PageState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/Button'
 import { ToggleGroup } from '@/components/ToggleGroup'
@@ -20,7 +21,7 @@ export default function AccommodationPage() {
   const [search, setSearch] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const params: Record<string, string> = { isActive: showArchived ? 'false' : 'true' }
-  const { data: properties = [], isLoading } = useAccommodation(params)
+  const { data: properties = [], isLoading, isError, refetch } = useAccommodation(params)
   const deleteAccommodation = useDeleteAccommodation()
   const restoreAccommodation = useRestoreAccommodation()
   const [confirmState, setConfirmState] = useState<{ type: 'archive' | 'restore'; item: AccommodationListDto } | null>(null)
@@ -58,7 +59,9 @@ export default function AccommodationPage() {
       </PageHeader>
 
       {isLoading ? (
-        <div className="text-center py-12 text-[var(--color-muted-foreground)]">Loading...</div>
+        <PageState kind="loading" noun="properties" />
+      ) : isError && properties.length === 0 ? (
+        <PageState kind="error" noun="property list" onRetry={() => refetch()} />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={Home}

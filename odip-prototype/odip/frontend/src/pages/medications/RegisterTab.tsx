@@ -38,7 +38,7 @@ export default function RegisterTab() {
   if (search) queryParams.search = search
   if (status) queryParams.status = status
 
-  const { data: medications = [], isLoading } = useMedicationRegister(queryParams)
+  const { data: medications = [], isLoading, isError, refetch } = useMedicationRegister(queryParams)
   // `medications` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
   // while loading is a plain array without that extra field — read it as optional, same pattern
   // as IncidentsPage/ParticipantPicker.
@@ -135,7 +135,7 @@ export default function RegisterTab() {
         </div>
       </div>
 
-      {!isLoading && medications.length === 0 ? (
+      {!isLoading && !isError && medications.length === 0 ? (
         <EmptyState
           icon={PillBottle}
           title={search || status ? 'No medications match your filters' : 'No medications in the register yet'}
@@ -148,6 +148,8 @@ export default function RegisterTab() {
           columns={columns}
           keyField="id"
           loading={isLoading}
+          error={isError}
+          onRetry={() => refetch()}
           onRowClick={canManageMedications || isReadOnly ? m => navigate(`/medications/${m.id}/edit`) : undefined}
           emptyMessage="No medications found"
           pagination={{

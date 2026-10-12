@@ -71,6 +71,21 @@ afterEach(() => {
   mockRestoreMutate.mockReset()
 })
 
+describe('ParticipantsPage — plan type and support ratio in words', () => {
+  it('prints the labels, never the enum names the API sends', () => {
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ planType: 'AgencyManaged', supportRatio: 'TwoToOne' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.getByText('Agency Managed')).toBeInTheDocument()
+    expect(screen.getByText('2:1')).toBeInTheDocument()
+    expect(screen.queryByText('AgencyManaged')).not.toBeInTheDocument()
+    expect(screen.queryByText('TwoToOne')).not.toBeInTheDocument()
+  })
+})
+
 describe('ParticipantsPage — service stream badges', () => {
   it('renders stream badges for a tagged participant', () => {
     mockUseParticipants.mockReturnValue({
