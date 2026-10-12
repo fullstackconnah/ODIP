@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 
 /**
  * Everything a keyboard user can Tab to. `input[type=hidden]` and anything inside a disabled `<fieldset>` match the
@@ -7,6 +7,8 @@ import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
  */
 export const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+const focusedElement = () => (document.activeElement instanceof HTMLElement ? document.activeElement : null)
 
 function focusableIn(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(el => !el.closest('fieldset[disabled]'))
@@ -120,8 +122,8 @@ export type DialogBehaviorOptions = {
  * It does NOT render anything or set `role` / `aria-modal`: the caller marks up the dialog. Call it with `open` true for as
  * long as the layer is on screen.
  *
- * Do not use `autoFocus` inside a layer: React focuses that element before this hook runs, so the hook would take it for
- * the opener and never return focus to the real one. Pass `initialFocusRef` instead.
+ * An `autoFocus` inside the layer chooses where focus starts. React applies it while committing the layer, before any effect
+ * runs, so the opener is read while the opening render happens instead.
  */
 export function useDialogBehavior({
   open,
@@ -157,17 +159,27 @@ export function useDialogBehavior({
     return releaseScrollLock
   }, [open, lockScroll])
 
+  // Whatever had focus when the layer opened (the button that opened it) gets it back on close: read on the render that opens
+  // it (state adjusted during render), because by the time an effect runs an autoFocus inside the layer has already moved focus.
+  const [opener, setOpener] = useState(() => (open ? focusedElement() : null))
+  const [openedFor, setOpenedFor] = useState(open)
+  if (open !== openedFor) {
+    setOpenedFor(open)
+    if (open) setOpener(focusedElement())
+  }
+
   useEffect(() => {
     if (!open) return
     const container = containerRef.current
     const active = document.activeElement
-    // Whatever has focus now (the button that opened the layer) gets it back on close. If focus is already inside the layer
-    // there is no opener to speak of (see the autoFocus note above).
-    const opener = active instanceof HTMLElement && !container?.contains(active) ? active : null
-    const target = initialFocusRef?.current ?? (container ? focusableIn(container)[0] : undefined) ?? container
-    target?.focus({ preventScroll: true })
-    return () => {
-      if (returnFocus && opener?.isConnected) opener.focus()
+    if (!active || !container?.contains(active)) {
+      const target = initialFocusRef?.current ?? (container ? focusableIn(container)[0] : undefined) ?? container
+      target?.focus({ preventScroll: true })
     }
-  }, [open, containerRef, initialFocusRef, returnFocus])
+    // An opener inside the layer itself is no opener to speak of.
+    const back = opener && !container?.contains(opener) ? opener : null
+    return () => {
+      if (returnFocus && back?.isConnected) back.focus()
+    }
+  }, [open, containerRef, initialFocusRef, returnFocus, opener])
 }

@@ -1309,3 +1309,24 @@ describe('IncidentCreatePage — editing', () => {
     expect(title).toHaveValue('My own title')
   })
 })
+
+// STAFF-7: editing an id the server does not know says so, instead of "Loading incident…" for ever.
+describe('IncidentCreatePage — editing an unknown incident', () => {
+  it('says it is loading while the incident loads', () => {
+    mockUseIncident.mockReturnValue({ data: undefined, isError: false })
+    renderCreatePage('/incidents/missing/edit')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading incident…')
+  })
+
+  it('says the incident was not found on a 404', () => {
+    mockUseIncident.mockReturnValue({ data: undefined, isError: true, error: { response: { status: 404 } } })
+    renderCreatePage('/incidents/missing/edit')
+    expect(screen.getByText('Incident not found')).toBeInTheDocument()
+  })
+
+  it('offers a retry when the load failed for another reason', () => {
+    mockUseIncident.mockReturnValue({ data: undefined, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
+    renderCreatePage('/incidents/missing/edit')
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+})

@@ -7,6 +7,8 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { SearchInput } from '@/components/SearchInput'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
+import { extractErrorMessage } from '@/lib/utils'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
 import { Plus, UserCog, Check, CalendarOff } from 'lucide-react'
@@ -38,8 +40,9 @@ export default function StaffPage() {
   // PP-46 — Active -> Inactive is staged behind a confirm, same pattern as BookingsPage's
   // CONFIRM_STATUSES; Active (re-activation) stays immediate.
   const [confirmDeactivate, setConfirmDeactivate] = useState<{ id: string; name: string; data: UpdateStaffDto } | null>(null)
+  const [statusError, setStatusError] = useState<string | null>(null)
 
-  const { showArchived, params, toggleButtons, confirmDialog, actionButtons } = useArchiveRestore<any>({
+  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, actionButtons } = useArchiveRestore<any>({
     deleteMutation: deleteStaff,
     restoreMutation: updateStaff,
     restoreData: (s: StaffListDto) => toUpdateStaffDto(s, { isActive: true }),
@@ -58,12 +61,21 @@ export default function StaffPage() {
       })
     : staffData
 
+  // The confirm (if any) closes either way; a refusal is said above the table.
+  function saveStatus(id: string, name: string, data: UpdateStaffDto) {
+    updateStaff.mutate({ id, data }, {
+      onSuccess: () => setStatusError(null),
+      onError: err => setStatusError(extractErrorMessage(err, `Could not update "${name}". Please try again.`)),
+      onSettled: () => setConfirmDeactivate(null),
+    })
+  }
+
   function handleStatusChange(s: StaffListDto, val: string) {
     const data = toUpdateStaffDto(s, { isActive: val === 'Active' })
     if (val === 'Inactive') {
       setConfirmDeactivate({ id: s.id, name: s.fullName, data })
     } else {
-      updateStaff.mutate({ id: s.id, data })
+      saveStatus(s.id, s.fullName, data)
     }
   }
 
@@ -163,6 +175,9 @@ export default function StaffPage() {
         </PageHeader>
       </div>
 
+      {errorNotice}
+      {statusError && <Callout tone="error">{statusError}</Callout>}
+
       {!isLoading && !isError && staff.length === 0 ? (
         search ? (
           <EmptyState
@@ -196,11 +211,7 @@ export default function StaffPage() {
         open={confirmDeactivate !== null}
         onCancel={() => setConfirmDeactivate(null)}
         onConfirm={() => {
-          if (!confirmDeactivate) return
-          updateStaff.mutate(
-            { id: confirmDeactivate.id, data: confirmDeactivate.data },
-            { onSuccess: () => setConfirmDeactivate(null) }
-          )
+          if (confirmDeactivate) saveStatus(confirmDeactivate.id, confirmDeactivate.name, confirmDeactivate.data)
         }}
         variant="danger"
         loading={updateStaff.isPending}

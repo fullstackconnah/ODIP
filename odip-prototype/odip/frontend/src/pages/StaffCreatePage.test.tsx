@@ -218,3 +218,19 @@ describe('StaffCreatePage — Back link touch target', () => {
     expect(back.className).not.toMatch(/44px/)
   })
 })
+
+// STAFF-7: editing an id the server does not know says so, instead of a blank form that would PUT to it.
+describe('StaffCreatePage — editing an unknown staff member', () => {
+  it('says it is loading while the record loads', () => {
+    mockUseStaffDetail.mockReturnValue({ data: undefined, isLoading: true, isError: false })
+    renderEditPage('missing')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading staff member…')
+  })
+
+  it('says the staff member was not found on a 404, with no form', () => {
+    mockUseStaffDetail.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } } })
+    renderEditPage('missing')
+    expect(screen.getByText('Staff member not found')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Changes' })).not.toBeInTheDocument()
+  })
+})

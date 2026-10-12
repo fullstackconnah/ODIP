@@ -16,7 +16,7 @@ const { createMutate, updateMutate, patchMutate } = vi.hoisted(() => ({ createMu
 vi.mock('@/api/hooks', () => ({
   useCreateBooking: () => ({ mutate: createMutate, isPending: false, isError: false }),
   useUpdateBooking: () => ({ mutate: updateMutate, isPending: false, isError: false }),
-  usePatchBooking: () => ({ mutate: patchMutate, isPending: false, isError: false }),
+  usePatchBooking: () => ({ mutateAsync: patchMutate, isPending: false, isError: false }),
   useDeleteBooking: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useCancelBooking: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useDownloadClientOverviewPdf: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
@@ -58,14 +58,14 @@ beforeEach(() => {
 describe('BookingsTab — the budget warning of a booking just confirmed', () => {
   it('shows the server’s warning when the row’s status is changed to Confirmed, and says the booking is confirmed', async () => {
     const user = userEvent.setup()
-    answerWith(patchMutate, { data: { participantName: 'Sophie Brown', bookingStatus: 'Confirmed', budgetWarnings: [warning] } })
+    patchMutate.mockResolvedValue({ data: { participantName: 'Sophie Brown', bookingStatus: 'Confirmed', budgetWarnings: [warning] } })
     renderTab()
 
     await user.click(screen.getByRole('button', { name: /Held/ }))
     await user.click(await screen.findByRole('option', { name: 'Confirmed' }))
 
-    expect(patchMutate).toHaveBeenCalledWith({ id: 'booking-1', data: { bookingStatus: 'Confirmed' } }, expect.objectContaining({ onSuccess: expect.any(Function) }))
-    expect(screen.getByText(`This booking takes Core (flexible) to $1,440.00 of $1,000.00 for ${SERVER_PERIOD}.`, { normalizer: asWritten })).toBeInTheDocument()
+    expect(patchMutate).toHaveBeenCalledWith({ id: 'booking-1', data: { bookingStatus: 'Confirmed' } })
+    expect(await screen.findByText(`This booking takes Core (flexible) to $1,440.00 of $1,000.00 for ${SERVER_PERIOD}.`, { normalizer: asWritten })).toBeInTheDocument()
     expect(screen.getByText('This is a warning only. Sophie Brown’s booking is confirmed.')).toBeInTheDocument()
   })
 
@@ -88,16 +88,16 @@ describe('BookingsTab — the budget warning of a booking just confirmed', () =>
 
   it('shows nothing when the server sent no warning, and can be dismissed when it did', async () => {
     const user = userEvent.setup()
-    answerWith(patchMutate, { data: { participantName: 'Sophie Brown', bookingStatus: 'Confirmed' } })
+    patchMutate.mockResolvedValue({ data: { participantName: 'Sophie Brown', bookingStatus: 'Confirmed' } })
     renderTab()
     await user.click(screen.getByRole('button', { name: /Held/ }))
     await user.click(await screen.findByRole('option', { name: 'Confirmed' }))
     expect(screen.queryByText(BUDGET_WARNINGS_TITLE)).not.toBeInTheDocument()
 
-    answerWith(patchMutate, { data: { participantName: 'Sophie Brown', bookingStatus: 'Confirmed', budgetWarnings: [warning] } })
+    patchMutate.mockResolvedValue({ data: { participantName: 'Sophie Brown', bookingStatus: 'Confirmed', budgetWarnings: [warning] } })
     await user.click(screen.getByRole('button', { name: /Held/ }))
     await user.click(await screen.findByRole('option', { name: 'Confirmed' }))
-    await user.click(screen.getByRole('button', { name: 'Dismiss' }))
+    await user.click(await screen.findByRole('button', { name: 'Dismiss' }))
 
     expect(screen.queryByText(BUDGET_WARNINGS_TITLE)).not.toBeInTheDocument()
   })

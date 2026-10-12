@@ -161,6 +161,7 @@ describe('StaffPage — PP-46 deactivate confirm', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(mockUpdateMutate).toHaveBeenCalledWith(
       expect.objectContaining({ id: 's3', data: expect.objectContaining({ isActive: true }) }),
+      expect.anything(),
     )
   })
 })
@@ -332,5 +333,51 @@ describe('StaffPage — write controls by role', () => {
     const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
     expect(within(row).getByRole('button', { name: /Active/ })).toBeEnabled()
     expect(screen.getByRole('link', { name: /New Staff/ })).toBeInTheDocument()
+  })
+})
+
+// STAFF-4 and STAFF-5: a refused status change, archive or restore closes its dialog and says why above the table.
+describe('StaffPage — refused writes are shown', () => {
+  const refused = { response: { status: 403, data: { message: 'You do not have permission to do that.' } } }
+  type Callbacks = { onError?: (e: unknown) => void; onSettled?: () => void }
+  const refuse = (mutate: typeof mockUpdateMutate) => mutate.mockImplementation((_v: unknown, o?: Callbacks) => { o?.onError?.(refused); o?.onSettled?.() })
+
+  it('closes the Mark inactive confirm and shows the server message when the change fails', async () => {
+    const user = userEvent.setup()
+    refuse(mockUpdateMutate)
+    renderPage()
+
+    const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    await user.click(within(row).getByRole('button', { name: /^active$/i }))
+    await user.click(await screen.findByRole('option', { name: /inactive/i }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: /mark inactive/i }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByText('You do not have permission to do that.')).toBeInTheDocument()
+  })
+
+  it('shows the server message when reactivating fails', async () => {
+    const user = userEvent.setup()
+    refuse(mockUpdateMutate)
+    mockUseStaff.mockReturnValue({ data: [makeStaff({ id: 's3', fullName: 'Jamie Fox', isActive: false })], isLoading: false })
+    renderPage()
+
+    const row = screen.getByText('Jamie Fox').closest('tr') as HTMLElement
+    await user.click(within(row).getByRole('button', { name: /^inactive$/i }))
+    await user.click(await screen.findByRole('option', { name: /^active$/i }))
+
+    expect(screen.getByText('You do not have permission to do that.')).toBeInTheDocument()
+  })
+
+  it('shows the server message when archiving fails', async () => {
+    const user = userEvent.setup()
+    refuse(mockDeleteMutate)
+    renderPage()
+
+    const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    await user.click(within(row).getByRole('button', { name: 'Archive' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Archive' }))
+
+    expect(screen.getByText('You do not have permission to do that.')).toBeInTheDocument()
   })
 })

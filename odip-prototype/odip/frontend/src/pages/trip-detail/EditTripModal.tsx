@@ -9,6 +9,8 @@ import type { TripStatus } from '@/api/types/enums'
 import type { EventTemplateDto } from '@/api/types/events'
 import type { StaffListDto } from '@/api/types/staff'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
+import { extractErrorMessage } from '@/lib/utils'
 
 interface TripEditFormState {
   tripName: string
@@ -277,12 +279,18 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
           </div>
         )}
 
+        {updateTrip.isError && (
+          <div className="px-6 pt-4">
+            <Callout tone="error">{extractErrorMessage(updateTrip.error, 'Failed to save the trip.')}</Callout>
+          </div>
+        )}
+
         {/* Modal footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[rgba(195,201,181,0.2)]">
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!tripEditForm || updateTrip.isPending}>
+          <Button onClick={handleSave} disabled={!tripEditForm || !tripEditForm.tripName.trim() || updateTrip.isPending}>
             {updateTrip.isPending ? 'Saving…' : 'Save Changes'}
           </Button>
         </div>

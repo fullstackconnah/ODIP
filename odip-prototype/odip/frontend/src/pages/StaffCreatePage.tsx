@@ -24,6 +24,8 @@ import { extractErrorMessage } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
 import { useFillOnce } from '@/hooks/useFillOnce'
 import { Callout } from '@/components/Callout'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 
 const POSITION_ITEMS: DropdownItem[] = [
   { value: 'SupportWorker', label: 'Support Worker' },
@@ -79,7 +81,7 @@ export default function StaffCreatePage() {
   const createStaff = useCreateStaff()
   const updateStaff = useUpdateStaff()
   const ensureStaffAccount = useEnsureStaffSignInAccount()
-  const { data: existing, isLoading: isLoadingExisting } = useStaffDetail(isEdit ? id : undefined)
+  const { data: existing, isError: isExistingError, error: existingError, refetch: refetchExisting } = useStaffDetail(isEdit ? id : undefined)
   const mutation = isEdit ? updateStaff : createStaff
   const { isCoordinator } = usePermissions()
   // Staff added here get a user row and, until something makes one, no Firebase sign-in account. After a create the page makes sure there is
@@ -226,7 +228,13 @@ export default function StaffCreatePage() {
     setRetrying(false)
   }
 
-  if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
+  // An unknown id is a not-found, never a blank form that would PUT to it.
+  if (isEdit && !existing) {
+    if (!isExistingError) return <PageState kind="loading" noun="staff member" />
+    return isNotFoundError(existingError)
+      ? <PageState kind="not-found" noun="staff member" backTo="/staff" backLabel="staff" />
+      : <PageState kind="error" noun="staff member" onRetry={() => refetchExisting()} />
+  }
 
   // What the done view says, once: the visible Callout shows the sentence and the status region announces it.
   const announcement = created ? `${created.name} was created. ${describeEmailOutcome(created.outcome, 'use Send again').message}` : ''

@@ -41,7 +41,7 @@ export default function TasksPage() {
   const updateTask = useUpdateTask()
   const deleteTask = useDeleteTask()
 
-  const { showArchived, params, toggleButtons, confirmDialog, actionButtons } = useArchiveRestore<any>({
+  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, actionButtons } = useArchiveRestore<any>({
     deleteMutation: deleteTask,
     restoreMutation: updateTask,
     entityName: (t) => t.title,
@@ -205,6 +205,8 @@ export default function TasksPage() {
           </div>
         )}
       </PageHeader>
+
+      {errorNotice}
 
       {!isLoading && !isError && tasks.length === 0 ? (
         !showArchived && statusFilter ? (

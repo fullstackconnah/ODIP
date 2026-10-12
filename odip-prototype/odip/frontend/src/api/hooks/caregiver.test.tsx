@@ -14,8 +14,8 @@ vi.mock('../caregiverClient', () => ({
   caregiverPost: vi.fn(async () => undefined),
 }))
 
-import { useCaregiverSubmissions, useGenerateCaregiverLink, usePublicCaregiverForm, useSaveCaregiverDraft } from './caregiver'
-import { apiGetWithDefault } from '../client'
+import { useCaregiverSubmissions, useGenerateCaregiverLink, usePublicCaregiverForm, useSaveCaregiverDraft, useRevokeCaregiverLink, useAcceptCaregiverSubmission, useRejectCaregiverSubmission } from './caregiver'
+import { apiGetWithDefault, apiPostRaw, apiDeleteRaw } from '../client'
 import { caregiverGet, caregiverPut } from '../caregiverClient'
 
 function wrapper(qc: QueryClient) {
@@ -58,5 +58,25 @@ describe('caregiver hooks', () => {
     const { result } = renderHook(() => useCaregiverSubmissions('Draft', { participantId: 'p1', enabled: false }), { wrapper: wrapper(qc) })
     await waitFor(() => expect(result.current.fetchStatus).toBe('idle'))
     expect(apiGetWithDefault).not.toHaveBeenCalled()
+  })
+})
+
+// PARTICIPANTS-5 review (S2, N5): a refused Revoke, Accept or Reject still reloads the link state and the list, so a stale
+// "Submitted" chip or row does not keep offering an action the server has already refused.
+describe('caregiver hooks — a refused review or revoke reloads the submissions', () => {
+  const refused = { response: { status: 409 } }
+
+  it.each([
+    ['useRevokeCaregiverLink', () => useRevokeCaregiverLink(), { participantId: 'p1' }, () => vi.mocked(apiDeleteRaw).mockRejectedValueOnce(refused)],
+    ['useAcceptCaregiverSubmission', () => useAcceptCaregiverSubmission(), { id: 's1', participantId: 'p1' }, () => vi.mocked(apiPostRaw).mockRejectedValueOnce(refused)],
+    ['useRejectCaregiverSubmission', () => useRejectCaregiverSubmission(), { id: 's1', note: 'n' }, () => vi.mocked(apiPostRaw).mockRejectedValueOnce(refused)],
+  ] as const)('%s invalidates the submissions list after a refusal', async (_name, hook, vars, refuse) => {
+    refuse()
+    const qc = new QueryClient()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    // The three hooks differ only in their variables, which the table pairs with each.
+    const { result } = renderHook(hook as () => { mutateAsync: (v: unknown) => Promise<unknown> }, { wrapper: wrapper(qc) })
+    await expect(result.current.mutateAsync(vars)).rejects.toBe(refused)
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['caregiver-submissions'] })
   })
 })

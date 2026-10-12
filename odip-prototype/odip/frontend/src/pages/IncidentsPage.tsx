@@ -2,7 +2,7 @@ import { useIncidents, useRestoreIncident, useDeleteIncident, useOverdueQscIncid
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import type { IncidentListDto, FlaggedShiftNoteDto } from '@/api/types'
 import { INCIDENT_STATUS_LABELS, type IncidentStatus } from '@/api/types/enums'
-import { CellText, DataTable, RowActions, type Column } from '@/components/DataTable'
+import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
@@ -196,7 +196,7 @@ export default function IncidentsPage() {
   const deleteIncident = useDeleteIncident()
   const { data: overdueQsc = [] } = useOverdueQscIncidents()
 
-  const { showArchived, params, toggleButtons, confirmDialog, actionButtons } = useArchiveRestore<any>({
+  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, actionButtons } = useArchiveRestore<any>({
     deleteMutation: deleteIncident,
     restoreMutation: restoreIncident,
     entityName: (i) => i.title,
@@ -249,7 +249,8 @@ export default function IncidentsPage() {
       key: 'title',
       header: 'Title',
       className: 'font-medium',
-      render: (i) => <CellText className="md:max-w-[15rem] 2xl:max-w-[18rem]">{i.title ?? '—'}</CellText>,
+      // The way into the incident for every role that sees the list; the cap sits on the link itself so its focus ring is not clipped.
+      render: (i) => <Link to={`/incidents/${i.id}`} title={i.title ?? undefined} className={`block md:truncate md:max-w-[15rem] 2xl:max-w-[18rem] text-[var(--color-primary)] hover:underline ${TAP_TRUNCATED_LINK}`}>{i.title ?? '—'}</Link>,
     },
     { key: 'incidentType', header: 'Type', maxWidth: '9rem' },
     {
@@ -403,6 +404,8 @@ export default function IncidentsPage() {
           <Link to="/incidents" className="font-medium underline underline-offset-2">Show all incidents</Link>
         </p>
       )}
+
+      {errorNotice}
 
       {!isLoading && !isError && incidents.length === 0 ? (
         qscOverdueOnly ? (

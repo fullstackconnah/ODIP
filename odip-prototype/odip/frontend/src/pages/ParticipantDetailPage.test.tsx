@@ -1321,3 +1321,40 @@ describe('ParticipantDetailPage — copying the caregiver link on a page that is
     }
   })
 })
+
+// PARTICIPANTS-5: a refused Revoke closes its confirm, so the server's reason is not hidden behind it.
+describe('ParticipantDetailPage — a refused caregiver link Revoke', () => {
+  it('closes the confirm and shows the server message', async () => {
+    setUserRole('Admin')
+    const user = userEvent.setup()
+    const refused = { response: { status: 409, data: { message: 'This link has already been used.' } } }
+    mockUseRevokeCaregiverLink.mockReturnValue({ mutate: vi.fn(), mutateAsync: vi.fn().mockRejectedValue(refused), isPending: false, isError: true, error: refused } as ReturnType<typeof mockUseRevokeCaregiverLink>)
+    mockUseCaregiverSubmissions.mockImplementation((status?: string) => ({
+      data: status === 'Submitted' ? [{ id: 'submission-1', participantId: 'participant-1', status: 'Submitted' }] : [],
+    }))
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    await user.click(within(screen.getByTestId('caregiver-link-control')).getByRole('button', { name: /^revoke$/i }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: /^revoke$/i }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByText('This link has already been used.')).toBeInTheDocument()
+  })
+})
+
+// Review N6: a refused Generate is caught and shown on the existing error line, not left as an unhandled rejection.
+describe('ParticipantDetailPage — a refused caregiver link Generate', () => {
+  it('shows the server message', async () => {
+    setUserRole('Admin')
+    const user = userEvent.setup()
+    const refused = { response: { status: 400, data: { message: 'Participant has no consent on file.' } } }
+    mockUseGenerateCaregiverLink.mockReturnValue({ mutateAsync: vi.fn().mockRejectedValue(refused), isPending: false, isError: true, error: refused } as ReturnType<typeof mockUseGenerateCaregiverLink>)
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    await user.click(screen.getByRole('button', { name: /generate caregiver link/i }))
+
+    expect(screen.getByText('Participant has no consent on file.')).toBeInTheDocument()
+  })
+})

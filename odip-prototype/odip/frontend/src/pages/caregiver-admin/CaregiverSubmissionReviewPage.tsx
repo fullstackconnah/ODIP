@@ -10,7 +10,8 @@ import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
-import { formatDateAu } from '@/lib/utils'
+import { Callout } from '@/components/Callout'
+import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 
 /**
  * cg04 Task 11 (design §5) — side-by-side current | caregiver's value for changed fields only,
@@ -32,6 +33,7 @@ export default function CaregiverSubmissionReviewPage() {
   const [confirmAccept, setConfirmAccept] = useState(false)
   const [rejectNote, setRejectNote] = useState('')
   const [showReject, setShowReject] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const rows = useMemo(() => (s ? computeCaregiverDiff(s.current, s.payload) : []), [s])
   const byGroup = useMemo(
@@ -46,6 +48,23 @@ export default function CaregiverSubmissionReviewPage() {
       : <PageState kind="not-found" noun="submission" backTo="/caregiver-submissions" backLabel="caregiver submissions" />
   }
   const canAct = canWriteParticipantDetails && s.status === 'Submitted'
+
+  // A refusal (409 when someone else reviewed it first) closes the dialog, says why and reloads the submission's real state.
+  const act = async (request: () => Promise<unknown>, fallback: string) => {
+    setActionError(null)
+    try {
+      await request()
+    } catch (err) {
+      setConfirmAccept(false)
+      setShowReject(false)
+      setActionError(extractErrorMessage(err, fallback))
+      void refetch()
+      return
+    }
+    setConfirmAccept(false)
+    setShowReject(false)
+    navigate('/caregiver-submissions')
+  }
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
@@ -74,6 +93,8 @@ export default function CaregiverSubmissionReviewPage() {
           />
         </div>
       </div>
+
+      {actionError && <Callout tone="error">{actionError}</Callout>}
 
       {rows.length === 0 ? (
         <p className="text-sm text-[var(--color-muted-foreground)]">The caregiver submitted the form without changing any values.</p>
@@ -112,11 +133,7 @@ export default function CaregiverSubmissionReviewPage() {
         confirmLabel="Accept"
         loading={accept.isPending}
         onCancel={() => setConfirmAccept(false)}
-        onConfirm={async () => {
-          await accept.mutateAsync({ id: s.id, participantId: s.participantId })
-          setConfirmAccept(false)
-          navigate('/caregiver-submissions')
-        }}
+        onConfirm={() => act(() => accept.mutateAsync({ id: s.id, participantId: s.participantId }), "Couldn't accept this submission. Please try again.")}
       />
 
       <Modal
@@ -133,11 +150,7 @@ export default function CaregiverSubmissionReviewPage() {
               variant="danger"
               size="md"
               disabled={!rejectNote.trim() || reject.isPending}
-              onClick={async () => {
-                await reject.mutateAsync({ id: s.id, note: rejectNote.trim() })
-                setShowReject(false)
-                navigate('/caregiver-submissions')
-              }}
+              onClick={() => act(() => reject.mutateAsync({ id: s.id, note: rejectNote.trim() }), "Couldn't reject this submission. Please try again.")}
             >
               Reject and reopen link
             </Button>
