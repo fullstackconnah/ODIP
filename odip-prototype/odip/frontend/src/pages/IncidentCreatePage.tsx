@@ -47,6 +47,8 @@ import { WitnessesStep } from './incidents/steps/WitnessesStep'
 import { ComplianceStep } from './incidents/steps/ComplianceStep'
 import type { z } from 'zod'
 import { Callout } from '@/components/Callout'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 
 // INC-01: the service-type dropdown offers the business streams plus "None" (untagged) —
 // selecting "Trip" is what reveals the trip-select dropdown below.
@@ -174,10 +176,13 @@ function extractIncidentErrorMessage(err: unknown, isEdit: boolean): string {
 export default function IncidentCreatePage() {
   const { id } = useParams()
   const isEdit = !!id
-  const { data: existingIncident } = useIncident(id)
+  const { data: existingIncident, isError, error, refetch } = useIncident(id)
 
   if (isEdit && !existingIncident) {
-    return <div className="p-6 text-sm text-[var(--color-muted-foreground)]">Loading incident…</div>
+    if (!isError) return <PageState kind="loading" noun="incident" />
+    return isNotFoundError(error)
+      ? <PageState kind="not-found" noun="incident" backTo="/incidents" backLabel="incidents" />
+      : <PageState kind="error" noun="incident" onRetry={() => refetch()} />
   }
 
   return <IncidentWizardForm key={id ?? 'new'} id={id} existingIncident={existingIncident} />

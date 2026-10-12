@@ -15,6 +15,8 @@ import { TAP_FLOOR } from '@/components/tapArea'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { formGrid, span } from '@/lib/formGrid'
 import { Callout } from '@/components/Callout'
+import { PageState } from '@/components/PageState'
+import { extractErrorMessage } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
 
 const TASK_TYPE_ITEMS: DropdownItem[] = [
@@ -134,7 +136,7 @@ export default function TaskCreatePage() {
   // PP-59: don't render the form with create-mode defaults while an edit-mode fetch is still in
   // flight — wait for it to resolve (success or the not-found case handled just below).
   if (isEdit && !isTaskError && !existingTask) {
-    return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
+    return <PageState kind="loading" noun="task" />
   }
 
   // PP-10/PP-11: a failed/not-found single-task fetch must surface visibly, not silently fall
@@ -163,7 +165,7 @@ export default function TaskCreatePage() {
 
       {mutation.isError && (
         <Callout tone="error">
-          Failed to {isEdit ? 'update' : 'create'} task. Please check your input and try again.
+          {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} task. Please check your input and try again.`)}
         </Callout>
       )}
 
