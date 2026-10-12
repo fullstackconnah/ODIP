@@ -12,6 +12,7 @@ import { usePermissions } from '@/lib/permissions'
 import { formatRatio, plural } from '@/lib/format'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
+import { PageState } from '@/components/PageState'
 import { PageHeader } from '@/components/PageHeader'
 import {
   ScheduleAssignmentCell, QualBadgeList, ScheduleSummary, TripStatusBadge, AvailabilityList,
@@ -45,7 +46,7 @@ const ROW = 'group md:h-[var(--row-h)]'
 export default function SchedulePage() {
   const { canWrite } = usePermissions()
   const queryClient = useQueryClient()
-  const { data, isLoading, error } = useScheduleOverview()
+  const { data, isLoading, error, refetch } = useScheduleOverview()
   const [expandedStaff, setExpandedStaff] = useState<Set<string>>(new Set())
   const [sectionStaff, setSectionStaff] = useState(true)
   const [sectionVehicles, setSectionVehicles] = useState(true)
@@ -104,9 +105,7 @@ export default function SchedulePage() {
     return (
       <div className="flex flex-col gap-[var(--section-gap)]">
         <PageHeader title="Schedule Overview" />
-        <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-[var(--card-pad)] py-10 text-center">
-          <p className="text-[var(--color-muted-foreground)]">Failed to load schedule overview.</p>
-        </div>
+        <PageState kind="error" noun="schedule" onRetry={() => refetch()} />
       </div>
     )
   }

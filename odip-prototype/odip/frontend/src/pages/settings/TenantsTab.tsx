@@ -24,7 +24,7 @@ export default function TenantsTab({
   onEditTenant,
   onViewTenantDetail,
 }: TenantsTabProps) {
-  const { data: tenants = [], isLoading } = useAdminTenantsSummary()
+  const { data: tenants = [], isLoading, isError, refetch } = useAdminTenantsSummary()
   const [search, setSearch] = useState('')
 
   const filtered = useMemo(() => {
@@ -70,6 +70,8 @@ export default function TenantsTab({
       <DataTable
         data={filtered}
         keyField="id"
+        error={isError}
+        onRetry={() => refetch()}
         emptyMessage={
           tenants.length === 0
             ? 'No tenants yet. Click "+ Add Tenant" to create the first one.'

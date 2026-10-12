@@ -56,7 +56,7 @@ export default function TasksPage() {
   const queryParams = { ...params }
   if (!showArchived && statusFilter) queryParams.status = statusFilter
 
-  const { data: tasks = [], isLoading } = useTasks(queryParams)
+  const { data: tasks = [], isLoading, isError, refetch } = useTasks(queryParams)
 
   const markComplete = (e: React.MouseEvent, task: any) => {
     e.stopPropagation()
@@ -206,7 +206,7 @@ export default function TasksPage() {
         )}
       </PageHeader>
 
-      {!isLoading && tasks.length === 0 ? (
+      {!isLoading && !isError && tasks.length === 0 ? (
         !showArchived && statusFilter ? (
           <EmptyState
             icon={ListChecks}
@@ -229,6 +229,8 @@ export default function TasksPage() {
           keyField="id"
           sortable
           loading={isLoading}
+          error={isError}
+          onRetry={() => refetch()}
           emptyMessage="No tasks found"
         />
       )}

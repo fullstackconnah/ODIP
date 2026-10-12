@@ -264,7 +264,7 @@ describe('SchedulePage — density (spec §7)', () => {
     renderPage()
 
     expect(screen.getByRole('heading', { level: 1, name: 'Schedule Overview' })).toBeInTheDocument()
-    expect(screen.getByText('Failed to load schedule overview.')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this schedule.")
   })
 
   it('shows the empty state, with the summary strip still present, when there are no trips', () => {

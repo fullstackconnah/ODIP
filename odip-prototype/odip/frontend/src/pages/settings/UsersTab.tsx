@@ -85,7 +85,7 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
   const ownNotices = useNotices()
   const { notices, notify, dismiss } = lifted ?? ownNotices
   const { data: tenants = [] } = useAdminTenantsSummary()
-  const { data: pagedResult, isLoading } = useAdminUsers({
+  const { data: pagedResult, isLoading, isError, refetch } = useAdminUsers({
     tenantId: tenantId || undefined,
     role: role || undefined,
     status: status || undefined,
@@ -193,6 +193,8 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
         data={users}
         keyField="id"
         loading={isLoading}
+        error={isError}
+        onRetry={() => refetch()}
         emptyMessage="No users found."
         columns={[
           { key: 'fullName', header: 'Name', className: 'font-medium' },
