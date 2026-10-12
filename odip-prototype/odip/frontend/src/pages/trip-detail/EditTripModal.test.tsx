@@ -4,10 +4,10 @@ import userEvent from '@testing-library/user-event'
 import EditTripModal from './EditTripModal'
 import type { TripDetailDto } from '@/api/types/trips'
 
-const { mutate } = vi.hoisted(() => ({ mutate: vi.fn() }))
+const { mutate, state } = vi.hoisted(() => ({ mutate: vi.fn(), state: { error: null as unknown } }))
 
 vi.mock('@/api/hooks', () => ({
-  useUpdateTrip: () => ({ mutate, isPending: false }),
+  useUpdateTrip: () => ({ mutate, isPending: false, isError: state.error != null, error: state.error }),
   useEventTemplates: () => ({ data: [] }),
   useStaff: () => ({ data: [] }),
 }))
@@ -53,5 +53,20 @@ describe('EditTripModal — what Save refuses', () => {
     const user = await setup()
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
     expect(mutate).toHaveBeenCalledWith({ id: 't1', data: expect.objectContaining({ startDate: '2026-11-01', durationDays: 3 }) }, expect.anything())
+  })
+})
+
+describe('EditTripModal — a refused save', () => {
+  it('shows the server message when the save fails', async () => {
+    state.error = { response: { status: 400, data: { message: 'Lead coordinator not found.' } } }
+    await setup()
+    expect(screen.getByText('Lead coordinator not found.')).toBeInTheDocument()
+    state.error = null
+  })
+
+  it('disables Save while the trip name is blank', async () => {
+    await setup()
+    fireEvent.change(screen.getByPlaceholderText('e.g. Beach Getaway 2026'), { target: { value: '   ' } })
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled()
   })
 })
