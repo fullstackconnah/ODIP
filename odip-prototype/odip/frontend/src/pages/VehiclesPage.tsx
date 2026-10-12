@@ -202,6 +202,12 @@ export default function VehiclesPage() {
                       )}
                     </div>
                   )}
+                  {/* ReadOnly has no detail page for a vehicle: it opens the form as a view (notes, ramp, driver requirements). */}
+                  {!canWrite && (
+                    <div className="border-t border-[var(--color-border)] pt-2 flex gap-2">
+                      <Button to={`/vehicles/${v.id}/edit`} variant="secondary" size="sm" className="flex-1">View</Button>
+                    </div>
+                  )}
                 </div>
               </div>
             )

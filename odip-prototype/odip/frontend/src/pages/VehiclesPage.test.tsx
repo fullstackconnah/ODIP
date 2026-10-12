@@ -64,3 +64,16 @@ describe('VehiclesPage — write controls by role', () => {
     expect(screen.queryByRole('link', { name: /Add your first vehicle/ })).not.toBeInTheDocument()
   })
 })
+
+// Q2 fix round: there is no vehicle detail page, so a role that cannot write gets View (the form as a view) instead of Edit and Archive.
+describe('VehiclesPage — View for a role that cannot write', () => {
+  it.each([[false, true], [true, false]] as const)('canWrite %s: View offered %s', (canWrite, view) => {
+    mockUsePermissions.mockReturnValue({ canWrite })
+    mockUseVehicles.mockReturnValue({ data: [makeVehicle()], isLoading: false })
+    render(<MemoryRouter><VehiclesPage /></MemoryRouter>)
+
+    expect(screen.queryByRole('link', { name: 'View' }) !== null).toBe(view)
+    if (view) expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/vehicles/v-1/edit')
+    expect(screen.queryByRole('link', { name: /Edit/ }) !== null).toBe(!view)
+  })
+})

@@ -111,3 +111,21 @@ describe('VehicleCreatePage — editing', () => {
     expect(name).toHaveValue('Renamed on the server')
   })
 })
+
+// Q2 fix round: there is no vehicle detail page, so ReadOnly reads the whole record (notes, ramp, driver requirements) here, as a view.
+describe('VehicleCreatePage — view mode for ReadOnly', () => {
+  const vehicle = { id: 'v1', vehicleName: 'Blue Van 1', registration: 'ABC123', vehicleType: 'Van', totalSeats: 8, wheelchairPositions: 1, isInternal: true, isActive: true, notes: 'Side door sticks' } as VehicleDetailDto
+
+  it.each([['ReadOnly', true], ['Coordinator', false]] as const)('%s: view mode %s', (role, view) => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    mockUseVehicleDetail.mockReturnValue({ data: vehicle, isLoading: false })
+    const router = createMemoryRouter([{ path: '/vehicles/:id/edit', element: <VehicleCreatePage /> }], { initialEntries: ['/vehicles/v1/edit'] })
+    render(<RouterProvider router={router} />)
+
+    expect(screen.getByRole('heading', { name: view ? 'View vehicle' : 'Edit Vehicle' })).toBeInTheDocument()
+    if (view) expect(screen.getByDisplayValue('Side door sticks')).toBeDisabled()
+    else expect(screen.getByDisplayValue('Side door sticks')).toBeEnabled()
+    expect(screen.queryByRole('button', { name: /Save/ }) === null).toBe(view)
+    localStorage.clear()
+  })
+})

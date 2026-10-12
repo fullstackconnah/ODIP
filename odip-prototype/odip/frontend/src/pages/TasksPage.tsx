@@ -27,7 +27,7 @@ const TASK_STATUS_ITEMS = [
 const isBudgetReview = (task: { taskType?: string }) => task.taskType === 'BudgetEmergencyReview'
 
 export default function TasksPage() {
-  const { canWrite, isAdmin, isSuperAdmin } = usePermissions()
+  const { canWrite, isAdmin, isSuperAdmin, isReadOnly } = usePermissions()
   const mayCloseBudgetReview = !!isAdmin || !!isSuperAdmin
   // The one place the rule lives: a row the user may not change gets no tick, a held status and no edit or archive.
   const mayChange = (task: { taskType?: string }) => canWrite && (!isBudgetReview(task) || mayCloseBudgetReview)
@@ -98,6 +98,9 @@ export default function TasksPage() {
         </Link>
       ) : isBudgetReview(t) ? (
         <span className="block whitespace-normal md:max-w-[16rem]" title={t.title}>{t.title}</span>
+      ) : isReadOnly ? (
+        // ReadOnly has no Edit action: the title opens the task as a view (the only place its notes are shown).
+        <Link to={`/tasks/${t.id}/edit`} title={t.title} className="block text-[var(--color-primary)] hover:underline md:truncate md:max-w-[16rem]">{t.title}</Link>
       ) : t.title,
     },
     {

@@ -29,7 +29,7 @@ const STATUS_ITEMS = [
 ]
 
 export default function RegisterTab() {
-  const { canManageMedications } = usePermissions()
+  const { canManageMedications, isReadOnly } = usePermissions()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
@@ -154,7 +154,7 @@ export default function RegisterTab() {
           columns={columns}
           keyField="id"
           loading={isLoading}
-          onRowClick={canManageMedications ? m => navigate(`/medications/${m.id}/edit`) : undefined}
+          onRowClick={canManageMedications || isReadOnly ? m => navigate(`/medications/${m.id}/edit`) : undefined}
           emptyMessage="No medications found"
           pagination={{
             page,

@@ -7,14 +7,14 @@ import type { MedicationListDto } from '@/api/types/medications'
 
 const { mockUseMedicationRegister, perms } = vi.hoisted(() => ({
   mockUseMedicationRegister: vi.fn(),
-  perms: { canManageMedications: true },
+  perms: { canManageMedications: true, isReadOnly: false },
 }))
 
 vi.mock('@/api/hooks', () => ({ useMedicationRegister: mockUseMedicationRegister }))
 vi.mock('@/lib/permissions', () => ({ usePermissions: () => perms }))
 
 afterEach(() => {
-  perms.canManageMedications = true
+  Object.assign(perms, { canManageMedications: true, isReadOnly: false })
   vi.clearAllMocks()
 })
 
@@ -39,6 +39,13 @@ function renderTab() {
 // PARTICIPANTS-4: the edit page is for the roles that manage medications; a row click took a SupportWorker there, to be sent away.
 describe('RegisterTab — row click by role', () => {
   it('opens the edit page for a role that manages medications', async () => {
+    renderTab()
+    await userEvent.click(screen.getByText('Metformin'))
+    expect(screen.getByText('Edit medication page')).toBeInTheDocument()
+  })
+
+  it('opens the form (as a view) for ReadOnly', async () => {
+    Object.assign(perms, { canManageMedications: false, isReadOnly: true })
     renderTab()
     await userEvent.click(screen.getByText('Metformin'))
     expect(screen.getByText('Edit medication page')).toBeInTheDocument()

@@ -402,6 +402,38 @@ function renderGuarded(role: UserRole, path: string, route: { page: PageKey; req
   )
 }
 
+// Q2 fix round: a record whose only read view is its edit form opens as a view for ReadOnly; its /new route and SupportWorker stay out.
+describe('PrivateRoute — viewableByReadOnly', () => {
+  afterEach(() => localStorage.clear())
+
+  function renderView(role: UserRole, path: string) {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    localStorage.setItem('odip_token', 'test-token')
+    return render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/" element={<div>Redirected</div>} />
+          <Route path="/tasks/new" element={<PrivateRoute page="tasks" requiresWrite><div>The page</div></PrivateRoute>} />
+          <Route path="/tasks/:id/edit" element={<PrivateRoute page="tasks" requiresWrite viewableByReadOnly><div>The page</div></PrivateRoute>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('admits ReadOnly to the edit route, not to /new', () => {
+    const { unmount } = renderView('ReadOnly', '/tasks/t-1/edit')
+    expect(screen.getByText('The page')).toBeInTheDocument()
+    unmount()
+    renderView('ReadOnly', '/tasks/new')
+    expect(screen.getByText('Redirected')).toBeInTheDocument()
+  })
+
+  it('still sends SupportWorker away from the edit route', () => {
+    renderView('SupportWorker', '/tasks/t-1/edit')
+    expect(screen.getByText('Redirected')).toBeInTheDocument()
+  })
+})
+
 describe('PrivateRoute — pages ReadOnly is refused', () => {
   afterEach(() => {
     localStorage.clear()

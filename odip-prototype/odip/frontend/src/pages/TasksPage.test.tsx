@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import TasksPage from './TasksPage'
 
 // A test sets the role it needs and beforeEach puts it back: a Coordinator-like user who can write (the default).
-const { perms } = vi.hoisted(() => ({ perms: { canWrite: true, isAdmin: false, isSuperAdmin: false } }))
+const { perms } = vi.hoisted(() => ({ perms: { canWrite: true, isAdmin: false, isSuperAdmin: false, isReadOnly: false } }))
 
 vi.mock('@/lib/permissions', () => ({
   usePermissions: () => perms,
@@ -32,7 +32,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
-  Object.assign(perms, { canWrite: true, isAdmin: false, isSuperAdmin: false })
+  Object.assign(perms, { canWrite: true, isAdmin: false, isSuperAdmin: false, isReadOnly: false })
   mockUseTasks.mockReturnValue({
     data: [
       { id: 't1', title: 'Confirm accommodation', tripInstanceId: 'trip-1', tripName: 'Beach Trip', taskType: 'AccommodationRequest', ownerName: 'Sam', dueDate: '2026-10-01', priority: 'Medium', status: 'NotStarted' },
@@ -284,6 +284,17 @@ describe('TasksPage — the Mark complete tick', () => {
     renderPage()
     expect(screen.queryByRole('button', { name: 'Mark complete' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Add task/ })).not.toBeInTheDocument()
+  })
+
+  // Q2 fix round: ReadOnly has no Edit action, so the title opens the task as a view; SupportWorker is sent away from that route, so its title is text.
+  it('links the title to the task view for ReadOnly only', () => {
+    Object.assign(perms, { canWrite: false, isReadOnly: true })
+    const { unmount } = renderPage()
+    expect(screen.getByRole('link', { name: 'Confirm accommodation' })).toHaveAttribute('href', '/tasks/t1/edit')
+    unmount()
+    Object.assign(perms, { canWrite: false, isReadOnly: false })
+    renderPage()
+    expect(screen.queryByRole('link', { name: 'Confirm accommodation' })).not.toBeInTheDocument()
   })
 
   it('shows a role that cannot write the status as text, not a pill', () => {

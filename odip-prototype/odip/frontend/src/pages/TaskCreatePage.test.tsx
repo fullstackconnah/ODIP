@@ -147,3 +147,37 @@ describe('TaskCreatePage — Back link touch target', () => {
     expect(back.className).not.toMatch(/44px/)
   })
 })
+
+// Q2 fix round: ReadOnly reads a task only through this form, so it opens as a view: every field disabled, no Save, no write.
+describe('TaskCreatePage — view mode for a role that cannot write', () => {
+  const task = {
+    id: 'task-1', tripInstanceId: 'trip-1', tripName: 'Gold Coast Beach Break',
+    participantBookingId: null, accommodationReservationId: null, vehicleAssignmentId: null, staffAssignmentId: null,
+    taskType: 'Other', title: 'Confirm accommodation booking', ownerId: null, ownerName: null,
+    priority: 'Medium', dueDate: null, status: 'NotStarted', completedDate: null, notes: 'Ring the host',
+  } as unknown as TaskDto
+
+  it('shows ReadOnly "View task" with every field disabled and no Save', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    mockUseTask.mockReturnValue({ data: task, isError: false })
+    renderEditPage()
+
+    expect(screen.getByRole('heading', { name: 'View task' })).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Confirm accommodation booking')).toBeDisabled()
+    expect(screen.getByDisplayValue('Ring the host')).toBeDisabled()
+    expect(screen.queryByRole('button', { name: /Save/ })).not.toBeInTheDocument()
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+    localStorage.clear()
+  })
+
+  it('keeps the editable form for a Coordinator', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseTask.mockReturnValue({ data: task, isError: false })
+    renderEditPage()
+
+    expect(screen.getByRole('heading', { name: 'Edit Task' })).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Confirm accommodation booking')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeInTheDocument()
+    localStorage.clear()
+  })
+})

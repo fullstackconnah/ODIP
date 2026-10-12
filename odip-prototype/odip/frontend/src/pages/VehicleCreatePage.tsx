@@ -9,6 +9,7 @@ import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
+import { usePermissions } from '@/lib/permissions'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
@@ -45,6 +46,9 @@ export default function VehicleCreatePage() {
   const navigate = useNavigate()
   const { id } = useParams()
   const isEdit = !!id
+  // ReadOnly reads a vehicle's full record (notes, ramp, driver requirements) only here: the route admits it to /:id/edit, not /new.
+  const { canWrite } = usePermissions()
+  const viewOnly = isEdit && !canWrite
   const createVehicle = useCreateVehicle()
   const updateVehicle = useUpdateVehicle()
   const { data: existing, isLoading: isLoadingExisting } = useVehicleDetail(isEdit ? id : undefined)
@@ -110,7 +114,7 @@ export default function VehicleCreatePage() {
       <div className="text-sm text-[var(--color-muted-foreground)]">
         <Link to="/vehicles" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Vehicles</Link>
       </div>
-      <PageHeader title={isEdit ? 'Edit Vehicle' : 'New Vehicle'} />
+      <PageHeader title={viewOnly ? 'View vehicle' : isEdit ? 'Edit Vehicle' : 'New Vehicle'} />
 
       {mutation.isError && (
         <Callout tone="error">
@@ -119,6 +123,7 @@ export default function VehicleCreatePage() {
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
+        <fieldset disabled={viewOnly} className="flex flex-col gap-[var(--section-gap)] min-w-0">
         {/* Vehicle Information */}
         <Card title="Vehicle Information">
           <div className={formGrid}>
@@ -188,13 +193,15 @@ export default function VehicleCreatePage() {
           </div>
         </Card>
 
+        </fieldset>
+
         {/* Submit */}
-        <div className="flex justify-end gap-3">
+        {!viewOnly && <div className="flex justify-end gap-3">
           <Button variant="secondary" to="/vehicles">Cancel</Button>
           <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Vehicle')}
           </Button>
-        </div>
+        </div>}
       </form>
     </div>
   )
