@@ -248,14 +248,16 @@ export default function IncidentsPage() {
     {
       key: 'title',
       header: 'Title',
+      mobile: 'primary',
       className: 'font-medium',
       // The way into the incident for every role that sees the list; the cap sits on the link itself so its focus ring is not clipped.
       render: (i) => <Link to={`/incidents/${i.id}`} title={i.title ?? undefined} className={`block md:truncate md:max-w-[15rem] 2xl:max-w-[18rem] text-[var(--color-primary)] hover:underline ${TAP_TRUNCATED_LINK}`}>{i.title ?? '—'}</Link>,
     },
-    { key: 'incidentType', header: 'Type', maxWidth: '9rem', render: (i) => INCIDENT_TYPE_LABELS[i.incidentType as IncidentType] ?? i.incidentType },
+    { key: 'incidentType', header: 'Type', maxWidth: '9rem', mobile: 'meta', render: (i) => INCIDENT_TYPE_LABELS[i.incidentType as IncidentType] ?? i.incidentType },
     {
       key: 'tripName',
       header: 'Trip',
+      mobile: 'meta',
       render: (i) => i.tripInstanceId && i.tripName ? (
         <Link
           to={`/trips/${i.tripInstanceId}`}
@@ -269,6 +271,7 @@ export default function IncidentsPage() {
     {
       key: 'involvedParticipantName',
       header: 'Participant',
+      mobile: 'meta',
       render: (i) => i.involvedParticipantId && i.involvedParticipantName ? (
         <Link
           to={`/participants/${i.involvedParticipantId}`}
@@ -279,10 +282,10 @@ export default function IncidentsPage() {
         </Link>
       ) : (i.involvedParticipantName ?? '—'),
     },
-    { key: 'severity', header: 'Severity', render: (i) => <StatusBadge status={i.severity} /> },
-    { key: 'status', header: 'Status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
-    { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem' },
-    { key: 'incidentDateTime', header: 'Date', type: 'date' },
+    { key: 'severity', header: 'Severity', mobile: 'meta', render: (i) => <StatusBadge status={i.severity} /> },
+    { key: 'status', header: 'Status', mobile: 'status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
+    { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem', mobile: 'hidden' },
+    { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta' },
     {
       key: 'qscReportingStatus',
       header: 'QSC',

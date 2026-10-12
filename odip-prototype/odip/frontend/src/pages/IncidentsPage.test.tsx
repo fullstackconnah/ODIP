@@ -426,11 +426,12 @@ describe('IncidentsPage — narrow-desktop columns', () => {
     renderPage()
 
     const cells = within(screen.getByText('Slip in kitchen').closest('tr') as HTMLElement).getAllByRole('cell')
+    // From md up (the Column Rule); max-md:hidden only leaves a field off the phone card.
     for (const label of ['Title', 'Severity', 'Status', 'Date', 'QSC', 'Participant', 'Type', 'Trip', 'Reported By']) {
       const index = headerIndex(label)
       expect(index, label).toBeGreaterThanOrEqual(0)
       const th = screen.getAllByRole('columnheader')[index]
-      for (const el of [th, cells[index]]) expect(el.className, label).not.toMatch(/hidden/)
+      for (const el of [th, cells[index]]) expect(el.className, label).not.toMatch(/(^|\s)((sm|md|lg|xl|2xl):)?hidden(\s|$)/)
     }
   })
 
@@ -743,5 +744,19 @@ describe('IncidentsPage — incident type label', () => {
 
     expect(screen.getByText('Medication Error')).toBeInTheDocument()
     expect(screen.queryByText('MedicationError')).not.toBeInTheDocument()
+  })
+})
+
+// Platform review V2-A (Incidents 3): the phone card was a grid of caps labels with blank space under it.
+describe('IncidentsPage — phone card', () => {
+  it('puts the title and status on the title line, the facts on one muted line, and leaves Reported by off the card', () => {
+    mockUseIncidents.mockReturnValue({ data: [baseIncident({ incidentType: 'MedicationError', reportedByName: 'Pat Jones' })], isLoading: false })
+    renderPage()
+
+    const row = screen.getByText('Medication Error').closest('tr') as HTMLElement
+    expect(row.querySelector('td[data-label="Title"]')).toHaveAttribute('data-card', 'primary')
+    expect(row.querySelector('td[data-label="Status"]')).toHaveAttribute('data-card', 'status')
+    for (const label of ['Type', 'Severity', 'Date']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
+    expect(row.querySelector('td[data-label="Reported By"]')).toHaveClass('max-md:hidden')
   })
 })

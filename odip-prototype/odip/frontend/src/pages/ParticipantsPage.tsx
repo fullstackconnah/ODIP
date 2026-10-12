@@ -203,6 +203,7 @@ function useParticipantsScreen() {
       key: 'fullName',
       header: 'Name',
       sortable: true,
+      mobile: 'primary',
       render: (p) => (
         // The link itself truncates (inline-block + truncate), not a wrapper around it: a wrapper's
         // overflow would clip the link's focus ring.
@@ -216,12 +217,13 @@ function useParticipantsScreen() {
         </Link>
       ),
     },
-    { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
-    { key: 'planType', header: 'Plan Type', maxWidth: '10rem', render: (p) => PLAN_TYPE_LABELS[p.planType] ?? p.planType },
-    { key: 'region', header: 'Region', sortable: true, maxWidth: '11rem' },
+    { key: 'ndisNumber', header: 'NDIS Number', mobile: 'hidden', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
+    { key: 'planType', header: 'Plan Type', maxWidth: '10rem', mobile: 'meta', render: (p) => PLAN_TYPE_LABELS[p.planType] ?? p.planType },
+    { key: 'region', header: 'Region', sortable: true, maxWidth: '11rem', mobile: 'meta' },
     {
       key: 'serviceStreams',
       header: 'Streams',
+      mobile: 'hidden',
       // Chips never wrap onto a second line (w-max), the group is clipped at 10rem instead.
       render: (p) => (
         <div className="md:max-w-[10rem] md:overflow-hidden">
@@ -241,14 +243,16 @@ function useParticipantsScreen() {
       ),
       type: 'boolean',
       align: 'center',
+      mobile: 'hidden',
     },
-    { key: 'isHighSupport', header: 'High', type: 'boolean', align: 'center' },
-    { key: 'supportRatio', header: 'Support Ratio', maxWidth: '10rem', render: (p) => SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio },
-    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center' },
+    { key: 'isHighSupport', header: 'High', type: 'boolean', align: 'center', mobile: 'hidden' },
+    { key: 'supportRatio', header: 'Support Ratio', maxWidth: '10rem', mobile: 'meta', render: (p) => SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio },
+    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center', mobile: 'hidden' },
     {
       key: 'status',
       header: 'Status',
       sortable: true,
+      mobile: 'status',
       render: (p) => {
         const current = p.isActive ? 'Active' : 'Inactive'
         return (
