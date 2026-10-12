@@ -11,7 +11,7 @@ import { bookingBudgetNote, bookingBudgetNotice, mergeBookingBudgetNotices, type
 import { TAP_ICON_SQUARE } from '@/components/tapArea'
 import { getStatusColor, extractErrorMessage } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
-import { BOOKING_STATUSES, INSURANCE_STATUSES, type BookingStatus, type InsuranceStatus, type PaymentStatus, type SupportRatio } from '@/api/types/enums'
+import { BOOKING_STATUSES, INSURANCE_STATUSES, type BookingStatus, type InsuranceStatus, type PaymentStatus, type SupportRatio, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
 import { BOOKING_STATUS_LABELS, statusItems } from '@/lib/tone'
 import { Plus, AlertTriangle, Pencil, ExternalLink, Trash2, Download, Loader2 } from 'lucide-react'
 import type { TripDetailDto } from '@/api/types/trips'
@@ -25,16 +25,6 @@ import { Callout } from '@/components/Callout'
 // dedicated actions elsewhere, not offered when first adding a participant to a trip.
 const NEW_BOOKING_STATUS_ITEMS: DropdownItem[] = ['Enquiry', 'Held', 'Confirmed', 'Waitlist'].map(s => ({ value: s, label: s }))
 
-const SUPPORT_RATIO_LABELS: Record<SupportRatio, string> = {
-  OneToOne: '1:1',
-  OneToTwo: '1:2',
-  OneToThree: '1:3',
-  OneToFour: '1:4',
-  OneToFive: '1:5',
-  TwoToOne: '2:1',
-  SharedSupport: 'Shared',
-  Other: 'Other',
-}
 const SUPPORT_RATIO_ITEMS: DropdownItem[] = (['OneToOne', 'OneToTwo', 'OneToThree', 'OneToFour', 'OneToFive', 'TwoToOne', 'SharedSupport', 'Other'] as SupportRatio[])
   .map(v => ({ value: v, label: SUPPORT_RATIO_LABELS[v] }))
 

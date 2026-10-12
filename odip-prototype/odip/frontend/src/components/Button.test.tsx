@@ -303,6 +303,6 @@ describe('Button — no destructive colour overrides on a ghost button', () => {
     expect(uses('pages/rostering/components/ShiftSlideOver.tsx')).toBe(1)
     expect(uses('pages/rostering/components/PatternSlideOver.tsx')).toBe(1)
     expect(uses('pages/trip-detail/AccommodationTab.tsx')).toBe(1)
-    expect(uses('pages/ParticipantDetailPage.tsx')).toBe(1)
+    // ParticipantDetailPage's Revoke is no longer a Button: it is an item of the header's Documents menu (VISUAL-1 V2).
   })
 })

@@ -1,16 +1,17 @@
 import { useVehicles, useDeleteVehicle, useRestoreVehicle } from '@/api/hooks'
 import type { VehicleListDto } from '@/api/types'
-import { formatDateAu } from '@/lib/utils'
+import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { deadlineState } from '@/lib/deadline'
-import { Plus, Pencil, Trash2, ArchiveRestore, Car, Bus, Truck, Users, Wrench, Calendar, Accessibility } from 'lucide-react'
+import { Plus, Car, Bus, Truck, Users, Wrench, Calendar, Accessibility } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
-import { StatusBadge } from '@/components/StatusBadge'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/Button'
 import { ToggleGroup } from '@/components/ToggleGroup'
-import { StatCard } from '@/components/StatCard'
+import { SearchInput } from '@/components/SearchInput'
+import { ActionButtons } from '@/components/ActionButtons'
+import { Callout } from '@/components/Callout'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { TONE } from '@/lib/tone'
@@ -65,27 +66,21 @@ export default function VehiclesPage() {
   const deleteVehicle = useDeleteVehicle()
   const restoreVehicle = useRestoreVehicle()
   const [confirmState, setConfirmState] = useState<{ type: 'archive' | 'restore'; item: VehicleListDto } | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
-  const handleRestore = (e: React.MouseEvent, v: VehicleListDto) => {
-    e.stopPropagation()
-    setConfirmState({ type: 'restore', item: v })
-  }
-
-  const handleDelete = (e: React.MouseEvent, v: VehicleListDto) => {
-    e.stopPropagation()
-    setConfirmState({ type: 'archive', item: v })
-  }
-
-  const totalSeats = vehicles.reduce((sum: number, v: VehicleListDto) => sum + (v.totalSeats || 0), 0)
-  const totalWheelchair = vehicles.reduce((sum: number, v: VehicleListDto) => sum + (v.wheelchairPositions || 0), 0)
-  const accessibleCount = vehicles.filter((v: VehicleListDto) => v.vehicleType === 'AccessibleVan' || v.wheelchairPositions > 0).length
+  const q = search.toLowerCase()
+  const filtered = q
+    ? vehicles.filter((v: VehicleListDto) => v.vehicleName.toLowerCase().includes(q) || v.registration?.toLowerCase().includes(q))
+    : vehicles
+  const totalSeats = filtered.reduce((sum: number, v: VehicleListDto) => sum + (v.totalSeats || 0), 0)
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {/* Page header */}
       <PageHeader
         title="Vehicles"
-        subtitle={plural(vehicles.length, `${showArchived ? 'archived' : 'active'} vehicle`)}
+        subtitle={`${plural(filtered.length, `${showArchived ? 'archived' : 'active'} vehicle`)}, ${plural(totalSeats, 'seat')}`}
         action={!showArchived && canWrite && (
           <Button to="/vehicles/new" size="md">
             <Plus className="w-4 h-4" /> New vehicle
@@ -96,25 +91,29 @@ export default function VehiclesPage() {
           ariaLabel="Filter vehicles by status"
           options={[{ key: 'active', label: 'Active' }, { key: 'archived', label: 'Archived' }]}
           value={showArchived ? 'archived' : 'active'}
-          onChange={key => setShowArchived(key === 'archived')}
+          onChange={key => { setShowArchived(key === 'archived'); setActionError(null) }}
         />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search vehicles..." />
       </PageHeader>
+
+      {actionError && <Callout tone="error">{actionError}</Callout>}
 
       {/* Loading state */}
       {isLoading ? (
         <PageState kind="loading" noun="vehicles" />
       ) : isError && vehicles.length === 0 ? (
         <PageState kind="error" noun="vehicle list" onRetry={() => refetch()} />
-      ) : vehicles.length === 0 ? (
+      ) : filtered.length === 0 ? (
         /* Empty state */
         <EmptyState
           icon={Bus}
-          title="No vehicles found"
+          title={vehicles.length === 0 ? 'No vehicles found' : 'No results for your search'}
+          description={vehicles.length === 0 ? undefined : 'Try a different search term.'}
         />
       ) : (
-        /* Vehicle grid */
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))] items-start gap-[var(--section-gap)]">
-          {vehicles.map((v: VehicleListDto) => {
+        /* Vehicle grid: cards in a row stretch to one height, so the action rows line up */
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))] gap-[var(--section-gap)]">
+          {filtered.map((v: VehicleListDto) => {
             const typeKey = (v.vehicleType as VehicleTypeKey) in vehicleTypeConfig
               ? (v.vehicleType as VehicleTypeKey)
               : 'Other'
@@ -125,9 +124,9 @@ export default function VehiclesPage() {
             return (
               <div
                 key={v.id}
-                className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden hover:shadow-md transition-all"
+                className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden hover:shadow-md transition-all flex flex-col"
               >
-                <div className="p-[var(--card-pad)]">
+                <div className="p-[var(--card-pad)] flex flex-1 flex-col">
                   {/* Card header */}
                   <div className="flex items-start gap-3 mb-3">
                     <div className={`w-10 h-10 rounded-[var(--radius-md)] ${iconBg} flex items-center justify-center shrink-0`}>
@@ -144,7 +143,6 @@ export default function VehiclesPage() {
                             {v.vehicleType} · {v.isInternal ? 'Internal' : 'External'}
                           </p>
                         </div>
-                        <StatusBadge status={v.isActive ? 'Active' : 'Archived'} className="shrink-0 font-semibold" />
                       </div>
                     </div>
                   </div>
@@ -155,7 +153,7 @@ export default function VehiclesPage() {
                     <StatCell
                       icon={Accessibility}
                       label="Wheelchair"
-                      value={v.wheelchairPositions > 0 ? plural(v.wheelchairPositions, 'position') : 'None'}
+                      value={v.wheelchairPositions > 0 ? plural(v.wheelchairPositions, 'wheelchair position') : 'None'}
                     />
                     <StatCell
                       icon={Wrench}
@@ -171,42 +169,21 @@ export default function VehiclesPage() {
                     />
                   </div>
 
-                  {/* Action row */}
+                  {/* Action row: the card pattern Accommodation shares, pinned to the foot of a stretched card */}
                   {canWrite && (
-                    <div className="border-t border-[var(--color-border)] pt-2 flex gap-2">
-                      <Button
-                        to={`/vehicles/${v.id}/edit`}
-                        onClick={e => e.stopPropagation()}
-                        variant="secondary"
-                        size="sm"
-                        className="flex-1"
-                      >
-                        <Pencil className="w-3.5 h-3.5" /> Edit
-                      </Button>
-                      {showArchived ? (
-                        <Button
-                          onClick={e => handleRestore(e, v)}
-                          variant="primary"
-                          size="sm"
-                          className="flex-1"
-                        >
-                          <ArchiveRestore className="w-3.5 h-3.5" /> Restore
-                        </Button>
-                      ) : (
-                        <Button
-                          onClick={e => handleDelete(e, v)}
-                          variant="secondary"
-                          size="sm"
-                          className="flex-1 hover:bg-[var(--color-error-container)] hover:text-[var(--color-destructive)]"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" /> Archive
-                        </Button>
-                      )}
+                    <div className="mt-auto">
+                      <ActionButtons
+                        labelled
+                        editTo={`/vehicles/${v.id}/edit`}
+                        onDelete={() => setConfirmState({ type: 'archive', item: v })}
+                        onRestore={() => setConfirmState({ type: 'restore', item: v })}
+                        showArchived={showArchived}
+                      />
                     </div>
                   )}
                   {/* ReadOnly has no detail page for a vehicle: it opens the form as a view (notes, ramp, driver requirements). */}
                   {!canWrite && (
-                    <div className="border-t border-[var(--color-border)] pt-2 flex gap-2">
+                    <div className="mt-auto border-t border-[var(--color-border)] pt-2 flex gap-2">
                       <Button to={`/vehicles/${v.id}/edit`} variant="secondary" size="sm" className="flex-1">View</Button>
                     </div>
                   )}
@@ -217,25 +194,18 @@ export default function VehiclesPage() {
         </div>
       )}
 
-      {/* Summary stats */}
-      {!isLoading && vehicles.length > 0 && (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-2">
-          <StatCard label="Total Fleet Capacity" value={`${totalSeats} passengers`} />
-          <StatCard label="Wheelchair Positions" value={`${totalWheelchair} available`} />
-          <StatCard label="Accessible Vehicles" value={`${accessibleCount} in fleet`} />
-        </div>
-      )}
-
       <ConfirmDialog
         open={confirmState !== null}
         onCancel={() => setConfirmState(null)}
         onConfirm={() => {
           if (!confirmState) return
-          if (confirmState.type === 'restore') {
-            restoreVehicle.mutate(confirmState.item.id, { onSuccess: () => setConfirmState(null) })
-          } else {
-            deleteVehicle.mutate(confirmState.item.id, { onSuccess: () => setConfirmState(null) })
-          }
+          const { type, item } = confirmState
+          setActionError(null)
+          // Its own promise (Q4a): the confirm closes either way, and a refusal shows above the cards.
+          const call = type === 'restore' ? restoreVehicle.mutateAsync(item.id) : deleteVehicle.mutateAsync(item.id)
+          call
+            .catch(err => setActionError(extractErrorMessage(err, `Could not ${type} "${item.vehicleName}". Please try again.`)))
+            .finally(() => setConfirmState(null))
         }}
         title={confirmState?.type === 'restore' ? 'Restore Vehicle' : 'Archive Vehicle'}
         message={

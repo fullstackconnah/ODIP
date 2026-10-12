@@ -91,6 +91,12 @@ describe('ContactsTab', () => {
     expect(screen.getByText('No contacts recorded')).toBeInTheDocument()
   })
 
+  // VISUAL-1 V2: the empty state carried a second Add contact under the header's own.
+  it('offers one Add contact on an empty list', () => {
+    render(<ContactsTab participantId="participant-1" />)
+    expect(screen.getAllByRole('button', { name: /Add contact/ })).toHaveLength(1)
+  })
+
   it('renders a contact role row with person, role, and status', () => {
     mockUseParticipantContactRoles.mockReturnValue({ data: [makeRole()], isLoading: false })
 

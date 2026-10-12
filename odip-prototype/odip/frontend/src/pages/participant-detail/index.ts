@@ -26,3 +26,5 @@ export { default as ParticipantCommunityAccessSection } from './ParticipantCommu
 export { default as ParticipantMealsDietSection } from './ParticipantMealsDietSection'
 export { default as ParticipantAboutMeSection } from './ParticipantAboutMeSection'
 export { default as ParticipantRisksHazardsSummarySection } from './ParticipantRisksHazardsSummarySection'
+export { NotRecordedFold } from './NotRecordedFold'
+export { hasAddressLiving, hasKeyIdentifiers, hasCulturalBackground, hasMedical, hasBehaviourCommunication, hasMealsDiet, hasAboutMe, hasRisksHazardsSummary } from './recorded'

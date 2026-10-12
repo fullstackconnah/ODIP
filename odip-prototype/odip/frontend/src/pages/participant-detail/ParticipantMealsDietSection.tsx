@@ -4,6 +4,7 @@ import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
+import { hasMealsDiet } from './recorded'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
 
@@ -33,9 +34,7 @@ export function ParticipantMealsDietSection({ p, participantId, canEdit }: { p: 
   const [draft, setDraft] = useState<MealsDietDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof MealsDietDraft)[]).some((k) => draft[k] !== saved[k])
 
-  const hasAnyData = !!(p.mealAssistanceDetail || p.chokingRiskMealDetail || p.modifiedDietDetail || p.pegRegimeMealDetail
-    || p.specialUtensilsDetail || p.specialDietaryNeedsDetail || p.favouriteBreakfast || p.favouriteLunch
-    || p.favouriteDinner || p.medicationTricks || p.foodsAlwaysEaten)
+  const hasAnyData = hasMealsDiet(p)
 
   if (!canEdit && !hasAnyData) return null
 

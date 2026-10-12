@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Activity } from 'lucide-react'
+import { NotRecordedFold } from './NotRecordedFold'
+import { plural } from '@/lib/format'
 import { useParticipantAdlAssessments, useUpsertAdlAssessment } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
@@ -142,32 +144,41 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
   if (phase === 'loading') return <PageState kind="loading" noun="ADL assessment list" />
   if (phase === 'error') return <PageState kind="error" noun="ADL assessment list" onRetry={() => assessmentsQuery.refetch()} />
 
+  // VISUAL-1 V2: a table of "Not recorded" rows on a new participant folds into one line that opens to it.
+  function foldIfNoneRecorded(rows: ParticipantAdlAssessmentDto[], noun: string, table: ReactNode) {
+    return rows.length > 0 && rows.every((a) => a.level == null && !a.notes) ? <NotRecordedFold summary={plural(rows.length, noun)}>{table}</NotRecordedFold> : table
+  }
+
   return (
     <div className="space-y-6">
       <div className="space-y-4">
         <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
           <Activity className="w-4 h-4" /> Personal ADLs
         </h3>
-        <DataTable
-          data={orderedFor('Personal')}
-          columns={columns()}
-          keyField="adlType"
-          emptyMessage="No personal ADLs recorded."
-          compact
-        />
+        {foldIfNoneRecorded(orderedFor('Personal'), 'personal ADL', (
+          <DataTable
+            data={orderedFor('Personal')}
+            columns={columns()}
+            keyField="adlType"
+            emptyMessage="No personal ADLs recorded."
+            compact
+          />
+        ))}
       </div>
 
       <div className="space-y-4">
         <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
           <Activity className="w-4 h-4" /> Community &amp; Domestic ADLs
         </h3>
-        <DataTable
-          data={orderedFor('CommunityDomestic')}
-          columns={columns()}
-          keyField="adlType"
-          emptyMessage="No community/domestic ADLs recorded."
-          compact
-        />
+        {foldIfNoneRecorded(orderedFor('CommunityDomestic'), 'community or domestic ADL', (
+          <DataTable
+            data={orderedFor('CommunityDomestic')}
+            columns={columns()}
+            keyField="adlType"
+            emptyMessage="No community/domestic ADLs recorded."
+            compact
+          />
+        ))}
       </div>
 
       <Modal

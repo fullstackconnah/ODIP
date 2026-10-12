@@ -4,6 +4,7 @@ import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
+import { hasAboutMe } from './recorded'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
 
@@ -27,7 +28,7 @@ export function ParticipantAboutMeSection({ p, participantId, canEdit }: { p: Pa
   const [draft, setDraft] = useState<AboutMeDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof AboutMeDraft)[]).some((k) => draft[k] !== saved[k])
 
-  const hasAnyData = !!(p.goals || p.supportAreas || p.strengthsFears || p.thingsToKnow || p.whoIsImportant || p.likesDislikes)
+  const hasAnyData = hasAboutMe(p)
 
   if (!canEdit && !hasAnyData) return null
 

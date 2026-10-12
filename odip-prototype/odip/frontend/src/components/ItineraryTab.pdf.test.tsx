@@ -16,7 +16,7 @@ describe('ItineraryTab — the PDF library', () => {
     const user = userEvent.setup()
     render(<ItineraryTab tripId="t1" />)
     expect(loaded).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: /Export Trip Package/ }))
+    await user.click(screen.getByRole('button', { name: /Export trip package/ }))
     await user.click(await screen.findByText('Staff Version'))
     expect(loaded).toHaveBeenCalledTimes(1)
     expect(generate).toHaveBeenCalledWith(expect.anything(), 'staff')

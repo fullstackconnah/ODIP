@@ -232,6 +232,40 @@ public class BookingsControllerTests
     }
 
     /// <summary>
+    /// VISUAL-1 V4: the Bookings list is paged on the server, so its search must be too (a client filter would only search one page).
+    /// It matches the participant's full or preferred name, or the trip name, ignoring case (lower-cased both sides, as
+    /// ParticipantQueries.SearchByName: Contains alone is a case-sensitive LIKE on Npgsql), and the total counts the matches.
+    /// </summary>
+    [Fact]
+    public async Task GetAll_Search_MatchesParticipantOrTripName_IgnoringCase_AndCountsOnlyMatches()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var beach = SeedTrip(db);
+        var snow = new TripInstance { Id = Guid.NewGuid(), TripName = "Snowy Mountains Week", StartDate = new DateOnly(2026, 7, 1), DurationDays = 5, Status = TripStatus.Planning };
+        db.TripInstances.Add(snow);
+        var sophie = SeedParticipant(db, firstName: "Sophie", lastName: "Brown");
+        var harrison = SeedParticipant(db, firstName: "Harrison", lastName: "Lee");
+        db.ParticipantBookings.AddRange(
+            new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = beach.Id, ParticipantId = sophie.Id, BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 8, 1) },
+            new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = snow.Id, ParticipantId = harrison.Id, BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 6, 1) });
+        await db.SaveChangesAsync();
+        var controller = new BookingsController(db);
+
+        async Task<PagedResult<BookingListDto>> Search(string? term) =>
+            Assert.IsType<ApiResponse<PagedResult<BookingListDto>>>(Assert.IsType<OkObjectResult>((await controller.GetAll(tripId: null, status: null, search: term, ct: CancellationToken.None)).Result).Value).Data!;
+
+        var byParticipant = await Search("  sophie b ");
+        Assert.Equal(1, byParticipant.TotalCount);
+        Assert.Equal(sophie.Id, Assert.Single(byParticipant.Items).ParticipantId);
+
+        var byTrip = await Search("SNOWY");
+        Assert.Equal(harrison.Id, Assert.Single(byTrip.Items).ParticipantId);
+
+        Assert.Equal(0, (await Search("nobody")).TotalCount);
+        Assert.Equal(2, (await Search(null)).TotalCount);
+    }
+
+    /// <summary>
     /// The correctness guarantee the Id tiebreaker exists for: paging over rows that tie on
     /// BookingDate must partition the result set into disjoint, exhaustive pages — no row
     /// duplicated across pages, none silently dropped. Mirrors

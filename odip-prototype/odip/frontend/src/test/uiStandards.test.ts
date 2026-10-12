@@ -62,7 +62,7 @@ const BASELINE: Record<Rule, Record<string, number>> = {
   // hover ring): index.css has no shadow tokens yet. Add them there and these go.
   colour: {
     'components/Dropdown.tsx': 3,
-    'components/ItineraryTab.tsx': 2,
+    'components/ItineraryTab.tsx': 1,
     'components/SearchableSelect.tsx': 1,
     'components/layout/AppLayout.tsx': 2,
     'pages/LoginPage.tsx': 2,

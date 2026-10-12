@@ -5,6 +5,7 @@ import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
+import { hasKeyIdentifiers } from './recorded'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 
 /** PD-7: Key Identifiers card — CORE-02's `keyIdentifiers` group, fully rendered (all fields optional, no merge needed). */
@@ -33,8 +34,7 @@ export function ParticipantKeyIdentifiersSection({ p, participantId, canEdit }: 
   const saved = readKeyIdentifiers(p)
   const [draft, setDraft] = useState<KeyIdentifiersDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof KeyIdentifiersDraft)[]).some((k) => draft[k] !== saved[k])
-  const hasAnyData = !!(p.pensionCardNumber || p.medicareNumber || p.companionCardNumber || p.privateHealthFund
-    || p.taxiCardNumber || p.hairColour || p.eyeColour || p.weightKg || p.heightCm)
+  const hasAnyData = hasKeyIdentifiers(p)
 
   if (!canEdit && !hasAnyData) return null
 

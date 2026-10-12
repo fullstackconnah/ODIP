@@ -5,6 +5,7 @@ import { FactList } from '@/components/FactList'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
+import { hasCulturalBackground } from './recorded'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
 
@@ -51,10 +52,7 @@ export function ParticipantCulturalBackgroundSection({ p, participantId, canEdit
   const saved = readCulturalBackground(p)
   const [draft, setDraft] = useState<CulturalBackgroundDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof CulturalBackgroundDraft)[]).some((k) => draft[k] !== saved[k])
-  const hasAnyData = p.isCald != null || p.isLgbtqi != null || p.isFamilyCommunity != null || p.isAboriginalOrTorresStraitIslander != null
-    || p.receivedRightsAndResponsibilitiesInfo != null || p.receivedPrivacyAndConfidentialityInfo != null
-    || p.receivedFeedbackInfo != null || p.receivedBeingSafeInfo != null || p.receivedAdvocacyInfo != null
-    || !!p.personalInterests || !!p.choiceControlNotes
+  const hasAnyData = hasCulturalBackground(p)
 
   if (!canEdit && !hasAnyData) return null
 

@@ -106,3 +106,23 @@ describe('ActionButtons — 44px hit areas on a coarse pointer', () => {
     }
   })
 })
+
+// V4: the card footer Accommodation and Vehicles share: labelled secondary Buttons, and a click does not reach the card under it.
+describe('ActionButtons — labelled (card footer)', () => {
+  it('renders labelled Edit and Archive, then Restore on the Archived view, without bubbling', async () => {
+    const onDelete = vi.fn()
+    const outer = vi.fn()
+    const { unmount } = render(<MemoryRouter><div onClick={outer}><ActionButtons labelled editTo="/things/1/edit" onDelete={onDelete} onRestore={vi.fn()} /></div></MemoryRouter>)
+
+    expect(screen.getByRole('link', { name: 'Edit' })).toHaveAttribute('href', '/things/1/edit')
+    expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Archive' }))
+    expect(onDelete).toHaveBeenCalledOnce()
+    expect(outer).not.toHaveBeenCalled()
+    unmount()
+
+    renderButtons({ labelled: true, onDelete: vi.fn(), onRestore: vi.fn(), showArchived: true })
+    expect(screen.getByRole('button', { name: 'Restore' })).toHaveTextContent('Restore')
+    expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument()
+  })
+})

@@ -57,13 +57,22 @@ public class BookingsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<BookingListDto>>>> GetAll(
         [FromQuery] Guid? tripId, [FromQuery] BookingStatus? status,
-        [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default)
+        [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default,
+        [FromQuery] string? search = null)
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
         var query = _db.ParticipantBookings.Include(b => b.Participant).Include(b => b.TripInstance).AsQueryable();
         if (tripId.HasValue) query = query.Where(b => b.TripInstanceId == tripId.Value);
         if (status.HasValue) query = query.Where(b => b.BookingStatus == status.Value);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            // Lower-cased both sides: Contains alone is a case-sensitive LIKE on Npgsql (as ParticipantQueries.SearchByName).
+            var term = search.Trim().ToLower();
+            query = query.Where(b => (b.Participant.FirstName + " " + b.Participant.LastName).ToLower().Contains(term)
+                || (b.Participant.PreferredName != null && b.Participant.PreferredName.ToLower().Contains(term))
+                || b.TripInstance.TripName.ToLower().Contains(term));
+        }
 
         // Correctness fix: BookingDate is a plain date (not a timestamp) and many bookings are
         // created on the same day, so ties on the sole OrderByDescending key are common. With no

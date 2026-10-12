@@ -178,7 +178,7 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
           <AlertTriangle className="w-4 h-4" /> Risks
         </h3>
         {canWriteRisks && participantId && (
-          <Button onClick={openCreate}>
+          <Button variant="secondary" onClick={openCreate}>
             <Plus className="w-4 h-4" /> Add risk
           </Button>
         )}

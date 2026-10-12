@@ -182,3 +182,21 @@ describe('ParticipantHealthConditionsSection', () => {
     })
   })
 })
+
+// VISUAL-1 V2: ten "Not recorded" rows on a new participant fold into one line that opens to them.
+describe('ParticipantHealthConditionsSection — nothing recorded yet', () => {
+  it('folds the table into one closed "Not recorded" line, and shows it open once a row is answered', () => {
+    const { unmount } = render(<ParticipantHealthConditionsSection participantId="participant-1" />)
+    const fold = screen.getByText('Not recorded: 10 health conditions').closest('details')!
+    expect(fold).not.toHaveAttribute('open')
+    expect(fold).toContainElement(screen.getByText('Epilepsy'))
+    unmount()
+
+    const data = unansweredConditions()
+    replaceCondition(data, { conditionType: 'Asthma', has: false })
+    mockUseParticipantHealthConditions.mockReturnValue({ data, isLoading: false })
+    render(<ParticipantHealthConditionsSection participantId="participant-1" />)
+    expect(screen.queryByText(/^Not recorded:/)).not.toBeInTheDocument()
+    expect(screen.getByText('Epilepsy').closest('details')).toBeNull()
+  })
+})
