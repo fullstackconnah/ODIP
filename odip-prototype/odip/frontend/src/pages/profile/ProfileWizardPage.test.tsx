@@ -102,6 +102,15 @@ beforeEach(() => {
   mockUpsertRiskItemMutateAsync.mockResolvedValue({ success: true })
 })
 
+// Its own h1 shell, not a PageHeader, so it names the tab itself (UI standard 6).
+describe('ProfileWizardPage — tab title', () => {
+  it('names the browser tab after its heading', async () => {
+    renderProfilePage()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Profile — Jamie Rivers' })).toBeInTheDocument()
+    expect(document.title).toBe('Profile — Jamie Rivers — Odip')
+  })
+})
+
 describe('ProfileWizardPage — drift guard against the PF-10.1 field-allocation contract', () => {
   it('every fieldsForEntry("profile") field (minus the documented UI-only exception) is covered by exactly one wizard step, with no overlap and no Intake-only field included', () => {
     const stepGroups = [

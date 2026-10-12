@@ -43,6 +43,7 @@ import {
   type WizardStepDef, type WizardValidate, type ReviewGroup, type ReviewRow,
 } from '@/components/wizard'
 import { BackButton } from '@/components/BackButton'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import {
   type ParticipantFormData, PROFILE_EDITABLE_STEP_SCHEMAS_BY_KEY, PROFILE_STEP_SHARED_FIELDS, PROFILE_CONDITIONAL_SECTIONS,
   PROFILE_STEP_KEY_IDENTIFIERS_FIELDS, PROFILE_STEP_CULTURAL_DEPTH_FIELDS, PROFILE_STEP_MEDICAL_FIELDS,
@@ -112,6 +113,9 @@ export default function ProfileWizardPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: participant, isLoading, isError, error, refetch } = useParticipant(id)
+  // Its own h1 shell, not a PageHeader, so it names the tab itself.
+  const heading = participant ? `Profile — ${participant.firstName} ${participant.lastName}` : 'Profile'
+  useDocumentTitle(heading)
   const patchParticipant = usePatchParticipant()
   const completeProfile = useCompleteParticipantProfile()
   const upsertRiskItem = useUpsertCommunityAccessRiskItem()
@@ -474,7 +478,7 @@ export default function ProfileWizardPage() {
       {unsavedChangesDialog}
       <div className="flex items-center gap-3">
         <BackButton to={fallbackBack} label="participant" variant="icon" data-testid="profile-header-back" />
-        <h1 className="text-xl font-bold">Profile — {participant.firstName} {participant.lastName}</h1>
+        <h1 className="text-xl font-bold">{heading}</h1>
       </div>
 
       {saveError && (
