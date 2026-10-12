@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Button } from '@/components/Button'
 import type { WizardSecondaryAction } from './types'
 
@@ -14,6 +15,8 @@ export type WizardNavFooterProps = {
   cancelTo: string
   submitLabel: string
   isSubmitting: boolean
+  /** Shown between the actions (above them on a phone): the agreement wizard's running total. */
+  summary?: ReactNode
 }
 
 /**
@@ -35,9 +38,10 @@ export function WizardNavFooter({
   cancelTo,
   submitLabel,
   isSubmitting,
+  summary,
 }: WizardNavFooterProps) {
   return (
-    <div className="sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 flex-col gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+    <div className={`sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 ${summary ? 'flex-row flex-wrap items-center justify-between' : 'flex-col'} gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between`}>
       <div className="flex min-w-0 flex-wrap items-center gap-3">
         {showBack && (
           <Button type="button" variant="secondary" onClick={onBack}>Back</Button>
@@ -54,6 +58,7 @@ export function WizardNavFooter({
           </Button>
         ))}
       </div>
+      {summary && <div className="order-first basis-full min-w-0 sm:order-none sm:basis-auto sm:flex-1 sm:px-3">{summary}</div>}
       <div className="flex min-w-0 flex-wrap justify-end gap-3">
         {!isReviewStep && (
           <Button type="button" onClick={onNext}>Next</Button>

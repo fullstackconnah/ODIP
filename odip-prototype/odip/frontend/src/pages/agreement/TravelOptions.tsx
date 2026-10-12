@@ -1,11 +1,11 @@
 import { Callout } from '@/components/Callout'
 import { CheckboxField } from '@/components/CheckboxField'
 import { ToggleGroup } from '@/components/ToggleGroup'
-import { formGrid, span } from '@/lib/formGrid'
+import { EDITOR_GRID } from './editorGrid'
 import { SUPPORT_LABEL, transportFamily } from '@/lib/planBlocks'
 import type { PlanAccommodation, PlanActivityTransport, PlanBlock, PlanProviderTravel, PlanVehicle } from '@/api/types'
 import { FormField } from '@/components/FormField'
-import { NumberField } from './NumberField'
+import { NumberField } from '@/components/NumberField'
 import { fieldError, type StepProps } from './stepTypes'
 
 const VEHICLE_OPTIONS: { key: PlanVehicle; label: string }[] = [
@@ -23,11 +23,11 @@ function sharingOf(value: number, present: number): number | undefined {
 }
 
 /**
- * Travel and transport: the worker's travel to the participant (claimed on the support item, with the minutes capped by the delivery zone and the kilometres at the provider's
+ * Travel and transport (in the shift editor's more options): the worker's travel to the participant (claimed on the support item, with the minutes capped by the delivery zone and the kilometres at the provider's
  * rate), the vehicle costs of taking participants on the activity (kilometres, tolls and parking at cost, shared by whoever is in the vehicle), and, for short-term
  * accommodation, the nights. Each is off until it is switched on, and a family that has no such item says so instead of offering it.
  */
-export function TravelStep({ entry, onChange, problems, settings }: StepProps) {
+export function TravelOptions({ entry, onChange, problems, settings }: StepProps) {
   const { block } = entry
   const patch = (changes: Partial<PlanBlock>) => onChange({ ...entry, block: { ...block, ...changes } })
   const travel = block.travel
@@ -52,11 +52,11 @@ export function TravelStep({ entry, onChange, problems, settings }: StepProps) {
           <>
             <CheckboxField label="Claim provider travel" checked={travel?.claim === true} onChange={event => patch({ travel: event.target.checked ? { ...(travel ?? DEFAULT_TRAVEL), claim: true } : undefined })} />
             {travel?.claim && (
-              <div className={formGrid}>
-                <NumberField label="Minutes each way" className={span.short} value={travel.minutesEachWay} min={0} max={480} error={fieldError(problems, 'travelMinutes')} onChange={value => patchTravel({ minutesEachWay: value })} />
-                <NumberField label="Kilometres each way" className={span.short} value={travel.kmEachWay} min={0} max={2000} step={0.1} inputMode="decimal" error={fieldError(problems, 'travelKm')} onChange={value => patchTravel({ kmEachWay: value })} />
-                <NumberField label="Participants sharing the trip" className={span.short} value={travel.participantsSharing ?? block.participantsPresent} min={1} max={block.participantsPresent} hint="Everyone present, unless the trip is shared by fewer." error={fieldError(problems, 'travelSharing')} onChange={value => patchTravel({ participantsSharing: sharingOf(value, block.participantsPresent) })} />
-                <CheckboxField label="Also claim the trip back to base" className={span.short} checked={travel.returnToBase} onChange={event => patchTravel({ returnToBase: event.target.checked })} />
+              <div className={EDITOR_GRID}>
+                <NumberField label="Minutes each way" value={travel.minutesEachWay} min={0} max={480} error={fieldError(problems, 'travelMinutes')} onChange={value => patchTravel({ minutesEachWay: value })} />
+                <NumberField label="Kilometres each way" value={travel.kmEachWay} min={0} max={2000} step={0.1} inputMode="decimal" error={fieldError(problems, 'travelKm')} onChange={value => patchTravel({ kmEachWay: value })} />
+                <NumberField label="Participants sharing the trip" value={travel.participantsSharing ?? block.participantsPresent} min={1} max={block.participantsPresent} hint="Everyone present, unless the trip is shared by fewer." error={fieldError(problems, 'travelSharing')} onChange={value => patchTravel({ participantsSharing: sharingOf(value, block.participantsPresent) })} />
+                <CheckboxField label="Also claim the trip back to base" checked={travel.returnToBase} onChange={event => patchTravel({ returnToBase: event.target.checked })} />
               </div>
             )}
           </>
@@ -72,12 +72,12 @@ export function TravelStep({ entry, onChange, problems, settings }: StepProps) {
             <p className="text-[13px] text-[var(--color-muted-foreground)]">The vehicle costs of taking participants on the activity. The worker&apos;s time in the vehicle stays on the support item.</p>
             <CheckboxField label="Add activity-based transport" checked={transport !== undefined} onChange={event => patch({ transport: event.target.checked ? { ...DEFAULT_TRANSPORT } : undefined })} />
             {transport && (
-              <div className={formGrid}>
-                <NumberField label="Kilometres" className={span.short} value={transport.km} min={0} max={2000} step={0.1} inputMode="decimal" error={fieldError(problems, 'transportKm')} onChange={value => patchTransport({ km: value })} />
-                <NumberField label="Tolls ($, at cost)" className={span.short} value={transport.tolls} min={0} max={10000} step={0.01} inputMode="decimal" error={fieldError(problems, 'tolls')} onChange={value => patchTransport({ tolls: value })} />
-                <NumberField label="Parking ($, at cost)" className={span.short} value={transport.parking} min={0} max={10000} step={0.01} inputMode="decimal" error={fieldError(problems, 'parking')} onChange={value => patchTransport({ parking: value })} />
-                <NumberField label="Participants sharing the vehicle" className={span.short} value={transport.participantsSharing ?? block.participantsPresent} min={1} max={block.participantsPresent} hint="Everyone present, unless the vehicle is shared by fewer." error={fieldError(problems, 'transportSharing')} onChange={value => patchTransport({ participantsSharing: sharingOf(value, block.participantsPresent) })} />
-                <FormField label="Vehicle" className={span.medium}>
+              <div className={EDITOR_GRID}>
+                <NumberField label="Kilometres" value={transport.km} min={0} max={2000} step={0.1} inputMode="decimal" error={fieldError(problems, 'transportKm')} onChange={value => patchTransport({ km: value })} />
+                <NumberField label="Tolls ($, at cost)" value={transport.tolls} min={0} max={10000} step={0.01} inputMode="decimal" error={fieldError(problems, 'tolls')} onChange={value => patchTransport({ tolls: value })} />
+                <NumberField label="Parking ($, at cost)" value={transport.parking} min={0} max={10000} step={0.01} inputMode="decimal" error={fieldError(problems, 'parking')} onChange={value => patchTransport({ parking: value })} />
+                <NumberField label="Participants sharing the vehicle" value={transport.participantsSharing ?? block.participantsPresent} min={1} max={block.participantsPresent} hint="Everyone present, unless the vehicle is shared by fewer." error={fieldError(problems, 'transportSharing')} onChange={value => patchTransport({ participantsSharing: sharingOf(value, block.participantsPresent) })} />
+                <FormField label="Vehicle">
                   <ToggleGroup className="flex-wrap" ariaLabel="Vehicle" options={VEHICLE_OPTIONS} value={transport.vehicle} onChange={value => patchTransport({ vehicle: value as PlanVehicle })} />
                 </FormField>
               </div>
@@ -89,10 +89,10 @@ export function TravelStep({ entry, onChange, problems, settings }: StepProps) {
       {block.supportType === 'StaSupport' && (
         <section className="flex flex-col gap-[var(--field-gap-y)] border-t border-[var(--color-border)] pt-[var(--section-gap)]" aria-labelledby="plan-accommodation-heading">
           <h4 id="plan-accommodation-heading" className="text-sm font-semibold">Accommodation nights</h4>
-          <p className="text-[13px] text-[var(--color-muted-foreground)]">The nights of short-term accommodation each shift of this block includes. Legacy per-day items are not offered: they end on 30 June 2027.</p>
-          <div className={formGrid}>
-            <NumberField label="Nights each shift" className={span.short} value={accommodation?.nights ?? 0} min={0} max={14} error={fieldError(problems, 'nights')} onChange={value => patch({ accommodation: { ...(accommodation ?? DEFAULT_ACCOMMODATION), nights: value } })} />
-            <CheckboxField label="A support worker must stay on site" className={span.medium} checked={accommodation?.workerOnSite === true} onChange={event => patch({ accommodation: { ...(accommodation ?? DEFAULT_ACCOMMODATION), workerOnSite: event.target.checked } })} />
+          <p className="text-[13px] text-[var(--color-muted-foreground)]">The nights of short-term accommodation each shift includes. Legacy per-day items are not offered: they end on 30 June 2027.</p>
+          <div className={EDITOR_GRID}>
+            <NumberField label="Nights each shift" value={accommodation?.nights ?? 0} min={0} max={14} error={fieldError(problems, 'nights')} onChange={value => patch({ accommodation: { ...(accommodation ?? DEFAULT_ACCOMMODATION), nights: value } })} />
+            <CheckboxField label="A support worker must stay on site" checked={accommodation?.workerOnSite === true} onChange={event => patch({ accommodation: { ...(accommodation ?? DEFAULT_ACCOMMODATION), workerOnSite: event.target.checked } })} />
           </div>
         </section>
       )}

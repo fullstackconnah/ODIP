@@ -79,4 +79,10 @@ describe('WizardNavFooter', () => {
     await user.keyboard('{Enter}')
     expect(onNext).toHaveBeenCalledTimes(1)
   })
+
+  it('shows a summary between the actions, such as a running total, and leaves the footer alone without one', () => {
+    renderFooter({ showBack: true, summary: <p>A week: 14 h</p> })
+    expect(screen.getByText('A week: 14 h')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeInTheDocument()
+  })
 })

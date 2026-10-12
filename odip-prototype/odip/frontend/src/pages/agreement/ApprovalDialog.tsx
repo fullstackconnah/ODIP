@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useApprovalPreview, useApproveServiceAgreementDraft } from '@/api/hooks'
-import type { ApprovalReasonDto, DraftApprovalPreviewDto, OverlappingPatternDto, PlanBlock, ServiceAgreementDraftDto } from '@/api/types'
+import type { ApprovalReasonDto, DraftApprovalPreviewDto, OverlappingPatternDto, ServiceAgreementDraftDto } from '@/api/types'
 import { BudgetWarnings } from '@/components/BudgetWarnings'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -12,22 +12,22 @@ import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { plural } from '@/lib/format'
 import { httpStatusOf } from '@/lib/httpStatus'
-import type { PlanStepKey } from '@/lib/planBlocks'
+import { shiftWords, type ShiftGroup } from '@/lib/agreementShifts'
 import { REASON_COPY, formatServiceDate, friendlyMessage, isRefusal } from '@/lib/planQuote'
 import { rosterLink } from '@/lib/rosterLinks'
 import { formatShiftTime } from '@/lib/utils'
 
 /**
- * The reasons only approval has (the engine's own are in REASON_COPY), and where each is fixed: `step` is the block step that fixes it, none when it is about the whole revision. The server's sentence for
+ * The reasons only approval has (the engine's own are in REASON_COPY), and where each is fixed: The server's sentence for
  * each of these is complete (it names the block, how many and from when), so the dialog shows it as it is, with no title that would say it again; an engine reason keeps its title, and how many shifts,
  * and gets the written advice of REASON_COPY under it. `advice` here is for the one approval-only reason whose sentence says what is wrong and not what to do.
  */
-const OWN_REASONS: Record<string, { hard: boolean; step?: PlanStepKey; advice?: string }> = {
-  HolidayUndecided: { hard: false, step: 'review' },
-  ReviewFlag: { hard: false, step: 'review' },
+const OWN_REASONS: Record<string, { hard: boolean; advice?: string }> = {
+  HolidayUndecided: { hard: false },
+  ReviewFlag: { hard: false },
   HandTyped: { hard: true },
   BlockUnreadable: { hard: true },
-  BlockInvalid: { hard: true, step: 'times' },
+  BlockInvalid: { hard: true },
   AgreementEnded: { hard: true },
   TimeZoneMismatch: { hard: true, advice: "Check the delivery state of this draft, or ask an Admin to check the organisation's state in Settings." },
   TooManyPatterns: { hard: true },
@@ -36,7 +36,6 @@ const OWN_REASONS: Record<string, { hard: boolean; step?: PlanStepKey; advice?: 
 }
 
 const reasonTitle = (code: string) => REASON_COPY[code as keyof typeof REASON_COPY]?.title ?? 'Needs a look'
-const reasonStep = (code: string): PlanStepKey => REASON_COPY[code as keyof typeof REASON_COPY]?.step ?? OWN_REASONS[code]?.step ?? 'review'
 const reasonIsHard = (code: string) => OWN_REASONS[code]?.hard ?? isRefusal(code as keyof typeof REASON_COPY)
 const reasonAdvice = (code: string) => REASON_COPY[code as keyof typeof REASON_COPY]?.advice ?? OWN_REASONS[code]?.advice
 
@@ -63,13 +62,15 @@ const timeRange = (pattern: OverlappingPatternDto) => `${formatShiftTime(pattern
 type ApprovalDialogProps = {
   open: boolean
   participantId: string
-  /** The revision to approve (the newest, with its blocks): its version, dates and block numbers are said in the dialog. */
+  /** The revision to approve (the newest, with its blocks): its dates and the shifts a reason is about are said in the dialog. */
   draft: ServiceAgreementDraftDto
   onClose: () => void
   /** The server approved it: the page has been told to read the revisions again. */
   onApproved: () => void
-  /** A reason is about a block: take the person to it, at the step that fixes it. The dialog closes. */
-  onGoToBlock?: (blockId: string, step: PlanStepKey) => void
+  /** A reason is about some shifts (named by the engine's block id): take the person to them. The dialog closes. */
+  onGoToShifts?: (blockId: string) => void
+  /** The server answered that a newer save has replaced this agreement (409 draft-superseded) to the preview or the approval: the page reads the agreement again. */
+  onSuperseded?: () => void
 }
 
 /**
@@ -80,11 +81,12 @@ type ApprovalDialogProps = {
  * approval is on its way nothing closes it: the request has been sent, and Cancel would only hide a dialog the approval goes on behind. That hold ends when the request does: an answer, or the time limit
  * (APPROVE_TIMEOUT_MS), after which it says no answer came back, to check the card, and that approving again is safe.
  */
-export function ApprovalDialog({ open, participantId, draft, onClose, onApproved, onGoToBlock }: ApprovalDialogProps) {
+export function ApprovalDialog({ open, participantId, draft, onClose, onApproved, onGoToShifts, onSuperseded }: ApprovalDialogProps) {
   const preview = useApprovalPreview(participantId, draft.id, open)
   const approve = useApproveServiceAgreementDraft()
   const [acknowledged, setAcknowledged] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
+  const supersededSeen = useRef(false)
   // A dialog that is opened again starts clean: the box is unticked and the last refusal is not there.
   const [seenOpen, setSeenOpen] = useState(open)
   if (seenOpen !== open) {
@@ -93,7 +95,17 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
   }
 
   const data = preview.data
-  const blocks = draft.blocks.map(entry => entry.block)
+  // The server's reasons carry the ids of the STORED blocks, which an older save may have with gaps: they are read as stored, never regrouped (regrouping renumbers them).
+  const groups = useMemo<ShiftGroup[]>(() => draft.blocks.map(entry => ({ entry, shiftIds: [] })), [draft.blocks])
+  const say = (text: string) => friendlyMessage(shiftWords(text, groups), [])
+  // The server says it two ways: approving answers 409 draft-superseded; the preview answers 200 with canApprove false and the reason Superseded.
+  const superseded = (httpStatusOf(approve.error) === 409 && (approve.error as { response?: { data?: { code?: string } } } | null)?.response?.data?.code === 'draft-superseded')
+    || !!data?.reasons.some(reason => reason.code === 'Superseded')
+  // Told once: the page reads the agreement again, and a second telling would read it again.
+  useEffect(() => {
+    if (superseded && !supersededSeen.current) { supersededSeen.current = true; onSuperseded?.() }
+    if (!superseded) supersededSeen.current = false
+  }, [superseded, onSuperseded])
   const needsAcknowledgement = (data?.overlappingPatterns.length ?? 0) > 0
   const pending = approve.isPending
   // Everything that would close it (the cross, Escape, the backdrop, Cancel) is held while the approval is on its way.
@@ -109,7 +121,7 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
 
   const cancel = <Button variant="secondary" onClick={close} disabled={pending}>Cancel</Button>
   const blocked = !!data && !data.canApprove
-  const title = blocked ? 'Not ready to approve' : `Approve version ${draft.version} for rostering?`
+  const title = blocked ? 'Not ready to approve' : 'Approve this agreement for rostering?'
   const footer = !data ? cancel : blocked ? <Button variant="secondary" onClick={close}>Close</Button> : (
     <>
       {cancel}
@@ -127,14 +139,14 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
           ? <Callout tone="warning">{failureMessages(preview.error)[0]}</Callout>
           : <PageState kind="error" noun="approval summary" onRetry={() => { void preview.refetch() }} />)}
         {data && (blocked
-          ? <Reasons reasons={data.reasons} blocks={blocks} onGoToBlock={onGoToBlock ? (blockId, step) => { onGoToBlock(blockId, step); onClose() } : undefined} />
+          ? <Reasons reasons={data.reasons} say={say} groups={groups} onGoToShifts={onGoToShifts ? blockId => { onGoToShifts(blockId); onClose() } : undefined} />
           : <WhatItDoes participantId={participantId} draft={draft} preview={data} acknowledged={acknowledged} onAcknowledge={setAcknowledged} />)}
         {failure && (failure.timedOut
           // No answer is not a refusal: it may well have been approved, so this says to look, not that it failed. The exits are back (the request is over), and approving again is safe.
           ? <Callout tone="warning" title="No answer came back">{failure.messages[0]}</Callout>
           : (
             <Callout tone="danger" title="Not approved">
-              <ul className="list-disc pl-5">{failure.messages.map(message => <li key={message}>{friendlyMessage(message, blocks)}</li>)}</ul>
+              <ul className="list-disc pl-5">{failure.messages.map(message => <li key={message}>{say(message)}</li>)}</ul>
             </Callout>
           ))}
       </div>
@@ -153,7 +165,7 @@ function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge
   const keepsGoing = topUpOn && !!preview.horizonEnd && preview.horizonEnd < draft.agreementEndDate
   const makesShifts = preview.shiftsToCreate > 0 && !!preview.horizonEnd
   const ends = preview.patternsToEnd > 0 && preview.endsFromVersion !== undefined
-    ? `Ends ${plural(preview.patternsToEnd, 'pattern')} from version ${preview.endsFromVersion} the day before ${start}.`
+    ? `Ends ${plural(preview.patternsToEnd, 'pattern')} from the agreement it replaces the day before ${start}.`
     : null
   const old = preview.oldShiftsRemaining
   const oldCount = old.open + old.assigned
@@ -163,7 +175,7 @@ function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge
 
   return (
     <>
-      <p className="text-[var(--color-muted-foreground)]">Puts this version&apos;s weekly patterns on the roster. It is separate from signing: nothing is signed or sent.</p>
+      <p className="text-[var(--color-muted-foreground)]">Puts this agreement&apos;s weekly patterns on the roster. It is separate from signing: nothing is signed or sent.</p>
       {/* What it does, a short line for each fact: the patterns, the shifts, what ends. */}
       <div className="flex flex-col gap-1 font-medium">
         <p>{`Creates ${patterns}, ${range}.`}</p>
@@ -177,7 +189,7 @@ function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge
       <BudgetWarnings warnings={preview.budgetWarnings} note="This is a warning only. Approving is not blocked." announce={false} />
       {oldCount > 0 && old.firstDate && (
         <p>
-          {old.open} unfilled and {old.assigned} assigned {oneOld ? 'shift' : 'shifts'}{old.fromVersion !== undefined ? ` from version ${old.fromVersion}` : ''}, from {formatServiceDate(old.firstDate)} on, {oneOld ? 'stays' : 'stay'} on the roster. The new version&apos;s unfilled shifts will sit beside {oneOld ? 'it' : 'them'} on the same days.{' '}
+          {old.open} unfilled and {old.assigned} assigned {oneOld ? 'shift' : 'shifts'} from the agreement it replaces, from {formatServiceDate(old.firstDate)} on, {oneOld ? 'stays' : 'stay'} on the roster. The new unfilled shifts will sit beside {oneOld ? 'it' : 'them'} on the same days.{' '}
           {/* A new tab: the person can look at the roster and come back to approve, instead of losing the dialog and its preview. */}
           <Link className="font-medium underline" to={rosterLink(old.firstDate, participantId)} target="_blank" rel="noopener noreferrer">
             {oneOld ? 'See it on the roster' : 'See them on the roster'}<span className="sr-only"> (opens in a new tab)</span>
@@ -206,31 +218,31 @@ function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge
   )
 }
 
-/** Every reason it cannot be approved yet, in the screen's own block numbers, with what to do about it and the way to the block it is about. */
-function Reasons({ reasons, blocks, onGoToBlock }: { reasons: ApprovalReasonDto[]; blocks: readonly PlanBlock[]; onGoToBlock?: (blockId: string, step: PlanStepKey) => void }) {
+/** Every reason it cannot be approved yet, in the screen's own words, with what to do about it and the way to the shifts it is about. */
+function Reasons({ reasons, say, groups, onGoToShifts }: { reasons: ApprovalReasonDto[]; say: (text: string) => string; groups: readonly ShiftGroup[]; onGoToShifts?: (blockId: string) => void }) {
   // A newer revision is not something to fix: the sentence says to approve that one instead, and the preface would say the opposite.
   const lone = reasons.length === 1 && reasons[0].code === 'Superseded'
   return (
     <>
-      {!lone && <p>Nothing has been changed. Fix each item, then approve the version you save.</p>}
+      {!lone && <p>Nothing has been changed. Fix each item, then approve the agreement you save.</p>}
       <ul className="flex flex-col gap-3">
         {reasons.map(reason => {
           const own = OWN_REASONS[reason.code] !== undefined
           const where = !own && (reason.count ?? 0) > 1 ? ` (${plural(reason.count!, 'shift')}${reason.firstDate ? `, from ${formatServiceDate(reason.firstDate)}` : ''})` : ''
-          const place = reason.blockId ? blocks.findIndex(block => block.id === reason.blockId) + 1 : 0
-          const advice = reasonAdvice(reason.code)
+          const shown = reason.blockId ? groups.some(group => group.entry.block.id === reason.blockId) : false
+          const advice = say(reasonAdvice(reason.code) ?? '') || undefined
           return (
             // On a phone the way to the block goes under the sentence, so the sentence keeps the whole width.
             <li key={`${reason.code}-${reason.blockId ?? ''}-${reason.message}`} className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-2">
               <div className="flex min-w-0 flex-1 items-start gap-2">
                 <StatusBadge tone={reasonIsHard(reason.code) ? 'danger' : 'warning'} label={reasonIsHard(reason.code) ? 'Fix' : 'Review'} />
                 <span className="min-w-0 flex-1">
-                  {own ? '' : `${reasonTitle(reason.code)}: `}{friendlyMessage(reason.message, blocks)}{where}
+                  {own ? '' : `${say(reasonTitle(reason.code))}: `}{say(reason.message)}{where}
                   {advice && <span className="mt-0.5 block text-[13px] text-[var(--color-muted-foreground)]">{advice}</span>}
                 </span>
               </div>
-              {onGoToBlock && reason.blockId && place > 0 && (
-                <Button className="self-start" variant="secondary" size="sm" onClick={() => onGoToBlock(reason.blockId!, reasonStep(reason.code))}>Go to block {place}</Button>
+              {onGoToShifts && reason.blockId && shown && (
+                <Button className="self-start" variant="secondary" size="sm" onClick={() => onGoToShifts(reason.blockId!)}>Show the shifts</Button>
               )}
             </li>
           )

@@ -5,8 +5,8 @@ import { createMemoryRouter, MemoryRouter, Route, Routes, RouterProvider } from 
 import OnboardingDetailPage from './OnboardingDetailPage'
 import { __testHooks } from '@/hooks/useBackNavigation'
 
-const { mockUseQuery, mockUseMutation, mockInvalidate, mockUseParticipant, mockUseProviderSettings } = vi.hoisted(() => ({
-  mockUseQuery: vi.fn(), mockUseMutation: vi.fn(), mockInvalidate: vi.fn(), mockUseParticipant: vi.fn(), mockUseProviderSettings: vi.fn(),
+const { mockUseQuery, mockUseMutation, mockInvalidate, mockUseParticipant, mockUseProviderSettings, mockConfirmNeeds } = vi.hoisted(() => ({
+  mockUseQuery: vi.fn(), mockUseMutation: vi.fn(), mockInvalidate: vi.fn(), mockUseParticipant: vi.fn(), mockUseProviderSettings: vi.fn(), mockConfirmNeeds: vi.fn(() => ({ mutate: vi.fn(), error: null, isPending: false })),
 }))
 vi.mock('@tanstack/react-query', () => ({
   useQuery: mockUseQuery,
@@ -14,7 +14,7 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: mockInvalidate }),
 }))
 vi.mock('@/api/client', () => ({ apiGet: vi.fn(), apiPost: vi.fn() }))
-vi.mock('@/api/hooks', () => ({ useParticipant: mockUseParticipant, useProviderSettings: mockUseProviderSettings }))
+vi.mock('@/api/hooks', () => ({ useParticipant: mockUseParticipant, useProviderSettings: mockUseProviderSettings, useConfirmServiceNeeds: () => mockConfirmNeeds() }))
 
 const incomplete = {
   participantId: 'p-1', intakeComplete: true, profileComplete: false,
@@ -107,7 +107,7 @@ describe('OnboardingDetailPage', () => {
 
   it('uses the existing validation endpoint only when the lifecycle capability is present, and gives a remediation hint on failure', async () => {
     const profileMutate = vi.fn()
-    mockUseMutation.mockReturnValueOnce({ mutate: profileMutate, error: new Error('validation failed'), isPending: false }).mockReturnValueOnce({ mutate: vi.fn(), error: null, isPending: false })
+    mockUseMutation.mockReturnValue({ mutate: profileMutate, error: new Error('validation failed'), isPending: false })
     const user = userEvent.setup()
     renderDetail()
 
@@ -122,7 +122,7 @@ describe('OnboardingDetailPage', () => {
 
     const recommendation = screen.getByRole('heading', { name: 'Confirm saved service needs' }).closest('section')!
     expect(within(recommendation).getByRole('button', { name: 'Confirm saved service needs' })).toBeInTheDocument()
-    expect(within(recommendation).getByRole('link', { name: 'Edit service needs' })).toHaveAttribute('href', '/participants/p-1?tab=support')
+    expect(within(recommendation).getByRole('link', { name: 'Edit service needs' })).toHaveAttribute('href', '/participants/p-1/agreement-draft?from=onboarding')
   })
 
   it('sends the last step to where the schedule is made, the agreement draft, and says what approving does there', () => {
@@ -130,13 +130,13 @@ describe('OnboardingDetailPage', () => {
     renderDetail()
 
     const recommendation = screen.getByRole('heading', { name: 'Approve the agreement for rostering' }).closest('section')!
-    expect(within(recommendation).getByRole('link', { name: 'Open agreement draft' })).toHaveAttribute('href', '/participants/p-1/agreement-draft')
+    expect(within(recommendation).getByRole('link', { name: 'Open agreement draft' })).toHaveAttribute('href', '/participants/p-1/agreement-draft?from=onboarding')
     expect(within(recommendation).getByText('Open the agreement draft and approve its newest revision for rostering. That makes the weekly patterns and unfilled shifts, which you can then check under Shift patterns.')).toBeInTheDocument()
     expect(within(recommendation).queryByText(/proposal-only|no shifts are created here/)).not.toBeInTheDocument()
     expect(screen.getByText('Schedule review').parentElement).toHaveTextContent('Blocked')
     // The Blocked row sends people to the draft, where the schedule is made, not to a patterns page with nothing on it yet.
     const gateRow = screen.getByText('Schedule review').closest('article')!
-    expect(within(gateRow).getByRole('link', { name: 'Open agreement draft' })).toHaveAttribute('href', '/participants/p-1/agreement-draft')
+    expect(within(gateRow).getByRole('link', { name: 'Open agreement draft' })).toHaveAttribute('href', '/participants/p-1/agreement-draft?from=onboarding')
     expect(within(gateRow).queryByRole('link', { name: 'Open shift patterns' })).not.toBeInTheDocument()
     expect(within(gateRow).queryByText(/./, { selector: 'p' })).not.toBeInTheDocument()                // and says nothing more: the next action above says what approving does
   })
@@ -212,9 +212,9 @@ describe('OnboardingDetailPage', () => {
       const { unmount } = renderDetail()
       // The two gate rows that are not done and are decided on the draft: the evidence, and (Blocked until a revision is approved) the schedule.
       for (const gate of ['Current agreement evidence', 'Schedule review']) {
-        expect(within(screen.getByText(gate).closest('article')!).getByRole('link', { name: 'Open agreement draft' }), `${role}: ${gate}`).toHaveAttribute('href', '/participants/p-1/agreement-draft')
+        expect(within(screen.getByText(gate).closest('article')!).getByRole('link', { name: 'Open agreement draft' }), `${role}: ${gate}`).toHaveAttribute('href', '/participants/p-1/agreement-draft?from=onboarding')
       }
-      expect(screen.getByRole('link', { name: 'Review agreement evidence' }), role).toHaveAttribute('href', '/participants/p-1/agreement-draft')
+      expect(screen.getByRole('link', { name: 'Review agreement evidence' }), role).toHaveAttribute('href', '/participants/p-1/agreement-draft?from=onboarding')
       unmount()
     }
   })

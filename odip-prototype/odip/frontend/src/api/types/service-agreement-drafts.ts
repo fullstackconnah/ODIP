@@ -12,10 +12,6 @@ export interface ServiceAgreementDraftDto {
   id: string
   participantId: string
   version: number
-  status: string
-  templateVersion: string
-  templateDocxSha256: string
-  templatePdfSha256: string
   state: AgreementState
   planStartDate: string
   planEndDate: string
@@ -39,7 +35,7 @@ export interface ServiceAgreementDraftDto {
   /** What a reader must not miss, a sentence each, counted in shifts: shifts with a part not priced, public holiday shifts to decide, and provisional rates. Empty for a revision priced in full or typed by hand. */
   caveats: string[]
   /**
-   * Who approved this revision for rostering, when, and what that did. Absent until somebody has. It is not `status` (the template's e-signing state, the same on every revision): approving
+   * Who approved this revision for rostering, when, and what that did. Absent until somebody has. Approving
    * makes the weekly roster patterns and the unfilled shifts, and is separate from signing.
    */
   approval?: DraftApprovalDto
@@ -168,40 +164,4 @@ export interface CreateServiceAgreementDraftDto {
 /** The body of the 409 a save answers when somebody else saved a newer version first (`code` is "draft-version-conflict"). */
 export interface DraftVersionConflictDto {
   currentVersion: number
-}
-
-/** An immutable, development-only document capture. It remains PendingVerification. */
-export interface ElectronicSigningSnapshotDto {
-  id: string
-  draftId: string
-  draftVersion: number
-  documentJson: string
-  documentHash: string
-  status: 'PendingVerification'
-}
-
-export interface SubmitElectronicSigningEvidenceDto {
-  idempotencyKey: string
-  signerName: string
-  signerCapacity: string
-  isAuthorisedRepresentative: boolean
-  consentToElectronicMethod: boolean
-  intendsToSign: boolean
-  documentWasDisplayed: boolean
-}
-
-export interface ElectronicSigningEvidenceDto {
-  id: string
-  status: 'PendingVerification'
-  evidenceHash: string
-  createdAt: string
-}
-
-/** A server-validated, non-persistent manual-test walkthrough. */
-export interface DemoJourneySimulationDto {
-  banner: 'SIMULATED — NOT A LEGAL AGREEMENT / NO CLAIM'
-  signing: string
-  activation: string
-  booking: string
-  rateLabel: string
 }
