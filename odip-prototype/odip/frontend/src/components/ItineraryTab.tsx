@@ -107,8 +107,9 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
       <div className="flex items-center justify-end">
         <Dropdown
           variant="menu"
+          triggerVariant="secondary"
           icon={<FileDown className="w-4 h-4" />}
-          label={exporting ? 'Exporting…' : 'Export Trip Package'}
+          label={exporting ? 'Exporting…' : 'Export trip package'}
           loading={exporting}
           onSelect={val => handleExport(val as 'staff' | 'participant')}
           items={[

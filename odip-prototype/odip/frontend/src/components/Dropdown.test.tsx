@@ -44,6 +44,13 @@ describe('Dropdown — 44px coarse-pointer hit area on the compact triggers', ()
     expect(classesOf(screen.getByRole('button', { name: 'Export' }))).toEqual(classesOf(screen.getByRole('button', { name: 'Plain' })))
   })
 
+  // A page has one filled primary: an in-page menu (Export trip package, the agreement week presets) reads as a secondary md Button.
+  it('draws the menu trigger as a secondary md Button when triggerVariant="secondary"', () => {
+    render(<><Dropdown variant="menu" triggerVariant="secondary" label="Export" items={ITEMS} onSelect={() => {}} /><Button variant="secondary">Plain</Button></>)
+    const classesOf = (el: HTMLElement) => el.className.split(/\s+/).filter(Boolean).sort()
+    expect(classesOf(screen.getByRole('button', { name: 'Export' }))).toEqual(classesOf(screen.getByRole('button', { name: 'Plain' })))
+  })
+
   it('does not pad the form trigger: it is --control-h tall, 44px on a touch screen already', () => {
     render(<Dropdown variant="form" value="" onChange={() => {}} label="Pick one" items={ITEMS} />)
     const trigger = screen.getByRole('button', { name: 'Pick one' })

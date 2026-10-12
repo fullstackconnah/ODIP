@@ -252,7 +252,8 @@ keyboard/positioning engine.
 
 **Props**: `variant: 'pill' | 'form' | 'menu' | 'icon'`, `items: DropdownItem[]`
 (`{ value, label, icon?, description?, disabled? }`), `value`/`onChange` (pill/form),
-`onSelect` (menu, no tracked value), `onBlur`, `label`, `icon`, `colorClass`, `disabled`,
+`onSelect` (menu, no tracked value), `triggerVariant` (menu: `primary`, the default, for a header
+action; `secondary` for an in-page menu, so a page keeps one filled primary), `onBlur`, `label`, `icon`, `colorClass`, `disabled`,
 `loading`, `align`, `searchable` (adds a filter `<input>` *inside* the open panel — see
 [Picking a picker](#picking-a-picker) for how this differs from SearchableSelect), plus
 the `id`/`aria-labelledby`/`aria-required`/`aria-invalid`/`aria-describedby` labelling

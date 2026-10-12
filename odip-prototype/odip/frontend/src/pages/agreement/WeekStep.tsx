@@ -138,7 +138,7 @@ export function WeekStep({ shifts, onChange, selected, onSelect, state, zone, se
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
       <div className="flex flex-wrap items-center gap-2">
-        {!readOnly && <Dropdown variant="menu" label="Start from a common week" items={PRESETS} onSelect={addPreset} align="left" />}
+        {!readOnly && <Dropdown variant="menu" triggerVariant="secondary" label="Start from a common week" items={PRESETS} onSelect={addPreset} align="left" />}
         {!readOnly && shifts.length > 0 && (
           <>
             <Button variant="secondary" onClick={() => onSelect(ordered.filter(shift => WEEKDAYS.includes(shift.day)).map(shift => shift.id))}>Select weekdays</Button>

@@ -3,7 +3,7 @@ import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { TAP_AREA } from './tapArea'
-import { buttonClasses } from './buttonClasses'
+import { buttonClasses, type ButtonVariant } from './buttonClasses'
 
 export type DropdownItem = {
   value: string
@@ -29,6 +29,8 @@ type DropdownProps = {
   // Trigger appearance
   label?: string            // button text (menu), placeholder text (form)
   icon?: ReactNode          // leading icon on trigger (menu variant)
+  /** Menu variant: the Button look of the trigger. Primary for a header action; secondary for an in-page menu, so a page keeps one filled primary. */
+  triggerVariant?: Extract<ButtonVariant, 'primary' | 'secondary'>
   colorClass?: string       // Tailwind color classes for pill trigger background
   disabled?: boolean        // caller controls — not auto-applied on empty items
   loading?: boolean
@@ -56,6 +58,7 @@ export function Dropdown({
   onBlur,
   label,
   icon,
+  triggerVariant = 'primary',
   colorClass = '',
   disabled = false,
   loading = false,
@@ -463,8 +466,8 @@ export function Dropdown({
         disabled={disabled || loading}
         onClick={() => setOpen(v => !v)}
         onKeyDown={handleKeyDown}
-        // A primary md Button (the header-action standard), 44px on a touch screen like any md Button, so no pad.
-        className={buttonClasses('primary', 'md')}
+        // An md Button (primary is the header-action standard), 44px on a touch screen like any md Button, so no pad.
+        className={buttonClasses(triggerVariant, 'md')}
       >
         {icon}
         {label}
