@@ -1231,3 +1231,15 @@ describe('ParticipantDetailPage — a refused caregiver link Generate', () => {
     expect(screen.getByText('Participant has no consent on file.')).toBeInTheDocument()
   })
 })
+
+// VD1 design review: a one-row scrolling strip hid Funding, Rostering and History at 1440 with no cue on macOS or iPad. From md up
+// the strip wraps, so every tab stays on screen; below md it is the default one scrolling row.
+describe('ParticipantDetailPage — every tab visible from md up', () => {
+  it('renders all twelve Admin tabs in a strip that wraps from md up', () => {
+    setUserRole('Admin')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+    expect(screen.getAllByRole('tab')).toHaveLength(12)
+    expect(screen.getByRole('tablist', { name: 'Participant detail sections' })).toHaveClass('md:flex-wrap')
+  })
+})

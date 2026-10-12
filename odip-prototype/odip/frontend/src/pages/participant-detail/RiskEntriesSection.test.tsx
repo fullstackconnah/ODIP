@@ -203,3 +203,13 @@ describe('RiskEntriesSection', () => {
     expect(mockDeleteMutateAsync).toHaveBeenCalledWith({ id: entry.id, participantId: 'participant-1' })
   })
 })
+
+// VD1 design review: "Add risk" was a second filled primary under the header's Edit. The page keeps one.
+describe('RiskEntriesSection — Add risk weight', () => {
+  it('is a secondary Button', () => {
+    render(<RiskEntriesSection participantId="participant-1" />)
+    const add = screen.getByRole('button', { name: /Add risk/ })
+    expect(add).toHaveClass('bg-[var(--color-card)]', 'border')
+    expect(add).not.toHaveClass('bg-[var(--color-primary)]')
+  })
+})

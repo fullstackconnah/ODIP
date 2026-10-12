@@ -239,7 +239,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
                                 </div>
                                 <div className="flex items-center gap-3 text-xs text-[var(--color-muted-foreground)] mt-1 flex-wrap">
                                   {(activity.startTime || activity.endTime) && (
-                                    <span className="flex items-center gap-1 text-[var(--color-primary)] font-bold w-12">
+                                    <span className="flex items-center gap-1 text-[var(--color-primary)] font-bold whitespace-nowrap">
                                       <Clock className="w-3 h-3" />
                                       {formatTime(activity.startTime)}{activity.endTime && ` – ${formatTime(activity.endTime)}`}
                                     </span>

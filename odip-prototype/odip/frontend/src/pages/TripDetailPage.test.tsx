@@ -519,3 +519,14 @@ describe('TripDetailPage — the tabpanel is named by its tab', () => {
     expect(document.getElementById(selected.getAttribute('aria-controls') as string)).toBe(screen.getByRole('tabpanel'))
   })
 })
+
+// VD1 design review: a one-row scrolling strip hid History at 1440 with no cue on macOS or iPad (no drawn scrollbar). From md up the
+// strip wraps, so every tab stays on screen; below md it is the default one scrolling row.
+describe('TripDetailPage — every tab visible from md up', () => {
+  it('renders all ten tabs in a strip that wraps from md up', () => {
+    isAdmin = true
+    renderPage()
+    expect(screen.getAllByRole('tab')).toHaveLength(10)
+    expect(screen.getByRole('tablist', { name: 'Trip detail sections' })).toHaveClass('md:flex-wrap')
+  })
+})

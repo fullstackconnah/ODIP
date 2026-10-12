@@ -192,8 +192,6 @@ export default function ParticipantDetailPage() {
         active={tab}
         onChange={setTab}
         ariaLabel="Participant detail sections"
-        // Twelve tabs for Admin: wrapping put four of them on a second row at 1440. One row that scrolls, as on a phone.
-        overflow="scroll"
       />
 
       {/* PDETAIL-01 — the short cards keep the original single-wizard's step-family order among

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Pencil, Trash2, ArchiveRestore } from 'lucide-react'
+import { Pencil, Trash2, Archive, ArchiveRestore } from 'lucide-react'
 import { TAP_ICON_SQUARE } from './tapArea'
 import { Button } from './Button'
 
@@ -34,7 +34,7 @@ export function ActionButtons({ editTo, onEdit, onDelete, onRestore, showArchive
       <div className="flex gap-2 border-t border-[var(--color-border)] pt-2">
         {editTo && <Button to={editTo} variant="secondary" size="sm" className="flex-1"><Pencil className="w-3.5 h-3.5" /> Edit</Button>}
         {showArchived && onRestore && <Button onClick={e => stop(e, onRestore)} variant="secondary" size="sm" className="flex-1"><ArchiveRestore className="w-3.5 h-3.5" /> Restore</Button>}
-        {!showArchived && onDelete && <Button onClick={e => stop(e, onDelete)} variant="secondary" size="sm" className="flex-1"><Trash2 className="w-3.5 h-3.5" /> Archive</Button>}
+        {!showArchived && onDelete && <Button onClick={e => stop(e, onDelete)} variant="secondary" size="sm" className="flex-1"><Archive className="w-3.5 h-3.5" /> Archive</Button>}
       </div>
     )
   }
