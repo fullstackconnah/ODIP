@@ -24,9 +24,11 @@ const overview: ScheduleOverviewDto = {
 // The hook mock reads this at render time, so a test can swap the data the page sees.
 let currentOverview: ScheduleOverviewDto = overview
 let currentError: unknown = null
+// A refetch that failed behind data already on screen: TanStack keeps the data and sets the error.
+let refetchError: unknown = null
 
 vi.mock('@/api/hooks', () => ({
-  useScheduleOverview: () => ({ data: currentError ? undefined : currentOverview, isLoading: false, error: currentError }),
+  useScheduleOverview: () => ({ data: currentError ? undefined : currentOverview, isLoading: false, error: currentError ?? refetchError }),
   useCreateStaffAssignment: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useCreateVehicleAssignment: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useDeleteStaffAssignment: () => ({ mutate: vi.fn(), isPending: false }),
@@ -83,6 +85,7 @@ beforeEach(() => {
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
   currentOverview = overview
   currentError = null
+  refetchError = null
 })
 
 describe('SchedulePage — Tentative badge for pending leave', () => {
@@ -272,6 +275,15 @@ describe('SchedulePage — density (spec §7)', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Schedule Overview' })).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this schedule.")
+  })
+
+  it('keeps the grid when a background refetch fails behind data already on screen', () => {
+    refetchError = new Error('refetch failed')
+    renderPage()
+
+    expect(screen.getByRole('group', { name: 'Resource health' })).toBeInTheDocument()
+    expect(screen.getAllByRole('table').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('shows the empty state, with the summary strip still present, when there are no trips', () => {

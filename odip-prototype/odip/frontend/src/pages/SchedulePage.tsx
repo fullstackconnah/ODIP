@@ -45,7 +45,7 @@ const ROW = 'group md:h-[var(--row-h)]'
 export default function SchedulePage() {
   const { canWrite } = usePermissions()
   const queryClient = useQueryClient()
-  const { data, isLoading, error, refetch } = useScheduleOverview()
+  const { data, isLoading, refetch } = useScheduleOverview()
   const [expandedStaff, setExpandedStaff] = useState<Set<string>>(new Set())
   const [sectionStaff, setSectionStaff] = useState(true)
   const [sectionVehicles, setSectionVehicles] = useState(true)
@@ -100,7 +100,8 @@ export default function SchedulePage() {
     )
   }
 
-  if (error || !data) {
+  // Only a first load that failed: a refetch that fails behind data already on screen keeps the grid (PageState rule).
+  if (!data) {
     return (
       <div className="flex flex-col gap-[var(--section-gap)]">
         <PageHeader title="Schedule Overview" />
