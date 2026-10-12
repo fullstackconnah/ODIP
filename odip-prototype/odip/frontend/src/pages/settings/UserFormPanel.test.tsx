@@ -93,3 +93,15 @@ describe('UserFormPanel — the tenants request', () => {
     expect(mockTenantsSummary).toHaveBeenLastCalledWith(true)
   })
 })
+
+// V-D2 follow-up: the Active switch had a role and a state but no name (the "Active" text beside it is a sibling), as TenantFormPanel's twin had.
+describe('UserFormPanel — Active switch', () => {
+  it('is a named switch that reports and flips its state', async () => {
+    const u = userEvent.setup()
+    render(<UserFormPanel isOpen onClose={() => {}} user={user1} />)
+    const toggle = screen.getByRole('switch', { name: 'Active' })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    await u.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+  })
+})

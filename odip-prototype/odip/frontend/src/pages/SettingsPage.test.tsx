@@ -323,7 +323,7 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
     await user.click(screen.getByRole('tab', { name: /provider settings/i }))
     // ProviderSettingsTab's labels aren't associated via htmlFor/id, so select the input
     // relative to its label text instead of by accessible label.
-    const abnInput = screen.getByText('ABN').nextElementSibling as HTMLInputElement
+    const abnInput = screen.getByLabelText('ABN') as HTMLInputElement
     await user.type(abnInput, '12345678901')
 
     await act(async () => { router.navigate('/elsewhere') })
@@ -402,7 +402,7 @@ describe('SettingsPage — Provider Settings: medication competency check', () =
     providerSettings.current = { ...saved, medicationCompetencyMode: 'Enforce' }
     const user = await openProviderSettings()
 
-    await user.type(screen.getByText('Manager Phone').nextElementSibling as HTMLInputElement, '0412000111')
+    await user.type(screen.getByLabelText('Manager Phone') as HTMLInputElement, '0412000111')
     await user.click(screen.getByRole('button', { name: 'Save Settings' }))
 
     expect(mockUpsertMutate).toHaveBeenCalledTimes(1)
@@ -419,7 +419,7 @@ describe('SettingsPage — Provider Settings: medication competency check', () =
     const user = await openProviderSettings()
     providerSettings.current = { ...saved, medicationCompetencyMode: 'Enforce' }   // another admin sets Enforce; the query refetches, the open form does not reset
 
-    await user.type(screen.getByText('Manager Phone').nextElementSibling as HTMLInputElement, '0412000111')
+    await user.type(screen.getByLabelText('Manager Phone') as HTMLInputElement, '0412000111')
     await user.click(screen.getByRole('button', { name: 'Save Settings' }))
 
     expect(mockUpsertMutate.mock.calls[0][0]).not.toHaveProperty('medicationCompetencyMode')
@@ -446,7 +446,7 @@ describe('SettingsPage — Provider Settings: medication competency check', () =
     await user.click(screen.getByRole('button', { name: /medication competency check/i }))
     await user.click(screen.getByRole('option', { name: 'Enforce' }))
     await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-    await user.type(screen.getByText('Manager Phone').nextElementSibling as HTMLInputElement, '0412000111')
+    await user.type(screen.getByLabelText('Manager Phone') as HTMLInputElement, '0412000111')
     await user.click(screen.getByRole('button', { name: /^save/i }))   // the label reads Saved! for two seconds after a save
 
     expect(mockUpsertMutate).toHaveBeenCalledTimes(2)
@@ -666,7 +666,7 @@ describe('SettingsPage — the timer that puts a confirmation away dies with its
     const user = userEvent.setup()
     const { unmount } = renderSettingsPage()
     await user.click(screen.getByRole('tab', { name: /provider settings/i }))
-    await user.type(screen.getByText('ABN').nextElementSibling as HTMLInputElement, '1')
+    await user.type(screen.getByLabelText('ABN') as HTMLInputElement, '1')
 
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const pending = actTwiceThenLeave(() => screen.getByRole('button', { name: /^(Save Settings|Saved!)$/ }), unmount)

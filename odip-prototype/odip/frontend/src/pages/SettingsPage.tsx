@@ -342,6 +342,8 @@ function ProviderSettingsTab() {
     value: (form[field] as string) ?? '',
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => { setForm((p) => ({ ...p, [field]: e.target.value })); setDirty(true) },
     className: inputClass,
+    // Names the field: each label points at it with htmlFor.
+    id: `provider-${field}`,
   })
 
   function handleSave() {
@@ -377,14 +379,15 @@ function ProviderSettingsTab() {
         <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Organisation Details</h2>
         <p className="text-sm text-[var(--color-muted-foreground)] mb-4">Used on NDIS claims, BPR CSV files, and invoices.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div><label className={labelClass}>Registration Number</label><input {...f('registrationNumber')} /></div>
-          <div><label className={labelClass}>ABN</label><input {...f('abn')} /></div>
-          <div className="col-span-2"><label className={labelClass}>Organisation Name</label><input {...f('organisationName')} /></div>
-          <div className="col-span-2"><label className={labelClass}>Address</label><input {...f('address')} /></div>
+          <div><label htmlFor="provider-registrationNumber" className={labelClass}>Registration Number</label><input {...f('registrationNumber')} /></div>
+          <div><label htmlFor="provider-abn" className={labelClass}>ABN</label><input {...f('abn')} /></div>
+          <div className="col-span-2"><label htmlFor="provider-organisationName" className={labelClass}>Organisation Name</label><input {...f('organisationName')} /></div>
+          <div className="col-span-2"><label htmlFor="provider-address" className={labelClass}>Address</label><input {...f('address')} /></div>
           <div>
-            <label className={labelClass}>State</label>
+            <label id="provider-state-label" className={labelClass}>State</label>
             <Dropdown
               variant="form"
+              aria-labelledby="provider-state-label"
               value={form.state ?? 'VIC'}
               onChange={v => setForm((p) => ({ ...p, state: v }))}
               items={['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'].map(s => ({ value: s, label: s }))}
@@ -405,9 +408,9 @@ function ProviderSettingsTab() {
         <div>
           <h2 className="font-semibold text-[var(--color-foreground)] mb-4">Bank Details</h2>
           <div className="grid grid-cols-3 gap-4">
-            <div><label className={labelClass}>Account Name</label><input {...f('bankAccountName')} /></div>
-            <div><label className={labelClass}>BSB</label><input {...f('bsb')} /></div>
-            <div><label className={labelClass}>Account Number</label><input {...f('accountNumber')} /></div>
+            <div><label htmlFor="provider-bankAccountName" className={labelClass}>Account Name</label><input {...f('bankAccountName')} /></div>
+            <div><label htmlFor="provider-bsb" className={labelClass}>BSB</label><input {...f('bsb')} /></div>
+            <div><label htmlFor="provider-accountNumber" className={labelClass}>Account Number</label><input {...f('accountNumber')} /></div>
           </div>
         </div>
       )}
@@ -415,8 +418,8 @@ function ProviderSettingsTab() {
         <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Manager Contact</h2>
         <p className="text-sm text-[var(--color-muted-foreground)] mb-4">The primary manager contact shown first when staff need guidance on a missed medication.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div><label className={labelClass}>Manager Name</label><input {...f('managerName')} placeholder="e.g. Priya Sharma" /></div>
-          <div><label className={labelClass}>Manager Phone</label><input {...f('managerPhone')} placeholder="e.g. 0412 345 007" /></div>
+          <div><label htmlFor="provider-managerName" className={labelClass}>Manager Name</label><input {...f('managerName')} placeholder="e.g. Priya Sharma" /></div>
+          <div><label htmlFor="provider-managerPhone" className={labelClass}>Manager Phone</label><input {...f('managerPhone')} placeholder="e.g. 0412 345 007" /></div>
         </div>
       </div>
       <div>
@@ -452,8 +455,8 @@ function ProviderSettingsTab() {
         </div>
       </div>
       <div>
-        <h2 className="font-semibold text-[var(--color-foreground)] mb-2">Invoice Footer Notes</h2>
-        <textarea {...f('invoiceFooterNotes')} rows={3} className={textareaClass} placeholder="e.g. All services delivered in accordance with the NDIS Code of Conduct..." />
+        <h2 id="provider-invoice-footer-notes-label" className="font-semibold text-[var(--color-foreground)] mb-2">Invoice Footer Notes</h2>
+        <textarea {...f('invoiceFooterNotes')} aria-labelledby="provider-invoice-footer-notes-label" rows={3} className={textareaClass} placeholder="e.g. All services delivered in accordance with the NDIS Code of Conduct..." />
       </div>
       {error && (
         <Callout tone="error">{error}</Callout>
