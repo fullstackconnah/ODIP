@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer'
 import { formatDateAu } from '@/lib/utils'
+import { plural } from '@/lib/format'
 import type { ItineraryDto, ItineraryAccommodationDto, ItineraryVehicleDto, ItineraryStaffDto, ItineraryParticipantDto, ItineraryDayDto, ItineraryActivityDto, ItineraryDayAccommodationEventDto } from '@/api/types'
 
 type ExportVersion = 'staff' | 'participant'
@@ -148,7 +149,7 @@ function ItineraryDocument({ data, version }: { data: ItineraryDto; version: Exp
               {data.vehicles.map((v: ItineraryVehicleDto, i: number) => (
                 <View key={i} style={[styles.infoCard, styles.gridHalf]}>
                   <Text style={styles.infoName}>{v.vehicleName}</Text>
-                  <Text style={styles.infoDetail}>{v.vehicleType} · {v.totalSeats} seats{v.wheelchairPositions > 0 ? ` · ${v.wheelchairPositions} wheelchair pos.` : ''}</Text>
+                  <Text style={styles.infoDetail}>{v.vehicleType} · {v.totalSeats} seats{v.wheelchairPositions > 0 ? ` · ${plural(v.wheelchairPositions, 'wheelchair position')}` : ''}</Text>
                   {v.registration && isStaff && <Text style={styles.infoDetail}>Rego: {v.registration}</Text>}
                   {v.driverName && <Text style={styles.infoDetail}>Driver: {v.driverName}</Text>}
                   {v.pickupTravelNotes && <Text style={styles.infoDetail}>{v.pickupTravelNotes}</Text>}

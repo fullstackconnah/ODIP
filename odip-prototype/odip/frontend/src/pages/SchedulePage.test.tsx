@@ -224,8 +224,9 @@ describe('SchedulePage — density (spec §7)', () => {
     expect(name).not.toHaveClass('md:flex-1')
     expect(meta).toHaveClass('min-w-0', 'truncate', 'md:flex-1')
     expect(meta.className).not.toMatch(/shrink-\[/)
-    // The wheelchair count is an icon on screen; the title spells it out.
-    expect(meta).toHaveAttribute('title', 'ABC123 · Mini Bus · 12 seats · 2 wheelchair')
+    // One wording for wheelchair positions across the app, on screen and in the title.
+    expect(meta).toHaveAttribute('title', 'ABC123 · Mini Bus · 12 seats · 2 wheelchair positions')
+    expect(meta).toHaveTextContent('ABC123 · Mini Bus · 12 seats · 2 wheelchair positions')
   })
 
   it('sizes the Resources column at 20rem from md up, the width the longest staff name needs beside the chip strip', () => {

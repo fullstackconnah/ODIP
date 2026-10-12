@@ -173,3 +173,12 @@ describe('AddVehicleModal — Add New Vehicle: a retry after the assignment fail
     expect(mockCreateAssignmentMutateAsync).toHaveBeenLastCalledWith({ tripInstanceId: 'trip-1', vehicleId: 'vehicle-new' })
   })
 })
+
+// V-D1 follow-up: one wording for a vehicle's wheelchair positions across the app ("N wheelchair positions"), not an icon and a bare number.
+describe('AddVehicleModal — wheelchair wording', () => {
+  it('spells out the wheelchair positions of an existing vehicle', () => {
+    mockCheckMutate.mockImplementation(() => {})
+    renderModal()
+    expect(screen.getByText(/ABC123 · Bus · 10 seats · 2 wheelchair positions/)).toBeInTheDocument()
+  })
+})

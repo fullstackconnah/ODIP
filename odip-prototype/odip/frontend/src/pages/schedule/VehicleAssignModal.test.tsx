@@ -155,3 +155,12 @@ describe('VehicleAssignModal — dialog behaviour', () => {
     expect(opener).toHaveFocus()
   })
 })
+
+// V-D1 follow-up: one wording for a vehicle's wheelchair positions across the app ("N wheelchair positions").
+describe('VehicleAssignModal — wheelchair wording', () => {
+  it('spells out the wheelchair positions', () => {
+    mockCheckMutate.mockImplementation(() => {})
+    render(<VehicleAssignModal vehicle={vehicle} trip={trip} staff={[]} onClose={vi.fn()} onAssign={vi.fn()} isLoading={false} />)
+    expect(screen.getByText(/ABC123 · 10 seats · 2 wheelchair positions/)).toBeInTheDocument()
+  })
+})
