@@ -41,7 +41,7 @@ export function WizardNavFooter({
   summary,
 }: WizardNavFooterProps) {
   return (
-    <div className={`sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 ${summary ? 'flex-row flex-wrap items-center justify-between' : 'flex-col'} gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between`}>
+    <div className={`sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 flex-row flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]`}>
       <div className="flex min-w-0 flex-wrap items-center gap-3">
         {/* The first step has no Back, so the way out takes its place (the review step has its own Cancel). */}
         {showBack ? (
