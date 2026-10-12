@@ -2,7 +2,7 @@ import { Page } from '@playwright/test';
 import { test, expect, call } from '../../support/fixtures';
 import { expectStatus, login } from '../../support/api';
 import { SEEDED } from '../../support/env';
-import { makeParticipant, makeStaff, makeTrip, type Created } from '../../support/data';
+import { makeParticipant, makeStaff, makeTrip, makeVehicle, type Created } from '../../support/data';
 import { addDays, sydneyToday } from '../../support/dates';
 
 // Owner decision 2026-10-12: ReadOnly HIDES write controls. ReadOnlyMiddleware answers every POST, PUT, PATCH and DELETE from
@@ -13,6 +13,7 @@ let trip: Created;
 let participant: Created;
 let taskId: string;
 let medicationId: string;
+let vehicle: Created;
 
 test.beforeAll(async () => {
   const coord = await login(SEEDED.coordinator);
@@ -30,6 +31,7 @@ test.beforeAll(async () => {
     timesOfDay: '08:00', startDate: `${sydneyToday()}T00:00:00`, consentObtained: true,
   }));
   medicationId = med.data.id;
+  vehicle = await makeVehicle(coord);
 });
 
 function recordWrites(page: Page): string[] {
@@ -77,6 +79,11 @@ test.describe('ReadOnly', () => {
     await page.goto(`/medications/${medicationId}/edit`);
     await expect(page.getByRole('heading', { name: 'View medication' })).toBeVisible();
     await expect(page.locator('input[name="name"]')).toBeDisabled();
+    await expect(page.getByRole('button', { name: /Save/ })).toHaveCount(0);
+
+    await page.goto(`/vehicles/${vehicle.id}/edit`);
+    await expect(page.getByRole('heading', { name: 'View vehicle' })).toBeVisible();
+    await expect(page.locator('input[name="vehicleName"]')).toBeDisabled();
     await expect(page.getByRole('button', { name: /Save/ })).toHaveCount(0);
 
     expect(writes).toEqual([]);
