@@ -409,6 +409,8 @@ function useCaregiverLink(participantId: string): CaregiverLink {
   const revoke = useRevokeCaregiverLink()
   const [issued, setIssued] = useState<{ url: string; expiresAt: string } | null>(null)
   const [confirmingRevoke, setConfirmingRevoke] = useState(false)
+  // The latest refusal, Generate's or Revoke's: each attempt clears it, so an older failure never stands in for a newer one.
+  const [linkError, setLinkError] = useState<string | null>(null)
   // The list route is Admin/Coordinator/SuperAdmin only: other roles would get a 403 for each call.
   const drafts = useCaregiverSubmissions('Draft', { participantId, enabled: canWriteParticipantDetails })
   const submitted = useCaregiverSubmissions('Submitted', { participantId, enabled: canWriteParticipantDetails })
@@ -429,8 +431,8 @@ function useCaregiverLink(participantId: string): CaregiverLink {
   ]
 
   const generateLink = async () => {
-    // A refusal shows on the error line below (generate.isError); there is nothing else to do with it.
-    const res = await generate.mutateAsync({ participantId }).catch(() => null)
+    setLinkError(null)
+    const res = await generate.mutateAsync({ participantId }).catch((err: unknown) => { setLinkError(extractErrorMessage(err, 'Something went wrong. Try again.')); return null })
     if (!res) return
     setIssued({ url: `${window.location.origin}/caregiver/${res.data!.token}`, expiresAt: res.data!.expiresAt })
   }
@@ -450,15 +452,14 @@ function useCaregiverLink(participantId: string): CaregiverLink {
           </button>
         </div>
       )}
-      {(generate.isError || revoke.isError) && (
-        <p role="alert" className="text-xs text-[var(--color-destructive)]">{extractErrorMessage(revoke.isError ? revoke.error : generate.error, 'Something went wrong. Try again.')}</p>
-      )}
+      {linkError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{linkError}</p>}
       <ConfirmDialog
         open={confirmingRevoke}
         onCancel={() => setConfirmingRevoke(false)}
         onConfirm={async () => {
-          // A refusal closes the dialog too, so the message above is not left behind it (revoke.isError renders it).
-          await revoke.mutateAsync({ participantId }).catch(() => {})
+          // A refusal closes the dialog too, so the message above is not left behind it.
+          setLinkError(null)
+          await revoke.mutateAsync({ participantId }).catch((err: unknown) => setLinkError(extractErrorMessage(err, 'Something went wrong. Try again.')))
           setConfirmingRevoke(false)
         }}
         title="Revoke caregiver link?"
