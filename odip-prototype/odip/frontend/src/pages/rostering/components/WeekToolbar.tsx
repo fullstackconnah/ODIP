@@ -105,10 +105,13 @@ export function WeekToolbar({
         >
           Unfilled only
         </Button>
-        <Button variant="secondary" size="md" onClick={onOpenExceptions}>
-          <AlertTriangle className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          {plural(exceptionsCount, 'exception')}
-        </Button>
+        {/* Nothing to open at zero, so no button (V2-G). */}
+        {exceptionsCount > 0 && (
+          <Button variant="secondary" size="md" onClick={onOpenExceptions}>
+            <AlertTriangle className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            {plural(exceptionsCount, 'exception')}
+          </Button>
+        )}
         {canWrite && (
           <Button size="md" onClick={onNewShift}>
             <Plus className="h-4 w-4" /> New shift
