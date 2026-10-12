@@ -6,6 +6,7 @@ import type { BookingListDto } from '@/api/types/bookings'
 import type { ReservationDto } from '@/api/types/reservations'
 import type { StaffAssignmentDto } from '@/api/types/staff'
 import type { VehicleAssignmentDto } from '@/api/types/vehicles'
+import { plural } from '@/lib/format'
 
 interface OverviewTabProps {
   tripId: string
@@ -186,7 +187,7 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[var(--color-foreground)] truncate">{v.vehicleName || 'Vehicle'}</p>
                     <p className="text-[13px] tabular-nums leading-tight text-[var(--color-muted-foreground)]">
-                      {[v.wheelchairPositionRequirement && `${v.wheelchairPositionRequirement} WC`, v.seatRequirement && `${v.seatRequirement} seats`].filter(Boolean).join(' · ') || 'Vehicle'}
+                      {[v.wheelchairPositionRequirement && plural(v.wheelchairPositionRequirement, 'wheelchair position'), v.seatRequirement && `${v.seatRequirement} seats`].filter(Boolean).join(' · ') || 'Vehicle'}
                     </p>
                   </div>
                 </div>

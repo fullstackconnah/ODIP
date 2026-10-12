@@ -6,6 +6,7 @@ import { TAP_AREA } from '@/components/tapArea'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { BookingListDto } from '@/api/types/bookings'
 import type { StaffAssignmentDto } from '@/api/types/staff'
+import type { VehicleAssignmentDto } from '@/api/types/vehicles'
 
 // The itinerary is its own suite and pulls in data hooks; the side panel is what this file exercises.
 vi.mock('@/components/ItineraryTab', () => ({ default: () => <div>Itinerary</div> }))
@@ -52,5 +53,16 @@ describe('OverviewTab — 44px coarse-pointer hit areas', () => {
     renderTab()
     const more = screen.getByRole('button', { name: /\+1 more staff assigned/ })
     expect(more.className).not.toContain('before:')
+  })
+})
+
+// Q4/V-A follow-up: one wheelchair wording across Vehicles and the trip tabs, "N wheelchair positions", not "1 WC".
+describe('OverviewTab — fleet manifest wording', () => {
+  it('says "1 wheelchair position", not "1 WC"', () => {
+    const vehicles = [{ id: 'va1', vehicleName: 'Big Red', wheelchairPositionRequirement: 1, seatRequirement: 8 }] as unknown as VehicleAssignmentDto[]
+    render(<OverviewTab tripId="trip-1" trip={trip} bookings={bookings} accommodation={[]} staff={staff} vehicles={vehicles} onSwitchTab={vi.fn()} />)
+
+    expect(screen.getByText('1 wheelchair position · 8 seats')).toBeInTheDocument()
+    expect(screen.queryByText(/\bWC\b/)).not.toBeInTheDocument()
   })
 })

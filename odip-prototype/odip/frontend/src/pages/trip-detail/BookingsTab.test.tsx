@@ -361,3 +361,16 @@ describe('BookingsTab — dialogs', () => {
     expect(screen.getByRole('button', { name: 'Add Booking' })).toBeDisabled()
   })
 })
+
+// V-A follow-up: the tab kept its own support-ratio map, so the override said "Shared" where the rest of the app says "Shared Support".
+describe('BookingsTab — support ratio override labels', () => {
+  it('uses the shared SUPPORT_RATIO_LABELS', async () => {
+    const user = userEvent.setup()
+    renderTab()
+    await user.click(screen.getByRole('button', { name: /Add Participant/ }))
+    await user.click(screen.getByRole('button', { name: 'Support Ratio Override' }))
+
+    expect(screen.getByRole('option', { name: 'Shared Support' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Shared' })).not.toBeInTheDocument()
+  })
+})

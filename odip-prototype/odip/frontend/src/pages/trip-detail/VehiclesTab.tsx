@@ -3,7 +3,7 @@ import { Plus, XCircle, AlertTriangle, Car } from 'lucide-react'
 import AddVehicleModal from '@/components/AddVehicleModal'
 import { getStatusColor } from '@/lib/utils'
 import { TONE } from '@/lib/tone'
-import { formatRatio } from '@/lib/format'
+import { formatRatio, plural } from '@/lib/format'
 import type { VehicleAssignmentDto } from '@/api/types/vehicles'
 import type { StaffAssignmentDto } from '@/api/types/staff'
 import { Button } from '@/components/Button'
@@ -80,7 +80,7 @@ export default function VehiclesTab({ tripId, vehicles, staff, canWrite }: Vehic
               </div>
             </div>
             <div className="mt-3 text-sm text-[var(--color-muted-foreground)]">
-              <p className="flex items-center gap-1">{v.registration || 'N/A'} · {v.seatRequirement ?? '?'} seats{v.wheelchairPositionRequirement ? <> · <span className="material-symbols-outlined text-sm leading-none">accessible</span> {v.wheelchairPositionRequirement}</> : ''}</p>
+              <p>{v.registration || 'N/A'} · {v.seatRequirement ?? '?'} seats{v.wheelchairPositionRequirement ? ` · ${plural(v.wheelchairPositionRequirement, 'wheelchair position')}` : ''}</p>
             </div>
           </div>
         ))}
