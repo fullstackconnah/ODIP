@@ -244,3 +244,16 @@ describe('CompletionReviewPage', () => {
     expect(mockUseCompletions).toHaveBeenCalledWith(expect.objectContaining({ status: 'PendingReview' }), 2, 50)
   })
 })
+
+// A failed load is the house error banner (a danger Callout, announced at once, with its retry), not an EmptyState that reads as "nothing here".
+describe('CompletionReviewPage — a failed load', () => {
+  it('shows the error banner with Try again, not an empty state', async () => {
+    const refetch = vi.fn()
+    mockUseCompletions.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+    renderPage()
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/couldn't load shift completions/i)
+    await userEvent.setup().click(within(alert).getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalled()
+  })
+})

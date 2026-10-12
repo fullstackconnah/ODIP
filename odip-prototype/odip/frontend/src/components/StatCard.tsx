@@ -176,7 +176,7 @@ function AttentionTile({ label, value, className, to, tone = 'neutral', caption,
 // the structure is new, and the structure is what makes it tall: its padding is --section-gap on every side (the airier step the dense pages do not use) and
 // it is four lines deep, so it is the biggest colour field on the page. Colour is never the only cue: the number, the label and the line each say it in words.
 const ACTION_TILE =
-  'relative flex min-w-0 flex-col rounded-md border border-[var(--color-border)] p-[var(--section-gap)] transition-opacity has-[a:hover]:opacity-90'
+  'relative flex min-w-0 flex-col rounded-md border border-[var(--color-border)] p-[var(--section-gap)] @max-[36rem]:py-[var(--card-pad)] transition-opacity has-[a:hover]:opacity-90'
 
 // The link's `::after` fills the (positioned) tile, so the whole tile is the target while the page keeps ONE link with a name of its own ("Open overdue
 // tasks"). The focus ring is drawn on that pseudo-element for the same reason: it surrounds the tile, not just the words. `--tap-min` floors the link's own
@@ -192,12 +192,14 @@ function ActionTile({ label, value, className, tone = 'neutral', detail, action 
   // A named group, so its accessible name carries the number as well as the label (like the compact tile without a link).
   return (
     <div role="group" aria-label={`${label} ${value}`} data-attention={attention} className={classes}>
-      <div className="flex flex-1 flex-col gap-1">
+      {/* In a band under 36rem (a phone: one tile a row) the tile is one compact row: figure, label, chevron. The line folds away and the
+          link's words become its name only; the link still covers the tile. Seven tall tiles ran about 1300px there before any trip showed. */}
+      <div className="flex flex-1 flex-col gap-1 @max-[36rem]:flex-row @max-[36rem]:items-center @max-[36rem]:gap-3">
         <span className="text-display tabular-nums">{value}</span>
         <span className="text-sm font-semibold leading-tight">{label}</span>
-        {detail && <span className="text-[13px] leading-snug text-balance">{detail}</span>}
-        <Link to={action.to} className={ACTION_LINK}>
-          {action.label}
+        {detail && <span className="text-[13px] leading-snug text-balance @max-[36rem]:hidden">{detail}</span>}
+        <Link to={action.to} className={`${ACTION_LINK} @max-[36rem]:ml-auto @max-[36rem]:mt-0 @max-[36rem]:self-center @max-[36rem]:pt-0`}>
+          <span className="@max-[36rem]:sr-only">{action.label}</span>
           <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
         </Link>
       </div>

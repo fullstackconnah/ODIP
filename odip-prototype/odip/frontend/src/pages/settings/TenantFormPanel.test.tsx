@@ -87,3 +87,17 @@ describe('TenantFormPanel as a dialog', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 })
+
+// The Active toggle is a switch, as UserFormPanel's twin is: a screen reader hears its name and whether it is on.
+describe('TenantFormPanel — Active switch', () => {
+  const tenant = { id: 'tenant-1', name: 'Sample Support Co', emailDomain: 'sample.com.au', isActive: true, createdAt: '2026-01-01T00:00:00Z', userCount: 2 }
+
+  it('is a named switch that reports and flips its state', async () => {
+    const user = userEvent.setup()
+    render(<TenantFormPanel isOpen onClose={vi.fn()} tenant={tenant} />)
+    const toggle = screen.getByRole('switch', { name: 'Active' })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+  })
+})

@@ -1,3 +1,4 @@
+import { labelClass } from '@/components/FormField'
 import { modalGrid, modalSpan } from '@/lib/formGrid'
 import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
@@ -182,7 +183,6 @@ export default function TemplateFormPanel({
 
   const inputClass =
     'w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
-  const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   const isBusy =
     isSubmitting || createMutation.isPending || updateMutation.isPending || deactivateMutation.isPending

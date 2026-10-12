@@ -468,3 +468,18 @@ describe('Tabs primitive — overflow="scroll": one row at every width', () => {
     }
   })
 })
+
+// V2-F: a one-row strip that scrolls fades out at its right edge, so a tab cut by the edge ("Notificatior") reads as "more this way", and it ends in room as wide
+// as the fade, so the last tab is clear of it once scrolled to the end. The wrapping strip has nothing to hide and no fade.
+describe('Tabs primitive — overflow="scroll" carries an edge fade', () => {
+  const manyTabs: TabItem[] = ['a', 'b', 'c'].map(id => ({ id, label: id.toUpperCase() }))
+
+  it('masks the strip\'s right edge and pads its end by the same width; the wrapping strip does neither', () => {
+    const { unmount } = render(<Tabs tabs={manyTabs} active="a" onChange={() => {}} ariaLabel="Many" overflow="scroll" />)
+    const strip = screen.getByRole('tablist', { name: 'Many' })
+    expect(strip).toHaveClass('[mask-image:linear-gradient(to_right,black_calc(100%_-_2rem),transparent)]', 'pr-8')
+    unmount()
+    render(<Tabs tabs={manyTabs} active="a" onChange={() => {}} ariaLabel="Many" />)
+    expect(screen.getByRole('tablist', { name: 'Many' }).className).not.toMatch(/mask-image/)
+  })
+})

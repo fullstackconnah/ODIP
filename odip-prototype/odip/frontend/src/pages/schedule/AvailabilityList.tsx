@@ -68,7 +68,6 @@ export default function AvailabilityList({ staffId, availability }: Availability
         {availability.length === 0 && (
           <p className="text-[13px] text-[var(--color-muted-foreground)] italic py-1">
             No leave, unavailability or availability records in this schedule window.
-            {manageLink && <>{' '}<Link to={manageLink} className="text-[var(--color-primary)] hover:underline">Manage on Leave page →</Link></>}
           </p>
         )}
         {availability.map(item => {

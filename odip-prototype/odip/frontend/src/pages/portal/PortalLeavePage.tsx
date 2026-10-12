@@ -3,6 +3,7 @@ import { CalendarOff, Plus } from 'lucide-react'
 import { useMyLeave, useCreateLeaveRequest, useCancelMyLeave, useCreateMyUnavailability, useCancelMyUnavailability } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
 import { PageHeader } from '@/components/PageHeader'
+import { BackButton } from '@/components/BackButton'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
@@ -127,14 +128,19 @@ export default function PortalLeavePage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader
-        title="My leave"
-        action={canRequestLeave && (
-          <Button size="md" onClick={openForm}>
-            <Plus className="w-4 h-4" /> {tab === 'leave' ? 'Request leave' : 'Add unavailability'}
-          </Button>
-        )}
-      />
+      <div className="flex items-start gap-2">
+        <BackButton to="/portal" label="my shifts" variant="icon" history={false} />
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            title="My leave"
+            action={canRequestLeave && (
+              <Button size="md" onClick={openForm}>
+                <Plus className="w-4 h-4" /> {tab === 'leave' ? 'Request leave' : 'Add unavailability'}
+              </Button>
+            )}
+          />
+        </div>
+      </div>
 
       {actionError && (
         <Callout tone="error">{actionError}</Callout>
@@ -150,12 +156,9 @@ export default function PortalLeavePage() {
       {isLoading ? (
         <PageState kind="loading" noun="leave requests" />
       ) : isError ? (
-        <EmptyState
-          icon={CalendarOff}
-          title="Couldn't load leave requests."
-          description="Check your connection and try again."
-          action={{ label: 'Try again', onClick: () => refetch() }}
-        />
+        <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
+          Couldn't load your leave. Check your connection and try again.
+        </Callout>
       ) : tab === 'leave' ? (
         leave.length === 0 ? (
           <EmptyState

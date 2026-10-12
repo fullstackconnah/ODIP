@@ -509,8 +509,13 @@ describe('BudgetRiskTable: the no-budget tail', () => {
 
     const toggle = screen.getByRole('button', { name: noBudgetHiddenLabel(2) })
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    expect(within(document.getElementById(toggle.getAttribute('aria-controls')!)!).getByText('Chen Wei')).toBeVisible()
-    expect(screen.getByText('No budgets are being tracked yet. Record a participant’s plan to start.')).toBeInTheDocument()
+    const list = document.getElementById(toggle.getAttribute('aria-controls')!)!
+    expect(within(list).getByText('Chen Wei')).toBeVisible()
+    // One message, not three (V2-F): no "nothing tracked" box above the list, and no "No budget recorded" on a row the toggle already names. A plan that ended still says when.
+    expect(screen.queryByText('No budgets are being tracked yet. Record a participant’s plan to start.')).not.toBeInTheDocument()
+    expect(within(list).queryByText('No budget recorded')).not.toBeInTheDocument()
+    expect(within(list).getByText('Plan ended 30 Jun 2026')).toBeVisible()
+    expect(within(list).getByRole('link', { name: /for Chen Wei$/ })).toBeVisible()
   })
 
   it('stays closed when there are rows to look at first', () => {

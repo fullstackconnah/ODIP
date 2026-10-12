@@ -352,7 +352,7 @@ describe('StatCard — attention variant, the tall action tile', () => {
   it('drops the line when there is none, rather than leaving an empty row', () => {
     renderTall({ detail: undefined })
 
-    expect(group().querySelectorAll('span')).toHaveLength(2) // the figure and the label
+    expect(group().querySelectorAll(':scope > div > span')).toHaveLength(2) // the figure and the label (the link's words are a span inside the link)
   })
 
   it('ignores a caption: the line takes that job', () => {
@@ -398,5 +398,24 @@ describe('StatCard — attention variant, the tall action tile', () => {
     renderTall({ className: 'h-full' })
 
     expect(group()).toHaveClass('h-full')
+  })
+})
+
+// V2-G: on a phone (a band under 36rem: one tile a row) the tall tile is one compact row (figure, label, chevron), so seven tiles no longer run
+// 1300px before the first trip. CSS only, by the band's own container width: the tile keeps its name, its one link and that link's name.
+describe('StatCard attention action tile — the compact row on a narrow band', () => {
+  const renderTall = () =>
+    renderCard(<StatCard variant="attention" label="Overdue" value={2} tone="danger" detail="Tasks past their due date and still open." action={{ label: 'Open overdue tasks', to: '/tasks?status=Overdue' }} />)
+
+  it('lays the figure, the label and the chevron in one row, folds the line away and keeps the link named', () => {
+    renderTall()
+    const tile = screen.getByRole('group', { name: 'Overdue 2' })
+    const figure = within(tile).getByText('2')
+    expect(figure.parentElement).toHaveClass('@max-[36rem]:flex-row', '@max-[36rem]:items-center')
+    expect(within(tile).getByText('Tasks past their due date and still open.')).toHaveClass('@max-[36rem]:hidden')
+    const link = within(tile).getByRole('link', { name: 'Open overdue tasks' })
+    expect(within(link).getByText('Open overdue tasks')).toHaveClass('@max-[36rem]:sr-only')
+    // mt-auto would push the chevron to the bottom of the row and the link's own self-start to the top: centre it in the row.
+    expect(link).toHaveClass('@max-[36rem]:ml-auto', '@max-[36rem]:mt-0', '@max-[36rem]:self-center')
   })
 })

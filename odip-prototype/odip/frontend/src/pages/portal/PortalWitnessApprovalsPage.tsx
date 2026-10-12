@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ShieldCheck, ShieldAlert, Check, X } from 'lucide-react'
+import { ShieldCheck, Check, X } from 'lucide-react'
 import {
   usePendingWitnessRequests, useApproveWitnessRequest, useDeclineWitnessRequest,
   useApproveIncidentWitnessRequest, useDeclineIncidentWitnessRequest,
@@ -163,12 +163,9 @@ export default function PortalWitnessApprovalsPage() {
           <SkeletonCard />
         </div>
       ) : isError ? (
-        <EmptyState
-          icon={ShieldAlert}
-          title="Couldn't load witness requests"
-          description="Check your connection and try again."
-          action={{ label: 'Try again', onClick: () => refetch() }}
-        />
+        <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
+          Couldn't load witness requests. Check your connection and try again.
+        </Callout>
       ) : list.length === 0 ? (
         <EmptyState
           icon={ShieldCheck}

@@ -688,3 +688,16 @@ describe('LeaveApprovalsPage', () => {
     expect(mockUseRecurringUnavailabilities).toHaveBeenCalledWith(expect.objectContaining({ userId: 'staff-1', status: undefined }))
   })
 })
+
+// A failed load is the house error banner (a danger Callout, announced at once, with its retry), not an EmptyState that reads as "nothing here".
+describe('LeaveApprovalsPage — a failed load', () => {
+  it('shows the error banner with Try again, not an empty state', async () => {
+    const refetch = vi.fn()
+    mockUseLeaveRequests.mockReturnValue({ data: [], isLoading: false, isError: true, refetch })
+    renderPage()
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/couldn't load leave requests/i)
+    await userEvent.setup().click(within(alert).getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalled()
+  })
+})

@@ -101,7 +101,7 @@ describe('RosterBoardPage — ASSIGNEE_ON_LEAVE exception comes from the server'
     expect(screen.getAllByText('Mei Zhang is on approved leave on 2026-08-18')).toHaveLength(1)
   })
 
-  it('shows zero exceptions when the server sends none, even though a shift is flagged assigneeOnApprovedLeave', () => {
+  it('shows no exceptions button when the server sends none, even though a shift is flagged assigneeOnApprovedLeave', () => {
     const board = makeBoardWithLeaveException()
     mockUseRosterBoard.mockReturnValue({
       data: { ...board, exceptions: [] },
@@ -111,7 +111,8 @@ describe('RosterBoardPage — ASSIGNEE_ON_LEAVE exception comes from the server'
     })
     renderPage()
 
-    expect(screen.getByRole('button', { name: '0 exceptions' })).toBeInTheDocument()
+    // An empty count is not a button: there is nothing to open (V2-G).
+    expect(screen.queryByRole('button', { name: /exception/ })).not.toBeInTheDocument()
   })
 })
 
