@@ -219,6 +219,19 @@ describe('OnboardingDetailPage', () => {
     }
   })
 
+  // Q2 fix round (Should 1): the profile wizard sends ReadOnly and SupportWorker away, so their profile gate offers no Edit profile, and the service-needs gate only opens the tab.
+  it('offers a ReadOnly or SupportWorker reader no Edit profile, and "Open service needs" instead of "Edit service needs"', () => {
+    for (const role of ['ReadOnly', 'SupportWorker']) {
+      localStorage.setItem('odip_user', JSON.stringify({ role }))
+      const { unmount } = renderDetail()
+      const profileGate = screen.getByText('Participant Profile').closest('article')!
+      expect(within(profileGate).queryByRole('link', { name: 'Edit profile' }), role).not.toBeInTheDocument()
+      const needsGate = screen.getByText('Service needs and provisional lines').closest('article')!
+      expect(within(needsGate).getByRole('link', { name: 'Open service needs' }), role).toHaveAttribute('href', '/participants/p-1?tab=support')
+      unmount()
+    }
+  })
+
   it('does not send a ReadOnly or SupportWorker reader of the page to the agreement draft', () => {
     mockUseQuery.mockReturnValue({ data: { ...incomplete, profileComplete: true, serviceTypeConfirmed: true }, isLoading: false })
     for (const role of ['ReadOnly', 'SupportWorker']) {

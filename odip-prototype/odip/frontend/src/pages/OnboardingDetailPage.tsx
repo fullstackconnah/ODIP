@@ -136,8 +136,8 @@ export default function OnboardingDetailPage() {
 
   const gates: Gate[] = [
     { label: 'Intake completed', state: gateState(d.intakeComplete) },
-    { label: 'Participant Profile', state: gateState(d.profileComplete), fixRoute: { to: `/participants/${id}/profile`, label: 'Edit profile' } },
-    { label: 'Service needs and provisional lines', state: gateState(d.serviceTypeConfirmed), fixRoute: { to: `/participants/${id}?tab=support`, label: 'Edit service needs' } },
+    { label: 'Participant Profile', state: gateState(d.profileComplete), fixRoute: canManageParticipantLifecycle ? { to: `/participants/${id}/profile`, label: 'Edit profile' } : undefined },
+    { label: 'Service needs and provisional lines', state: gateState(d.serviceTypeConfirmed), fixRoute: { to: `/participants/${id}?tab=support`, label: canManageParticipantLifecycle ? 'Edit service needs' : 'Open service needs' } },
     // The draft carries money, so only the roles the API admits to it are sent there (a ReadOnly or SupportWorker who can read this page would only meet a redirect or a 403).
     { label: 'Current agreement evidence', state: gateState(d.serviceAgreementSigned), context: 'Agreements are signed and approved elsewhere.', fixRoute: canAccessPage('agreement-drafts') ? { to: `/participants/${id}/agreement-draft`, label: 'Open agreement draft' } : undefined },
     // Only an NDIS-funded participant is asked for a plan budget: the server sends fundingRecorded for them alone, and counts it in the worklist's "of 6 gates", so this list shows the
