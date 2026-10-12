@@ -13,10 +13,7 @@ export default function MedicationsPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title="Medications"
-        subtitle="Medication administration record and the participant medication register"
-      />
+      <PageHeader title="Medications" />
 
       <Tabs
         tabs={[

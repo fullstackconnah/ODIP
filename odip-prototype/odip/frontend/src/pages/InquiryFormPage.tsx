@@ -61,10 +61,7 @@ export default function InquiryFormPage() {
     <div className="flex items-start gap-4">
       <BackButton to="/participants?tab=enquiries" label="enquiries" variant="icon" history={false} />
       <div className="flex-1">
-        <PageHeader
-          title={editId ? 'Edit enquiry' : 'New enquiry'}
-          subtitle={editId ? 'Update the saved enquiry details.' : 'Capture a light enquiry when someone first contacts the service.'}
-        />
+        <PageHeader title={editId ? 'Edit enquiry' : 'New enquiry'} />
       </div>
     </div>
   )

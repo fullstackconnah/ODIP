@@ -208,10 +208,7 @@ export default function CompatibilityPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title="Staff–participant compatibility"
-        subtitle="Preferred and excluded pairings the roster board and conflict checks use when suggesting or warning about a match."
-      />
+      <PageHeader title="Staff–participant compatibility" />
 
       {saveError && (
         <Callout

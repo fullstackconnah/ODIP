@@ -55,19 +55,19 @@ describe('AppLayout nav active state', () => {
     localStorage.clear()
   })
 
-  it('marks the Rostering "Board" entry active only on exactly /rostering', () => {
+  it('marks the "Roster board" entry active only on exactly /rostering', () => {
     renderAt('/rostering')
-    // Board's NavLink uses `end` matching, so it's active on exactly this path. The accessible
-    // name includes the leading material-icon ligature text (e.g. "calendar_view_week Board"),
+    // Roster board's NavLink uses `end` matching, so it's active on exactly this path. The accessible
+    // name includes the leading material-icon ligature text (e.g. "calendar_view_week Roster board"),
     // so these match on the visible label rather than the full name.
-    expect(screen.getByRole('link', { name: /Board$/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: /Roster board$/ })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: /Patterns$/ })).not.toHaveAttribute('aria-current')
   })
 
-  it('activates the "Patterns" entry, not the "Board" parent, on /rostering/patterns', () => {
+  it('activates the "Patterns" entry, not the "Roster board" parent, on /rostering/patterns', () => {
     renderAt('/rostering/patterns')
     expect(screen.getByRole('link', { name: /Patterns$/ })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('link', { name: /Board$/ })).not.toHaveAttribute('aria-current')
+    expect(screen.getByRole('link', { name: /Roster board$/ })).not.toHaveAttribute('aria-current')
   })
 
   it('still activates "All Trips" on a /trips/:id detail route (prefix match must not regress)', () => {
@@ -166,7 +166,7 @@ describe('AppLayout — witness-approval nav badge (leave-2, shares NavCountBadg
   it('gives the /portal link an accessible name ending in "Portal" and announcing the pending count', () => {
     mockUsePendingWitnessRequests.mockReturnValue({ data: [{}, {}], isLoading: false })
     renderAt('/trips')
-    expect(screen.getByRole('link', { name: '2 witness approvals pending, My Shifts' })).toHaveAttribute('href', '/portal')
+    expect(screen.getByRole('link', { name: '2 witness approvals pending, My shifts' })).toHaveAttribute('href', '/portal')
   })
 })
 
@@ -508,7 +508,7 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
   })
 
   // The bar's links, in order, then "More" (a button, so not in this list). Generated from navConfig: the office roles' bar leads with
-  // the Dashboard and carries the Staff & roster group as "Roster"; a SupportWorker's leads with My Shifts and carries Incidents.
+  // the Dashboard and carries the Staff & roster group as "Roster"; a SupportWorker's leads with My shifts and carries Incidents.
   const OFFICE_BOTTOM_NAV = ['/', '/trips', '/rostering', '/participants']
   it.each<[string, string[]]>([
     ['SuperAdmin', OFFICE_BOTTOM_NAV],
@@ -546,7 +546,7 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
     renderAt('/trips')
 
     // Caregiver forms used to be listed here (the link was shown to a role the route then bounces), and so did the Dashboard (a SupportWorker's
-    // home is My Shifts).
+    // home is My shifts).
     expect(hrefs(mainNav())).toEqual([
       '/portal',
       '/trips', '/schedule', '/tasks',
@@ -590,21 +590,21 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
 
   const FULL_MENU = [
     'Dashboard',
-    'My Shifts',
+    'My shifts',
     'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
     'Participants: Participants | Medications | Caregiver forms',
-    'Staff & roster: Board | Patterns | Compatibility | Leave | Completions | Staff | Qualifications',
+    'Staff & roster: Roster board | Patterns | Compatibility | Leave | Completions | Staff | Qualifications',
     'Budgets',
     'Incidents',
     'Settings',
   ]
-  // A SupportWorker starts from My Shifts, so the Dashboard is not in their menu; they never see the pages their allow-list leaves out.
-  const SUPPORT_WORKER_MENU = ['My Shifts', 'Trips: All Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents']
+  // A SupportWorker starts from My shifts, so the Dashboard is not in their menu; they never see the pages their allow-list leaves out.
+  const SUPPORT_WORKER_MENU = ['My shifts', 'Trips: All Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents']
   // ReadOnly reads most of the app but its API refuses Rostering (all five pages), Budgets, Caregiver forms and
   // Settings, so the menu does not offer them: Budgets and Settings disappear, Staff & roster is down to Staff and Qualifications.
   const READ_ONLY_MENU = [
     'Dashboard',
-    'My Shifts',
+    'My shifts',
     'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
     'Participants: Participants | Medications',
     'Staff & roster: Staff | Qualifications',
@@ -617,7 +617,7 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     expect(navShape()).toEqual(FULL_MENU)
   })
 
-  it('gives a SupportWorker only the pages their role may open, and no Dashboard (their home is My Shifts)', () => {
+  it('gives a SupportWorker only the pages their role may open, and no Dashboard (their home is My shifts)', () => {
     signIn('SupportWorker')
     renderAt('/')
     expect(navShape()).toEqual(SUPPORT_WORKER_MENU)
@@ -628,7 +628,7 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     signIn('ReadOnly')
     renderAt('/')
     expect(navShape()).toEqual(READ_ONLY_MENU)
-    for (const name of [/Board$/, /Patterns$/, /Compatibility$/, /Leave$/, /Completions$/, /Budgets$/, /Caregiver forms$/, /Settings$/]) {
+    for (const name of [/Roster board$/, /Patterns$/, /Compatibility$/, /Leave$/, /Completions$/, /Budgets$/, /Caregiver forms$/, /Settings$/]) {
       expect(screen.queryByRole('link', { name }), String(name)).not.toBeInTheDocument()
     }
   })
@@ -862,10 +862,10 @@ describe('AppLayout — the bottom bar is generated from the same config (U6)', 
     expect(barLabels()).toEqual(['dashboardDashboard', 'mapTrips', 'calendar_view_weekRoster', 'groupParticipants', 'menuMore'])
   })
 
-  it('gives a SupportWorker a bar that starts with My Shifts, and Incidents instead of the Dashboard and the roster', () => {
+  it('gives a SupportWorker a bar that starts with My shifts, and Incidents instead of the Dashboard and the roster', () => {
     signIn('SupportWorker')
     renderAt('/trips')
-    expect(barLabels()).toEqual(['calendar_todayMy Shifts', 'mapTrips', 'groupParticipants', 'emergencyIncidents', 'menuMore'])
+    expect(barLabels()).toEqual(['calendar_todayMy shifts', 'mapTrips', 'groupParticipants', 'emergencyIncidents', 'menuMore'])
   })
 
   it('gives ReadOnly a Roster cell that opens Staff (the Board is refused it), still lit on its pages', () => {
@@ -920,7 +920,7 @@ describe('AppLayout — the bottom bar is generated from the same config (U6)', 
     expect(within(mobileNav()).getByRole('link', { name: 'Trips' })).toHaveAttribute('aria-current', 'true')
   })
 
-  it('shows the Staff & roster count on the Roster cell and My Shifts\' on a SupportWorker\'s, announced in the name', () => {
+  it('shows the Staff & roster count on the Roster cell and My shifts\' on a SupportWorker\'s, announced in the name', () => {
     signIn('Coordinator')
     mockUsePendingLeaveCount.mockReturnValue(3)
     mockUsePendingCompletionCount.mockReturnValue(4)
@@ -932,7 +932,7 @@ describe('AppLayout — the bottom bar is generated from the same config (U6)', 
     signIn('SupportWorker')
     mockUsePendingWitnessRequests.mockReturnValue({ data: [{}, {}], isLoading: false })
     renderAt('/')
-    expect(within(mobileNav()).getByRole('link', { name: '2 witness approvals pending, My Shifts' })).toHaveTextContent('2')
+    expect(within(mobileNav()).getByRole('link', { name: '2 witness approvals pending, My shifts' })).toHaveTextContent('2')
   })
 
   it('opens the drawer from More, the same one as the header toggle', () => {

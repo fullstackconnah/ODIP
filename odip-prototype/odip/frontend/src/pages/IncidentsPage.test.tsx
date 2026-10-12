@@ -489,7 +489,7 @@ describe('IncidentsPage — header row', () => {
   it('puts the H1 and the section tabs on one header row', () => {
     renderPage()
 
-    const h1 = screen.getByRole('heading', { level: 1, name: 'Incident Reports' })
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Incidents' })
     const tablist = screen.getByRole('tablist', { name: 'Incidents sections' })
     // PageHeader's title row: h1 group + action slot. The tabs live in that same row (spec §3).
     const titleRow = h1.parentElement?.parentElement as HTMLElement
@@ -502,14 +502,14 @@ describe('IncidentsPage — header row', () => {
 
     await user.click(screen.getByRole('tab', { name: /flagged notes/i }))
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Incident Reports' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Incidents' })).toBeInTheDocument()
     expect(screen.getByRole('tablist', { name: 'Incidents sections' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /report incident/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: 'Archived' })).not.toBeInTheDocument()
   })
 
-  it('shows the Report Incident action and the filters on the Incidents tab', () => {
-    // A row present, so the empty state (which has its own "Report incident" link) is not rendered.
+  it('shows the Report incident action and the filters on the Reports tab', () => {
+    // A row present, so the list (not its empty state) is on screen.
     mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
     renderPage()
 
@@ -523,7 +523,7 @@ describe('IncidentsPage — header row', () => {
     mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
     renderPage()
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Incident Reports' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Incidents' })).toBeInTheDocument()
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /report incident/i })).toBeInTheDocument()
   })

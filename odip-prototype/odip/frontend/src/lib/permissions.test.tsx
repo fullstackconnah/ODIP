@@ -484,17 +484,17 @@ describe('HomeRoute', () => {
         <Suspense fallback={<div>Loading</div>}>
           <Routes>
             <Route path="/" element={<HomeRoute />} />
-            <Route path="/portal" element={<div>My Shifts page</div>} />
+            <Route path="/portal" element={<div>My shifts page</div>} />
           </Routes>
         </Suspense>
       </MemoryRouter>,
     )
   }
 
-  it('sends a SupportWorker from / to My Shifts, replacing the entry so Back does not bounce them again', () => {
+  it('sends a SupportWorker from / to My shifts, replacing the entry so Back does not bounce them again', () => {
     setUserRole('SupportWorker')
     renderHome()
-    expect(screen.getByText('My Shifts page')).toBeInTheDocument()
+    expect(screen.getByText('My shifts page')).toBeInTheDocument()
     expect(screen.queryByText('Dashboard page')).not.toBeInTheDocument()
   })
 
@@ -502,7 +502,7 @@ describe('HomeRoute', () => {
     setUserRole(role)
     renderHome()
     expect(await screen.findByText('Dashboard page')).toBeInTheDocument()
-    expect(screen.queryByText('My Shifts page')).not.toBeInTheDocument()
+    expect(screen.queryByText('My shifts page')).not.toBeInTheDocument()
   })
 
   it('still sends someone with no token to the login route (the shell guard is the first hop; PrivateRoute is the second)', () => {

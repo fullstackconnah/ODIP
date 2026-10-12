@@ -74,14 +74,7 @@ function buildGroups(staff: StaffListDto[], warningDays: number): StaffGroup[] {
 }
 
 export default function QualificationsPage() {
-  const { canWrite, canAccessPage } = usePermissions()
-  // ReadOnly is refused Settings: it reads the window without a link to a page that sends it back.
-  const settingsLink = canAccessPage('settings') && (
-    <>
-      {' — '}
-      <Link to="/settings" className="text-[var(--color-primary)] hover:underline">change in Settings</Link>
-    </>
-  )
+  const { canWrite } = usePermissions()
   const { data: settings } = useSettings()
   const { data: allStaff = [], isLoading, isError, refetch } = useStaff({ isActive: 'true' })
   const updateStaff = useUpdateStaff()
@@ -134,31 +127,29 @@ export default function QualificationsPage() {
   }
 
   const tabs: { key: FilterTab; label: string }[] = [
-    { key: 'all', label: `All Issues (${counts.all})` },
+    { key: 'all', label: `All issues (${counts.all})` },
     { key: 'expired', label: `Expired (${counts.expired})` },
-    { key: 'expiring', label: `Expiring Soon (${counts.expiring})` },
-    { key: 'no-date', label: `No Date Set (${counts['no-date']})` },
+    { key: 'expiring', label: `Expiring soon (${counts.expiring})` },
+    { key: 'no-date', label: `No date set (${counts['no-date']})` },
   ]
 
   if (isLoading) return <PageState kind="loading" noun="staff qualifications" />
 
+  // The Dashboard's "Qualification Issues" figure counts issues; the tabs below count staff. The subtitle says both, so 12 reads against 4.
+  const issueCount = groups.reduce((sum, g) => sum + g.issueCount, 0)
+  const header = (
+    <PageHeader title="Qualifications" subtitle={allStaff.length > 0 ? `${plural(issueCount, 'issue')} across ${groups.length} staff` : undefined} />
+  )
+
   if (allStaff.length === 0) {
     return (
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-        <PageHeader
-          title="Staff Qualification Expiry"
-          subtitle={(
-            <>
-              Warning window: {warningDays} days{settingsLink}
-              {' '}· showing active staff only
-            </>
-          )}
-        />
+        {header}
         {isError ? <PageState kind="error" noun="staff list" onRetry={() => refetch()} /> : <EmptyState
           icon={UserCog}
           title="No staff members yet"
           description="This page tracks expiry dates for staff certifications like First Aid, driver licences, and manual handling. Add a staff member to start tracking theirs."
-          action={canWrite ? { label: 'Add staff member', to: '/staff/new' } : undefined}
+          action={canWrite ? { label: 'New staff member', to: '/staff/new' } : undefined}
         />}
       </div>
     )
@@ -166,17 +157,7 @@ export default function QualificationsPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title="Staff Qualification Expiry"
-        subtitle={(
-          <>
-            Warning window: {warningDays} days{settingsLink}
-            {' '}· showing active staff only
-            {/* The Dashboard's "Qualification Issues" figure counts issues; the tabs below count staff. Both are said here, so 12 reads against 4. */}
-            {' '}· {plural(groups.reduce((sum, g) => sum + g.issueCount, 0), 'issue')} across {plural(groups.length, 'staff member')}
-          </>
-        )}
-      />
+      {header}
 
       {/* Filter tabs */}
       <Tabs

@@ -104,7 +104,7 @@ export default function SchedulePage() {
   if (!data) {
     return (
       <div className="flex flex-col gap-[var(--section-gap)]">
-        <PageHeader title="Schedule Overview" />
+        <PageHeader title="Schedule" />
         <PageState kind="error" noun="schedule" onRetry={() => refetch()} />
       </div>
     )
@@ -128,10 +128,7 @@ export default function SchedulePage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
-      <PageHeader
-        title="Schedule Overview"
-        subtitle="Staff and vehicle assignment across active trips"
-      />
+      <PageHeader title="Schedule" />
 
       {/* ── Summary strip (one line: trips + resource health) ── */}
       <ScheduleSummary

@@ -220,7 +220,7 @@ export default function RosterBoardPage() {
       {/* PageHeader is a fragment, so title row and toolbar sit in one tight block here (title 28px + 8px + toolbar 32px)
           instead of being spaced apart by the page's --section-gap. */}
       <div className="flex flex-col gap-2">
-        <PageHeader title="Rostering" subtitle="Week roster board — community shifts, trip work, and leave in one view." />
+        <PageHeader title="Roster board" />
 
         <WeekToolbar
           days={days}

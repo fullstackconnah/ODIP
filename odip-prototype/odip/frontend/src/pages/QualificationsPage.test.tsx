@@ -110,22 +110,22 @@ describe('QualificationsPage: the list', () => {
     expect(screen.getAllByText('No date set')).toHaveLength(3)
   })
 
-  it('counts a credential due today under Expiring Soon, and the last day of the window as soon', () => {
+  it('counts a credential due today under Expiring soon, and the last day of the window as soon', () => {
     renderList()
 
     const tabs = screen.getAllByRole('tab').map(t => t.textContent)
-    expect(tabs).toEqual(['All Issues (4)', 'Expired (1)', 'Expiring Soon (2)', 'No Date Set (2)'])
+    expect(tabs).toEqual(['All issues (4)', 'Expired (1)', 'Expiring soon (2)', 'No date set (2)'])
   })
 
   it('filters to the staff with a credential in that state', () => {
     renderList()
 
-    fireEvent.click(screen.getByRole('tab', { name: /No Date Set/ }))
+    fireEvent.click(screen.getByRole('tab', { name: /No date set/ }))
     expect(screen.getByText('Gus NoDate')).toBeInTheDocument()
     expect(screen.getByText('Ivy OneIssue')).toBeInTheDocument()
     expect(screen.queryByText('Dana Expired')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('tab', { name: /Expiring Soon/ }))
+    fireEvent.click(screen.getByRole('tab', { name: /Expiring soon/ }))
     expect(screen.getByText('Dana Expired')).toBeInTheDocument() // due today and in 1 day
     expect(screen.getByText('Eli Soon')).toBeInTheDocument()
     expect(screen.queryByText('Gus NoDate')).not.toBeInTheDocument()
@@ -169,25 +169,23 @@ describe('QualificationsPage and the Dashboard agree', () => {
   })
 })
 
-// STAFF-3 / STAFF-9 / CORE-6: ReadOnly is refused Settings and every staff write, so it is offered neither the Settings link nor an edit.
+// STAFF-3 / STAFF-9 / CORE-6: ReadOnly is refused every staff write, so it is offered no edit.
 describe('QualificationsPage: controls by role', () => {
-  it('offers ReadOnly the window and the list, with no Settings link, pencil or inline Edit', () => {
+  it('offers ReadOnly the list, with no pencil or inline Edit', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
     renderList()
     expandAll()
 
-    expect(screen.getByText(/Warning window: 30 days/)).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'change in Settings' })).not.toBeInTheDocument()
+    expect(screen.getByText('12 issues across 4 staff')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Edit / })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 
-  it.each(['Admin', 'Coordinator'])('offers %s the Settings link, the pencil and inline Edit', role => {
+  it.each(['Admin', 'Coordinator'])('offers %s the pencil and inline Edit', role => {
     localStorage.setItem('odip_user', JSON.stringify({ role }))
     renderList()
     expandAll()
 
-    expect(screen.getByRole('link', { name: 'change in Settings' })).toHaveAttribute('href', '/settings')
     expect(screen.getByRole('link', { name: 'Edit Dana Expired' })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Edit' }).length).toBeGreaterThan(0)
   })

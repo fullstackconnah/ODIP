@@ -17,24 +17,21 @@ import { usePermissions } from '@/lib/permissions'
  */
 type TabId = 'enquiries' | 'onboarding' | 'active'
 
-const TABS: { id: TabId; label: string; title: string; description: string }[] = [
+const TABS: { id: TabId; label: string; title: string }[] = [
   {
     id: 'enquiries',
     label: 'Enquiries',
     title: 'Enquiries',
-    description: 'Open enquiries and intakes in progress — start or resume an intake.',
   },
   {
     id: 'onboarding',
     label: 'Onboarding',
     title: 'Onboarding',
-    description: 'Intake complete, not yet active — gate progress and what is still missing.',
   },
   {
     id: 'active',
     label: 'Active participants',
     title: 'Active participants',
-    description: 'The operational register — participants you can roster and book.',
   },
 ]
 
@@ -67,9 +64,6 @@ export default function ParticipantsHubPage() {
   // the user per-stage orientation even though there's one route behind it all.
   useDocumentTitle(activeMeta.title)
 
-  // The stage's one-line description used to sit in its own row inside every panel (20px + 16px of
-  // spacing) under a generic page subtitle that just restated the three tab labels. It now IS the
-  // inline subtitle beside the H1 (see `subtitle` below), so a panel is only its table.
   const items: TabItem[] = useMemo(
     () => TABS.map(t => ({
       id: t.id,
@@ -92,7 +86,6 @@ export default function ParticipantsHubPage() {
     <div className="animate-fade-in">
       <PageHeader
         title="Participants"
-        subtitle={activeMeta.description}
         action={canManageParticipantLifecycle ? (
           <Button to="/participants/new-inquiry" size="md">
             <Plus className="w-4 h-4" /> New enquiry

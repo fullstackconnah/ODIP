@@ -96,14 +96,14 @@ describe('navConfig — who sees what', () => {
 
   it('gives a SupportWorker only their pages, no Dashboard, and no group that has lost every child', () => {
     expect(shape(resolveNav(navItems, accessFor('SupportWorker')))).toEqual([
-      'My Shifts', 'Trips: All Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents',
+      'My shifts', 'Trips: All Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents',
     ])
   })
 
   it('gives ReadOnly what its API lets it read: no Rostering pages but Staff and Qualifications, no Budgets, no Caregiver forms, no Settings', () => {
     expect(shape(resolveNav(navItems, accessFor('ReadOnly')))).toEqual([
       'Dashboard',
-      'My Shifts',
+      'My shifts',
       'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
       'Participants: Participants | Medications',
       'Staff & roster: Staff | Qualifications',
@@ -122,10 +122,10 @@ describe('navConfig — who sees what', () => {
   it('shows a role with no restriction everything, in config order', () => {
     expect(shape(resolveNav(navItems, accessFor('Admin')))).toEqual([
       'Dashboard',
-      'My Shifts',
+      'My shifts',
       'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
       'Participants: Participants | Medications | Caregiver forms',
-      'Staff & roster: Board | Patterns | Compatibility | Leave | Completions | Staff | Qualifications',
+      'Staff & roster: Roster board | Patterns | Compatibility | Leave | Completions | Staff | Qualifications',
       'Budgets',
       'Incidents',
       'Settings',
@@ -199,12 +199,12 @@ describe('navConfig — the bottom bar', () => {
     for (const role of ['SuperAdmin', 'Admin', 'Coordinator', 'ReadOnly']) expect(labels(role, 'office'), role).toEqual(['Dashboard', 'Trips', 'Roster', 'Participants'])
   })
 
-  it('gives a SupportWorker My Shifts, Trips, Participants, Incidents, in that order', () => {
-    expect(labels('SupportWorker', 'field')).toEqual(['My Shifts', 'Trips', 'Participants', 'Incidents'])
+  it('gives a SupportWorker My shifts, Trips, Participants, Incidents, in that order', () => {
+    expect(labels('SupportWorker', 'field')).toEqual(['My shifts', 'Trips', 'Participants', 'Incidents'])
   })
 
   it('keeps an entry out of a bar its audience excludes, even when the role could see it', () => {
-    expect(labels('Admin', 'field')).toEqual(['My Shifts', 'Trips', 'Participants', 'Incidents'])
+    expect(labels('Admin', 'field')).toEqual(['My shifts', 'Trips', 'Participants', 'Incidents'])
     expect(labels('SupportWorker', 'office')).toEqual(['Trips', 'Participants'])
   })
 
@@ -241,6 +241,6 @@ describe('navConfig — the bottom bar', () => {
     expect(items[0]).toMatchObject({ label: 'Dashboard', active: true, current: 'page', count: 0 })
     expect(items[2]).toMatchObject({ label: 'Roster', count: 7, noun: 'approval', active: false })
     const [myShifts] = bar('SupportWorker', 'field').map(entry => toBarItem(entry, '/portal', { ...NO_COUNTS, pendingWitness: 2 }))
-    expect(myShifts).toMatchObject({ label: 'My Shifts', count: 2, noun: 'witness approval', active: true, current: 'page' })
+    expect(myShifts).toMatchObject({ label: 'My shifts', count: 2, noun: 'witness approval', active: true, current: 'page' })
   })
 })
