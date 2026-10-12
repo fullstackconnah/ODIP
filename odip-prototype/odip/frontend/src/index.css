@@ -198,6 +198,10 @@
     display: block;
     margin-bottom: 2px;
   }
+  /* A column placed on the card by DataTable `mobile` (title, status, meta line) carries no caps label. */
+  .mobile-card-table tbody td[data-card]::before {
+    content: none;
+  }
   .mobile-card-table .divide-y > * + * {
     border-top: none;
   }

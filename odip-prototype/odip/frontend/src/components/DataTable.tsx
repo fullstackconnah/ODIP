@@ -47,6 +47,12 @@ type ColumnBase<T> = {
   /** Let this column's cells wrap onto several lines (prose such as notes). The row then grows past
    * `--row-h`. Default: body cells never wrap, so every row is exactly `--row-h` at any width. */
   wrap?: boolean
+  /**
+   * Where this column goes on the phone card (below md). Unset keeps the labelled field every column gets by default. `primary` is the
+   * title line, `status` a pill at the end of it, `meta` folds into one muted line under it (no caps labels, empty values skipped) and
+   * `hidden` leaves the card. The table from md up is unchanged.
+   */
+  mobile?: 'primary' | 'meta' | 'status' | 'hidden'
   editable?: {
     /**
      * `ctx.errorId` is the id of the row's error message element (see `rowError` on
@@ -228,6 +234,15 @@ function pinsOf<T>(columns: Column<T>[]): Array<ColumnPin | undefined> {
   })
 }
 
+// The phone card's placement of a column that opts in (`mobile`). `order-first` puts the title, its status and the meta line (rendered
+// after every column) ahead of the labelled fields, in that order; `data-card` drops the caps label (index.css).
+const CARD_CLASS: Record<NonNullable<ColumnBase<unknown>['mobile']>, string> = {
+  primary: 'max-md:order-first max-md:flex-1 max-md:min-w-0',
+  status: 'max-md:order-first max-md:ml-auto',
+  meta: 'max-md:hidden',
+  hidden: 'max-md:hidden',
+}
+
 /** A number is px, a string is passed through as a CSS length. */
 function cssLength(value: number | string): string {
   return typeof value === 'number' ? `${value}px` : value
@@ -295,6 +310,7 @@ export function DataTable<T>({
   const activeSort = isControlled ? controlledSort ?? null : internalSort
 
   const visibleColumns = useMemo(() => columns.filter(c => !c.hidden), [columns])
+  const metaColumns = visibleColumns.filter(c => c.mobile === 'meta')
   // A server-paged table holds one slice, so it can only offer sorting if the caller turns it into a server request (onSortChange).
   const canSort = sortable && (!pagination || !!onSortChange)
 
@@ -575,9 +591,10 @@ export function DataTable<T>({
                     return (
                       <td
                         key={col.key}
-                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${pinClass(colIndex, false)} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
+                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${pinClass(colIndex, false)} ${col.mobile ? CARD_CLASS[col.mobile] : ''} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
                         style={columnStyle(col)}
                         data-label={typeof col.header === 'string' ? col.header : ''}
+                        data-card={col.mobile === 'primary' || col.mobile === 'status' ? col.mobile : undefined}
                       >
                         {text != null ? (
                           <span
@@ -591,6 +608,24 @@ export function DataTable<T>({
                       </td>
                     )
                   })}
+                  {metaColumns.length > 0 && (
+                    <td data-card="meta" className={`md:hidden max-md:order-first max-md:basis-full text-[13px] text-[var(--color-muted-foreground)] ${TAP_AREA_LINKS}`}>
+                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                        {metaColumns
+                          .map(col => ({ col, content: renderCell(row, col, rowIndex) }))
+                          .filter(({ content }) => content != null && content !== false && content !== '' && content !== '—')
+                          .map(({ col, content }, index) => (
+                            <Fragment key={col.key}>
+                              {index > 0 && <span aria-hidden="true">·</span>}
+                              <span className="min-w-0">
+                                {typeof col.header === 'string' && col.header && <span className="sr-only">{col.header}: </span>}
+                                {content}
+                              </span>
+                            </Fragment>
+                          ))}
+                      </div>
+                    </td>
+                  )}
                 </tr>
                 {errorMessage && (
                   <tr className={dividerClass}>
@@ -609,7 +644,8 @@ export function DataTable<T>({
           </tfoot>
         )}
       </table>
-      {pagination && pagination.totalCount > 0 && (
+      {/* One page has nothing to page through; a later page keeps its way back even if the list shrank under it. */}
+      {pagination && (pagination.totalCount > pagination.pageSize || pagination.page > 1) && (
         <div className={`flex min-h-[var(--row-h)] items-center justify-between text-sm ${cellPaddingX} border-t border-[var(--color-border)]`}>
           <span className="text-[var(--color-muted-foreground)]" aria-live="polite">
             Showing {(pagination.page - 1) * pagination.pageSize + 1}-
@@ -653,6 +689,8 @@ const ROW_ACTIONS_REVEAL = [
   'opacity-0 transition-opacity',
   'group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-within:opacity-100',
   '[@media(pointer:coarse)]:opacity-100',
+  // The phone card has no hover either.
+  'max-md:opacity-100',
 ].join(' ')
 
 // Bridge for the hand-rolled icon group in `ActionButtons` (what `useArchiveRestore().actionButtons`
@@ -666,6 +704,10 @@ const ROW_ACTIONS_LEGACY_ICONS = [
   '[&>div>:is(a,button)]:inline-flex [&>div>:is(a,button)]:items-center [&>div>:is(a,button)]:justify-center',
   '[&>div>:is(a,button)]:h-[var(--control-h-sm)] [&>div>:is(a,button)]:w-[var(--control-h-sm)] [&>div>:is(a,button)]:p-0',
 ].join(' ')
+
+// The phone card: every control in the cluster (a Button, an ActionButtons icon) is a real 44px target, whatever the pointer, since a
+// card below md is what a phone shows. min-* only grow a control, so a text button keeps its width and the icons stay centred.
+const ROW_ACTIONS_CARD = 'max-md:[&_:is(a,button)]:min-h-11 max-md:[&_:is(a,button)]:min-w-11'
 
 // Overlay mode: on a mouse (`pointer-fine`) at md+ the cluster leaves the table's flow and sits on
 // top of the row's last data cells, so its column costs no width — a cluster with "Change status"
@@ -700,7 +742,7 @@ const ROW_ACTIONS_OVERLAY = [
 export function RowActions({ children, overlay = false }: { children: ReactNode; overlay?: boolean }) {
   if (overlay && Children.toArray(children).length === 0) return null
   return (
-    <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_REVEAL} ${ROW_ACTIONS_LEGACY_ICONS} ${overlay ? ROW_ACTIONS_OVERLAY : ''}`}>
+    <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_REVEAL} ${ROW_ACTIONS_LEGACY_ICONS} ${ROW_ACTIONS_CARD} ${overlay ? ROW_ACTIONS_OVERLAY : ''}`}>
       {children}
     </div>
   )
