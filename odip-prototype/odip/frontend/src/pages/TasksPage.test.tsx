@@ -374,5 +374,7 @@ describe('TasksPage — phone card', () => {
     // On a mouse at md+ the cluster overlays the row instead of holding a column, so the Open link beside Status is not cut at 1440.
     expect(edit.closest('div.flex.justify-end')).toHaveClass('md:pointer-fine:absolute')
     expect(screen.getByRole('button', { name: 'Mark complete' })).toHaveClass('max-md:min-h-11', 'max-md:min-w-11')
+    // VC design review fix 3: on the card the tick joins the controls after Due, so Due does not move on a card without a tick.
+    expect(screen.getByRole('button', { name: 'Mark complete' }).closest('td')).toHaveClass('max-md:order-1')
   })
 })

@@ -157,7 +157,7 @@ export default function BookingsPage() {
             },
             { key: 'bookingDate', header: 'Booking Date', type: 'date', mobile: 'meta' },
             // Only what the booking needs, as chips: three tick columns read the same for a booking with none as with all three on a phone.
-            { key: 'needs', header: 'Needs', mobile: 'meta', render: (b: BookingListDto) => <Needs booking={b} /> },
+            { key: 'needs', header: 'Needs', mobile: 'meta', className: 'max-md:basis-full', render: (b: BookingListDto) => <Needs booking={b} /> },
           ]}
           pagination={{
             page,

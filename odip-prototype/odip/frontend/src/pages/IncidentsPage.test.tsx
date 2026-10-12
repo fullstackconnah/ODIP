@@ -749,7 +749,7 @@ describe('IncidentsPage — incident type label', () => {
 
 // Platform review V2-A (Incidents 3): the phone card was a grid of caps labels with blank space under it.
 describe('IncidentsPage — phone card', () => {
-  it('puts the title and status on the title line, the facts on one muted line, and leaves Reported by off the card', () => {
+  it('puts the title and status on the title line, the facts on one muted line, Reported by included', () => {
     mockUseIncidents.mockReturnValue({ data: [baseIncident({ incidentType: 'MedicationError', reportedByName: 'Pat Jones' })], isLoading: false })
     renderPage()
 
@@ -757,6 +757,7 @@ describe('IncidentsPage — phone card', () => {
     expect(row.querySelector('td[data-label="Title"]')).toHaveAttribute('data-card', 'primary')
     expect(row.querySelector('td[data-label="Status"]')).toHaveAttribute('data-card', 'status')
     for (const label of ['Type', 'Severity', 'Date']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
-    expect(row.querySelector('td[data-label="Reported By"]')).toHaveClass('max-md:hidden')
+    // VC check A: the reporter stays on the card, on the muted line.
+    expect(row.querySelector('td[data-label="Reported By"]')).toHaveAttribute('data-card', 'meta')
   })
 })

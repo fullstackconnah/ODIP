@@ -797,6 +797,30 @@ describe('ParticipantsPage — phone card', () => {
     expect(row.querySelector('td[data-label="Name"]')).toHaveAttribute('data-card', 'primary')
     expect(row.querySelector('td[data-label="Status"]')).toHaveAttribute('data-card', 'status')
     for (const label of ['Plan Type', 'Support Ratio', 'Region']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
-    for (const label of ['NDIS Number', 'Streams', 'High', 'Repeat']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveClass('max-md:hidden')
+    for (const label of ['NDIS Number', 'Streams', 'Repeat']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveClass('max-md:hidden')
+  })
+})
+
+// VC design review fix 1: the card had dropped the care needs. Wheelchair and High support stay on the card as chips when true.
+describe('ParticipantsPage — care needs on the phone card', () => {
+  it('shows Wheelchair and High support as phone-only chips beside the desktop tick, and nothing when false', () => {
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ mobilityAidWheelchair: true, isHighSupport: true }), baseParticipant({ id: 'p2', fullName: 'Ava Lee' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    const row = screen.getByRole('link', { name: /Jamie Smith/ }).closest('tr') as HTMLElement
+    for (const label of ['Wheelchair', 'High support']) {
+      const chip = within(row).getByText(label)
+      expect(chip, label).toHaveClass('md:hidden')
+      const cell = chip.closest('td') as HTMLElement
+      expect(cell, label).toHaveAttribute('data-card', 'meta')
+      expect(cell.querySelector('svg'), label).toHaveClass('max-md:hidden')
+    }
+    const ava = screen.getByRole('link', { name: /Ava Lee/ }).closest('tr') as HTMLElement
+    expect(within(ava).queryByText('Wheelchair')).not.toBeInTheDocument()
+    expect(within(ava).queryByText('High support')).not.toBeInTheDocument()
+    expect(ava.querySelector('td[data-label="High"]')).toHaveClass('max-md:hidden')
   })
 })

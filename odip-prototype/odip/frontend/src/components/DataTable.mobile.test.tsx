@@ -103,3 +103,12 @@ describe('RowActions on the phone card', () => {
     expect(cluster).toHaveClass('max-md:opacity-100', 'max-md:[&_:is(a,button)]:min-h-11', 'max-md:[&_:is(a,button)]:min-w-11')
   })
 })
+
+// VC check A: a later page of a list that has emptied printed "Showing 21-0 of 0"; with nothing to show there is no pager, as before.
+describe('DataTable pager with an empty list', () => {
+  it('shows no pager when there is nothing at all, even on a later page', () => {
+    render(<DataTable data={[]} columns={[{ key: 'title', header: 'Task' }]} keyField="id" pagination={{ page: 2, pageSize: 20, totalCount: 0, onPageChange: vi.fn() }} />)
+
+    expect(screen.queryByText(/Showing/)).not.toBeInTheDocument()
+  })
+})

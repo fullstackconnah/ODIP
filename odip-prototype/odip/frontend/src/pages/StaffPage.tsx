@@ -126,7 +126,7 @@ export default function StaffPage() {
     // actions pinned. On the phone card the name and status make the title line and the rest one muted line.
     { key: 'position', header: 'Position', sortable: true, mobile: 'meta', render: positionLabel },
     { key: 'region', header: 'Region', sortable: true, maxWidth: '7rem', mobile: 'meta' },
-    { key: 'qualifications', header: 'Qualifications', mobile: 'meta', render: (s: StaffListDto) => <Qualifications staff={s} /> },
+    { key: 'qualifications', header: 'Qualifications', mobile: 'meta', className: 'max-md:basis-full', render: (s: StaffListDto) => <Qualifications staff={s} /> },
     {
       key: 'status',
       header: 'Status',

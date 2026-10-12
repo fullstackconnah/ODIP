@@ -71,6 +71,8 @@ export default function TasksPage() {
       key: 'checkbox',
       header: '',
       hidden: showArchived,
+      // On the card the tick joins the controls after Due, so Due holds its place on a card without one.
+      className: 'max-md:order-1',
       render: (t) => t.status !== 'Completed' && t.status !== 'Cancelled' && mayChange(t) ? (
         <Button variant="ghost" size="sm" iconOnly onClick={(e) => markComplete(e, t)} title="Mark complete" className="max-md:min-h-11 max-md:min-w-11">
           <CheckCircle className="w-4 h-4" />

@@ -7,7 +7,7 @@ import { PLAN_TYPE_LABELS, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
-import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
+import { ServiceStreamBadges, CHIP_CLASS } from '@/components/ServiceStreamBadges'
 import { TextField } from '@/components/TextField'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { Button } from '@/components/Button'
@@ -17,7 +17,7 @@ import { ALERT_SEVERITY_STYLES } from '@/components/alertSeverityStyles'
 import type { ParticipantListDto } from '@/api/types'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Users, ChevronRight, Pill } from 'lucide-react'
+import { Users, ChevronRight, Pill, Check } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { queryPhase } from '@/lib/queryPhase'
@@ -40,6 +40,16 @@ const VIEW_OPTIONS: { key: View; label: string }[] = [
  * bypass onboarding). Archived is every finalised participant who is not active, NOT narrowed by that rule: someone archived after
  * going through onboarding has an onboarding row and would otherwise be listed nowhere they could be restored from.
  */
+// A care need the phone card must not lose: the table keeps the tick a 'boolean' column draws, the card shows the need as a chip.
+function CareNeed({ label }: { label: string }) {
+  return (
+    <>
+      <Check className="w-4 h-4 text-[var(--color-primary)] mx-auto max-md:hidden" aria-label={label} />
+      <span className={`${CHIP_CLASS} md:hidden`}>{label}</span>
+    </>
+  )
+}
+
 function listParams(view: View, search: string): Record<string, string> {
   const params: Record<string, string> = view === 'archived'
     ? { isActive: 'false', isDraft: 'false' }
@@ -241,11 +251,11 @@ function useParticipantsScreen() {
           <span className="sr-only">Wheelchair</span>
         </span>
       ),
-      type: 'boolean',
       align: 'center',
-      mobile: 'hidden',
+      mobile: 'meta',
+      render: (p) => p.mobilityAidWheelchair ? <CareNeed label="Wheelchair" /> : null,
     },
-    { key: 'isHighSupport', header: 'High', type: 'boolean', align: 'center', mobile: 'hidden' },
+    { key: 'isHighSupport', header: 'High', align: 'center', mobile: 'meta', render: (p) => p.isHighSupport ? <CareNeed label="High support" /> : null },
     { key: 'supportRatio', header: 'Support Ratio', maxWidth: '10rem', mobile: 'meta', render: (p) => SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio },
     { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center', mobile: 'hidden' },
     {

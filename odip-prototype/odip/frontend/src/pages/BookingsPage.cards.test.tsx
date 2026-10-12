@@ -39,5 +39,6 @@ describe('BookingsPage — needs and the phone card', () => {
     expect(within(row).getByRole('link', { name: 'Coastal weekend' }).closest('td')).toHaveAttribute('data-card', 'meta')
     expect(within(row).getByText('12/10/2026').closest('td')).toHaveAttribute('data-card', 'meta')
     expect(within(row).getByRole('list', { name: 'Needs' }).closest('td')).toHaveAttribute('data-card', 'meta')
+    expect(within(row).getByRole('list', { name: 'Needs' }).closest('td')).toHaveClass('max-md:basis-full')
   })
 })
