@@ -5,13 +5,14 @@ import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { SearchInput } from '@/components/SearchInput'
+import { CHIP_CLASS } from '@/components/ServiceStreamBadges'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { extractErrorMessage } from '@/lib/utils'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
-import { Plus, UserCog, Check, CalendarOff } from 'lucide-react'
+import { Plus, UserCog, CalendarOff } from 'lucide-react'
 import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { deadlineState } from '@/lib/deadline'
@@ -32,6 +33,30 @@ const ACTIVE_STATUS_ITEMS = [
 const ACTIVE_STATUS_COLORS: Record<string, string> = {
   Active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   Inactive: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+}
+
+// What a staff member holds, as chips, and nothing for what they do not: the eight caps-labelled flag columns this replaces made a phone
+// card ten labels long and a desktop row a run of ticks and blanks. An expired worker screening is the one flag shown as a problem.
+const QUALIFICATIONS: Array<[keyof StaffListDto, string]> = [
+  ['isDriverEligible', 'Driver'],
+  ['isFirstAidQualified', 'First aid'],
+  ['isMedicationCompetent', 'Medication'],
+  ['isManualHandlingCompetent', 'Manual handling'],
+  ['isOvernightEligible', 'Overnight'],
+]
+
+function Qualifications({ staff }: { staff: StaffListDto }) {
+  const held = QUALIFICATIONS.filter(([flag]) => staff[flag]).map(([, label]) => label)
+  const screening = staff.workerScreeningExpiryDate
+  if (held.length === 0 && !screening) return null
+  return (
+    <ul aria-label="Qualifications" className="inline-flex flex-wrap items-center gap-1">
+      {held.map(label => <li key={label} className={CHIP_CLASS}>{label}</li>)}
+      {screening && (isExpired(screening)
+        ? <li><StatusBadge status="expired" label="Screening expired" /></li>
+        : <li className={CHIP_CLASS}>Worker screening</li>)}
+    </ul>
+  )
 }
 
 export default function StaffPage() {
@@ -87,6 +112,7 @@ export default function StaffPage() {
       key: 'fullName',
       header: 'Name',
       sortable: true,
+      mobile: 'primary',
       className: 'font-medium',
       render: (s: StaffListDto) => (
         // Truncation on the link itself (not a wrapper): a wrapper's overflow: hidden would clip the link's focus ring.
@@ -95,31 +121,17 @@ export default function StaffPage() {
         </Link>
       ),
     },
-    // Column budget (density §4): eleven columns need ~1140px, the box at 1280 is ~1006. The text columns are capped (ellipsis, full
-    // text in the tooltip); every column stays (Manual and Overnight were deleted below 1536, L3-04), and what does not fit scrolls in the
-    // box with the name and the row actions pinned, so the actions stay on screen whatever the names and regions are.
-    { key: 'position', header: 'Position', sortable: true, render: positionLabel },
-    { key: 'region', header: 'Region', sortable: true, maxWidth: '7rem' },
-    { key: 'isDriverEligible', header: 'Driver', type: 'boolean', align: 'center' },
-    { key: 'isFirstAidQualified', header: 'First Aid', type: 'boolean', align: 'center' },
-    { key: 'isMedicationCompetent', header: 'Meds', type: 'boolean', align: 'center' },
-    { key: 'isManualHandlingCompetent', header: 'Manual', type: 'boolean', align: 'center' },
-    { key: 'isOvernightEligible', header: 'Overnight', type: 'boolean', align: 'center' },
-    {
-      key: 'workerScreening',
-      header: 'Worker Screening',
-      align: 'center',
-      render: (s) => {
-        if (!s.workerScreeningExpiryDate) return null
-        return isExpired(s.workerScreeningExpiryDate)
-          ? <StatusBadge status="expired" label="Expired" />
-          : <Check className="w-4 h-4 text-[var(--color-primary)] mx-auto" aria-label="Worker screening current" />
-      },
-    },
+    // Column budget (density §4): Region is capped (ellipsis, full text in the tooltip); every flag is still on the row (Manual and Overnight
+    // were once deleted below 1536, L3-04), now as Qualifications chips, and what does not fit scrolls in the box with the name and the row
+    // actions pinned. On the phone card the name and status make the title line and the rest one muted line.
+    { key: 'position', header: 'Position', sortable: true, mobile: 'meta', render: positionLabel },
+    { key: 'region', header: 'Region', sortable: true, maxWidth: '7rem', mobile: 'meta' },
+    { key: 'qualifications', header: 'Qualifications', mobile: 'meta', render: (s: StaffListDto) => <Qualifications staff={s} /> },
     {
       key: 'status',
       header: 'Status',
       sortable: true,
+      mobile: 'status',
       render: (s) => {
         const current = s.isActive ? 'Active' : 'Inactive'
         // A role that cannot write reads the status: no pill it cannot change.
