@@ -5,6 +5,7 @@ import { usePermissions } from '@/lib/permissions'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
+import { Callout } from '@/components/Callout'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -586,12 +587,9 @@ export default function LeaveApprovalsPage() {
       {isLoading ? (
         <PageState kind="loading" noun="leave requests" />
       ) : isError ? (
-        <EmptyState
-          icon={CalendarOff}
-          title="Couldn't load leave requests."
-          description="Check your connection and try again."
-          action={{ label: 'Try again', onClick: refetchAll }}
-        />
+        <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={refetchAll}>Try again</Button>}>
+          Couldn't load leave requests. Check your connection and try again.
+        </Callout>
       ) : rows.length === 0 ? (
         <EmptyState icon={CalendarOff} title="No requests match these filters" description="Try a different status, staff member or date range." />
       ) : (

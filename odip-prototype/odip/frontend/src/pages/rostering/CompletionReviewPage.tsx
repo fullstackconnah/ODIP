@@ -5,6 +5,7 @@ import { usePermissions } from '@/lib/permissions'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
+import { Callout } from '@/components/Callout'
 import { PageState } from '@/components/PageState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown } from '@/components/Dropdown'
@@ -274,12 +275,9 @@ export default function CompletionReviewPage() {
       {isLoading ? (
         <PageState kind="loading" noun="shift completions" />
       ) : isError ? (
-        <EmptyState
-          icon={ClipboardCheck}
-          title="Couldn't load shift completions."
-          description="Check your connection and try again."
-          action={{ label: 'Try again', onClick: refetch }}
-        />
+        <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
+          Couldn't load shift completions. Check your connection and try again.
+        </Callout>
       ) : rows.length === 0 ? (
         <EmptyState icon={ClipboardCheck} title="No completions match these filters" description="Try a different status, staff member or date range." />
       ) : (

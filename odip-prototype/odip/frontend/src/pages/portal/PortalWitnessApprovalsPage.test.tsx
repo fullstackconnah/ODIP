@@ -266,3 +266,15 @@ describe('PortalWitnessApprovalsPage', () => {
     })
   })
 })
+
+describe('PortalWitnessApprovalsPage — a failed load', () => {
+  it('is the error banner with Try again, not an empty state', async () => {
+    const refetch = vi.fn()
+    mockUsePendingWitnessRequests.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+    renderPage()
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/couldn't load witness requests/i)
+    await userEvent.setup().click(within(alert).getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalled()
+  })
+})
