@@ -1,18 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import AccommodationPage from './AccommodationPage'
 
-const { mockUseAccommodation, mockUsePermissions, mockRestore } = vi.hoisted(() => ({
+const { mockUseAccommodation, mockUsePermissions, mockRestore, mockDelete } = vi.hoisted(() => ({
   mockRestore: vi.fn(),
+  mockDelete: vi.fn(),
   mockUseAccommodation: vi.fn(),
   mockUsePermissions: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
   useAccommodation: mockUseAccommodation,
-  useDeleteAccommodation: () => ({ mutate: vi.fn(), isPending: false }),
-  useRestoreAccommodation: () => ({ mutate: mockRestore, isPending: false }),
+  useDeleteAccommodation: () => ({ mutateAsync: mockDelete, isPending: false }),
+  useRestoreAccommodation: () => ({ mutateAsync: mockRestore, isPending: false }),
 }))
 
 vi.mock('@/lib/permissions', () => ({
@@ -46,6 +47,8 @@ function makeProperty(overrides: Partial<Record<string, unknown>> = {}) {
 
 beforeEach(() => {
   mockUsePermissions.mockReturnValue({ canWrite: true })
+  mockRestore.mockReset().mockResolvedValue({})
+  mockDelete.mockReset().mockResolvedValue({})
 })
 
 describe('AccommodationPage — card is not a nested interactive element (PP-68)', () => {
@@ -68,14 +71,15 @@ describe('AccommodationPage — accessible names on action buttons (PP-69)', () 
 })
 
 describe('AccommodationPage — card grid', () => {
-  it('collapses to one column on a phone through a min(22rem,100%) track floor', () => {
+  it('collapses to one column on a phone through a min(22rem,100%) track floor, and stretches the cards in a row to one height', () => {
     mockUseAccommodation.mockReturnValue({ data: [makeProperty()], isLoading: false })
     renderPage()
 
     // jsdom has no layout, so the class is the only observable proof: a bare minmax(22rem,1fr)
-    // floor (352px) overflows a 320-360px phone viewport.
+    // floor (352px) overflows a 320-360px phone viewport. A wrapped title made one card taller than its row: no items-start.
     const grid = screen.getByRole('link', { name: 'Sunrise House' }).closest('.grid')!
-    expect(grid).toHaveClass('items-start', 'grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))]')
+    expect(grid).toHaveClass('grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))]')
+    expect(grid).not.toHaveClass('items-start')
   })
 })
 
@@ -120,6 +124,44 @@ describe('AccommodationPage — Restore changes only the archived state (TRIPS-2
     fireEvent.click(screen.getByRole('button', { name: /Restore/ }))
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Restore' }))
 
-    expect(mockRestore).toHaveBeenCalledWith('acc-1', expect.anything())
+    expect(mockRestore).toHaveBeenCalledWith('acc-1')
+  })
+})
+
+// V4: one card pattern with Vehicles: labelled Buttons instead of a bare trash icon, and no pill that only repeats the tab.
+describe('AccommodationPage — card pattern', () => {
+  it('offers labelled Edit and Archive and no Active pill on the Active tab', () => {
+    mockUseAccommodation.mockReturnValue({ data: [makeProperty()], isLoading: false })
+    renderPage()
+
+    expect(screen.getByRole('link', { name: 'Edit' })).toHaveAttribute('href', '/accommodation/acc-1/edit')
+    expect(screen.getByRole('button', { name: 'Archive' })).toHaveTextContent('Archive')
+    expect(screen.getAllByText('Active')).toHaveLength(1) // the tab, not a pill on the card
+  })
+})
+
+// Q4a follow-up: the confirm only closed on success, so a refusal left it open and said nothing.
+describe('AccommodationPage — a refused archive or restore', () => {
+  it('closes the confirm and shows the server message', async () => {
+    mockDelete.mockRejectedValue({ response: { data: { message: 'Property has upcoming reservations.' } } })
+    mockUseAccommodation.mockReturnValue({ data: [makeProperty()], isLoading: false })
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Archive' }))
+
+    expect(await screen.findByText('Property has upcoming reservations.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+  })
+
+  it('closes the confirm on a refused restore too, with a fallback message', async () => {
+    mockRestore.mockRejectedValue(new Error('network'))
+    mockUseAccommodation.mockReturnValue({ data: [makeProperty({ isActive: false })], isLoading: false })
+    renderPage()
+    fireEvent.click(screen.getByRole('radio', { name: 'Archived' }))
+    fireEvent.click(screen.getByRole('button', { name: /Restore/ }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Restore' }))
+
+    expect(await screen.findByText('Could not restore "Sunrise House". Please try again.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
   })
 })
