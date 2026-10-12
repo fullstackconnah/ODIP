@@ -134,7 +134,14 @@ describe('SchedulePage — density (spec §7)', () => {
     renderPage()
 
     const h1 = screen.getByRole('heading', { level: 1, name: 'Schedule Overview' })
-    expect(h1.parentElement).toHaveTextContent('Staff and vehicle assignment across active trips · Click Available to assign')
+    expect(h1.parentElement).toHaveTextContent(/^Schedule OverviewStaff and vehicle assignment across active trips$/)
+  })
+
+  it('offers no dead controls: no view toggle, no disabled Timeline, Filter or Download', () => {
+    renderPage()
+
+    expect(screen.queryByRole('button', { name: /grid view|timeline/i })).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Coming soon')).not.toBeInTheDocument()
   })
 
   it('sets the cell font size at the source: the table itself is text-sm (14px), not the inherited 16px', () => {

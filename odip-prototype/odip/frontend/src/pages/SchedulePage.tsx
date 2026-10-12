@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import {
   CalendarRange, Users, Truck, ChevronDown, ChevronRight,
   Car, Shield, Pill, HandMetal, Moon,
-  Filter, Download,
 } from 'lucide-react'
 import {
   useScheduleOverview, useCreateStaffAssignment, useCreateVehicleAssignment, useDeleteStaffAssignment,
@@ -130,25 +129,7 @@ export default function SchedulePage() {
     <div className="flex flex-col gap-[var(--section-gap)]">
       <PageHeader
         title="Schedule Overview"
-        subtitle="Staff and vehicle assignment across active trips · Click Available to assign"
-        action={
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-[var(--radius-sm)] bg-[var(--color-surface-container)] p-0.5">
-              <button className="h-[calc(var(--control-h)_-_4px)] rounded-[var(--radius-sm)] bg-[var(--color-card)] px-3 text-sm font-bold text-[var(--color-foreground)] shadow-sm">
-                Grid View
-              </button>
-              <button disabled title="Coming soon" className="h-[calc(var(--control-h)_-_4px)] px-3 text-sm font-medium text-[var(--color-muted-foreground)] transition-colors hover:text-[var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-50">
-                Timeline
-              </button>
-            </div>
-            <button disabled title="Coming soon" className="flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-surface-container)] disabled:cursor-not-allowed disabled:opacity-50">
-              <Filter className="h-4 w-4" />
-            </button>
-            <button disabled title="Coming soon" className="flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-surface-container)] disabled:cursor-not-allowed disabled:opacity-50">
-              <Download className="h-4 w-4" />
-            </button>
-          </div>
-        }
+        subtitle="Staff and vehicle assignment across active trips"
       />
 
       {/* ── Summary strip (one line: trips + resource health) ── */}
