@@ -352,7 +352,9 @@ row). Modal bodies use the narrower `modalGrid` (two columns from `sm`, `half` /
 Body rows are `--row-h` and the header `--table-head-h`; cells take `--cell-px` horizontally. Plain-string
 cells are capped at 24rem with an ellipsis and a `title` carrying the full text.
 Below 768px a table becomes a stack of cards, one per row, each cell labelled by `data-label` in a 12px caption. Under a coarse pointer the cells of a card sit 12px apart
-(8px otherwise), so two neighbouring 44px hit areas never overlap.
+(8px otherwise), so two neighbouring 44px hit areas never overlap. A column may place itself on the card with `mobile`: `primary` is the title line and
+`status` a pill at its end, `meta` cells follow as one muted line with no caps labels (an empty value is skipped; a chip column such as Qualifications takes
+its own line with `max-md:basis-full`), `hidden` leaves the card (never the table from md up), and an unset column stays a labelled field after them.
 
 **The Column Rule.** A column is never removed at md and up. The #161 overflow fix hid columns by breakpoint (`priority`: below xl, 2xl and 1792px), so at 1280 a
 task's Trip and Type, a staff member's Manual and Overnight flags, a reservation's Ref and Nights were not on the page at all:
@@ -369,10 +371,12 @@ the answer is a tighter cell (a cap, an ellipsis), not more air, and never a del
 **The Row Action Reveal Rule.** Row actions are `Button size="sm"` / `iconOnly` (24px) and are revealed by
 opacity alone (row hover, row focus-within, or control focus), so they stay in the tab order and the
 accessibility tree. On a mouse the cluster may overlay the row's trailing cells so it costs no column
-width. Under a coarse pointer there is no hover, so they are always shown and stay in the flow.
+width. Under a coarse pointer there is no hover, so they are always shown and stay in the flow, and below md, on the card, they are
+always shown too, with every control in the cluster at least 44px square whatever the pointer.
 
 ### Touch hit areas
-Two mechanisms, both driven by `--tap-min` (0px on a mouse, 44px on touch), so the desktop look is unchanged.
+Two mechanisms, both driven by `--tap-min` (0px on a mouse, 44px on touch), so the desktop look is unchanged. The one exception is the row-action
+cluster on a phone card (below md), whose controls are 44px at any pointer (the Row Action Reveal Rule).
 `TAP_AREA` (`components/tapArea.ts`) is a transparent pseudo-element centred on a control and sized
 `max(100%, --tap-min)`: on touch a 36px or 24px control gets a 44px hit area without growing. Two padded
 neighbours must sit far enough apart that the pads do not overlap (row-action clusters and `ActionButtons`

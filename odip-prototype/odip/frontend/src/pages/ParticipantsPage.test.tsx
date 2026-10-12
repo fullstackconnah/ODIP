@@ -692,11 +692,12 @@ describe('ParticipantsPage — narrow-desktop columns', () => {
     const row = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
     const cells = within(row).getAllByRole('cell')
     const headers = screen.getAllByRole('columnheader')
+    // From md up (the Column Rule); max-md:hidden only leaves a field off the phone card.
     for (const label of ['Name', 'NDIS Number', 'Streams', 'Status', 'High', 'Plan Type', 'Region', 'Support Ratio', 'Repeat']) {
       const index = headers.findIndex(h => h.textContent?.includes(label))
       expect(index, label).toBeGreaterThanOrEqual(0)
-      expect(headers[index].className, label).not.toMatch(/hidden/)
-      expect(cells[index].className, label).not.toMatch(/hidden/)
+      expect(headers[index].className, label).not.toMatch(/(^|\s)((sm|md|lg|xl|2xl):)?hidden(\s|$)/)
+      expect(cells[index].className, label).not.toMatch(/(^|\s)((sm|md|lg|xl|2xl):)?hidden(\s|$)/)
     }
   })
 
@@ -782,5 +783,44 @@ describe('ParticipantsPage — name link touch target', () => {
     )
     expect(link).toHaveAttribute('title', 'Grace Palmer-Hughes')
     expect(link.className).not.toMatch(/before:/)
+  })
+})
+
+// Platform review VISUAL-1 (Participants, phone): each row was an 8-field caps card, 4,700px for 21 rows. Name, status and plan type;
+// the rest is on the detail page.
+describe('ParticipantsPage — phone card', () => {
+  it('puts the name and status on the title line, plan type, ratio and region on one muted line, and leaves the rest off the card', () => {
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant({ planType: 'PlanManaged' })], isLoading: false })
+    renderPage()
+
+    const row = screen.getByText('Plan Managed').closest('tr') as HTMLElement
+    expect(row.querySelector('td[data-label="Name"]')).toHaveAttribute('data-card', 'primary')
+    expect(row.querySelector('td[data-label="Status"]')).toHaveAttribute('data-card', 'status')
+    for (const label of ['Plan Type', 'Support Ratio', 'Region']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
+    for (const label of ['NDIS Number', 'Streams', 'Repeat']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveClass('max-md:hidden')
+  })
+})
+
+// VC design review fix 1: the card had dropped the care needs. Wheelchair and High support stay on the card as chips when true.
+describe('ParticipantsPage — care needs on the phone card', () => {
+  it('shows Wheelchair and High support as phone-only chips beside the desktop tick, and nothing when false', () => {
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ mobilityAidWheelchair: true, isHighSupport: true }), baseParticipant({ id: 'p2', fullName: 'Ava Lee' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    const row = screen.getByRole('link', { name: /Jamie Smith/ }).closest('tr') as HTMLElement
+    for (const label of ['Wheelchair', 'High support']) {
+      const chip = within(row).getByText(label)
+      expect(chip, label).toHaveClass('md:hidden')
+      const cell = chip.closest('td') as HTMLElement
+      expect(cell, label).toHaveAttribute('data-card', 'meta')
+      expect(cell.querySelector('svg'), label).toHaveClass('max-md:hidden')
+    }
+    const ava = screen.getByRole('link', { name: /Ava Lee/ }).closest('tr') as HTMLElement
+    expect(within(ava).queryByText('Wheelchair')).not.toBeInTheDocument()
+    expect(within(ava).queryByText('High support')).not.toBeInTheDocument()
+    expect(ava.querySelector('td[data-label="High"]')).toHaveClass('max-md:hidden')
   })
 })

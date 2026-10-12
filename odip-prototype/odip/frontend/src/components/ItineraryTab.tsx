@@ -162,12 +162,12 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
         </div>
       </div>
 
-      {/* Admin details (from trip data) */}
+      {/* Admin details (from trip data). Label and value sit side by side at every width: stacked on a phone, seven facts took ~450px. */}
       {trip && (
         <div className="grid md:grid-cols-2 gap-4">
           <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-5 space-y-3">
             <h3 className="font-semibold text-[var(--color-foreground)]">Trip Details</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
               <span className="text-[var(--color-muted-foreground)]">Event Template</span><span className="text-[var(--color-foreground)]">{trip.eventTemplateName || '—'}</span>
               <span className="text-[var(--color-muted-foreground)]">Region</span><span className="text-[var(--color-foreground)]">{itinerary.region || '—'}</span>
               <span className="text-[var(--color-muted-foreground)]">OOP Due Date</span><span className="text-[var(--color-foreground)]">{trip.oopDueDate ? formatDateAu(trip.oopDueDate) : '—'}</span>
@@ -179,7 +179,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
           </div>
           <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-5 space-y-3">
             <h3 className="font-semibold text-[var(--color-foreground)]">Requirements</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 text-sm">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
               <span className="text-[var(--color-muted-foreground)]">Wheelchair Capacity</span><span className="text-[var(--color-foreground)]">{trip.requiredWheelchairCapacity || '—'}</span>
               <span className="text-[var(--color-muted-foreground)]">Required Beds</span><span className="text-[var(--color-foreground)]">{trip.requiredBeds || '—'}</span>
               <span className="text-[var(--color-muted-foreground)]">Required Bedrooms</span><span className="text-[var(--color-foreground)]">{trip.requiredBedrooms || '—'}</span>

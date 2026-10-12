@@ -115,7 +115,7 @@ describe('StaffDetailPage — header', () => {
 
     expect(screen.getByRole('heading', { name: 'Alex Rivera' })).toBeInTheDocument()
     expect(screen.getByText('Active')).toBeInTheDocument()
-    expect(screen.getByText(/SupportWorker.*North/)).toBeInTheDocument()
+    expect(screen.getByText(/Support worker.*North/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /edit/i })).toHaveAttribute('href', '/staff/staff-1/edit')
     expect(screen.getByRole('link', { name: /leave.*availability/i })).toHaveAttribute('href', '/rostering/leave?userId=staff-1')
   })

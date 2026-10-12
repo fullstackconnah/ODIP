@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { BudgetWarnings } from '@/components/BudgetWarnings'
 import { Dropdown } from '@/components/Dropdown'
 import { StatusBadge } from '@/components/StatusBadge'
+import { CHIP_CLASS } from '@/components/ServiceStreamBadges'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Callout } from '@/components/Callout'
@@ -37,6 +38,22 @@ const BOOKING_STATUS_ITEMS = [
   { value: 'Completed', label: 'Completed' },
   { value: 'NoLongerAttending', label: 'No Longer Attending' },
 ]
+
+const NEEDS: Array<[keyof BookingListDto, string]> = [
+  ['wheelchairRequired', 'Wheelchair'],
+  ['highSupportRequired', 'High support'],
+  ['nightSupportRequired', 'Night support'],
+]
+
+function Needs({ booking }: { booking: BookingListDto }) {
+  const needed = NEEDS.filter(([flag]) => booking[flag]).map(([, label]) => label)
+  if (needed.length === 0) return null
+  return (
+    <ul aria-label="Needs" className="inline-flex flex-wrap items-center gap-1">
+      {needed.map(label => <li key={label} className={CHIP_CLASS}>{label}</li>)}
+    </ul>
+  )
+}
 
 export default function BookingsPage() {
   const { canWrite } = usePermissions()
@@ -104,6 +121,7 @@ export default function BookingsPage() {
             {
               key: 'participantName',
               header: 'Participant',
+              mobile: 'primary',
               render: (b: any) => (
                 <Link to={`/participants/${b.participantId}`} className="font-medium hover:text-[var(--color-primary)]">
                   {b.participantName || '\u2014'}
@@ -113,6 +131,7 @@ export default function BookingsPage() {
             {
               key: 'tripName',
               header: 'Trip',
+              mobile: 'meta',
               render: (b: any) => (
                 <Link to={`/trips/${b.tripInstanceId}`} className="hover:text-[var(--color-primary)]">
                   {b.tripName || '\u2014'}
@@ -122,6 +141,7 @@ export default function BookingsPage() {
             {
               key: 'bookingStatus',
               header: 'Status',
+              mobile: 'status',
               // ReadOnly is refused PATCH /bookings/:id, so it reads the status instead of a pill it cannot change.
               render: (b) => canWrite ? (
                 <Dropdown
@@ -135,15 +155,9 @@ export default function BookingsPage() {
                 <StatusBadge status={b.bookingStatus} label={BOOKING_STATUS_ITEMS.find(i => i.value === b.bookingStatus)?.label} />
               ),
             },
-            { key: 'bookingDate', header: 'Booking Date', type: 'date' },
-            {
-              key: 'wheelchairRequired',
-              header: 'WC',
-              type: 'boolean',
-              align: 'center' as const,
-            },
-            { key: 'highSupportRequired', header: 'High', type: 'boolean', align: 'center' as const },
-            { key: 'nightSupportRequired', header: 'Night', type: 'boolean', align: 'center' as const },
+            { key: 'bookingDate', header: 'Booking Date', type: 'date', mobile: 'meta' },
+            // Only what the booking needs, as chips: three tick columns read the same for a booking with none as with all three on a phone.
+            { key: 'needs', header: 'Needs', mobile: 'meta', className: 'max-md:basis-full', render: (b: BookingListDto) => <Needs booking={b} /> },
           ]}
           pagination={{
             page,

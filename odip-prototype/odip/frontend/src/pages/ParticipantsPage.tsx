@@ -7,7 +7,7 @@ import { PLAN_TYPE_LABELS, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
-import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
+import { ServiceStreamBadges, CHIP_CLASS } from '@/components/ServiceStreamBadges'
 import { TextField } from '@/components/TextField'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { Button } from '@/components/Button'
@@ -17,7 +17,7 @@ import { ALERT_SEVERITY_STYLES } from '@/components/alertSeverityStyles'
 import type { ParticipantListDto } from '@/api/types'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Users, ChevronRight, Pill } from 'lucide-react'
+import { Users, ChevronRight, Pill, Check } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { queryPhase } from '@/lib/queryPhase'
@@ -34,6 +34,16 @@ const VIEW_OPTIONS: { key: View; label: string }[] = [
   { key: 'active', label: 'Active' },
   { key: 'archived', label: 'Archived' },
 ]
+
+// A care need the phone card must not lose: the table keeps the tick a 'boolean' column draws, the card shows the need as a chip.
+function CareNeed({ label }: { label: string }) {
+  return (
+    <>
+      <Check className="w-4 h-4 text-[var(--color-primary)] mx-auto max-md:hidden" aria-label={label} />
+      <span className={`${CHIP_CLASS} md:hidden`}>{label}</span>
+    </>
+  )
+}
 
 /**
  * What each view asks the server for. Active is the operational register (the server owns the stage rule, so a browser filter cannot
@@ -203,6 +213,7 @@ function useParticipantsScreen() {
       key: 'fullName',
       header: 'Name',
       sortable: true,
+      mobile: 'primary',
       render: (p) => (
         // The link itself truncates (inline-block + truncate), not a wrapper around it: a wrapper's
         // overflow would clip the link's focus ring.
@@ -216,12 +227,13 @@ function useParticipantsScreen() {
         </Link>
       ),
     },
-    { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
-    { key: 'planType', header: 'Plan Type', maxWidth: '10rem', render: (p) => PLAN_TYPE_LABELS[p.planType] ?? p.planType },
-    { key: 'region', header: 'Region', sortable: true, maxWidth: '11rem' },
+    { key: 'ndisNumber', header: 'NDIS Number', mobile: 'hidden', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
+    { key: 'planType', header: 'Plan Type', maxWidth: '10rem', mobile: 'meta', render: (p) => PLAN_TYPE_LABELS[p.planType] ?? p.planType },
+    { key: 'region', header: 'Region', sortable: true, maxWidth: '11rem', mobile: 'meta' },
     {
       key: 'serviceStreams',
       header: 'Streams',
+      mobile: 'hidden',
       // Chips never wrap onto a second line (w-max), the group is clipped at 10rem instead.
       render: (p) => (
         <div className="md:max-w-[10rem] md:overflow-hidden">
@@ -239,16 +251,18 @@ function useParticipantsScreen() {
           <span className="sr-only">Wheelchair</span>
         </span>
       ),
-      type: 'boolean',
       align: 'center',
+      mobile: 'meta',
+      render: (p) => p.mobilityAidWheelchair ? <CareNeed label="Wheelchair" /> : null,
     },
-    { key: 'isHighSupport', header: 'High', type: 'boolean', align: 'center' },
-    { key: 'supportRatio', header: 'Support Ratio', maxWidth: '10rem', render: (p) => SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio },
-    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center' },
+    { key: 'isHighSupport', header: 'High', align: 'center', mobile: 'meta', render: (p) => p.isHighSupport ? <CareNeed label="High support" /> : null },
+    { key: 'supportRatio', header: 'Support Ratio', maxWidth: '10rem', mobile: 'meta', render: (p) => SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio },
+    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center', mobile: 'hidden' },
     {
       key: 'status',
       header: 'Status',
       sortable: true,
+      mobile: 'status',
       render: (p) => {
         const current = p.isActive ? 'Active' : 'Inactive'
         return (

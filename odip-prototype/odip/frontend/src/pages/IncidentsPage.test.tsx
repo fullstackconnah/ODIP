@@ -426,11 +426,12 @@ describe('IncidentsPage — narrow-desktop columns', () => {
     renderPage()
 
     const cells = within(screen.getByText('Slip in kitchen').closest('tr') as HTMLElement).getAllByRole('cell')
+    // From md up (the Column Rule); max-md:hidden only leaves a field off the phone card.
     for (const label of ['Title', 'Severity', 'Status', 'Date', 'QSC', 'Participant', 'Type', 'Trip', 'Reported By']) {
       const index = headerIndex(label)
       expect(index, label).toBeGreaterThanOrEqual(0)
       const th = screen.getAllByRole('columnheader')[index]
-      for (const el of [th, cells[index]]) expect(el.className, label).not.toMatch(/hidden/)
+      for (const el of [th, cells[index]]) expect(el.className, label).not.toMatch(/(^|\s)((sm|md|lg|xl|2xl):)?hidden(\s|$)/)
     }
   })
 
@@ -732,5 +733,34 @@ describe('IncidentsPage — the title links to the incident', () => {
     renderPage()
 
     expect(screen.getByRole('link', { name: 'Slip in kitchen' })).toHaveAttribute('href', '/incidents/inc-1')
+  })
+})
+
+// Platform review V2-B: the Type column printed the raw enum ("MedicationError").
+describe('IncidentsPage — incident type label', () => {
+  it('shows the incident type in words', () => {
+    mockUseIncidents.mockReturnValue({ data: [baseIncident({ incidentType: 'MedicationError' })], isLoading: false })
+    renderPage()
+
+    expect(screen.getByText('Medication Error')).toBeInTheDocument()
+    expect(screen.queryByText('MedicationError')).not.toBeInTheDocument()
+  })
+})
+
+// Platform review V2-A (Incidents 3): the phone card was a grid of caps labels with blank space under it.
+describe('IncidentsPage — phone card', () => {
+  it('puts the title and status on the title line, the facts on one muted line, and the reporter as a labelled field', () => {
+    mockUseIncidents.mockReturnValue({ data: [baseIncident({ incidentType: 'MedicationError', reportedByName: 'Pat Jones' })], isLoading: false })
+    renderPage()
+
+    const row = screen.getByText('Medication Error').closest('tr') as HTMLElement
+    expect(row.querySelector('td[data-label="Title"]')).toHaveAttribute('data-card', 'primary')
+    expect(row.querySelector('td[data-label="Status"]')).toHaveAttribute('data-card', 'status')
+    for (const label of ['Type', 'Severity', 'Date']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
+    // On the muted line the reporter's name sat unlabelled beside the participant's; as a labelled field it says who it is.
+    const reporter = row.querySelector('td[data-label="Reported By"]') as HTMLElement
+    expect(reporter).not.toHaveAttribute('data-card')
+    expect(reporter).not.toHaveClass('max-md:hidden')
+    expect(reporter).toHaveTextContent('Pat Jones')
   })
 })
