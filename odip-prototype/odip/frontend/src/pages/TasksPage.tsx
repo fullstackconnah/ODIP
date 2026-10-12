@@ -1,6 +1,6 @@
 import { useTasks, useUpdateTask, useDeleteTask } from '@/api/hooks'
 import { TASK_TYPE_LABELS } from '@/api/types'
-import { DataTable, type Column } from '@/components/DataTable'
+import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Dropdown } from '@/components/Dropdown'
@@ -72,62 +72,68 @@ export default function TasksPage() {
       header: '',
       hidden: showArchived,
       render: (t) => t.status !== 'Completed' && t.status !== 'Cancelled' && mayChange(t) ? (
-        <Button variant="ghost" size="sm" iconOnly onClick={(e) => markComplete(e, t)} title="Mark complete">
+        <Button variant="ghost" size="sm" iconOnly onClick={(e) => markComplete(e, t)} title="Mark complete" className="max-md:min-h-11 max-md:min-w-11">
           <CheckCircle className="w-4 h-4" />
         </Button>
       ) : null,
     },
     // Column budget (density §4): at 1280 the box is ~1006px and the fixed columns (tick, due, priority, status, Open, actions)
     // take ~500 of it, so the text columns are capped (an ellipsis, full text in the tooltip). Every column stays (Trip and Type were
-    // deleted below 1536 and 1792, L3-04): what does not fit scrolls in the box with the task and the actions pinned.
+    // deleted below 1536 and 1792, L3-04): what does not fit scrolls in the box with the task and the actions pinned. Task 13rem, Trip
+    // 9rem and Type 8rem keep Status clear of the pinned actions at 1440 (it was cut to "Sta", platform review V2-B).
+    // On the phone card the title and status make the title line, trip, type, owner and priority one muted line, and Due stays labelled.
     {
       key: 'title',
       header: 'Task',
       sortable: true,
+      mobile: 'primary',
       className: 'font-medium',
-      maxWidth: '16rem',
+      maxWidth: '13rem',
       // The title is the way in when the task has one (this column is pinned, so it is always reachable; "Open" stays for the habit). The review of an emergency names the participant and the day LAST, which is
       // exactly what a one-line cap cuts, so its title wraps instead and the row says which emergency it is. Every other title is cut on the link itself (a wrapper would clip its focus ring).
       render: (t) => t.linkTo ? (
         <Link
           to={t.linkTo}
           title={t.title}
-          className={`text-[var(--color-primary)] hover:underline ${isBudgetReview(t) ? 'whitespace-normal md:max-w-[16rem]' : 'block md:truncate md:max-w-[16rem]'}`}
+          className={`text-[var(--color-primary)] hover:underline ${isBudgetReview(t) ? 'whitespace-normal md:max-w-[13rem]' : 'block md:truncate md:max-w-[13rem]'}`}
         >
           {t.title}
         </Link>
       ) : isBudgetReview(t) ? (
-        <span className="block whitespace-normal md:max-w-[16rem]" title={t.title}>{t.title}</span>
+        <span className="block whitespace-normal md:max-w-[13rem]" title={t.title}>{t.title}</span>
       ) : isReadOnly ? (
         // ReadOnly has no Edit action: the title opens the task as a view (the only place its notes are shown).
-        <Link to={`/tasks/${t.id}/edit`} title={t.title} className="block text-[var(--color-primary)] hover:underline md:truncate md:max-w-[16rem]">{t.title}</Link>
+        <Link to={`/tasks/${t.id}/edit`} title={t.title} className="block text-[var(--color-primary)] hover:underline md:truncate md:max-w-[13rem]">{t.title}</Link>
       ) : t.title,
     },
     {
       key: 'tripName',
       header: 'Trip',
       sortable: true,
-      maxWidth: '11rem',
+      maxWidth: '9rem',
+      mobile: 'meta',
       render: (t) => t.tripInstanceId && t.tripName ? (
         // Truncation on the link itself (not a wrapper): a wrapper's overflow: hidden would clip the link's focus ring.
-        <Link to={`/trips/${t.tripInstanceId}`} title={t.tripName} className="block truncate text-[var(--color-primary)] hover:underline md:max-w-[11rem]">
+        <Link to={`/trips/${t.tripInstanceId}`} title={t.tripName} className="block truncate text-[var(--color-primary)] hover:underline md:max-w-[9rem]">
           {t.tripName}
         </Link>
       ) : (t.tripName ?? '—'),
     },
-    { key: 'taskType', header: 'Type', sortable: true, maxWidth: '10rem', render: (t) => TASK_TYPE_LABELS[t.taskType as keyof typeof TASK_TYPE_LABELS] ?? t.taskType },
+    { key: 'taskType', header: 'Type', sortable: true, maxWidth: '8rem', mobile: 'meta', render: (t) => TASK_TYPE_LABELS[t.taskType as keyof typeof TASK_TYPE_LABELS] ?? t.taskType },
     // Nobody owns the review of an emergency until an Admin takes it, and it is the Admins' to take: say so rather than a dash that reads as "nobody's job".
-    { key: 'ownerName', header: 'Owner', sortable: true, maxWidth: '8rem', render: (t) => t.ownerName ?? (isBudgetReview(t) ? 'Admins' : '—') },
+    { key: 'ownerName', header: 'Owner', sortable: true, maxWidth: '8rem', mobile: 'meta', render: (t) => t.ownerName ?? (isBudgetReview(t) ? 'Admins' : '—') },
     { key: 'dueDate', header: 'Due', type: 'date', sortable: true },
     {
       key: 'priority',
       header: 'Priority',
+      mobile: 'meta',
       render: (t) => <StatusBadge status={t.priority} />,
     },
     {
       key: 'status',
       header: 'Status',
       sortable: true,
+      mobile: 'status',
       // "Not Started" / "In Progress" swap in place: reserve the widest so the column does not jump.
       minWidth: '9rem',
       // A role that cannot write reads the status; one that can but may not change this row (the emergency review) gets a held pill.
@@ -172,10 +178,12 @@ export default function TasksPage() {
       ) : null,
     },
     // ReadOnly has no Edit: View opens the task itself, which a linked task's title does not (it goes to the linked page).
-    { key: 'actions', header: '', render: (t) => mayChange(t) ? actionButtons(t) : isReadOnly && !isBudgetReview(t) ? (
-      <Button to={`/tasks/${t.id}/edit`} variant="ghost" size="sm" iconOnly title="View" aria-label="View">
-        <Eye className="w-4 h-4" />
-      </Button>
+    { key: 'actions', header: '', render: (t) => mayChange(t) ? <RowActions>{actionButtons(t)}</RowActions> : isReadOnly && !isBudgetReview(t) ? (
+      <RowActions>
+        <Button to={`/tasks/${t.id}/edit`} variant="ghost" size="sm" iconOnly title="View" aria-label="View">
+          <Eye className="w-4 h-4" />
+        </Button>
+      </RowActions>
     ) : null },
   ]
 

@@ -167,12 +167,14 @@ describe('TasksPage — column budget', () => {
     const row = screen.getByRole('link', { name: 'Beach Trip' }).closest('tr')!
     const task = within(row).getByText('Confirm accommodation')
     expect(task).toHaveClass('md:truncate')
-    expect(task).toHaveStyle('--cell-max: 16rem')
+    expect(task).toHaveStyle('--cell-max: 13rem')
     expect(task).toHaveAttribute('title', 'Confirm accommodation')
     expect(within(row).getByText('Sam')).toHaveStyle('--cell-max: 8rem')
+    // Platform review V2-B (Tasks 1): at 1440 Status was clipped under the pinned actions by ~90px; Task, Trip and Type give ~112px back.
+    expect(within(row).getByText('Accommodation request')).toHaveStyle('--cell-max: 8rem')
     // The link is a custom cell, so it limits itself: truncation on the link (not a wrapper, which would clip its focus ring).
     const link = screen.getByRole('link', { name: 'Beach Trip' })
-    expect(link).toHaveClass('block', 'truncate', 'md:max-w-[11rem]')
+    expect(link).toHaveClass('block', 'truncate', 'md:max-w-[9rem]')
     expect(link).toHaveAttribute('title', 'Beach Trip')
   })
 
@@ -274,7 +276,7 @@ describe('TasksPage — the emergency review task', () => {
     renderPage()
 
     const title = screen.getByRole('link', { name: 'Find leave cover' })
-    expect(title).toHaveClass('block', 'md:truncate', 'md:max-w-[16rem]')
+    expect(title).toHaveClass('block', 'md:truncate', 'md:max-w-[13rem]')
     expect(title).toHaveAttribute('title', 'Find leave cover')
     expect(title).toHaveAttribute('href', '/rostering/leave')
   })
@@ -348,5 +350,27 @@ describe('TasksPage — a refused archive', () => {
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Archive' }))
 
     expect(screen.getByText('You do not have permission to do that.')).toBeInTheDocument()
+  })
+})
+
+// Platform review V2-A (Tasks 2): 21 tasks were 6,143px at 390, each card a grid of six caps labels with 20px icons.
+describe('TasksPage — phone card', () => {
+  it('puts the title and the status pill on the title line, trip, type, owner and priority on one muted line, and keeps the due date labelled', () => {
+    renderPage()
+
+    expect(screen.getByText('Confirm accommodation').closest('td')).toHaveAttribute('data-card', 'primary')
+    expect(screen.getByRole('button', { name: /Not Started/i }).closest('td')).toHaveAttribute('data-card', 'status')
+    for (const text of ['Beach Trip', 'Accommodation request', 'Sam', 'Medium']) {
+      expect(screen.getByText(text).closest('td'), text).toHaveAttribute('data-card', 'meta')
+    }
+    expect(screen.getByText('01/10/2026').closest('td')).not.toHaveAttribute('data-card')
+  })
+
+  it('gives the edit and archive icons and the tick a 44px target on the card', () => {
+    renderPage()
+
+    const edit = screen.getByRole('link', { name: 'Edit' })
+    expect(edit.closest('div.flex.justify-end')).toHaveClass('max-md:[&_:is(a,button)]:min-h-11', 'max-md:[&_:is(a,button)]:min-w-11')
+    expect(screen.getByRole('button', { name: 'Mark complete' })).toHaveClass('max-md:min-h-11', 'max-md:min-w-11')
   })
 })
