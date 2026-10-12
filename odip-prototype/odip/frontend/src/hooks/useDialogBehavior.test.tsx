@@ -487,3 +487,54 @@ describe('useDialogBehavior: teardown', () => {
     remove.mockRestore()
   })
 })
+
+// CORE-8: React applies `autoFocus` while committing the layer, before any effect runs, so the opener has to be known by then.
+describe('useDialogBehavior: a field with autoFocus inside the layer', () => {
+  function FieldLayer({ open, onClose }: { open: boolean; onClose: () => void }) {
+    const ref = useRef<HTMLDivElement>(null)
+    useDialogBehavior({ open, onClose, containerRef: ref })
+    if (!open) return null
+    return (
+      <div ref={ref} role="dialog" aria-label="add" tabIndex={-1}>
+        <button>close</button>
+        <input aria-label="name" autoFocus />
+      </div>
+    )
+  }
+
+  it('keeps focus on the autoFocus field, and Escape returns it to the opener', async () => {
+    const user = userEvent.setup()
+    function Toggling() {
+      const [open, setOpen] = useState(false)
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>open</button>
+          <FieldLayer open={open} onClose={() => setOpen(false)} />
+        </>
+      )
+    }
+    render(<Toggling />)
+    await user.click(screen.getByRole('button', { name: 'open' }))
+    expect(screen.getByRole('textbox', { name: 'name' })).toHaveFocus()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'open' })).toHaveFocus()
+  })
+
+  it('returns focus to the opener of a layer that mounts already open', async () => {
+    const user = userEvent.setup()
+    function Mounting() {
+      const [on, setOn] = useState(false)
+      return (
+        <>
+          <button onClick={() => setOn(true)}>open</button>
+          {on && <FieldLayer open onClose={() => setOn(false)} />}
+        </>
+      )
+    }
+    render(<Mounting />)
+    await user.click(screen.getByRole('button', { name: 'open' }))
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('button', { name: 'open' })).toHaveFocus()
+  })
+})
