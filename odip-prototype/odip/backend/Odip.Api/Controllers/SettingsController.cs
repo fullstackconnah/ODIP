@@ -9,6 +9,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Api.Controllers;
 
 [ApiController]
+// Every action names its own roles: the class alone admits any signed-in user.
 [Authorize]
 [Route("api/v1/settings")]
 public class SettingsController : ControllerBase
