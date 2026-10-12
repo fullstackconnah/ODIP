@@ -55,6 +55,10 @@ export type TabsProps = {
   overflow?: 'wrap' | 'scroll'
 }
 
+// The one-row strip fades out over its last 2rem, so a tab cut by the edge reads as "more this way" (V2-F: Settings at 1440 ended in "Notificatior" with no
+// cue), and its end is padded by the same 2rem, so scrolled to the end the last tab sits clear of the fade.
+const SCROLL_FADE = '[mask-image:linear-gradient(to_right,black_calc(100%_-_2rem),transparent)] pr-8'
+
 /**
  * Consolidated accessible tab primitive. Visual style: an underline with an optional lucide icon,
  * no fill on active, no rounded-t-lg card. Behaviour
@@ -203,7 +207,7 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, cla
         // stays as the safety net there too. The scrollbar is hidden only below md, where the strip is
         // the scrolling surface (Tailwind has no scrollbar-width utility, hence the arbitrary property
         // and the WebKit pseudo).
-        className={`flex flex-nowrap gap-x-4 gap-y-1 border-b border-[var(--color-border)] overflow-x-auto scroll-smooth max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden ${overflow === 'scroll' ? 'md:[scrollbar-width:thin]' : 'md:flex-wrap'}`}
+        className={`flex flex-nowrap gap-x-4 gap-y-1 border-b border-[var(--color-border)] overflow-x-auto scroll-smooth max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden ${overflow === 'scroll' ? `md:[scrollbar-width:thin] ${SCROLL_FADE}` : 'md:flex-wrap'}`}
       >
         {tabs.map(tab => {
           const isActive = tab.id === active
