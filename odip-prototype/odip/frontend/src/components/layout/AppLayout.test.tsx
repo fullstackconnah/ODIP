@@ -819,11 +819,11 @@ describe('AppLayout — a closed group that holds the current page stays marked 
   it('takes the lit fill and aria-current when the user closes the group they are in, and loses both when it opens', () => {
     renderAt('/rostering/leave')
     const toggle = openGroupToggle(/Staff & roster$/)
-    // Open: the child link is the lit one, the header only turns bold.
+    // Open: the child link is the lit one, and the only one (the header stays as it is).
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(toggle).not.toHaveAttribute('aria-current')
     expect(toggle).not.toHaveClass(FILL)
-    expect(toggle).toHaveClass('font-bold')
+    expect(toggle).not.toHaveClass('font-bold')
 
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
@@ -1138,5 +1138,39 @@ describe('AppLayout — Sign out', () => {
     fireEvent.click(screen.getByRole('button', { name: /Sign out$/ }))
 
     expect(mockEndSession).toHaveBeenCalledTimes(1)
+  })
+})
+
+// V2-G: the sidebar holds one group open for the page you are on, not every group you have passed through, and the page has ONE active signal.
+describe('AppLayout — only the current group and the saved ones stay open', () => {
+  afterEach(() => localStorage.clear())
+
+  it('closes a group that opened itself for the page you left when you move to a page in another group', async () => {
+    const router = createMemoryRouter([{ path: '*', element: <AppLayout /> }], { initialEntries: ['/trips'] })
+    render(<RouterProvider router={router} />)
+    expect(openGroupToggle(/Trips$/)).toHaveAttribute('aria-expanded', 'true')
+
+    await act(async () => { await router.navigate('/participants') })
+    await act(async () => { await router.navigate('/staff') })
+
+    expect(openGroupToggle(/Staff & roster$/)).toHaveAttribute('aria-expanded', 'true')
+    expect(openGroupToggle(/Trips$/)).toHaveAttribute('aria-expanded', 'false')
+    expect(openGroupToggle(/Participants$/)).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('keeps a group the user opened open across navigation', async () => {
+    const router = createMemoryRouter([{ path: '*', element: <AppLayout /> }], { initialEntries: ['/'] })
+    render(<RouterProvider router={router} />)
+    fireEvent.click(openGroupToggle(/Trips$/))
+    await act(async () => { await router.navigate('/staff') })
+    expect(openGroupToggle(/Trips$/)).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('lights only the page link inside an open group: the group header is not bold too', () => {
+    renderAt('/rostering/leave')
+    const toggle = openGroupToggle(/Staff & roster$/)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(toggle).not.toHaveClass('font-bold')
+    expect(within(mainNav()).getByRole('link', { current: 'page' })).toHaveClass('font-bold')
   })
 })

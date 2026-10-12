@@ -101,13 +101,8 @@ function SidebarGroup({ group, leaves, open, onToggle, pathname, counts, onNavig
         aria-current={filled ? 'true' : undefined}
         aria-label={open ? undefined : navBadgeLabel(count, group.badgeNoun ?? 'item', group.label)}
         onClick={() => onToggle(group.id)}
-        className={`flex items-center w-full gap-3 px-3 py-1.5 min-h-[var(--tap-min)] rounded-md text-sm transition-all duration-150 ${
-          filled
-            ? NAV_ACTIVE
-            : active
-              ? 'text-[var(--color-on-primary-fixed)] font-bold hover:bg-[var(--color-surface-container-high)]'
-              : NAV_IDLE
-        }`}
+        // One active signal: the open group's lit child. The header is lit only when closed over the current page (U3).
+        className={`flex items-center w-full gap-3 px-3 py-1.5 min-h-[var(--tap-min)] rounded-md text-sm transition-all duration-150 ${filled ? NAV_ACTIVE : NAV_IDLE}`}
       >
         <span className="material-symbols-outlined shrink-0" aria-hidden="true" style={{ fontSize: '18px' }}>{group.msIcon}</span>
         <span className="flex-1 text-left truncate">{group.label}</span>
@@ -213,11 +208,14 @@ export default function AppLayout() {
 
   // Which groups are open: what the user chose to keep open last time, plus the group that holds the current page.
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => withActiveGroups(readStoredOpenGroups(), location.pathname))
-  // Navigating (a link, a Dashboard tile, the browser's Back) opens the group that now holds the page, and closes the drawer.
+  // Navigating (a link, a Dashboard tile, the browser's Back) opens the group that now holds the page, and closes the drawer. It starts again
+  // from the saved choices, so a group that only opened itself for the page you left closes again (V2-G: passing through Trips, Participants
+  // and Staff used to leave all three open, filling the sidebar).
+  // shortcut: with localStorage blocked, a toggle made this session is forgotten on the next navigation; keep a session set if that matters.
   const [seenPathname, setSeenPathname] = useState(location.pathname)
   if (seenPathname !== location.pathname) {
     setSeenPathname(location.pathname)
-    setOpenGroups(open => withActiveGroups(open, location.pathname))
+    setOpenGroups(withActiveGroups(readStoredOpenGroups(), location.pathname))
     setSidebarOpen(false)
   }
 
