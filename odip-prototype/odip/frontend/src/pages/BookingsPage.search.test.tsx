@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import BookingsPage from './BookingsPage'
 import type { BookingListDto } from '@/api/types/bookings'
@@ -23,6 +23,10 @@ beforeEach(() => {
 
 // VISUAL-1 V4: the only list with no search. The list is paged on the server, so the search is a server parameter, in the PageHeader.
 describe('BookingsPage — search', () => {
+  // The search waits for typing to pause (about 300 ms), so the tests drive the clock.
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
   it('asks the server for the search from page 1, and says when nothing matches', () => {
     mockUseBookings.mockReturnValue(list([booking], 120))
     render(<MemoryRouter><BookingsPage /></MemoryRouter>)
@@ -31,9 +35,22 @@ describe('BookingsPage — search', () => {
 
     mockUseBookings.mockReturnValue(list([]))
     fireEvent.change(screen.getByPlaceholderText('Search participants or trips...'), { target: { value: ' sophie ' } })
+    act(() => { vi.advanceTimersByTime(300) })
 
     expect(mockUseBookings).toHaveBeenLastCalledWith({ page: '1', pageSize: '50', search: 'sophie' })
     expect(screen.getByText('No results for your search')).toBeInTheDocument()
     expect(screen.queryByText('No bookings yet')).not.toBeInTheDocument()
+  })
+
+  it('asks the server once typing pauses, not once per keystroke', () => {
+    mockUseBookings.mockReturnValue(list([booking]))
+    render(<MemoryRouter><BookingsPage /></MemoryRouter>)
+    const box = screen.getByPlaceholderText('Search participants or trips...')
+    for (const value of ['s', 'so', 'sop']) fireEvent.change(box, { target: { value } })
+    const searched = () => mockUseBookings.mock.calls.map(([params]) => (params as Record<string, string>).search).filter(Boolean)
+    expect(searched()).toEqual([])
+
+    act(() => { vi.advanceTimersByTime(300) })
+    expect(new Set(searched())).toEqual(new Set(['sop']))
   })
 })

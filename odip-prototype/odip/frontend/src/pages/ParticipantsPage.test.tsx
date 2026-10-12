@@ -824,3 +824,20 @@ describe('ParticipantsPage — care needs on the phone card', () => {
     expect(ava.querySelector('td[data-label="High"]')).toHaveClass('max-md:hidden')
   })
 })
+
+// V-D1 follow-up: each keystroke in the header search sent a request and flashed the table to loading. The search waits for a pause.
+describe('ParticipantsPage — search debounce', () => {
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('asks the server once typing pauses, not once per keystroke', () => {
+    renderPage()
+    const box = screen.getByPlaceholderText('Search participants...')
+    for (const value of ['s', 'so', 'sop']) fireEvent.change(box, { target: { value } })
+    const searched = () => mockUseParticipants.mock.calls.map(([params]) => (params as Record<string, string>).search).filter(Boolean)
+    expect(searched()).toEqual([])
+
+    act(() => { vi.advanceTimersByTime(300) })
+    expect(new Set(searched())).toEqual(new Set(['sop']))
+  })
+})
