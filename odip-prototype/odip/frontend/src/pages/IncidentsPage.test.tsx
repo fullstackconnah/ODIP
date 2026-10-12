@@ -518,6 +518,18 @@ describe('IncidentsPage — header row', () => {
     expect(screen.getByRole('button', { name: /all statuses/i })).toBeInTheDocument()
   })
 
+  // VB review: at 390 "Report incident" landed right-aligned under the tabs. On a phone it leads the header's action row, directly under
+  // the title as on the other list pages, and the tabs take the row below; from md up it stays at the right end of the tab row.
+  it('puts Report incident first in the action row on a phone, and at the end of the tab row from md up', () => {
+    mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
+    renderPage()
+
+    const action = screen.getByRole('link', { name: /report incident/i }).parentElement as HTMLElement
+    expect(action).toHaveClass('max-md:order-first', 'md:ml-auto')
+    expect(action).not.toHaveClass('ml-auto')
+    expect(screen.getByRole('tablist', { name: 'Incidents sections' }).closest('[class~="max-md:basis-full"]')).not.toBeNull()
+  })
+
   it('renders the H1 and the action but no tab strip for a role that cannot see flagged notes', () => {
     localStorage.setItem('odip_user', JSON.stringify({ id: 'user-1', role: 'SupportWorker' }))
     mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })

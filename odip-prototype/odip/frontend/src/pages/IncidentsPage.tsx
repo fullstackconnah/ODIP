@@ -343,10 +343,11 @@ export default function IncidentsPage() {
                   active={tab}
                   onChange={key => setTab(key as IncidentsTab)}
                   ariaLabel="Incidents sections"
-                  className="min-w-0"
+                  className="min-w-0 max-md:basis-full"
                 />
               )}
-              {reportIncidentAction && <div className="ml-auto">{reportIncidentAction}</div>}
+              {/* On a phone the action leads the row, under the title as on the other list pages, and the tabs take the row below it. */}
+              {reportIncidentAction && <div className="max-md:order-first md:ml-auto">{reportIncidentAction}</div>}
             </div>
           )}
         >
