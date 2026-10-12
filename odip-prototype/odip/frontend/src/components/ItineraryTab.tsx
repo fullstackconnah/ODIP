@@ -1,7 +1,7 @@
 import { useTripItinerary } from '@/api/hooks'
 import { formatCurrency, formatDateAu } from '@/lib/utils'
-import { MapPin, Clock, Users, Building2, UserCog, DollarSign, FileDown, Calendar, Utensils, Camera, Bus, Compass, Palette, Dumbbell, Star } from 'lucide-react'
-import { useState } from 'react'
+import { MapPin, Clock, Users, Building2, UserCog, FileDown, Calendar, Utensils, Camera, Bus, Compass, Palette, Dumbbell, Star } from 'lucide-react'
+import { Fragment, useState, type ReactNode } from 'react'
 import { Dropdown } from './Dropdown'
 import { EmptyState } from './EmptyState'
 import { PageState } from './PageState'
@@ -58,10 +58,6 @@ function formatDayName(date: string) {
   return parseLocalDate(date).toLocaleDateString('en-AU', { weekday: 'long' })
 }
 
-function formatDateLong(date: string) {
-  return parseLocalDate(date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-}
-
 export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
   const { data: itinerary, isLoading, isError, refetch } = useTripItinerary(tripId)
   const [exporting, setExporting] = useState(false)
@@ -82,6 +78,26 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
       />
     )
   }
+
+  // [label, value] facts with a value; a 0 minimum or requirement counts as not set, as it always has.
+  const recorded = (facts: [string, ReactNode][]) => facts.filter(([, value]) => !!value)
+  const factGroups = ([
+    ['Trip Details', recorded([
+      ['Event Template', trip?.eventTemplateName],
+      ['Region', itinerary.region],
+      ['OOP Due Date', trip?.oopDueDate && formatDateAu(trip.oopDueDate)],
+      ['Booking Cutoff', trip?.bookingCutoffDate && formatDateAu(trip.bookingCutoffDate)],
+      ['Lead Coordinator', itinerary.leadCoordinatorName],
+      ['Min Participants', trip?.minParticipants],
+      ['Min Staff', trip?.minStaffRequired],
+      ['Est. Cost', Number(itinerary.totalEstimatedCost) > 0 && formatCurrency(Number(itinerary.totalEstimatedCost))],
+    ])],
+    ['Requirements', recorded([
+      ['Wheelchair Capacity', trip?.requiredWheelchairCapacity],
+      ['Required Beds', trip?.requiredBeds],
+      ['Required Bedrooms', trip?.requiredBedrooms],
+    ])],
+  ] as [string, [string, ReactNode][]][]).filter(([, facts]) => facts.length > 0)
 
   const handleExport = async (version: 'staff' | 'participant') => {
     setExporting(true)
@@ -119,73 +135,22 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
         />
       </div>
 
-      {/* Overview Hero Card */}
-      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-6 relative overflow-hidden shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--color-primary)]/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-        <div className="relative">
-          <div className="flex items-start justify-between flex-wrap gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-wider text-[var(--color-primary)] font-bold mb-1">Trip Overview</p>
-              <h2 className="text-2xl font-bold text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{itinerary.tripName}</h2>
-              <div className="flex items-center gap-2 mt-2 text-[var(--color-muted-foreground)]">
-                <MapPin className="w-4 h-4 text-[var(--color-primary)]" />
-                <span>{itinerary.destination || 'Destination TBD'}</span>
-                {itinerary.region && <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]">{itinerary.region}</span>}
-              </div>
-              <p className="text-sm text-[var(--color-muted-foreground)] mt-1">
-                {formatDateLong(itinerary.startDate)} — {formatDateLong(itinerary.endDate)}
-              </p>
-            </div>
-            {itinerary.tripCode && (
-              <span className="font-mono text-sm bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)] px-3 py-1.5 rounded-lg">{itinerary.tripCode}</span>
-            )}
-          </div>
+      {itinerary.notes && <p className="text-sm text-[var(--color-muted-foreground)]">{itinerary.notes}</p>}
 
-          {/* Stats row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
-            {[
-              { icon: Calendar, label: 'Duration', value: `${itinerary.durationDays} days` },
-              { icon: Users, label: 'Participants', value: itinerary.participantCount },
-              { icon: UserCog, label: 'Staff', value: itinerary.staffCount },
-              { icon: DollarSign, label: 'Est. Cost', value: `$${Number(itinerary.totalEstimatedCost).toLocaleString('en-AU', { minimumFractionDigits: 2 })}` },
-            ].map(s => (
-              <div key={s.label} className="bg-[var(--color-surface-container)] rounded-[var(--radius-md)] p-3 text-center">
-                <s.icon className="w-4 h-4 mx-auto text-[var(--color-primary)] mb-1" />
-                <p className="text-lg font-bold text-[var(--color-foreground)]">{s.value}</p>
-                <p className="text-xs text-[var(--color-muted-foreground)]">{s.label}</p>
-              </div>
-            ))}
-          </div>
-
-          {itinerary.notes && (
-            <p className="text-sm text-[var(--color-muted-foreground)] mt-4 pt-4">{itinerary.notes}</p>
-          )}
-        </div>
-      </div>
-
-      {/* Admin details (from trip data). Label and value sit side by side at every width: stacked on a phone, seven facts took ~450px. */}
-      {trip && (
+      {/* Admin details (from trip data): only what is recorded. The title, dates, days and head counts are in the header and the glance strip.
+          Label and value sit side by side at every width: stacked on a phone, seven facts took ~450px. */}
+      {factGroups.length > 0 && (
         <div className="grid md:grid-cols-2 gap-4">
-          <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-5 space-y-3">
-            <h3 className="font-semibold text-[var(--color-foreground)]">Trip Details</h3>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-              <span className="text-[var(--color-muted-foreground)]">Event Template</span><span className="text-[var(--color-foreground)]">{trip.eventTemplateName || '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Region</span><span className="text-[var(--color-foreground)]">{itinerary.region || '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">OOP Due Date</span><span className="text-[var(--color-foreground)]">{trip.oopDueDate ? formatDateAu(trip.oopDueDate) : '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Booking Cutoff</span><span className="text-[var(--color-foreground)]">{trip.bookingCutoffDate ? formatDateAu(trip.bookingCutoffDate) : '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Lead Coordinator</span><span className="text-[var(--color-foreground)]">{itinerary.leadCoordinatorName || '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Min Participants</span><span className="text-[var(--color-foreground)]">{trip.minParticipants || '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Min Staff</span><span className="text-[var(--color-foreground)]">{trip.minStaffRequired || '—'}</span>
+          {factGroups.map(([title, facts]) => (
+            <div key={title} className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-5 space-y-3">
+              <h3 className="font-semibold text-[var(--color-foreground)]">{title}</h3>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                {facts.map(([label, value]) => (
+                  <Fragment key={label}><span className="text-[var(--color-muted-foreground)]">{label}</span><span className="text-[var(--color-foreground)]">{value}</span></Fragment>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-5 space-y-3">
-            <h3 className="font-semibold text-[var(--color-foreground)]">Requirements</h3>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-              <span className="text-[var(--color-muted-foreground)]">Wheelchair Capacity</span><span className="text-[var(--color-foreground)]">{trip.requiredWheelchairCapacity || '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Required Beds</span><span className="text-[var(--color-foreground)]">{trip.requiredBeds || '—'}</span>
-              <span className="text-[var(--color-muted-foreground)]">Required Bedrooms</span><span className="text-[var(--color-foreground)]">{trip.requiredBedrooms || '—'}</span>
-            </div>
-          </div>
+          ))}
         </div>
       )}
 
@@ -285,9 +250,7 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
                                     </span>
                                   )}
                                   {activity.estimatedCost != null && (
-                                    <span className="flex items-center gap-1">
-                                      <DollarSign className="w-3 h-3" /> {formatCurrency(Number(activity.estimatedCost))}
-                                    </span>
+                                    <span>{formatCurrency(Number(activity.estimatedCost))}</span>
                                   )}
                                 </div>
                                 {activity.providerName && (

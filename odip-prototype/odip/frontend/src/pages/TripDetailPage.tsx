@@ -156,6 +156,8 @@ export default function TripDetailPage() {
           onChange={setActiveTab}
           ariaLabel="Trip detail sections"
           idPrefix="trip"
+          // Ten tabs: wrapping left History alone on a second row at 1440. One row that scrolls, as on a phone.
+          overflow="scroll"
         />
       </div>
 
