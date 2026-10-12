@@ -197,7 +197,7 @@ export default function TasksPage() {
         subtitle={plural(tasks.length, 'task')}
         action={!showArchived && canWrite && (
           <Button to="/tasks/new" size="md">
-            <Plus className="w-4 h-4" /> New Task
+            <Plus className="w-4 h-4" /> New task
           </Button>
         )}
       >
@@ -232,7 +232,6 @@ export default function TasksPage() {
             icon={ListChecks}
             title="No tasks yet"
             description="Tasks track the to-dos for a trip — accommodation confirmations, vehicle requests, medication checks and more. Add one to start tracking work."
-            action={!showArchived && canWrite ? { label: 'Add task', to: '/tasks/new' } : undefined}
           />
         )
       ) : (

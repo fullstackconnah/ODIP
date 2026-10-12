@@ -45,7 +45,7 @@ export default function AccommodationPage() {
         subtitle={plural(filtered.length, 'property', 'properties')}
         action={!showArchived && canWrite && (
           <Button to="/accommodation/new" size="md">
-            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New Accommodation</span><span className="sm:hidden">New</span>
+            <Plus className="w-4 h-4" /> New accommodation
           </Button>
         )}
       >
@@ -67,7 +67,6 @@ export default function AccommodationPage() {
           icon={Home}
           title={properties.length === 0 ? 'No properties yet' : 'No results for your search'}
           description={properties.length === 0 ? undefined : 'Try a different search term.'}
-          action={properties.length === 0 && !showArchived && canWrite ? { label: 'Add your first property', to: '/accommodation/new' } : undefined}
         />
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(22rem,100%),1fr))] items-start gap-[var(--section-gap)]">

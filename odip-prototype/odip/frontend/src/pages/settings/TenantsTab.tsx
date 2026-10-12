@@ -58,7 +58,7 @@ export default function TenantsTab({
         </div>
 
         <Button onClick={onAddTenant}>
-          <Plus className="w-4 h-4" /> Add Tenant
+          <Plus className="w-4 h-4" /> New tenant
         </Button>
       </div>
 
@@ -70,7 +70,7 @@ export default function TenantsTab({
         onRetry={() => refetch()}
         emptyMessage={
           tenants.length === 0
-            ? 'No tenants yet. Click "+ Add Tenant" to create the first one.'
+            ? 'No tenants yet. Select "New tenant" to create the first one.'
             : 'No tenants match your search.'
         }
         columns={[

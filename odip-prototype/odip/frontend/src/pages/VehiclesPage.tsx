@@ -88,7 +88,7 @@ export default function VehiclesPage() {
         subtitle={plural(vehicles.length, `${showArchived ? 'archived' : 'active'} vehicle`)}
         action={!showArchived && canWrite && (
           <Button to="/vehicles/new" size="md">
-            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Vehicle</span><span className="sm:hidden">Add</span>
+            <Plus className="w-4 h-4" /> New vehicle
           </Button>
         )}
       >
@@ -110,7 +110,6 @@ export default function VehiclesPage() {
         <EmptyState
           icon={Bus}
           title="No vehicles found"
-          action={!showArchived && canWrite ? { label: 'Add your first vehicle', to: '/vehicles/new' } : undefined}
         />
       ) : (
         /* Vehicle grid */

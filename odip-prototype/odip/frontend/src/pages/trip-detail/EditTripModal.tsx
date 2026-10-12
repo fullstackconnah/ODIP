@@ -3,7 +3,8 @@ import { useUpdateTrip, useEventTemplates, useStaff } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
 import { Modal } from '@/components/Modal'
 import type { TripDetailDto, UpdateTripDto } from '@/api/types/trips'
-import type { TripStatus } from '@/api/types/enums'
+import { TRIP_STATUSES, type TripStatus } from '@/api/types/enums'
+import { TRIP_STATUS_LABELS, statusItems } from '@/lib/tone'
 import type { EventTemplateDto } from '@/api/types/events'
 import type { StaffListDto } from '@/api/types/staff'
 import { Button } from '@/components/Button'
@@ -115,7 +116,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!tripEditForm || !tripEditForm.tripName.trim() || updateTrip.isPending}>
-            {updateTrip.isPending ? 'Saving…' : 'Save Changes'}
+            {updateTrip.isPending ? 'Saving…' : 'Save'}
           </Button>
         </>
       }
@@ -189,16 +190,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
                   variant="form"
                   value={tripEditForm.status}
                   onChange={val => setTripEditForm({ ...tripEditForm, status: val as TripStatus })}
-                  items={[
-                    { value: 'Draft', label: 'Draft' },
-                    { value: 'Planning', label: 'Planning' },
-                    { value: 'OpenForBookings', label: 'Open For Bookings' },
-                    { value: 'Confirmed', label: 'Confirmed' },
-                    { value: 'InProgress', label: 'In Progress' },
-                    { value: 'Completed', label: 'Completed' },
-                    { value: 'Cancelled', label: 'Cancelled' },
-                    { value: 'Archived', label: 'Archived' },
-                  ]}
+                  items={statusItems(TRIP_STATUSES.filter(s => s !== 'WaitlistOnly'), TRIP_STATUS_LABELS)}
                 />
               </div>
               <div className="sm:col-span-2">

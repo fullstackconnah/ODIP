@@ -20,7 +20,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('UsersTab: Last Login', () => {
+describe('UsersTab: Last sign-in', () => {
   // formatRelative (compact) for the first month, then the date itself.
   it('reads never, just now, minutes, hours and days, and the date once the login is a month old', () => {
     vi.useFakeTimers({ toFake: ['Date'] })

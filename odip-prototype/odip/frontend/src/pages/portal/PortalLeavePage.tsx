@@ -127,13 +127,14 @@ export default function PortalLeavePage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader title="My leave" subtitle="Request leave or a regular weekly unavailability, and track what's been decided.">
-        {canRequestLeave && (
-          <Button onClick={openForm}>
+      <PageHeader
+        title="My leave"
+        action={canRequestLeave && (
+          <Button size="md" onClick={openForm}>
             <Plus className="w-4 h-4" /> {tab === 'leave' ? 'Request leave' : 'Add unavailability'}
           </Button>
         )}
-      </PageHeader>
+      />
 
       {actionError && (
         <Callout tone="error">{actionError}</Callout>

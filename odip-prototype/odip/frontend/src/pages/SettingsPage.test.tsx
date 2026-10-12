@@ -122,17 +122,17 @@ beforeEach(() => {
 })
 
 describe('SettingsPage — Event Templates tab', () => {
-  it('shows an empty state with a single "+ New Template" action when there are no templates', async () => {
+  it('shows an empty state and a single "New template" action, in the header, when there are no templates', async () => {
     const user = userEvent.setup()
     renderSettingsPage()
 
     expect(screen.getByText('No event templates yet')).toBeInTheDocument()
-    // The action lives inside the empty state, not duplicated in the toolbar.
-    const actions = screen.getAllByRole('button', { name: '+ New Template' })
+    // The action is the header's, not repeated in the empty state.
+    const actions = screen.getAllByRole('button', { name: 'New template' })
     expect(actions).toHaveLength(1)
 
     await user.click(actions[0])
-    expect(await screen.findByRole('heading', { name: 'New Template' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'New template' })).toBeInTheDocument()
   })
 
   it('shows the empty state when every template is inactive', () => {
@@ -145,7 +145,7 @@ describe('SettingsPage — Event Templates tab', () => {
     expect(screen.queryByText('Old Escape')).not.toBeInTheDocument()
   })
 
-  it('lists active templates with the toolbar action and no empty state', () => {
+  it('lists active templates with the header action and no empty state', () => {
     mockUseEventTemplates.mockReturnValue({
       data: [{ id: 't1', eventName: 'Beach Escape', eventCode: 'BE', isActive: true }],
     })
@@ -153,7 +153,7 @@ describe('SettingsPage — Event Templates tab', () => {
 
     expect(screen.getByText('Beach Escape')).toBeInTheDocument()
     expect(screen.queryByText('No event templates yet')).not.toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: '+ New Template' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'New template' })).toHaveLength(1)
   })
 
   it('does not claim there are no templates while they are still loading', () => {
@@ -163,10 +163,10 @@ describe('SettingsPage — Event Templates tab', () => {
     expect(screen.queryByText('No event templates yet')).not.toBeInTheDocument()
   })
 
-  it('draws the empty-state "+ New Template" as a Button at --control-h (32px, 44px on a coarse pointer), not a hand-rolled 44px link', () => {
+  it('draws "New template" as a Button at --control-h (32px, 44px on a coarse pointer), not a hand-rolled 44px link', () => {
     const { container } = renderSettingsPage()
 
-    const action = screen.getByRole('button', { name: '+ New Template' })
+    const action = screen.getByRole('button', { name: 'New template' })
     expect(action).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
     // EmptyState's own action slot is the only place that min-h-[44px] link-button is drawn; it is left unused here.
     expect(container.querySelector('.min-h-\\[44px\\]')).toBeNull()
@@ -185,7 +185,7 @@ describe('SettingsPage — Public Holidays tab: who may change the calendar', ()
     mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
     renderSettingsPage()
 
-    await user.click(screen.getByRole('tab', { name: 'Public Holidays' }))
+    await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
 
     expect(screen.getByText('Labour Day')).toBeInTheDocument()
     for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', 'Delete']) {
@@ -200,7 +200,7 @@ describe('SettingsPage — Public Holidays tab: who may change the calendar', ()
     mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
     renderSettingsPage()
 
-    await user.click(screen.getByRole('tab', { name: 'Public Holidays' }))
+    await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
 
     expect(screen.getByText('Labour Day')).toBeInTheDocument()
     for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', 'Delete']) {
@@ -227,7 +227,7 @@ describe('SettingsPage — buttons are the Button primitive', () => {
     mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
     renderSettingsPage()
 
-    await user.click(screen.getByRole('tab', { name: 'Public Holidays' }))
+    await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
     for (const name of ['+ Add Holiday', 'Sync Holidays']) {
       const button = screen.getByRole('button', { name })
       expect(button).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
@@ -251,7 +251,7 @@ describe('SettingsPage — buttons are the Button primitive', () => {
     mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
     renderSettingsPageWithQueryClient()
 
-    await user.click(screen.getByRole('tab', { name: 'Support Catalogue' }))
+    await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
     const open = screen.getByRole('button', { name: 'Import Catalogue' })
     expect(open).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
 
@@ -267,7 +267,7 @@ describe('SettingsPage — buttons are the Button primitive', () => {
     mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
     renderSettingsPageWithQueryClient()
 
-    await user.click(screen.getByRole('tab', { name: 'Support Catalogue' }))
+    await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
     const open = screen.getByRole('button', { name: 'Import Catalogue' })
     await user.click(open)
     expect(screen.getByRole('dialog', { name: 'Import NDIS Support Catalogue' })).toBeInTheDocument()
@@ -283,7 +283,7 @@ describe('SettingsPage — buttons are the Button primitive', () => {
     mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
     renderSettingsPageWithQueryClient()
 
-    await user.click(screen.getByRole('tab', { name: 'Support Catalogue' }))
+    await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
     await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
     await user.click(screen.getByRole('dialog', { name: 'Import NDIS Support Catalogue' }).parentElement!)
 
@@ -551,7 +551,7 @@ describe('SettingsPage — catalogue import preview', () => {
     mockImportPost.mockResolvedValueOnce({ data: { data: preview(detectedFormat) } })
     renderSettingsPageWithQueryClient()
 
-    await user.click(screen.getByRole('tab', { name: 'Support Catalogue' }))
+    await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
     await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
     const file = new File(['xlsx'], 'support-catalogue-2026-27.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file)
@@ -604,7 +604,7 @@ describe('SettingsPage — catalogue import preview', () => {
     mockImportPost.mockRejectedValueOnce({ response: { status: 400, data: { success: false, errors: ['No support items found. Upload the NDIS Support Catalogue .xlsx (the 2026-27 or 2025-26 file).'] } } })
     renderSettingsPageWithQueryClient()
 
-    await user.click(screen.getByRole('tab', { name: 'Support Catalogue' }))
+    await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
     await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
     await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, new File(['x'], 'notes.xlsx'))
 
@@ -679,7 +679,7 @@ describe('SettingsPage — the timer that puts a confirmation away dies with its
     mockSyncMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.({ holidaysAdded: 3, holidaysUpdated: 1, errors: [] }))
     const user = userEvent.setup()
     const { unmount } = renderSettingsPage()
-    await user.click(screen.getByRole('tab', { name: 'Public Holidays' }))
+    await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
 
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const pending = actTwiceThenLeave(() => screen.getByRole('button', { name: 'Sync Holidays' }), unmount)
@@ -695,24 +695,24 @@ describe('SettingsPage — Plan Pricing tab and the tab in the URL', () => {
   it('gives an Admin and a SuperAdmin the Plan Pricing tab, and a Coordinator none', () => {
     asAdmin()
     const admin = renderSettingsPage()
-    expect(screen.getByRole('tab', { name: 'Plan Pricing' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Plan pricing' })).toBeInTheDocument()
     admin.unmount()
 
     mockUsePermissions.mockReturnValue({ isSuperAdmin: true, isAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
     const superAdmin = renderSettingsPage()
-    expect(screen.getByRole('tab', { name: 'Plan Pricing' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Plan pricing' })).toBeInTheDocument()
     superAdmin.unmount()
 
     mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: false, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false })
     renderSettingsPage()
-    expect(screen.queryByRole('tab', { name: 'Plan Pricing' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Plan pricing' })).not.toBeInTheDocument()
   })
 
   it('opens on the tab the URL names, so "Confirm in Settings" in the plan builder lands on the registration groups', () => {
     asAdmin()
     renderSettingsPageAt('/settings?tab=pricing')
 
-    expect(screen.getByRole('tab', { name: 'Plan Pricing', selected: true })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Plan pricing', selected: true })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Registration groups you hold' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Confirm these groups' })).toBeInTheDocument()
   })
@@ -722,9 +722,9 @@ describe('SettingsPage — Plan Pricing tab and the tab in the URL', () => {
     asAdmin()
     const { router } = renderSettingsPage()
 
-    await user.click(screen.getByRole('tab', { name: 'Plan Pricing' }))
+    await user.click(screen.getByRole('tab', { name: 'Plan pricing' }))
     expect(router.state.location.search).toBe('?tab=pricing')
-    await user.click(screen.getByRole('tab', { name: 'Event Templates' }))
+    await user.click(screen.getByRole('tab', { name: 'Event templates' }))
     expect(router.state.location.search).toBe('')
   })
 
@@ -732,7 +732,7 @@ describe('SettingsPage — Plan Pricing tab and the tab in the URL', () => {
     mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: false, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false })
     renderSettingsPageAt('/settings?tab=pricing')
 
-    expect(screen.getByRole('tab', { name: 'Event Templates', selected: true })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Event templates', selected: true })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Registration groups you hold' })).not.toBeInTheDocument()
   })
 })
@@ -746,7 +746,7 @@ describe('SettingsPage — Budgets tab and the one-row tab strip', () => {
     asRole('admin')
     const admin = renderSettingsPage()
     const names = screen.getAllByRole('tab').map(tab => tab.textContent)
-    expect(names.indexOf('Budgets')).toBe(names.indexOf('Plan Pricing') + 1)
+    expect(names.indexOf('Budgets')).toBe(names.indexOf('Plan pricing') + 1)
     admin.unmount()
 
     asRole('superAdmin')
@@ -767,7 +767,7 @@ describe('SettingsPage — Budgets tab and the one-row tab strip', () => {
     expect(screen.getByRole('tab', { name: 'Budgets', selected: true })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Warn only' })).toBeChecked()
 
-    await user.click(screen.getByRole('tab', { name: 'Plan Pricing' }))
+    await user.click(screen.getByRole('tab', { name: 'Plan pricing' }))
     expect(router.state.location.search).toBe('?tab=pricing')
     await user.click(screen.getByRole('tab', { name: 'Budgets' }))
     expect(router.state.location.search).toBe('?tab=budgets')
@@ -777,7 +777,7 @@ describe('SettingsPage — Budgets tab and the one-row tab strip', () => {
     asRole('coordinator')
     renderSettingsPageAt('/settings?tab=budgets')
 
-    expect(screen.getByRole('tab', { name: 'Event Templates', selected: true })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Event templates', selected: true })).toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: 'Warn only' })).not.toBeInTheDocument()
   })
 

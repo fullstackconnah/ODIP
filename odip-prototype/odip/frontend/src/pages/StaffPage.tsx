@@ -181,7 +181,7 @@ export default function StaffPage() {
           subtitle={plural(staff.length, 'staff member')}
           action={!showArchived && canWrite && (
             <Button to="/staff/new" size="md">
-              <Plus className="w-4 h-4" /> New Staff
+              <Plus className="w-4 h-4" /> New staff member
             </Button>
           )}
         >
@@ -206,7 +206,6 @@ export default function StaffPage() {
             icon={UserCog}
             title="No staff members yet"
             description="Staff are the support workers and coordinators you assign to trips, tasks, and incidents. Add one to start rostering them."
-            action={!showArchived && canWrite ? { label: 'Add staff member', to: '/staff/new' } : undefined}
           />
         )
       ) : (

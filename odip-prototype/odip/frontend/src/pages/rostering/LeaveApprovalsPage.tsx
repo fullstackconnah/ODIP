@@ -538,8 +538,9 @@ export default function LeaveApprovalsPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader title="Leave approvals" subtitle="Review and decide staff leave and regular-unavailability requests.">
-        {canApproveLeave && (
+      <PageHeader
+        title="Leave approvals"
+        action={canApproveLeave && (
           <Dropdown
             variant="menu"
             label="Enter on behalf"
@@ -552,7 +553,7 @@ export default function LeaveApprovalsPage() {
             onSelect={value => { setOnBehalfError(null); setOnBehalfMode(value as 'leave' | 'unavailability' | 'availability') }}
           />
         )}
-      </PageHeader>
+      />
 
       {!canApproveLeave && (
         <p className="text-sm text-[var(--color-muted-foreground)]">
@@ -691,7 +692,7 @@ export default function LeaveApprovalsPage() {
         onConfirm={handleDeleteLegacyConfirm}
         title="Delete record"
         variant="danger"
-        confirmLabel="Yes, delete it"
+        confirmLabel="Delete"
         cancelLabel="Keep"
         loading={deleteStaffAvailability.isPending}
         message={
@@ -768,7 +769,7 @@ export default function LeaveApprovalsPage() {
         onConfirm={handleCancelConfirm}
         title="Cancel approved request"
         variant="danger"
-        confirmLabel="Yes, cancel it"
+        confirmLabel="Cancel request"
         cancelLabel="Keep"
         loading={cancelLeave.isPending || cancelUnavailability.isPending}
         message={
