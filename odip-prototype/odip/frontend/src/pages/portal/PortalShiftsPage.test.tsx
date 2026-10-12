@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import PortalShiftsPage from './PortalShiftsPage'
 import type { PortalShiftsResponseDto } from '@/api/types'
@@ -115,5 +115,20 @@ describe('PortalShiftsPage', () => {
     mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse(), isLoading: false })
     renderPage()
     expect(screen.getByRole('link', { name: /my leave/i })).toHaveAttribute('href', '/portal/leave')
+  })
+})
+
+// V2-C: the week controls are one group that never wraps (prev, the range, next, This week), built from Button; My leave and Witness approvals are header actions, not part of it.
+describe('PortalShiftsPage — the week controls', () => {
+  it('keep prev, the range, next and This week in one non-wrapping group of Buttons', () => {
+    mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse(), isLoading: false })
+    renderPage()
+    const week = screen.getByRole('group', { name: 'Week' })
+    expect(week).toHaveClass('flex-nowrap')
+    for (const name of ['Previous week', 'Next week', 'This week']) {
+      expect(within(week).getByRole('button', { name })).toHaveClass('h-[var(--control-h)]')
+    }
+    expect(within(week).queryByRole('link', { name: /my leave|witness approvals/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /witness approvals/i })).toHaveAttribute('href', '/portal/witness-approvals')
   })
 })

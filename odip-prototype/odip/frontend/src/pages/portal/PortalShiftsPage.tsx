@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, AlertTriangle, ShieldCheck, CalendarOff } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, ShieldCheck, CalendarOff } from 'lucide-react'
 import { useMyShifts, usePendingWitnessRequests } from '@/api/hooks'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -68,70 +69,48 @@ export default function PortalShiftsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader title="My shifts">
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            to="/portal/leave"
-            className="inline-flex items-center gap-1.5 h-11 px-3 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] text-sm transition-colors"
-          >
-            <CalendarOff className="w-4 h-4" />
-            My leave
-          </Link>
-          <Link
-            to="/portal/witness-approvals"
-            className="relative inline-flex items-center gap-1.5 h-11 px-3 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] text-sm transition-colors"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            Witness approvals
-            {pendingWitnessCount > 0 && (
-              <span
-                className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-[var(--color-destructive)] text-white text-xs font-medium"
-                aria-label={`${pendingWitnessCount} pending`}
-              >
-                {pendingWitnessCount > 99 ? '99+' : pendingWitnessCount}
-              </span>
-            )}
-          </Link>
-          <button
-            type="button"
-            onClick={() => setWeekStart(w => shiftWeek(w, -1))}
-            className="h-11 w-11 flex items-center justify-center rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
-            aria-label="Previous week"
-          >
+      <PageHeader
+        title="My shifts"
+        action={
+          <>
+            <Button to="/portal/leave" variant="secondary" size="md">
+              <CalendarOff className="w-4 h-4" /> My leave
+            </Button>
+            <Button to="/portal/witness-approvals" variant="secondary" size="md">
+              <ShieldCheck className="w-4 h-4" /> Witness approvals
+              {pendingWitnessCount > 0 && (
+                <span
+                  className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-[var(--color-destructive)] text-white text-xs font-medium"
+                  aria-label={`${pendingWitnessCount} pending`}
+                >
+                  {pendingWitnessCount > 99 ? '99+' : pendingWitnessCount}
+                </span>
+              )}
+            </Button>
+          </>
+        }
+      >
+        {/* One row that never wraps (a phone split it over two): the same square chevrons as the roster board's week toolbar. */}
+        <div role="group" aria-label="Week" className="flex flex-nowrap items-center gap-1">
+          <Button variant="secondary" size="md" onClick={() => setWeekStart(w => shiftWeek(w, -1))} aria-label="Previous week" className="w-[var(--control-h)] px-0!">
             <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-medium min-w-[10rem] text-center">{formatWeekRange(daysOfWeek(weekStart))}</span>
-          <button
-            type="button"
-            onClick={() => setWeekStart(w => shiftWeek(w, 1))}
-            className="h-11 w-11 flex items-center justify-center rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
-            aria-label="Next week"
-          >
+          </Button>
+          <span className="px-1 text-sm font-medium tabular-nums whitespace-nowrap">{formatWeekRange(daysOfWeek(weekStart))}</span>
+          <Button variant="secondary" size="md" onClick={() => setWeekStart(w => shiftWeek(w, 1))} aria-label="Next week" className="w-[var(--control-h)] px-0!">
             <ChevronRight className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setWeekStart(weekStartOf(new Date()))}
-            className="h-11 px-3 flex items-center justify-center rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] text-sm transition-colors"
-          >
+          </Button>
+          <Button variant="secondary" size="md" onClick={() => setWeekStart(weekStartOf(new Date()))} className="ml-1">
             This week
-          </button>
+          </Button>
         </div>
       </PageHeader>
 
       {isLoading ? (
         <ShiftsSkeleton />
       ) : isError ? (
-        <div className="flex flex-col items-center justify-center text-center py-24 gap-3">
-          <AlertTriangle className="w-16 h-16 text-[var(--color-foreground)] opacity-20" aria-hidden="true" />
-          <p className="text-lg font-semibold text-[var(--color-muted-foreground)]" role="alert">Couldn't load your shifts</p>
-          <p className="max-w-sm text-sm text-[var(--color-muted-foreground)] opacity-80">
-            Check your connection and try again.
-          </p>
-          <Button className="mt-2" onClick={() => refetch()}>
-            Try again
-          </Button>
-        </div>
+        <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
+          Couldn't load your shifts. Check your connection and try again.
+        </Callout>
       ) : shifts.length === 0 && tripAssignments.length === 0 ? (
         <EmptyState
           icon={CalendarCheck2}
