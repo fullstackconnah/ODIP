@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Button } from '@/components/Button'
 import { Plus } from 'lucide-react'
 import { useUpdateTask } from '@/api/hooks'
 import type { TaskDto, UpdateTaskDto } from '@/api/types'
@@ -114,12 +114,9 @@ export default function TasksTab({ tripId, tasks, canWrite }: { tripId: string; 
     <div className="space-y-4">
       {canWrite && (
         <div className="flex justify-end">
-          <Link
-            to={`/tasks/new?tripInstanceId=${tripId}`}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20"
-          >
+          <Button to={`/tasks/new?tripInstanceId=${tripId}`}>
             <Plus className="w-4 h-4" /> Add Task
-          </Link>
+          </Button>
         </div>
       )}
       <DataTable

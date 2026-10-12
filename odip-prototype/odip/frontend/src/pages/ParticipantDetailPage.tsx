@@ -1,4 +1,4 @@
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import {
   useParticipant, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf,
   useGenerateCaregiverLink, useRevokeCaregiverLink, useCaregiverSubmissions,
@@ -233,12 +233,9 @@ export default function ParticipantDetailPage() {
                   : "This participant is a draft — intake hasn't been completed yet. Excluded from rosters, claims, and other operational lists until finalised."}
               </span>
               {canWrite && (
-                <Link
-                  to={p.intakeCompletedAt ? `/participants/${id}/profile` : `/participants/${id}/intake`}
-                  className="inline-flex items-center gap-1.5 h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] bg-[var(--color-on-warning-container)] text-white text-sm font-medium hover:bg-[var(--color-on-warning-container)]/90 transition-colors shrink-0"
-                >
+                <Button variant="secondary" size="sm" className="shrink-0" to={p.intakeCompletedAt ? `/participants/${id}/profile` : `/participants/${id}/intake`}>
                   <Pencil className="w-4 h-4" /> {p.intakeCompletedAt ? 'Continue profile' : 'Resume intake'}
-                </Link>
+                </Button>
               )}
             </div>
           )}

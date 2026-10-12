@@ -60,8 +60,8 @@ describe('WizardStepRail', () => {
       render(<WizardStepRail steps={steps} visitedSteps={new Set(['a'])} currentKey="a" onSelect={vi.fn()} filled />)
 
       const bubble = screen.getByRole('button', { name: /alpha/i }).querySelector('span') as HTMLElement
-      expect(bubble.className).toContain('bg-white text-[var(--color-primary)]')
-      expect(bubble.className).not.toContain('bg-white/20')
+      expect(bubble.className).toContain('bg-[var(--color-primary-foreground)] text-[var(--color-primary)]')
+      expect(bubble.className).not.toContain('bg-[var(--color-primary-foreground)]/20')
     })
 
     // Read from the palette in index.css, as PlanVisuals does: the label of every state is 4.5:1 or better on the fill it sits on.
@@ -115,7 +115,7 @@ describe('WizardStepRail', () => {
 
       expect(screen.getByRole('button', { name: /beta/i }).className).toContain('opacity-60')
       expect(screen.getByRole('button', { name: /alpha/i })).toHaveAttribute('aria-current', 'step')
-      expect(screen.getByRole('button', { name: /alpha/i }).querySelector('span')?.className).toContain('bg-white/20')
+      expect(screen.getByRole('button', { name: /alpha/i }).querySelector('span')?.className).toContain('bg-[var(--color-primary-foreground)]/20')
     })
   })
 

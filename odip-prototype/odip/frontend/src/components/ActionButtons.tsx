@@ -44,14 +44,14 @@ export function ActionButtons({ editTo, onEdit, onDelete, onRestore, showArchive
       )}
       {showArchived && onRestore && (
         <button onClick={e => stop(e, onRestore)}
-          className={`${ICON_BUTTON} hover:bg-green-500/20 hover:text-green-400`}
+          className={`${ICON_BUTTON} hover:bg-[var(--color-primary-fixed)]/40 hover:text-[var(--color-primary)]`}
           title="Restore" aria-label="Restore">
           <ArchiveRestore className="w-4 h-4" />
         </button>
       )}
       {!showArchived && onDelete && (
         <button onClick={e => stop(e, onDelete)}
-          className={`${ICON_BUTTON} hover:bg-red-500/20 hover:text-red-400`}
+          className={`${ICON_BUTTON} hover:bg-[var(--color-error-container)] hover:text-[var(--color-destructive)]`}
           title="Archive" aria-label="Archive">
           <Trash2 className="w-4 h-4" />
         </button>

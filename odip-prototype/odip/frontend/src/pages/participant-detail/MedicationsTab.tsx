@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ChevronDown, Plus, Info, Pill } from 'lucide-react'
 import { useParticipantMedications, useParticipantAdministrations } from '@/api/hooks'
 import { Card } from '@/components/Card'
+import { Button } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -119,12 +120,9 @@ export default function MedicationsTab({ participantId }: { participantId: strin
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-[var(--color-foreground)]">Medications</h2>
         {canManageMedications && participantId && (
-          <Link
-            to={`/medications/new?participantId=${participantId}`}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20"
-          >
+          <Button to={`/medications/new?participantId=${participantId}`}>
             <Plus className="w-4 h-4" /> New medication
-          </Link>
+          </Button>
         )}
       </div>
 

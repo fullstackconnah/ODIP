@@ -163,7 +163,7 @@ export function WizardStepRail<V>({
                 <span
                   className={`flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold shrink-0 ${
                     isCurrent
-                      ? filled ? 'bg-white text-[var(--color-primary)]' : 'bg-white/20'      // filled: white over the olive, 7.2:1; the 20% veil was 4.46:1
+                      ? filled ? 'bg-[var(--color-primary-foreground)] text-[var(--color-primary)]' : 'bg-[var(--color-primary-foreground)]/20'      // filled: white over the olive, 7.2:1; the 20% veil was 4.46:1
                       : isCompleted ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-border)]'
                   }`}
                 >

@@ -5,7 +5,7 @@ import { DataTable } from '@/components/DataTable'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import type { TripDetailDto, ClaimPreviewResponseDto, ClaimPreviewLineItemDto } from '@/api/types'
 import { plural } from '@/lib/format'
-import { extractErrorMessage } from '@/lib/utils'
+import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 
@@ -39,8 +39,8 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
   const previewClaim = usePreviewClaim()
   const generateClaim = useGenerateClaim()
 
-  const startDate = trip.startDate ? new Date(trip.startDate).toLocaleDateString('en-AU') : '—'
-  const endDate = trip.endDate ? new Date(trip.endDate).toLocaleDateString('en-AU') : '—'
+  const startDate = formatDateAu(trip.startDate)
+  const endDate = formatDateAu(trip.endDate)
   const durationDays = trip.startDate && trip.endDate
     ? Math.ceil((new Date(trip.endDate).getTime() - new Date(trip.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
     : 0
@@ -181,7 +181,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
             <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] p-4 mb-[var(--section-gap)]">
               <div className="flex items-baseline justify-between mb-2">
                 <span className="text-sm text-[var(--color-muted-foreground)]">Total Estimate</span>
-                <span className="text-xl font-semibold">${previewData.totalAmount?.toFixed(2)}</span>
+                <span className="text-xl font-semibold">{formatCurrency(previewData.totalAmount)}</span>
               </div>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[var(--color-muted-foreground)]">
                 <span>Participants: {previewData.confirmedParticipantCount ?? '—'}</span>
@@ -210,9 +210,9 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
                     key: 'supportsDeliveredFrom',
                     header: 'Dates',
                     render: (item: ClaimPreviewLineItemDto & { _idx: number }) => {
-                      const from = item.supportsDeliveredFrom ? new Date(item.supportsDeliveredFrom).toLocaleDateString('en-AU') : '—'
+                      const from = formatDateAu(item.supportsDeliveredFrom)
                       const to = item.supportsDeliveredTo && item.supportsDeliveredTo !== item.supportsDeliveredFrom
-                        ? ` – ${new Date(item.supportsDeliveredTo).toLocaleDateString('en-AU')}`
+                        ? ` – ${formatDateAu(item.supportsDeliveredTo)}`
                         : ''
                       return from + to
                     },

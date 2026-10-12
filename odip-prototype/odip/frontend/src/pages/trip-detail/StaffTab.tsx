@@ -398,7 +398,7 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
             <div>
               <label className="flex items-center gap-2 text-sm font-medium">
                 <input type="checkbox" checked={editStaffForm.isDriver} onChange={e => setEditStaffForm({ ...editStaffForm, isDriver: e.target.checked })}
-                  className="rounded border-[rgba(195,201,181,0.15)]" />
+                  className="rounded border-[var(--color-border)]" />
                 Is Driver
               </label>
             </div>
@@ -510,7 +510,7 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
             <div>
               <label className="flex items-center gap-2 text-sm font-medium">
                 <input type="checkbox" checked={staffIsDriver} onChange={e => setStaffIsDriver(e.target.checked)}
-                  className="rounded border-[rgba(195,201,181,0.15)]" />
+                  className="rounded border-[var(--color-border)]" />
                 Is Driver
               </label>
             </div>
@@ -585,7 +585,7 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
                 updateStaffAssignment.mutate({ id: deletingStaff.id, data }, { onSuccess: () => setDeletingStaff(null) })
               }}
               disabled={updateStaffAssignment.isPending}
-              className="w-full px-4 py-2 rounded-[var(--radius-md)] bg-[#fef3c7]/60 text-sm font-medium hover:bg-[#fef3c7] transition-colors disabled:opacity-50 text-left">
+              className="w-full px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-warning-container)]/60 text-sm font-medium hover:bg-[var(--color-warning-container)] transition-colors disabled:opacity-50 text-left">
               <span className="font-semibold">Cancel assignment</span>
               <span className="block text-xs text-[var(--color-muted-foreground)] mt-0.5">Mark as cancelled — keeps the record for history</span>
             </button>

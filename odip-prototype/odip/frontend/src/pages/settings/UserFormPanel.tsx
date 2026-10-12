@@ -490,7 +490,7 @@ export default function UserFormPanel({
             }`}
           >
             <span
-              className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+              className={`inline-block h-4 w-4 rounded-full bg-[var(--color-card)] transition-transform ${
                 isActive ? 'translate-x-6' : 'translate-x-1'
               }`}
             />

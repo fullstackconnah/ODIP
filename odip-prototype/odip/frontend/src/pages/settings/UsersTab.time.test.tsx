@@ -42,3 +42,17 @@ describe.each(['Australia/Sydney', 'UTC'])('UsersTab Last login in %s', zone => 
     expect(screen.getByText('10m ago')).toBeInTheDocument()
   })
 })
+
+// Standard 8: a login a month old or more prints its date in en-AU, not in whatever locale the browser (or the CI container) defaults to.
+describe('UsersTab Last login a month back', () => {
+  it('prints the day as dd/mm/yyyy', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-03T05:10:30Z'))
+    mockUseAdminUsers.mockReturnValue({
+      data: { items: [user('2026-08-03T05:00:00Z')], totalCount: 1, page: 1, pageSize: 20, totalPages: 1, hasNext: false, hasPrevious: false },
+      isLoading: false,
+    })
+    render(<UsersTab onAddUser={vi.fn()} onEditUser={vi.fn()} />)
+    expect(screen.getByText('03/08/2026')).toBeInTheDocument()
+  })
+})

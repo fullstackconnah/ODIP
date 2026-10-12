@@ -12,8 +12,6 @@ import { Button } from '@/components/Button'
 const BODY_MAX_LENGTH = 1000
 
 const textareaClass = 'w-full px-3 py-2 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-shadow'
-const primaryButtonClass = 'min-h-[44px] inline-flex items-center justify-center px-4 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2'
-const ghostButtonClass = 'min-h-[44px] inline-flex items-center justify-center px-3 rounded-lg text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2'
 
 function CharCount({ length }: { length: number }) {
   const nearCap = length >= BODY_MAX_LENGTH * 0.9
@@ -60,12 +58,12 @@ function FlagBanner({
         <span>This note mentions {formatFlaggedCategoryList(categories)}. Consider filing an incident report.</span>
       </p>
       <div className="flex shrink-0 items-center gap-2 self-end sm:self-start">
-        <button type="button" onClick={onDismiss} disabled={dismissing} className={`${ghostButtonClass} px-3`}>
+        <Button variant="ghost" onClick={onDismiss} disabled={dismissing}>
           {dismissing ? 'Dismissing…' : 'Dismiss'}
-        </button>
-        <button type="button" onClick={onFileIncident} className={`${primaryButtonClass} !bg-[var(--color-on-warning-container)]`}>
+        </Button>
+        <Button variant="secondary" onClick={onFileIncident}>
           File incident report
-        </button>
+        </Button>
       </div>
     </div>
   )

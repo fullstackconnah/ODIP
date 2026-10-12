@@ -210,12 +210,12 @@ export default function ClaimDetailPage() {
 
       <FactBar
         segments={[
-          { label: 'Total Amount', value: <span className="tabular-nums">{`$${totalAmount.toFixed(2)}`}</span> },
+          { label: 'Total Amount', value: <span className="tabular-nums">{formatCurrency(totalAmount)}</span> },
           claim.kind === 'Shift'
             ? { label: 'Period', value: <span className="tabular-nums">{`${formatDateAu(claim.periodFrom)} – ${formatDateAu(claim.periodTo)}`}</span> }
             : { label: 'Trip', value: claim.tripName || '—' },
-          { label: 'Created', value: <span className="tabular-nums">{claim.createdAt ? new Date(claim.createdAt).toLocaleDateString('en-AU') : '—'}</span> },
-          { label: 'Submitted', value: <span className="tabular-nums">{claim.submittedDate ? new Date(claim.submittedDate).toLocaleDateString('en-AU') : '—'}</span> },
+          { label: 'Created', value: <span className="tabular-nums">{formatDateAu(claim.createdAt)}</span> },
+          { label: 'Submitted', value: <span className="tabular-nums">{formatDateAu(claim.submittedDate)}</span> },
           // What the NDIA said, once it has refused the claim: when, and the code it gave (V17, V18, V27 and V28 say the funds ran out). Nothing is said of a claim that is not rejected.
           ...(claim.status === 'Rejected'
             ? [{
@@ -223,7 +223,7 @@ export default function ClaimDetailPage() {
               value: (
                 <>
                   <span className="tabular-nums">
-                    {claim.rejectedDate ? new Date(claim.rejectedDate).toLocaleDateString('en-AU') : '—'}
+                    {formatDateAu(claim.rejectedDate)}
                     {' · '}{claim.rejectionCode ? `NDIA code ${claim.rejectionCode}${ndiaCodeMeaning(claim.rejectionCode) ? ` (${ndiaCodeMeaning(claim.rejectionCode)})` : ''}` : 'no NDIA code recorded'}
                   </span>
                   {/* The code is the one input that switches the budget warning on, and the reason often arrives after the status is set: a claim rejected with none can be given one here. */}

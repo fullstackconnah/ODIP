@@ -374,7 +374,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
             {/* Missing nights warning */}
             {coverage && !coverage.allCovered && (
-              <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-[rgba(195,201,181,0.15)]">
+              <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-[var(--color-border)]/15">
                 <AlertTriangle className="w-3.5 h-3.5 text-[var(--color-destructive)] shrink-0" />
                 <p className="text-xs text-[var(--color-destructive)]">
                   Missing: {coverage.uncoveredNights.map(dayLabel).join(', ')}

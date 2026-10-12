@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { useState } from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import EditTripModal from './EditTripModal'
@@ -68,5 +69,39 @@ describe('EditTripModal — a refused save', () => {
     await setup()
     fireEvent.change(screen.getByPlaceholderText('e.g. Beach Getaway 2026'), { target: { value: '   ' } })
     expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled()
+  })
+})
+
+describe('EditTripModal — the dialog', () => {
+  it('is named by its title and keeps the form open on a backdrop click (it holds typing)', async () => {
+    const onClose = vi.fn()
+    render(<EditTripModal trip={trip} onClose={onClose} />)
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Trip' })
+    fireEvent.click(dialog.parentElement!)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('traps Tab inside and gives focus back to the opener when it closes', async () => {
+    const user = userEvent.setup()
+    function Host() {
+      const [open, setOpen] = useState(false)
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Edit Trip</button>
+          {open && <EditTripModal trip={trip} onClose={() => setOpen(false)} />}
+        </>
+      )
+    }
+    render(<Host />)
+    const opener = screen.getByRole('button', { name: 'Edit Trip' })
+    await user.click(opener)
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Trip' })
+    for (let i = 0; i < 40; i++) {
+      await user.tab()
+      expect(dialog.contains(document.activeElement)).toBe(true)
+    }
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(opener).toHaveFocus()
   })
 })
